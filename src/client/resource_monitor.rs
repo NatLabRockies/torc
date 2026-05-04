@@ -1,6 +1,6 @@
 use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
 use log::{debug, error, info, warn};
-use rusqlite::{Connection, Result as SqliteResult};
+use rusqlite::{Connection, Params, Result as SqliteResult, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
@@ -36,6 +36,13 @@ pub struct ResourceMonitorConfig {
     /// Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
     pub granularity: MonitorGranularity,
     pub sample_interval_seconds: i32,
+    /// How often buffered time-series samples are flushed to SQLite, in seconds.
+    /// Samples are accumulated in memory between flushes so that we make one
+    /// transaction per flush instead of one per sample interval. Larger values
+    /// are friendlier to shared filesystems (Lustre/GPFS/NFS) at the cost of
+    /// losing up to `flush_interval_seconds` of time-series data on an
+    /// uncontrolled crash. Aggregated peak/avg metrics are unaffected.
+    pub flush_interval_seconds: i32,
     pub generate_plots: bool,
     pub jobs: Option<JobMonitorConfig>,
     pub compute_node: Option<ComputeNodeMonitorConfig>,
@@ -47,6 +54,7 @@ impl Default for ResourceMonitorConfig {
             enabled: false,
             granularity: MonitorGranularity::Summary,
             sample_interval_seconds: 10,
+            flush_interval_seconds: 300,
             generate_plots: false,
             jobs: None,
             compute_node: None,
@@ -369,6 +377,13 @@ impl ResourceMonitor {
             )
             .into());
         }
+        if config.flush_interval_seconds < 1 {
+            return Err(format!(
+                "resource_monitor.flush_interval_seconds must be >= 1 (got {})",
+                config.flush_interval_seconds
+            )
+            .into());
+        }
 
         let (tx, rx) = channel();
         let (oom_tx, oom_rx) = channel();
@@ -575,9 +590,19 @@ fn run_monitoring_loop(
     let mut sys = System::new_with_specifics(refresh_kind);
     let mut monitored_jobs: HashMap<u32, MonitoredJob> = HashMap::new();
     let sample_interval = Duration::from_secs(config.sample_interval_seconds as u64);
+    let flush_interval = Duration::from_secs(config.flush_interval_seconds as u64);
     let jobs_config = config.jobs_config();
+    let jobs_time_series =
+        jobs_config.enabled && matches!(jobs_config.granularity, MonitorGranularity::TimeSeries);
     let compute_node_config = config.compute_node_config();
     let mut system_metrics = compute_node_config.as_ref().map(|_| SystemMetrics::new());
+
+    // Per-interval samples accumulate here and are flushed to SQLite as a single
+    // batched transaction every `flush_interval`. Flushing in batches keeps the
+    // commit rate low enough to be friendly to shared filesystems (Lustre, GPFS,
+    // NFS) where small writes and frequent file extends are expensive.
+    let mut pending_job_samples: Vec<(i64, i64, f64, u64, usize)> = Vec::new();
+    let mut pending_system_samples: Vec<(i64, f64, u64, u64)> = Vec::new();
 
     // Allow tests to substitute a fake sstat binary via TORC_FAKE_SSTAT.
     let sstat_binary = std::env::var("TORC_FAKE_SSTAT").unwrap_or_else(|_| "sstat".to_string());
@@ -586,9 +611,7 @@ fn run_monitoring_loop(
     let compute_node_time_series = compute_node_config
         .as_ref()
         .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
-    let mut db_conn = if matches!(jobs_config.granularity, MonitorGranularity::TimeSeries)
-        || compute_node_time_series
-    {
+    let mut db_conn = if jobs_time_series || compute_node_time_series {
         Some(init_timeseries_db(&output_dir, &unique_label)?)
     } else {
         None
@@ -604,6 +627,7 @@ fn run_monitoring_loop(
     );
 
     let mut last_sample_time = Instant::now();
+    let mut last_flush_time = Instant::now();
 
     loop {
         // Process all pending commands (non-blocking)
@@ -615,8 +639,9 @@ fn run_monitoring_loop(
                     job_name,
                     memory_limit_bytes,
                 } => {
-                    // Store job metadata in database
-                    if let Some(ref mut conn) = db_conn
+                    // Persist job metadata only when per-job time-series storage is enabled.
+                    if jobs_time_series
+                        && let Some(ref mut conn) = db_conn
                         && let Err(e) = store_job_metadata(conn, job_id, &job_name)
                     {
                         error!("Failed to store job metadata for job {}: {}", job_id, e);
@@ -647,7 +672,8 @@ fn run_monitoring_loop(
                     job_id,
                     job_name,
                 } => {
-                    if let Some(ref mut conn) = db_conn
+                    if jobs_time_series
+                        && let Some(ref mut conn) = db_conn
                         && let Err(e) = store_job_metadata(conn, job_id, &job_name)
                     {
                         error!("Failed to store job metadata for job {}: {}", job_id, e);
@@ -714,25 +740,24 @@ fn run_monitoring_loop(
                         if matches!(
                             compute_node_config.granularity,
                             MonitorGranularity::TimeSeries
-                        ) && let Some(ref mut conn) = db_conn
-                            && let Err(e) = store_system_sample(
-                                conn,
+                        ) {
+                            pending_system_samples.push((
                                 timestamp,
                                 cpu_percent,
                                 memory_bytes,
                                 total_memory_bytes,
-                            )
-                        {
-                            error!("Failed to store final system resource sample: {}", e);
+                            ));
                         }
                     }
 
                     let summary = system_metrics.as_ref().and_then(SystemMetrics::summary);
-                    if let Some(ref mut conn) = db_conn
-                        && let Some(ref summary) = summary
-                        && let Err(e) = store_system_summary(conn, summary)
-                    {
-                        error!("Failed to store system resource summary: {}", e);
+                    if let Some(ref mut conn) = db_conn {
+                        flush_pending_samples(
+                            conn,
+                            &mut pending_job_samples,
+                            &mut pending_system_samples,
+                            summary.as_ref(),
+                        );
                     }
                     let _ = response_tx.send(summary);
                     info!("Resource monitor received shutdown command");
@@ -822,6 +847,8 @@ fn run_monitoring_loop(
 
             let timestamp = chrono::Utc::now().timestamp();
 
+            let mut sampled_system = None;
+            let mut sampled_jobs = Vec::new();
             if let Some(compute_node_config) = &compute_node_config {
                 let cpu_percent = if compute_node_config.cpu {
                     sys.global_cpu_info().cpu_usage() as f64
@@ -842,21 +869,7 @@ fn run_monitoring_loop(
                 if let Some(metrics) = &mut system_metrics {
                     metrics.add_sample(cpu_percent, memory_bytes);
                 }
-
-                if matches!(
-                    compute_node_config.granularity,
-                    MonitorGranularity::TimeSeries
-                ) && let Some(ref mut conn) = db_conn
-                    && let Err(e) = store_system_sample(
-                        conn,
-                        timestamp,
-                        cpu_percent,
-                        memory_bytes,
-                        total_memory_bytes,
-                    )
-                {
-                    error!("Failed to store system resource sample: {}", e);
-                }
+                sampled_system = Some((cpu_percent, memory_bytes, total_memory_bytes));
 
                 debug!(
                     "System resources: CPU={:.1}%, Mem={:.1}/{:.1}MB",
@@ -950,18 +963,8 @@ fn run_monitoring_loop(
                     }
                 }
 
-                // Store in database if using TimeSeries
-                if let Some(ref mut conn) = db_conn
-                    && let Err(e) = store_sample(
-                        conn,
-                        job.job_id,
-                        timestamp,
-                        cpu_percent,
-                        memory_bytes,
-                        num_processes,
-                    )
-                {
-                    error!("Failed to store sample for job {}: {}", job.job_id, e);
+                if jobs_time_series {
+                    sampled_jobs.push((job.job_id, cpu_percent, memory_bytes, num_processes));
                 }
 
                 debug!(
@@ -974,12 +977,146 @@ fn run_monitoring_loop(
                 );
             }
 
+            if compute_node_time_series
+                && let Some((cpu_percent, memory_bytes, total_memory_bytes)) = sampled_system
+            {
+                pending_system_samples.push((
+                    timestamp,
+                    cpu_percent,
+                    memory_bytes,
+                    total_memory_bytes,
+                ));
+            }
+
+            if jobs_time_series {
+                for (job_id, cpu_percent, memory_bytes, num_processes) in sampled_jobs {
+                    pending_job_samples.push((
+                        job_id,
+                        timestamp,
+                        cpu_percent,
+                        memory_bytes,
+                        num_processes,
+                    ));
+                }
+            }
+
             last_sample_time = Instant::now();
+        }
+
+        // Periodically flush accumulated samples in a single transaction. The
+        // flush interval intentionally lags the sample interval so we trade a
+        // small amount of crash-exposure for a much lower SQLite commit rate.
+        if last_flush_time.elapsed() >= flush_interval
+            && let Some(ref mut conn) = db_conn
+        {
+            flush_pending_samples(
+                conn,
+                &mut pending_job_samples,
+                &mut pending_system_samples,
+                None,
+            );
+            last_flush_time = Instant::now();
         }
 
         // Sleep briefly to avoid busy-waiting
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+/// Flush accumulated time-series samples (and optionally a final system summary)
+/// to the SQLite database in a single transaction.
+///
+/// Buffers are cleared regardless of commit success so a persistent write
+/// failure can't grow memory unbounded; errors are logged so they're visible
+/// in the runner log.
+fn flush_pending_samples(
+    conn: &mut Connection,
+    pending_jobs: &mut Vec<(i64, i64, f64, u64, usize)>,
+    pending_system: &mut Vec<(i64, f64, u64, u64)>,
+    final_summary: Option<&SystemMetricsSummary>,
+) {
+    if pending_jobs.is_empty() && pending_system.is_empty() && final_summary.is_none() {
+        return;
+    }
+
+    let tx = match conn.transaction() {
+        Ok(tx) => tx,
+        Err(e) => {
+            error!("Failed to open resource sample transaction: {}", e);
+            pending_jobs.clear();
+            pending_system.clear();
+            return;
+        }
+    };
+
+    let mut commit_ok = true;
+
+    if commit_ok && !pending_system.is_empty() {
+        match tx.prepare_cached(
+            "INSERT INTO system_resource_samples \
+                 (timestamp, cpu_percent, memory_bytes, total_memory_bytes) \
+             VALUES (?1, ?2, ?3, ?4)",
+        ) {
+            Ok(mut stmt) => {
+                for (ts, cpu, mem, total) in pending_system.iter() {
+                    if let Err(e) =
+                        stmt.execute(rusqlite::params![*ts, *cpu, *mem as i64, *total as i64])
+                    {
+                        error!("Failed to insert system sample: {}", e);
+                        commit_ok = false;
+                        break;
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to prepare system sample insert: {}", e);
+                commit_ok = false;
+            }
+        }
+    }
+
+    if commit_ok && !pending_jobs.is_empty() {
+        match tx.prepare_cached(
+            "INSERT INTO job_resource_samples \
+                 (job_id, timestamp, cpu_percent, memory_bytes, num_processes) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        ) {
+            Ok(mut stmt) => {
+                for (job_id, ts, cpu, mem, nproc) in pending_jobs.iter() {
+                    if let Err(e) = stmt.execute(rusqlite::params![
+                        *job_id,
+                        *ts,
+                        *cpu,
+                        *mem as i64,
+                        *nproc as i64
+                    ]) {
+                        error!("Failed to insert sample for job {}: {}", job_id, e);
+                        commit_ok = false;
+                        break;
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to prepare job sample insert: {}", e);
+                commit_ok = false;
+            }
+        }
+    }
+
+    if commit_ok
+        && let Some(summary) = final_summary
+        && let Err(e) = store_system_summary(&tx, summary)
+    {
+        error!("Failed to store system resource summary: {}", e);
+        commit_ok = false;
+    }
+
+    if commit_ok && let Err(e) = tx.commit() {
+        error!("Failed to commit resource sample transaction: {}", e);
+    }
+
+    pending_jobs.clear();
+    pending_system.clear();
 }
 
 /// Collect CPU and memory stats for a process and all its children
@@ -1170,6 +1307,14 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
     );
 
     let conn = Connection::open(&db_path)?;
+    // WAL + synchronous=NORMAL keeps the DB consistent across process kills
+    // (e.g. Slurm SIGKILL on OOM) and OS crashes, while still amortizing fsync
+    // cost. With our 5-minute default flush interval, the per-commit fsync is
+    // negligible — the perf win of this monitor comes from batching, not from
+    // disabling durability.
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS job_resource_samples (
@@ -1199,7 +1344,7 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS system_resource_samples (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             timestamp INTEGER NOT NULL,
             cpu_percent REAL NOT NULL,
             memory_bytes INTEGER NOT NULL,
@@ -1223,9 +1368,25 @@ fn init_timeseries_db(output_dir: &Path, unique_label: &str) -> SqliteResult<Con
     Ok(conn)
 }
 
+trait SqlExecutor {
+    fn execute_sql<P: Params>(&self, sql: &str, params: P) -> SqliteResult<usize>;
+}
+
+impl SqlExecutor for Connection {
+    fn execute_sql<P: Params>(&self, sql: &str, params: P) -> SqliteResult<usize> {
+        Connection::execute(self, sql, params)
+    }
+}
+
+impl SqlExecutor for Transaction<'_> {
+    fn execute_sql<P: Params>(&self, sql: &str, params: P) -> SqliteResult<usize> {
+        self.execute(sql, params)
+    }
+}
+
 /// Store job metadata in the TimeSeries database
-fn store_job_metadata(conn: &mut Connection, job_id: i64, job_name: &str) -> SqliteResult<()> {
-    conn.execute(
+fn store_job_metadata(conn: &impl SqlExecutor, job_id: i64, job_name: &str) -> SqliteResult<()> {
+    conn.execute_sql(
         "INSERT OR REPLACE INTO job_metadata (job_id, job_name)
          VALUES (?1, ?2)",
         rusqlite::params![job_id, job_name],
@@ -1233,48 +1394,12 @@ fn store_job_metadata(conn: &mut Connection, job_id: i64, job_name: &str) -> Sql
     Ok(())
 }
 
-/// Store a sample in the TimeSeries database
-fn store_sample(
-    conn: &mut Connection,
-    job_id: i64,
-    timestamp: i64,
-    cpu_percent: f64,
-    memory_bytes: u64,
-    num_processes: usize,
-) -> SqliteResult<()> {
-    conn.execute(
-        "INSERT INTO job_resource_samples (job_id, timestamp, cpu_percent, memory_bytes, num_processes)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![job_id, timestamp, cpu_percent, memory_bytes as i64, num_processes as i64],
-    )?;
-    Ok(())
-}
-
-/// Store an overall compute-node resource sample in the TimeSeries database.
-fn store_system_sample(
-    conn: &mut Connection,
-    timestamp: i64,
-    cpu_percent: f64,
-    memory_bytes: u64,
-    total_memory_bytes: u64,
-) -> SqliteResult<()> {
-    conn.execute(
-        "INSERT INTO system_resource_samples
-            (timestamp, cpu_percent, memory_bytes, total_memory_bytes)
-         VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![
-            timestamp,
-            cpu_percent,
-            memory_bytes as i64,
-            total_memory_bytes as i64
-        ],
-    )?;
-    Ok(())
-}
-
 /// Store summary statistics for overall compute-node resource usage.
-fn store_system_summary(conn: &mut Connection, summary: &SystemMetricsSummary) -> SqliteResult<()> {
-    conn.execute(
+fn store_system_summary(
+    conn: &impl SqlExecutor,
+    summary: &SystemMetricsSummary,
+) -> SqliteResult<()> {
+    conn.execute_sql(
         "INSERT OR REPLACE INTO system_resource_summary
             (id, sample_count, peak_cpu_percent, avg_cpu_percent,
              peak_memory_bytes, avg_memory_bytes)
@@ -1293,6 +1418,9 @@ fn store_system_summary(conn: &mut Connection, summary: &SystemMetricsSummary) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+    use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn parses_scoped_monitor_config() {
@@ -1383,24 +1511,45 @@ mod tests {
     }
 
     #[test]
-    fn stores_system_samples_and_summary() {
+    fn flush_pending_samples_writes_one_transaction() {
         let temp_dir = tempfile::tempdir().unwrap();
         let mut conn = init_timeseries_db(temp_dir.path(), "test").unwrap();
 
-        store_system_sample(&mut conn, 123, 42.0, 1024, 4096).unwrap();
-        store_system_sample(&mut conn, 123, 43.0, 2048, 4096).unwrap();
-
+        let mut pending_jobs = vec![
+            (1, 100, 25.0, 1024, 1),
+            (1, 110, 75.0, 2048, 2),
+            (2, 100, 5.0, 512, 1),
+        ];
+        let mut pending_system = vec![(100, 42.0, 1024, 4096), (110, 43.0, 2048, 4096)];
         let mut metrics = SystemMetrics::new();
         metrics.add_sample(10.0, 100);
         metrics.add_sample(30.0, 300);
-        store_system_summary(&mut conn, &metrics.summary().unwrap()).unwrap();
+        let summary = metrics.summary().unwrap();
 
-        let sample_count: i64 = conn
+        flush_pending_samples(
+            &mut conn,
+            &mut pending_jobs,
+            &mut pending_system,
+            Some(&summary),
+        );
+
+        // Buffers must be cleared after a successful flush.
+        assert!(pending_jobs.is_empty());
+        assert!(pending_system.is_empty());
+
+        let job_sample_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM job_resource_samples", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(job_sample_count, 3);
+
+        let system_sample_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM system_resource_samples", [], |row| {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(sample_count, 2);
+        assert_eq!(system_sample_count, 2);
 
         let (summary_count, peak_cpu, avg_memory): (i64, f64, i64) = conn
             .query_row(
@@ -1413,5 +1562,186 @@ mod tests {
         assert_eq!(summary_count, 2);
         assert_eq!(peak_cpu, 30.0);
         assert_eq!(avg_memory, 200);
+    }
+
+    #[test]
+    fn flush_pending_samples_noop_on_empty_input() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut conn = init_timeseries_db(temp_dir.path(), "noop").unwrap();
+        let mut pending_jobs: Vec<(i64, i64, f64, u64, usize)> = Vec::new();
+        let mut pending_system: Vec<(i64, f64, u64, u64)> = Vec::new();
+
+        flush_pending_samples(&mut conn, &mut pending_jobs, &mut pending_system, None);
+
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM system_resource_samples", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn new_rejects_non_positive_flush_interval() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        for bad in [0, -1, i32::MIN] {
+            let config = ResourceMonitorConfig {
+                sample_interval_seconds: 1,
+                flush_interval_seconds: bad,
+                jobs: Some(JobMonitorConfig {
+                    enabled: true,
+                    granularity: MonitorGranularity::Summary,
+                }),
+                ..ResourceMonitorConfig::default()
+            };
+            let err = ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "f".into())
+                .err()
+                .unwrap_or_else(|| panic!("invalid flush interval {bad} should fail"));
+            assert!(
+                err.to_string().contains("flush_interval_seconds"),
+                "error should name the field: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn periodic_flush_writes_samples_before_shutdown() {
+        // Use a short flush interval so multiple flushes happen during a brief
+        // run. After ~3s of sampling at 1s with flush every 1s, the DB should
+        // contain at least a few job samples that landed via the periodic
+        // flush path (not just the shutdown-only path).
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = ResourceMonitorConfig {
+            sample_interval_seconds: 1,
+            flush_interval_seconds: 1,
+            jobs: Some(JobMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::TimeSeries,
+            }),
+            ..ResourceMonitorConfig::default()
+        };
+        let monitor =
+            ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "flush".into()).unwrap();
+
+        let mut child = Command::new("sleep").arg("5").spawn().unwrap();
+        monitor
+            .start_monitoring(child.id(), 99, "job-99".to_string(), None)
+            .unwrap();
+
+        // ~3 sample intervals and ~3 flush ticks.
+        thread::sleep(Duration::from_millis(3200));
+
+        // Open a read-only connection to inspect the DB while the monitor is
+        // still running. The writer thread holds the SQLite write lock during
+        // each flush, so set a busy_timeout and retry briefly to avoid a
+        // flaky "database is locked" failure.
+        let db_path = timeseries_db_path(temp_dir.path(), "flush");
+        let inspect =
+            Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        inspect.busy_timeout(Duration::from_millis(250)).unwrap();
+        let retry_deadline = Instant::now() + Duration::from_secs(2);
+        let mid_run_count: i64 = loop {
+            match inspect.query_row("SELECT COUNT(*) FROM job_resource_samples", [], |row| {
+                row.get(0)
+            }) {
+                Ok(count) => break count,
+                Err(rusqlite::Error::SqliteFailure(err, _))
+                    if (err.code == rusqlite::ErrorCode::DatabaseBusy
+                        || err.code == rusqlite::ErrorCode::DatabaseLocked)
+                        && Instant::now() < retry_deadline =>
+                {
+                    thread::sleep(Duration::from_millis(50));
+                }
+                Err(err) => panic!(
+                    "failed to inspect mid-run sample count from {}: {err}",
+                    db_path.display()
+                ),
+            }
+        };
+        drop(inspect);
+
+        let _ = monitor.stop_monitoring(child.id());
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = monitor.shutdown();
+
+        assert!(
+            mid_run_count >= 1,
+            "periodic flush should have written samples before shutdown, \
+             got mid_run_count={mid_run_count}"
+        );
+    }
+
+    #[test]
+    fn init_timeseries_db_uses_wal_pragmas() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let conn = init_timeseries_db(temp_dir.path(), "pragmas").unwrap();
+
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        let synchronous: i64 = conn
+            .query_row("PRAGMA synchronous", [], |row| row.get(0))
+            .unwrap();
+        let temp_store: i64 = conn
+            .query_row("PRAGMA temp_store", [], |row| row.get(0))
+            .unwrap();
+
+        assert_eq!(journal_mode.to_lowercase(), "wal");
+        assert_eq!(synchronous, 1);
+        assert_eq!(temp_store, 2);
+    }
+
+    #[test]
+    fn compute_node_timeseries_does_not_write_job_samples_for_summary_jobs() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = ResourceMonitorConfig {
+            sample_interval_seconds: 1,
+            jobs: Some(JobMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::Summary,
+            }),
+            compute_node: Some(ComputeNodeMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::TimeSeries,
+                cpu: true,
+                memory: true,
+            }),
+            ..ResourceMonitorConfig::default()
+        };
+        let monitor =
+            ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "mixed".into()).unwrap();
+
+        let mut child = Command::new("sleep").arg("2").spawn().unwrap();
+        monitor
+            .start_monitoring(child.id(), 42, "job-42".to_string(), None)
+            .unwrap();
+
+        thread::sleep(Duration::from_millis(1200));
+        let _ = monitor.stop_monitoring(child.id());
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = monitor.shutdown();
+
+        let db_path = timeseries_db_path(temp_dir.path(), "mixed");
+        let conn = Connection::open(db_path).unwrap();
+        let job_sample_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM job_resource_samples", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let job_metadata_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM job_metadata", [], |row| row.get(0))
+            .unwrap();
+        let system_sample_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM system_resource_samples", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+
+        assert_eq!(job_sample_count, 0);
+        assert_eq!(job_metadata_count, 0);
+        assert!(system_sample_count >= 1);
     }
 }

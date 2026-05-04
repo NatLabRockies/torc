@@ -30,8 +30,8 @@ use log::{self, debug, error, info, warn};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -47,9 +47,91 @@ use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    ComputeNodesResources, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel,
-    WorkflowModel,
+    BatchCompleteJobsRequest, ComputeNodesResources, JobCompletionEntry, JobStatus,
+    ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
 };
+
+/// Local-side result of preparing a job completion: the data to send to the
+/// server in a `batch_complete_jobs` call. Returned by `prepare_job_completion`
+/// for jobs that were not retried locally.
+struct PreparedCompletion {
+    job_id: i64,
+    final_result: ResultModel,
+    slurm_stats: Option<SlurmStatsModel>,
+}
+
+/// Condvar-backed wakeup primitive used by the runner's main loop.
+///
+/// `wait_with_timeout` blocks up to the given duration; `notify` wakes any
+/// waiter immediately. Notifications are remembered: if `notify` is called
+/// while no one is waiting, the next `wait_with_timeout` returns immediately
+/// without sleeping. This makes it safe for an external thread (e.g. a
+/// SIGCHLD handler thread) to call `notify` at any time without coordinating
+/// with the runner's loop position.
+///
+/// `notify` takes a mutex and so is not async-signal-safe. Call it from a
+/// normal thread that consumes signals, never from a raw signal handler.
+pub struct Wakeup {
+    pending: Mutex<bool>,
+    cv: Condvar,
+}
+
+impl Wakeup {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            pending: Mutex::new(false),
+            cv: Condvar::new(),
+        })
+    }
+
+    /// Wake any waiter. If no one is waiting, the next `wait_with_timeout`
+    /// returns immediately.
+    pub fn notify(&self) {
+        let mut pending = self.pending.lock().unwrap();
+        *pending = true;
+        self.cv.notify_all();
+    }
+
+    /// Wait until notified or `timeout` elapses. Returns `true` if a
+    /// notification was consumed, `false` on timeout.
+    pub fn wait_with_timeout(&self, timeout: Duration) -> bool {
+        let mut pending = self.pending.lock().unwrap();
+        if *pending {
+            *pending = false;
+            return true;
+        }
+
+        let deadline = Instant::now() + timeout;
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                return false;
+            }
+
+            let remaining = deadline.saturating_duration_since(now);
+            let (next_pending, wait_result) = self.cv.wait_timeout(pending, remaining).unwrap();
+            pending = next_pending;
+
+            if *pending {
+                *pending = false;
+                return true;
+            }
+
+            if wait_result.timed_out() {
+                return false;
+            }
+        }
+    }
+}
+
+impl Default for Wakeup {
+    fn default() -> Self {
+        Self {
+            pending: Mutex::new(false),
+            cv: Condvar::new(),
+        }
+    }
+}
 
 /// Rule definition for failure handler (parsed from JSON stored in database)
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -278,6 +360,10 @@ pub struct JobRunner {
     resource_monitor: Option<ResourceMonitor>,
     /// Flag set when SIGTERM is received. Shared with signal handler.
     termination_requested: Arc<AtomicBool>,
+    /// Notified when SIGCHLD fires (or termination is requested) so the main
+    /// loop can wake from its idle wait without waiting for the full
+    /// `job_completion_poll_interval`. Shared with signal-handler threads.
+    wakeup: Arc<Wakeup>,
     /// Monotonic timestamp of when a job was last claimed. Used for idle timeout.
     /// Uses std::time::Instant instead of wall clock time to avoid issues with
     /// NTP clock adjustments that could cause premature idle timeout exits.
@@ -543,6 +629,7 @@ impl JobRunner {
             rules,
             resource_monitor,
             termination_requested: Arc::new(AtomicBool::new(false)),
+            wakeup: Wakeup::new(),
             last_job_claimed_time: None,
             had_failures: false,
             had_terminations: false,
@@ -614,6 +701,16 @@ impl JobRunner {
     /// ```
     pub fn get_termination_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.termination_requested)
+    }
+
+    /// Returns a clone of the wakeup primitive for use by signal-handler
+    /// threads. Calling `notify()` on the returned handle wakes the runner's
+    /// main loop from its idle wait, shrinking subprocess-completion latency
+    /// from up to `job_completion_poll_interval` down to the time it takes
+    /// the loop to call `try_wait` on each child. Intended for SIGCHLD
+    /// handlers, but safe for any thread to call.
+    pub fn get_wakeup_handle(&self) -> Arc<Wakeup> {
+        Arc::clone(&self.wakeup)
     }
 
     /// Checks if termination has been requested.
@@ -745,10 +842,13 @@ impl JobRunner {
                 }
             }
 
-            if let Err(e) = self.check_job_status() {
-                self.kill_running_jobs();
-                return Err(e);
-            }
+            let completions = match self.check_job_status() {
+                Ok(count) => count,
+                Err(e) => {
+                    self.kill_running_jobs();
+                    return Err(e);
+                }
+            };
             if self.execution_config.limit_resources()
                 && exec_mode == ExecutionMode::Direct
                 && let Err(e) = self.handle_oom_violations()
@@ -762,7 +862,7 @@ impl JobRunner {
             if let Some(max) = self.max_parallel_jobs {
                 // Parallelism-based mode: skip if already at max parallel jobs
                 if (self.running_jobs.len() as i64) < max {
-                    self.run_ready_jobs_based_on_user_parallelism()
+                    self.run_ready_jobs_based_on_user_parallelism();
                 } else {
                     debug!(
                         "Skipping job claim: at max parallel jobs ({}/{})",
@@ -773,7 +873,7 @@ impl JobRunner {
             } else {
                 // Resource-based mode: skip if no CPUs available or memory nearly exhausted
                 if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
-                    self.run_ready_jobs_based_on_resources()
+                    self.run_ready_jobs_based_on_resources();
                 } else {
                     debug!(
                         "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
@@ -782,7 +882,23 @@ impl JobRunner {
                 }
             }
 
-            thread::sleep(Duration::from_secs_f64(self.job_completion_poll_interval));
+            // Skip the poll-interval wait when this iteration reported one or
+            // more completions. Completions free capacity and the deferred
+            // unblock task may have made more jobs ready in the meantime, so
+            // reacting immediately closes the idle gap between a short job
+            // completing and the next job filling its slot.
+            //
+            // When we do wait, use the SIGCHLD-aware wakeup primitive instead
+            // of a plain sleep. A subprocess that exits during the wait
+            // delivers SIGCHLD to this process; the signal-handler thread
+            // calls `wakeup.notify()`, and we re-enter the loop to call
+            // `try_wait` on each child immediately. This eliminates the case
+            // where short jobs spawned in the prior iteration finish during
+            // the wait but aren't observed until the full interval elapses.
+            if completions == 0 {
+                self.wakeup
+                    .wait_with_timeout(Duration::from_secs_f64(self.job_completion_poll_interval));
+            }
 
             if self.is_termination_requested() {
                 info!("Termination requested (SIGTERM received). Terminating jobs.");
@@ -1020,13 +1136,11 @@ impl JobRunner {
                 }
             };
         }
-        for (job_id, result) in results {
-            if let Err(e) = self.handle_job_completion(job_id, result) {
-                error!(
-                    "Failed to record canceled job completion workflow_id={} job_id={}: {}",
-                    self.workflow_id, job_id, e
-                );
-            }
+        if let Err(e) = self.handle_completions_batch(results) {
+            error!(
+                "Failed to record canceled job completions workflow_id={}: {}",
+                self.workflow_id, e
+            );
         }
     }
 
@@ -1205,19 +1319,21 @@ impl JobRunner {
         }
 
         // Final pass: handle completions (notify server)
-        for (job_id, result) in results {
-            if let Err(e) = self.handle_job_completion(job_id, result) {
-                error!(
-                    "Failed to record terminated job completion workflow_id={} job_id={}: {}",
-                    self.workflow_id, job_id, e
-                );
-            }
+        if let Err(e) = self.handle_completions_batch(results) {
+            error!(
+                "Failed to record terminated job completions workflow_id={}: {}",
+                self.workflow_id, e
+            );
         }
     }
 
     /// Check the status of running jobs and remove completed ones.
-    fn check_job_status(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut completed_jobs = Vec::new();
+    /// Detect locally-completed jobs and report them to the server.
+    ///
+    /// Returns the number of completions handled this iteration. Callers use
+    /// this to decide whether the runner should re-enter the main loop
+    /// immediately rather than sleeping.
+    fn check_job_status(&mut self) -> Result<usize, Box<dyn std::error::Error>> {
         let mut job_results = Vec::new();
 
         // First pass: check status and collect completed jobs
@@ -1225,8 +1341,6 @@ impl JobRunner {
             match async_job.check_status() {
                 Ok(()) => {
                     if async_job.is_complete {
-                        completed_jobs.push(*job_id);
-
                         let attempt_id = async_job.job.attempt_id.unwrap_or(1);
                         let result = async_job.get_result(
                             self.run_id,
@@ -1247,9 +1361,11 @@ impl JobRunner {
             }
         }
 
-        // Second pass: validate output files and complete jobs
+        let completion_count = job_results.len();
+
+        // Second pass: validate output files, then report all completions in one batch.
+        let mut to_report = Vec::with_capacity(completion_count);
         for (job_id, mut result, output_file_ids) in job_results {
-            // Validate output files if job completed successfully
             if result.return_code == 0
                 && let Err(e) = self.validate_and_update_output_files(job_id, &output_file_ids)
             {
@@ -1257,10 +1373,10 @@ impl JobRunner {
                 result.return_code = 1;
                 result.status = JobStatus::Failed;
             }
-
-            self.handle_job_completion(job_id, result)?;
+            to_report.push((job_id, result));
         }
-        Ok(())
+        self.handle_completions_batch(to_report)?;
+        Ok(completion_count)
     }
 
     /// Handle OOM violations detected by the resource monitor.
@@ -1354,9 +1470,7 @@ impl JobRunner {
         }
 
         // Third pass: handle completions (notify server)
-        for (job_id, result) in results {
-            self.handle_job_completion(job_id, result)?;
-        }
+        self.handle_completions_batch(results)?;
         Ok(())
     }
 
@@ -1582,11 +1696,32 @@ impl JobRunner {
         }
     }
 
-    fn handle_job_completion(
+    /// Prepare and report a list of (job_id, result) completions in one batched
+    /// server call. Each completion is run through the local-side preparation
+    /// pipeline (recovery, status determination, side-effect flags); the
+    /// surviving entries (those not retried locally) are then sent in a single
+    /// `batch_complete_jobs` request.
+    fn handle_completions_batch(
+        &mut self,
+        completions: Vec<(i64, ResultModel)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let prepared: Vec<PreparedCompletion> = completions
+            .into_iter()
+            .filter_map(|(job_id, result)| self.prepare_job_completion(job_id, result))
+            .collect();
+        self.report_completions_batch(prepared)
+    }
+
+    /// Run the local-side preparation for a job completion: collect Slurm stats,
+    /// run failure-handler recovery, settle on the final status, and update
+    /// runner-level flags. Returns `None` when recovery scheduled a retry (in
+    /// which case all local cleanup has already happened); otherwise returns
+    /// the data that needs to be reported to the server.
+    fn prepare_job_completion(
         &mut self,
         job_id: i64,
         result: ResultModel,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Option<PreparedCompletion> {
         // Take sacct stats now, before the result is sent to the server, so we can backfill
         // resource fields.  For srun-wrapped jobs the sysinfo monitor only sees the srun process
         // (negligible overhead), so sacct provides the authoritative peak memory and CPU data.
@@ -1600,7 +1735,6 @@ impl JobRunner {
             backfill_sacct_into_result(&mut final_result, stats);
         }
 
-        // Get job info before removing from running_jobs
         let job_info = self.running_jobs.get(&job_id).map(|cmd| {
             (
                 cmd.job.name.clone(),
@@ -1609,14 +1743,12 @@ impl JobRunner {
             )
         });
 
-        // Check if we should try to recover a failed or terminated job
         if matches!(
             final_result.status,
             JobStatus::Failed | JobStatus::Terminated
         ) && let Some((job_name, attempt_id, failure_handler_id)) = &job_info
         {
             let return_code = final_result.return_code;
-            // Try to recover the job if it has a failure handler
             let outcome = self.try_recover_job(
                 job_id,
                 job_name,
@@ -1627,7 +1759,6 @@ impl JobRunner {
 
             match outcome {
                 RecoveryOutcome::Retried => {
-                    // Job was successfully scheduled for retry - clean up but don't mark as failed
                     info!(
                         "Job retry scheduled workflow_id={} job_id={} job_name={} return_code={} attempt_id={}",
                         self.workflow_id, job_id, job_name, return_code, attempt_id
@@ -1639,114 +1770,172 @@ impl JobRunner {
                     self.last_job_claimed_time = Some(Instant::now());
                     self.running_jobs.remove(&job_id);
                     self.job_resources.remove(&job_id);
-                    return Ok(());
+                    return None;
                 }
                 RecoveryOutcome::NoHandler | RecoveryOutcome::NoMatchingRule => {
-                    // Check if workflow has use_pending_failed enabled
                     if self.workflow.use_pending_failed.unwrap_or(false) {
-                        // Use PendingFailed status for AI-assisted recovery
                         info!(
                             "Job pending_failed workflow_id={} job_id={} job_name={} return_code={} reason={:?}",
                             self.workflow_id, job_id, job_name, return_code, outcome
                         );
                         final_result.status = JobStatus::PendingFailed;
                     } else {
-                        // Use Failed status (default behavior)
                         debug!(
                             "Job failed workflow_id={} job_id={} job_name={} return_code={} reason={:?}",
                             self.workflow_id, job_id, job_name, return_code, outcome
                         );
-                        // Keep status as Failed
                     }
                 }
                 RecoveryOutcome::MaxRetriesExceeded | RecoveryOutcome::Error(_) => {
-                    // Max retries exceeded or error - use Failed status (no recovery possible)
                     debug!(
                         "Job failed workflow_id={} job_id={} reason={:?}",
                         self.workflow_id, job_id, outcome
                     );
-                    // Keep status as Failed
                 }
             }
         }
 
-        // Track failures and terminations (if we reach here, no retry happened)
         match final_result.status {
             JobStatus::Failed | JobStatus::PendingFailed => self.had_failures = true,
             JobStatus::Terminated => self.had_terminations = true,
             _ => {}
         }
 
-        let status_str = format!("{:?}", final_result.status).to_lowercase();
-        match self.send_with_retries(|| {
-            Self::box_retry_error(apis::jobs_api::complete_job(
+        Some(PreparedCompletion {
+            job_id,
+            final_result,
+            slurm_stats,
+        })
+    }
+
+    /// Send a batch of prepared completions in a single request and run the
+    /// post-success finalization for each one (slurm stats upload, resource
+    /// release, stdio cleanup, removal from local state). Returns an error if
+    /// the batch call itself fails after retries; per-completion errors
+    /// reported by the server are logged and treated as terminal for that job.
+    fn report_completions_batch(
+        &mut self,
+        prepared: Vec<PreparedCompletion>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if prepared.is_empty() {
+            return Ok(());
+        }
+
+        let request = BatchCompleteJobsRequest {
+            completions: prepared
+                .iter()
+                .map(|p| JobCompletionEntry {
+                    job_id: p.job_id,
+                    status: p.final_result.status,
+                    run_id: p.final_result.run_id,
+                    result: p.final_result.clone(),
+                })
+                .collect(),
+        };
+
+        let response = match self.send_with_retries(|| {
+            Self::box_retry_error(apis::workflows_api::batch_complete_jobs(
                 &self.config,
-                job_id,
-                final_result.status,
-                final_result.run_id,
-                final_result.clone(),
+                self.workflow_id,
+                request.clone(),
             ))
         }) {
-            Ok(_) => {
-                info!(
-                    "Job completed workflow_id={} job_id={} run_id={} status={}",
-                    self.workflow_id, job_id, final_result.run_id, status_str
+            Ok(response) => response,
+            Err(e) => {
+                error!(
+                    "batch_complete_jobs failed after retries workflow_id={} count={} error={}",
+                    self.workflow_id,
+                    prepared.len(),
+                    e
                 );
-                // Store Slurm accounting stats if collected (best-effort, non-blocking).
-                // slurm_stats was taken at the top of handle_job_completion so we could backfill
-                // resource fields into the result before reporting to the server.
-                if let Some(stats) = slurm_stats {
-                    match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
-                        Ok(_) => {
-                            info!(
-                                "Stored slurm_stats workflow_id={} job_id={}",
-                                self.workflow_id, job_id
-                            );
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to store slurm_stats workflow_id={} job_id={}: {}",
-                                self.workflow_id, job_id, e
-                            );
-                        }
+                // Clean up local state for every prepared completion before
+                // propagating the batch error so finished subprocesses do not
+                // keep local resources reserved.
+                for p in &prepared {
+                    if let Some(job_rr) = self.job_resources.get(&p.job_id).cloned() {
+                        self.increment_node_resources(p.job_id, &job_rr);
+                        self.increment_resources(&job_rr);
                     }
+                    self.running_jobs.remove(&p.job_id);
+                    self.job_resources.remove(&p.job_id);
+                    self.release_gpu_devices(p.job_id);
                 }
+                return Err(format!("Unable to record job completions: {}", e).into());
+            }
+        };
+
+        let completed: std::collections::HashSet<i64> = response.completed.into_iter().collect();
+        for err in &response.errors {
+            error!(
+                "Job complete reported as failed by server workflow_id={} job_id={} message={}",
+                self.workflow_id, err.job_id, err.message
+            );
+        }
+
+        for prep in prepared {
+            let PreparedCompletion {
+                job_id,
+                final_result,
+                slurm_stats,
+            } = prep;
+
+            if !completed.contains(&job_id) {
+                // Server rejected this individual completion. Clean up local
+                // state so we don't leak the entry in running_jobs or keep
+                // local resources reserved for a finished subprocess.
                 if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
                     self.increment_node_resources(job_id, &job_rr);
                     self.increment_resources(&job_rr);
                 }
-                // Reset the idle timer when a job completes, since blocked jobs may now
-                // become ready. This gives dependent jobs time to be picked up before
-                // the runner exits due to no jobs being claimed.
-                self.last_job_claimed_time = Some(Instant::now());
-
-                // Delete stdio files on successful completion if configured
-                if final_result.return_code == 0
-                    && let Some(cmd) = self.running_jobs.get(&job_id)
-                {
-                    let job_name = &cmd.job.name;
-                    if self.execution_config.delete_stdio_on_success(job_name) {
-                        Self::cleanup_stdio_files(cmd);
-                    }
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Job complete failed after retries workflow_id={} job_id={} error={}",
-                    self.workflow_id, job_id, e
-                );
-                // Clean up local state before propagating the error
                 self.running_jobs.remove(&job_id);
                 self.job_resources.remove(&job_id);
                 self.release_gpu_devices(job_id);
-                return Err(
-                    format!("Unable to record job completion for job {}: {}", job_id, e).into(),
-                );
+                continue;
             }
+
+            let status_str = format!("{:?}", final_result.status).to_lowercase();
+            info!(
+                "Job completed workflow_id={} job_id={} run_id={} status={}",
+                self.workflow_id, job_id, final_result.run_id, status_str
+            );
+
+            if let Some(stats) = slurm_stats {
+                match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
+                    Ok(_) => {
+                        info!(
+                            "Stored slurm_stats workflow_id={} job_id={}",
+                            self.workflow_id, job_id
+                        );
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to store slurm_stats workflow_id={} job_id={}: {}",
+                            self.workflow_id, job_id, e
+                        );
+                    }
+                }
+            }
+
+            if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
+                self.increment_node_resources(job_id, &job_rr);
+                self.increment_resources(&job_rr);
+            }
+            self.last_job_claimed_time = Some(Instant::now());
+
+            if final_result.return_code == 0
+                && let Some(cmd) = self.running_jobs.get(&job_id)
+            {
+                let job_name = &cmd.job.name;
+                if self.execution_config.delete_stdio_on_success(job_name) {
+                    Self::cleanup_stdio_files(cmd);
+                }
+            }
+
+            self.running_jobs.remove(&job_id);
+            self.job_resources.remove(&job_id);
+            self.release_gpu_devices(job_id);
         }
-        self.running_jobs.remove(&job_id);
-        self.job_resources.remove(&job_id);
-        self.release_gpu_devices(job_id);
+
         Ok(())
     }
 
@@ -2161,6 +2350,7 @@ impl JobRunner {
                         .resource_requirements_id
                         .expect("Job must have a resource_requirements_id");
                     let mut async_job = AsyncCliCommand::new(job);
+                    let effective_job_env = async_job.job.env.clone();
 
                     let job_rr = match self.send_with_retries(|| {
                         Self::box_retry_error(
@@ -2220,6 +2410,7 @@ impl JobRunner {
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
                         Some(&job_rr),
+                        effective_job_env.as_ref(),
                         gpu_visible_devices.as_deref(),
                         self.execution_config.limit_resources(),
                         effective_mode,
@@ -2312,6 +2503,7 @@ impl JobRunner {
                         .resource_requirements_id
                         .expect("Job must have a resource_requirements_id");
                     let mut async_job = AsyncCliCommand::new(job);
+                    let effective_job_env = async_job.job.env.clone();
 
                     let job_rr = match self.send_with_retries(|| {
                         Self::box_retry_error(
@@ -2372,6 +2564,7 @@ impl JobRunner {
                         self.resource_monitor.as_ref(),
                         &self.config.base_path,
                         Some(&job_rr),
+                        effective_job_env.as_ref(),
                         gpu_visible_devices.as_deref(),
                         self.execution_config.limit_resources(),
                         effective_mode,
@@ -2986,6 +3179,95 @@ mod tests {
     use crate::client::apis::configuration::Configuration;
     use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
     use serial_test::serial;
+
+    #[test]
+    fn wakeup_notify_before_wait_returns_immediately() {
+        let w = Wakeup::new();
+        w.notify();
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_secs(2));
+        assert!(notified, "wait should report a notification");
+        assert!(
+            start.elapsed() < Duration::from_millis(100),
+            "wait should return immediately when a notification is already pending, took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn wakeup_notify_during_wait_wakes_waiter() {
+        let w = Wakeup::new();
+        let w2 = Arc::clone(&w);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            w2.notify();
+        });
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_secs(5));
+        let elapsed = start.elapsed();
+        assert!(notified, "wait should be notified, not time out");
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "wait should wake shortly after notify, took {:?}",
+            elapsed
+        );
+    }
+
+    #[test]
+    fn wakeup_timeout_returns_false_without_notify() {
+        let w = Wakeup::new();
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_millis(50));
+        assert!(!notified, "wait should report timeout, not notification");
+        assert!(
+            start.elapsed() >= Duration::from_millis(40),
+            "wait should respect the timeout, only waited {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn wakeup_ignores_spurious_condvar_notifications() {
+        let w = Wakeup::new();
+        let w2 = Arc::clone(&w);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(20));
+            w2.cv.notify_all();
+        });
+        let start = Instant::now();
+        let notified = w.wait_with_timeout(Duration::from_millis(60));
+        assert!(
+            !notified,
+            "spurious condvar wake should not look like notify()"
+        );
+        assert!(
+            start.elapsed() >= Duration::from_millis(45),
+            "wait should continue until timeout after a spurious wake, only waited {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn wakeup_notification_does_not_persist_across_waits() {
+        let w = Wakeup::new();
+        w.notify();
+        assert!(w.wait_with_timeout(Duration::from_millis(10)));
+        let start = Instant::now();
+        assert!(!w.wait_with_timeout(Duration::from_millis(50)));
+        assert!(start.elapsed() >= Duration::from_millis(40));
+    }
+
+    #[test]
+    fn wakeup_multiple_notifies_coalesce() {
+        let w = Wakeup::new();
+        for _ in 0..100 {
+            w.notify();
+        }
+        assert!(w.wait_with_timeout(Duration::from_millis(10)));
+        let start = Instant::now();
+        assert!(!w.wait_with_timeout(Duration::from_millis(50)));
+        assert!(start.elapsed() >= Duration::from_millis(40));
+    }
 
     fn make_result(
         peak_memory_bytes: Option<i64>,

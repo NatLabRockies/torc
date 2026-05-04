@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            WITH RECURSIVE downstream_jobs(job_id, level) AS (\n                SELECT\n                    jbb.job_id,\n                    0 as level\n                FROM job_depends_on jbb\n                WHERE jbb.depends_on_job_id = ?\n                  AND jbb.workflow_id = ?\n\n                UNION ALL\n\n                SELECT\n                    jbb.job_id,\n                    dj.level + 1 as level\n                FROM downstream_jobs dj\n                JOIN job_depends_on jbb ON jbb.depends_on_job_id = dj.job_id\n                WHERE jbb.workflow_id = ?\n                  AND dj.level < 100\n            )\n            UPDATE job\n            SET status = ?\n            WHERE workflow_id = ?\n              AND id IN (SELECT DISTINCT job_id FROM downstream_jobs)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "8858c269a643f3d77490b539d6a6be02139744b90f42b15a672e854d19011331"
+}

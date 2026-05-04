@@ -290,7 +290,7 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
     );
 
     // --- Initialize the workflow so jobs transition to 'ready' ---
-    apis::workflows_api::initialize_jobs(&start_server.config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(&start_server.config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // --- Verify all 4 jobs are now ready ---

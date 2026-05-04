@@ -479,7 +479,7 @@ pub fn create_diamond_workflow(
         apis::jobs_api::create_job(config, postprocess_pre).expect("Failed to add postprocess");
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id as i64, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id as i64, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -718,7 +718,7 @@ pub fn create_minimal_resources_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -768,7 +768,7 @@ pub fn create_high_cpu_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -818,7 +818,7 @@ pub fn create_high_memory_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -868,7 +868,7 @@ pub fn create_gpu_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -918,7 +918,7 @@ pub fn create_multi_node_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -968,7 +968,7 @@ pub fn create_maximum_resources_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1077,7 +1077,7 @@ pub fn create_dependency_chain_workflow(
     let created_job3 = apis::jobs_api::create_job(config, job3).expect("Failed to create job3");
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1149,7 +1149,7 @@ pub fn create_custom_resources_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1196,7 +1196,7 @@ pub fn create_many_jobs_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 
@@ -1271,7 +1271,7 @@ pub fn create_diverse_jobs_workflow(
     }
 
     if init_jobs {
-        apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
             .expect("Failed to initialize jobs");
     }
 

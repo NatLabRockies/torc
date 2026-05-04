@@ -15,6 +15,7 @@ The top-level container for a complete workflow definition.
 | `project`                                        | string                                                  | none         | Project name or identifier for grouping workflows                         |
 | `metadata`                                       | string                                                  | none         | Arbitrary metadata as JSON string                                         |
 | `parameters`                                     | map\<string, string\>                                   | none         | Shared parameters that can be used by jobs and files via `use_parameters` |
+| `env`                                            | map\<string, string\>                                   | none         | Environment variables exported for every job in the workflow              |
 | `jobs`                                           | [[JobSpec](#jobspec)]                                   | _required_   | Jobs that make up this workflow                                           |
 | `files`                                          | [[FileSpec](#filespec)]                                 | none         | Files associated with this workflow                                       |
 | `user_data`                                      | [[UserDataSpec](#userdataspec)]                         | none         | User data associated with this workflow                                   |
@@ -31,11 +32,15 @@ The top-level container for a complete workflow definition.
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                |
 | `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking  |
 
-### Examples with project and metadata
+### Examples with project, metadata, and shared environment
 
 The `project` and `metadata` fields are useful for organizing and categorizing workflows. For more
 detailed guidance on organizing workflows, see
 [Organizing and Managing Workflows](../workflows/organizing-workflows.md).
+
+Use the top-level `env` map to export environment variables for every job in the workflow. Jobs can
+also define their own `env` map to add variables or override workflow-level values with the same
+key.
 
 **YAML example:**
 
@@ -44,11 +49,16 @@ name: "ml_training_workflow"
 project: "customer-churn-prediction"
 metadata: '{"environment":"staging","version":"1.0.0","team":"ml-engineering"}'
 description: "Train and evaluate churn prediction model"
+env:
+  DATA_ROOT: "/scratch/churn"
+  LOG_LEVEL: "info"
 jobs:
   - name: "preprocess"
     command: "python preprocess.py"
   - name: "train"
     command: "python train.py"
+    env:
+      LOG_LEVEL: "debug"
     depends_on: ["preprocess"]
 ```
 
@@ -60,10 +70,17 @@ jobs:
   "project": "analytics-platform",
   "metadata": "{\"cost_center\":\"eng-data\",\"priority\":\"high\"}",
   "description": "Daily data processing pipeline",
+  "env": {
+    "DATA_ROOT": "/scratch/analytics",
+    "LOG_LEVEL": "info"
+  },
   "jobs": [
     {
       "name": "extract",
-      "command": "python extract.py"
+      "command": "python extract.py",
+      "env": {
+        "LOG_LEVEL": "debug"
+      }
     }
   ]
 }
@@ -79,6 +96,7 @@ Defines a single computational task within a workflow.
 | `command`                        | string                      | _required_  | Command to execute for this job                                        |
 | `priority`                       | integer                     | `0`         | Scheduling priority; higher values are claimed before lower values     |
 | `invocation_script`              | string                      | none        | Optional script for job invocation                                     |
+| `env`                            | map\<string, string\>       | none        | Environment variables exported for this job                            |
 | `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
 | `failure_handler`                | string                      | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
 | `scheduler`                      | string                      | none        | Name of the scheduler to use for this job                              |
@@ -97,6 +115,10 @@ Defines a single computational task within a workflow.
 | `parameter_mode`                 | string                      | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
 | `use_parameters`                 | [string]                    | none        | Workflow parameter names to use for this job                           |
 | `stdio`                          | [StdioConfig](#stdioconfig) | none        | Per-job override for stdout/stderr capture (overrides workflow-level)  |
+
+When both workflow-level and job-level `env` maps are present, Torc merges them when the job is
+created and stores the effective environment on the job. Job-level values win on key conflicts. Torc
+exports these variables before running the job's `invocation_script`, if any.
 
 ## FileSpec
 
@@ -382,18 +404,20 @@ Defines conditional actions triggered by workflow or job state changes.
 
 Configuration for resource usage monitoring.
 
-| Name                      | Type                     | Default | Description                         |
-| ------------------------- | ------------------------ | ------- | ----------------------------------- |
-| `sample_interval_seconds` | integer                  | `10`    | Shared sampling interval in seconds |
-| `generate_plots`          | boolean                  | `false` | Generate resource usage plots       |
-| `jobs`                    | JobMonitorConfig         | none    | Per-job monitoring config           |
-| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node monitoring     |
+| Name                      | Type                     | Default | Description                                     |
+| ------------------------- | ------------------------ | ------- | ----------------------------------------------- |
+| `sample_interval_seconds` | integer                  | `10`    | Shared sampling interval in seconds             |
+| `flush_interval_seconds`  | integer                  | `300`   | Flush interval for buffered time-series samples |
+| `generate_plots`          | boolean                  | `false` | Generate resource usage plots                   |
+| `jobs`                    | JobMonitorConfig         | none    | Per-job monitoring config                       |
+| `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node monitoring                 |
 
 Example with per-job summary monitoring and overall compute-node time-series monitoring:
 
 ```yaml
 resource_monitor:
   sample_interval_seconds: 5
+  flush_interval_seconds: 300
   jobs:
     enabled: true
     granularity: summary
@@ -407,8 +431,10 @@ resource_monitor:
 `jobs.granularity` controls per-job monitoring. `compute_node.granularity` independently controls
 overall compute-node monitoring, so a workflow can store per-job summaries while collecting
 compute-node time series. Both scopes use the parent `sample_interval_seconds`; there is not a
-separate sampling interval per scope. The current compute-node monitor records CPU and memory; GPU
-monitoring is expected to use the same nested `compute_node` configuration in a future release.
+separate sampling interval per scope. When time-series monitoring is enabled, samples are flushed to
+SQLite every `flush_interval_seconds`, which trades lower commit overhead for a bounded amount of
+crash-exposed buffered data. The current compute-node monitor records CPU and memory; GPU monitoring
+is expected to use the same nested `compute_node` configuration in a future release.
 
 For backwards compatibility, top-level `enabled` and `granularity` fields are still accepted and
 apply to job monitoring when `jobs` is omitted. New workflow specs should use `jobs`.

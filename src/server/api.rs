@@ -3,6 +3,7 @@
 use crate::server::transport_types::context_types::ApiError;
 use log::{debug, error, info};
 use sqlx::sqlite::SqlitePool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub use crate::MAX_RECORD_TRANSFER_COUNT;
@@ -52,6 +53,79 @@ pub fn json_parse_error(e: impl std::fmt::Display) -> ApiError {
     ApiError("Failed to parse event data".to_string())
 }
 
+pub fn normalize_env_map(env: Option<HashMap<String, String>>) -> Option<HashMap<String, String>> {
+    env.filter(|env_map| !env_map.is_empty())
+}
+
+pub fn serialize_env_map(
+    env: Option<HashMap<String, String>>,
+    field_name: &str,
+) -> Result<Option<String>, ApiError> {
+    normalize_env_map(env)
+        .map(|env_map| {
+            serde_json::to_string(&env_map)
+                .map_err(|e| ApiError(format!("Failed to serialize {}: {}", field_name, e)))
+        })
+        .transpose()
+}
+
+pub fn deserialize_env_map(
+    env_json: Option<String>,
+    field_name: &str,
+) -> Result<Option<HashMap<String, String>>, ApiError> {
+    env_json
+        .and_then(|env| {
+            let trimmed = env.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .map(|env| {
+            serde_json::from_str::<HashMap<String, String>>(&env)
+                .map_err(|e| ApiError(format!("Failed to parse {}: {}", field_name, e)))
+        })
+        .transpose()
+        .map(normalize_env_map)
+}
+
+pub fn validate_env_map(
+    env: Option<&HashMap<String, String>>,
+    field_name: &str,
+) -> Result<(), ApiError> {
+    let Some(env) = env else {
+        return Ok(());
+    };
+
+    for key in env.keys() {
+        if !crate::models::is_valid_env_var_name(key) {
+            return Err(ApiError(format!(
+                "Invalid {} key '{}'; expected [A-Za-z_][A-Za-z0-9_]*",
+                field_name, key
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Begin a SQLite transaction with `BEGIN IMMEDIATE`, taking the write lock up front.
+///
+/// In WAL mode, `pool.begin()` issues plain `BEGIN` (= `BEGIN DEFERRED`), which only
+/// takes the database write lock when the first write statement runs. If a `SELECT`
+/// runs first inside the transaction, the connection acquires a WAL read snapshot,
+/// and a subsequent `INSERT`/`UPDATE`/`DELETE` can fail with `SQLITE_BUSY_SNAPSHOT`
+/// (extended code 517) the moment any other connection commits in between. The
+/// connection's `busy_timeout` does **not** retry `SQLITE_BUSY_SNAPSHOT` -- it
+/// returns immediately.
+///
+/// `BEGIN IMMEDIATE` takes the write lock up front, so the full `busy_timeout`
+/// applies to lock acquisition and the snapshot-conflict path is impossible. Use
+/// this helper for any handler that mixes reads and writes inside a single
+/// transaction.
+pub async fn begin_immediate(
+    pool: &SqlitePool,
+) -> Result<sqlx::Transaction<'static, sqlx::Sqlite>, sqlx::Error> {
+    pool.begin_with("BEGIN IMMEDIATE").await
+}
+
 /// Escape SQL LIKE wildcard characters in user input.
 /// Escapes `%`, `_`, and `\` with a backslash prefix.
 pub fn escape_like_pattern(input: &str) -> String {
@@ -63,7 +137,8 @@ pub fn escape_like_pattern(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::escape_like_pattern;
+    use super::{deserialize_env_map, escape_like_pattern, validate_env_map};
+    use std::collections::HashMap;
 
     #[test]
     fn escapes_percent_sign() {
@@ -102,6 +177,47 @@ mod tests {
         assert_eq!(escape_like_pattern("simpletext"), "simpletext");
         assert_eq!(escape_like_pattern("123456"), "123456");
         assert_eq!(escape_like_pattern(""), "");
+    }
+
+    #[test]
+    fn deserialize_env_map_treats_empty_string_as_none() {
+        let env = deserialize_env_map(Some(String::new()), "job env").expect("empty env");
+        assert_eq!(env, None);
+    }
+
+    #[test]
+    fn deserialize_env_map_round_trips_json_object() {
+        let env = deserialize_env_map(Some(r#"{"FOO":"bar"}"#.to_string()), "job env")
+            .expect("valid env json");
+        assert_eq!(
+            env,
+            Some(HashMap::from([("FOO".to_string(), "bar".to_string())]))
+        );
+    }
+
+    #[test]
+    fn validate_env_map_accepts_valid_names() {
+        validate_env_map(
+            Some(&HashMap::from([
+                ("FOO".to_string(), "bar".to_string()),
+                ("_CACHE1".to_string(), "/tmp".to_string()),
+            ])),
+            "job env",
+        )
+        .expect("valid env map");
+    }
+
+    #[test]
+    fn validate_env_map_rejects_invalid_names() {
+        let err = validate_env_map(
+            Some(&HashMap::from([(
+                "BAD-NAME".to_string(),
+                "bar".to_string(),
+            )])),
+            "job env",
+        )
+        .expect_err("invalid env map should fail");
+        assert!(err.0.contains("BAD-NAME"));
     }
 }
 

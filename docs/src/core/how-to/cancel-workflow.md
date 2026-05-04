@@ -56,4 +56,6 @@ Jobs that completed before cancellation remain completed.
 ## See Also
 
 - [Track Workflow Status](./track-workflow-status.md) — Monitor workflow progress
-- [Workflow Reinitialization](../concepts/reinitialization.md) — Resume after issues
+- [Intelligent Restart](../concepts/intelligent-restart.md) — Rerun affected jobs after editing
+  inputs
+- [Rerun Failed Jobs](./rerun-failed-jobs.md) — Retry jobs that failed

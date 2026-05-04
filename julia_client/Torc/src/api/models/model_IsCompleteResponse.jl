@@ -7,43 +7,37 @@
     IsCompleteResponse(;
         is_canceled=nothing,
         is_complete=nothing,
-        needs_to_run_completion_script=nothing,
     )
 
     - is_canceled::Bool
     - is_complete::Bool
-    - needs_to_run_completion_script::Bool
 """
 Base.@kwdef mutable struct IsCompleteResponse <: OpenAPI.APIModel
     is_canceled::Union{Nothing, Bool} = nothing
     is_complete::Union{Nothing, Bool} = nothing
-    needs_to_run_completion_script::Union{Nothing, Bool} = nothing
 
-    function IsCompleteResponse(is_canceled, is_complete, needs_to_run_completion_script, )
-        o = new(is_canceled, is_complete, needs_to_run_completion_script, )
+    function IsCompleteResponse(is_canceled, is_complete, )
+        o = new(is_canceled, is_complete, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type IsCompleteResponse
 
-const _property_types_IsCompleteResponse = Dict{Symbol,String}(Symbol("is_canceled")=>"Bool", Symbol("is_complete")=>"Bool", Symbol("needs_to_run_completion_script")=>"Bool", )
+const _property_types_IsCompleteResponse = Dict{Symbol,String}(Symbol("is_canceled")=>"Bool", Symbol("is_complete")=>"Bool", )
 OpenAPI.property_type(::Type{ IsCompleteResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_IsCompleteResponse[name]))}
 
 function OpenAPI.check_required(o::IsCompleteResponse)
     o.is_canceled === nothing && (return false)
     o.is_complete === nothing && (return false)
-    o.needs_to_run_completion_script === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::IsCompleteResponse)
     OpenAPI.validate_property(IsCompleteResponse, Symbol("is_canceled"), o.is_canceled)
     OpenAPI.validate_property(IsCompleteResponse, Symbol("is_complete"), o.is_complete)
-    OpenAPI.validate_property(IsCompleteResponse, Symbol("needs_to_run_completion_script"), o.needs_to_run_completion_script)
 end
 
 function OpenAPI.validate_property(::Type{ IsCompleteResponse }, name::Symbol, val)
-
 
 
 end

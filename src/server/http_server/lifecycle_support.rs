@@ -1,5 +1,5 @@
 use super::*;
-use crate::server::api::{database_error_with_msg, database_lock_aware_error};
+use crate::server::api::{begin_immediate, database_error_with_msg, database_lock_aware_error};
 
 impl<C> Server<C> {
     pub(super) async fn manage_job_status_change(
@@ -234,8 +234,8 @@ impl<C> Server<C> {
                           FROM job_depends_on jbb
                           JOIN job j ON jbb.depends_on_job_id = j.id
                           JOIN result r ON j.id = r.job_id
-                          JOIN workflow_status ws ON j.workflow_id = ws.id
-                            AND r.run_id = ws.run_id
+                          JOIN workflow w ON j.workflow_id = w.id
+                            AND r.run_id = w.run_id
                           WHERE jbb.job_id = job.id
                             AND j.status IN (?, ?, ?)
                             AND r.return_code != 0
@@ -396,7 +396,11 @@ impl<C> Server<C> {
 
         let uninitialized_status = models::JobStatus::Uninitialized.to_int();
 
-        let mut tx = match self.pool.begin().await {
+        // BEGIN IMMEDIATE: the first statement on this tx is a SELECT, which would
+        // acquire a WAL read snapshot under BEGIN DEFERRED and then risk
+        // SQLITE_BUSY_SNAPSHOT (517) on the recursive UPDATE that follows.
+        // See server/api.rs::begin_immediate.
+        let mut tx = match begin_immediate(&self.pool).await {
             Ok(tx) => tx,
             Err(e) => {
                 error!("Failed to begin transaction for completion reversal: {}", e);

@@ -128,7 +128,7 @@ sequenceDiagram
     Note over JR,DB: Job Failure
     JR->>JR: Job exits with code 1
     JR->>JR: No failure handler match
-    JR->>API: complete_job(status=pending_failed)
+    JR->>API: batch_complete_jobs(... pending_failed ...)
     API->>DB: UPDATE job SET status=10
 
     Note over AI,DB: AI Classification

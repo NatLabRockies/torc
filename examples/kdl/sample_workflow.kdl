@@ -5,6 +5,11 @@ name "sample_data_processing_workflow"
 
 description "A sample workflow that demonstrates data processing with multiple jobs"
 
+env {
+    TORC_EXAMPLE_DATA_ROOT "/data"
+    LOG_LEVEL "info"
+}
+
 // File definitions
 file "raw_data" path="/data/input/raw_data.csv"
 file "validated_data" path="/data/processed/validated_data.csv"
@@ -83,7 +88,11 @@ job "data_download" {
 
 job "data_validation" {
     command "python ${files.input.validation_script} ${files.input.raw_data}"
-    invocation_script "#!/bin/bash\\nset -e\\nexport PYTHONPATH=/opt/validation:$PYTHONPATH"
+    env {
+        PYTHONPATH "/opt/validation"
+        LOG_LEVEL "debug"
+    }
+    invocation_script "#!/bin/bash\\nset -e"
     cancel_on_blocking_job_failure #true
     resource_requirements "small_job"
     depends_on_job "data_download"

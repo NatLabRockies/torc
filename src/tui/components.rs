@@ -115,6 +115,207 @@ impl ConfirmationDialog {
     }
 }
 
+/// A small modal that asks the user for the two recovery multipliers
+/// (memory and runtime) before launching `torc recover`. The modal also
+/// serves as the confirmation gate: pressing Enter applies, Esc cancels.
+#[derive(Debug, Clone)]
+pub struct RecoverPromptDialog {
+    pub title: String,
+    pub message: String,
+    pub memory_input: String,
+    pub runtime_input: String,
+    /// 0 = memory field, 1 = runtime field
+    pub active_field: u8,
+    /// Validation error to show under the inputs (e.g. unparseable number)
+    pub error: Option<String>,
+    pub is_destructive: bool,
+}
+
+impl RecoverPromptDialog {
+    pub fn new(title: &str, message: &str, is_destructive: bool) -> Self {
+        Self {
+            title: title.to_string(),
+            message: message.to_string(),
+            memory_input: "1.5".to_string(),
+            runtime_input: "1.4".to_string(),
+            active_field: 0,
+            error: None,
+            is_destructive,
+        }
+    }
+
+    pub fn toggle_field(&mut self) {
+        self.active_field = 1 - self.active_field;
+    }
+
+    fn active_buf_mut(&mut self) -> &mut String {
+        if self.active_field == 0 {
+            &mut self.memory_input
+        } else {
+            &mut self.runtime_input
+        }
+    }
+
+    pub fn add_char(&mut self, c: char) {
+        // Allow only digits and a single decimal point.
+        if c.is_ascii_digit() || c == '.' {
+            let buf = self.active_buf_mut();
+            if c == '.' && buf.contains('.') {
+                return;
+            }
+            if buf.len() < 8 {
+                buf.push(c);
+            }
+            self.error = None;
+        }
+    }
+
+    pub fn backspace(&mut self) {
+        self.active_buf_mut().pop();
+        self.error = None;
+    }
+
+    /// Parse the two fields. Returns (memory_multiplier, runtime_multiplier)
+    /// or an error message suitable for inline display.
+    pub fn parse(&self) -> Result<(f64, f64), String> {
+        let mem = self
+            .memory_input
+            .parse::<f64>()
+            .map_err(|_| format!("Invalid memory multiplier: '{}'", self.memory_input))?;
+        let rt = self
+            .runtime_input
+            .parse::<f64>()
+            .map_err(|_| format!("Invalid runtime multiplier: '{}'", self.runtime_input))?;
+        if mem <= 0.0 || rt <= 0.0 {
+            return Err("Multipliers must be greater than 0".to_string());
+        }
+        Ok((mem, rt))
+    }
+
+    pub fn set_error(&mut self, message: String) {
+        self.error = Some(message);
+    }
+
+    pub fn render(&self, f: &mut Frame, area: Rect) {
+        let dialog_width = 60.min(area.width.saturating_sub(4));
+        let dialog_height = 12.min(area.height.saturating_sub(2));
+
+        let dialog_x = (area.width.saturating_sub(dialog_width)) / 2;
+        let dialog_y = (area.height.saturating_sub(dialog_height)) / 2;
+        let dialog_area = Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
+
+        f.render_widget(Clear, dialog_area);
+
+        let border_color = if self.is_destructive {
+            Color::Red
+        } else {
+            Color::Yellow
+        };
+
+        let block = Block::default()
+            .title(self.title.as_str())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        let inner = block.inner(dialog_area);
+        f.render_widget(block, dialog_area);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(2),    // Message
+                Constraint::Length(1), // Memory field
+                Constraint::Length(1), // Runtime field
+                Constraint::Length(1), // Error / spacer
+                Constraint::Length(1), // Hints
+            ])
+            .split(inner);
+
+        let message = Paragraph::new(self.message.as_str())
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true });
+        f.render_widget(message, chunks[0]);
+
+        let mem_line = Self::field_line(
+            "Memory multiplier  ",
+            &self.memory_input,
+            self.active_field == 0,
+        );
+        let rt_line = Self::field_line(
+            "Runtime multiplier ",
+            &self.runtime_input,
+            self.active_field == 1,
+        );
+        f.render_widget(
+            Paragraph::new(mem_line).alignment(Alignment::Center),
+            chunks[1],
+        );
+        f.render_widget(
+            Paragraph::new(rt_line).alignment(Alignment::Center),
+            chunks[2],
+        );
+
+        if let Some(ref err) = self.error {
+            let err_line = Paragraph::new(Line::from(Span::styled(
+                err.clone(),
+                Style::default().fg(Color::Red),
+            )))
+            .alignment(Alignment::Center);
+            f.render_widget(err_line, chunks[3]);
+        }
+
+        let confirm_color = if self.is_destructive {
+            Color::Red
+        } else {
+            Color::Green
+        };
+        let hints = Line::from(vec![
+            Span::styled("Tab", Style::default().fg(Color::Yellow)),
+            Span::raw(": switch field | "),
+            Span::styled(
+                "Enter",
+                Style::default()
+                    .fg(confirm_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": apply | "),
+            Span::styled("Esc", Style::default().fg(Color::DarkGray)),
+            Span::raw(": cancel"),
+        ]);
+        f.render_widget(
+            Paragraph::new(hints).alignment(Alignment::Center),
+            chunks[4],
+        );
+    }
+
+    fn field_line(label: &str, value: &str, active: bool) -> Line<'static> {
+        let value_style = if active {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Cyan)
+        };
+        // The input buffer is capped at 8 chars; when active we render a cursor
+        // glyph in place of the trailing character so the field always occupies
+        // exactly 8 columns inside the brackets.
+        let display_value = if active {
+            let mut visible: String = value.chars().take(7).collect();
+            visible.push('_');
+            visible
+        } else {
+            value.to_string()
+        };
+        Line::from(vec![
+            Span::styled(label.to_string(), Style::default().fg(Color::White)),
+            Span::raw("["),
+            Span::styled(format!("{:<8}", display_value), value_style),
+            Span::raw("]"),
+        ])
+    }
+}
+
 /// Status message types for the status bar
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatusLevel {
@@ -262,39 +463,47 @@ impl ErrorDialog {
     }
 }
 
-/// A help popup showing all available keybindings
+/// Identifies which pane / detail tab the user is currently looking at, so
+/// the help popup can show only the relevant keybindings instead of the
+/// full reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HelpContext {
+    Workflows,
+    DetailSummary,
+    DetailJobs,
+    DetailFiles,
+    DetailEvents,
+    DetailResults,
+    DetailComputeNodes,
+    DetailScheduledNodes,
+    DetailSlurmStats,
+    DetailDag,
+    FilterInput,
+    Other,
+}
+
+/// A help popup showing keybindings relevant to the current context.
 pub struct HelpPopup;
 
 impl HelpPopup {
-    pub fn render(f: &mut Frame, area: Rect, context: &str) {
-        // Calculate popup size
+    pub fn render(f: &mut Frame, area: Rect, context: HelpContext) {
         let popup_width = 70.min(area.width.saturating_sub(4));
-        let popup_height = 44.min(area.height.saturating_sub(2));
+        let popup_height = 48.min(area.height.saturating_sub(2));
 
         let popup_x = (area.width.saturating_sub(popup_width)) / 2;
         let popup_y = (area.height.saturating_sub(popup_height)) / 2;
-
         let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
-
-        // Clear the area behind the popup
         f.render_widget(Clear, popup_area);
 
         let block = Block::default()
             .title(" Help (press q or Esc to close) ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
-
         let inner = block.inner(popup_area);
         f.render_widget(block, popup_area);
 
         let mut lines = vec![
-            Line::from(vec![Span::styled(
-                "Global Keys",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
+            Self::section_header("Global Keys"),
             Self::key_line("q", "Quit / Close popup"),
             Self::key_line("?", "Show this help"),
             Self::key_line("r", "Refresh current view"),
@@ -302,73 +511,81 @@ impl HelpPopup {
             Self::key_line("Tab/Shift+Tab", "Switch between detail tabs"),
             Self::key_line(left_right_arrows(), "Switch focus between panes"),
             Self::key_line(up_down_arrows(), "Navigate rows in tables"),
+            Self::key_line("PgUp/PgDn", "Page through rows (10 at a time)"),
+            Self::key_line("g / G", "Jump to top / bottom of table"),
             Self::key_line("Enter", "Load details / Confirm action"),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Workflow Actions",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Self::key_line("n", "Create new workflow from spec file"),
-            Self::key_line("i", "Initialize workflow"),
-            Self::key_line("I", "Re-initialize workflow"),
-            Self::key_line("R", "Reset workflow status"),
-            Self::key_line("x", "Run workflow locally"),
-            Self::key_line("s", "Submit workflow to scheduler"),
-            Self::key_line("W", "Watch workflow (recovery)"),
-            Self::key_line("d", "Delete workflow"),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Job Actions (Jobs tab)",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Self::key_line("l", "View logs (Jobs/Scheduled Nodes)"),
-            Self::key_line("Enter", "View job details"),
-            Self::key_line("c", "Cancel job"),
-            Self::key_line("t", "Terminate job"),
-            Self::key_line("y", "Retry failed job"),
+            Self::key_line("f", "Filter current pane (Workflows or Details)"),
+            Self::key_line("=", "Filter to the selected row's value"),
+            Self::key_line("c", "Clear filter on current pane"),
+            Self::key_line("e", "Jump to Events tab and open the live SSE stream"),
         ];
 
-        // Add context-specific help
-        if context == "filter" {
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![Span::styled(
-                "Filter Mode",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )]));
-            lines.push(Line::from(""));
-            lines.push(Self::key_line("Tab", "Change filter column"));
-            lines.push(Self::key_line("Enter", "Apply filter"));
-            lines.push(Self::key_line("Esc", "Cancel filter"));
+        // Context-specific section.
+        match context {
+            HelpContext::Workflows => {
+                lines.extend(Self::section("Workflow Actions"));
+                lines.push(Self::key_line("n", "Create new workflow from spec file"));
+                lines.push(Self::key_line("i", "Initialize workflow"));
+                lines.push(Self::key_line("I", "Re-initialize workflow"));
+                lines.push(Self::key_line("R", "Reset workflow status"));
+                lines.push(Self::key_line("x", "Run workflow locally"));
+                lines.push(Self::key_line("s", "Submit workflow to scheduler"));
+                lines.push(Self::key_line("W", "Watch workflow (recovery)"));
+                lines.push(Self::key_line("V", "Recover workflow (one-shot)"));
+                lines.push(Self::key_line("v", "Preview recovery (dry run)"));
+                lines.push(Self::key_line("d", "Delete workflow"));
+                lines.push(Self::key_line(
+                    "C",
+                    "Cancel workflow (Jobs tab: cancel job)",
+                ));
+            }
+            HelpContext::DetailJobs => {
+                lines.extend(Self::section("Jobs Tab"));
+                lines.push(Self::key_line("Enter", "View job details"));
+                lines.push(Self::key_line("l", "View logs"));
+                lines.push(Self::key_line("C", "Cancel job"));
+                lines.push(Self::key_line("t", "Terminate job"));
+                lines.push(Self::key_line("y", "Retry failed job"));
+                lines.push(Self::key_line("1 / 2 / 3", "Sort by ID / Name / Status"));
+            }
+            HelpContext::DetailResults => {
+                lines.extend(Self::section("Results Tab"));
+                lines.push(Self::key_line(
+                    "m",
+                    "Sort by Peak Memory (cycles desc / asc / off)",
+                ));
+                lines.push(Self::key_line(
+                    "p",
+                    "Sort by Peak CPU % (cycles desc / asc / off)",
+                ));
+            }
+            HelpContext::DetailScheduledNodes => {
+                lines.extend(Self::section("Scheduled Nodes Tab"));
+                lines.push(Self::key_line("l", "View Slurm stdout/stderr logs"));
+            }
+            HelpContext::FilterInput => {
+                lines.extend(Self::section("Filter Mode"));
+                lines.push(Self::key_line("Tab", "Change filter column"));
+                lines.push(Self::key_line("Enter", "Apply filter"));
+                lines.push(Self::key_line("Esc", "Cancel filter"));
+            }
+            HelpContext::DetailSummary
+            | HelpContext::DetailFiles
+            | HelpContext::DetailEvents
+            | HelpContext::DetailComputeNodes
+            | HelpContext::DetailSlurmStats
+            | HelpContext::DetailDag
+            | HelpContext::Other => {
+                // No tab-specific keys to surface beyond globals.
+            }
         }
 
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Server Management",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]));
-        lines.push(Line::from(""));
+        lines.extend(Self::section("Server Management"));
         lines.push(Self::key_line("S", "Start torc-server"));
         lines.push(Self::key_line("K", "Stop/Kill server"));
         lines.push(Self::key_line("O", "Show server output"));
 
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Connection",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )]));
-        lines.push(Line::from(""));
+        lines.extend(Self::section("Connection"));
         lines.push(Self::key_line("u", "Change server URL"));
         lines.push(Self::key_line("o", "Change output directory"));
         lines.push(Self::key_line("w", "Change user filter"));
@@ -379,6 +596,21 @@ impl HelpPopup {
             .wrap(Wrap { trim: false });
 
         f.render_widget(paragraph, inner);
+    }
+
+    fn section_header(title: &str) -> Line<'static> {
+        Line::from(vec![Span::styled(
+            title.to_string(),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )])
+    }
+
+    /// Returns the two lines that introduce a new section (blank separator
+    /// + bold title).
+    fn section(title: &str) -> Vec<Line<'static>> {
+        vec![Line::from(""), Self::section_header(title), Line::from("")]
     }
 
     fn key_line(key: &str, description: &str) -> Line<'static> {

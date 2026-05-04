@@ -42,7 +42,7 @@ pub use apis::{
     access_control_api, compute_nodes_api, events_api, failure_handlers_api, files_api, jobs_api,
     local_schedulers_api, remote_workers_api, resource_requirements_api, results_api,
     ro_crate_entities_api, scheduled_compute_nodes_api, slurm_schedulers_api, slurm_stats_api,
-    system_api, user_data_api, workflow_actions_api, workflows_api,
+    system_api, tasks_api, user_data_api, workflow_actions_api, workflows_api,
 };
 pub use hpc::{
     HpcDetection, HpcInterface, HpcJobInfo, HpcJobStats, HpcJobStatus, HpcManager, HpcPartition,

@@ -313,18 +313,8 @@ pub fn find_entity_for_file(
     workflow_id: i64,
     file_id: i64,
 ) -> Option<RoCrateEntityModel> {
-    match apis::ro_crate_entities_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-    ) {
-        Ok(response) => response
-            .items
-            .into_iter()
-            .find(|e| e.file_id == Some(file_id)),
+    match apis::ro_crate_api::find_ro_crate_entity_by_file_id(config, workflow_id, file_id) {
+        Ok(entity) => entity,
         Err(e) => {
             warn!("Failed to check for existing RO-Crate entities: {}", e);
             None
@@ -732,6 +722,8 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
         match apis::ro_crate_entities_api::list_ro_crate_entities(
             config,
             workflow_id,
+            None,
+            None,
             None,
             None,
             None,

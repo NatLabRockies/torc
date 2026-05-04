@@ -5,7 +5,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.23.0"
+version = "0.26.0"
 authors = [
   "Daniel Thom",
   "Joseph McKinsey",
@@ -20,7 +20,7 @@ description = "Workflow management system"
 
 [workspace.dependencies]
 # Self-reference for sub-crates (version only specified here)
-torc = { version = "0.23.0", path = "." }
+torc = { version = "0.26.0", path = "." }
 
 # Shared dependencies
 serde = { version = "1.0", features = ["derive"] }
@@ -31,7 +31,7 @@ config = { version = "0.15", features = ["toml"] }
 dirs = "6"
 toml = "1.1"
 serde_repr = "0.1"
-serde_with = { version = "3.18", default-features = false, features = ["base64", "std", "macros"] }
+serde_with = { version = "3.19", default-features = false, features = ["base64", "std", "macros"] }
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4.28"
 env_logger = "0.11"
@@ -45,13 +45,13 @@ libc = "0.2"
 file-rotate = "0.7"
 clap = { version = "4.6", features = ["derive", "env", "color", "wrap_help"] }
 clap_complete = "4.6"
-tokio = { version = "1.51", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
 url = "2.5"
 validator = { version = "0.20", features = ["derive"] }
 mime = "0.3"
 futures = "0.3"
 bcrypt = "0.19"
-rpassword = "7.3"
+rpassword = "7.5"
 zxcvbn = "3.1"
 
 # TUI-specific
@@ -87,7 +87,7 @@ sha2 = "0.10"
 base64 = "0.22"
 
 # Client-specific
-rayon = "1.10"
+rayon = "1.12"
 reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "multipart", "native-tls", "stream"] }
 sysinfo = "0.29"
 hostname = "0.4.1"
@@ -113,7 +113,7 @@ hyper-openssl = "0.10.2"
 openssl = "0.10"
 
 # MCP server
-rmcp = { version = "1.4", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
+rmcp = { version = "1.6", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
 schemars = "1.0"
 
 # Dashboard-specific

@@ -83,7 +83,7 @@ Object.assign(TorcDashboard.prototype, {
         // Handle specific event types
         ['job_started', 'job_completed', 'job_failed', 'job_canceled', 'job_terminated',
          'job_blocked', 'job_ready', 'job_uninitialized',
-         'compute_node_started', 'compute_node_stopped', 'workflow_started', 
+         'compute_node_started', 'compute_node_stopped', 'workflow_started',
          'workflow_reinitialized', 'scheduler_node_created', 'warning'].forEach(eventType => {
             this._eventSource.addEventListener(eventType, (event) => {
                 try {
@@ -166,7 +166,7 @@ Object.assign(TorcDashboard.prototype, {
                         if (severity === 'error') severityClass = 'status-failed';
                         else if (severity === 'warning') severityClass = 'status-pending'; // Yellow
                         else if (severity === 'info') severityClass = 'status-success'; // Green
-                        
+
                         return `
                         <tr>
                             <td>${this.formatTimestamp(event.timestamp)}</td>

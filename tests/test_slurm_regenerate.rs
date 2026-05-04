@@ -52,7 +52,7 @@ fn create_workflow_with_job_states(
 
     // Initialize jobs - after this, jobs without dependencies will be "ready",
     // jobs with dependencies will be "blocked"
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -145,7 +145,7 @@ fn create_multi_stage_workflow(
         apis::jobs_api::create_job(config, postprocess).expect("Failed to create postprocess job");
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Build job_ids map
@@ -240,7 +240,7 @@ fn create_workflow_with_varied_resources(
     }
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)
@@ -634,7 +634,7 @@ fn test_regenerate_with_default_resource_requirements(start_server: &ServerProce
     );
 
     // Initialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize");
 
     // Run regenerate command

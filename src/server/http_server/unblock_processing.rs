@@ -1,6 +1,6 @@
 use super::Server;
 use crate::models;
-use crate::server::api::database_lock_aware_error;
+use crate::server::api::{begin_immediate, database_lock_aware_error};
 use crate::server::transport_types::context_types::{ApiError, EmptyContext, Has, XSpanIdString};
 use log::{debug, error, info};
 use std::sync::atomic::Ordering;
@@ -144,7 +144,11 @@ where
     let canceled_status = models::JobStatus::Canceled.to_int();
     let terminated_status = models::JobStatus::Terminated.to_int();
 
-    let mut tx = match server.pool.begin().await {
+    // BEGIN IMMEDIATE: the first statement on this tx is a SELECT, which would
+    // acquire a WAL read snapshot under BEGIN DEFERRED and then risk
+    // SQLITE_BUSY_SNAPSHOT (517) on the subsequent UPDATEs. busy_timeout does
+    // not retry that error. See server/api.rs::begin_immediate.
+    let mut tx = match begin_immediate(&server.pool).await {
         Ok(tx) => tx,
         Err(e) => {
             debug!(
@@ -160,7 +164,7 @@ where
         SELECT j.id, r.return_code
         FROM job j
         JOIN result r ON j.id = r.job_id
-        JOIN workflow_status ws ON j.workflow_id = ws.id AND r.run_id = ws.run_id
+        JOIN workflow w ON j.workflow_id = w.id AND r.run_id = w.run_id
         WHERE j.workflow_id = ?
           AND j.status IN (?, ?, ?, ?)
           AND j.unblocking_processed = 0

@@ -280,20 +280,6 @@ impl AuthorizationService {
         self.check_workflow_access(auth, workflow_id).await
     }
 
-    /// Check if a user can access a workflow status
-    pub async fn check_workflow_status_access(
-        &self,
-        auth: &Option<Authorization>,
-        status_id: i64,
-    ) -> AccessCheckResult {
-        if !self.enforce_access_control {
-            return AccessCheckResult::Allowed;
-        }
-
-        // workflow_status ID is the same as workflow ID
-        self.check_workflow_access(auth, status_id).await
-    }
-
     /// Get all workflow IDs that a user can access
     /// This is useful for filtering list queries
     pub async fn get_accessible_workflow_ids(

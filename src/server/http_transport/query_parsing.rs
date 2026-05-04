@@ -170,6 +170,7 @@ pub(super) struct PendingActionsQuery {
 pub(super) struct InitializeJobsQuery {
     pub(super) only_uninitialized: Option<bool>,
     pub(super) clear_ephemeral_user_data: Option<bool>,
+    pub(super) async_: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -472,6 +473,7 @@ pub(super) fn parse_initialize_jobs_query(
     Ok(InitializeJobsQuery {
         only_uninitialized: parse_optional_bool(&params, "only_uninitialized")?,
         clear_ephemeral_user_data: parse_optional_bool(&params, "clear_ephemeral_user_data")?,
+        async_: parse_optional_bool(&params, "async")?,
     })
 }
 

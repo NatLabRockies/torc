@@ -12,6 +12,7 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_timing::{Builder, Histogram};
 
+use torc::server::export;
 use torc::server::http_server;
 use torc::server::logging;
 use torc::server::service;
@@ -142,6 +143,57 @@ enum Commands {
         #[command(subcommand)]
         action: ServiceAction,
     },
+    /// Export a (filtered) copy of the database to a standalone SQLite file.
+    ///
+    /// With no filter, produces a full copy. Supply --user, --access-group, or
+    /// positional workflow IDs to restrict the export to a subset. Workflow IDs
+    /// and all per-workflow data are preserved verbatim, so log files referring
+    /// to the original IDs continue to make sense in the exported database.
+    Export {
+        #[command(flatten)]
+        args: ExportArgs,
+    },
+}
+
+#[derive(Args, Clone)]
+struct ExportArgs {
+    /// Output path for the exported SQLite database.
+    #[arg(short, long)]
+    output: PathBuf,
+
+    /// Source database path. Defaults to DATABASE_URL.
+    #[arg(short, long)]
+    database: Option<String>,
+
+    /// Keep only workflows owned by this user (repeatable).
+    #[arg(long = "user", conflicts_with_all = ["access_groups", "workflow_ids"])]
+    users: Vec<String>,
+
+    /// Keep only workflows associated with this access group ID (repeatable).
+    #[arg(long = "access-group", conflicts_with_all = ["users", "workflow_ids"])]
+    access_groups: Vec<i64>,
+
+    /// Keep only these specific workflow IDs.
+    #[arg(conflicts_with_all = ["users", "access_groups"])]
+    workflow_ids: Vec<i64>,
+
+    /// Overwrite the output file if it already exists.
+    #[arg(long)]
+    overwrite: bool,
+
+    /// Preserve the access_group, workflow_access_group, and user_group_membership
+    /// tables in the exported database. Off by default because these tables
+    /// contain entries for users and groups outside the filtered set and are
+    /// difficult to sanitize without risking accidental leaks. Only use this
+    /// when producing a full copy or when the recipient is authorized to see
+    /// the entire access-control state.
+    #[arg(long)]
+    preserve_access_groups: bool,
+
+    /// Skip the final VACUUM on the output database. Faster, but the file
+    /// retains the original database's size even after rows are deleted.
+    #[arg(long)]
+    no_vacuum: bool,
 }
 
 #[derive(clap::Subcommand)]
@@ -218,6 +270,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Service { action }) => handle_service_action(action),
         Some(Commands::Run { config }) => run_server(config),
+        Some(Commands::Export { args }) => handle_export(args),
         None => {
             // Default: run server with default config
             // We need to re-parse as "run" to get ServerConfig defaults from clap
@@ -229,6 +282,52 @@ fn main() -> Result<()> {
             }
         }
     }
+}
+
+fn handle_export(args: ExportArgs) -> Result<()> {
+    // Minimal logging setup — the export command writes a status line to stderr
+    // via tracing; defer to RUST_LOG if set, otherwise default to info.
+    let env_filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+    let _ = tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_target(false)
+                .with_level(true),
+        )
+        .with(env_filter)
+        .try_init();
+
+    let source_db = match args.database {
+        Some(ref path) => path.clone(),
+        None => env::var("DATABASE_URL")
+            .map_err(|_| anyhow::anyhow!("--database not provided and DATABASE_URL not set"))?,
+    };
+
+    let filter = if !args.users.is_empty() {
+        export::Filter::Users(args.users.clone())
+    } else if !args.access_groups.is_empty() {
+        export::Filter::AccessGroups(args.access_groups.clone())
+    } else if !args.workflow_ids.is_empty() {
+        export::Filter::WorkflowIds(args.workflow_ids.clone())
+    } else {
+        export::Filter::None
+    };
+
+    let opts = export::ExportOptions {
+        source_db_url: source_db,
+        output_path: args.output,
+        filter,
+        overwrite: args.overwrite,
+        preserve_access_groups: args.preserve_access_groups,
+        run_final_vacuum: !args.no_vacuum,
+    };
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(export::run_export(opts))
 }
 
 fn handle_service_action(action: ServiceAction) -> Result<()> {
@@ -415,6 +514,37 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         env::var("DATABASE_URL").expect("DATABASE_URL must be set or --database must be provided")
     };
 
+    // Detect supported SQLite in-memory URLs:
+    //  - `sqlite::memory:` is what our own `-d :memory:` produces via the
+    //    `format!("sqlite:{}", ...)` above, and is also the canonical sqlx
+    //    URL form for in-memory.
+    //  - `:memory:` is the bare SQLite spelling, which users naturally type
+    //    when setting `DATABASE_URL` directly.
+    //  - Any URL containing `file::memory:` is the shared-cache in-memory
+    //    SQLite URI form. We rewrite bare `:memory:` to one of these below,
+    //    but a power user can also supply it directly (e.g.
+    //    `sqlite:file::memory:?cache=shared`); without this branch they'd
+    //    miss `min_connections(1)` and the pool could drop the only
+    //    connection and destroy their data between requests.
+    // A bare `:memory:` URI gives each pool connection its own private database,
+    // which silently breaks data sharing across connections and prevents
+    // VACUUM INTO snapshots from observing any data. Only the bare forms get
+    // rewritten — a user who supplied an explicit shared-cache URI should
+    // have it preserved verbatim.
+    let needs_rewrite = matches!(database_url.as_str(), ":memory:" | "sqlite::memory:");
+    let in_memory = needs_rewrite || database_url.contains("file::memory:");
+    let database_url = if needs_rewrite {
+        info!(
+            "Using shared-cache in-memory database. Send SIGUSR1 to the server \
+             to snapshot the database to disk. Configure with \
+             TORC_SERVER_SNAPSHOT_PATH (default ./torc-server-snapshot.db) and \
+             TORC_SERVER_SNAPSHOT_KEEP (default 5)."
+        );
+        "sqlite:file::memory:?cache=shared".to_string()
+    } else {
+        database_url
+    };
+
     // Build Tokio runtime with user-specified thread count
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(config.threads as usize)
@@ -422,15 +552,23 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         .build()?;
 
     runtime.block_on(async {
-        // Configure SQLite connection with WAL journal mode for better concurrency
-        // and foreign key constraints enabled
+        // Configure SQLite connection. On-disk databases use WAL for
+        // concurrency; in-memory databases use Memory journal mode (WAL is
+        // silently ignored for `:memory:` and would mislead operators
+        // reading the startup log).
+        let journal_mode = if in_memory {
+            SqliteJournalMode::Memory
+        } else {
+            SqliteJournalMode::Wal
+        };
         let connect_options = SqliteConnectOptions::from_str(&database_url)?
-            .journal_mode(SqliteJournalMode::Wal)
+            .journal_mode(journal_mode)
             .foreign_keys(true)
             .create_if_missing(true)
             .busy_timeout(std::time::Duration::from_secs(45))
             // NORMAL synchronous is safe with WAL and avoids fsync on every commit,
-            // reducing latency for concurrent claim/complete operations
+            // reducing latency for concurrent claim/complete operations.
+            // For in-memory mode this pragma is harmless (no fsync to elide).
             .pragma("synchronous", "NORMAL")
             // 16MB page cache (default is 2MB)
             .pragma("cache_size", "-16000");
@@ -440,10 +578,21 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         // - The background unblock task (1 connection)
         // - Concurrent read queries while write transactions hold connections
         let max_connections = config.threads.max(2) + 2;
-        let pool = SqlitePoolOptions::new()
-            .max_connections(max_connections)
-            .connect_with(connect_options)
-            .await?;
+        let mut pool_options = SqlitePoolOptions::new().max_connections(max_connections);
+        if in_memory {
+            // Shared-cache in-memory databases are destroyed the moment the
+            // connection count hits zero. `min_connections(1)` targets a
+            // floor of one connection, but sqlx's reaper closes a connection
+            // *before* opening its replacement when `idle_timeout` or
+            // `max_lifetime` fires — that brief gap is enough to wipe the
+            // database. Disable both timers so the bootstrap connection
+            // lives for the lifetime of the process.
+            pool_options = pool_options
+                .min_connections(1)
+                .idle_timeout(None)
+                .max_lifetime(None);
+        }
+        let pool = pool_options.connect_with(connect_options).await?;
 
         let version = env!("CARGO_PKG_VERSION");
         let git_hash = env!("GIT_HASH");
@@ -452,7 +601,10 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             version, git_hash
         );
         info!("Connected to database: {}", database_url);
-        info!("Database configured with WAL journal mode and foreign key constraints");
+        info!(
+            "Database configured with {} journal mode and foreign key constraints",
+            if in_memory { "Memory" } else { "WAL" }
+        );
 
         // Run embedded migrations
         info!("Running database migrations...");
@@ -461,6 +613,29 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .await
             .expect("Failed to run migrations");
         info!("Database migrations completed successfully");
+
+        // Mark any in-progress async handles as failed (server restarted mid-operation).
+        // Async handles are persisted; SSE events are ephemeral.
+        if let Ok(result) = sqlx::query(
+            r#"
+            UPDATE async_handle
+            SET status = 'failed',
+                finished_at_ms = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                error = COALESCE(error, 'server restarted while task was in progress')
+            WHERE status IN ('queued', 'running')
+            "#,
+        )
+        .execute(&pool)
+        .await
+        {
+            let count = result.rows_affected();
+            if count > 0 {
+                info!(
+                    "Marked {} async handle(s) as failed due to server restart",
+                    count
+                );
+            }
+        }
 
         // Load htpasswd file if provided
         let htpasswd = if let Some(auth_file_path) = &config.auth_file {

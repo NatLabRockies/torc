@@ -37,12 +37,13 @@ pub mod events {
 
 pub mod jobs {
     pub use crate::server::api_responses::{
-        ClaimJobsBasedOnResources, ClaimNextJobsResponse, CompleteJobResponse, CreateJobResponse,
-        CreateJobsResponse, DeleteJobResponse, DeleteJobsResponse, GetJobResponse,
-        GetReadyJobRequirementsResponse, InitializeJobsResponse, ListJobDependenciesResponse,
-        ListJobFileRelationshipsResponse, ListJobIdsResponse, ListJobUserDataRelationshipsResponse,
-        ListJobsResponse, ManageStatusChangeResponse, ProcessChangedJobInputsResponse,
-        ResetJobStatusResponse, RetryJobResponse, StartJobResponse, UpdateJobResponse,
+        BatchCompleteJobsResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
+        CompleteJobResponse, CreateJobResponse, CreateJobsResponse, DeleteJobResponse,
+        DeleteJobsResponse, GetJobResponse, GetReadyJobRequirementsResponse,
+        InitializeJobsResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
+        ListJobIdsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
+        ManageStatusChangeResponse, ProcessChangedJobInputsResponse, ResetJobStatusResponse,
+        RetryJobResponse, StartJobResponse, UpdateJobResponse,
     };
 }
 
@@ -67,15 +68,17 @@ pub mod scheduling {
 }
 
 pub mod system {
-    pub use crate::server::api_responses::{GetVersionResponse, PingResponse, ReloadAuthResponse};
+    pub use crate::server::api_responses::{
+        GetTaskResponse, GetVersionResponse, PingResponse, ReloadAuthResponse,
+    };
 }
 
 pub mod workflows {
     pub use crate::server::api_responses::{
-        CancelWorkflowResponse, ClaimActionResponse, CreateWorkflowActionResponse,
-        CreateWorkflowResponse, DeleteWorkflowResponse, GetPendingActionsResponse,
-        GetWorkflowActionsResponse, GetWorkflowResponse, GetWorkflowStatusResponse,
-        IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListWorkflowsResponse,
-        ResetWorkflowStatusResponse, UpdateWorkflowResponse, UpdateWorkflowStatusResponse,
+        ArchiveWorkflowResponse, CancelWorkflowResponse, ClaimActionResponse,
+        CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteWorkflowResponse,
+        GetActiveTaskResponse, GetPendingActionsResponse, GetWorkflowActionsResponse,
+        GetWorkflowResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
+        ListWorkflowsResponse, ResetWorkflowStatusResponse, UpdateWorkflowResponse,
     };
 }

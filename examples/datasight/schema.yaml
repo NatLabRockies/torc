@@ -1,0 +1,49 @@
+# datasight schema configuration for a torc SQLite database.
+#
+# Restricts AI exploration to the tables most useful for analyzing job
+# execution, resource usage, and failures. Internal scheduling/plumbing
+# columns are excluded to reduce noise in the AI's working context.
+#
+# Drop this file (alongside schema_description.md and queries.yaml) into
+# your datasight project directory. See the integration guide at
+# docs/src/specialized/tools/datasight.md for the full setup.
+
+tables:
+  - name: workflow
+    excluded_columns:
+      - resource_monitor_config
+      - compute_node_expiration_buffer_seconds
+      - compute_node_wait_for_new_jobs_seconds
+      - compute_node_ignore_workflow_completion
+      - compute_node_wait_for_healthy_database_minutes
+
+  - name: workflow_status
+    excluded_columns: []
+
+  - name: job
+    excluded_columns:
+      - unblocking_processed
+      - schedule_compute_nodes
+      - invocation_script
+      - cancel_on_blocking_job_failure
+      - supports_termination
+
+  - name: resource_requirements
+    excluded_columns: []
+
+  - name: result
+    excluded_columns: []
+
+  - name: workflow_result
+    excluded_columns: []
+
+  - name: compute_node
+    excluded_columns:
+      - pid
+      - scheduler_config_id
+
+  - name: file
+    excluded_columns: []
+
+  - name: user_data
+    excluded_columns: []

@@ -721,7 +721,7 @@ fn test_claim_next_jobs_priority_ordering(start_server: &ServerProcess) {
     }
 
     // Initialize jobs so they become ready
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Claim one job at a time and verify descending priority order
@@ -782,7 +782,7 @@ fn test_claim_next_jobs_returns_invocation_script(start_server: &ServerProcess) 
     let _created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize jobs
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Claim the job

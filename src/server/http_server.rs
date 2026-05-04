@@ -25,6 +25,26 @@ fn full_version() -> String {
     format!("{} ({})", TORC_VERSION, GIT_HASH)
 }
 
+#[derive(Debug)]
+enum CreateTaskError {
+    /// An async task is already active and the new request is incompatible with it.
+    /// Reasons: a different operation is in-flight, or the same operation was requested
+    /// with different parameters.
+    Conflict {
+        existing_task_id: i64,
+        existing_operation: String,
+        reason: String,
+    },
+    Api(ApiError),
+}
+
+/// Result of `create_or_get_initialize_jobs_task`.
+pub(super) enum TaskCreation {
+    /// A new task was inserted; the caller must spawn the background work.
+    Created(models::TaskModel),
+    /// An identical task is already active; returned idempotently. No work spawned.
+    Existing(models::TaskModel),
+}
 macro_rules! forbidden_error {
     ($reason:expr) => {
         models::ErrorResponse::new(serde_json::json!({
@@ -332,6 +352,563 @@ impl<C> Server<C> {
         self.shared.clone()
     }
 
+    fn now_ms() -> i64 {
+        chrono::Utc::now().timestamp_millis()
+    }
+
+    /// Load the single active async task for a workflow, if any.
+    pub(super) async fn get_active_task(
+        &self,
+        workflow_id: i64,
+    ) -> Result<Option<models::TaskModel>, ApiError> {
+        Ok(self
+            .get_active_task_with_request(workflow_id)
+            .await?
+            .map(|(task, _)| task))
+    }
+
+    /// Like `get_active_task` but also returns the serialized request parameters that
+    /// created the task, so callers can detect parameter mismatches on idempotent returns.
+    async fn get_active_task_with_request(
+        &self,
+        workflow_id: i64,
+    ) -> Result<Option<(models::TaskModel, Option<String>)>, ApiError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workflow_id, operation, status, created_at_ms, started_at_ms, finished_at_ms, request_json
+            FROM async_handle
+            WHERE workflow_id = ?1
+              AND status IN ('queued', 'running')
+            ORDER BY id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(workflow_id)
+        .fetch_optional(self.pool.as_ref())
+        .await
+        .map_err(|e| ApiError(format!("Database error: {}", e)))?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let status = row
+            .get::<String, _>("status")
+            .parse::<models::TaskStatus>()
+            .map_err(|e| {
+                error!(
+                    "Invalid async_handle.status for workflow_id={}: {}",
+                    workflow_id, e
+                );
+                ApiError("Database error".to_string())
+            })?;
+
+        let task = models::TaskModel {
+            id: row.get("id"),
+            workflow_id: row.get("workflow_id"),
+            operation: row.get("operation"),
+            status,
+            created_at_ms: row.get("created_at_ms"),
+            started_at_ms: row.get("started_at_ms"),
+            finished_at_ms: row.get("finished_at_ms"),
+            error: None,
+        };
+        Ok(Some((task, row.get("request_json"))))
+    }
+
+    async fn create_or_get_initialize_jobs_task(
+        &self,
+        workflow_id: i64,
+        only_uninitialized: Option<bool>,
+        clear_ephemeral_user_data: Option<bool>,
+        requested_by: Option<String>,
+    ) -> Result<TaskCreation, CreateTaskError> {
+        let new_params = serde_json::json!({
+            "only_uninitialized": only_uninitialized,
+            "clear_ephemeral_user_data": clear_ephemeral_user_data,
+        });
+        let request_json = new_params.to_string();
+
+        // Retry once to close a narrow race: if the conflicting task transitions out of
+        // (queued, running) between our failed INSERT and the follow-up SELECT, the partial
+        // unique index no longer blocks us and the second INSERT will succeed.
+        for attempt in 0..2 {
+            // Capture created_at_ms once per attempt so the persisted row and the returned
+            // TaskModel agree.
+            let created_at_ms = Self::now_ms();
+            let insert_result = sqlx::query(
+                r#"
+                INSERT INTO async_handle
+                  (workflow_id, operation, status, created_at_ms, requested_by, request_json)
+                VALUES
+                  (?1, 'initialize_jobs', 'queued', ?2, ?3, ?4)
+                "#,
+            )
+            .bind(workflow_id)
+            .bind(created_at_ms)
+            .bind(requested_by.clone())
+            .bind(&request_json)
+            .execute(self.pool.as_ref())
+            .await;
+
+            match insert_result {
+                Ok(result) => {
+                    return Ok(TaskCreation::Created(models::TaskModel::new(
+                        result.last_insert_rowid(),
+                        workflow_id,
+                        "initialize_jobs".to_string(),
+                        models::TaskStatus::Queued,
+                        created_at_ms,
+                    )));
+                }
+                Err(e) if Self::is_sqlite_unique_constraint(&e) => {
+                    // Another active task exists for this workflow. Return it idempotently only
+                    // if it is the same operation AND was started with the same parameters —
+                    // otherwise the new caller would silently get someone else's task.
+                    let Some((existing, existing_request_json)) = self
+                        .get_active_task_with_request(workflow_id)
+                        .await
+                        .map_err(CreateTaskError::Api)?
+                    else {
+                        // The conflicting task finished between INSERT failure and this SELECT.
+                        // Retry the INSERT once; if it still fails there's a deeper problem.
+                        if attempt == 0 {
+                            continue;
+                        }
+                        return Err(CreateTaskError::Api(ApiError(
+                            "unique constraint violated but no active task found after retry"
+                                .to_string(),
+                        )));
+                    };
+
+                    if existing.operation != "initialize_jobs" {
+                        return Err(CreateTaskError::Conflict {
+                            existing_task_id: existing.id,
+                            existing_operation: existing.operation,
+                            reason: "different async operation is already active".to_string(),
+                        });
+                    }
+
+                    let existing_params = existing_request_json
+                        .as_deref()
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                        .unwrap_or(serde_json::Value::Null);
+                    if existing_params != new_params {
+                        return Err(CreateTaskError::Conflict {
+                            existing_task_id: existing.id,
+                            existing_operation: existing.operation,
+                            reason: format!(
+                                "initialize_jobs task already active with different parameters: existing={}, requested={}",
+                                existing_params, new_params
+                            ),
+                        });
+                    }
+
+                    return Ok(TaskCreation::Existing(existing));
+                }
+                Err(e) => {
+                    return Err(CreateTaskError::Api(ApiError(format!(
+                        "Database error: {}",
+                        e
+                    ))));
+                }
+            }
+        }
+
+        // Loop can only fall through if both attempts hit the "no active task after unique
+        // constraint" branch, which is already handled above. Keep this as a belt-and-suspenders
+        // guard so the function always returns explicitly.
+        Err(CreateTaskError::Api(ApiError(
+            "create_or_get_initialize_jobs_task: exhausted retries".to_string(),
+        )))
+    }
+
+    fn is_sqlite_unique_constraint(err: &sqlx::Error) -> bool {
+        let sqlx::Error::Database(db_err) = err else {
+            return false;
+        };
+
+        // SQLite extended error code for UNIQUE constraint is typically 2067.
+        // Prefer matching on code when available, but also match message for robustness.
+        if let Some(code) = db_err.code()
+            && (code == "2067" || code == "1555")
+        {
+            return true;
+        }
+
+        db_err.message().contains("UNIQUE constraint failed")
+    }
+
+    async fn update_task_running(&self, task_id: i64) -> Result<(), ApiError> {
+        sqlx::query(
+            r#"
+            UPDATE async_handle
+            SET status = 'running', started_at_ms = ?2
+            WHERE id = ?1
+            "#,
+        )
+        .bind(task_id)
+        .bind(Self::now_ms())
+        .execute(self.pool.as_ref())
+        .await
+        .map_err(|e| ApiError(format!("Database error: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn update_task_finished(
+        &self,
+        task_id: i64,
+        succeeded: bool,
+        error: Option<String>,
+    ) -> Result<(), ApiError> {
+        let (status, result_json) = if succeeded {
+            (
+                "succeeded",
+                Some(serde_json::json!({"message": "initialize_jobs completed"}).to_string()),
+            )
+        } else {
+            ("failed", None)
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE async_handle
+            SET status = ?2,
+                finished_at_ms = ?3,
+                result_json = ?4,
+                error = ?5
+            WHERE id = ?1
+            "#,
+        )
+        .bind(task_id)
+        .bind(status)
+        .bind(Self::now_ms())
+        .bind(result_json)
+        .bind(error)
+        .execute(self.pool.as_ref())
+        .await
+        .map_err(|e| ApiError(format!("Database error: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn run_initialize_jobs_task(
+        &self,
+        task_id: i64,
+        workflow_id: i64,
+        only_uninitialized: Option<bool>,
+        clear_ephemeral_user_data: Option<bool>,
+        requested_by: String,
+    ) {
+        if let Err(e) = self.update_task_running(task_id).await {
+            error!("Failed to mark task {} running: {}", task_id, e);
+        }
+
+        let result = self
+            .initialize_jobs_core(
+                workflow_id,
+                only_uninitialized,
+                clear_ephemeral_user_data,
+                requested_by.clone(),
+            )
+            .await;
+
+        match result {
+            Ok(()) => {
+                if let Err(e) = self.update_task_finished(task_id, true, None).await {
+                    error!("Failed to mark task {} succeeded: {}", task_id, e);
+                }
+
+                self.event_broadcaster.broadcast(BroadcastEvent {
+                    workflow_id,
+                    timestamp: Self::now_ms(),
+                    event_type: "task_completed".to_string(),
+                    severity: models::EventSeverity::Info,
+                    data: serde_json::json!({
+                        "category": "tasks",
+                        "type": "task_completed",
+                        "task_id": task_id,
+                        "operation": "initialize_jobs",
+                        "status": "succeeded",
+                        "user": requested_by,
+                        "message": format!("task {} succeeded", task_id),
+                    }),
+                });
+            }
+            Err(e) => {
+                let error_msg = e.0;
+                if let Err(e) = self
+                    .update_task_finished(task_id, false, Some(error_msg.clone()))
+                    .await
+                {
+                    error!("Failed to mark task {} failed: {}", task_id, e);
+                }
+
+                self.event_broadcaster.broadcast(BroadcastEvent {
+                    workflow_id,
+                    timestamp: Self::now_ms(),
+                    event_type: "task_completed".to_string(),
+                    severity: models::EventSeverity::Error,
+                    data: serde_json::json!({
+                        "category": "tasks",
+                        "type": "task_completed",
+                        "task_id": task_id,
+                        "operation": "initialize_jobs",
+                        "status": "failed",
+                        "user": requested_by,
+                        "error": error_msg,
+                        "message": format!("task {} failed", task_id),
+                    }),
+                });
+            }
+        }
+    }
+
+    async fn initialize_jobs_core(
+        &self,
+        id: i64,
+        only_uninitialized: Option<bool>,
+        clear_ephemeral_user_data: Option<bool>,
+        username: String,
+    ) -> Result<(), ApiError> {
+        // Clear in-memory failure tracking for this workflow when (re)initializing
+        if let Ok(mut set) = self.workflows_with_failures.write() {
+            set.remove(&id);
+        }
+
+        // Begin a transaction to ensure all initialization steps are atomic
+        let mut tx = match self.pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to begin transaction for initialize_jobs: {}", e);
+                return Err(ApiError("Database error".to_string()));
+            }
+        };
+
+        // Step 1: Add depends-on associations based on file dependencies
+        if let Err(e) = self
+            .add_depends_on_associations_from_files(&mut *tx, id)
+            .await
+        {
+            error!("Failed to add depends-on associations from files: {}", e);
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
+        // Step 1b: Add depends-on associations from user_data
+        if let Err(e) = self
+            .add_depends_on_associations_from_user_data(&mut *tx, id)
+            .await
+        {
+            error!(
+                "Failed to add depends-on associations from user_data: {}",
+                e
+            );
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
+        // Step 2: Uninitialize blocked jobs (only needed during reinitialization)
+        // This is skipped during initial workflow start because Step 3 will set all job statuses anyway.
+        // During reinitialization, this ensures jobs transitively blocked by reset jobs are also reset.
+        let only_uninit = only_uninitialized.unwrap_or(false);
+        if only_uninit && let Err(e) = self.uninitialize_blocked_jobs(&mut *tx, id).await {
+            error!("Failed to uninitialize blocked jobs: {}", e);
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
+        // Step 3: Initialize blocked jobs to blocked status
+        if let Err(e) = self
+            .initialize_blocked_jobs_to_blocked(&mut *tx, id, only_uninit)
+            .await
+        {
+            error!("Failed to initialize blocked jobs to blocked: {}", e);
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
+        // Step 4: Initialize unblocked jobs to ready status
+        if let Err(e) = self.initialize_unblocked_jobs(&mut *tx, id).await {
+            error!("Failed to initialize unblocked jobs: {}", e);
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
+        // TODO: helper function
+        // Step 5: Delete workflow_result records for jobs that are not complete
+        // This is done after steps 1-4 to be future-proof in case those steps reset job completion statuses
+        // Complete statuses are: Completed (5), Failed (6), Canceled (7), Terminated (8)
+        let completed_status = models::JobStatus::Completed.to_int();
+        let failed_status = models::JobStatus::Failed.to_int();
+        let canceled_status = models::JobStatus::Canceled.to_int();
+        let terminated_status = models::JobStatus::Terminated.to_int();
+
+        match sqlx::query!(
+            r#"
+            DELETE FROM workflow_result
+            WHERE workflow_id = $1
+            AND job_id IN (
+                SELECT id FROM job
+                WHERE workflow_id = $1
+                AND status NOT IN ($2, $3, $4, $5)
+            )
+            "#,
+            id,
+            completed_status,
+            failed_status,
+            canceled_status,
+            terminated_status
+        )
+        .execute(&mut *tx)
+        .await
+        {
+            Ok(result) => {
+                debug!(
+                    "Deleted {} workflow_result records for incomplete jobs in workflow {}",
+                    result.rows_affected(),
+                    id
+                );
+            }
+            Err(e) => {
+                error!("Database error deleting workflow_result records: {}", e);
+                let _ = tx.rollback().await;
+                return Err(ApiError("Database error".to_string()));
+            }
+        }
+
+        // This endpoint currently accepts forward-compatible parameters that may be unused.
+        let _ = clear_ephemeral_user_data;
+
+        // Commit the transaction
+        // Hash computation must happen AFTER this commit so that compute_job_input_hash
+        // can see the job_depends_on relationships that were inserted in this transaction.
+        if let Err(e) = tx.commit().await {
+            error!("Failed to commit transaction for initialize_jobs: {}", e);
+            return Err(ApiError("Database error".to_string()));
+        }
+
+        // Compute and store input hashes for all jobs in the workflow.
+        // IMPORTANT: This must happen after the transaction commits so the hash computation sees
+        // the committed job_depends_on relationships.
+        self.jobs_api.compute_and_store_all_input_hashes(id).await?;
+
+        match sqlx::query!("SELECT enable_ro_crate FROM workflow WHERE id = ?", id)
+            .fetch_optional(self.pool.as_ref())
+            .await
+        {
+            Ok(Some(row)) if row.enable_ro_crate == Some(1) => {
+                debug!(
+                    "enable_ro_crate is true for workflow {}, creating input file entities",
+                    id
+                );
+                if let Err(e) = self.ro_crate_api.create_entities_for_input_files(id).await {
+                    // Non-blocking: log warning but don't fail initialization
+                    warn!("Failed to create RO-Crate entities for input files: {}", e);
+                }
+            }
+            Ok(_) => {}
+            Err(e) => {
+                // Non-blocking: log warning but don't fail initialization
+                warn!("Failed to check enable_ro_crate flag: {}", e);
+            }
+        }
+
+        // Always create SoftwareApplication entity for torc-server
+        if let Err(e) = self.ro_crate_api.create_server_software_entity(id).await {
+            warn!("Failed to create torc-server software entity: {}", e);
+        }
+
+        debug!(
+            "Successfully initialized jobs for workflow {} with transaction",
+            id
+        );
+
+        // Reset workflow actions for reinitialization
+        if let Err(e) = self
+            .workflow_actions_api
+            .reset_actions_for_reinitialize(id)
+            .await
+        {
+            error!(
+                "Failed to reset workflow actions for workflow {}: {}",
+                id, e
+            );
+        }
+
+        // Activate on_workflow_start actions (workflow has started with initialization)
+        if let Err(e) = self
+            .workflow_actions_api
+            .check_and_trigger_actions(id, "on_workflow_start", None)
+            .await
+        {
+            error!(
+                "Failed to check_and_trigger_actions for on_workflow_start: {}",
+                e
+            );
+        }
+
+        // Activate on_worker_start and on_worker_complete actions immediately
+        for trigger_type in &["on_worker_start", "on_worker_complete"] {
+            match sqlx::query(
+                "UPDATE workflow_action SET trigger_count = required_triggers WHERE workflow_id = ? AND trigger_type = ?"
+            )
+            .bind(id)
+            .bind(trigger_type)
+            .execute(self.pool.as_ref())
+            .await
+            {
+                Ok(result) => {
+                    let count = result.rows_affected();
+                    if count > 0 {
+                        debug!("Activated {} {} actions for workflow {}", count, trigger_type, id);
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to activate {} actions for workflow {}: {}",
+                        trigger_type, id, e
+                    );
+                }
+            }
+        }
+
+        // Check if any on_jobs_ready actions should be triggered based on job states
+        if let Err(e) = self
+            .workflow_actions_api
+            .check_and_trigger_actions(id, "on_jobs_ready", None)
+            .await
+        {
+            error!(
+                "Failed to check_and_trigger_actions for on_jobs_ready: {}",
+                e
+            );
+        }
+
+        // Broadcast SSE event for workflow initialization
+        let event_type = if only_uninitialized.unwrap_or(false) {
+            "workflow_started"
+        } else {
+            "workflow_reinitialized"
+        };
+
+        self.event_broadcaster.broadcast(BroadcastEvent {
+            workflow_id: id,
+            timestamp: Self::now_ms(),
+            event_type: event_type.to_string(),
+            severity: models::EventSeverity::Info,
+            data: serde_json::json!({
+                "category": "workflow",
+                "type": event_type,
+                "user": username,
+                "message": format!("{} workflow {}", event_type.replace('_', " "), id),
+            }),
+        });
+
+        Ok(())
+    }
+
     #[cfg(feature = "openapi-codegen")]
     pub fn openapi_app_state(&self) -> crate::openapi_spec::OpenApiAppState {
         self.shared.openapi_app_state(
@@ -356,7 +933,7 @@ use crate::server::live_state::LiveServerState;
 #[async_trait]
 impl<C> TransportApiCore<C> for Server<C>
 where
-    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync + 'static,
 {
     /// Store a compute node.
     async fn create_compute_node(
@@ -475,6 +1052,8 @@ where
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        file_id: Option<i64>,
+        entity_id: Option<String>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         context: &C,
@@ -483,6 +1062,8 @@ where
             workflow_id,
             offset,
             limit,
+            file_id,
+            entity_id,
             sort_by,
             reverse_sort,
             context,
@@ -731,6 +1312,15 @@ where
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError> {
         self.transport_cancel_workflow(id, context).await
+    }
+
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError> {
+        self.transport_archive_workflow(id, body, context).await
     }
 
     async fn delete_compute_nodes(
@@ -1245,12 +1835,88 @@ where
         self.transport_get_workflow(id, context).await
     }
 
-    async fn get_workflow_status(
+    async fn get_active_task_for_workflow(
         &self,
-        id: i64,
+        workflow_id: i64,
         context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError> {
-        self.transport_get_workflow_status(id, context).await
+    ) -> Result<GetActiveTaskResponse, ApiError> {
+        match self
+            .check_workflow_access_for_context(workflow_id, context)
+            .await
+        {
+            AccessCheckResult::Allowed => {}
+            AccessCheckResult::Denied(_) | AccessCheckResult::NotFound(_) => {
+                return Ok(GetActiveTaskResponse::NotFoundErrorResponse(
+                    not_found_error!("Workflow not found".to_string()),
+                ));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
+        }
+
+        let task = self.get_active_task(workflow_id).await?;
+        Ok(GetActiveTaskResponse::SuccessfulResponse(
+            models::ActiveTaskResponse { task },
+        ))
+    }
+
+    async fn get_task(&self, id: i64, context: &C) -> Result<GetTaskResponse, ApiError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workflow_id, operation, status, created_at_ms, started_at_ms, finished_at_ms, error
+            FROM async_handle
+            WHERE id = ?1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(self.pool.as_ref())
+        .await
+        .map_err(|e| ApiError(format!("Database error: {}", e)))?;
+
+        let row = match row {
+            Some(r) => r,
+            None => {
+                return Ok(GetTaskResponse::NotFoundErrorResponse(not_found_error!(
+                    "Task not found".to_string()
+                )));
+            }
+        };
+
+        // Avoid task ID enumeration: return 404 both for "no such task" and "not authorized".
+        match self
+            .check_workflow_access_for_context(row.get("workflow_id"), context)
+            .await
+        {
+            AccessCheckResult::Allowed => {}
+            AccessCheckResult::Denied(_) | AccessCheckResult::NotFound(_) => {
+                return Ok(GetTaskResponse::NotFoundErrorResponse(not_found_error!(
+                    "Task not found".to_string()
+                )));
+            }
+            AccessCheckResult::InternalError(reason) => {
+                return Err(ApiError(reason));
+            }
+        }
+
+        let status = row
+            .get::<String, _>("status")
+            .parse::<models::TaskStatus>()
+            .map_err(|e| {
+                error!("Invalid async_handle.status for task_id={}: {}", id, e);
+                ApiError("Database error".to_string())
+            })?;
+
+        Ok(GetTaskResponse::SuccessfulResponse(models::TaskModel {
+            id: row.get("id"),
+            workflow_id: row.get("workflow_id"),
+            operation: row.get("operation"),
+            status,
+            created_at_ms: row.get("created_at_ms"),
+            started_at_ms: row.get("started_at_ms"),
+            finished_at_ms: row.get("finished_at_ms"),
+            error: row.get("error"),
+        }))
     }
 
     /// Initialize job relationships based on file and user_data relationships.
@@ -1267,10 +1933,17 @@ where
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
+        async_: Option<bool>,
         context: &C,
     ) -> Result<InitializeJobsResponse, ApiError> {
-        self.transport_initialize_jobs(id, only_uninitialized, clear_ephemeral_user_data, context)
-            .await
+        self.transport_initialize_jobs(
+            id,
+            only_uninitialized,
+            clear_ephemeral_user_data,
+            async_,
+            context,
+        )
+        .await
     }
 
     /// Return true if all jobs in the workflow are complete.
@@ -1428,17 +2101,6 @@ where
         self.transport_update_workflow(id, body, context).await
     }
 
-    /// Update the workflow status.
-    async fn update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError> {
-        self.transport_update_workflow_status(id, body, context)
-            .await
-    }
-
     /// Return jobs that are ready for submission and meet worker resource requirements. Set status to pending.
     #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, limit))]
     async fn claim_jobs_based_on_resources(
@@ -1579,11 +2241,10 @@ where
             .await
     }
 
-    /// Reset worklow status.
+    /// Reset workflow status fields (run_id, is_canceled, is_archived) on the
+    /// workflow row.
     /// Rules:
     /// - Not allowed if any job is running or SubmittedPending (unless force=true)
-    /// Actions:
-    /// - Reset fields in WorkflowStatusModel
     async fn reset_workflow_status(
         &self,
         id: i64,
@@ -1631,6 +2292,18 @@ where
         context: &C,
     ) -> Result<CompleteJobResponse, ApiError> {
         self.transport_complete_job(id, status, run_id, result, context)
+            .await
+    }
+
+    /// Complete a batch of jobs in a single request.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id, completion_count = body.completions.len()))]
+    async fn batch_complete_jobs(
+        &self,
+        workflow_id: i64,
+        body: models::BatchCompleteJobsRequest,
+        context: &C,
+    ) -> Result<BatchCompleteJobsResponse, ApiError> {
+        self.transport_batch_complete_jobs(workflow_id, body, context)
             .await
     }
 

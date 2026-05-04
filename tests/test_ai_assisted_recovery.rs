@@ -44,7 +44,7 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim the job using resources
@@ -108,7 +108,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new jobs
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim both jobs
@@ -197,7 +197,7 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Reinitialize to pick up the new job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim the job

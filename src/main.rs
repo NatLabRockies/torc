@@ -28,6 +28,7 @@ use torc::client::commands::results::handle_result_commands;
 use torc::client::commands::ro_crate::handle_ro_crate_commands;
 use torc::client::commands::scheduled_compute_nodes::handle_scheduled_compute_node_commands;
 use torc::client::commands::slurm::handle_slurm_commands;
+use torc::client::commands::tasks::handle_tasks_commands;
 use torc::client::commands::user_data::handle_user_data_commands;
 use torc::client::commands::watch::{WatchArgs, run_watch};
 use torc::client::commands::workflows::{handle_cancel, handle_workflow_commands};
@@ -89,10 +90,87 @@ struct StandaloneServer {
     // path. Stored as Option so `Drop::drop` can move it out and close it
     // before waiting.
     stdin: Option<std::process::ChildStdin>,
+    /// True when launched with `--in-memory`. Drives final-snapshot behavior
+    /// and unlocks the SIGUSR1 path.
+    in_memory: bool,
+    /// Receiver for `TORC_SNAPSHOT_DONE=<path>` lines from the child's stdout.
+    /// Bounded (capacity 1) so periodic-snapshot notifications can't pile up.
+    /// `None` outside in-memory mode.
+    snapshot_done_rx: Option<mpsc::Receiver<()>>,
+    /// Sender that, when dropped, signals the periodic-snapshot thread to
+    /// stop. `None` if no periodic thread was spawned.
+    periodic_stop_tx: Option<mpsc::Sender<()>>,
+    /// Join handle for the periodic-snapshot thread, taken in `Drop`.
+    periodic_handle: Option<thread::JoinHandle<()>>,
+}
+
+impl StandaloneServer {
+    /// Send `SIGUSR1` to the child process to trigger a snapshot.
+    /// No-op on non-Unix; relies on the child being addressable by its PID.
+    #[cfg(unix)]
+    fn send_sigusr1(&self) -> std::io::Result<()> {
+        let pid = self.child.id() as libc::pid_t;
+        let rc = unsafe { libc::kill(pid, libc::SIGUSR1) };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn send_sigusr1(&self) -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "SIGUSR1 snapshots are only supported on Unix",
+        ))
+    }
 }
 
 impl Drop for StandaloneServer {
     fn drop(&mut self) {
+        // Stop the periodic-snapshot thread first so we don't race a tick
+        // against the final snapshot.
+        drop(self.periodic_stop_tx.take());
+        if let Some(h) = self.periodic_handle.take() {
+            let _ = h.join();
+        }
+
+        // For --in-memory mode, request a final snapshot and wait for the
+        // server to confirm it landed on disk before we shut things down.
+        // This is what makes the user-facing contract "when the command
+        // returns, the workflow is queryable from --db" hold.
+        if self.in_memory {
+            // Drain any pending notifications from periodic snapshots before
+            // requesting the final one — otherwise `recv_timeout` below could
+            // return immediately on a stale notification and proceed to
+            // shutdown before the *final* snapshot has actually completed.
+            if let Some(rx) = &self.snapshot_done_rx {
+                while rx.try_recv().is_ok() {}
+            }
+            match self.send_sigusr1() {
+                Ok(()) => {
+                    if let Some(rx) = &self.snapshot_done_rx {
+                        // Cap the wait so a stuck server can't hang shutdown
+                        // indefinitely. Five seconds is enough for any
+                        // reasonable in-memory database.
+                        match rx.recv_timeout(Duration::from_secs(5)) {
+                            Ok(()) => {}
+                            Err(mpsc::RecvTimeoutError::Timeout) => eprintln!(
+                                "warning: timed out waiting for final snapshot to {}",
+                                self.db_path.display()
+                            ),
+                            Err(mpsc::RecvTimeoutError::Disconnected) => eprintln!(
+                                "warning: server exited before confirming final snapshot to {}",
+                                self.db_path.display()
+                            ),
+                        }
+                    }
+                }
+                Err(e) => eprintln!("warning: failed to request final snapshot: {}", e),
+            }
+        }
+
         // Close our end of the child's stdin pipe. The server is running with
         // `--shutdown-on-stdin-eof`, so this alone should cause it to drain
         // connections and exit on its own — a hard kill risks interrupting an
@@ -122,14 +200,54 @@ impl Drop for StandaloneServer {
     }
 }
 
+/// Send `SIGUSR1` every `interval` until the stop channel is closed.
+/// Used by `--snapshot-interval-seconds` to drive periodic snapshots from the
+/// parent without touching the server-side scheduler.
+#[cfg(unix)]
+fn periodic_snapshot_loop(pid: u32, interval: Duration, stop: mpsc::Receiver<()>) {
+    loop {
+        match stop.recv_timeout(interval) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let rc = unsafe { libc::kill(pid as libc::pid_t, libc::SIGUSR1) };
+                if rc != 0 {
+                    eprintln!(
+                        "warning: periodic snapshot SIGUSR1 failed: {}",
+                        std::io::Error::last_os_error()
+                    );
+                    return;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn periodic_snapshot_loop(_pid: u32, _interval: Duration, _stop: mpsc::Receiver<()>) {}
+
+/// Options for the standalone server spawn.
+struct StandaloneOptions {
+    server_bin: String,
+    /// On-disk path. In normal mode this is the live database; in `--in-memory`
+    /// mode this is the snapshot destination.
+    db: Option<std::path::PathBuf>,
+    in_memory: bool,
+    /// When `Some(secs)`, parent-side timer that sends SIGUSR1 every `secs`.
+    /// Only honored when `in_memory` is true.
+    snapshot_interval_seconds: Option<u64>,
+}
+
 /// Spawn a torc-server subprocess bound to 127.0.0.1 on an auto-assigned port,
 /// backed by the given SQLite database (default: `./torc_output/torc.db`).
 /// Waits up to 15 seconds for the server to print its `TORC_SERVER_PORT=<port>` line.
-fn start_standalone_server(
-    server_bin: &str,
-    db: Option<std::path::PathBuf>,
-) -> Result<StandaloneServer, String> {
-    let db_path = db.unwrap_or_else(|| std::path::PathBuf::from("torc_output/torc.db"));
+fn start_standalone_server(opts: StandaloneOptions) -> Result<StandaloneServer, String> {
+    if opts.in_memory && !cfg!(unix) {
+        return Err("--in-memory is only supported on Unix systems".to_string());
+    }
+
+    let db_path = opts
+        .db
+        .unwrap_or_else(|| std::path::PathBuf::from("torc_output/torc.db"));
     if let Some(parent) = db_path.parent()
         && !parent.as_os_str().is_empty()
     {
@@ -142,7 +260,18 @@ fn start_standalone_server(
         })?;
     }
 
-    let mut child = std::process::Command::new(server_bin)
+    // In --in-memory mode the server's `--database` argument becomes literal
+    // `:memory:` and the on-disk path is wired through as the snapshot
+    // destination via env. Default to `KEEP=1` so users see one canonical
+    // file at the path they expect, not rotated `.1`/`.2` siblings.
+    let database_arg = if opts.in_memory {
+        ":memory:".to_string()
+    } else {
+        db_path.display().to_string()
+    };
+
+    let mut command = std::process::Command::new(&opts.server_bin);
+    command
         .args([
             "run",
             "--host",
@@ -150,19 +279,28 @@ fn start_standalone_server(
             "--port",
             "0",
             "--database",
-            &db_path.display().to_string(),
+            &database_arg,
             "--shutdown-on-stdin-eof",
         ])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            format!(
-                "failed to spawn '{}': {}. Set --torc-server-bin or TORC_SERVER_BIN.",
-                server_bin, e
-            )
-        })?;
+        .stderr(std::process::Stdio::piped());
+
+    if opts.in_memory {
+        command.env("TORC_SERVER_SNAPSHOT_PATH", &db_path);
+        // Only set KEEP=1 if the user hasn't already overridden it, so power
+        // users can opt into rotation by exporting the env var themselves.
+        if std::env::var_os("TORC_SERVER_SNAPSHOT_KEEP").is_none() {
+            command.env("TORC_SERVER_SNAPSHOT_KEEP", "1");
+        }
+    }
+
+    let mut child = command.spawn().map_err(|e| {
+        format!(
+            "failed to spawn '{}': {}. Set --torc-server-bin or TORC_SERVER_BIN.",
+            opts.server_bin, e
+        )
+    })?;
 
     let child_stdin = child
         .stdin
@@ -191,13 +329,36 @@ fn start_standalone_server(
     // forwarded over `tx` so we can enforce a timeout on the startup handshake.
     // After the receiver is dropped (port found), the thread keeps draining stdout
     // for the lifetime of the child so the pipe buffer can't fill and block it.
+    //
+    // For --in-memory mode we additionally route `TORC_SNAPSHOT_DONE=<path>`
+    // lines onto `snapshot_done_tx` so the parent can synchronize on snapshot
+    // completion (final snapshot during Drop, or for tests).
     let (tx, rx) = mpsc::channel::<Result<String, std::io::Error>>();
+    // Bounded `sync_channel(1)` plus `try_send` gives drop-on-full semantics:
+    // if the parent hasn't yet consumed the previous snapshot notification (it
+    // only does so during Drop), additional notifications from periodic
+    // snapshots are silently dropped rather than accumulating unboundedly.
+    // The parent drains the channel before requesting the final snapshot, so
+    // it never waits on a stale notification.
+    let (snapshot_done_tx, snapshot_done_rx) = if opts.in_memory {
+        let (s, r) = mpsc::sync_channel::<()>(1);
+        (Some(s), Some(r))
+    } else {
+        (None, None)
+    };
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         let mut tx = Some(tx);
         for line in reader.lines() {
             match line {
                 Ok(line) => {
+                    if line.trim().starts_with("TORC_SNAPSHOT_DONE=") {
+                        if let Some(s) = &snapshot_done_tx {
+                            let _ = s.try_send(());
+                        }
+                        // Don't forward to stderr — internal sync line.
+                        continue;
+                    }
                     if let Some(sender) = tx.as_ref() {
                         if sender.send(Ok(line.clone())).is_ok() {
                             continue;
@@ -237,11 +398,32 @@ fn start_standalone_server(
                     // systems where `localhost` resolves to `::1` first but the server
                     // is only bound to v4, connections would fail.
                     let api_url = format!("http://127.0.0.1:{}/torc-service/v1", port);
+                    let pid = child.id();
+
+                    // Spawn the periodic-snapshot thread if requested. Park it
+                    // on a stop channel with timeout so Drop can stop it
+                    // before the final synchronous snapshot.
+                    let (periodic_stop_tx, periodic_handle) = if opts.in_memory
+                        && let Some(secs) = opts.snapshot_interval_seconds
+                    {
+                        let (stop_tx, stop_rx) = mpsc::channel::<()>();
+                        let interval = Duration::from_secs(secs);
+                        let h =
+                            thread::spawn(move || periodic_snapshot_loop(pid, interval, stop_rx));
+                        (Some(stop_tx), Some(h))
+                    } else {
+                        (None, None)
+                    };
+
                     return Ok(StandaloneServer {
                         child,
                         api_url,
                         db_path,
                         stdin: Some(child_stdin),
+                        in_memory: opts.in_memory,
+                        snapshot_done_rx,
+                        periodic_stop_tx,
+                        periodic_handle,
                     });
                 }
                 // Other lines are passed through to stderr so users see startup logs.
@@ -382,6 +564,18 @@ fn main() {
             | Commands::Exec { dry_run: true, .. }
     );
 
+    // --in-memory snapshots the empty DB over the on-disk path on exit, which
+    // would destroy prior data for any command that doesn't create workflow
+    // state in the same invocation (e.g. `results list`, `workflows list`).
+    // Restrict it to commands that produce the data they're snapshotting.
+    if cli.in_memory && !matches!(cli.command, Commands::Exec { .. } | Commands::Run { .. }) {
+        eprintln!(
+            "Error: --in-memory is only supported with `exec` and `run`. \
+             Other commands would snapshot an empty database over your existing data."
+        );
+        std::process::exit(1);
+    }
+
     // Spawn an ephemeral torc-server when --standalone is set. The guard's Drop
     // terminates the subprocess on normal exit of this function.
     let _standalone_server = if cli.standalone {
@@ -389,7 +583,12 @@ fn main() {
             eprintln!("--standalone has no effect for this command; ignoring.");
             None
         } else {
-            match start_standalone_server(&cli.torc_server_bin, cli.db.clone()) {
+            match start_standalone_server(StandaloneOptions {
+                server_bin: cli.torc_server_bin.clone(),
+                db: cli.db.clone(),
+                in_memory: cli.in_memory,
+                snapshot_interval_seconds: cli.snapshot_interval_seconds,
+            }) {
                 Ok(server) => {
                     url = server.api_url.clone();
                     config.base_path = url.clone();
@@ -928,6 +1127,9 @@ fn main() {
         }
         Commands::Results { command } => {
             handle_result_commands(&config, command, &format);
+        }
+        Commands::Tasks { command } => {
+            handle_tasks_commands(&config, command, &format);
         }
         Commands::UserData { command } => {
             handle_user_data_commands(&config, command, &format);

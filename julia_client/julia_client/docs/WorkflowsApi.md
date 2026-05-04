@@ -4,14 +4,16 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**archive_workflow**](WorkflowsApi.md#archive_workflow) | **POST** /workflows/{id}/archive | 
+[**batch_complete_jobs**](WorkflowsApi.md#batch_complete_jobs) | **POST** /workflows/{id}/batch_complete_jobs | 
 [**cancel_workflow**](WorkflowsApi.md#cancel_workflow) | **PUT** /workflows/{id}/cancel | 
 [**claim_jobs_based_on_resources**](WorkflowsApi.md#claim_jobs_based_on_resources) | **POST** /workflows/{id}/claim_jobs_based_on_resources/{limit} | 
 [**claim_next_jobs**](WorkflowsApi.md#claim_next_jobs) | **POST** /workflows/{id}/claim_next_jobs | 
 [**create_workflow**](WorkflowsApi.md#create_workflow) | **POST** /workflows | 
 [**delete_workflow**](WorkflowsApi.md#delete_workflow) | **DELETE** /workflows/{id} | 
+[**get_active_task_for_workflow**](WorkflowsApi.md#get_active_task_for_workflow) | **GET** /workflows/{id}/active_task | 
 [**get_ready_job_requirements**](WorkflowsApi.md#get_ready_job_requirements) | **GET** /workflows/{id}/ready_job_requirements | 
 [**get_workflow**](WorkflowsApi.md#get_workflow) | **GET** /workflows/{id} | 
-[**get_workflow_status**](WorkflowsApi.md#get_workflow_status) | **GET** /workflows/{id}/status | 
 [**initialize_jobs**](WorkflowsApi.md#initialize_jobs) | **POST** /workflows/{id}/initialize_jobs | 
 [**is_workflow_complete**](WorkflowsApi.md#is_workflow_complete) | **GET** /workflows/{id}/is_complete | 
 [**is_workflow_uninitialized**](WorkflowsApi.md#is_workflow_uninitialized) | **GET** /workflows/{id}/is_uninitialized | 
@@ -26,8 +28,65 @@ Method | HTTP request | Description
 [**reset_job_status**](WorkflowsApi.md#reset_job_status) | **POST** /workflows/{id}/reset_job_status | 
 [**reset_workflow_status**](WorkflowsApi.md#reset_workflow_status) | **POST** /workflows/{id}/reset_status | 
 [**update_workflow**](WorkflowsApi.md#update_workflow) | **PUT** /workflows/{id} | 
-[**update_workflow_status**](WorkflowsApi.md#update_workflow_status) | **PUT** /workflows/{id}/status | 
 
+
+# **archive_workflow**
+> archive_workflow(_api::WorkflowsApi, id::Int64, archive_workflow_request::ArchiveWorkflowRequest; _mediaType=nothing) -> WorkflowModel, OpenAPI.Clients.ApiResponse <br/>
+> archive_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64, archive_workflow_request::ArchiveWorkflowRequest; _mediaType=nothing) -> Channel{ WorkflowModel }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**archive_workflow_request** | [**ArchiveWorkflowRequest**](ArchiveWorkflowRequest.md) |  |
+
+### Return type
+
+[**WorkflowModel**](WorkflowModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **batch_complete_jobs**
+> batch_complete_jobs(_api::WorkflowsApi, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing) -> BatchCompleteJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> batch_complete_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64, batch_complete_jobs_request::BatchCompleteJobsRequest; _mediaType=nothing) -> Channel{ BatchCompleteJobsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**batch_complete_jobs_request** | [**BatchCompleteJobsRequest**](BatchCompleteJobsRequest.md) |  |
+
+### Return type
+
+[**BatchCompleteJobsResponse**](BatchCompleteJobsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **cancel_workflow**
 > cancel_workflow(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
@@ -183,6 +242,34 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **get_active_task_for_workflow**
+> get_active_task_for_workflow(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> ActiveTaskResponse, OpenAPI.Clients.ApiResponse <br/>
+> get_active_task_for_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ActiveTaskResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+
+### Return type
+
+[**ActiveTaskResponse**](ActiveTaskResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **get_ready_job_requirements**
 > get_ready_job_requirements(_api::WorkflowsApi, id::Int64; scheduler_config_id=nothing, _mediaType=nothing) -> GetReadyJobRequirementsResponse, OpenAPI.Clients.ApiResponse <br/>
 > get_ready_job_requirements(_api::WorkflowsApi, response_stream::Channel, id::Int64; scheduler_config_id=nothing, _mediaType=nothing) -> Channel{ GetReadyJobRequirementsResponse }, OpenAPI.Clients.ApiResponse
@@ -245,37 +332,9 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
-# **get_workflow_status**
-> get_workflow_status(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> WorkflowStatusModel, OpenAPI.Clients.ApiResponse <br/>
-> get_workflow_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ WorkflowStatusModel }, OpenAPI.Clients.ApiResponse
-
-
-
-### Required Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **_api** | **WorkflowsApi** | API context | 
-**id** | **Int64** | Workflow ID |
-
-### Return type
-
-[**WorkflowStatusModel**](WorkflowStatusModel.md)
-
-### Authorization
-
-No authorization required
-
-### HTTP request headers
-
- - **Content-Type**: Not defined
- - **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
 # **initialize_jobs**
-> initialize_jobs(_api::WorkflowsApi, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> initialize_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> initialize_jobs(_api::WorkflowsApi, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, async=nothing, _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
+> initialize_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; only_uninitialized=nothing, clear_ephemeral_user_data=nothing, async=nothing, _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -292,6 +351,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **only_uninitialized** | **Bool** |  | [default to nothing]
  **clear_ephemeral_user_data** | **Bool** |  | [default to nothing]
+ **async** | **Bool** |  | [default to nothing]
 
 ### Return type
 
@@ -718,35 +778,6 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**WorkflowModel**](WorkflowModel.md)
-
-### Authorization
-
-No authorization required
-
-### HTTP request headers
-
- - **Content-Type**: application/json
- - **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
-# **update_workflow_status**
-> update_workflow_status(_api::WorkflowsApi, id::Int64, workflow_status_model::WorkflowStatusModel; _mediaType=nothing) -> WorkflowStatusModel, OpenAPI.Clients.ApiResponse <br/>
-> update_workflow_status(_api::WorkflowsApi, response_stream::Channel, id::Int64, workflow_status_model::WorkflowStatusModel; _mediaType=nothing) -> Channel{ WorkflowStatusModel }, OpenAPI.Clients.ApiResponse
-
-
-
-### Required Parameters
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
- **_api** | **WorkflowsApi** | API context | 
-**id** | **Int64** | Workflow ID |
-**workflow_status_model** | [**WorkflowStatusModel**](WorkflowStatusModel.md) |  |
-
-### Return type
-
-[**WorkflowStatusModel**](WorkflowStatusModel.md)
 
 ### Authorization
 

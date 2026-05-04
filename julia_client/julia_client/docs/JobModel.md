@@ -8,6 +8,7 @@ Name | Type | Description | Notes
 **cancel_on_blocking_job_failure** | **Bool** |  | [optional] [default to nothing]
 **command** | **String** |  | [default to nothing]
 **depends_on_job_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
+**env** | **Dict{String, String}** |  | [optional] [default to nothing]
 **failure_handler_id** | **Int64** |  | [optional] [default to nothing]
 **id** | **Int64** |  | [optional] [default to nothing]
 **input_file_ids** | **Vector{Int64}** |  | [optional] [default to nothing]

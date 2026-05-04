@@ -3,6 +3,10 @@
   "name": "sample_data_processing_workflow",
 
   "description": "A sample workflow that demonstrates data processing with multiple jobs",
+  "env": {
+    "TORC_EXAMPLE_DATA_ROOT": "/data",
+    "LOG_LEVEL": "info"
+  },
 
   // Job definitions
   "jobs": [
@@ -26,7 +30,11 @@
     {
       "name": "data_validation",
       "command": "python validate_data.py input_data.csv",
-      "invocation_script": "#!/bin/bash\nset -e\nexport PYTHONPATH=/opt/validation:$PYTHONPATH\n",
+      "env": {
+        "PYTHONPATH": "/opt/validation",
+        "LOG_LEVEL": "debug"
+      },
+      "invocation_script": "#!/bin/bash\nset -e\n",
       "cancel_on_blocking_job_failure": true,
       "resource_requirements": "small_job",
       "depends_on": [
@@ -72,7 +80,7 @@
       "scheduler": "gpu_scheduler"
     }
   ],
-  
+
   // File definitions
   "files": [
     {
@@ -96,7 +104,7 @@
       "path": "/scripts/analyze_data.py"
     }
   ],
-  
+
   // User data
   "user_data": [
     {
@@ -130,7 +138,7 @@
       "is_ephemeral": false
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -150,7 +158,7 @@
       "runtime": "PT2H"
     }
   ],
-  
+
   // Slurm schedulers
   "slurm_schedulers": [
     {

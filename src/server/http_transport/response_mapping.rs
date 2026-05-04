@@ -20,12 +20,51 @@ macro_rules! map_response_std {
     };
 }
 
+macro_rules! map_response_not_found_only {
+    ($name:ident, $ty:path, $success:ident) => {
+        pub(crate) fn $name(response: $ty) -> Response<Body> {
+            use $ty::*;
+            match response {
+                $success(body) => json_response_with_status(&body, StatusCode::OK),
+                NotFoundErrorResponse(body) => {
+                    json_response_with_status(&body, StatusCode::NOT_FOUND)
+                }
+                DefaultErrorResponse(body) => {
+                    json_response_with_status(&body, StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+    };
+}
+
 macro_rules! map_response_conflict {
     ($name:ident, $ty:path, $success:ident, $conflict:ident) => {
         pub(crate) fn $name(response: $ty) -> Response<Body> {
             use $ty::*;
             match response {
                 $success(body) => json_response_with_status(&body, StatusCode::OK),
+                ForbiddenErrorResponse(body) => {
+                    json_response_with_status(&body, StatusCode::FORBIDDEN)
+                }
+                NotFoundErrorResponse(body) => {
+                    json_response_with_status(&body, StatusCode::NOT_FOUND)
+                }
+                $conflict(body) => json_response_with_status(&body, StatusCode::CONFLICT),
+                DefaultErrorResponse(body) => {
+                    json_response_with_status(&body, StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+    };
+}
+
+macro_rules! map_response_accepted_conflict {
+    ($name:ident, $ty:path, $success:ident, $accepted:ident, $conflict:ident) => {
+        pub(crate) fn $name(response: $ty) -> Response<Body> {
+            use $ty::*;
+            match response {
+                $success(body) => json_response_with_status(&body, StatusCode::OK),
+                $accepted(body) => json_response_with_status(&body, StatusCode::ACCEPTED),
                 ForbiddenErrorResponse(body) => {
                     json_response_with_status(&body, StatusCode::FORBIDDEN)
                 }
@@ -127,7 +166,7 @@ map_response_std!(
     CreateSlurmStatsResponse,
     SuccessfulResponse
 );
-map_response_std!(
+map_response_unprocessable!(
     create_ro_crate_entity_response,
     CreateRoCrateEntityResponse,
     SuccessfulResponse
@@ -437,7 +476,7 @@ map_response_std!(
     SuccessfulResponse
 );
 map_response_std!(reload_auth_response, ReloadAuthResponse, SuccessfulResponse);
-map_response_std!(
+map_response_unprocessable!(
     update_ro_crate_entity_response,
     UpdateRoCrateEntityResponse,
     SuccessfulResponse
@@ -453,6 +492,11 @@ map_response_unprocessable!(
     CompleteJobResponse,
     SuccessfulResponse
 );
+map_response_std!(
+    batch_complete_jobs_response,
+    BatchCompleteJobsResponse,
+    SuccessfulResponse
+);
 map_response_unprocessable!(
     manage_status_change_response,
     ManageStatusChangeResponse,
@@ -460,7 +504,7 @@ map_response_unprocessable!(
 );
 map_response_unprocessable!(start_job_response, StartJobResponse, SuccessfulResponse);
 map_response_unprocessable!(retry_job_response, RetryJobResponse, SuccessfulResponse);
-map_response_std!(
+map_response_unprocessable!(
     create_workflow_response,
     CreateWorkflowResponse,
     SuccessfulResponse
@@ -475,7 +519,7 @@ map_response_std!(
     GetWorkflowResponse,
     SuccessfulResponse
 );
-map_response_std!(
+map_response_unprocessable!(
     update_workflow_response,
     UpdateWorkflowResponse,
     SuccessfulResponse
@@ -511,6 +555,11 @@ map_response_std!(
     CancelWorkflowResponse,
     SuccessfulResponse
 );
+map_response_std!(
+    archive_workflow_response,
+    ArchiveWorkflowResponse,
+    SuccessfulResponse
+);
 map_response_unprocessable!(
     claim_jobs_based_on_resources_response,
     ClaimJobsBasedOnResources,
@@ -521,10 +570,19 @@ map_response_std!(
     ClaimNextJobsResponse,
     SuccessfulResponse
 );
-map_response_std!(
+map_response_not_found_only!(get_task_response, GetTaskResponse, SuccessfulResponse);
+
+map_response_not_found_only!(
+    get_active_task_response,
+    GetActiveTaskResponse,
+    SuccessfulResponse
+);
+map_response_accepted_conflict!(
     initialize_jobs_response,
     InitializeJobsResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    AcceptedResponse,
+    ConflictErrorResponse
 );
 map_response_std!(
     is_workflow_complete_response,
@@ -584,16 +642,6 @@ map_response_std!(
 map_response_unprocessable!(
     reset_workflow_status_response,
     ResetWorkflowStatusResponse,
-    SuccessfulResponse
-);
-map_response_std!(
-    get_workflow_status_response,
-    GetWorkflowStatusResponse,
-    SuccessfulResponse
-);
-map_response_std!(
-    update_workflow_status_response,
-    UpdateWorkflowStatusResponse,
     SuccessfulResponse
 );
 pub(crate) fn json_response<T>(body: &T) -> Response<Body>

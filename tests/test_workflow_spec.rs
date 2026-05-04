@@ -956,7 +956,7 @@ fn test_from_spec_file_json5_format() {
     let json5_content = r#"{
         // JSON5 test with comments
         "name": "test_workflow",
-        "user": "test_user", 
+        "user": "test_user",
         "description": "JSON5 test",
         "jobs": [],
         "files": null,
@@ -1322,6 +1322,10 @@ fn test_json_field_name_compatibility() {
         name: "test".to_string(),
         command: "echo".to_string(),
         invocation_script: Some("script".to_string()),
+        env: Some(std::collections::HashMap::from([(
+            "PIXI_CACHE_FOLDER".to_string(),
+            "/tmp/cache".to_string(),
+        )])),
         cancel_on_blocking_job_failure: Some(true),
         supports_termination: Some(false),
         resource_requirements: Some("req".to_string()),
@@ -1350,6 +1354,7 @@ fn test_json_field_name_compatibility() {
     assert!(json.get("name").is_some());
     assert!(json.get("command").is_some());
     assert!(json.get("invocation_script").is_some());
+    assert!(json.get("env").is_some());
     assert!(json.get("cancel_on_blocking_job_failure").is_some());
     assert!(json.get("supports_termination").is_some());
     assert!(json.get("resource_requirements").is_some());

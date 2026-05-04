@@ -9,5 +9,5 @@ This section covers the fundamental concepts you need to understand to work effe
 - [Dependency Resolution](./dependencies.md) - How job dependencies are managed
 - [Job Runners](./job-runners.md) - Executing jobs locally and on clusters
 - [Parallelization Strategies](./parallelization.md) - Running jobs in parallel
-- [Workflow Reinitialization](./reinitialization.md) - Restarting workflows
+- [Intelligent Restart](./intelligent-restart.md) - Rerunning affected jobs after input changes
 - [RO-Crate Provenance](./ro-crate.md) - Automatic provenance tracking with RO-Crate

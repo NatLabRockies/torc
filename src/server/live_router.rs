@@ -111,6 +111,11 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(check_workflow_access),
         )
         .route("/torc-service/v1/ping", get(ping))
+        .route("/torc-service/v1/tasks/{id}", get(get_task))
+        .route(
+            "/torc-service/v1/workflows/{id}/active_task",
+            get(get_active_task_for_workflow),
+        )
         .route("/torc-service/v1/version", get(version))
         .route(
             "/torc-service/v1/compute_nodes",
@@ -295,6 +300,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             put(cancel_workflow),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/archive",
+            post(archive_workflow),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/initialize_jobs",
             post(initialize_jobs),
         )
@@ -315,16 +324,16 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(reset_job_status),
         )
         .route(
-            "/torc-service/v1/workflows/{id}/status",
-            get(get_workflow_status).put(update_workflow_status),
-        )
-        .route(
             "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
             post(claim_jobs_based_on_resources),
         )
         .route(
             "/torc-service/v1/workflows/{id}/claim_next_jobs",
             post(claim_next_jobs),
+        )
+        .route(
+            "/torc-service/v1/workflows/{id}/batch_complete_jobs",
+            post(batch_complete_jobs),
         )
         .route(
             "/torc-service/v1/workflows/{id}/job_dependencies",
@@ -419,6 +428,9 @@ pub struct InitializeJobsQuery {
     pub only_uninitialized: Option<bool>,
     #[param(nullable = true)]
     pub clear_ephemeral_user_data: Option<bool>,
+    #[serde(rename = "async")]
+    #[param(nullable = true)]
+    pub async_: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2176,6 +2188,32 @@ pub async fn complete_job(
 }
 
 #[utoipa::path(
+    post,
+    tag = "workflows",
+    path = "/workflows/{id}/batch_complete_jobs",
+    operation_id = "batch_complete_jobs",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    request_body = models::BatchCompleteJobsRequest,
+    responses(
+        (status = 200, description = "Per-completion outcomes", body = models::BatchCompleteJobsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn batch_complete_jobs(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::BatchCompleteJobsRequest>,
+) -> Response<Body> {
+    match state.server.batch_complete_jobs(id, body, &context).await {
+        Ok(response) => batch_complete_jobs_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
     put,
     tag = "jobs",
     path = "/jobs/{id}/manage_status_change/{status}/{run_id}",
@@ -3185,7 +3223,13 @@ pub async fn list_workflows(
     path = "/workflows",
     operation_id = "create_workflow",
     request_body = models::WorkflowModel,
-    responses((status = 200, body = models::WorkflowModel))
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn create_workflow(
     State(state): State<LiveRouterState>,
@@ -3224,7 +3268,13 @@ pub async fn get_workflow(
     operation_id = "update_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
     request_body = models::WorkflowModel,
-    responses((status = 200, body = models::WorkflowModel))
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn update_workflow(
     State(state): State<LiveRouterState>,
@@ -3279,10 +3329,89 @@ pub async fn cancel_workflow(
 #[utoipa::path(
     post,
     tag = "workflows",
+    path = "/workflows/{id}/archive",
+    operation_id = "archive_workflow",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    request_body = models::ArchiveWorkflowRequest,
+    responses((status = 200, body = models::WorkflowModel))
+)]
+pub async fn archive_workflow(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::ArchiveWorkflowRequest>,
+) -> Response<Body> {
+    match state.server.archive_workflow(id, body, &context).await {
+        Ok(response) => archive_workflow_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    get,
+    tag = "tasks",
+    path = "/tasks/{id}",
+    operation_id = "get_task",
+    params(("id" = i64, Path, description = "Task ID")),
+    responses(
+        (status = 200, body = models::TaskModel),
+        (status = 404, body = models::ErrorResponse),
+        (status = 500, body = models::ErrorResponse)
+    )
+)]
+pub async fn get_task(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state.server.get_task(id, &context).await {
+        Ok(response) => get_task_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    get,
+    tag = "workflows",
+    path = "/workflows/{id}/active_task",
+    operation_id = "get_active_task_for_workflow",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    responses(
+        (status = 200, body = models::ActiveTaskResponse,
+         description = "Returns { task: null } when no task is active"),
+        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, body = models::ErrorResponse)
+    )
+)]
+pub async fn get_active_task_for_workflow(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .get_active_task_for_workflow(id, &context)
+        .await
+    {
+        Ok(response) => get_active_task_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflows",
     path = "/workflows/{id}/initialize_jobs",
     operation_id = "initialize_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), InitializeJobsQuery),
-    responses((status = 200, body = Value))
+    responses(
+        (status = 200, body = Value),
+        (status = 202, body = models::TaskModel),
+        (status = 403, body = models::ErrorResponse),
+        (status = 404, body = models::ErrorResponse),
+        (status = 409, body = models::ErrorResponse),
+        (status = 500, body = models::ErrorResponse)
+    )
 )]
 pub async fn initialize_jobs(
     State(state): State<LiveRouterState>,
@@ -3296,6 +3425,7 @@ pub async fn initialize_jobs(
             id,
             query.only_uninitialized,
             query.clear_ephemeral_user_data,
+            query.async_,
             &context,
         )
         .await
@@ -3387,50 +3517,6 @@ pub async fn reset_job_status(
         .await
     {
         Ok(response) => reset_job_status_response(response),
-        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
-    }
-}
-
-#[utoipa::path(
-    get,
-    tag = "workflows",
-    path = "/workflows/{id}/status",
-    operation_id = "get_workflow_status",
-    params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::WorkflowStatusModel))
-)]
-pub async fn get_workflow_status(
-    State(state): State<LiveRouterState>,
-    Path(id): Path<i64>,
-    Extension(context): Extension<EmptyContext>,
-) -> Response<Body> {
-    match state.server.get_workflow_status(id, &context).await {
-        Ok(response) => get_workflow_status_response(response),
-        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
-    }
-}
-
-#[utoipa::path(
-    put,
-    tag = "workflows",
-    path = "/workflows/{id}/status",
-    operation_id = "update_workflow_status",
-    params(("id" = i64, Path, description = "Workflow ID")),
-    request_body = models::WorkflowStatusModel,
-    responses((status = 200, body = models::WorkflowStatusModel))
-)]
-pub async fn update_workflow_status(
-    State(state): State<LiveRouterState>,
-    Path(id): Path<i64>,
-    Extension(context): Extension<EmptyContext>,
-    Json(body): Json<models::WorkflowStatusModel>,
-) -> Response<Body> {
-    match state
-        .server
-        .update_workflow_status(id, body, &context)
-        .await
-    {
-        Ok(response) => update_workflow_status_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
@@ -3698,6 +3784,10 @@ pub struct RoCrateEntitiesQuery {
     #[param(nullable = true)]
     pub limit: Option<i64>,
     #[param(nullable = true)]
+    pub file_id: Option<i64>,
+    #[param(nullable = true)]
+    pub entity_id: Option<String>,
+    #[param(nullable = true)]
     pub sort_by: Option<String>,
     #[param(nullable = true)]
     pub reverse_sort: Option<bool>,
@@ -3925,6 +4015,8 @@ pub async fn list_ro_crate_entities(
             workflow_id,
             query.offset,
             query.limit,
+            query.file_id,
+            query.entity_id,
             query.sort_by,
             query.reverse_sort,
             &context,
@@ -4107,10 +4199,15 @@ fn anonymous_authorization() -> Authorization {
 #[cfg(test)]
 mod live_router_tests {
     use super::*;
-    use crate::models::{ComputeNodeModel, JobModel, JobsModel, WorkflowModel};
+    use crate::models::{
+        BatchCompleteJobsRequest, ComputeNodeModel, JobCompletionEntry, JobModel, JobStatus,
+        JobsModel, ResultModel, WorkflowModel,
+    };
     use crate::server::api_contract::TransportApiCore;
     use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
-    use crate::server::response_types::workflows::CreateWorkflowResponse;
+    use crate::server::response_types::jobs::CreateJobResponse;
+    use crate::server::response_types::scheduling::CreateComputeNodeResponse;
+    use crate::server::response_types::workflows::{CreateWorkflowResponse, GetWorkflowResponse};
     use axum::http::Request;
     use axum::http::header::CONTENT_TYPE;
     use http_body_util::BodyExt;
@@ -4119,6 +4216,7 @@ mod live_router_tests {
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use std::str::FromStr;
     use std::sync::Arc;
+    use tempfile::NamedTempFile;
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -4332,6 +4430,72 @@ mod live_router_tests {
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
+    #[tokio::test]
+    async fn batch_complete_jobs_round_trip_via_router() {
+        let (server, _db_file) = test_server_with_file_backed_schema(4).await;
+        let workflow_id = create_workflow_record(&server).await;
+        let run_id = get_workflow_run_id(&server, workflow_id).await;
+        let compute_node_id = create_compute_node_record(&server, workflow_id).await;
+        let job_id = create_job_record(&server, workflow_id).await;
+        let router = test_router(server);
+
+        let body = BatchCompleteJobsRequest {
+            completions: vec![JobCompletionEntry {
+                job_id,
+                status: JobStatus::Completed,
+                run_id,
+                result: ResultModel::new(
+                    job_id,
+                    workflow_id,
+                    run_id,
+                    1,
+                    compute_node_id,
+                    0,
+                    0.25,
+                    chrono::Utc::now().to_rfc3339(),
+                    JobStatus::Completed,
+                ),
+            }],
+        };
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/torc-service/v1/workflows/{workflow_id}/batch_complete_jobs"
+                    ))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&body).expect("serialize batch complete request"),
+                    ))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("batch complete response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let completed: serde_json::Value = read_json_body(response).await;
+        assert_eq!(completed["completed"], serde_json::json!([job_id]));
+        assert_eq!(completed["errors"], serde_json::json!([]));
+
+        let get_response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/torc-service/v1/jobs/{job_id}"))
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("get job response");
+
+        assert_eq!(get_response.status(), StatusCode::OK);
+        let job: JobModel = read_json_body(get_response).await;
+        assert_eq!(job.status, Some(JobStatus::Completed));
+    }
+
     fn test_router(server: Server<EmptyContext>) -> Router {
         app_router(LiveRouterState {
             openapi_state: server.openapi_app_state(),
@@ -4364,6 +4528,33 @@ mod live_router_tests {
         Server::new(pool, false, htpasswd, None, credential_cache)
     }
 
+    async fn test_server_with_file_backed_schema(
+        max_connections: u32,
+    ) -> (Server<EmptyContext>, NamedTempFile) {
+        let db_file = NamedTempFile::new().expect("temporary sqlite file");
+        let url = format!("sqlite:{}", db_file.path().display());
+        let pool = SqlitePoolOptions::new()
+            .max_connections(max_connections)
+            .connect_with(
+                SqliteConnectOptions::from_str(&url)
+                    .expect("sqlite file connection")
+                    .create_if_missing(true),
+            )
+            .await
+            .expect("sqlite pool");
+        sqlx::migrate!("./torc-server/migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
+
+        let htpasswd: SharedHtpasswd = Arc::new(RwLock::new(None));
+        let credential_cache: SharedCredentialCache = Arc::new(RwLock::new(None));
+        (
+            Server::new(pool, false, htpasswd, None, credential_cache),
+            db_file,
+        )
+    }
+
     async fn create_workflow_record(server: &Server<EmptyContext>) -> i64 {
         let workflow_response = server
             .create_workflow(
@@ -4378,6 +4569,65 @@ mod live_router_tests {
                 workflow.id.expect("workflow id")
             }
             other => panic!("unexpected workflow response: {other:?}"),
+        }
+    }
+
+    async fn create_job_record(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
+        let response = server
+            .create_job(
+                JobModel::new(
+                    workflow_id,
+                    "transport-job".to_string(),
+                    "echo transport".to_string(),
+                ),
+                &EmptyContext::default(),
+            )
+            .await
+            .expect("create job");
+
+        match response {
+            CreateJobResponse::SuccessfulResponse(job) => job.id.expect("job id"),
+            other => panic!("unexpected create_job response: {other:?}"),
+        }
+    }
+
+    async fn create_compute_node_record(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
+        let response = server
+            .create_compute_node(
+                ComputeNodeModel::new(
+                    workflow_id,
+                    "router-node".to_string(),
+                    4321,
+                    chrono::Utc::now().to_rfc3339(),
+                    8,
+                    16.0,
+                    0,
+                    1,
+                    "local".to_string(),
+                    None,
+                ),
+                &EmptyContext::default(),
+            )
+            .await
+            .expect("create compute node");
+
+        match response {
+            CreateComputeNodeResponse::SuccessfulResponse(node) => {
+                node.id.expect("compute node id")
+            }
+            other => panic!("unexpected create_compute_node response: {other:?}"),
+        }
+    }
+
+    async fn get_workflow_run_id(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
+        let response = server
+            .get_workflow(workflow_id, &EmptyContext::default())
+            .await
+            .expect("get workflow");
+
+        match response {
+            GetWorkflowResponse::SuccessfulResponse(workflow) => workflow.run_id.unwrap_or(0),
+            other => panic!("unexpected get_workflow response: {other:?}"),
         }
     }
 

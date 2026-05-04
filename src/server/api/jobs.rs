@@ -2,7 +2,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
@@ -21,7 +21,11 @@ use crate::server::api_responses::{
 
 use crate::models::{self as models, JobStatus};
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
+    database_error_with_msg, deserialize_env_map, normalize_env_map, serialize_env_map,
+    validate_env_map,
+};
 
 /// Trait defining job-related API operations
 #[async_trait]
@@ -154,6 +158,7 @@ const JOB_COLUMNS: &[&str] = &[
     "workflow_id",
     "name",
     "command",
+    "env",
     "cancel_on_blocking_job_failure",
     "supports_termination",
     "resource_requirements_id",
@@ -167,6 +172,37 @@ const JOB_COLUMNS: &[&str] = &[
 impl JobsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
+    }
+
+    async fn fetch_workflow_env<'e, E>(
+        executor: E,
+        workflow_id: i64,
+    ) -> Result<Option<HashMap<String, String>>, ApiError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    {
+        let env_json: Option<String> = sqlx::query_scalar("SELECT env FROM workflow WHERE id = ?")
+            .bind(workflow_id)
+            .fetch_optional(executor)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow env"))?
+            .flatten();
+        deserialize_env_map(env_json, "workflow env")
+    }
+
+    fn merge_env(
+        workflow_env: Option<&HashMap<String, String>>,
+        job_env: Option<&HashMap<String, String>>,
+    ) -> Option<HashMap<String, String>> {
+        let mut effective_env = workflow_env.cloned().unwrap_or_default();
+        if let Some(job_env) = job_env {
+            effective_env.extend(job_env.clone());
+        }
+        normalize_env_map(Some(effective_env))
+    }
+
+    fn env_for_hash(env: Option<HashMap<String, String>>) -> Option<BTreeMap<String, String>> {
+        env.map(|env_map| env_map.into_iter().collect())
     }
 
     /// Create an association between a job and a file.
@@ -268,6 +304,7 @@ impl JobsApiImpl {
         let record = match sqlx::query(
             r#"
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
+                       env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
                        failure_handler_id, attempt_id, priority
                 FROM job
@@ -425,6 +462,12 @@ impl JobsApiImpl {
             workflow_id: record.get("workflow_id"),
             name: record.get("name"),
             command: record.get("command"),
+            env: deserialize_env_map(
+                record
+                    .try_get::<Option<String>, _>("env")
+                    .map_err(|e| database_error_with_msg(e, "Failed to decode job env"))?,
+                "job env",
+            )?,
             cancel_on_blocking_job_failure: record.try_get("cancel_on_blocking_job_failure").ok(),
             supports_termination: record.try_get("supports_termination").ok(),
             depends_on_job_ids,
@@ -575,9 +618,10 @@ impl JobsApiImpl {
 
         let uninitialized_status = JobStatus::Uninitialized.to_int();
 
-        // Begin a transaction with immediate lock to ensure atomicity
-        // SQLx automatically uses BEGIN IMMEDIATE for SQLite when the first write occurs
-        let mut tx = match self.context.pool.begin().await {
+        // Acquire the SQLite write lock up front. We read `workflow_id` before
+        // the recursive UPDATE, which would risk SQLITE_BUSY_SNAPSHOT under
+        // BEGIN DEFERRED if another writer commits in between.
+        let mut tx = match begin_immediate(&self.context.pool).await {
             Ok(tx) => tx,
             Err(e) => {
                 error!("Failed to begin transaction for completion reversal: {}", e);
@@ -668,7 +712,7 @@ impl JobsApiImpl {
                     "Database error during completion reversal for job {}: {}",
                     job_id, e
                 );
-                // Transaction will be automatically rolled back when tx is dropped
+                // Transaction is rolled back automatically when `tx` is dropped.
                 Err(ApiError("Database error".to_string()))
             }
         }
@@ -727,11 +771,13 @@ impl JobsApiImpl {
         // Normalize invocation_script: treat Some("") the same as None to ensure
         // consistent hashing between per-job and bulk hash computation methods.
         let invocation_script = job.invocation_script.filter(|s| !s.is_empty());
+        let effective_env = Self::env_for_hash(normalize_env_map(job.env.clone()));
 
         // Build JSON object with all input fields in deterministic order
         let hash_input = serde_json::json!({
             "command": job.command,
             "invocation_script": invocation_script,
+            "env": effective_env,
             "depends_on_job_ids": job.depends_on_job_ids,
             "input_file_ids": job.input_file_ids,
             "output_file_ids": job.output_file_ids,
@@ -800,7 +846,7 @@ impl JobsApiImpl {
         // Query 1: All jobs in the workflow
         let job_rows = sqlx::query(
             r#"
-            SELECT id, command, invocation_script
+            SELECT id, command, invocation_script, env
             FROM job
             WHERE workflow_id = ?
             ORDER BY id
@@ -820,7 +866,6 @@ impl JobsApiImpl {
             "Computing bulk input hashes for {} jobs in workflow {}",
             job_count, workflow_id
         );
-
         // Query 2: All depends_on relationships
         let depends_on_rows = sqlx::query!(
             r#"
@@ -982,6 +1027,8 @@ impl JobsApiImpl {
             let invocation_script: Option<String> = job_row
                 .get::<Option<String>, _>("invocation_script")
                 .filter(|s| !s.is_empty());
+            let effective_env =
+                Self::env_for_hash(deserialize_env_map(job_row.get("env"), "job env")?);
 
             // Build the same JSON structure as compute_job_input_hash
             let depends_on: Option<&Vec<i64>> = depends_on_map.get(&job_id);
@@ -1009,6 +1056,7 @@ impl JobsApiImpl {
             let hash_input = serde_json::json!({
                 "command": command,
                 "invocation_script": invocation_script,
+                "env": effective_env,
                 "depends_on_job_ids": depends_on,
                 "input_file_ids": input_files,
                 "output_file_ids": output_files,
@@ -1135,15 +1183,41 @@ where
                 error_response,
             ));
         }
+        if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": err.0
+            }));
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
+        }
         let status = JobStatus::Uninitialized;
         let status_int = status.to_int();
         job.status = Some(status);
 
-        // Begin a transaction to ensure job and all relationships are created atomically
-        let mut tx = match self.context.pool.begin().await {
+        // Acquire the SQLite write lock up front. `fetch_workflow_env` reads
+        // before the INSERT, which would risk SQLITE_BUSY_SNAPSHOT under
+        // BEGIN DEFERRED if another writer commits in between.
+        let mut tx = match begin_immediate(&self.context.pool).await {
             Ok(tx) => tx,
             Err(e) => {
                 return Err(database_error_with_msg(e, "Failed to begin transaction"));
+            }
+        };
+
+        let workflow_env = match Self::fetch_workflow_env(&mut *tx, job.workflow_id).await {
+            Ok(env) => env,
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
+            }
+        };
+        job.env = Self::merge_env(workflow_env.as_ref(), job.env.as_ref());
+        let job_env = match serialize_env_map(job.env.clone(), "job env") {
+            Ok(env) => env,
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
             }
         };
 
@@ -1158,12 +1232,13 @@ where
                 supports_termination,
                 resource_requirements_id,
                 invocation_script,
+                env,
                 status,
                 scheduler_id,
                 failure_handler_id,
                 priority
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -1174,6 +1249,7 @@ where
         .bind(supports_termination)
         .bind(job.resource_requirements_id)
         .bind(&invocation_script)
+        .bind(job_env)
         .bind(status_int)
         .bind(job.scheduler_id)
         .bind(job.failure_handler_id)
@@ -1323,15 +1399,54 @@ where
 
         let mut added_jobs = Vec::new();
 
-        // Use a transaction for all operations to ensure consistency
-        let mut transaction = match self.context.pool.begin().await {
+        // Acquire the SQLite write lock up front. `fetch_workflow_env` reads
+        // before the per-job INSERTs, which would risk SQLITE_BUSY_SNAPSHOT
+        // under BEGIN DEFERRED if another writer commits in between.
+        let mut transaction = match begin_immediate(&self.context.pool).await {
             Ok(tx) => tx,
             Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
         };
 
+        // Cache workflow env per workflow_id to avoid re-fetching inside the loop.
+        // In practice all jobs in a single request share one workflow, so this usually
+        // collapses to a single query.
+        let mut workflow_env_cache: HashMap<i64, Option<HashMap<String, String>>> = HashMap::new();
+
         // Process each job
         for mut job in body.jobs {
+            if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
+                let _ = transaction.rollback().await;
+                let error_response = models::ErrorResponse::new(serde_json::json!({
+                    "message": err.0
+                }));
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    error_response,
+                ));
+            }
+            let workflow_env = match workflow_env_cache.get(&job.workflow_id) {
+                Some(cached) => cached.clone(),
+                None => {
+                    let fetched =
+                        match Self::fetch_workflow_env(&mut *transaction, job.workflow_id).await {
+                            Ok(env) => env,
+                            Err(e) => {
+                                let _ = transaction.rollback().await;
+                                return Err(e);
+                            }
+                        };
+                    workflow_env_cache.insert(job.workflow_id, fetched.clone());
+                    fetched
+                }
+            };
+            job.env = Self::merge_env(workflow_env.as_ref(), job.env.as_ref());
             let invocation_script = job.invocation_script.clone();
+            let job_env = match serialize_env_map(job.env.clone(), "job env") {
+                Ok(env) => env,
+                Err(e) => {
+                    let _ = transaction.rollback().await;
+                    return Err(e);
+                }
+            };
             let cancel_on_blocking_job_failure = job.cancel_on_blocking_job_failure.unwrap_or(true);
             let supports_termination = job.supports_termination.unwrap_or(false);
             let priority = job.priority.unwrap_or(0);
@@ -1360,12 +1475,13 @@ where
                     supports_termination,
                     resource_requirements_id,
                     invocation_script,
+                    env,
                     status,
                     scheduler_id,
                     failure_handler_id,
                     priority
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 "#,
             )
@@ -1376,6 +1492,7 @@ where
             .bind(supports_termination)
             .bind(job.resource_requirements_id)
             .bind(&invocation_script)
+            .bind(job_env)
             .bind(status_int)
             .bind(job.scheduler_id)
             .bind(job.failure_handler_id)
@@ -1670,7 +1787,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1792,6 +1909,12 @@ where
                     workflow_id: record.get("workflow_id"),
                     name: record.get("name"),
                     command: record.get("command"),
+                    env: deserialize_env_map(
+                        record
+                            .try_get::<Option<String>, _>("env")
+                            .map_err(|e| database_error_with_msg(e, "Failed to decode job env"))?,
+                        "job env",
+                    )?,
                     cancel_on_blocking_job_failure: record
                         .try_get("cancel_on_blocking_job_failure")
                         .ok(),
@@ -1921,6 +2044,8 @@ where
         // Note: If body field is None, we treat it as "not changing" that field
         let name_changed = body.name != existing_job.name;
         let command_changed = body.command != existing_job.command;
+        let body_env = normalize_env_map(body.env.clone());
+        let env_changed = body.env.is_some() && body_env != existing_job.env;
         // Treat None as "not changing" - only compare if body.status is Some
         let status_changed = body.status.is_some() && body.status != existing_job.status;
         let input_file_ids_changed =
@@ -1936,6 +2061,7 @@ where
 
         let has_restricted_updates = name_changed
             || command_changed
+            || env_changed
             || status_changed
             || input_file_ids_changed
             || output_file_ids_changed
@@ -1954,6 +2080,9 @@ where
             }
             if command_changed {
                 changed_fields.push("command".to_string());
+            }
+            if env_changed {
+                changed_fields.push("env".to_string());
             }
             if status_changed {
                 changed_fields.push(format!(
@@ -2097,6 +2226,15 @@ where
                     error_response,
                 ));
             }
+        }
+
+        if env_changed {
+            let error_response = models::ErrorResponse::new(serde_json::json!({
+                "message": "Cannot modify env - this field is immutable after job creation"
+            }));
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                error_response,
+            ));
         }
 
         // Update the job (only non-relationship fields)
@@ -2279,7 +2417,7 @@ where
         })?;
 
         let workflow_is_canceled =
-            match sqlx::query("SELECT is_canceled FROM workflow_status WHERE workflow_id = $1")
+            match sqlx::query("SELECT is_canceled FROM workflow WHERE id = $1")
                 .bind(id)
                 .fetch_optional(&mut *conn)
                 .await
@@ -2314,6 +2452,7 @@ where
                 name,
                 command,
                 invocation_script,
+                env,
                 status,
                 cancel_on_blocking_job_failure,
                 supports_termination,
@@ -2360,6 +2499,7 @@ where
                 workflow_id: row.get("workflow_id"),
                 name: row.get("name"),
                 command: row.get("command"),
+                env: deserialize_env_map(row.get("env"), "job env")?,
                 invocation_script: row.get("invocation_script"),
                 status: Some(models::JobStatus::Pending),
                 schedule_compute_nodes: None,
@@ -2799,12 +2939,11 @@ where
         let job_record = match sqlx::query(
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
-                   j.invocation_script, j.cancel_on_blocking_job_failure, j.supports_termination,
+                   j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
                    j.resource_requirements_id, j.scheduler_id, j.priority,
-                   ws.run_id as workflow_run_id
+                   w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
-            JOIN workflow_status ws ON w.status_id = ws.id
             WHERE j.id = ?
             "#,
         )
@@ -2835,6 +2974,8 @@ where
         let failure_handler_id: Option<i64> = job_record.get("failure_handler_id");
         let attempt_id: i64 = job_record.get("attempt_id");
         let invocation_script: Option<String> = job_record.get("invocation_script");
+        let env: Option<HashMap<String, String>> =
+            deserialize_env_map(job_record.get("env"), "job env")?;
         let cancel_on_blocking_job_failure: Option<bool> =
             job_record.get("cancel_on_blocking_job_failure");
         let supports_termination: Option<bool> = job_record.get("supports_termination");
@@ -2976,6 +3117,7 @@ where
             name,
             command,
             invocation_script,
+            env,
             status: Some(status),
             schedule_compute_nodes: None,
             cancel_on_blocking_job_failure,

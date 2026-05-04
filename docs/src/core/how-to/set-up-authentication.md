@@ -38,10 +38,16 @@ history:
 
 ```bash
 mkdir -p ~/.config/torc
+```
+
+```bash
 (
   read -s -p "Enter Torc password: " _pw && echo
   printf 'export TORC_PASSWORD="%s"\n' "$_pw"
 ) > ~/.config/torc/credentials
+```
+
+```bash
 chmod 600 ~/.config/torc/credentials
 ```
 

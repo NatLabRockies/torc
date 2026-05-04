@@ -61,7 +61,7 @@
       }
     }
   ],
-  
+
   // File definitions
   "files": [
     {
@@ -91,7 +91,7 @@
       }
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {

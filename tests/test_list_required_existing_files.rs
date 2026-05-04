@@ -43,7 +43,7 @@ fn test_list_required_existing_files_missing_user_files(start_server: &ServerPro
     let _created_job = apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize the workflow to set up job dependencies
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Call list_required_existing_files - should report all user files as missing

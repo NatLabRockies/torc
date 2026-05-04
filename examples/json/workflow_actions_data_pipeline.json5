@@ -53,7 +53,7 @@
       ]
     }
   ],
-  
+
   // Resource requirements
   "resource_requirements": [
     {
@@ -81,7 +81,7 @@
       "runtime": "PT2H"
     }
   ],
-  
+
   // Workflow actions
   "actions": [
     {

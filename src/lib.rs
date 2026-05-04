@@ -80,7 +80,7 @@ pub use models::{
     ListSlurmSchedulersResponse, ListUserDataResponse, ListWorkflowsResponse, LocalSchedulerModel,
     ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel,
     ScheduledComputeNodesModel, SlurmSchedulerModel, UserDataModel, WorkflowActionModel,
-    WorkflowModel, WorkflowStatusModel,
+    WorkflowModel,
 };
 
 // Re-export client types when client feature is enabled

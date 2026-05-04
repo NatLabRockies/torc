@@ -23,6 +23,7 @@ use crate::client::commands::results::ResultCommands;
 use crate::client::commands::ro_crate::RoCrateCommands;
 use crate::client::commands::scheduled_compute_nodes::ScheduledComputeNodeCommands;
 use crate::client::commands::slurm::SlurmCommands;
+use crate::client::commands::tasks::TasksCommands;
 use crate::client::commands::user_data::UserDataCommands;
 use crate::client::commands::workflows::WorkflowCommands;
 use crate::plot_resources_cmd;
@@ -81,6 +82,7 @@ const HELP_TEMPLATE: &str = "\
 
 \x1b[1;32mConfiguration & Utilities:\x1b[0m
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
+  \x1b[1;36mtasks\x1b[0m                    Wait for async tasks
   \x1b[1;36mplot-resources\x1b[0m           Generate HTML resource plots
   \x1b[1;36mcompletions\x1b[0m              Generate shell completions
   \x1b[1;36mhelp\x1b[0m                     Print help for a subcommand
@@ -127,8 +129,33 @@ pub struct Cli {
     #[arg(short = 's', long)]
     pub standalone: bool,
     /// SQLite database path for standalone mode. Defaults to `./torc_output/torc.db`.
+    ///
+    /// With `--in-memory`, this becomes the *snapshot* destination for the
+    /// in-memory database rather than the live database file.
     #[arg(long, value_name = "PATH")]
     pub db: Option<PathBuf>,
+    /// Run the standalone server with an in-memory SQLite database (Unix only).
+    ///
+    /// The database lives in RAM for the lifetime of the command and is
+    /// snapshotted to `--db` (default `./torc_output/torc.db`) right before
+    /// shutdown, so the workflow remains queryable afterwards. Useful on HPC
+    /// compute / login nodes where shared filesystems (Lustre, GPFS, NFS) are
+    /// intermittently slow. Trade-off: if the parent process is killed
+    /// unexpectedly, any state since the last snapshot is lost.
+    #[arg(long, requires = "standalone")]
+    pub in_memory: bool,
+    /// Periodically snapshot the in-memory database while the command runs.
+    ///
+    /// Only meaningful with `--in-memory`. The snapshot briefly serializes
+    /// against writes (milliseconds for small DBs, seconds for very large
+    /// ones), so prefer larger intervals for high-throughput scenarios.
+    #[arg(
+        long,
+        value_name = "SECONDS",
+        requires = "in_memory",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
+    pub snapshot_interval_seconds: Option<u64>,
     /// Path to the torc-server binary used in standalone mode.
     #[arg(
         long,
@@ -882,6 +909,11 @@ EXAMPLES:
     Results {
         #[command(subcommand)]
         command: ResultCommands,
+    },
+    /// Task management commands
+    Tasks {
+        #[command(subcommand)]
+        command: TasksCommands,
     },
 
     // =========================================================================

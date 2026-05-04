@@ -152,6 +152,8 @@ pub enum CreateRoCrateEntityResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -191,6 +193,8 @@ pub enum UpdateRoCrateEntityResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -325,6 +329,8 @@ pub enum CreateWorkflowResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -745,6 +751,19 @@ pub enum CancelWorkflowResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum ArchiveWorkflowResponse {
+    /// Successful response: the post-archive WorkflowModel.
+    SuccessfulResponse(models::WorkflowModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum GetComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ComputeNodeModel),
@@ -901,27 +920,43 @@ pub enum GetWorkflowResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
-pub enum GetWorkflowStatusResponse {
+pub enum InitializeJobsResponse {
     /// Successful response
-    SuccessfulResponse(models::WorkflowStatusModel),
+    SuccessfulResponse(serde_json::Value),
+    /// Accepted - initialization task created
+    AcceptedResponse(models::TaskModel),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Conflict error response
+    ConflictErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
-pub enum InitializeJobsResponse {
+pub enum GetTaskResponse {
     /// Successful response
-    SuccessfulResponse(serde_json::Value),
-    /// Forbidden - user does not have access
-    ForbiddenErrorResponse(models::ErrorResponse),
+    SuccessfulResponse(models::TaskModel),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+/// Response for `GET /workflows/{id}/active_task`. The body is an `ActiveTaskResponse`
+/// with `task: Option<TaskModel>`, so the response is always a JSON object even when no
+/// active task exists.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum GetActiveTaskResponse {
+    /// 200 OK with an `ActiveTaskResponse` body.
+    SuccessfulResponse(models::ActiveTaskResponse),
+    /// Workflow not found or caller is not authorized.
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response.
     DefaultErrorResponse(models::ErrorResponse),
 }
 
@@ -1133,19 +1168,8 @@ pub enum UpdateWorkflowResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
-    /// Default error response
-    DefaultErrorResponse(models::ErrorResponse),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[must_use]
-pub enum UpdateWorkflowStatusResponse {
-    /// Successful response
-    SuccessfulResponse(models::WorkflowStatusModel),
-    /// Forbidden - user does not have access
-    ForbiddenErrorResponse(models::ErrorResponse),
-    /// Not found error response
-    NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -1442,6 +1466,19 @@ pub enum CompleteJobResponse {
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
     UnprocessableContentErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum BatchCompleteJobsResponse {
+    /// Successful response. Per-completion failures are reported in the body's `errors` field.
+    SuccessfulResponse(models::BatchCompleteJobsResponse),
+    /// Forbidden - user does not have access to the workflow
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Workflow not found
+    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

@@ -153,6 +153,7 @@ pub mod scheduled_compute_nodes_api;
 pub mod slurm_schedulers_api;
 pub mod slurm_stats_api;
 pub mod system_api;
+pub mod tasks_api;
 pub mod user_data_api;
 pub mod workflow_actions_api;
 pub mod workflows_api;

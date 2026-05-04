@@ -67,14 +67,17 @@ When the TUI starts, you'll see:
 
 ## Basic Navigation
 
-| Key       | Action                                                             |
-| --------- | ------------------------------------------------------------------ |
-| `↑` / `↓` | Move up/down in the current table                                  |
-| `←` / `→` | Switch focus between Workflows and Details panes                   |
-| `Tab`     | Switch between detail tabs (Jobs → Files → Events → Results → DAG) |
-| `Enter`   | Load details for selected workflow                                 |
-| `q`       | Quit (or close popup/dialog)                                       |
-| `?`       | Show help popup with all keybindings                               |
+| Key             | Action                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| `↑` / `↓`       | Move up/down in the current table                                  |
+| `PgUp` / `PgDn` | Page through rows (10 at a time)                                   |
+| `g` / `G`       | Jump to top / bottom of the current table                          |
+| `←` / `→`       | Switch focus between Workflows and Details panes                   |
+| `Tab`           | Switch between detail tabs (Jobs → Files → Events → Results → DAG) |
+| `Enter`         | Load details for selected workflow                                 |
+| `e`             | Jump to Events tab for the highlighted workflow (opens SSE stream) |
+| `q`             | Quit (or close popup/dialog)                                       |
+| `?`             | Show context-aware help popup (scoped to current pane / tab)       |
 
 ## Workflow Actions
 
@@ -88,10 +91,22 @@ Select a workflow and use these keys:
 | `R` | Reset         | Reset all job statuses                                  |
 | `x` | Run           | Run workflow locally (shows real-time output)           |
 | `s` | Submit        | Submit to HPC scheduler (Slurm)                         |
+| `W` | Watch         | Watch workflow with auto-recovery (live output)         |
+| `V` | Recover       | One-shot recovery: bump resources and resubmit failures |
+| `v` | Recover (dry) | Preview recovery without applying changes               |
 | `C` | Cancel        | Cancel running workflow                                 |
 | `d` | Delete        | Delete workflow (destructive!)                          |
 
-All destructive actions show a confirmation dialog.
+Most destructive actions show a yes/no confirmation dialog. Recovery (`V`) is gated by the
+multiplier prompt modal instead — pressing Enter in that modal both applies the multipliers and
+confirms the recovery (Esc cancels).
+
+### Recovery Prompt
+
+Pressing `V` or `v` opens a small modal that pre-fills the default `--memory-multiplier` (1.5) and
+`--runtime-multiplier` (1.4). Tab switches between the two fields, Enter applies them and launches
+the recovery (Esc cancels). The modal accepts only digits and a single decimal point; invalid input
+is reported inline.
 
 ### Handling Existing Output Files
 
@@ -103,14 +118,14 @@ show a confirmation dialog listing the files that will be deleted. Press `y` to 
 
 Navigate to the Jobs tab (`→` then `Tab` if needed) to manage individual jobs:
 
-| Key     | Action                        |
-| ------- | ----------------------------- |
-| `Enter` | View job details              |
-| `l`     | View job logs (stdout/stderr) |
-| `c`     | Cancel job                    |
-| `t`     | Terminate job                 |
-| `y`     | Retry failed job              |
-| `f`     | Filter jobs by column         |
+| Key         | Action                                      |
+| ----------- | ------------------------------------------- |
+| `Enter`     | View job details                            |
+| `l`         | View job logs (stdout/stderr)               |
+| `C`         | Cancel job                                  |
+| `t`         | Terminate job                               |
+| `y`         | Retry failed job                            |
+| `1`/`2`/`3` | Sort by ID / Name / Status (cycles ↓ ↑ off) |
 
 ### Job Status Colors
 
@@ -144,6 +159,57 @@ supports:
 - Files up to 1MB
 - Binary files show a hex dump preview
 - Same navigation keys as the log viewer
+
+## Filtering and Sorting
+
+### Filtering
+
+| Key | Action                                                            |
+| --- | ----------------------------------------------------------------- |
+| `f` | Open the filter input for the focused pane (Workflows or Details) |
+| `=` | Filter to the selected row's value on a sensible primary column   |
+| `c` | Clear the active filter on the focused pane                       |
+
+When a filter is active, the table title shows it in magenta so you don't lose track of why rows are
+missing — for example, `▶ Jobs │ filter: Status~failed`.
+
+The `=` shortcut maps the focused pane to a primary column and applies the filter using the selected
+row's value: Workflows → User, Jobs → Status, Results → Status, Events → Event Type, Files → Name,
+Compute Nodes → Hostname, Scheduled Nodes → Status. Use it to quickly narrow down to "rows like this
+one."
+
+### Sorting
+
+The Jobs and Results tables support cycling sort indicators in their column headers.
+
+| Tab     | Key | Action                               |
+| ------- | --- | ------------------------------------ |
+| Jobs    | `1` | Sort by ID (cycles ↓ ↑ off)          |
+| Jobs    | `2` | Sort by Name (cycles ↓ ↑ off)        |
+| Jobs    | `3` | Sort by Status (cycles ↓ ↑ off)      |
+| Results | `m` | Sort by Peak Memory (cycles ↓ ↑ off) |
+| Results | `p` | Sort by Peak CPU % (cycles ↓ ↑ off)  |
+
+Selection is preserved across sort changes and refreshes — re-sorting the table keeps the row you
+were looking at highlighted.
+
+## Results Tab
+
+The Results tab shows execution results for completed and failed jobs:
+
+| Column     | Meaning                                        |
+| ---------- | ---------------------------------------------- |
+| ID         | Result row ID                                  |
+| Job ID     | The job that produced this result              |
+| Run        | Workflow run number                            |
+| Attempt    | Attempt number for this job                    |
+| Return     | Process exit code (0 green, non-zero red)      |
+| Status     | Final job status                               |
+| Peak Mem   | Highest sampled memory usage                   |
+| Peak CPU % | Highest sampled CPU% across the job's lifetime |
+
+Use `m` and `p` to surface jobs that exceeded their resource allocation (sort descending and the
+worst offenders rise to the top).
 
 ## Events Tab (SSE Live Streaming)
 

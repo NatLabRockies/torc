@@ -479,9 +479,9 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
         .expect("Failed to initialize workflow for run 1");
 
     // Get run_id for run 1
-    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id_1 = status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id_1 = workflow.run_id.unwrap_or(0);
 
     // Complete jobs for run 1 using complete_job (which updates workflow_result table)
     // Note: status must match return_code - non-zero return_code requires Failed status
@@ -533,9 +533,9 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
         .expect("Failed to reinitialize workflow for run 2");
 
     // Get run_id for run 2
-    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id_2 = status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id_2 = workflow.run_id.unwrap_or(0);
 
     // Complete jobs for run 2
     apis::jobs_api::complete_job(
@@ -633,7 +633,7 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
     let job2_id = job2.id.unwrap();
 
     // Initialize workflow for run 1
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs for run 1");
 
     // Create results for run 1
@@ -666,7 +666,7 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         .expect("Failed to create result2 for run 1");
 
     // Reinitialize workflow for run 2
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize jobs for run 2");
 
     // Create results for run 2
@@ -699,7 +699,7 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         .expect("Failed to create result2 for run 2");
 
     // Reinitialize workflow for run 3
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize jobs for run 3");
 
     // Create results for run 3 (only one job)
@@ -775,7 +775,7 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
     let job2_id = job2.id.unwrap();
 
     // Initialize workflow for run 1
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs for run 1");
 
     // Create results for run 1 with different statuses
@@ -808,7 +808,7 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
         .expect("Failed to create result2 for run 1");
 
     // Reinitialize for run 2
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize jobs for run 2");
 
     // Create results for run 2
@@ -932,9 +932,9 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
         .expect("Failed to initialize workflow for run 1");
 
     // Get run_id for run 1
-    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Complete jobs for run 1 using complete_job (which updates workflow_result table)
     apis::jobs_api::complete_job(

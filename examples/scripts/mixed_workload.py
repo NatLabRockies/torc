@@ -9,11 +9,13 @@ import sys
 import random
 import hashlib
 
+
 def fibonacci(n):
     """Compute the nth Fibonacci number recursively (CPU intensive)."""
     if n <= 1:
         return n
     return fibonacci(n - 1) + fibonacci(n - 2)
+
 
 def compute_hashes(data):
     """Compute SHA256 hashes of data (CPU intensive)."""
@@ -22,6 +24,7 @@ def compute_hashes(data):
         hash_obj = hashlib.sha256(str(item).encode())
         result.append(hash_obj.hexdigest())
     return result
+
 
 def mixed_workload(duration_seconds=60):
     """
@@ -51,8 +54,10 @@ def mixed_workload(duration_seconds=60):
                 data_store.pop(0)
 
             memory_mb = (sum(len(c) for c in data_store) * 8) / (1024 * 1024)
-            print(f"[{elapsed:.1f}s] Memory phase: {len(data_store)} chunks, "
-                  f"~{memory_mb:.1f} MB")
+            print(
+                f"[{elapsed:.1f}s] Memory phase: {len(data_store)} chunks, "
+                f"~{memory_mb:.1f} MB"
+            )
 
         # Phase 2: CPU computation (odd iterations)
         else:
@@ -67,10 +72,12 @@ def mixed_workload(duration_seconds=60):
             if data_store:
                 chunk_idx = random.randint(0, len(data_store) - 1)
                 sample_data = data_store[chunk_idx][:100]
-                hashes = compute_hashes(sample_data)
+                _ = compute_hashes(sample_data)
 
-            print(f"[{elapsed:.1f}s] CPU phase: computed {len(fib_results)} Fibonacci numbers, "
-                  f"largest: {fib_results[-1]:,}")
+            print(
+                f"[{elapsed:.1f}s] CPU phase: computed {len(fib_results)} Fibonacci numbers, "
+                f"largest: {fib_results[-1]:,}"
+            )
 
         # Small sleep between phases
         time.sleep(0.5)
@@ -87,10 +94,11 @@ def mixed_workload(duration_seconds=60):
 
     return iteration
 
+
 if __name__ == "__main__":
     try:
         iterations = mixed_workload(60)
-        print(f"\n✓ Mixed workload job completed successfully")
+        print("\n✓ Mixed workload job completed successfully")
         sys.exit(0)
     except Exception as e:
         print(f"\n✗ Error: {e}", file=sys.stderr)

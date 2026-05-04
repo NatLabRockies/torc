@@ -7,13 +7,14 @@ use utoipa::ToSchema;
 
 use crate::api_version::HTTP_API_VERSION;
 use crate::models::{
-    AccessCheckResponse, AccessGroupModel, ClaimActionRequest, ClaimActionResponse,
-    ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources,
-    CreateJobsResponse, DeleteCountResponse, DeleteRoCrateEntitiesResponse, EventModel,
-    FailureHandlerModel, FileModel, GetReadyJobRequirementsResponse, IsCompleteResponse,
-    IsUninitializedResponse, JobDependencyModel, JobFileRelationshipModel, JobModel, JobStatus,
-    JobUserDataRelationshipModel, JobsModel, ListAccessGroupsResponse, ListComputeNodesResponse,
-    ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse,
+    AccessCheckResponse, AccessGroupModel, ArchiveWorkflowRequest, BatchCompleteJobsRequest,
+    BatchCompleteJobsResponse, ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources,
+    ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources, CreateJobsResponse,
+    DeleteCountResponse, DeleteRoCrateEntitiesResponse, EventModel, FailureHandlerModel, FileModel,
+    GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
+    JobCompletionEntry, JobCompletionError, JobDependencyModel, JobFileRelationshipModel, JobModel,
+    JobStatus, JobUserDataRelationshipModel, JobsModel, ListAccessGroupsResponse,
+    ListComputeNodesResponse, ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse,
     ListJobDependenciesResponse, ListJobFileRelationshipsResponse, ListJobIdsResponse,
     ListJobUserDataRelationshipsResponse, ListJobsResponse, ListLocalSchedulersResponse,
     ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
@@ -24,7 +25,7 @@ use crate::models::{
     RemoteWorkerModel, ResetJobStatusResponse, ResourceRequirementsModel, ResultModel,
     RoCrateEntityModel, ScheduledComputeNodesModel, SlurmSchedulerModel, SlurmStatsModel,
     UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
-    WorkflowModel, WorkflowStatusModel,
+    WorkflowModel,
 };
 
 #[allow(unused_imports)]
@@ -130,22 +131,22 @@ mod openapi_workflow_action_paths {
 #[allow(unused_imports)]
 mod openapi_workflow_paths {
     pub use crate::server::live_router::{
-        __path_cancel_workflow, __path_claim_jobs_based_on_resources, __path_claim_next_jobs,
-        __path_create_workflow, __path_delete_workflow, __path_get_ready_job_requirements,
-        __path_get_workflow, __path_get_workflow_status, __path_initialize_jobs,
+        __path_archive_workflow, __path_batch_complete_jobs, __path_cancel_workflow,
+        __path_claim_jobs_based_on_resources, __path_claim_next_jobs, __path_create_workflow,
+        __path_delete_workflow, __path_get_active_task_for_workflow,
+        __path_get_ready_job_requirements, __path_get_workflow, __path_initialize_jobs,
         __path_is_workflow_complete, __path_is_workflow_uninitialized,
         __path_list_job_dependencies, __path_list_job_file_relationships, __path_list_job_ids,
         __path_list_job_user_data_relationships, __path_list_missing_user_data,
         __path_list_required_existing_files, __path_list_workflows,
         __path_process_changed_job_inputs, __path_reset_job_status, __path_reset_workflow_status,
-        __path_update_workflow, __path_update_workflow_status, cancel_workflow,
+        __path_update_workflow, archive_workflow, batch_complete_jobs, cancel_workflow,
         claim_jobs_based_on_resources, claim_next_jobs, create_workflow, delete_workflow,
-        get_ready_job_requirements, get_workflow, get_workflow_status, initialize_jobs,
+        get_active_task_for_workflow, get_ready_job_requirements, get_workflow, initialize_jobs,
         is_workflow_complete, is_workflow_uninitialized, list_job_dependencies,
         list_job_file_relationships, list_job_ids, list_job_user_data_relationships,
         list_missing_user_data, list_required_existing_files, list_workflows,
         process_changed_job_inputs, reset_job_status, reset_workflow_status, update_workflow,
-        update_workflow_status,
     };
 }
 
@@ -217,6 +218,11 @@ mod openapi_ro_crate_paths {
         delete_ro_crate_entity, get_ro_crate_entity, list_ro_crate_entities,
         update_ro_crate_entity,
     };
+}
+
+#[allow(unused_imports)]
+mod openapi_task_paths {
+    pub use crate::server::live_router::{__path_get_task, get_task};
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -514,10 +520,10 @@ fn resolve_schema_properties<'a>(
         openapi_workflow_paths::is_workflow_uninitialized,
         openapi_workflow_paths::reset_workflow_status,
         openapi_workflow_paths::reset_job_status,
-        openapi_workflow_paths::get_workflow_status,
-        openapi_workflow_paths::update_workflow_status,
+        openapi_workflow_paths::archive_workflow,
         openapi_workflow_paths::claim_jobs_based_on_resources,
         openapi_workflow_paths::claim_next_jobs,
+        openapi_workflow_paths::batch_complete_jobs,
         openapi_workflow_paths::list_job_dependencies,
         openapi_workflow_paths::list_job_file_relationships,
         openapi_workflow_paths::list_job_user_data_relationships,
@@ -526,12 +532,14 @@ fn resolve_schema_properties<'a>(
         openapi_workflow_paths::process_changed_job_inputs,
         openapi_workflow_paths::get_ready_job_requirements,
         openapi_workflow_paths::list_required_existing_files,
+        openapi_workflow_paths::get_active_task_for_workflow,
         openapi_user_data_paths::create_user_data,
         openapi_user_data_paths::delete_all_user_data,
         openapi_user_data_paths::list_user_data,
         openapi_user_data_paths::delete_user_data,
         openapi_user_data_paths::get_user_data,
-        openapi_user_data_paths::update_user_data
+        openapi_user_data_paths::update_user_data,
+        openapi_task_paths::get_task
     ),
     components(schemas(
         PingResponse,
@@ -578,10 +586,15 @@ fn resolve_schema_properties<'a>(
         DeleteRoCrateEntitiesResponse,
         ReloadAuthResponse,
         WorkflowModel,
+        ArchiveWorkflowRequest,
         ListWorkflowsResponse,
         ComputeNodesResources,
         ClaimJobsBasedOnResources,
         ClaimNextJobsResponse,
+        BatchCompleteJobsRequest,
+        BatchCompleteJobsResponse,
+        JobCompletionEntry,
+        JobCompletionError,
         JobDependencyModel,
         ListJobDependenciesResponse,
         JobFileRelationshipModel,
@@ -593,7 +606,6 @@ fn resolve_schema_properties<'a>(
         ProcessChangedJobInputsResponse,
         GetReadyJobRequirementsResponse,
         ListRequiredExistingFilesResponse,
-        WorkflowStatusModel,
         IsCompleteResponse,
         IsUninitializedResponse,
         ResetJobStatusResponse,
@@ -614,12 +626,84 @@ fn openapi_doc() -> utoipa::openapi::OpenApi {
     doc
 }
 
+const ENV_VAR_NAME_PATTERN: &str = "^[A-Za-z_][A-Za-z0-9_]*$";
+
+/// Inject `propertyNames.pattern` on the `env` map property of the named schemas so the
+/// OpenAPI contract advertises the same key constraint the server enforces at runtime.
+fn apply_env_property_name_pattern_json(value: &mut Value) {
+    let Some(schemas) = value
+        .get_mut("components")
+        .and_then(|components| components.get_mut("schemas"))
+        .and_then(|schemas| schemas.as_object_mut())
+    else {
+        return;
+    };
+
+    for schema_name in ["JobModel", "WorkflowModel"] {
+        let Some(env) = schemas
+            .get_mut(schema_name)
+            .and_then(|schema| schema.get_mut("properties"))
+            .and_then(|props| props.get_mut("env"))
+            .and_then(|env| env.as_object_mut())
+        else {
+            continue;
+        };
+
+        let mut property_names = Map::new();
+        property_names.insert("type".to_string(), Value::String("string".to_string()));
+        property_names.insert(
+            "pattern".to_string(),
+            Value::String(ENV_VAR_NAME_PATTERN.to_string()),
+        );
+        env.insert("propertyNames".to_string(), Value::Object(property_names));
+    }
+}
+
+fn apply_env_property_name_pattern_yaml(value: &mut serde_yaml::Value) {
+    let Some(schemas) = value
+        .get_mut("components")
+        .and_then(|components| components.get_mut("schemas"))
+        .and_then(|schemas| schemas.as_mapping_mut())
+    else {
+        return;
+    };
+
+    for schema_name in ["JobModel", "WorkflowModel"] {
+        let Some(env) = schemas
+            .get_mut(serde_yaml::Value::String(schema_name.to_string()))
+            .and_then(|schema| schema.get_mut("properties"))
+            .and_then(|props| props.get_mut("env"))
+            .and_then(|env| env.as_mapping_mut())
+        else {
+            continue;
+        };
+
+        let mut property_names = serde_yaml::Mapping::new();
+        property_names.insert(
+            serde_yaml::Value::String("type".to_string()),
+            serde_yaml::Value::String("string".to_string()),
+        );
+        property_names.insert(
+            serde_yaml::Value::String("pattern".to_string()),
+            serde_yaml::Value::String(ENV_VAR_NAME_PATTERN.to_string()),
+        );
+        env.insert(
+            serde_yaml::Value::String("propertyNames".to_string()),
+            serde_yaml::Value::Mapping(property_names),
+        );
+    }
+}
+
 pub fn openapi_value() -> Value {
-    serde_json::to_value(openapi_doc()).expect("OpenAPI document should serialize")
+    let mut value = serde_json::to_value(openapi_doc()).expect("OpenAPI document should serialize");
+    apply_env_property_name_pattern_json(&mut value);
+    value
 }
 
 pub fn render_openapi_yaml() -> Result<String, serde_yaml::Error> {
-    serde_yaml::to_string(&openapi_doc())
+    let mut value = serde_yaml::to_value(openapi_doc())?;
+    apply_env_property_name_pattern_yaml(&mut value);
+    serde_yaml::to_string(&value)
 }
 
 pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
@@ -1875,22 +1959,6 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_operation_id(
         source,
         &emitted,
-        "/workflows/{id}/status",
-        "get",
-        "get_workflow_status",
-        &mut issues,
-    );
-    check_operation_id(
-        source,
-        &emitted,
-        "/workflows/{id}/status",
-        "put",
-        "update_workflow_status",
-        &mut issues,
-    );
-    check_operation_id(
-        source,
-        &emitted,
         "/workflows/{id}/claim_jobs_based_on_resources/{limit}",
         "post",
         "claim_jobs_based_on_resources",
@@ -1988,9 +2056,11 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "slurm_defaults",
             "use_pending_failed",
             "enable_ro_crate",
-            "status_id",
             "slurm_config",
             "execution_config",
+            "run_id",
+            "is_canceled",
+            "is_archived",
         ],
         &mut issues,
     );
@@ -2009,24 +2079,8 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     );
     check_component_properties(
         &emitted,
-        "WorkflowStatusModel",
-        &[
-            "id",
-            "is_canceled",
-            "is_archived",
-            "run_id",
-            "has_detected_need_to_run_completion_script",
-        ],
-        &mut issues,
-    );
-    check_component_properties(
-        &emitted,
         "IsCompleteResponse",
-        &[
-            "is_canceled",
-            "is_complete",
-            "needs_to_run_completion_script",
-        ],
+        &["is_canceled", "is_complete"],
         &mut issues,
     );
     check_component_properties(
@@ -2285,7 +2339,6 @@ mod tests {
         assert!(yaml.contains("/admin/reload-auth"));
         assert!(yaml.contains("/user_data"));
         assert!(yaml.contains("/workflows"));
-        assert!(yaml.contains("/workflows/{id}/status"));
         assert!(yaml.contains("/workflows/{id}/claim_jobs_based_on_resources/{limit}"));
         assert!(yaml.contains("/workflows/{id}/claim_next_jobs"));
         assert!(yaml.contains("/workflows/{id}/job_dependencies"));
@@ -2318,7 +2371,6 @@ mod tests {
         assert!(yaml.contains("reload_auth"));
         assert!(yaml.contains("list_user_data"));
         assert!(yaml.contains("list_workflows"));
-        assert!(yaml.contains("get_workflow_status"));
         assert!(yaml.contains("claim_jobs_based_on_resources"));
         assert!(yaml.contains("claim_next_jobs"));
         assert!(yaml.contains("list_job_dependencies"));

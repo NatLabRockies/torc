@@ -3,6 +3,9 @@
 
 name: sample_data_processing_workflow
 description: A sample workflow that demonstrates data processing with multiple jobs
+env:
+  TORC_EXAMPLE_DATA_ROOT: /data
+  LOG_LEVEL: info
 
 # Job definitions - these define the computational tasks
 jobs:
@@ -22,11 +25,14 @@ jobs:
 
   - name: data_validation
     command: python validate_data.py input_data.csv
-    # Multi-line invocation script with environment setup
+    # Workflow env applies to every job; this job sets PYTHONPATH and overrides LOG_LEVEL
+    env:
+      PYTHONPATH: /opt/validation
+      LOG_LEVEL: debug
+    # Multi-line invocation script with shell setup
     invocation_script: |
       #!/bin/bash
       set -e
-      export PYTHONPATH=/opt/validation:$PYTHONPATH
     cancel_on_blocking_job_failure: true
     resource_requirements: small_job
     depends_on:

@@ -14,6 +14,7 @@ This document contains the help content for the `torc` command-line program.
 - [`torc compute-nodes`](#torc-compute-nodes)
 - [`torc files`](#torc-files)
 - [`torc jobs`](#torc-jobs)
+- [`torc tasks`](#torc-tasks)
 - [`torc job-dependencies`](#torc-job-dependencies)
 - [`torc resource-requirements`](#torc-resource-requirements)
 - [`torc events`](#torc-events)
@@ -489,7 +490,12 @@ Archive or unarchive one or more workflows
 
 ## `torc workflows init`
 
-Initialize a workflow, including all job statuses
+Initialize a workflow, including all job statuses.
+
+Initialization runs asynchronously on the server. By default the command blocks until the
+server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
+fails. Use `--async` to return the task handle immediately — useful for scripting where you want to
+do other work and resume with [`torc tasks wait`](#torc-tasks) later.
 
 **Usage:** `torc workflows init [OPTIONS] [WORKFLOW_ID]`
 
@@ -502,12 +508,20 @@ Initialize a workflow, including all job statuses
 - `--force` — If false, fail the operation if missing data is present. Default: `false`
 - `--no-prompts` — Skip confirmation prompt
 - `--dry-run` — Perform a dry run without making changes
+- `--async` — Return immediately with a task handle instead of waiting for init to finish
+- `--wait-timeout <SECONDS>` — When waiting (default mode), give up after this many seconds. If the
+  timeout expires, the task keeps running on the server; resume with `torc tasks wait <id>`
 
 ## `torc workflows reinit`
 
 Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
 pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
 user_data record has changed.
+
+Reinitialization runs asynchronously on the server. By default the command blocks until the
+server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
+fails. Use `--async` to return the task handle immediately — useful for scripting where you want to
+do other work and resume with [`torc tasks wait`](#torc-tasks) later.
 
 **Usage:** `torc workflows reinit [OPTIONS] [WORKFLOW_ID]`
 
@@ -519,6 +533,9 @@ user_data record has changed.
 
 - `--force` — If false, fail the operation if missing data is present. Default: `false`
 - `--dry-run` — Perform a dry run without making changes
+- `--async` — Return immediately with a task handle instead of waiting for reinit to finish
+- `--wait-timeout <SECONDS>` — When waiting (default mode), give up after this many seconds. If the
+  timeout expires, the task keeps running on the server; resume with `torc tasks wait <id>`
 
 ## `torc status`
 
@@ -745,6 +762,42 @@ torc workflows correct-resources 123 --memory-multiplier 1.5 --cpu-multiplier 1.
 
 # Output as JSON for programmatic use
 torc -f json workflows correct-resources 123 --dry-run
+```
+
+## `torc tasks`
+
+Wait for async tasks created by commands such as `torc workflows reinit`.
+
+**Usage:** `torc tasks <COMMAND>`
+
+###### **Commands:**
+
+- `wait` — Block until a task reaches a terminal state (`succeeded` or `failed`)
+
+### `torc tasks wait`
+
+Wait for a task to complete. Uses the workflow SSE stream to wake early on completion, with periodic
+polling as a fallback. Exits with status 0 when the task succeeded, or 1 if it failed or the timeout
+expired.
+
+**Usage:** `torc tasks wait [OPTIONS] <ID>`
+
+###### **Arguments:**
+
+- `<ID>` — Task ID returned by the async operation that created it
+
+###### **Options:**
+
+- `--timeout <SECONDS>` — Give up after this many seconds (default: wait forever)
+- `--poll-fallback-interval <SECONDS>` — How often to poll if no SSE event arrives. Default: `10`
+
+###### **Example:**
+
+```bash
+# Kick off a reinit and resume later
+task_id=$(torc -f json workflows reinit 123 --async | jq -r .task_id)
+# ... do other work ...
+torc tasks wait --timeout 300 "$task_id"
 ```
 
 ## `torc compute-nodes`
@@ -1612,8 +1665,8 @@ Generate Slurm schedulers for a workflow based on job resource requirements
 - `--single-allocation` — Bundle all nodes into a single Slurm allocation per scheduler. By default,
   creates one Slurm allocation per node (N×1 mode). With this flag, creates one large allocation
   with all nodes (1×N mode).
-- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values:
-  `resource-requirements` (default), `partition`
+- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values: `partition`
+  (default), `resource-requirements`
 - `--walltime-strategy <STRATEGY>` — Strategy for determining Slurm job walltime. Possible values:
   `max-job-runtime` (default), `max-partition-time`. `max-job-runtime` uses the maximum job runtime
   multiplied by `--walltime-multiplier`. `max-partition-time` uses the partition's maximum allowed
@@ -1654,8 +1707,8 @@ regenerate schedulers to submit new allocations.
   Default: `output`
 - `-p`, `--poll-interval <POLL_INTERVAL>` — Poll interval in seconds (used when submitting).
   Default: `60`
-- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values:
-  `resource-requirements` (default), `partition`
+- `--group-by <GROUP_BY>` — Strategy for grouping jobs into schedulers. Possible values: `partition`
+  (default), `resource-requirements`
 - `--walltime-strategy <STRATEGY>` — Strategy for determining Slurm job walltime. Possible values:
   `max-job-runtime` (default), `max-partition-time`. Ignored when `--walltime` is set.
 - `--walltime-multiplier <MULTIPLIER>` — Multiplier for job runtime when using

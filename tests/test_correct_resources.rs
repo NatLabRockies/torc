@@ -57,7 +57,7 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
     apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job with OOM simulation
@@ -155,7 +155,7 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
     apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job
@@ -252,7 +252,7 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
     apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job
@@ -373,7 +373,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         .expect("Failed to update job3");
 
     // Reinitialize
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim jobs
@@ -538,7 +538,7 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
     apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job with violations
@@ -645,7 +645,7 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
     apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job with violations
@@ -759,7 +759,7 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
     apis::jobs_api::update_job(config, job.id.unwrap(), job).expect("Failed to update job");
 
     // Reinitialize to pick up the job
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     // Claim and complete the job successfully
@@ -998,7 +998,7 @@ fn test_downsize_memory(start_server: &ServerProcess) {
     let job_b_id = create_job_with_rr(config, workflow_id, "job_b", rr_id);
 
     // Reinitialize and complete jobs through lifecycle
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1081,7 +1081,7 @@ fn test_downsize_cpu(start_server: &ServerProcess) {
 
     let job_id = create_job_with_rr(config, workflow_id, "low_cpu_job", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1155,7 +1155,7 @@ fn test_downsize_runtime(start_server: &ServerProcess) {
     let job2_id = create_job_with_rr(config, workflow_id, "fast2", rr_id);
     let job3_id = create_job_with_rr(config, workflow_id, "fast3", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1249,7 +1249,7 @@ fn test_no_downsize_below_threshold(start_server: &ServerProcess) {
 
     let job_id = create_job_with_rr(config, workflow_id, "tight_job", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1324,7 +1324,7 @@ fn test_no_downsize_flag(start_server: &ServerProcess) {
 
     let job_id = create_job_with_rr(config, workflow_id, "tiny_job", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1403,7 +1403,7 @@ fn test_no_downsize_missing_peak_data(start_server: &ServerProcess) {
     // Job 2: missing memory and CPU data (None)
     let job2_id = create_job_with_rr(config, workflow_id, "no_data", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1481,7 +1481,7 @@ fn test_downsize_dry_run(start_server: &ServerProcess) {
 
     let job_id = create_job_with_rr(config, workflow_id, "small_job", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(
@@ -1555,7 +1555,7 @@ fn test_downsize_adjustment_report_direction(start_server: &ServerProcess) {
 
     let job_id = create_job_with_rr(config, workflow_id, "tiny", rr_id);
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to reinitialize");
 
     claim_and_complete_jobs(

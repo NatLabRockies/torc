@@ -191,7 +191,7 @@ fn test_uninitialize_blocked_jobs(start_server: &ServerProcess) {
     //     .expect("Failed to update bystander");
     // assert_eq!(bystander_b.status, Some(models::JobStatus::Completed));
 
-    // apis::workflows_api::initialize_jobs(config, workflow_id as i64, Some(false), None)
+    // apis::workflows_api::initialize_jobs(config, workflow_id as i64, Some(false), None, None)
     //     .expect("Failed to initialize jobs");
     // let job1_post = apis::jobs_api::get_job(config, job1.id.unwrap()).expect("Failed to get job1");
     // let job2_post = apis::jobs_api::get_job(config, job2_id).expect("Failed to get job2");

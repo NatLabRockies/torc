@@ -1,0 +1,41 @@
+# Test: In-Memory Exec
+#
+# Single allocation, single job that runs `torc -s --in-memory exec` with a
+# small `--snapshot-interval-seconds` so periodic snapshots fire during the
+# inner run. The driver script (scripts/in_memory_exec.sh) builds a
+# commands.txt file, invokes the standalone in-memory server on the compute
+# node, and asserts that the resulting on-disk torc.db contains every
+# subjob in the completed state. Mirrors the example in
+# docs/src/core/how-to/run-inline-commands.md.
+
+name: in_memory_exec
+description: Smoke test for `torc -s --in-memory exec` with periodic snapshots on a Slurm node
+project: slurm-tests
+execution_config:
+  mode: direct
+
+resource_requirements:
+  - name: in_memory_resources
+    num_cpus: 4
+    num_nodes: 1
+    memory: 2g
+    runtime: PT5M
+
+jobs:
+  - name: in_memory_exec
+    command: bash slurm-tests/scripts/in_memory_exec.sh
+    resource_requirements: in_memory_resources
+
+slurm_schedulers:
+  - name: in_memory_scheduler
+    account: PLACEHOLDER_ACCOUNT
+    partition: PLACEHOLDER_PARTITION
+    nodes: 1
+    walltime: "00:10:00"
+
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "in_memory_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

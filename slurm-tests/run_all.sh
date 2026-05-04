@@ -158,6 +158,7 @@ ALL_WORKFLOW_NAMES=(
   timeout_detection
   srun_termination_signal
   sync_status
+  in_memory_exec
 )
 
 WORKFLOW_NAMES=()

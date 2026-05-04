@@ -76,7 +76,7 @@ src/
 │   ├── client.md
 │   ├── job-runners.md
 │   ├── job-states.md
-│   ├── reinitialization.md
+│   ├── intelligent-restart.md
 │   ├── dependencies.md
 │
 ├── how-to/                 # Problem-oriented

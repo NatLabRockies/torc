@@ -324,3 +324,156 @@ fn non_standalone_does_not_start_server() {
     // The command itself is expected to fail (unreachable URL); we only care that
     // the standalone code path was not triggered.
 }
+
+/// Helper: run `torc -s --in-memory --db <db> <args>` and return the output.
+/// The standalone helper hard-codes the flag order, so we build the command
+/// manually here to inject `--in-memory` ahead of the subcommand.
+#[cfg(unix)]
+fn run_torc_in_memory(
+    work_dir: &std::path::Path,
+    db_path: &std::path::Path,
+    extra_args: &[&str],
+    args: &[&str],
+) -> std::process::Output {
+    let server_bin = torc_server_binary_path();
+    assert!(
+        server_bin.exists(),
+        "torc-server binary missing at {:?}",
+        server_bin
+    );
+
+    let target_debug = std::env::current_dir().expect("cwd").join("target/debug");
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut entries: Vec<std::path::PathBuf> = vec![target_debug];
+    entries.extend(std::env::split_paths(&existing));
+    let path_var = std::env::join_paths(entries).expect("join PATH entries");
+
+    let mut cmd = Command::new(torc_binary_path());
+    cmd.current_dir(work_dir)
+        .arg("-s")
+        .arg("--in-memory")
+        .args(["--torc-server-bin", server_bin.to_str().unwrap()])
+        .args(["--db", db_path.to_str().unwrap()])
+        .args(extra_args)
+        .args(args)
+        .env_remove("TORC_API_URL")
+        .env("RUST_LOG", "warn")
+        .env("PATH", path_var);
+    cmd.output().expect("failed to spawn torc")
+}
+
+#[cfg(unix)]
+#[test]
+fn standalone_in_memory_snapshot_is_queryable() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("snap.db");
+
+    // `--in-memory` runs the server entirely in RAM, then snapshots to `--db`
+    // right before shutdown. After the command returns, the snapshot file
+    // must exist and contain the workflow we just created.
+    let out = run_torc_in_memory(work.path(), &db, &[], &["exec", "-c", "echo in-mem-ok"]);
+    assert!(
+        out.status.success(),
+        "torc -s --in-memory exec failed (status {:?}):\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        db.exists(),
+        "snapshot DB at {:?} should exist after --in-memory exec returns",
+        db
+    );
+    // No timeout warning — drop+drain logic should land the final snapshot
+    // synchronously.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("timed out waiting for final snapshot"),
+        "final snapshot timed out unexpectedly; stderr:\n{}",
+        stderr
+    );
+
+    // Verify the workflow is readable from the snapshot via a fresh
+    // standalone invocation (now without --in-memory; just on-disk against
+    // the snapshot file).
+    let listed = run_torc_standalone_ok(work.path(), &db, &["-f", "json", "workflows", "list"]);
+    let stdout = String::from_utf8_lossy(&listed.stdout).to_string();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("workflows list JSON parse failed: {}\n---\n{}", e, stdout));
+    let items = parsed
+        .get("workflows")
+        .and_then(|v| v.as_array())
+        .unwrap_or_else(|| panic!("expected workflows[] in list response: {}", stdout));
+    assert!(
+        !items.is_empty(),
+        "expected ≥1 workflow in --in-memory snapshot DB; got {}",
+        stdout
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn standalone_in_memory_periodic_snapshot_lands_before_exit() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("periodic-snap.db");
+
+    // Run a workflow that sleeps long enough for at least one periodic
+    // snapshot to fire mid-run, then verify the final snapshot is intact
+    // and contains the completed job. 1.5 s vs the 1 s interval gives one
+    // guaranteed tick without paying for a full multi-second sleep on CI.
+    let out = run_torc_in_memory(
+        work.path(),
+        &db,
+        &["--snapshot-interval-seconds", "1"],
+        &["exec", "-c", "sleep 1.5 && echo periodic-ok"],
+    );
+    assert!(
+        out.status.success(),
+        "torc -s --in-memory --snapshot-interval-seconds 1 exec failed:\n--- stderr ---\n{}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(db.exists(), "snapshot DB at {:?} should exist", db);
+
+    let listed = run_torc_standalone_ok(work.path(), &db, &["-f", "json", "workflows", "list"]);
+    let stdout = String::from_utf8_lossy(&listed.stdout);
+    assert!(
+        stdout.contains("\"workflows\""),
+        "expected workflows list response; got {}",
+        stdout
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn standalone_in_memory_rejected_for_read_only_command() {
+    ensure_test_binaries_built();
+
+    let work = TempDir::new().expect("tempdir");
+    let db = work.path().join("readonly.db");
+
+    // `--in-memory` should be refused for commands that don't create
+    // workflow state — otherwise the empty in-memory DB would snapshot
+    // over an existing torc.db and destroy prior data.
+    let out = run_torc_in_memory(work.path(), &db, &[], &["workflows", "list"]);
+    assert!(
+        !out.status.success(),
+        "--in-memory + workflows list should fail; stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("--in-memory is only supported with"),
+        "stderr should explain the restriction; got:\n{}",
+        stderr
+    );
+    assert!(
+        !db.exists(),
+        "rejected --in-memory must not create the snapshot file; got {:?}",
+        db
+    );
+}

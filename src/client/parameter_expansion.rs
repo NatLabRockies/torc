@@ -336,21 +336,27 @@ pub fn substitute_parameters(template: &str, params: &HashMap<String, ParameterV
     let mut result = template.to_string();
 
     for (param_name, param_value) in params {
-        // Look for {param_name:format} pattern
+        // Replace every {param_name:format} occurrence using a cursor so that substituted
+        // bytes are never re-scanned. Without this, a String param whose value contains
+        // `{param_name:...}` would loop forever (string formatting ignores the spec, so the
+        // replacement equals the matched token and `find` keeps returning the same index).
         let pattern_with_format = format!("{{{}:", param_name);
-        if let Some(start_idx) = result.find(&pattern_with_format) {
-            // Find the closing brace
-            if let Some(end_idx) = result[start_idx..].find('}') {
-                let full_pattern = &result[start_idx..start_idx + end_idx + 1];
-                // Extract format specifier
-                let format_spec = &full_pattern[pattern_with_format.len()..full_pattern.len() - 1];
-                let replacement = param_value.format(Some(format_spec));
-                result = result.replace(full_pattern, &replacement);
-                continue;
-            }
+        let mut cursor = 0;
+        while let Some(rel_idx) = result[cursor..].find(&pattern_with_format) {
+            let start_idx = cursor + rel_idx;
+            let Some(end_offset) = result[start_idx..].find('}') else {
+                break;
+            };
+            let end_idx = start_idx + end_offset + 1;
+            let format_spec = &result[start_idx + pattern_with_format.len()..end_idx - 1];
+            let replacement = param_value.format(Some(format_spec));
+            let replacement_len = replacement.len();
+            result.replace_range(start_idx..end_idx, &replacement);
+            cursor = start_idx + replacement_len;
         }
 
-        // Look for simple {param_name} pattern
+        // Replace simple {param_name} occurrences. `str::replace` is a single pass and does
+        // not re-scan inserted text, so it is safe even if a value contains `{param_name}`.
         let pattern = format!("{{{}}}", param_name);
         result = result.replace(&pattern, &param_value.to_string());
     }
@@ -368,22 +374,25 @@ pub fn substitute_parameters_regex(
     let mut result = template.to_string();
 
     for (param_name, param_value) in params {
-        // Look for {param_name:format} pattern
+        // Replace every {param_name:format} occurrence using a cursor (see substitute_parameters
+        // for why this is required to guarantee termination).
         let pattern_with_format = format!("{{{}:", param_name);
-        if let Some(start_idx) = result.find(&pattern_with_format) {
-            // Find the closing brace
-            if let Some(end_idx) = result[start_idx..].find('}') {
-                let full_pattern = &result[start_idx..start_idx + end_idx + 1];
-                // Extract format specifier
-                let format_spec = &full_pattern[pattern_with_format.len()..full_pattern.len() - 1];
-                let value_str = param_value.format(Some(format_spec));
-                let escaped = regex::escape(&value_str);
-                result = result.replace(full_pattern, &escaped);
-                continue;
-            }
+        let mut cursor = 0;
+        while let Some(rel_idx) = result[cursor..].find(&pattern_with_format) {
+            let start_idx = cursor + rel_idx;
+            let Some(end_offset) = result[start_idx..].find('}') else {
+                break;
+            };
+            let end_idx = start_idx + end_offset + 1;
+            let format_spec = &result[start_idx + pattern_with_format.len()..end_idx - 1];
+            let value_str = param_value.format(Some(format_spec));
+            let escaped = regex::escape(&value_str);
+            let escaped_len = escaped.len();
+            result.replace_range(start_idx..end_idx, &escaped);
+            cursor = start_idx + escaped_len;
         }
 
-        // Look for simple {param_name} pattern
+        // Replace simple {param_name} occurrences (single-pass, safe).
         let pattern = format!("{{{}}}", param_name);
         let value_str = param_value.to_string();
         let escaped = regex::escape(&value_str);
@@ -523,6 +532,55 @@ mod tests {
 
         let result = substitute_parameters("job_{i:03d}", &params);
         assert_eq!(result, "job_005");
+    }
+
+    #[test]
+    fn test_substitute_mixed_format_and_simple() {
+        // A template that uses both {w} and {w:02d} for the same parameter must
+        // substitute both, not just the format-spec form.
+        let mut params = HashMap::new();
+        params.insert("w".to_string(), ParameterValue::Integer(7));
+
+        let result = substitute_parameters("run.sh {w} 2024-{w:02d}-01", &params);
+        assert_eq!(result, "run.sh 7 2024-07-01");
+    }
+
+    #[test]
+    fn test_substitute_multiple_distinct_format_specs() {
+        // Different format specs for the same parameter must each be handled.
+        let mut params = HashMap::new();
+        params.insert("i".to_string(), ParameterValue::Integer(5));
+
+        let result = substitute_parameters("{i:02d}-{i:03d}-{i}", &params);
+        assert_eq!(result, "05-005-5");
+    }
+
+    #[test]
+    fn test_substitute_parameters_value_contains_template_syntax() {
+        // Regression: a String parameter whose value happens to look like template syntax
+        // must not be re-scanned. String formatting ignores the format spec, so prior to
+        // the cursor-based fix this looped forever (replacement == match, no progress).
+        let mut params = HashMap::new();
+        params.insert(
+            "w".to_string(),
+            ParameterValue::String("{w:02d}".to_string()),
+        );
+
+        let result = substitute_parameters("prefix {w:02d} suffix", &params);
+        assert_eq!(result, "prefix {w:02d} suffix");
+    }
+
+    #[test]
+    fn test_substitute_parameters_regex_mixed_format_and_simple() {
+        // Same fix as substitute_parameters: mixed {w} + {w:02d} must both be replaced
+        // (and substituted values are regex-escaped).
+        let mut params = HashMap::new();
+        params.insert("w".to_string(), ParameterValue::Integer(7));
+        params.insert("tag".to_string(), ParameterValue::String("a.b".to_string()));
+
+        let result = substitute_parameters_regex("^out_{w}_{w:02d}_{tag}$", &params);
+        // "a.b" must be regex-escaped to "a\.b" since it's intended for literal matching.
+        assert_eq!(result, "^out_7_07_a\\.b$");
     }
 
     #[test]

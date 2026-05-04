@@ -150,6 +150,18 @@ where
                         }
                         _ => {}
                     },
+                    Some(PopupType::RecoverPrompt { .. }) => match key.code {
+                        KeyCode::Esc => app.recover_prompt_cancel(),
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Up | KeyCode::Down => {
+                            app.recover_prompt_toggle_field();
+                        }
+                        KeyCode::Backspace => app.recover_prompt_backspace(),
+                        KeyCode::Enter => {
+                            let _ = app.recover_prompt_submit();
+                        }
+                        KeyCode::Char(c) => app.recover_prompt_add_char(c),
+                        _ => {}
+                    },
                     Some(PopupType::JobDetails(_)) => match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => app.close_popup(),
                         KeyCode::Char('l') => {
@@ -480,14 +492,18 @@ where
                     KeyCode::Char(c) => app.add_output_dir_char(c),
                     _ => {}
                 },
-                Focus::Popup => {
-                    // Handled above
+                Focus::Popup | Focus::RecoverPrompt => {
+                    // Handled above (popup-specific match)
                 }
                 Focus::Workflows | Focus::Details => match key.code {
                     KeyCode::Char('q') => return Ok(()),
                     KeyCode::Char('?') => app.show_help(),
                     KeyCode::Down => app.next_in_active_table(),
                     KeyCode::Up => app.previous_in_active_table(),
+                    KeyCode::PageDown => app.page_down_in_active_table(),
+                    KeyCode::PageUp => app.page_up_in_active_table(),
+                    KeyCode::Char('g') => app.jump_to_top_in_active_table(),
+                    KeyCode::Char('G') => app.jump_to_bottom_in_active_table(),
                     KeyCode::Enter => {
                         if app.focus == Focus::Workflows {
                             app.load_detail_data()?;
@@ -506,16 +522,22 @@ where
                     KeyCode::Left | KeyCode::Right => {
                         app.toggle_focus();
                     }
-                    KeyCode::Char('f') if app.focus == Focus::Details => {
+                    KeyCode::Char('f') => {
                         app.start_filter();
                     }
-                    KeyCode::Char('c') => {
-                        if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
-                            // Cancel job (with confirmation)
-                            app.request_job_action(JobAction::Cancel);
-                        } else if app.focus == Focus::Details {
-                            app.clear_filter();
+                    KeyCode::Char('=') => {
+                        app.filter_by_current_row();
+                    }
+                    KeyCode::Char('e') => {
+                        if let Err(err) = app.jump_to_events() {
+                            app.set_status(components::StatusMessage::error(&format!(
+                                "Failed to load events: {}",
+                                err
+                            )));
                         }
+                    }
+                    KeyCode::Char('c') => {
+                        app.clear_filter();
                     }
                     KeyCode::Char('u') => {
                         app.start_server_url_input();
@@ -552,10 +574,22 @@ where
                         app.request_workflow_action(WorkflowAction::Delete);
                     }
                     KeyCode::Char('C') => {
-                        app.request_workflow_action(WorkflowAction::Cancel);
+                        // On the Jobs detail tab, cancel the selected job;
+                        // anywhere else, cancel the selected workflow.
+                        if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
+                            app.request_job_action(JobAction::Cancel);
+                        } else {
+                            app.request_workflow_action(WorkflowAction::Cancel);
+                        }
                     }
                     KeyCode::Char('W') => {
                         app.request_workflow_action(WorkflowAction::Watch);
+                    }
+                    KeyCode::Char('V') => {
+                        app.request_workflow_action(WorkflowAction::Recover);
+                    }
+                    KeyCode::Char('v') => {
+                        app.request_workflow_action(WorkflowAction::RecoverDryRun);
                     }
                     // Server management
                     KeyCode::Char('S') => {
@@ -588,6 +622,39 @@ where
                             && app.detail_view == DetailViewType::Jobs =>
                     {
                         app.request_job_action(JobAction::Retry);
+                    }
+                    // Sort the Results table by Peak Memory / Peak CPU. Each
+                    // press cycles None → Desc → Asc → None.
+                    KeyCode::Char('m')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_peak_memory();
+                    }
+                    KeyCode::Char('p')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_peak_cpu();
+                    }
+                    // Sort the Jobs table by column index 1=ID, 2=Name, 3=Status.
+                    KeyCode::Char('1')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.cycle_jobs_sort_id();
+                    }
+                    KeyCode::Char('2')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.cycle_jobs_sort_name();
+                    }
+                    KeyCode::Char('3')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.cycle_jobs_sort_status();
                     }
                     _ => {}
                 },

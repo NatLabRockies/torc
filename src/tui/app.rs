@@ -23,12 +23,13 @@ use crate::client::config::TorcConfig;
 use super::api::TorcClient;
 use super::components::{
     ConfirmationDialog, ErrorDialog, FileViewer, JobDetailsPopup, LogViewer, ProcessViewer,
-    StatusMessage,
+    RecoverPromptDialog, StatusMessage,
 };
 use super::dag::{DagLayout, JobNode};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DetailViewType {
+    Summary,
     Jobs,
     Files,
     Events,
@@ -49,8 +50,10 @@ pub enum WorkflowAction {
     Reset,
     Run,
     Submit,
-    Watch,       // Watch workflow with recovery
-    WatchNoAuto, // Watch workflow without recovery
+    Watch,         // Watch workflow with recovery
+    WatchNoAuto,   // Watch workflow without recovery
+    Recover,       // One-shot recovery: adjust resources and resubmit failed jobs
+    RecoverDryRun, // Preview what recovery would do without applying changes
     Delete,
     Cancel,
 }
@@ -83,6 +86,19 @@ impl WorkflowAction {
                 "Watch workflow '{}'?\nThis will monitor without automatic recovery.",
                 workflow_name
             ),
+            Self::Recover => format!(
+                "Recover workflow '{}'?\n\
+                 Diagnoses failures, increases memory/runtime for OOM/timeout jobs, \
+                 resets failed jobs, and resubmits Slurm allocations.\n\
+                 Workflow must be complete with no active workers.",
+                workflow_name
+            ),
+            Self::RecoverDryRun => format!(
+                "Preview recovery for workflow '{}'?\n\
+                 Shows the proposed resource adjustments and Slurm scheduler plan \
+                 without making any changes.",
+                workflow_name
+            ),
             Self::Delete => format!(
                 "DELETE workflow '{}'?\nThis action cannot be undone!",
                 workflow_name
@@ -99,6 +115,7 @@ impl WorkflowAction {
                 | Self::Reinitialize
                 | Self::ReinitializeForce
                 | Self::InitializeForce
+                | Self::Recover
         )
     }
 
@@ -113,6 +130,8 @@ impl WorkflowAction {
             Self::Submit => "Submit Workflow",
             Self::Watch => "Watch Workflow (Auto-Recovery)",
             Self::WatchNoAuto => "Watch Workflow",
+            Self::Recover => "Recover Workflow",
+            Self::RecoverDryRun => "Recover Workflow (Dry Run)",
             Self::Delete => "Delete Workflow",
             Self::Cancel => "Cancel Workflow",
         }
@@ -148,6 +167,12 @@ pub enum PopupType {
         dialog: ConfirmationDialog,
         action: PendingAction,
     },
+    RecoverPrompt {
+        dialog: RecoverPromptDialog,
+        workflow_id: i64,
+        workflow_name: String,
+        dry_run: bool,
+    },
     Error(ErrorDialog),
 }
 
@@ -161,6 +186,7 @@ pub enum PendingAction {
 impl DetailViewType {
     pub fn as_str(&self) -> &str {
         match self {
+            Self::Summary => "◆ Summary",
             Self::Jobs => "▶ Jobs",
             Self::Files => "◫ Files",
             Self::Events => "⚡ Events",
@@ -174,6 +200,7 @@ impl DetailViewType {
 
     pub fn all() -> Vec<Self> {
         vec![
+            Self::Summary,
             Self::Jobs,
             Self::Files,
             Self::Events,
@@ -187,6 +214,7 @@ impl DetailViewType {
 
     pub fn next(&self) -> Self {
         match self {
+            Self::Summary => Self::Jobs,
             Self::Jobs => Self::Files,
             Self::Files => Self::Events,
             Self::Events => Self::Results,
@@ -194,13 +222,14 @@ impl DetailViewType {
             Self::ComputeNodes => Self::ScheduledNodes,
             Self::ScheduledNodes => Self::SlurmStats,
             Self::SlurmStats => Self::Dag,
-            Self::Dag => Self::Jobs,
+            Self::Dag => Self::Summary,
         }
     }
 
     pub fn previous(&self) -> Self {
         match self {
-            Self::Jobs => Self::Dag,
+            Self::Summary => Self::Dag,
+            Self::Jobs => Self::Summary,
             Self::Files => Self::Jobs,
             Self::Events => Self::Files,
             Self::Results => Self::Events,
@@ -220,6 +249,7 @@ pub enum Focus {
     ServerUrlInput,
     WorkflowPathInput,
     OutputDirInput,
+    RecoverPrompt,
     Popup,
 }
 
@@ -229,16 +259,150 @@ pub struct Filter {
     pub value: String,
 }
 
+/// Which table the active filter applies to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FilterTarget {
+    Workflows,
+    Details,
+}
+
+/// Number of rows to advance/retreat for PageDown/PageUp.
+pub const PAGE_STEP: usize = 10;
+
+/// Sort state for the Results detail table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResultsSort {
+    None,
+    PeakMemoryDesc,
+    PeakMemoryAsc,
+    PeakCpuDesc,
+    PeakCpuAsc,
+}
+
+/// Sort state for the Jobs detail table. Number keys 1..3 cycle a single
+/// column at a time (None → Desc → Asc → None).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobsSort {
+    None,
+    IdDesc,
+    IdAsc,
+    NameDesc,
+    NameAsc,
+    StatusDesc,
+    StatusAsc,
+}
+
+impl JobsSort {
+    pub fn cycle_id(self) -> Self {
+        match self {
+            Self::IdDesc => Self::IdAsc,
+            Self::IdAsc => Self::None,
+            _ => Self::IdDesc,
+        }
+    }
+    pub fn cycle_name(self) -> Self {
+        match self {
+            Self::NameDesc => Self::NameAsc,
+            Self::NameAsc => Self::None,
+            _ => Self::NameDesc,
+        }
+    }
+    pub fn cycle_status(self) -> Self {
+        match self {
+            Self::StatusDesc => Self::StatusAsc,
+            Self::StatusAsc => Self::None,
+            _ => Self::StatusDesc,
+        }
+    }
+    pub fn id_indicator(self) -> &'static str {
+        match self {
+            Self::IdDesc => " ↓",
+            Self::IdAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn name_indicator(self) -> &'static str {
+        match self {
+            Self::NameDesc => " ↓",
+            Self::NameAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn status_indicator(self) -> &'static str {
+        match self {
+            Self::StatusDesc => " ↓",
+            Self::StatusAsc => " ↑",
+            _ => "",
+        }
+    }
+}
+
+impl ResultsSort {
+    /// Cycle: None → Desc → Asc → None for the Peak Memory column. If currently
+    /// sorting by another column, jump to PeakMemoryDesc.
+    pub fn cycle_peak_memory(self) -> Self {
+        match self {
+            Self::PeakMemoryDesc => Self::PeakMemoryAsc,
+            Self::PeakMemoryAsc => Self::None,
+            _ => Self::PeakMemoryDesc,
+        }
+    }
+
+    pub fn cycle_peak_cpu(self) -> Self {
+        match self {
+            Self::PeakCpuDesc => Self::PeakCpuAsc,
+            Self::PeakCpuAsc => Self::None,
+            _ => Self::PeakCpuDesc,
+        }
+    }
+
+    /// Returns the arrow indicator for the Peak Memory column header.
+    pub fn peak_memory_indicator(self) -> &'static str {
+        match self {
+            Self::PeakMemoryDesc => " ↓",
+            Self::PeakMemoryAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn peak_cpu_indicator(self) -> &'static str {
+        match self {
+            Self::PeakCpuDesc => " ↓",
+            Self::PeakCpuAsc => " ↑",
+            _ => "",
+        }
+    }
+}
+
+/// Aggregated high-level information about a single workflow, computed from
+/// list_jobs + get_workflow + is_workflow_complete and rendered by the
+/// Summary detail view.
+#[derive(Debug, Clone)]
+pub struct WorkflowSummary {
+    pub workflow_id: i64,
+    pub workflow_name: String,
+    pub workflow_user: String,
+    pub description: Option<String>,
+    pub is_complete: bool,
+    pub is_canceled: bool,
+    pub total_jobs: usize,
+    /// Counts indexed by `JobStatus as usize` (0 = Uninitialized .. 10 = PendingFailed).
+    pub counts: [usize; 11],
+}
+
 pub struct App {
     pub client: TorcClient,
     pub server_url: String,
     pub server_url_input: String,
     pub user_filter: Option<String>,
     pub workflows: Vec<WorkflowModel>,
+    pub workflows_all: Vec<WorkflowModel>,
     pub workflows_state: TableState,
     pub jobs: Vec<JobModel>,
     pub jobs_all: Vec<JobModel>,
+    pub jobs_workflow_id: Option<i64>,
     pub jobs_state: TableState,
+    pub jobs_sort: JobsSort,
     pub files: Vec<FileModel>,
     pub files_all: Vec<FileModel>,
     pub files_state: TableState,
@@ -249,6 +413,7 @@ pub struct App {
     pub results_all: Vec<ResultModel>,
     pub results_state: TableState,
     pub results_workflow_id: Option<i64>,
+    pub results_sort: ResultsSort,
     pub exec_time_map: std::collections::HashMap<(i64, i64, i64), f64>,
     pub compute_nodes: Vec<ComputeNodeModel>,
     pub compute_nodes_all: Vec<ComputeNodeModel>,
@@ -260,6 +425,7 @@ pub struct App {
     pub slurm_stats_all: Vec<SlurmStatsModel>,
     pub slurm_stats_state: TableState,
     pub dag: Option<DagLayout>,
+    pub summary: Option<WorkflowSummary>,
     pub detail_view: DetailViewType,
     pub selected_workflow_id: Option<i64>,
     pub focus: Focus,
@@ -267,6 +433,7 @@ pub struct App {
     pub filter: Option<Filter>,
     pub filter_input: String,
     pub filter_column_index: usize,
+    pub filter_target: FilterTarget,
 
     // New fields for enhanced functionality
     pub popup: Option<PopupType>,
@@ -341,10 +508,13 @@ impl App {
             server_url_input: String::new(),
             user_filter: Some(current_user.clone()),
             workflows: Vec::new(),
+            workflows_all: Vec::new(),
             workflows_state: TableState::default(),
             jobs: Vec::new(),
             jobs_all: Vec::new(),
+            jobs_workflow_id: None,
             jobs_state: TableState::default(),
+            jobs_sort: JobsSort::None,
             files: Vec::new(),
             files_all: Vec::new(),
             files_state: TableState::default(),
@@ -355,6 +525,7 @@ impl App {
             results_all: Vec::new(),
             results_state: TableState::default(),
             results_workflow_id: None,
+            results_sort: ResultsSort::None,
             exec_time_map: std::collections::HashMap::new(),
             compute_nodes: Vec::new(),
             compute_nodes_all: Vec::new(),
@@ -366,13 +537,15 @@ impl App {
             slurm_stats_all: Vec::new(),
             slurm_stats_state: TableState::default(),
             dag: None,
-            detail_view: DetailViewType::Jobs,
+            summary: None,
+            detail_view: DetailViewType::Summary,
             selected_workflow_id: None,
             focus: Focus::Workflows,
             previous_focus: Focus::Workflows,
             filter: None,
             filter_input: String::new(),
             filter_column_index: 0,
+            filter_target: FilterTarget::Details,
             popup: None,
             status_message: None,
             workflow_path_input: String::new(),
@@ -404,14 +577,46 @@ impl App {
     }
 
     pub fn refresh_workflows(&mut self) -> Result<()> {
-        self.workflows = if let Some(ref user) = self.user_filter {
+        // Capture the currently-selected workflow id so we can re-find it
+        // after the refresh, instead of snapping back to row 0 when the list
+        // shifts.
+        let prev_id = self
+            .workflows_state
+            .selected()
+            .and_then(|i| self.workflows.get(i))
+            .and_then(|w| w.id);
+
+        self.workflows_all = if let Some(ref user) = self.user_filter {
             self.client.list_workflows_for_user(user)?
         } else {
             self.client.list_workflows()?
         };
 
-        if !self.workflows.is_empty() && self.workflows_state.selected().is_none() {
-            self.workflows_state.select(Some(0));
+        // Re-apply any active workflow filter against the freshly loaded data.
+        if self.filter_target == FilterTarget::Workflows
+            && let Some(ref filter) = self.filter.clone()
+        {
+            self.workflows =
+                filter_workflow_list(&self.workflows_all, &filter.column, &filter.value);
+        } else {
+            self.workflows = self.workflows_all.clone();
+        }
+
+        if let Some(id) = prev_id
+            && let Some(idx) = self.workflows.iter().position(|w| w.id == Some(id))
+        {
+            self.workflows_state.select(Some(idx));
+        } else if self.workflows.is_empty() {
+            self.workflows_state.select(None);
+        } else {
+            // Repair the selection if the previously-selected row vanished
+            // and we don't have a stable id to recover. Leaving a stale,
+            // out-of-bounds index would let later actions operate on the
+            // wrong row.
+            match self.workflows_state.selected() {
+                Some(idx) if idx < self.workflows.len() => {}
+                _ => self.workflows_state.select(Some(0)),
+            }
         }
         Ok(())
     }
@@ -425,6 +630,7 @@ impl App {
             Focus::ServerUrlInput => Focus::ServerUrlInput,
             Focus::WorkflowPathInput => Focus::WorkflowPathInput,
             Focus::OutputDirInput => Focus::OutputDirInput,
+            Focus::RecoverPrompt => Focus::RecoverPrompt,
             Focus::Popup => Focus::Popup,
         };
     }
@@ -454,7 +660,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
-                    DetailViewType::Dag => return, // DAG view doesn't support table navigation
+                    DetailViewType::Summary | DetailViewType::Dag => return, // No table to navigate
                 };
                 if len > 0 {
                     state.select(Some(
@@ -470,6 +676,7 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -499,7 +706,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
-                    DetailViewType::Dag => return, // DAG view doesn't support table navigation
+                    DetailViewType::Summary | DetailViewType::Dag => return, // No table to navigate
                 };
                 if len > 0 {
                     state.select(Some(
@@ -512,6 +719,176 @@ impl App {
             | Focus::ServerUrlInput
             | Focus::WorkflowPathInput
             | Focus::OutputDirInput
+            | Focus::RecoverPrompt
+            | Focus::Popup => {}
+        }
+    }
+
+    pub fn page_down_in_active_table(&mut self) {
+        match self.focus {
+            Focus::Workflows => {
+                let len = self.workflows.len();
+                if len == 0 {
+                    return;
+                }
+                let next = self
+                    .workflows_state
+                    .selected()
+                    .map(|i| (i + PAGE_STEP).min(len.saturating_sub(1)))
+                    .unwrap_or(0);
+                self.workflows_state.select(Some(next));
+            }
+            Focus::Details => {
+                let (state, len) = match self.detail_view {
+                    DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Files => (&mut self.files_state, self.files.len()),
+                    DetailViewType::Events => (&mut self.events_state, self.events.len()),
+                    DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
+                    DetailViewType::ScheduledNodes => {
+                        (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
+                    DetailViewType::Summary | DetailViewType::Dag => return,
+                };
+                if len > 0 {
+                    let next = state
+                        .selected()
+                        .map(|i| (i + PAGE_STEP).min(len.saturating_sub(1)))
+                        .unwrap_or(0);
+                    state.select(Some(next));
+                }
+            }
+            Focus::FilterInput
+            | Focus::ServerUrlInput
+            | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
+            | Focus::RecoverPrompt
+            | Focus::Popup => {}
+        }
+    }
+
+    pub fn page_up_in_active_table(&mut self) {
+        match self.focus {
+            Focus::Workflows => {
+                if self.workflows.is_empty() {
+                    return;
+                }
+                let next = self
+                    .workflows_state
+                    .selected()
+                    .map(|i| i.saturating_sub(PAGE_STEP))
+                    .unwrap_or(0);
+                self.workflows_state.select(Some(next));
+            }
+            Focus::Details => {
+                let (state, len) = match self.detail_view {
+                    DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Files => (&mut self.files_state, self.files.len()),
+                    DetailViewType::Events => (&mut self.events_state, self.events.len()),
+                    DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
+                    DetailViewType::ScheduledNodes => {
+                        (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
+                    DetailViewType::Summary | DetailViewType::Dag => return,
+                };
+                if len > 0 {
+                    let next = state
+                        .selected()
+                        .map(|i| i.saturating_sub(PAGE_STEP))
+                        .unwrap_or(0);
+                    state.select(Some(next));
+                }
+            }
+            Focus::FilterInput
+            | Focus::ServerUrlInput
+            | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
+            | Focus::RecoverPrompt
+            | Focus::Popup => {}
+        }
+    }
+
+    pub fn jump_to_top_in_active_table(&mut self) {
+        match self.focus {
+            Focus::Workflows => {
+                if !self.workflows.is_empty() {
+                    self.workflows_state.select(Some(0));
+                }
+            }
+            Focus::Details => {
+                let (state, len) = match self.detail_view {
+                    DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Files => (&mut self.files_state, self.files.len()),
+                    DetailViewType::Events => (&mut self.events_state, self.events.len()),
+                    DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
+                    DetailViewType::ScheduledNodes => {
+                        (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
+                    DetailViewType::Summary | DetailViewType::Dag => return,
+                };
+                if len > 0 {
+                    state.select(Some(0));
+                }
+            }
+            Focus::FilterInput
+            | Focus::ServerUrlInput
+            | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
+            | Focus::RecoverPrompt
+            | Focus::Popup => {}
+        }
+    }
+
+    pub fn jump_to_bottom_in_active_table(&mut self) {
+        match self.focus {
+            Focus::Workflows => {
+                if !self.workflows.is_empty() {
+                    self.workflows_state.select(Some(self.workflows.len() - 1));
+                }
+            }
+            Focus::Details => {
+                let (state, len) = match self.detail_view {
+                    DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Files => (&mut self.files_state, self.files.len()),
+                    DetailViewType::Events => (&mut self.events_state, self.events.len()),
+                    DetailViewType::Results => (&mut self.results_state, self.results.len()),
+                    DetailViewType::ComputeNodes => {
+                        (&mut self.compute_nodes_state, self.compute_nodes.len())
+                    }
+                    DetailViewType::ScheduledNodes => {
+                        (&mut self.scheduled_nodes_state, self.scheduled_nodes.len())
+                    }
+                    DetailViewType::SlurmStats => {
+                        (&mut self.slurm_stats_state, self.slurm_stats.len())
+                    }
+                    DetailViewType::Summary | DetailViewType::Dag => return,
+                };
+                if len > 0 {
+                    state.select(Some(len - 1));
+                }
+            }
+            Focus::FilterInput
+            | Focus::ServerUrlInput
+            | Focus::WorkflowPathInput
+            | Focus::OutputDirInput
+            | Focus::RecoverPrompt
             | Focus::Popup => {}
         }
     }
@@ -526,9 +903,38 @@ impl App {
                 self.filter = None;
 
                 match self.detail_view {
+                    DetailViewType::Summary => {
+                        if self.jobs_workflow_id != Some(workflow_id) {
+                            self.jobs_all = self.client.list_jobs(workflow_id)?;
+                            self.jobs_workflow_id = Some(workflow_id);
+                        }
+                        self.jobs = self.jobs_all.clone();
+                        self.apply_jobs_sort();
+                        let workflow = self.client.get_workflow(workflow_id)?;
+                        let completion = self.client.is_workflow_complete(workflow_id)?;
+
+                        let mut counts = [0usize; 11];
+                        for job in &self.jobs_all {
+                            if let Some(s) = &job.status {
+                                counts[*s as usize] += 1;
+                            }
+                        }
+                        self.summary = Some(WorkflowSummary {
+                            workflow_id,
+                            workflow_name: workflow.name,
+                            workflow_user: workflow.user,
+                            description: workflow.description,
+                            is_complete: completion.is_complete,
+                            is_canceled: completion.is_canceled,
+                            total_jobs: self.jobs_all.len(),
+                            counts,
+                        });
+                    }
                     DetailViewType::Jobs => {
                         self.jobs_all = self.client.list_jobs(workflow_id)?;
+                        self.jobs_workflow_id = Some(workflow_id);
                         self.jobs = self.jobs_all.clone();
+                        self.apply_jobs_sort();
                         if !self.jobs.is_empty() {
                             self.jobs_state.select(Some(0));
                         }
@@ -550,6 +956,7 @@ impl App {
                             self.results_workflow_id = Some(workflow_id);
                         }
                         self.results = self.results_all.clone();
+                        self.apply_results_sort();
                         if !self.results.is_empty() {
                             self.results_state.select(Some(0));
                         }
@@ -582,23 +989,185 @@ impl App {
                         {
                             self.results_all = r;
                             self.results = self.results_all.clone();
+                            self.apply_results_sort();
                             self.results_workflow_id = Some(workflow_id);
                         }
                         self.rebuild_exec_time_map();
                     }
                     DetailViewType::Dag => {
-                        // Load jobs if not already loaded
-                        if self.jobs_all.is_empty() {
+                        if self.jobs_workflow_id != Some(workflow_id) {
                             self.jobs_all = self.client.list_jobs(workflow_id)?;
+                            self.jobs_workflow_id = Some(workflow_id);
                             self.jobs = self.jobs_all.clone();
+                            self.apply_jobs_sort();
                         }
-                        // Build the DAG
                         self.build_dag_from_jobs();
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    /// Sort `self.results` in-place based on `self.results_sort`. Rows with
+    /// missing values sort last in both directions so they don't crowd the
+    /// top.
+    pub fn apply_results_sort(&mut self) {
+        match self.results_sort {
+            ResultsSort::None => {}
+            ResultsSort::PeakMemoryDesc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
+                        (Some(x), Some(y)) => y.cmp(&x),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+            ResultsSort::PeakMemoryAsc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
+                        (Some(x), Some(y)) => x.cmp(&y),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+            // f64::total_cmp gives a total order for floats; partial_cmp +
+            // unwrap_or(Equal) violates the strict-weak-ordering required by
+            // sort_by when NaN is present, which can scramble unrelated
+            // rows. NaN sorts to the end via its natural total_cmp position
+            // (greater than +inf), which we don't bother special-casing.
+            ResultsSort::PeakCpuDesc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
+                        (Some(x), Some(y)) => y.total_cmp(&x),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+            ResultsSort::PeakCpuAsc => {
+                self.results
+                    .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
+                        (Some(x), Some(y)) => x.total_cmp(&y),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    });
+            }
+        }
+    }
+
+    pub fn cycle_results_sort_peak_memory(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_peak_memory();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_peak_cpu(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_peak_cpu();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    fn selected_result_id(&self) -> Option<i64> {
+        self.results_state
+            .selected()
+            .and_then(|i| self.results.get(i))
+            .and_then(|r| r.id)
+    }
+
+    /// Re-select the row whose stable id matches `prev_id`. Falls back to
+    /// row 0 if the previously-selected row is no longer present, or clears
+    /// selection entirely when the list is empty.
+    fn restore_results_selection(&mut self, prev_id: Option<i64>) {
+        if let Some(id) = prev_id
+            && let Some(idx) = self.results.iter().position(|r| r.id == Some(id))
+        {
+            self.results_state.select(Some(idx));
+            return;
+        }
+        if self.results.is_empty() {
+            self.results_state.select(None);
+        } else {
+            self.results_state.select(Some(0));
+        }
+    }
+
+    /// Sort `self.jobs` in-place based on `self.jobs_sort`. Stable for None.
+    pub fn apply_jobs_sort(&mut self) {
+        match self.jobs_sort {
+            JobsSort::None => {}
+            // Sort missing IDs last in either direction (server-assigned IDs
+            // should always be present, but match the None-last convention
+            // used by the Results / Status sorts for consistency).
+            JobsSort::IdDesc => self
+                .jobs
+                .sort_by_key(|j| (j.id.is_none(), std::cmp::Reverse(j.id.unwrap_or(i64::MIN)))),
+            JobsSort::IdAsc => self
+                .jobs
+                .sort_by_key(|j| (j.id.is_none(), j.id.unwrap_or(i64::MAX))),
+            // Cache lowercased keys so we don't allocate on every comparison.
+            JobsSort::NameDesc => self
+                .jobs
+                .sort_by_cached_key(|j| std::cmp::Reverse(j.name.to_lowercase())),
+            JobsSort::NameAsc => self.jobs.sort_by_cached_key(|j| j.name.to_lowercase()),
+            JobsSort::StatusDesc => self.jobs.sort_by(|a, b| {
+                let ka = a.status.map(|s| s as u8).unwrap_or(u8::MAX);
+                let kb = b.status.map(|s| s as u8).unwrap_or(u8::MAX);
+                kb.cmp(&ka)
+            }),
+            JobsSort::StatusAsc => self.jobs.sort_by(|a, b| {
+                let ka = a.status.map(|s| s as u8).unwrap_or(u8::MAX);
+                let kb = b.status.map(|s| s as u8).unwrap_or(u8::MAX);
+                ka.cmp(&kb)
+            }),
+        }
+    }
+
+    pub fn cycle_jobs_sort_id(&mut self) {
+        let prev_id = self.selected_job_id();
+        self.jobs_sort = self.jobs_sort.cycle_id();
+        self.apply_jobs_sort();
+        self.restore_jobs_selection(prev_id);
+    }
+
+    pub fn cycle_jobs_sort_name(&mut self) {
+        let prev_id = self.selected_job_id();
+        self.jobs_sort = self.jobs_sort.cycle_name();
+        self.apply_jobs_sort();
+        self.restore_jobs_selection(prev_id);
+    }
+
+    pub fn cycle_jobs_sort_status(&mut self) {
+        let prev_id = self.selected_job_id();
+        self.jobs_sort = self.jobs_sort.cycle_status();
+        self.apply_jobs_sort();
+        self.restore_jobs_selection(prev_id);
+    }
+
+    fn selected_job_id(&self) -> Option<i64> {
+        self.jobs_state
+            .selected()
+            .and_then(|i| self.jobs.get(i))
+            .and_then(|j| j.id)
+    }
+
+    fn restore_jobs_selection(&mut self, prev_id: Option<i64>) {
+        if let Some(id) = prev_id
+            && let Some(idx) = self.jobs.iter().position(|j| j.id == Some(id))
+        {
+            self.jobs_state.select(Some(idx));
+            return;
+        }
+        if self.jobs.is_empty() {
+            self.jobs_state.select(None);
+        } else {
+            self.jobs_state.select(Some(0));
+        }
     }
 
     /// Rebuild the cached exec_time_map from results_all.
@@ -613,6 +1182,17 @@ impl App {
                 ((r.job_id, r.run_id, attempt_id), r.exec_time_minutes)
             })
             .collect();
+    }
+
+    /// Jump to the Events tab for the currently-highlighted workflow and
+    /// open its live SSE stream. Works whether focus is on the Workflows
+    /// pane or already on a Details tab — `load_detail_data` reads the
+    /// highlighted workflow row from `workflows_state` and `Events` is the
+    /// case that starts the SSE connection.
+    pub fn jump_to_events(&mut self) -> Result<()> {
+        self.detail_view = DetailViewType::Events;
+        self.focus = Focus::Details;
+        self.load_detail_data()
     }
 
     pub fn next_detail_view(&mut self) {
@@ -632,18 +1212,38 @@ impl App {
     }
 
     pub fn start_filter(&mut self) {
+        // Decide which table is being filtered based on which pane has focus.
+        let target = match self.focus {
+            Focus::Workflows => FilterTarget::Workflows,
+            _ => FilterTarget::Details,
+        };
+        self.filter_target = target;
+
+        if self.get_filter_columns().is_empty() {
+            self.set_status(StatusMessage::info(
+                "Filtering is not supported in this view",
+            ));
+            return;
+        }
         self.focus = Focus::FilterInput;
         self.filter_input.clear();
         self.filter_column_index = 0;
     }
 
     pub fn cancel_filter(&mut self) {
-        self.focus = Focus::Details;
+        self.focus = match self.filter_target {
+            FilterTarget::Workflows => Focus::Workflows,
+            FilterTarget::Details => Focus::Details,
+        };
         self.filter_input.clear();
     }
 
     pub fn get_filter_columns(&self) -> Vec<&str> {
+        if self.filter_target == FilterTarget::Workflows {
+            return vec!["Name", "User", "Description"];
+        }
         match self.detail_view {
+            DetailViewType::Summary => vec![], // Summary view doesn't support filtering
             DetailViewType::Jobs => vec!["Status", "Name", "Command"],
             DetailViewType::Files => vec!["Name", "Path"],
             DetailViewType::Events => vec!["Event Type", "Data"],
@@ -655,13 +1255,110 @@ impl App {
         }
     }
 
+    /// Apply a filter using the currently-selected row's value for a sensible
+    /// "primary" column on each table. No-op when the focused table doesn't
+    /// have a useful primary column or no row is selected.
+    pub fn filter_by_current_row(&mut self) {
+        let (target, column_name, value) = match self.focus {
+            Focus::Workflows => {
+                let Some(idx) = self.workflows_state.selected() else {
+                    return;
+                };
+                let Some(wf) = self.workflows.get(idx) else {
+                    return;
+                };
+                (FilterTarget::Workflows, "User", wf.user.clone())
+            }
+            Focus::Details => match self.detail_view {
+                DetailViewType::Jobs => {
+                    let Some(idx) = self.jobs_state.selected() else {
+                        return;
+                    };
+                    let Some(job) = self.jobs.get(idx) else {
+                        return;
+                    };
+                    let Some(s) = job.status else { return };
+                    (FilterTarget::Details, "Status", format!("{:?}", s))
+                }
+                DetailViewType::Results => {
+                    let Some(idx) = self.results_state.selected() else {
+                        return;
+                    };
+                    let Some(r) = self.results.get(idx) else {
+                        return;
+                    };
+                    (FilterTarget::Details, "Status", format!("{:?}", r.status))
+                }
+                DetailViewType::Events => {
+                    let Some(idx) = self.events_state.selected() else {
+                        return;
+                    };
+                    let Some(e) = self.events.get(idx) else {
+                        return;
+                    };
+                    (FilterTarget::Details, "Event Type", e.event_type.clone())
+                }
+                DetailViewType::ComputeNodes => {
+                    let Some(idx) = self.compute_nodes_state.selected() else {
+                        return;
+                    };
+                    let Some(n) = self.compute_nodes.get(idx) else {
+                        return;
+                    };
+                    (FilterTarget::Details, "Hostname", n.hostname.clone())
+                }
+                DetailViewType::ScheduledNodes => {
+                    let Some(idx) = self.scheduled_nodes_state.selected() else {
+                        return;
+                    };
+                    let Some(n) = self.scheduled_nodes.get(idx) else {
+                        return;
+                    };
+                    (FilterTarget::Details, "Status", n.status.clone())
+                }
+                DetailViewType::Files => {
+                    let Some(idx) = self.files_state.selected() else {
+                        return;
+                    };
+                    let Some(file) = self.files.get(idx) else {
+                        return;
+                    };
+                    (FilterTarget::Details, "Name", file.name.clone())
+                }
+                _ => return,
+            },
+            _ => return,
+        };
+
+        // Resolve the column index *before* mutating any state so that an
+        // invalid mapping doesn't leave us with a stale `filter_target`.
+        let saved_target = self.filter_target;
+        self.filter_target = target;
+        let columns = self.get_filter_columns();
+        let Some(col_idx) = columns.iter().position(|c| *c == column_name) else {
+            self.filter_target = saved_target;
+            return;
+        };
+        self.filter_column_index = col_idx;
+        self.filter_input = value;
+        self.apply_filter();
+    }
+
     pub fn next_filter_column(&mut self) {
         let columns = self.get_filter_columns();
+        if columns.is_empty() {
+            self.filter_column_index = 0;
+            return;
+        }
         self.filter_column_index = (self.filter_column_index + 1) % columns.len();
     }
 
     pub fn prev_filter_column(&mut self) {
         let columns = self.get_filter_columns();
+        if columns.is_empty() {
+            self.filter_column_index = 0;
+            return;
+        }
         if self.filter_column_index == 0 {
             self.filter_column_index = columns.len() - 1;
         } else {
@@ -678,13 +1375,23 @@ impl App {
     }
 
     pub fn apply_filter(&mut self) {
+        let target = self.filter_target;
+        let return_focus = match target {
+            FilterTarget::Workflows => Focus::Workflows,
+            FilterTarget::Details => Focus::Details,
+        };
+
         if self.filter_input.is_empty() {
             self.clear_filter();
-            self.focus = Focus::Details;
+            self.focus = return_focus;
             return;
         }
 
         let columns = self.get_filter_columns();
+        if columns.is_empty() {
+            self.focus = return_focus;
+            return;
+        }
         let column = columns[self.filter_column_index].to_string();
         let value = self.filter_input.clone().to_lowercase();
 
@@ -692,6 +1399,17 @@ impl App {
             column: column.clone(),
             value: value.clone(),
         });
+
+        if target == FilterTarget::Workflows {
+            self.workflows = filter_workflow_list(&self.workflows_all, &column, &value);
+            if !self.workflows.is_empty() {
+                self.workflows_state.select(Some(0));
+            } else {
+                self.workflows_state.select(None);
+            }
+            self.focus = return_focus;
+            return;
+        }
 
         match self.detail_view {
             DetailViewType::Jobs => {
@@ -710,6 +1428,7 @@ impl App {
                     })
                     .cloned()
                     .collect();
+                self.apply_jobs_sort();
                 if !self.jobs.is_empty() {
                     self.jobs_state.select(Some(0));
                 } else {
@@ -763,6 +1482,7 @@ impl App {
                     })
                     .cloned()
                     .collect();
+                self.apply_results_sort();
                 if !self.results.is_empty() {
                     self.results_state.select(Some(0));
                 } else {
@@ -834,8 +1554,8 @@ impl App {
                     self.slurm_stats_state.select(None);
                 }
             }
-            DetailViewType::Dag => {
-                // DAG view doesn't support filtering
+            DetailViewType::Summary | DetailViewType::Dag => {
+                // Summary and DAG views don't support filtering
             }
         }
 
@@ -843,10 +1563,29 @@ impl App {
     }
 
     pub fn clear_filter(&mut self) {
-        self.filter = None;
+        // Clear the filter for whichever pane currently has focus. This way
+        // pressing `c` on the Workflows pane always restores the workflow
+        // list, even if the last filter applied was a Details filter.
+        let target = match self.focus {
+            Focus::Workflows => FilterTarget::Workflows,
+            _ => FilterTarget::Details,
+        };
+        if self.filter_target == target {
+            self.filter = None;
+        }
+        if target == FilterTarget::Workflows {
+            self.workflows = self.workflows_all.clone();
+            if !self.workflows.is_empty() {
+                self.workflows_state.select(Some(0));
+            } else {
+                self.workflows_state.select(None);
+            }
+            return;
+        }
         match self.detail_view {
             DetailViewType::Jobs => {
                 self.jobs = self.jobs_all.clone();
+                self.apply_jobs_sort();
                 if !self.jobs.is_empty() {
                     self.jobs_state.select(Some(0));
                 }
@@ -865,6 +1604,7 @@ impl App {
             }
             DetailViewType::Results => {
                 self.results = self.results_all.clone();
+                self.apply_results_sort();
                 if !self.results.is_empty() {
                     self.results_state.select(Some(0));
                 }
@@ -887,8 +1627,8 @@ impl App {
                     self.slurm_stats_state.select(Some(0));
                 }
             }
-            DetailViewType::Dag => {
-                // DAG view doesn't support filtering
+            DetailViewType::Summary | DetailViewType::Dag => {
+                // Summary and DAG views don't support filtering
             }
         }
     }
@@ -1067,7 +1807,9 @@ impl App {
                 // Refresh jobs for the current workflow
                 if let Ok(jobs) = self.client.list_jobs(workflow_id) {
                     self.jobs_all = jobs.clone();
+                    self.jobs_workflow_id = Some(workflow_id);
                     self.jobs = jobs;
+                    self.apply_jobs_sort();
                     if !self.jobs.is_empty() {
                         self.jobs_state.select(Some(0));
                     }
@@ -1078,6 +1820,7 @@ impl App {
                 if let Ok(results) = self.client.list_results(workflow_id) {
                     self.results_all = results.clone();
                     self.results = results;
+                    self.apply_results_sort();
                     self.results_workflow_id = Some(workflow_id);
                     if !self.results.is_empty() {
                         self.results_state.select(Some(0));
@@ -1160,6 +1903,19 @@ impl App {
         if let Some(workflow) = self.get_selected_workflow() {
             if let Some(workflow_id) = workflow.id {
                 let workflow_name = workflow.name.clone();
+
+                // Recover actions skip the standard yes/no confirmation
+                // and use a dedicated prompt that collects multipliers.
+                // The prompt itself acts as the confirmation gate.
+                if matches!(
+                    action,
+                    WorkflowAction::Recover | WorkflowAction::RecoverDryRun
+                ) {
+                    let dry_run = action == WorkflowAction::RecoverDryRun;
+                    self.open_recover_prompt(workflow_id, &workflow_name, dry_run);
+                    return;
+                }
+
                 let dialog = ConfirmationDialog::new(
                     action.title(),
                     &action.confirmation_message(&workflow_name),
@@ -1253,6 +2009,8 @@ impl App {
             WorkflowAction::Run => unreachable!(),        // Handled above
             WorkflowAction::Watch => unreachable!(),      // Handled above
             WorkflowAction::WatchNoAuto => unreachable!(), // Handled above
+            WorkflowAction::Recover => unreachable!(),    // Handled above
+            WorkflowAction::RecoverDryRun => unreachable!(), // Handled above
             WorkflowAction::Submit => self.client.submit_workflow(workflow_id),
             WorkflowAction::Delete => self.client.delete_workflow(workflow_id),
             WorkflowAction::Cancel => self.client.cancel_workflow(workflow_id),
@@ -1269,6 +2027,8 @@ impl App {
                     WorkflowAction::Run => unreachable!(),
                     WorkflowAction::Watch => unreachable!(),
                     WorkflowAction::WatchNoAuto => unreachable!(),
+                    WorkflowAction::Recover => unreachable!(),
+                    WorkflowAction::RecoverDryRun => unreachable!(),
                     WorkflowAction::Submit => {
                         format!("Workflow '{}' submitted to scheduler", workflow_name)
                     }
@@ -1686,6 +2446,159 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn recover_workflow_with_viewer(
+        &mut self,
+        workflow_id: i64,
+        workflow_name: &str,
+        dry_run: bool,
+        memory_multiplier: f64,
+        runtime_multiplier: f64,
+    ) -> Result<()> {
+        let title = if dry_run {
+            format!("Recover (dry run): {}", workflow_name)
+        } else {
+            format!("Recovering: {}", workflow_name)
+        };
+        let mut viewer = ProcessViewer::new(title);
+
+        let exe_path = self.get_torc_exe_path();
+        let workflow_id_str = workflow_id.to_string();
+        let url = self.client.get_base_url();
+        let output_dir = self.output_dir.display().to_string();
+        let mem_str = format!("{}", memory_multiplier);
+        let rt_str = format!("{}", runtime_multiplier);
+
+        // --no-prompts is required because the interactive wizard would
+        // try to read from stdin, which the TUI owns.
+        let mut args = vec![
+            "--url",
+            &url,
+            "recover",
+            &workflow_id_str,
+            "--output-dir",
+            &output_dir,
+            "--memory-multiplier",
+            &mem_str,
+            "--runtime-multiplier",
+            &rt_str,
+            "--no-prompts",
+        ];
+        if dry_run {
+            args.push("--dry-run");
+        }
+
+        match viewer.start(&exe_path, &args) {
+            Ok(()) => {
+                self.previous_focus = self.focus;
+                self.focus = Focus::Popup;
+                self.popup = Some(PopupType::ProcessViewer(viewer));
+                let msg = if dry_run {
+                    format!("Previewing recovery for '{}'...", workflow_name)
+                } else {
+                    format!("Recovering workflow '{}'...", workflow_name)
+                };
+                self.set_status(StatusMessage::info(&msg));
+            }
+            Err(e) => {
+                self.set_status(StatusMessage::error(&format!(
+                    "Failed to start recovery: {}",
+                    e
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Open the multiplier-input modal that gates the actual `torc recover`
+    /// subprocess launch.
+    pub fn open_recover_prompt(&mut self, workflow_id: i64, workflow_name: &str, dry_run: bool) {
+        let title = if dry_run {
+            format!(" Recover '{}' (dry run) ", workflow_name)
+        } else {
+            format!(" Recover '{}' ", workflow_name)
+        };
+        let message = if dry_run {
+            "Preview proposed resource adjustments without applying them.".to_string()
+        } else {
+            "Bumps memory/runtime for OOM/timeout jobs, resets failed jobs, \
+             and resubmits Slurm allocations."
+                .to_string()
+        };
+
+        let dialog = RecoverPromptDialog::new(&title, &message, !dry_run);
+        self.previous_focus = self.focus;
+        self.focus = Focus::RecoverPrompt;
+        self.popup = Some(PopupType::RecoverPrompt {
+            dialog,
+            workflow_id,
+            workflow_name: workflow_name.to_string(),
+            dry_run,
+        });
+    }
+
+    pub fn recover_prompt_add_char(&mut self, c: char) {
+        if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            dialog.add_char(c);
+        }
+    }
+
+    pub fn recover_prompt_backspace(&mut self) {
+        if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            dialog.backspace();
+        }
+    }
+
+    pub fn recover_prompt_toggle_field(&mut self) {
+        if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            dialog.toggle_field();
+        }
+    }
+
+    pub fn recover_prompt_cancel(&mut self) {
+        if matches!(self.popup, Some(PopupType::RecoverPrompt { .. })) {
+            self.popup = None;
+            self.focus = self.previous_focus;
+        }
+    }
+
+    pub fn recover_prompt_submit(&mut self) -> Result<()> {
+        // Parse first; if invalid, attach the error to the dialog and keep
+        // the modal open.
+        let parsed = if let Some(PopupType::RecoverPrompt { dialog, .. }) = self.popup.as_mut() {
+            match dialog.parse() {
+                Ok(values) => Some(values),
+                Err(err) => {
+                    dialog.set_error(err);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let Some((mem, rt)) = parsed else {
+            return Ok(());
+        };
+
+        // Take ownership of the popup so we can drop it before launching
+        // the subprocess (which installs its own popup).
+        let (workflow_id, workflow_name, dry_run) = if let Some(PopupType::RecoverPrompt {
+            workflow_id,
+            workflow_name,
+            dry_run,
+            ..
+        }) = self.popup.take()
+        {
+            (workflow_id, workflow_name, dry_run)
+        } else {
+            return Ok(());
+        };
+
+        self.focus = self.previous_focus;
+        self.recover_workflow_with_viewer(workflow_id, &workflow_name, dry_run, mem, rt)
     }
 
     // === Job Actions ===
@@ -2355,4 +3268,27 @@ impl App {
             }
         }
     }
+}
+
+/// Apply a case-insensitive substring filter on the given column to a list of
+/// workflows. Returns a new owned vector containing only matching entries.
+pub fn filter_workflow_list(
+    workflows: &[WorkflowModel],
+    column: &str,
+    value: &str,
+) -> Vec<WorkflowModel> {
+    workflows
+        .iter()
+        .filter(|w| match column {
+            "Name" => w.name.to_lowercase().contains(value),
+            "User" => w.user.to_lowercase().contains(value),
+            "Description" => w
+                .description
+                .as_deref()
+                .map(|d| d.to_lowercase().contains(value))
+                .unwrap_or(false),
+            _ => false,
+        })
+        .cloned()
+        .collect()
 }

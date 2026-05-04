@@ -49,7 +49,7 @@ fn create_workflow_with_ready_jobs(
     }
 
     // Initialize jobs (sets them to Ready state)
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     (workflow_id, job_ids)

@@ -137,6 +137,10 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 - `TORC_LOG_DIR`: Default log directory
 - `RUST_LOG`: Default log level
 - `TORC_MAX_REQUEST_BODY_MB`: Override the bulk job upload request-body limit in MiB
+- `TORC_SERVER_SNAPSHOT_PATH`: Snapshot output path for in-memory mode (default
+  `./torc-server-snapshot.db`). See
+  [In-Memory Database with Snapshots](#in-memory-database-with-snapshots-advanced).
+- `TORC_SERVER_SNAPSHOT_KEEP`: Number of snapshots to retain (default `5`, minimum `1`)
 
 Example:
 
@@ -182,6 +186,274 @@ kill $(cat /var/run/torc-server.pid)
 # Or forcefully
 kill -9 $(cat /var/run/torc-server.pid)
 ```
+
+## In-Memory Database with Snapshots (Advanced)
+
+Torc-server supports running entirely from a SQLite in-memory database, with on-demand snapshots to
+disk for persistence. This mode is intended for **HPC login and compute nodes where shared
+filesystems (Lustre, GPFS, NFS) are intermittently slow**. SQLite running against a stalled shared
+filesystem can hang request handlers for tens of seconds; running in memory eliminates that failure
+mode entirely.
+
+This is an advanced feature. The trade-off is straightforward: the database lives in RAM, and any
+data not yet snapshotted is lost if the process dies. Use it when you understand that trade-off and
+want to opt into it explicitly.
+
+### Starting the Server In-Memory
+
+Pass `:memory:` as the database path:
+
+```bash
+torc-server run -d ":memory:" -p 8080
+```
+
+On startup the server logs a confirmation message describing the snapshot configuration. Internally
+the server uses SQLite shared-cache memory mode so all pool connections share a single database;
+this is handled automatically — you only need to pass `:memory:`.
+
+### Persisting State with SIGUSR1
+
+To snapshot the in-memory database to disk, send `SIGUSR1` to the server process:
+
+```bash
+kill -USR1 $(pgrep -f 'torc-server run')
+```
+
+The server uses SQLite's [`VACUUM INTO`](https://sqlite.org/lang_vacuum.html#vacuuminto) to write a
+consistent point-in-time copy without blocking writers. The snapshot is written to a `.tmp` sibling
+first and then atomically renamed into place, so an interrupted snapshot can never corrupt a prior
+one.
+
+This works the same way for on-disk databases — you can use it as a hot-backup mechanism even when
+not running in memory.
+
+### Snapshot Rotation
+
+By default the server keeps **5 snapshots**, with the canonical path always pointing at the newest:
+
+```text
+./torc-server-snapshot.db      # newest
+./torc-server-snapshot.db.1    # previous
+./torc-server-snapshot.db.2
+./torc-server-snapshot.db.3
+./torc-server-snapshot.db.4    # oldest
+```
+
+On each `SIGUSR1`, older snapshots are shifted down (`.1` → `.2`, etc.), the oldest is dropped, and
+the freshly-written snapshot is renamed into the canonical path. If `TORC_SERVER_SNAPSHOT_KEEP=1`,
+no rotation happens — each snapshot simply overwrites the previous one.
+
+### Configuration
+
+Two environment variables control snapshot behavior:
+
+| Variable                    | Default                     | Description                                                                                     |
+| --------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `TORC_SERVER_SNAPSHOT_PATH` | `./torc-server-snapshot.db` | Output path for the canonical (newest) snapshot. Relative paths resolve against the launch CWD. |
+| `TORC_SERVER_SNAPSHOT_KEEP` | `5`                         | Total snapshots retained (canonical + rotated). Minimum `1`.                                    |
+
+```bash
+export TORC_SERVER_SNAPSHOT_PATH=/scratch/$USER/torc-snapshots/torc.db
+export TORC_SERVER_SNAPSHOT_KEEP=10
+torc-server run -d ":memory:" -p 8080
+```
+
+Pick a snapshot path on **fast local storage** (e.g. `/tmp`, `/scratch`) — writing snapshots to the
+same slow shared filesystem that motivated in-memory mode in the first place defeats the purpose.
+
+### Standalone Mode (`torc --standalone --in-memory`)
+
+For ad-hoc workflows on HPC compute / login nodes, the easier entry point is the standalone client
+flag — you do not need to manage `torc-server` directly. Both `exec` (inline commands) and `run`
+(workflow spec files) support `--in-memory`:
+
+```bash
+# Inline commands
+torc -s --in-memory exec -C commands.txt -j 8
+
+# Workflow specification file
+torc -s --in-memory run workflow.yaml
+```
+
+This launches an ephemeral in-memory `torc-server`, runs the workflow against it, and snapshots the
+final database to `./torc_output/torc.db` (or wherever `--db` points) right before shutdown. After
+the command returns, the workflow is queryable like any other:
+
+```bash
+torc -s results list
+torc -s workflows list
+torc tui --standalone
+```
+
+`--in-memory` is restricted to `exec` and `run` — commands that _create_ workflow state in the same
+invocation. It is rejected for read-only commands like `results list` or `workflows list` because
+those would snapshot an empty database over your existing `torc_output/torc.db` and destroy prior
+data.
+
+Add `--snapshot-interval-seconds <N>` to also snapshot periodically while the workflow is running.
+Each snapshot briefly serializes against writes (milliseconds for small DBs, seconds for very large
+ones), so prefer larger values — `600` (10 minutes) is a sensible default for high-throughput
+workloads:
+
+```bash
+torc -s --in-memory --snapshot-interval-seconds 600 run workflow.yaml
+```
+
+If the parent process is killed unexpectedly, only state since the last snapshot is lost. Users who
+need stronger durability should not opt into `--in-memory` in the first place.
+
+### Restarting from a Snapshot
+
+A snapshot file is a normal SQLite database. To resume from one, copy it into place and start the
+server pointing at it:
+
+```bash
+cp /scratch/$USER/torc-snapshots/torc.db /tmp/torc-resume.db
+torc-server run -d /tmp/torc-resume.db -p 8080
+```
+
+If you want to keep running in memory but seed from a prior snapshot, that's not currently supported
+— the in-memory database always starts empty.
+
+### When to Use This
+
+Good fits:
+
+- **HPC login/compute nodes** with slow or unreliable shared filesystems
+- **Short-lived workflow runs** where you can afford to take a snapshot at the end
+- **Performance-sensitive scenarios** where you want to eliminate disk I/O from the hot path
+
+Poor fits:
+
+- Long-running production servers (use a regular on-disk database with backups)
+- Multi-day workflows where losing recent state on process death would be costly
+- Deployments without operator access to send signals (signals are local-only; there is no remote
+  snapshot endpoint)
+
+### Operational Notes
+
+- **Snapshots are signal-driven, not automatic.** Schedule them via cron, a sidecar, or
+  workflow-completion hooks if you want periodic captures.
+- **The snapshot completes on the server's signal-handler task**, so it does not block HTTP request
+  handlers. A snapshot of a small database typically completes in milliseconds; large databases
+  scale linearly with size.
+- **`SIGUSR1` is Unix-only.** This feature is not available on Windows.
+- **Process death loses unsaved data.** Always snapshot before stopping the server if you care about
+  the current state. `SIGTERM`/`SIGINT` (graceful shutdown) does **not** automatically snapshot.
+
+## Exporting Filtered Database Copies
+
+`torc-server export` produces a standalone SQLite copy of the live database, optionally filtered to
+a subset of workflows. The original workflow and job IDs are preserved verbatim, so log files,
+ticket references, and screenshots referring to the production IDs remain interpretable in the
+exported copy. The most common use case is **handing a debugging copy to an end user** who does not
+have direct access to the production database — for example, so they can analyze their workflows
+with [datasight](../tools/datasight.md), `sqlite3`, or another SQL tool without touching production.
+
+```bash
+# Hand a single user their workflows
+torc-server export --user alice --output alice.db
+
+# Export everything in a project's access group
+torc-server export --access-group 7 --output proj-energy.db
+
+# Pull a specific list of workflows (positional)
+torc-server export 42 99 314 --output requested.db
+
+# Full unfiltered copy (useful as a hot-backup)
+torc-server export --output snapshot.db
+```
+
+The filters are mutually exclusive — pick one of `--user` (repeatable), `--access-group`
+(repeatable), or positional workflow IDs. Without any filter, the command produces a full copy.
+
+### How it works
+
+1. **Snapshot.** SQLite's [`VACUUM INTO`](https://sqlite.org/lang_vacuum.html#vacuuminto) writes a
+   transactionally consistent, defragmented copy of the live database to the output path. This does
+   _not_ require quiescing the running server — readers and writers continue normally during the
+   snapshot.
+2. **Filter.** The output database is reopened with foreign keys enabled, and a single
+   `DELETE FROM workflow WHERE id NOT IN (<filter>)` runs. Every per-workflow table has
+   `ON DELETE CASCADE` on `workflow_id`, so jobs, files, results, events, ro_crate entities, compute
+   nodes, etc. are removed automatically by the cascade chain — for the workflows the filter
+   actually deleted.
+3. **Sweep orphans (always).** Cascade only fires when the parent row IS deleted, so pre-existing
+   orphans in the source DB survive the snapshot. Common sources: a `delete_workflow` code path that
+   toggled `PRAGMA foreign_keys = OFF`, or a bare `sqlite3` CLI session (the CLI defaults to
+   `foreign_keys = OFF`). The export iteratively runs `PRAGMA foreign_key_check` and deletes every
+   reported violation until none remain. `workflow_status` is pruned separately (its back-reference
+   column has no FK declared and so is invisible to `foreign_key_check`). This step runs for
+   unfiltered exports too — FK violations are data corruption, not fidelity to the source.
+4. **Sanitize.** If a filter was applied and `--preserve-access-groups` is not set, the exported
+   database has its `user_group_membership` and `access_group` tables emptied. See
+   [Access-control sanitization](#access-control-sanitization) below.
+5. **Compact.** A final `VACUUM` reclaims the space freed by the deletes (skip with `--no-vacuum`).
+
+If anything in steps 2–5 fails after step 1 has written the snapshot, the partial output file is
+removed before the error is reported — a failed export never leaves a half-finished database on
+disk.
+
+### Flags
+
+| Flag                       | Effect                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| `-o`, `--output <PATH>`    | Output SQLite file path (required).                                                                |
+| `-d`, `--database <PATH>`  | Source database path. Defaults to `DATABASE_URL`.                                                  |
+| `--user <NAME>`            | Keep only workflows owned by this user. Repeatable.                                                |
+| `--access-group <ID>`      | Keep only workflows linked to this access-group ID. Repeatable.                                    |
+| (positional)               | Keep only these workflow IDs.                                                                      |
+| `--overwrite`              | Replace the output file if it already exists.                                                      |
+| `--preserve-access-groups` | Keep `access_group` / `user_group_membership` / `workflow_access_group` instead of stripping them. |
+| `--no-vacuum`              | Skip the final `VACUUM`. Faster, but the output file retains the source database's allocated size. |
+
+If a filter is specified and matches zero workflows, the command errors out and removes the
+partially-written output file rather than producing an empty database.
+
+### Access-control sanitization
+
+By default, `torc-server export` strips three tables from any **filtered** export:
+
+- `user_group_membership` — has no per-workflow scoping, so leaving it intact would leak unrelated
+  users' group affiliations.
+- `access_group` — group names and descriptions for groups across the whole server.
+- `workflow_access_group` — cascades away when `access_group` is emptied.
+
+This is conservative on purpose: there is no straightforward per-workflow filter that wouldn't risk
+accidentally leaking entries about other users or groups. If the recipient _is_ authorized to see
+the entire access-control state (for example, when handing a full copy to another admin), pass
+`--preserve-access-groups` to keep the tables intact.
+
+For unfiltered (full-copy) exports, the access tables are kept as-is regardless — the operator
+running the command already has access to everything in the database.
+
+### Recommended workflow for end-user requests
+
+The expected interaction pattern is admin-mediated:
+
+1. End user asks for a copy of workflow `42` (or all workflows under user `alice`, etc.).
+2. Admin runs `torc-server export` with the appropriate filter on the server host.
+3. Admin reviews the output (`sqlite3 alice.db "SELECT id, user, name FROM workflow"`) and confirms
+   it contains only the intended scope.
+4. Admin transfers the file to the user.
+5. User analyzes the copy locally — IDs match production, so anything that was in their logs or
+   tickets continues to make sense.
+
+This avoids needing to grant the user direct filesystem access to the production database, while
+still giving them a faithful debugging artifact.
+
+### Notes
+
+- **Live server safe.** `VACUUM INTO` does not block the source server's writers or readers, and the
+  export connection participates in SQLite's normal WAL coherency, so the snapshot reflects every
+  committed transaction the running server can see.
+- **Same-IDs guarantee.** The export preserves all primary keys. By contrast,
+  [`torc workflows export`](../../core/workflows/export-import-workflows.md) emits portable JSON
+  that loses ID identity on import — use that flow when the recipient cannot get a SQLite file from
+  an admin.
+- **External files are not bundled.** Only database rows are exported. Files referenced by `path` in
+  the `file` table (job inputs, outputs, logs on shared filesystems) are not copied; the recipient
+  analyzes metadata only unless those paths are independently shared.
 
 ## Complete Example: Production Deployment
 

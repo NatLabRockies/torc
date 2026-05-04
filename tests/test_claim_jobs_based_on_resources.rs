@@ -64,7 +64,7 @@ fn test_claim_jobs_based_on_resources_priority_ordering(start_server: &ServerPro
         apis::jobs_api::create_job(config, job).expect("Failed to create job");
     }
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
@@ -135,7 +135,7 @@ fn test_claim_jobs_based_on_resources_skips_high_priority_job_that_does_not_fit(
     cpu_job.resource_requirements_id = Some(cpu_rr.id.unwrap());
     apis::jobs_api::create_job(config, cpu_job).expect("Failed to create CPU job");
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
@@ -197,7 +197,7 @@ fn test_claim_jobs_based_on_resources_prefers_gpu_jobs_with_equal_priority(
         apis::jobs_api::create_job(config, job).expect("Failed to create GPU job");
     }
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 2, 1);
@@ -259,7 +259,7 @@ fn test_claim_jobs_based_on_resources_scans_past_limit_for_runnable_jobs(
     fit_job.resource_requirements_id = Some(fit_rr.id.unwrap());
     apis::jobs_api::create_job(config, fit_job).expect("Failed to create fit job");
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
@@ -311,7 +311,7 @@ fn test_claim_jobs_based_on_resources_backfills_after_gpu_saturates(start_server
         apis::jobs_api::create_job(config, job).expect("Failed to create CPU job");
     }
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(4, 4.0, 1, 1);
@@ -392,7 +392,7 @@ fn test_claim_jobs_based_on_resources_backfill_uses_relaxed_scheduler_fallback(
         apis::jobs_api::create_job(config, job).expect("Failed to create CPU job");
     }
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let mut resources = models::ComputeNodesResources::new(4, 4.0, 1, 1);
@@ -475,7 +475,7 @@ fn test_claim_jobs_based_on_resources_backfill_short_circuits_when_saturated(
         apis::jobs_api::create_job(config, job).expect("Failed to create CPU job");
     }
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 1, 1);
@@ -561,7 +561,7 @@ fn test_claim_jobs_based_on_resources_backfill_enforces_per_node_limits(
     small_job.resource_requirements_id = Some(small_rr.id.unwrap());
     apis::jobs_api::create_job(config, small_job).expect("Failed to create small job");
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(4, 4.0, 1, 2);
@@ -617,7 +617,7 @@ fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
     job.scheduler_id = Some(7);
     apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let mut resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);

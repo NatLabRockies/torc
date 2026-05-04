@@ -212,6 +212,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        file_id: Option<i64>,
+        entity_id: Option<String>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         context: &C,
@@ -642,6 +644,14 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError>;
 
+    /// Archive or unarchive a workflow.
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError>;
+
     /// Retrieve a compute node by ID.
     async fn get_compute_node(
         &self,
@@ -703,12 +713,17 @@ pub trait TransportApiCore<C: Send + Sync> {
     /// Retrieve a workflow.
     async fn get_workflow(&self, id: i64, context: &C) -> Result<GetWorkflowResponse, ApiError>;
 
-    /// Return the workflow status.
-    async fn get_workflow_status(
+    /// Return the status of a background task.
+    async fn get_task(&self, id: i64, context: &C) -> Result<GetTaskResponse, ApiError>;
+
+    /// Return the single active (queued or running) async task for a workflow, if any.
+    /// Lets clients probe before issuing a new async request so they can avoid mutating
+    /// state when a task is already in-flight.
+    async fn get_active_task_for_workflow(
         &self,
-        id: i64,
+        workflow_id: i64,
         context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError>;
+    ) -> Result<GetActiveTaskResponse, ApiError>;
 
     /// Initialize job relationships based on file and user_data relationships.
     async fn initialize_jobs(
@@ -716,6 +731,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         id: i64,
         only_uninitialized: Option<bool>,
         clear_ephemeral_user_data: Option<bool>,
+        async_: Option<bool>,
         context: &C,
     ) -> Result<InitializeJobsResponse, ApiError>;
 
@@ -837,14 +853,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         body: models::WorkflowModel,
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError>;
-
-    /// Update the workflow status.
-    async fn update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError>;
 
     /// Return jobs that are ready for submission and meet worker resource. Set status to pending.
     async fn claim_jobs_based_on_resources(
@@ -976,6 +984,18 @@ pub trait TransportApiCore<C: Send + Sync> {
         body: models::ResultModel,
         context: &C,
     ) -> Result<CompleteJobResponse, ApiError>;
+
+    /// Complete a batch of jobs in a single request.
+    ///
+    /// Each completion is processed independently and may succeed or fail on its own
+    /// merits. Per-completion failures are returned in the response body's `errors`
+    /// field; transport-level errors abort the whole batch.
+    async fn batch_complete_jobs(
+        &self,
+        workflow_id: i64,
+        body: models::BatchCompleteJobsRequest,
+        context: &C,
+    ) -> Result<BatchCompleteJobsResponse, ApiError>;
 
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
     async fn retry_job(

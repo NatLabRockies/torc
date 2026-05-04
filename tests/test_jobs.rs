@@ -6,6 +6,7 @@ use common::{
 };
 use rstest::rstest;
 use serde_json::json;
+use std::collections::HashMap;
 use torc::client::apis;
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
@@ -1088,13 +1089,13 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow to get run_id and make job Ready
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Set job to Running (simulating job runner claiming it)
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
@@ -1128,13 +1129,13 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Create compute node for complete_job
     let compute_node = create_test_compute_node(config, workflow_id);
@@ -1183,13 +1184,13 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
 
     // Initialize workflow
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false))
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
         .expect("Failed to initialize jobs");
 
     // Get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Job should be Ready after initialization
     let job_before = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
@@ -1362,4 +1363,151 @@ fn test_jobs_update_runtime_and_resource_requirements_id_together(start_server: 
     let rr_after = apis::resource_requirements_api::get_resource_requirements(config, rr_id)
         .expect("Failed to get RR after");
     assert_eq!(rr_after.runtime, "PT8H");
+}
+
+#[rstest]
+fn test_create_job_materializes_effective_env(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let mut workflow = models::WorkflowModel::new(
+        "test_materialized_job_env_workflow".to_string(),
+        "test_user".to_string(),
+    );
+    workflow.env = Some(HashMap::from([
+        ("WORKFLOW_ONLY".to_string(), "workflow".to_string()),
+        ("SHARED".to_string(), "workflow".to_string()),
+    ]));
+    let workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "materialized_env_job".to_string(),
+        "echo materialized".to_string(),
+    );
+    job.env = Some(HashMap::from([
+        ("JOB_ONLY".to_string(), "job".to_string()),
+        ("SHARED".to_string(), "job".to_string()),
+    ]));
+
+    let created = apis::jobs_api::create_job(config, job).expect("Failed to create job");
+    let job_id = created.id.unwrap();
+
+    let fetched = apis::jobs_api::get_job(config, job_id).expect("Failed to fetch job");
+    assert_eq!(
+        fetched.env,
+        Some(HashMap::from([
+            ("WORKFLOW_ONLY".to_string(), "workflow".to_string()),
+            ("JOB_ONLY".to_string(), "job".to_string()),
+            ("SHARED".to_string(), "job".to_string()),
+        ]))
+    );
+}
+
+#[rstest]
+fn test_update_job_rejects_env_changes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "test_job_env_immutable_workflow");
+    let workflow_id = workflow.id.unwrap();
+    let job = create_test_job(config, workflow_id, "immutable_env_job");
+    let job_id = job.id.unwrap();
+
+    let mut update = apis::jobs_api::get_job(config, job_id).expect("Failed to fetch job");
+    update.env = Some(HashMap::from([(
+        "NEW_ENV".to_string(),
+        "value".to_string(),
+    )]));
+
+    let result = apis::jobs_api::update_job(config, job_id, update);
+    assert!(result.is_err(), "Updating job env should fail");
+
+    let err_str = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_str.contains("immutable") || err_str.contains("Cannot modify env"),
+        "Error should mention env immutability, got: {}",
+        err_str
+    );
+}
+
+#[rstest]
+fn test_create_job_rejects_invalid_env_name(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "test_invalid_job_env_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "invalid_env_job".to_string(),
+        "echo invalid".to_string(),
+    );
+    job.env = Some(HashMap::from([(
+        "BAD-NAME".to_string(),
+        "value".to_string(),
+    )]));
+
+    let result = apis::jobs_api::create_job(config, job);
+    assert!(result.is_err(), "Creating job with invalid env should fail");
+
+    let err = result.unwrap_err();
+    if let torc::client::apis::Error::ResponseError(response) = &err {
+        assert_eq!(
+            response.status.as_u16(),
+            422,
+            "Expected HTTP 422 for invalid job env, got: {}",
+            response.status
+        );
+    } else {
+        panic!("Expected ResponseError, got: {:?}", err);
+    }
+
+    let err_str = format!("{:?}", err);
+    assert!(
+        err_str.contains("BAD-NAME"),
+        "Error should mention invalid env key"
+    );
+}
+
+#[rstest]
+fn test_bulk_create_jobs_rejects_invalid_env_name(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "test_invalid_bulk_job_env_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let mut job = models::JobModel::new(
+        workflow_id,
+        "invalid_bulk_env_job".to_string(),
+        "echo invalid".to_string(),
+    );
+    job.env = Some(HashMap::from([(
+        "BAD-NAME".to_string(),
+        "value".to_string(),
+    )]));
+
+    let result = apis::jobs_api::create_jobs(config, models::JobsModel { jobs: vec![job] });
+    assert!(
+        result.is_err(),
+        "Bulk creating jobs with invalid env should fail"
+    );
+
+    let err = result.unwrap_err();
+    if let torc::client::apis::Error::ResponseError(response) = &err {
+        assert_eq!(
+            response.status.as_u16(),
+            422,
+            "Expected HTTP 422 for invalid bulk job env, got: {}",
+            response.status
+        );
+    } else {
+        panic!("Expected ResponseError, got: {:?}", err);
+    }
+
+    let err_str = format!("{:?}", err);
+    assert!(
+        err_str.contains("BAD-NAME"),
+        "Error should mention invalid env key"
+    );
 }

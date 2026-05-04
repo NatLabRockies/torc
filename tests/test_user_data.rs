@@ -960,7 +960,7 @@ fn test_api_list_missing_user_data(start_server: &ServerProcess) {
     let job1 = apis::jobs_api::create_job(config, job1).expect("Failed to create consumer job");
     let _job1_id = job1.id.unwrap();
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let response = apis::workflows_api::list_missing_user_data(config, workflow_id)

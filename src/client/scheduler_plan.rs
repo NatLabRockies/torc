@@ -322,7 +322,7 @@ pub fn generate_scheduler_plan<RR: ResourceRequirements>(
             );
         }
         GroupByStrategy::ResourceRequirements => {
-            // Default: one scheduler per resource_requirements name
+            // One scheduler per resource_requirements name
             for group in &scheduler_groups {
                 match process_scheduler_group(
                     group,

@@ -68,6 +68,7 @@ fn test_async_cli_command_start_simple_command(start_server: &ServerProcess) {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Direct,
@@ -113,6 +114,7 @@ fn test_async_cli_command_start_already_running() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -135,6 +137,7 @@ fn test_async_cli_command_start_already_running() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Direct,
@@ -168,6 +171,7 @@ fn test_async_cli_command_start_invalid_directory() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Direct,
@@ -197,6 +201,7 @@ fn test_async_cli_command_check_status_completion() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -248,6 +253,7 @@ fn test_async_cli_command_with_exit_code_success() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -283,6 +289,7 @@ fn test_async_cli_command_with_exit_code_failure() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -319,6 +326,7 @@ fn test_async_cli_command_cancel() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -368,6 +376,7 @@ fn test_async_cli_command_terminate() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -410,6 +419,7 @@ fn test_async_cli_command_wait_for_completion() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -454,6 +464,7 @@ fn test_async_cli_command_get_result() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -506,6 +517,7 @@ fn test_async_cli_command_with_invocation_script() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Direct,
@@ -544,6 +556,7 @@ fn test_async_cli_command_environment_variables() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -569,6 +582,64 @@ fn test_async_cli_command_environment_variables() {
 
 #[rstest]
 #[cfg(unix)]
+fn test_async_cli_command_effective_env() {
+    let job = create_test_job_model(1, 124, "echo WF=$WF_ONLY SHARED=$SHARED JOB=$JOB_ONLY");
+    let mut async_cmd = AsyncCliCommand::new(job);
+
+    let temp_dir = create_temp_output_dir();
+    let effective_env = std::collections::HashMap::from([
+        ("WF_ONLY".to_string(), "workflow".to_string()),
+        ("SHARED".to_string(), "job".to_string()),
+        ("JOB_ONLY".to_string(), "job".to_string()),
+    ]);
+
+    async_cmd
+        .start(
+            temp_dir.path(),
+            1, // workflow_id
+            1, // run_id
+            1, // attempt_id
+            None,
+            "http://localhost:8080/torc-service/v1",
+            None,
+            Some(&effective_env), // effective_env
+            None,                 // gpu_visible_devices
+            true,
+            ExecutionMode::Direct,
+            false,
+            None,
+            None,
+            60,   // sigkill_headroom_seconds
+            None, // target_node
+            &StdioMode::Separate,
+        )
+        .expect("Failed to start command");
+    let _ = async_cmd.wait_for_completion();
+
+    let stdout_path = temp_dir
+        .path()
+        .join("job_stdio")
+        .join("job_wf1_j124_r1_a1.o");
+    let contents = fs::read_to_string(stdout_path).expect("Failed to read stdout");
+    assert!(
+        contents.contains("WF=workflow"),
+        "Missing workflow env: {}",
+        contents
+    );
+    assert!(
+        contents.contains("SHARED=job"),
+        "Missing override env: {}",
+        contents
+    );
+    assert!(
+        contents.contains("JOB=job"),
+        "Missing job env: {}",
+        contents
+    );
+}
+
+#[rstest]
+#[cfg(unix)]
 fn test_async_cli_command_gpu_visible_devices_env() {
     let job = create_test_job_model(
         1,
@@ -588,6 +659,7 @@ fn test_async_cli_command_gpu_visible_devices_env() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None,        // effective_env
             Some("1,3"), // gpu_visible_devices
             true,
             ExecutionMode::Direct, // direct execution
@@ -646,6 +718,7 @@ fn test_async_cli_command_stdout_stderr_separation() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -686,6 +759,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -709,6 +783,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -732,6 +807,7 @@ fn test_async_cli_command_multiple_jobs_same_workflow() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -779,6 +855,7 @@ fn test_async_cli_command_long_running_job() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -832,6 +909,7 @@ fn test_async_cli_command_complex_shell_command() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -875,6 +953,7 @@ fn test_async_cli_command_file_creation() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -912,6 +991,7 @@ fn test_async_cli_command_drop_while_running() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -951,6 +1031,7 @@ fn test_async_cli_command_execution_time() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -986,6 +1067,7 @@ fn test_async_cli_command_empty_command() {
         None,
         "http://localhost:8080/torc-service/v1",
         None,
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Direct,
@@ -1018,6 +1100,7 @@ fn test_async_cli_command_command_not_found() {
             None,
             "http://localhost:8080/torc-service/v1",
             None,
+            None, // effective_env
             None, // gpu_visible_devices
             true,
             ExecutionMode::Direct,
@@ -1054,6 +1137,7 @@ fn test_stdio_mode_combined(start_server: &ServerProcess) {
             1,
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
             None,
             None,
             true,
@@ -1107,6 +1191,7 @@ fn test_stdio_mode_no_stdout(start_server: &ServerProcess) {
             "http://localhost:8080/torc-service/v1",
             None,
             None,
+            None,
             true,
             ExecutionMode::Direct,
             false,
@@ -1149,6 +1234,7 @@ fn test_stdio_mode_no_stderr(start_server: &ServerProcess) {
             1,
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
             None,
             None,
             true,
@@ -1194,6 +1280,7 @@ fn test_stdio_mode_none(start_server: &ServerProcess) {
             1,
             None,
             "http://localhost:8080/torc-service/v1",
+            None,
             None,
             None,
             true,

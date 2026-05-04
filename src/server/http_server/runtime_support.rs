@@ -284,25 +284,23 @@ impl<C> Server<C> {
         workflow_id: i64,
         provided_run_id: i64,
     ) -> Result<(), String> {
-        let workflow_status = match sqlx::query!(
-            "SELECT run_id FROM workflow_status WHERE id = ?",
-            workflow_id
-        )
-        .fetch_optional(self.pool.as_ref())
-        .await
-        {
-            Ok(Some(row)) => row,
-            Ok(None) => {
-                return Err(format!(
-                    "Workflow status not found for workflow ID: {}",
-                    workflow_id
-                ));
-            }
-            Err(e) => {
-                error!("Database error looking up workflow status: {}", e);
-                return Err("Database error".to_string());
-            }
-        };
+        let workflow_status =
+            match sqlx::query!("SELECT run_id FROM workflow WHERE id = ?", workflow_id)
+                .fetch_optional(self.pool.as_ref())
+                .await
+            {
+                Ok(Some(row)) => row,
+                Ok(None) => {
+                    return Err(format!(
+                        "Workflow status not found for workflow ID: {}",
+                        workflow_id
+                    ));
+                }
+                Err(e) => {
+                    error!("Database error looking up workflow status: {}", e);
+                    return Err("Database error".to_string());
+                }
+            };
 
         if provided_run_id != workflow_status.run_id {
             return Err(format!(

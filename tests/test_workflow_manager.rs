@@ -15,7 +15,7 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
-use torc::client::{Configuration, apis, workflow_manager::WorkflowManager};
+use torc::client::{Configuration, apis, tasks_api, workflow_manager::WorkflowManager};
 use torc::config::TorcConfig;
 use torc::models;
 
@@ -37,6 +37,30 @@ fn wait_for_job_status(
         thread::sleep(Duration::from_millis(50));
     }
     false
+}
+
+/// Helper to wait for an async task to reach a terminal state.
+fn wait_for_task_completion(
+    config: &Configuration,
+    task_id: i64,
+    timeout_secs: u64,
+) -> torc::models::TaskModel {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs() < timeout_secs {
+        let task = tasks_api::get_task(config, task_id).expect("Failed to get task");
+        if matches!(
+            task.status,
+            models::TaskStatus::Succeeded | models::TaskStatus::Failed
+        ) {
+            return task;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    panic!(
+        "Task {} did not complete within {} seconds",
+        task_id, timeout_secs
+    );
 }
 
 /// Helper function to create a WorkflowManager with a test workflow
@@ -369,11 +393,12 @@ fn test_start_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(&config, workflow_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        &config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Start should fail for archived workflow
     let result = manager.initialize(false);
@@ -405,18 +430,18 @@ fn test_reinitialize_workflow_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get original run_id
-    let original_status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    let original_run_id = original_status.run_id;
+    let original_workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let original_run_id = original_workflow.run_id.unwrap_or(0);
 
     // Dry run reinitialize should succeed without changing anything
     let result = manager.reinitialize(false, true);
     assert!(result.is_ok());
 
     // Run ID should be unchanged
-    let status_after = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status after dry run");
-    assert_eq!(status_after.run_id, original_run_id);
+    let workflow_after = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("Failed to get workflow after dry run");
+    assert_eq!(workflow_after.run_id.unwrap_or(0), original_run_id);
 }
 
 #[rstest]
@@ -438,18 +463,18 @@ fn test_reinitialize_workflow_real(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get original run_id
-    let original_status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    let original_run_id = original_status.run_id;
+    let original_workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let original_run_id = original_workflow.run_id.unwrap_or(0);
 
     // Real reinitialize should increment run_id
     let result = manager.reinitialize(false, false);
     assert!(result.is_ok());
 
     // Run ID should be incremented
-    let status_after = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status after reinitialize");
-    assert_eq!(status_after.run_id, original_run_id + 1);
+    let workflow_after = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("Failed to get workflow after reinitialize");
+    assert_eq!(workflow_after.run_id.unwrap_or(0), original_run_id + 1);
 }
 
 #[rstest]
@@ -462,27 +487,29 @@ fn test_get_run_id(start_server: &ServerProcess) {
     assert!(run_id.is_ok());
 
     // Should match the database
-    let status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    assert_eq!(run_id.unwrap(), status.run_id);
+    let wf =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    assert_eq!(run_id.unwrap(), wf.run_id.unwrap_or(0));
 }
 
 #[rstest]
-fn test_bump_run_id(start_server: &ServerProcess) {
+fn test_reset_workflow_status_bumps_run_id(start_server: &ServerProcess) {
     let config = start_server.config.clone();
-    let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_bump_run_id");
-    let _workflow_id = workflow.id.unwrap();
+    let (manager, workflow) =
+        create_test_workflow_manager(config.clone(), "test_reset_bumps_run_id");
+    let workflow_id = workflow.id.unwrap();
 
-    // Get original run_id
     let original_run_id = manager.get_run_id().expect("Failed to get original run_id");
 
-    // Bump run_id
-    let result = manager.bump_run_id();
-    assert!(result.is_ok());
+    apis::workflows_api::reset_workflow_status(&config, workflow_id, None)
+        .expect("reset_workflow_status should succeed");
 
-    // Should be incremented
     let new_run_id = manager.get_run_id().expect("Failed to get new run_id");
-    assert_eq!(new_run_id, original_run_id + 1);
+    assert_eq!(
+        new_run_id,
+        original_run_id + 1,
+        "reset_workflow_status must bump run_id"
+    );
 }
 
 #[rstest]
@@ -502,11 +529,12 @@ fn test_check_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(&config, workflow_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        &config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Check should fail for archived workflow
     let result = manager.check_workflow(false);
@@ -924,7 +952,7 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
     let ready_id = created_ready.id.unwrap();
 
     // Initialize and set different statuses
-    apis::workflows_api::initialize_jobs(&config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(&config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     apis::jobs_api::manage_status_change(&config, running_id, models::JobStatus::Running, run_id)
@@ -2797,4 +2825,346 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
         models::JobStatus::Blocked,
         "postprocess should be Blocked (waiting for work1 to complete)"
     );
+}
+
+#[rstest]
+fn test_reinitialize_async_with_file_change_runs_task_and_updates_statuses(
+    start_server: &ServerProcess,
+) {
+    let config = start_server.config.clone();
+
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let jobs = create_diamond_workflow(&config, false, temp_dir.path());
+
+    let preprocess_job = jobs.get("preprocess").unwrap();
+    let work1_job = jobs.get("work1").unwrap();
+    let work2_job = jobs.get("work2").unwrap();
+    let postprocess_job = jobs.get("postprocess").unwrap();
+
+    let workflow_id = preprocess_job.workflow_id;
+    let preprocess_id = preprocess_job.id.unwrap();
+    let work1_id = work1_job.id.unwrap();
+    let work2_id = work2_job.id.unwrap();
+    let postprocess_id = postprocess_job.id.unwrap();
+
+    let workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+
+    let f1_path = temp_dir.path().join("f1.json");
+    let f2_path = temp_dir.path().join("f2.json");
+    let f3_path = temp_dir.path().join("f3.json");
+    let f4_path = temp_dir.path().join("f4.json");
+    let f5_path = temp_dir.path().join("f5.json");
+    let f6_path = temp_dir.path().join("f6.json");
+
+    fs::write(&f1_path, r#"{"input": "data"}"#).expect("Failed to write f1");
+
+    manager.initialize(true).expect("Failed to initialize");
+    let run_id = manager.get_run_id().expect("Failed to get run_id");
+
+    let compute_node = create_test_compute_node(&config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    apis::jobs_api::manage_status_change(
+        &config,
+        preprocess_id,
+        models::JobStatus::Running,
+        run_id,
+    )
+    .expect("Failed to set preprocess to Running");
+    fs::write(&f2_path, r#"{"preprocess": "output1"}"#).expect("Failed to write f2");
+    fs::write(&f3_path, r#"{"preprocess": "output2"}"#).expect("Failed to write f3");
+
+    let preprocess_result = models::ResultModel::new(
+        preprocess_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(
+        &config,
+        preprocess_id,
+        models::JobStatus::Completed,
+        run_id,
+        preprocess_result,
+    )
+    .expect("Failed to complete preprocess");
+
+    assert!(
+        wait_for_job_status(&config, work1_id, models::JobStatus::Ready, 5),
+        "work1 did not become ready after preprocess completed"
+    );
+    apis::jobs_api::manage_status_change(&config, work1_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set work1 to Running");
+    fs::write(&f4_path, r#"{"work1": "output"}"#).expect("Failed to write f4");
+
+    let work1_result = models::ResultModel::new(
+        work1_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(
+        &config,
+        work1_id,
+        models::JobStatus::Completed,
+        run_id,
+        work1_result,
+    )
+    .expect("Failed to complete work1");
+
+    assert!(
+        wait_for_job_status(&config, work2_id, models::JobStatus::Ready, 5),
+        "work2 did not become ready after preprocess completed"
+    );
+    apis::jobs_api::manage_status_change(&config, work2_id, models::JobStatus::Running, run_id)
+        .expect("Failed to set work2 to Running");
+    fs::write(&f5_path, r#"{"work2": "output"}"#).expect("Failed to write f5");
+
+    let work2_result = models::ResultModel::new(
+        work2_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(
+        &config,
+        work2_id,
+        models::JobStatus::Completed,
+        run_id,
+        work2_result,
+    )
+    .expect("Failed to complete work2");
+
+    assert!(
+        wait_for_job_status(&config, postprocess_id, models::JobStatus::Ready, 5),
+        "postprocess did not become ready after work1 and work2 completed"
+    );
+    apis::jobs_api::manage_status_change(
+        &config,
+        postprocess_id,
+        models::JobStatus::Running,
+        run_id,
+    )
+    .expect("Failed to set postprocess to Running");
+    fs::write(&f6_path, r#"{"postprocess": "output"}"#).expect("Failed to write f6");
+
+    let postprocess_result = models::ResultModel::new(
+        postprocess_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(
+        &config,
+        postprocess_id,
+        models::JobStatus::Completed,
+        run_id,
+        postprocess_result,
+    )
+    .expect("Failed to complete postprocess");
+
+    manager
+        .initialize_files()
+        .expect("Failed to initialize file mtimes");
+
+    thread::sleep(Duration::from_millis(100));
+    fs::write(&f2_path, r#"{"preprocess": "modified_output"}"#).expect("Failed to modify f2");
+
+    let task = manager
+        .reinitialize_async(false, false)
+        .expect("Failed to start async reinitialize")
+        .expect("Expected an async task for non-dry-run reinitialize");
+    assert_eq!(task.workflow_id, workflow_id);
+    assert_eq!(task.operation, "initialize_jobs");
+
+    let completed_task = wait_for_task_completion(&config, task.id, 20);
+    assert_eq!(completed_task.status, models::TaskStatus::Succeeded);
+
+    let preprocess_after = apis::jobs_api::get_job(&config, preprocess_id)
+        .expect("Failed to get preprocess after reinit");
+    let work1_after =
+        apis::jobs_api::get_job(&config, work1_id).expect("Failed to get work1 after reinit");
+    let work2_after =
+        apis::jobs_api::get_job(&config, work2_id).expect("Failed to get work2 after reinit");
+    let postprocess_after = apis::jobs_api::get_job(&config, postprocess_id)
+        .expect("Failed to get postprocess after reinit");
+
+    assert_eq!(
+        preprocess_after.status.unwrap(),
+        models::JobStatus::Completed,
+        "preprocess should remain Completed"
+    );
+    assert_eq!(
+        work1_after.status.unwrap(),
+        models::JobStatus::Ready,
+        "work1 should be Ready after its input file changes"
+    );
+    assert_eq!(
+        work2_after.status.unwrap(),
+        models::JobStatus::Completed,
+        "work2 should remain Completed because its inputs did not change"
+    );
+    assert_eq!(
+        postprocess_after.status.unwrap(),
+        models::JobStatus::Blocked,
+        "postprocess should be Blocked waiting on work1 to run again"
+    );
+}
+
+/// P1: reinitialize_async must NOT mutate workflow state (bump_run_id, reset status,
+/// process changed files, etc.) when an async task is already in-flight for this workflow.
+/// If it did, a client calling reinit while the previous reinit was still running would
+/// double-apply those side effects on top of the active task.
+#[rstest]
+fn test_reinitialize_async_returns_existing_task_without_mutating(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let jobs = create_diamond_workflow(&config, false, temp_dir.path());
+    let workflow_id = jobs.get("preprocess").unwrap().workflow_id;
+
+    // f1 must exist on disk so reinit's pre-steps don't fail on missing input.
+    fs::write(temp_dir.path().join("f1.json"), r#"{"seed": 1}"#).expect("Failed to write f1");
+
+    // Pad the workflow with extra jobs so the server's initialize_jobs task takes long enough
+    // for the second client call to race with it (the diamond workflow alone is a handful of
+    // microseconds to initialize).
+    for i in 0..200 {
+        let _ = common::create_test_job(&config, workflow_id, &format!("filler_{i}"));
+    }
+
+    let workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+
+    // First reinit: creates the task AND bumps run_id.
+    let first = manager
+        .reinitialize_async(false, false)
+        .expect("first reinit should succeed")
+        .expect("non-dry-run should return a task");
+
+    let workflow_after_first =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("get_workflow");
+    let run_id_after_first = workflow_after_first.run_id.unwrap_or(0);
+
+    // Second reinit while the first task is still active: must return the existing task
+    // with the *same* task id and NOT bump run_id again.
+    let second = manager
+        .reinitialize_async(false, false)
+        .expect("second reinit should be idempotent while first is active")
+        .expect("non-dry-run should return a task");
+
+    assert_eq!(
+        second.id, first.id,
+        "second reinit should return the existing task's id, not a new one"
+    );
+
+    let workflow_after_second =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("get_workflow");
+    assert_eq!(
+        workflow_after_second.run_id.unwrap_or(0),
+        run_id_after_first,
+        "run_id must not be bumped again when a task is already active; got {} then {}",
+        run_id_after_first,
+        workflow_after_second.run_id.unwrap_or(0),
+    );
+
+    // Let the task finish so the test doesn't leak.
+    let _final_task = wait_for_task_completion(&config, first.id, 30);
+}
+
+/// Covers `torc workflows init`'s underlying async path: WorkflowManager::initialize_async
+/// returns a TaskModel, and waiting on that task takes the workflow's jobs from
+/// Uninitialized to Ready/Blocked.
+#[rstest]
+fn test_initialize_async_with_dependencies_completes_task_and_readies_jobs(
+    start_server: &ServerProcess,
+) {
+    let config = start_server.config.clone();
+
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let jobs = create_diamond_workflow(&config, false, temp_dir.path());
+    let preprocess_id = jobs.get("preprocess").unwrap().id.unwrap();
+    let work1_id = jobs.get("work1").unwrap().id.unwrap();
+    let work2_id = jobs.get("work2").unwrap().id.unwrap();
+    let postprocess_id = jobs.get("postprocess").unwrap().id.unwrap();
+    let workflow_id = jobs.get("preprocess").unwrap().workflow_id;
+
+    // The diamond workflow's f1 input must exist on disk for init to proceed without force.
+    fs::write(temp_dir.path().join("f1.json"), r#"{"seed": 1}"#).expect("Failed to write f1");
+
+    let workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+
+    // Before init the jobs sit uninitialized.
+    for id in [preprocess_id, work1_id, work2_id, postprocess_id] {
+        let job = apis::jobs_api::get_job(&config, id).expect("get_job");
+        assert_eq!(
+            job.status,
+            Some(models::JobStatus::Uninitialized),
+            "job {} should start Uninitialized, got {:?}",
+            id,
+            job.status
+        );
+    }
+
+    let task = manager
+        .initialize_async(false)
+        .expect("initialize_async should return a task");
+
+    assert_eq!(task.workflow_id, workflow_id);
+    assert_eq!(task.operation, "initialize_jobs");
+    assert_eq!(task.status, models::TaskStatus::Queued);
+
+    let final_task = wait_for_task_completion(&config, task.id, 30);
+    assert_eq!(
+        final_task.status,
+        models::TaskStatus::Succeeded,
+        "init task should succeed; error: {:?}",
+        final_task.error
+    );
+
+    // The root job is ready; downstream jobs are blocked on it.
+    let preprocess = apis::jobs_api::get_job(&config, preprocess_id).expect("get preprocess");
+    assert_eq!(
+        preprocess.status,
+        Some(models::JobStatus::Ready),
+        "preprocess should be Ready once dependencies are resolved"
+    );
+    for id in [work1_id, work2_id, postprocess_id] {
+        let job = apis::jobs_api::get_job(&config, id).expect("get_job");
+        assert_eq!(
+            job.status,
+            Some(models::JobStatus::Blocked),
+            "downstream job {} should be Blocked, got {:?}",
+            id,
+            job.status
+        );
+    }
 }

@@ -32,6 +32,7 @@ use crate::memory_utils::{memory_string_to_bytes, memory_string_to_mb};
 use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
+use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -141,6 +142,22 @@ fn build_srun_command(params: &SrunParams) -> Result<Command, String> {
     Ok(srun)
 }
 
+fn build_command_string(invocation_script: Option<&str>, command: &str) -> String {
+    match invocation_script {
+        Some(script) => {
+            let trimmed = script.trim();
+            if trimmed.is_empty() {
+                command.to_string()
+            } else if script.contains('\n') || script.contains('\r') {
+                format!("{}\n{}", script.trim_end(), command)
+            } else {
+                format!("{} {}", trimmed, command)
+            }
+        }
+        None => command.to_string(),
+    }
+}
+
 #[allow(dead_code)]
 pub struct AsyncCliCommand {
     pub job: JobModel,
@@ -209,6 +226,7 @@ impl AsyncCliCommand {
         resource_monitor: Option<&ResourceMonitor>,
         api_url: &str,
         resource_requirements: Option<&ResourceRequirementsModel>,
+        effective_env: Option<&HashMap<String, String>>,
         gpu_visible_devices: Option<&str>,
         limit_resources: bool,
         execution_mode: ExecutionMode,
@@ -284,11 +302,8 @@ impl AsyncCliCommand {
         self.stdout_path = stdout_path_opt;
         self.stderr_path = stderr_path_opt;
 
-        let command_str = if let Some(ref invocation_script) = self.job.invocation_script {
-            format!("{} {}", invocation_script, self.job.command)
-        } else {
-            self.job.command.clone()
-        };
+        let command_str =
+            build_command_string(self.job.invocation_script.as_deref(), &self.job.command);
 
         let slurm_job_id = if execution_mode == ExecutionMode::Slurm {
             // JobRunner::new() guarantees SLURM_JOB_ID is set when mode is Slurm.
@@ -330,6 +345,12 @@ impl AsyncCliCommand {
             shell.arg(&command_str);
             shell
         };
+
+        if let Some(env) = effective_env {
+            for (key, value) in env {
+                cmd.env(key, value);
+            }
+        }
 
         if let Some(v) = gpu_visible_devices {
             cmd.env("CUDA_VISIBLE_DEVICES", v)
@@ -1196,5 +1217,23 @@ mod tests {
         let line = "step1|1024K|2048K";
         let stats = parse_sacct_line(line, "step1");
         assert!(stats.is_none());
+    }
+
+    #[test]
+    fn test_build_command_string_keeps_single_line_wrapper_compatible() {
+        let command = build_command_string(Some("bash setup.sh"), "python run.py");
+        assert_eq!(command, "bash setup.sh python run.py");
+    }
+
+    #[test]
+    fn test_build_command_string_uses_newline_for_multi_line_prelude() {
+        let command = build_command_string(Some("#!/bin/bash\necho preflight"), "python run.py");
+        assert_eq!(command, "#!/bin/bash\necho preflight\npython run.py");
+    }
+
+    #[test]
+    fn test_build_command_string_ignores_empty_prelude() {
+        let command = build_command_string(Some("   "), "python run.py");
+        assert_eq!(command, "python run.py");
     }
 }

@@ -190,7 +190,7 @@ fn test_get_pending_actions(start_server: &ServerProcess) {
         .expect("Failed to create action");
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize workflow");
 
     // Get pending actions (should include the newly created action)
@@ -229,7 +229,7 @@ fn test_claim_action_success(start_server: &ServerProcess) {
     let action_id = created_action.id.unwrap();
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize workflow");
 
     // Claim the action
@@ -280,7 +280,7 @@ fn test_claim_action_already_claimed(start_server: &ServerProcess) {
     let action_id = created_action.id.unwrap();
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize workflow");
 
     // First claim should succeed
@@ -501,7 +501,7 @@ fn test_action_status_lifecycle(start_server: &ServerProcess) {
     assert!(created_action.executed_by.is_none());
 
     // Initialize the workflow to trigger on_workflow_start actions
-    apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize workflow");
 
     // Claim the action

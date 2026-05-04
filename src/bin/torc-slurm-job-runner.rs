@@ -12,7 +12,7 @@ mod unix_main {
     use clap::{Parser, builder::styling};
     use env_logger::Builder;
     use log::{LevelFilter, debug, error, info, warn};
-    use signal_hook::consts::SIGTERM;
+    use signal_hook::consts::{SIGCHLD, SIGTERM};
     use signal_hook::iterator::Signals;
     use std::fs::File;
     use std::path::PathBuf;
@@ -414,12 +414,12 @@ mod unix_main {
             create_compute_node(&config, args.workflow_id, &resources, &hostname, scheduler);
         let run_id = match utils::send_with_retries(
             &config,
-            || apis::workflows_api::get_workflow_status(&config, args.workflow_id),
+            || apis::workflows_api::get_workflow(&config, args.workflow_id),
             args.wait_for_healthy_database_minutes,
         ) {
-            Ok(status) => status.run_id,
+            Ok(workflow) => workflow.run_id.unwrap_or(0),
             Err(e) => {
-                error!("Error getting workflow status: {}", e);
+                error!("Error getting workflow: {}", e);
                 std::process::exit(1);
             }
         };
@@ -449,26 +449,48 @@ mod unix_main {
             node_tracker,
         );
 
-        // Register SIGTERM signal handler
-        // When Slurm is about to reach walltime, it sends SIGTERM to this process.
-        // The handler sets a flag that the job runner checks in its main loop.
+        // Register SIGTERM and SIGCHLD signal handlers.
+        //
+        // SIGTERM: When Slurm is about to reach walltime it sends SIGTERM to
+        // this process. The handler sets the termination flag and notifies
+        // the wakeup so the runner exits its idle wait immediately rather
+        // than waiting up to job_completion_poll_interval.
+        //
+        // SIGCHLD: Delivered whenever a tracked subprocess exits. The handler
+        // notifies the wakeup so the runner's main loop can call try_wait on
+        // each child right away.
         let termination_flag = job_runner.get_termination_flag();
-        let mut signals = match Signals::new([SIGTERM]) {
+        let wakeup = job_runner.get_wakeup_handle();
+        let mut signals = match Signals::new([SIGTERM, SIGCHLD]) {
             Ok(s) => s,
             Err(e) => {
-                error!("Failed to register SIGTERM handler: {}", e);
+                error!("Failed to register signal handlers: {}", e);
                 std::process::exit(1);
             }
         };
 
         // Spawn a thread to handle signals
         thread::spawn(move || {
+            unsafe {
+                let mut set: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&mut set);
+                libc::sigaddset(&mut set, libc::SIGTERM);
+                libc::sigaddset(&mut set, libc::SIGCHLD);
+                libc::pthread_sigmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut());
+            }
+            info!("Signal-handler thread active for SIGTERM and SIGCHLD");
             for sig in signals.forever() {
-                if sig == SIGTERM {
-                    info!("Received SIGTERM signal from Slurm. Initiating graceful shutdown.");
-                    termination_flag.store(true, Ordering::SeqCst);
-                    // Exit the signal handler thread after setting the flag
-                    break;
+                match sig {
+                    SIGTERM => {
+                        info!("Received SIGTERM signal from Slurm. Initiating graceful shutdown.");
+                        termination_flag.store(true, Ordering::SeqCst);
+                        wakeup.notify();
+                        break;
+                    }
+                    SIGCHLD => {
+                        wakeup.notify();
+                    }
+                    _ => {}
                 }
             }
         });

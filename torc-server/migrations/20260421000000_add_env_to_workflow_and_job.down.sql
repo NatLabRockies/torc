@@ -1,0 +1,3 @@
+ALTER TABLE job DROP COLUMN env;
+
+ALTER TABLE workflow DROP COLUMN env;

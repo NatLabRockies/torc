@@ -137,6 +137,7 @@ fn run_and_capture_srun_args_with_headroom(
         None,
         "http://localhost:8080/torc-service/v1",
         rr,
+        None, // effective_env
         None, // gpu_visible_devices
         limit_resources,
         execution_mode,
@@ -418,6 +419,7 @@ fn test_srun_with_end_time_insufficient_time_rejected() {
         None,
         "http://localhost:8080/torc-service/v1",
         Some(&rr),
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Slurm,
@@ -624,6 +626,7 @@ fn test_srun_step_name_format() {
         None,
         "http://localhost:8080/torc-service/v1",
         Some(&rr),
+        None, // effective_env
         None, // gpu_visible_devices
         true,
         ExecutionMode::Slurm,

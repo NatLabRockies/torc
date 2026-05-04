@@ -578,7 +578,7 @@ fn test_files_list_required_existing_command_json(start_server: &ServerProcess) 
         torc::client::apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     // Initialize the workflow to set up job dependencies
-    torc::client::apis::workflows_api::initialize_jobs(config, workflow_id, None, None)
+    torc::client::apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     // Test the CLI list-required-existing command
