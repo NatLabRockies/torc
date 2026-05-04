@@ -327,20 +327,8 @@ pub fn find_entity_by_entity_id(
     workflow_id: i64,
     entity_id: &str,
 ) -> Option<RoCrateEntityModel> {
-    match apis::ro_crate_entities_api::list_ro_crate_entities(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ) {
-        Ok(response) => response
-            .items
-            .into_iter()
-            .find(|e| e.entity_id == entity_id),
+    match apis::ro_crate_api::find_ro_crate_entity_by_entity_id(config, workflow_id, entity_id) {
+        Ok(entity) => entity,
         Err(e) => {
             warn!("Failed to check for existing RO-Crate entities: {}", e);
             None
