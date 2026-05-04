@@ -150,14 +150,6 @@ impl RoCrateApiImpl {
     ///
     /// This is called during `initialize_jobs` when `enable_ro_crate` is true.
     pub async fn create_entities_for_input_files(&self, workflow_id: i64) -> Result<i64, ApiError> {
-        // Get the current run_id from workflow
-        let run_id: i64 =
-            sqlx::query_scalar!("SELECT run_id FROM workflow WHERE id = $1", workflow_id,)
-                .fetch_optional(self.context.pool.as_ref())
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
-                .unwrap_or(0);
-
         // Get all files with st_mtime set (input files)
         let input_files = match sqlx::query!(
             r#"

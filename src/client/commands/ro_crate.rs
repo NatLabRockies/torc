@@ -377,18 +377,11 @@ fn read_metadata_input(metadata: &str) -> String {
 }
 
 fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&str>) {
-    // Fetch the workflow name and status for the root dataset and current run.
-    let workflow_name = match apis::workflows_api::get_workflow(config, workflow_id) {
-        Ok(w) => w.name,
+    // Fetch the workflow name and current run for the root dataset.
+    let (workflow_name, run_id) = match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(workflow) => (workflow.name, workflow.run_id),
         Err(e) => {
             print_error("getting workflow", &e);
-            std::process::exit(1);
-        }
-    };
-    let run_id = match apis::workflows_api::get_workflow_status(config, workflow_id) {
-        Ok(status) => status.run_id,
-        Err(e) => {
-            print_error("getting workflow status", &e);
             std::process::exit(1);
         }
     };
