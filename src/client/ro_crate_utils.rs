@@ -334,6 +334,8 @@ pub fn find_entity_by_entity_id(
         None,
         None,
         None,
+        None,
+        None,
     ) {
         Ok(response) => response
             .items
