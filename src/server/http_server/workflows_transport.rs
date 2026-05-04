@@ -414,11 +414,6 @@ where
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError> {
         authorize_workflow!(self, id, context, UpdateWorkflowResponse);
-        if body.is_archived == Some(true)
-            && let Ok(mut set) = self.workflows_with_failures.write()
-        {
-            set.remove(&id);
-        }
         self.workflows_api.update_workflow(id, body, context).await
     }
 
