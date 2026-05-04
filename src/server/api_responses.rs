@@ -751,6 +751,19 @@ pub enum CancelWorkflowResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum ArchiveWorkflowResponse {
+    /// Successful response: the post-archive WorkflowModel.
+    SuccessfulResponse(models::WorkflowModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum GetComputeNodeResponse {
     /// Successful response
     SuccessfulResponse(models::ComputeNodeModel),
@@ -897,19 +910,6 @@ pub enum GetUserDataResponse {
 pub enum GetWorkflowResponse {
     /// Successful response
     SuccessfulResponse(models::WorkflowModel),
-    /// Forbidden - user does not have access
-    ForbiddenErrorResponse(models::ErrorResponse),
-    /// Not found error response
-    NotFoundErrorResponse(models::ErrorResponse),
-    /// Default error response
-    DefaultErrorResponse(models::ErrorResponse),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[must_use]
-pub enum GetWorkflowStatusResponse {
-    /// Successful response
-    SuccessfulResponse(models::WorkflowStatusModel),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
@@ -1170,19 +1170,6 @@ pub enum UpdateWorkflowResponse {
     NotFoundErrorResponse(models::ErrorResponse),
     /// Unprocessable content error response
     UnprocessableContentErrorResponse(models::ErrorResponse),
-    /// Default error response
-    DefaultErrorResponse(models::ErrorResponse),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[must_use]
-pub enum UpdateWorkflowStatusResponse {
-    /// Successful response
-    SuccessfulResponse(models::WorkflowStatusModel),
-    /// Forbidden - user does not have access
-    ForbiddenErrorResponse(models::ErrorResponse),
-    /// Not found error response
-    NotFoundErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

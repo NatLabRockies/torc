@@ -234,8 +234,8 @@ impl<C> Server<C> {
                           FROM job_depends_on jbb
                           JOIN job j ON jbb.depends_on_job_id = j.id
                           JOIN result r ON j.id = r.job_id
-                          JOIN workflow_status ws ON j.workflow_id = ws.id
-                            AND r.run_id = ws.run_id
+                          JOIN workflow w ON j.workflow_id = w.id
+                            AND r.run_id = w.run_id
                           WHERE jbb.job_id = job.id
                             AND j.status IN (?, ?, ?)
                             AND r.return_code != 0

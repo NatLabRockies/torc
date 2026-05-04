@@ -164,7 +164,7 @@ where
         SELECT j.id, r.return_code
         FROM job j
         JOIN result r ON j.id = r.job_id
-        JOIN workflow_status ws ON j.workflow_id = ws.id AND r.run_id = ws.run_id
+        JOIN workflow w ON j.workflow_id = w.id AND r.run_id = w.run_id
         WHERE j.workflow_id = ?
           AND j.status IN (?, ?, ?, ?)
           AND j.unblocking_processed = 0

@@ -647,10 +647,6 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
 
     // --- Header: name / id / user / badge ---
     let (badge_text, badge_color) = summary_badge(summary);
-    let mut badge_suffix = String::new();
-    if summary.needs_completion_script {
-        badge_suffix.push_str(" (completion script pending)");
-    }
 
     let header_lines = vec![
         Line::from(vec![
@@ -677,7 +673,6 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
                     .fg(badge_color)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(badge_suffix, Style::default().fg(Color::DarkGray)),
         ]),
     ];
     f.render_widget(Paragraph::new(header_lines), chunks[0]);

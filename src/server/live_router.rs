@@ -300,6 +300,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             put(cancel_workflow),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/archive",
+            post(archive_workflow),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/initialize_jobs",
             post(initialize_jobs),
         )
@@ -318,10 +322,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
         .route(
             "/torc-service/v1/workflows/{id}/reset_job_status",
             post(reset_job_status),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/status",
-            get(get_workflow_status).put(update_workflow_status),
         )
         .route(
             "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
@@ -3327,6 +3327,27 @@ pub async fn cancel_workflow(
 }
 
 #[utoipa::path(
+    post,
+    tag = "workflows",
+    path = "/workflows/{id}/archive",
+    operation_id = "archive_workflow",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    request_body = models::ArchiveWorkflowRequest,
+    responses((status = 200, body = models::WorkflowModel))
+)]
+pub async fn archive_workflow(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::ArchiveWorkflowRequest>,
+) -> Response<Body> {
+    match state.server.archive_workflow(id, body, &context).await {
+        Ok(response) => archive_workflow_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
     get,
     tag = "tasks",
     path = "/tasks/{id}",
@@ -3496,50 +3517,6 @@ pub async fn reset_job_status(
         .await
     {
         Ok(response) => reset_job_status_response(response),
-        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
-    }
-}
-
-#[utoipa::path(
-    get,
-    tag = "workflows",
-    path = "/workflows/{id}/status",
-    operation_id = "get_workflow_status",
-    params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::WorkflowStatusModel))
-)]
-pub async fn get_workflow_status(
-    State(state): State<LiveRouterState>,
-    Path(id): Path<i64>,
-    Extension(context): Extension<EmptyContext>,
-) -> Response<Body> {
-    match state.server.get_workflow_status(id, &context).await {
-        Ok(response) => get_workflow_status_response(response),
-        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
-    }
-}
-
-#[utoipa::path(
-    put,
-    tag = "workflows",
-    path = "/workflows/{id}/status",
-    operation_id = "update_workflow_status",
-    params(("id" = i64, Path, description = "Workflow ID")),
-    request_body = models::WorkflowStatusModel,
-    responses((status = 200, body = models::WorkflowStatusModel))
-)]
-pub async fn update_workflow_status(
-    State(state): State<LiveRouterState>,
-    Path(id): Path<i64>,
-    Extension(context): Extension<EmptyContext>,
-    Json(body): Json<models::WorkflowStatusModel>,
-) -> Response<Body> {
-    match state
-        .server
-        .update_workflow_status(id, body, &context)
-        .await
-    {
-        Ok(response) => update_workflow_status_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
@@ -4230,9 +4207,7 @@ mod live_router_tests {
     use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
     use crate::server::response_types::jobs::CreateJobResponse;
     use crate::server::response_types::scheduling::CreateComputeNodeResponse;
-    use crate::server::response_types::workflows::{
-        CreateWorkflowResponse, GetWorkflowStatusResponse,
-    };
+    use crate::server::response_types::workflows::{CreateWorkflowResponse, GetWorkflowResponse};
     use axum::http::Request;
     use axum::http::header::CONTENT_TYPE;
     use http_body_util::BodyExt;
@@ -4646,13 +4621,13 @@ mod live_router_tests {
 
     async fn get_workflow_run_id(server: &Server<EmptyContext>, workflow_id: i64) -> i64 {
         let response = server
-            .get_workflow_status(workflow_id, &EmptyContext::default())
+            .get_workflow(workflow_id, &EmptyContext::default())
             .await
-            .expect("get workflow status");
+            .expect("get workflow");
 
         match response {
-            GetWorkflowStatusResponse::SuccessfulResponse(status) => status.run_id,
-            other => panic!("unexpected get_workflow_status response: {other:?}"),
+            GetWorkflowResponse::SuccessfulResponse(workflow) => workflow.run_id.unwrap_or(0),
+            other => panic!("unexpected get_workflow response: {other:?}"),
         }
     }
 

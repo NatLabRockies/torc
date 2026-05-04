@@ -29,9 +29,11 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
         enable_ro_crate: None,
         project: Some("test-project".to_string()),
         metadata: Some(r#"{"key":"value","num":42}"#.to_string()),
-        status_id: None,
         slurm_config: None,
         execution_config: None,
+        run_id: None,
+        is_canceled: None,
+        is_archived: None,
     };
 
     // Create the workflow
@@ -70,9 +72,11 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
         enable_ro_crate: None,
         project: None,
         metadata: None,
-        status_id: None,
         slurm_config: None,
         execution_config: None,
+        run_id: None,
+        is_canceled: None,
+        is_archived: None,
     };
 
     let created =
@@ -119,9 +123,11 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
         enable_ro_crate: None,
         project: Some("initial-project".to_string()),
         metadata: Some(r#"{"version":"1.0"}"#.to_string()),
-        status_id: None,
         slurm_config: None,
         execution_config: None,
+        run_id: None,
+        is_canceled: None,
+        is_archived: None,
     };
 
     let created =
@@ -171,9 +177,11 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
         enable_ro_crate: None,
         project: Some("my-project".to_string()),
         metadata: Some(r#"{"key":"value"}"#.to_string()),
-        status_id: None,
         slurm_config: None,
         execution_config: None,
+        run_id: None,
+        is_canceled: None,
+        is_archived: None,
     };
 
     let created =

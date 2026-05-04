@@ -644,6 +644,14 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError>;
 
+    /// Archive or unarchive a workflow.
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError>;
+
     /// Retrieve a compute node by ID.
     async fn get_compute_node(
         &self,
@@ -704,13 +712,6 @@ pub trait TransportApiCore<C: Send + Sync> {
 
     /// Retrieve a workflow.
     async fn get_workflow(&self, id: i64, context: &C) -> Result<GetWorkflowResponse, ApiError>;
-
-    /// Return the workflow status.
-    async fn get_workflow_status(
-        &self,
-        id: i64,
-        context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError>;
 
     /// Return the status of a background task.
     async fn get_task(&self, id: i64, context: &C) -> Result<GetTaskResponse, ApiError>;
@@ -852,14 +853,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         body: models::WorkflowModel,
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError>;
-
-    /// Update the workflow status.
-    async fn update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError>;
 
     /// Return jobs that are ready for submission and meet worker resource. Set status to pending.
     async fn claim_jobs_based_on_resources(

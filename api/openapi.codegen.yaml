@@ -7,7 +7,7 @@ info:
   license:
     name: BSD-3-Clause
     identifier: BSD-3-Clause
-  version: 0.14.0
+  version: 0.15.0
 servers:
 - url: /torc-service/v1
   description: Versioned Torc API base path
@@ -4229,6 +4229,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/archive:
+    post:
+      tags:
+      - workflows
+      operationId: archive_workflow
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveWorkflowRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowModel'
   /workflows/{id}/batch_complete_jobs:
     post:
       tags:
@@ -5099,51 +5125,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /workflows/{id}/status:
-    get:
-      tags:
-      - workflows
-      operationId: get_workflow_status
-      parameters:
-      - name: id
-        in: path
-        description: Workflow ID
-        required: true
-        schema:
-          type: integer
-          format: int64
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WorkflowStatusModel'
-    put:
-      tags:
-      - workflows
-      operationId: update_workflow_status
-      parameters:
-      - name: id
-        in: path
-        description: Workflow ID
-        required: true
-        schema:
-          type: integer
-          format: int64
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WorkflowStatusModel'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WorkflowStatusModel'
 components:
   schemas:
     AccessCheckResponse:
@@ -5195,6 +5176,16 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/TaskModel'
+    ArchiveWorkflowRequest:
+      type: object
+      description: |-
+        Request body for `POST /workflows/{id}/archive`. Setting `is_archived`
+        to true marks the workflow as archived; false unarchives it.
+      required:
+      - is_archived
+      properties:
+        is_archived:
+          type: boolean
     BatchCompleteJobsRequest:
       type: object
       required:
@@ -5543,13 +5534,10 @@ components:
       required:
       - is_canceled
       - is_complete
-      - needs_to_run_completion_script
       properties:
         is_canceled:
           type: boolean
         is_complete:
-          type: boolean
-        needs_to_run_completion_script:
           type: boolean
     IsUninitializedResponse:
       type: object
@@ -6953,6 +6941,26 @@ components:
           - integer
           - 'null'
           format: int64
+        is_archived:
+          type:
+          - boolean
+          - 'null'
+          description: |-
+            True when the workflow has been archived.
+            Read-only on the API: set via `POST /workflows/{id}/archive`,
+            cleared via `POST /workflows/{id}/reset_status`. Values supplied to
+            create/update workflow endpoints are ignored.
+          readOnly: true
+        is_canceled:
+          type:
+          - boolean
+          - 'null'
+          description: |-
+            True when a user (or scheduler) has canceled the workflow.
+            Read-only on the API: set via `POST /workflows/{id}/cancel`,
+            cleared via `POST /workflows/{id}/reset_status`. Values supplied to
+            create/update workflow endpoints are ignored.
+          readOnly: true
         metadata:
           type:
           - string
@@ -6967,6 +6975,17 @@ components:
           type:
           - string
           - 'null'
+        run_id:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Current run number; incremented on each restart/recovery.
+            Read-only on the API: incremented as a side effect of
+            `POST /workflows/{id}/reset_status`. Values supplied to
+            create/update workflow endpoints are ignored.
+          readOnly: true
         slurm_config:
           type:
           - string
@@ -6975,11 +6994,6 @@ components:
           type:
           - string
           - 'null'
-        status_id:
-          type:
-          - integer
-          - 'null'
-          format: int64
         timestamp:
           type:
           - string
@@ -6990,27 +7004,3 @@ components:
           - 'null'
         user:
           type: string
-    WorkflowStatusModel:
-      type: object
-      required:
-      - is_canceled
-      - run_id
-      properties:
-        has_detected_need_to_run_completion_script:
-          type:
-          - boolean
-          - 'null'
-        id:
-          type:
-          - integer
-          - 'null'
-          format: int64
-        is_archived:
-          type:
-          - boolean
-          - 'null'
-        is_canceled:
-          type: boolean
-        run_id:
-          type: integer
-          format: int64

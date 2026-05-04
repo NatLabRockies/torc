@@ -243,6 +243,29 @@ where
         Ok(response)
     }
 
+    pub(super) async fn transport_archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError> {
+        info!(
+            "archive_workflow(workflow_id={}, is_archived={}) - X-Span-ID: {:?}",
+            id,
+            body.is_archived,
+            Has::<XSpanIdString>::get(context).0.clone()
+        );
+        authorize_workflow!(self, id, context, ArchiveWorkflowResponse);
+        // When archiving, drop the workflow from the failures cache (mirrors
+        // the previous behavior of the now-removed update_workflow_status flow).
+        if body.is_archived
+            && let Ok(mut set) = self.workflows_with_failures.write()
+        {
+            set.remove(&id);
+        }
+        self.workflows_api.archive_workflow(id, body, context).await
+    }
+
     pub(super) async fn transport_delete_events(
         &self,
         workflow_id: i64,
@@ -354,15 +377,6 @@ where
         self.workflows_api.get_workflow(id, context).await
     }
 
-    pub(super) async fn transport_get_workflow_status(
-        &self,
-        id: i64,
-        context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError> {
-        authorize_workflow!(self, id, context, GetWorkflowStatusResponse);
-        self.workflows_api.get_workflow_status(id, context).await
-    }
-
     pub(super) async fn transport_is_workflow_complete(
         &self,
         id: i64,
@@ -400,24 +414,12 @@ where
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError> {
         authorize_workflow!(self, id, context, UpdateWorkflowResponse);
-        self.workflows_api.update_workflow(id, body, context).await
-    }
-
-    pub(super) async fn transport_update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError> {
-        authorize_workflow!(self, id, context, UpdateWorkflowStatusResponse);
         if body.is_archived == Some(true)
             && let Ok(mut set) = self.workflows_with_failures.write()
         {
             set.remove(&id);
         }
-        self.workflows_api
-            .update_workflow_status(id, body, context)
-            .await
+        self.workflows_api.update_workflow(id, body, context).await
     }
 
     pub(super) async fn transport_delete_event(
@@ -512,21 +514,21 @@ where
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
 
-        let status = match self.get_workflow_status(id, context).await {
-            Ok(GetWorkflowStatusResponse::SuccessfulResponse(status)) => status,
+        let workflow = match self.get_workflow(id, context).await {
+            Ok(GetWorkflowResponse::SuccessfulResponse(workflow)) => workflow,
             Ok(_) => {
                 error!(
-                    "Unexpected response from get_workflow_status for workflow_id={}",
+                    "Unexpected response from get_workflow for workflow_id={}",
                     id
                 );
                 return Err(ApiError(
-                    "Unexpected response from get_workflow_status".to_string(),
+                    "Unexpected response from get_workflow".to_string(),
                 ));
             }
             Err(e) => return Err(e),
         };
 
-        if status.is_canceled {
+        if workflow.is_canceled.unwrap_or(false) {
             return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
                 models::ClaimJobsBasedOnResources {
                     jobs: Some(vec![]),

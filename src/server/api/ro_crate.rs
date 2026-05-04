@@ -149,15 +149,13 @@ impl RoCrateApiImpl {
     ///
     /// This is called during `initialize_jobs` when `enable_ro_crate` is true.
     pub async fn create_entities_for_input_files(&self, workflow_id: i64) -> Result<i64, ApiError> {
-        // Get the current run_id from workflow_status
-        let run_id: i64 = sqlx::query_scalar!(
-            "SELECT run_id FROM workflow_status WHERE id = $1",
-            workflow_id,
-        )
-        .fetch_optional(self.context.pool.as_ref())
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
-        .unwrap_or(0);
+        // Get the current run_id from workflow
+        let run_id: i64 =
+            sqlx::query_scalar!("SELECT run_id FROM workflow WHERE id = $1", workflow_id,)
+                .fetch_optional(self.context.pool.as_ref())
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
+                .unwrap_or(0);
 
         // Get all files with st_mtime set (input files)
         let input_files = match sqlx::query!(
@@ -293,15 +291,13 @@ impl RoCrateApiImpl {
     ///
     /// Called during `initialize_jobs` regardless of `enable_ro_crate`.
     pub async fn create_server_software_entity(&self, workflow_id: i64) -> Result<(), ApiError> {
-        // Get the current run_id from workflow_status
-        let run_id: i64 = sqlx::query_scalar!(
-            "SELECT run_id FROM workflow_status WHERE id = $1",
-            workflow_id,
-        )
-        .fetch_optional(self.context.pool.as_ref())
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
-        .unwrap_or(0);
+        // Get the current run_id from workflow
+        let run_id: i64 =
+            sqlx::query_scalar!("SELECT run_id FROM workflow WHERE id = $1", workflow_id,)
+                .fetch_optional(self.context.pool.as_ref())
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
+                .unwrap_or(0);
 
         let entity_id = format!("#software-torc-server-run-{}", run_id);
 

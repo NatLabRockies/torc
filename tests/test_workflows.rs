@@ -409,16 +409,11 @@ fn test_workflows_delete_command_json(start_server: &ServerProcess) {
     run_cli_with_json(&args, start_server, Some("delete_user"))
         .expect("Failed to run delete command");
 
-    // Verify the workflow is actually deleted by trying to get it
+    // Verify the workflow is actually deleted by trying to get it.
+    // Status fields live on the workflow row now, so a successful delete also
+    // removes the status data — there is nowhere else for it to leak from.
     let get_result = apis::workflows_api::get_workflow(config, workflow_id);
     assert!(get_result.is_err(), "Workflow should be deleted");
-
-    // Verify the workflow status is also cleaned up (not orphaned)
-    let status_result = apis::workflows_api::get_workflow_status(config, workflow_id);
-    assert!(
-        status_result.is_err(),
-        "Workflow status should be deleted with the workflow"
-    );
 }
 
 #[rstest]
@@ -571,10 +566,10 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
     let _result = apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
-    // Get workflow status to get run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    // Get workflow to read run_id
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Set job1 to running status
     let _submitted_job = apis::jobs_api::manage_status_change(
@@ -647,14 +642,14 @@ fn test_workflows_reset_status_depends_on_submitted_jobs(start_server: &ServerPr
     );
 
     // Verify workflow status was reset
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
     assert!(
-        !workflow_status.is_canceled,
+        !workflow.is_canceled.unwrap_or(false),
         "Workflow should not be canceled after reset"
     );
     assert!(
-        !workflow_status.is_archived.unwrap_or(false),
+        !workflow.is_archived.unwrap_or(false),
         "Workflow should not be archived after reset"
     );
 }
@@ -1119,10 +1114,10 @@ fn test_workflow_archive_and_unarchive(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Get initial workflow status - should not be archived
-    let initial_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get initial workflow status");
+    let initial_workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("Failed to get initial workflow");
     assert!(
-        !initial_status.is_archived.unwrap_or(false),
+        !initial_workflow.is_archived.unwrap_or(false),
         "New workflow should not be archived"
     );
 
@@ -1143,10 +1138,10 @@ fn test_workflow_archive_and_unarchive(start_server: &ServerProcess) {
     );
 
     // Verify workflow is archived
-    let archived_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get archived workflow status");
+    let archived_workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("Failed to get archived workflow");
     assert!(
-        archived_status.is_archived.unwrap_or(false),
+        archived_workflow.is_archived.unwrap_or(false),
         "Workflow should be archived"
     );
 
@@ -1169,10 +1164,10 @@ fn test_workflow_archive_and_unarchive(start_server: &ServerProcess) {
     );
 
     // Verify workflow is no longer archived
-    let unarchived_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get unarchived workflow status");
+    let unarchived_workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("Failed to get unarchived workflow");
     assert!(
-        !unarchived_status.is_archived.unwrap_or(false),
+        !unarchived_workflow.is_archived.unwrap_or(false),
         "Workflow should not be archived after unarchive"
     );
 }
@@ -1189,11 +1184,12 @@ fn test_workflow_list_excludes_archived_by_default(start_server: &ServerProcess)
     let archived_id = to_archive_workflow.id.unwrap();
 
     // Archive the second workflow
-    let mut status = apis::workflows_api::get_workflow_status(config, archived_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(config, archived_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        archived_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // List workflows without archived filter (default behavior)
     let list_args = ["workflows", "list", "--limit", "100"];
@@ -1239,11 +1235,12 @@ fn test_workflow_list_archived_only(start_server: &ServerProcess) {
     let archived_id = to_archive_workflow.id.unwrap();
 
     // Archive the second workflow
-    let mut status = apis::workflows_api::get_workflow_status(config, archived_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(config, archived_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        archived_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // List only archived workflows
     let list_args = ["workflows", "list", "--limit", "100", "--archived-only"];
@@ -1286,11 +1283,12 @@ fn test_cannot_reset_archived_workflow_status(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(config, workflow_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Attempt to reset workflow status - should fail
     let reset_result = apis::workflows_api::reset_workflow_status(config, workflow_id, None);
@@ -1320,24 +1318,19 @@ fn test_archived_workflow_other_operations_still_work(start_server: &ServerProce
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(config, workflow_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
-    // Verify get_workflow still works
+    // Verify get_workflow still works on archived workflows (status fields are
+    // returned inline on the workflow row).
     let get_result = apis::workflows_api::get_workflow(config, workflow_id);
     assert!(
         get_result.is_ok(),
         "Should be able to get archived workflow"
-    );
-
-    // Verify get_workflow_status still works
-    let status_result = apis::workflows_api::get_workflow_status(config, workflow_id);
-    assert!(
-        status_result.is_ok(),
-        "Should be able to get status of archived workflow"
     );
 
     // Verify is_workflow_complete still works
@@ -1407,10 +1400,10 @@ fn test_archive_multiple_workflows(start_server: &ServerProcess) {
 
     // Verify all workflows are archived
     for workflow_id in &[id1, id2, id3] {
-        let status = apis::workflows_api::get_workflow_status(config, *workflow_id)
-            .expect("Failed to get workflow status");
+        let wf = apis::workflows_api::get_workflow(config, *workflow_id)
+            .expect("Failed to get workflow");
         assert!(
-            status.is_archived.unwrap_or(false),
+            wf.is_archived.unwrap_or(false),
             "Workflow {} should be archived",
             workflow_id
         );

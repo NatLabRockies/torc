@@ -485,11 +485,30 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub slurm_config: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_config: Option<String>,
+    /// Current run number; incremented on each restart/recovery.
+    /// Read-only on the API: incremented as a side effect of
+    /// `POST /workflows/{id}/reset_status`. Values supplied to
+    /// create/update workflow endpoints are ignored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
+    pub run_id: Option<i64>,
+    /// True when a user (or scheduler) has canceled the workflow.
+    /// Read-only on the API: set via `POST /workflows/{id}/cancel`,
+    /// cleared via `POST /workflows/{id}/reset_status`. Values supplied to
+    /// create/update workflow endpoints are ignored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
+    pub is_canceled: Option<bool>,
+    /// True when the workflow has been archived.
+    /// Read-only on the API: set via `POST /workflows/{id}/archive`,
+    /// cleared via `POST /workflows/{id}/reset_status`. Values supplied to
+    /// create/update workflow endpoints are ignored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
+    pub is_archived: Option<bool>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -501,6 +520,14 @@ pub struct ListWorkflowsResponse {
     pub count: i64,
     pub total_count: i64,
     pub has_more: bool,
+}
+
+/// Request body for `POST /workflows/{id}/archive`. Setting `is_archived`
+/// to true marks the workflow as archived; false unarchives it.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ArchiveWorkflowRequest {
+    pub is_archived: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1099,15 +1126,10 @@ impl GetReadyJobRequirementsResponse {
 }
 
 impl IsCompleteResponse {
-    pub fn new(
-        is_canceled: bool,
-        is_complete: bool,
-        needs_to_run_completion_script: bool,
-    ) -> IsCompleteResponse {
+    pub fn new(is_canceled: bool, is_complete: bool) -> IsCompleteResponse {
         IsCompleteResponse {
             is_canceled,
             is_complete,
-            needs_to_run_completion_script,
         }
     }
 }
@@ -1451,21 +1473,11 @@ impl WorkflowModel {
             enable_ro_crate: None,
             project: None,
             metadata: None,
-            status_id: None,
             slurm_config: None,
             execution_config: None,
-        }
-    }
-}
-
-impl WorkflowStatusModel {
-    pub fn new(is_canceled: bool, run_id: i64) -> WorkflowStatusModel {
-        WorkflowStatusModel {
-            id: None,
-            is_canceled,
-            is_archived: Some(false),
-            run_id,
-            has_detected_need_to_run_completion_script: Some(false),
+            run_id: None,
+            is_canceled: None,
+            is_archived: None,
         }
     }
 }
@@ -1830,23 +1842,9 @@ pub struct ReloadAuthResponse {
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorkflowStatusModel {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i64>,
-    pub is_canceled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_archived: Option<bool>,
-    pub run_id: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_detected_need_to_run_completion_script: Option<bool>,
-}
-
-#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IsCompleteResponse {
     pub is_canceled: bool,
     pub is_complete: bool,
-    pub needs_to_run_completion_script: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1871,7 +1869,7 @@ mod tests {
         ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources,
         CreateJobsResponse, EventModel, FileModel, GetReadyJobRequirementsResponse, JobModel,
         JobStatus, ListComputeNodesResponse, ListFilesResponse, ResourceRequirementsModel,
-        ResultModel, UserDataModel, WorkflowModel, WorkflowStatusModel,
+        ResultModel, UserDataModel, WorkflowModel,
     };
     use serde_json::json;
 
@@ -1895,9 +1893,11 @@ mod tests {
             enable_ro_crate: Some(true),
             project: Some("proj".to_string()),
             metadata: Some(json!({"k": "v"}).to_string()),
-            status_id: Some(1),
             slurm_config: None,
             execution_config: None,
+            run_id: Some(1),
+            is_canceled: Some(false),
+            is_archived: Some(false),
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");
@@ -2008,13 +2008,6 @@ mod tests {
             memory: "1m".into(),
             runtime: "P0DT1M".into(),
         };
-        let wf_status = WorkflowStatusModel {
-            id: Some(1),
-            is_canceled: false,
-            is_archived: Some(false),
-            run_id: 1,
-            has_detected_need_to_run_completion_script: Some(false),
-        };
         let _ =
             serde_json::from_value::<ComputeNodeModel>(serde_json::to_value(compute_node).unwrap())
                 .unwrap();
@@ -2027,9 +2020,6 @@ mod tests {
         let _ = serde_json::from_value::<EventModel>(serde_json::to_value(event).unwrap()).unwrap();
         let _ =
             serde_json::from_value::<ResourceRequirementsModel>(serde_json::to_value(rr).unwrap())
-                .unwrap();
-        let _ =
-            serde_json::from_value::<WorkflowStatusModel>(serde_json::to_value(wf_status).unwrap())
                 .unwrap();
     }
 

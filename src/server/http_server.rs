@@ -1314,6 +1314,15 @@ where
         self.transport_cancel_workflow(id, context).await
     }
 
+    async fn archive_workflow(
+        &self,
+        id: i64,
+        body: models::ArchiveWorkflowRequest,
+        context: &C,
+    ) -> Result<ArchiveWorkflowResponse, ApiError> {
+        self.transport_archive_workflow(id, body, context).await
+    }
+
     async fn delete_compute_nodes(
         &self,
         workflow_id: i64,
@@ -1826,14 +1835,6 @@ where
         self.transport_get_workflow(id, context).await
     }
 
-    async fn get_workflow_status(
-        &self,
-        id: i64,
-        context: &C,
-    ) -> Result<GetWorkflowStatusResponse, ApiError> {
-        self.transport_get_workflow_status(id, context).await
-    }
-
     async fn get_active_task_for_workflow(
         &self,
         workflow_id: i64,
@@ -2100,17 +2101,6 @@ where
         self.transport_update_workflow(id, body, context).await
     }
 
-    /// Update the workflow status.
-    async fn update_workflow_status(
-        &self,
-        id: i64,
-        body: models::WorkflowStatusModel,
-        context: &C,
-    ) -> Result<UpdateWorkflowStatusResponse, ApiError> {
-        self.transport_update_workflow_status(id, body, context)
-            .await
-    }
-
     /// Return jobs that are ready for submission and meet worker resource requirements. Set status to pending.
     #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, limit))]
     async fn claim_jobs_based_on_resources(
@@ -2251,11 +2241,10 @@ where
             .await
     }
 
-    /// Reset worklow status.
+    /// Reset workflow status fields (run_id, is_canceled, is_archived) on the
+    /// workflow row.
     /// Rules:
     /// - Not allowed if any job is running or SubmittedPending (unless force=true)
-    /// Actions:
-    /// - Reset fields in WorkflowStatusModel
     async fn reset_workflow_status(
         &self,
         id: i64,

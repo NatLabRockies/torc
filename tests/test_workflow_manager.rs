@@ -393,11 +393,12 @@ fn test_start_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(&config, workflow_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        &config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Start should fail for archived workflow
     let result = manager.initialize(false);
@@ -429,18 +430,18 @@ fn test_reinitialize_workflow_dry_run(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get original run_id
-    let original_status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    let original_run_id = original_status.run_id;
+    let original_workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let original_run_id = original_workflow.run_id.unwrap_or(0);
 
     // Dry run reinitialize should succeed without changing anything
     let result = manager.reinitialize(false, true);
     assert!(result.is_ok());
 
     // Run ID should be unchanged
-    let status_after = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status after dry run");
-    assert_eq!(status_after.run_id, original_run_id);
+    let workflow_after = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("Failed to get workflow after dry run");
+    assert_eq!(workflow_after.run_id.unwrap_or(0), original_run_id);
 }
 
 #[rstest]
@@ -462,18 +463,18 @@ fn test_reinitialize_workflow_real(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Get original run_id
-    let original_status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    let original_run_id = original_status.run_id;
+    let original_workflow =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    let original_run_id = original_workflow.run_id.unwrap_or(0);
 
     // Real reinitialize should increment run_id
     let result = manager.reinitialize(false, false);
     assert!(result.is_ok());
 
     // Run ID should be incremented
-    let status_after = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status after reinitialize");
-    assert_eq!(status_after.run_id, original_run_id + 1);
+    let workflow_after = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("Failed to get workflow after reinitialize");
+    assert_eq!(workflow_after.run_id.unwrap_or(0), original_run_id + 1);
 }
 
 #[rstest]
@@ -486,27 +487,29 @@ fn test_get_run_id(start_server: &ServerProcess) {
     assert!(run_id.is_ok());
 
     // Should match the database
-    let status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    assert_eq!(run_id.unwrap(), status.run_id);
+    let wf =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("Failed to get workflow");
+    assert_eq!(run_id.unwrap(), wf.run_id.unwrap_or(0));
 }
 
 #[rstest]
-fn test_bump_run_id(start_server: &ServerProcess) {
+fn test_reset_workflow_status_bumps_run_id(start_server: &ServerProcess) {
     let config = start_server.config.clone();
-    let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_bump_run_id");
-    let _workflow_id = workflow.id.unwrap();
+    let (manager, workflow) =
+        create_test_workflow_manager(config.clone(), "test_reset_bumps_run_id");
+    let workflow_id = workflow.id.unwrap();
 
-    // Get original run_id
     let original_run_id = manager.get_run_id().expect("Failed to get original run_id");
 
-    // Bump run_id
-    let result = manager.bump_run_id();
-    assert!(result.is_ok());
+    apis::workflows_api::reset_workflow_status(&config, workflow_id, None)
+        .expect("reset_workflow_status should succeed");
 
-    // Should be incremented
     let new_run_id = manager.get_run_id().expect("Failed to get new run_id");
-    assert_eq!(new_run_id, original_run_id + 1);
+    assert_eq!(
+        new_run_id,
+        original_run_id + 1,
+        "reset_workflow_status must bump run_id"
+    );
 }
 
 #[rstest]
@@ -526,11 +529,12 @@ fn test_check_workflow_archived(start_server: &ServerProcess) {
     let workflow_id = workflow.id.unwrap();
 
     // Archive the workflow
-    let mut status = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("Failed to get workflow status");
-    status.is_archived = Some(true);
-    apis::workflows_api::update_workflow_status(&config, workflow_id, status)
-        .expect("Failed to archive workflow");
+    apis::workflows_api::archive_workflow(
+        &config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
 
     // Check should fail for archived workflow
     let result = manager.check_workflow(false);
@@ -3063,9 +3067,9 @@ fn test_reinitialize_async_returns_existing_task_without_mutating(start_server: 
         .expect("first reinit should succeed")
         .expect("non-dry-run should return a task");
 
-    let status_after_first = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("get_workflow_status");
-    let run_id_after_first = status_after_first.run_id;
+    let workflow_after_first =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("get_workflow");
+    let run_id_after_first = workflow_after_first.run_id.unwrap_or(0);
 
     // Second reinit while the first task is still active: must return the existing task
     // with the *same* task id and NOT bump run_id again.
@@ -3079,12 +3083,14 @@ fn test_reinitialize_async_returns_existing_task_without_mutating(start_server: 
         "second reinit should return the existing task's id, not a new one"
     );
 
-    let status_after_second = apis::workflows_api::get_workflow_status(&config, workflow_id)
-        .expect("get_workflow_status");
+    let workflow_after_second =
+        apis::workflows_api::get_workflow(&config, workflow_id).expect("get_workflow");
     assert_eq!(
-        status_after_second.run_id, run_id_after_first,
+        workflow_after_second.run_id.unwrap_or(0),
+        run_id_after_first,
         "run_id must not be bumped again when a task is already active; got {} then {}",
-        run_id_after_first, status_after_second.run_id
+        run_id_after_first,
+        workflow_after_second.run_id.unwrap_or(0),
     );
 
     // Let the task finish so the test doesn't leak.

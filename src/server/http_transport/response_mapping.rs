@@ -555,6 +555,11 @@ map_response_std!(
     CancelWorkflowResponse,
     SuccessfulResponse
 );
+map_response_std!(
+    archive_workflow_response,
+    ArchiveWorkflowResponse,
+    SuccessfulResponse
+);
 map_response_unprocessable!(
     claim_jobs_based_on_resources_response,
     ClaimJobsBasedOnResources,
@@ -637,16 +642,6 @@ map_response_std!(
 map_response_unprocessable!(
     reset_workflow_status_response,
     ResetWorkflowStatusResponse,
-    SuccessfulResponse
-);
-map_response_std!(
-    get_workflow_status_response,
-    GetWorkflowStatusResponse,
-    SuccessfulResponse
-);
-map_response_std!(
-    update_workflow_status_response,
-    UpdateWorkflowStatusResponse,
     SuccessfulResponse
 );
 pub(crate) fn json_response<T>(body: &T) -> Response<Body>

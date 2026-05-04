@@ -230,10 +230,10 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         }
     }
 
-    let run_id = match apis::workflows_api::get_workflow_status(&config, workflow_id) {
-        Ok(status) => status.run_id,
+    let run_id = match apis::workflows_api::get_workflow(&config, workflow_id) {
+        Ok(workflow) => workflow.run_id.unwrap_or(0),
         Err(e) => {
-            eprintln!("Error getting workflow status: {}", e);
+            eprintln!("Error getting workflow: {}", e);
             std::process::exit(1);
         }
     };

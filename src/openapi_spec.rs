@@ -7,10 +7,10 @@ use utoipa::ToSchema;
 
 use crate::api_version::HTTP_API_VERSION;
 use crate::models::{
-    AccessCheckResponse, AccessGroupModel, BatchCompleteJobsRequest, BatchCompleteJobsResponse,
-    ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
-    ComputeNodeModel, ComputeNodesResources, CreateJobsResponse, DeleteCountResponse,
-    DeleteRoCrateEntitiesResponse, EventModel, FailureHandlerModel, FileModel,
+    AccessCheckResponse, AccessGroupModel, ArchiveWorkflowRequest, BatchCompleteJobsRequest,
+    BatchCompleteJobsResponse, ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources,
+    ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources, CreateJobsResponse,
+    DeleteCountResponse, DeleteRoCrateEntitiesResponse, EventModel, FailureHandlerModel, FileModel,
     GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
     JobCompletionEntry, JobCompletionError, JobDependencyModel, JobFileRelationshipModel, JobModel,
     JobStatus, JobUserDataRelationshipModel, JobsModel, ListAccessGroupsResponse,
@@ -25,7 +25,7 @@ use crate::models::{
     RemoteWorkerModel, ResetJobStatusResponse, ResourceRequirementsModel, ResultModel,
     RoCrateEntityModel, ScheduledComputeNodesModel, SlurmSchedulerModel, SlurmStatsModel,
     UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
-    WorkflowModel, WorkflowStatusModel,
+    WorkflowModel,
 };
 
 #[allow(unused_imports)]
@@ -131,23 +131,22 @@ mod openapi_workflow_action_paths {
 #[allow(unused_imports)]
 mod openapi_workflow_paths {
     pub use crate::server::live_router::{
-        __path_batch_complete_jobs, __path_cancel_workflow, __path_claim_jobs_based_on_resources,
-        __path_claim_next_jobs, __path_create_workflow, __path_delete_workflow,
-        __path_get_active_task_for_workflow, __path_get_ready_job_requirements,
-        __path_get_workflow, __path_get_workflow_status, __path_initialize_jobs,
+        __path_archive_workflow, __path_batch_complete_jobs, __path_cancel_workflow,
+        __path_claim_jobs_based_on_resources, __path_claim_next_jobs, __path_create_workflow,
+        __path_delete_workflow, __path_get_active_task_for_workflow,
+        __path_get_ready_job_requirements, __path_get_workflow, __path_initialize_jobs,
         __path_is_workflow_complete, __path_is_workflow_uninitialized,
         __path_list_job_dependencies, __path_list_job_file_relationships, __path_list_job_ids,
         __path_list_job_user_data_relationships, __path_list_missing_user_data,
         __path_list_required_existing_files, __path_list_workflows,
         __path_process_changed_job_inputs, __path_reset_job_status, __path_reset_workflow_status,
-        __path_update_workflow, __path_update_workflow_status, batch_complete_jobs,
-        cancel_workflow, claim_jobs_based_on_resources, claim_next_jobs, create_workflow,
-        delete_workflow, get_active_task_for_workflow, get_ready_job_requirements, get_workflow,
-        get_workflow_status, initialize_jobs, is_workflow_complete, is_workflow_uninitialized,
-        list_job_dependencies, list_job_file_relationships, list_job_ids,
-        list_job_user_data_relationships, list_missing_user_data, list_required_existing_files,
-        list_workflows, process_changed_job_inputs, reset_job_status, reset_workflow_status,
-        update_workflow, update_workflow_status,
+        __path_update_workflow, archive_workflow, batch_complete_jobs, cancel_workflow,
+        claim_jobs_based_on_resources, claim_next_jobs, create_workflow, delete_workflow,
+        get_active_task_for_workflow, get_ready_job_requirements, get_workflow, initialize_jobs,
+        is_workflow_complete, is_workflow_uninitialized, list_job_dependencies,
+        list_job_file_relationships, list_job_ids, list_job_user_data_relationships,
+        list_missing_user_data, list_required_existing_files, list_workflows,
+        process_changed_job_inputs, reset_job_status, reset_workflow_status, update_workflow,
     };
 }
 
@@ -521,8 +520,7 @@ fn resolve_schema_properties<'a>(
         openapi_workflow_paths::is_workflow_uninitialized,
         openapi_workflow_paths::reset_workflow_status,
         openapi_workflow_paths::reset_job_status,
-        openapi_workflow_paths::get_workflow_status,
-        openapi_workflow_paths::update_workflow_status,
+        openapi_workflow_paths::archive_workflow,
         openapi_workflow_paths::claim_jobs_based_on_resources,
         openapi_workflow_paths::claim_next_jobs,
         openapi_workflow_paths::batch_complete_jobs,
@@ -588,6 +586,7 @@ fn resolve_schema_properties<'a>(
         DeleteRoCrateEntitiesResponse,
         ReloadAuthResponse,
         WorkflowModel,
+        ArchiveWorkflowRequest,
         ListWorkflowsResponse,
         ComputeNodesResources,
         ClaimJobsBasedOnResources,
@@ -607,7 +606,6 @@ fn resolve_schema_properties<'a>(
         ProcessChangedJobInputsResponse,
         GetReadyJobRequirementsResponse,
         ListRequiredExistingFilesResponse,
-        WorkflowStatusModel,
         IsCompleteResponse,
         IsUninitializedResponse,
         ResetJobStatusResponse,
@@ -1961,22 +1959,6 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_operation_id(
         source,
         &emitted,
-        "/workflows/{id}/status",
-        "get",
-        "get_workflow_status",
-        &mut issues,
-    );
-    check_operation_id(
-        source,
-        &emitted,
-        "/workflows/{id}/status",
-        "put",
-        "update_workflow_status",
-        &mut issues,
-    );
-    check_operation_id(
-        source,
-        &emitted,
         "/workflows/{id}/claim_jobs_based_on_resources/{limit}",
         "post",
         "claim_jobs_based_on_resources",
@@ -2074,9 +2056,11 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "slurm_defaults",
             "use_pending_failed",
             "enable_ro_crate",
-            "status_id",
             "slurm_config",
             "execution_config",
+            "run_id",
+            "is_canceled",
+            "is_archived",
         ],
         &mut issues,
     );
@@ -2095,24 +2079,8 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     );
     check_component_properties(
         &emitted,
-        "WorkflowStatusModel",
-        &[
-            "id",
-            "is_canceled",
-            "is_archived",
-            "run_id",
-            "has_detected_need_to_run_completion_script",
-        ],
-        &mut issues,
-    );
-    check_component_properties(
-        &emitted,
         "IsCompleteResponse",
-        &[
-            "is_canceled",
-            "is_complete",
-            "needs_to_run_completion_script",
-        ],
+        &["is_canceled", "is_complete"],
         &mut issues,
     );
     check_component_properties(
@@ -2371,7 +2339,6 @@ mod tests {
         assert!(yaml.contains("/admin/reload-auth"));
         assert!(yaml.contains("/user_data"));
         assert!(yaml.contains("/workflows"));
-        assert!(yaml.contains("/workflows/{id}/status"));
         assert!(yaml.contains("/workflows/{id}/claim_jobs_based_on_resources/{limit}"));
         assert!(yaml.contains("/workflows/{id}/claim_next_jobs"));
         assert!(yaml.contains("/workflows/{id}/job_dependencies"));
@@ -2404,7 +2371,6 @@ mod tests {
         assert!(yaml.contains("reload_auth"));
         assert!(yaml.contains("list_user_data"));
         assert!(yaml.contains("list_workflows"));
-        assert!(yaml.contains("get_workflow_status"));
         assert!(yaml.contains("claim_jobs_based_on_resources"));
         assert!(yaml.contains("claim_next_jobs"));
         assert!(yaml.contains("list_job_dependencies"));

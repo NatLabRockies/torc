@@ -121,10 +121,10 @@ fn fail_orphaned_slurm_jobs(
     workflow_id: i64,
     dry_run: bool,
 ) -> Result<(usize, Vec<OrphanedJobDetail>), String> {
-    // Get workflow status to retrieve run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .map_err(|e| format!("Failed to get workflow status: {}", e))?;
-    let run_id = workflow_status.run_id;
+    // Get workflow to retrieve run_id
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Failed to get workflow: {}", e))?;
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Get all scheduled compute nodes with status="active" and scheduler_type="slurm"
     let scheduled_nodes = paginate_scheduled_compute_nodes(
@@ -497,10 +497,10 @@ fn fail_orphaned_running_jobs(
     workflow_id: i64,
     dry_run: bool,
 ) -> Result<(usize, Vec<OrphanedJobDetail>), String> {
-    // Get workflow status to retrieve run_id
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .map_err(|e| format!("Failed to get workflow status: {}", e))?;
-    let run_id = workflow_status.run_id;
+    // Get workflow to retrieve run_id
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Failed to get workflow: {}", e))?;
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Check for active compute nodes
     let active_nodes_response = apis::compute_nodes_api::list_compute_nodes(

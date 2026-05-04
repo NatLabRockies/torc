@@ -1896,9 +1896,12 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
     }
 
     // Verify workflow was canceled
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    assert!(workflow_status.is_canceled, "Workflow should be canceled");
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    assert!(
+        workflow.is_canceled.unwrap_or(false),
+        "Workflow should be canceled"
+    );
 
     // Get the scheduled compute node
     let scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(

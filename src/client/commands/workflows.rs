@@ -2162,32 +2162,18 @@ fn handle_archive(config: &Configuration, is_archived: &str, workflow_ids: &[i64
     };
 
     for workflow_id in ids_to_update {
-        // First, get the current workflow status
-        match apis::workflows_api::get_workflow_status(config, workflow_id) {
-            Ok(mut status) => {
-                // Set is_archived to the specified value
-                status.is_archived = Some(is_archived_bool);
-
-                // Update the workflow status
-                match apis::workflows_api::update_workflow_status(config, workflow_id, status) {
-                    Ok(_) => {
-                        updated_workflows.push(workflow_id);
-                        if format != "json" {
-                            println!("Successfully {} workflow {}", action_past, workflow_id);
-                        }
-                    }
-                    Err(e) => {
-                        let error_msg =
-                            format!("Failed to {} workflow {}: {}", action, workflow_id, e);
-                        errors.push(error_msg.clone());
-                        if format != "json" {
-                            eprintln!("Error: {}", error_msg);
-                        }
-                    }
+        let request = models::ArchiveWorkflowRequest {
+            is_archived: is_archived_bool,
+        };
+        match apis::workflows_api::archive_workflow(config, workflow_id, request) {
+            Ok(_) => {
+                updated_workflows.push(workflow_id);
+                if format != "json" {
+                    println!("Successfully {} workflow {}", action_past, workflow_id);
                 }
             }
             Err(e) => {
-                let error_msg = format!("Failed to get status for workflow {}: {}", workflow_id, e);
+                let error_msg = format!("Failed to {} workflow {}: {}", action, workflow_id, e);
                 errors.push(error_msg.clone());
                 if format != "json" {
                     eprintln!("Error: {}", error_msg);

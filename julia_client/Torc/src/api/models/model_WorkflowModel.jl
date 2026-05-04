@@ -15,13 +15,15 @@
         env=nothing,
         execution_config=nothing,
         id=nothing,
+        is_archived=nothing,
+        is_canceled=nothing,
         metadata=nothing,
         name=nothing,
         project=nothing,
         resource_monitor_config=nothing,
+        run_id=nothing,
         slurm_config=nothing,
         slurm_defaults=nothing,
-        status_id=nothing,
         timestamp=nothing,
         use_pending_failed=nothing,
         user=nothing,
@@ -37,13 +39,15 @@
     - env::Dict{String, String}
     - execution_config::String
     - id::Int64
+    - is_archived::Bool : True when the workflow has been archived. Read-only on the API: set via &#x60;POST /workflows/{id}/archive&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
+    - is_canceled::Bool : True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via &#x60;POST /workflows/{id}/cancel&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
     - metadata::String
     - name::String
     - project::String
     - resource_monitor_config::String
+    - run_id::Int64 : Current run number; incremented on each restart/recovery. Read-only on the API: incremented as a side effect of &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
     - slurm_config::String
     - slurm_defaults::String
-    - status_id::Int64
     - timestamp::String
     - use_pending_failed::Bool
     - user::String
@@ -59,25 +63,27 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     env::Union{Nothing, Dict{String, String}} = nothing
     execution_config::Union{Nothing, String} = nothing
     id::Union{Nothing, Int64} = nothing
+    is_archived::Union{Nothing, Bool} = nothing
+    is_canceled::Union{Nothing, Bool} = nothing
     metadata::Union{Nothing, String} = nothing
     name::Union{Nothing, String} = nothing
     project::Union{Nothing, String} = nothing
     resource_monitor_config::Union{Nothing, String} = nothing
+    run_id::Union{Nothing, Int64} = nothing
     slurm_config::Union{Nothing, String} = nothing
     slurm_defaults::Union{Nothing, String} = nothing
-    status_id::Union{Nothing, Int64} = nothing
     timestamp::Union{Nothing, String} = nothing
     use_pending_failed::Union{Nothing, Bool} = nothing
     user::Union{Nothing, String} = nothing
 
-    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, env, execution_config, id, metadata, name, project, resource_monitor_config, slurm_config, slurm_defaults, status_id, timestamp, use_pending_failed, user, )
-        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, env, execution_config, id, metadata, name, project, resource_monitor_config, slurm_config, slurm_defaults, status_id, timestamp, use_pending_failed, user, )
+    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_config, slurm_defaults, timestamp, use_pending_failed, user, )
+        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_config, slurm_defaults, timestamp, use_pending_failed, user, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowModel
 
-const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"String", Symbol("id")=>"Int64", Symbol("metadata")=>"String", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"String", Symbol("slurm_config")=>"String", Symbol("slurm_defaults")=>"String", Symbol("status_id")=>"Int64", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
+const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"String", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("metadata")=>"String", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"String", Symbol("run_id")=>"Int64", Symbol("slurm_config")=>"String", Symbol("slurm_defaults")=>"String", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
 OpenAPI.property_type(::Type{ WorkflowModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowModel)
@@ -97,13 +103,15 @@ function OpenAPI.validate_properties(o::WorkflowModel)
     OpenAPI.validate_property(WorkflowModel, Symbol("env"), o.env)
     OpenAPI.validate_property(WorkflowModel, Symbol("execution_config"), o.execution_config)
     OpenAPI.validate_property(WorkflowModel, Symbol("id"), o.id)
+    OpenAPI.validate_property(WorkflowModel, Symbol("is_archived"), o.is_archived)
+    OpenAPI.validate_property(WorkflowModel, Symbol("is_canceled"), o.is_canceled)
     OpenAPI.validate_property(WorkflowModel, Symbol("metadata"), o.metadata)
     OpenAPI.validate_property(WorkflowModel, Symbol("name"), o.name)
     OpenAPI.validate_property(WorkflowModel, Symbol("project"), o.project)
     OpenAPI.validate_property(WorkflowModel, Symbol("resource_monitor_config"), o.resource_monitor_config)
+    OpenAPI.validate_property(WorkflowModel, Symbol("run_id"), o.run_id)
     OpenAPI.validate_property(WorkflowModel, Symbol("slurm_config"), o.slurm_config)
     OpenAPI.validate_property(WorkflowModel, Symbol("slurm_defaults"), o.slurm_defaults)
-    OpenAPI.validate_property(WorkflowModel, Symbol("status_id"), o.status_id)
     OpenAPI.validate_property(WorkflowModel, Symbol("timestamp"), o.timestamp)
     OpenAPI.validate_property(WorkflowModel, Symbol("use_pending_failed"), o.use_pending_failed)
     OpenAPI.validate_property(WorkflowModel, Symbol("user"), o.user)
@@ -142,9 +150,11 @@ function OpenAPI.validate_property(::Type{ WorkflowModel }, name::Symbol, val)
 
 
 
-    if name === Symbol("status_id")
+    if name === Symbol("run_id")
         OpenAPI.validate_param(name, "WorkflowModel", :format, val, "int64")
     end
+
+
 
 
 

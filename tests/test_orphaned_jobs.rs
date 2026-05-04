@@ -79,9 +79,9 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Create a compute node to start the job on
     let compute_node = models::ComputeNodeModel::new(
@@ -153,9 +153,9 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Create compute node
     let compute_node = models::ComputeNodeModel::new(
@@ -293,9 +293,9 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Claim jobs (transition from Ready to Pending)
     apis::workflows_api::claim_next_jobs(config, workflow_id, Some(2))
@@ -510,9 +510,9 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Claim all jobs (transition from Ready to Pending)
     apis::workflows_api::claim_next_jobs(config, workflow_id, Some(4))
@@ -648,9 +648,9 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Get the run_id from workflow status
-    let workflow_status = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .expect("Failed to get workflow status");
-    let run_id = workflow_status.run_id;
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
 
     // Create compute node and start job
     let compute_node = models::ComputeNodeModel::new(
