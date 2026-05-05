@@ -1643,26 +1643,23 @@ impl JobRunner {
 
         let attempt_id = job.attempt_id.unwrap_or(1);
 
-        let input_file_paths: Vec<String> = job
-            .input_file_ids
-            .clone()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|file_id| {
+        let mut input_file_paths = Vec::new();
+        if let Some(input_file_ids) = job.input_file_ids.clone() {
+            input_file_paths.reserve(input_file_ids.len());
+            for file_id in input_file_ids {
                 match self.send_with_retries(|| {
                     Self::box_retry_error(apis::files_api::get_file(&self.config, file_id))
                 }) {
-                    Ok(file) => Some(file.path),
+                    Ok(file) => input_file_paths.push(file.path),
                     Err(e) => {
                         warn!(
                             "Could not fetch input file {} for RO-Crate creation on job {}: {}",
                             file_id, job_id, e
                         );
-                        None
                     }
                 }
-            })
-            .collect();
+            }
+        }
 
         // Collect output file paths for the CreateAction
         let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();

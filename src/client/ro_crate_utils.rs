@@ -263,29 +263,22 @@ fn build_workflow_plan_entity(workflow_id: i64, workflow_name: &str) -> RoCrateE
     }
 }
 
-fn build_workflow_run_entity(
+fn build_workflow_run_entity_base(
     workflow_id: i64,
     run_id: i64,
     workflow_name: &str,
-    start_time: DateTime<Utc>,
-    end_time: Option<DateTime<Utc>>,
 ) -> RoCrateEntityModel {
-    let mut metadata = serde_json::json!({
+    let metadata = serde_json::json!({
         "@id": format!("#torc-run-{}", run_id),
         "@type": typed_entity("CreateAction", "prov:Activity"),
         "name": format!("{} Run {}", workflow_name, run_id),
         "prov:hadPlan": id_ref("#torc-workflow"),
         "instrument": id_ref(format!("#software-torc-run-{}", run_id)),
-        "startTime": start_time.to_rfc3339(),
         "prov:wasAssociatedWith": [
             id_ref(format!("#software-torc-run-{}", run_id)),
             id_ref(format!("#software-torc-server-run-{}", run_id))
         ]
     });
-
-    if let Some(end_time) = end_time {
-        metadata["endTime"] = serde_json::json!(end_time.to_rfc3339());
-    }
 
     RoCrateEntityModel {
         id: None,
@@ -295,6 +288,47 @@ fn build_workflow_run_entity(
         entity_type: "CreateAction".to_string(),
         metadata: metadata.to_string(),
     }
+}
+
+fn apply_workflow_run_entity_times(
+    entity: &mut RoCrateEntityModel,
+    start_time: DateTime<Utc>,
+    end_time: Option<DateTime<Utc>>,
+) -> bool {
+    let mut metadata = match serde_json::from_str::<serde_json::Value>(&entity.metadata) {
+        Ok(value) => value,
+        Err(e) => {
+            warn!(
+                "Failed to parse RO-Crate run entity metadata for '{}': {}",
+                entity.entity_id, e
+            );
+            return false;
+        }
+    };
+
+    let Some(obj) = metadata.as_object_mut() else {
+        warn!(
+            "RO-Crate run entity metadata for '{}' is not a JSON object",
+            entity.entity_id
+        );
+        return false;
+    };
+
+    obj.insert(
+        "startTime".to_string(),
+        serde_json::json!(start_time.to_rfc3339()),
+    );
+    if let Some(end_time) = end_time {
+        obj.insert(
+            "endTime".to_string(),
+            serde_json::json!(end_time.to_rfc3339()),
+        );
+    } else {
+        obj.remove("endTime");
+    }
+
+    entity.metadata = metadata.to_string();
+    true
 }
 
 fn parse_entity_datetime(entity: &RoCrateEntityModel, field: &str) -> Option<DateTime<Utc>> {
@@ -380,6 +414,59 @@ fn create_or_update_entity_by_entity_id(
     }
 }
 
+fn create_or_update_run_entity(
+    config: &Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    workflow_name: &str,
+) {
+    let run_entity_id = format!("#torc-run-{}", run_id);
+    if let Some(existing_run_entity) = find_entity_by_entity_id(config, workflow_id, &run_entity_id)
+    {
+        let entity_db_id = match existing_run_entity.id {
+            Some(id) => id,
+            None => {
+                warn!("Existing run entity has no ID, cannot update");
+                return;
+            }
+        };
+
+        let start_time =
+            parse_entity_datetime(&existing_run_entity, "startTime").unwrap_or_else(Utc::now);
+        let end_time = parse_entity_datetime(&existing_run_entity, "endTime");
+        let mut updated_run_entity = RoCrateEntityModel {
+            id: Some(entity_db_id),
+            ..build_workflow_run_entity_base(workflow_id, run_id, workflow_name)
+        };
+        if !apply_workflow_run_entity_times(&mut updated_run_entity, start_time, end_time) {
+            return;
+        }
+
+        if let Err(e) = apis::ro_crate_entities_api::update_ro_crate_entity(
+            config,
+            entity_db_id,
+            updated_run_entity,
+        ) {
+            warn!(
+                "Failed to update RO-Crate run entity '{}' (entity_id={}): {}",
+                existing_run_entity.entity_type, existing_run_entity.entity_id, e
+            );
+        }
+        return;
+    }
+
+    let mut new_run_entity = build_workflow_run_entity_base(workflow_id, run_id, workflow_name);
+    if !apply_workflow_run_entity_times(&mut new_run_entity, Utc::now(), None) {
+        return;
+    }
+    if let Err(e) = apis::ro_crate_entities_api::create_ro_crate_entity(config, new_run_entity) {
+        warn!(
+            "Failed to create RO-Crate run entity '{}': {}",
+            run_entity_id, e
+        );
+    }
+}
+
 pub fn create_workflow_provenance_entities(
     config: &Configuration,
     workflow_id: i64,
@@ -389,18 +476,7 @@ pub fn create_workflow_provenance_entities(
     let plan_entity = build_workflow_plan_entity(workflow_id, workflow_name);
     create_or_update_entity_by_entity_id(config, workflow_id, plan_entity);
 
-    let run_entity_id = format!("#torc-run-{}", run_id);
-    let existing_run_entity = find_entity_by_entity_id(config, workflow_id, &run_entity_id);
-    let start_time = existing_run_entity
-        .as_ref()
-        .and_then(|entity| parse_entity_datetime(entity, "startTime"))
-        .unwrap_or_else(Utc::now);
-    let end_time = existing_run_entity
-        .as_ref()
-        .and_then(|entity| parse_entity_datetime(entity, "endTime"));
-    let run_entity =
-        build_workflow_run_entity(workflow_id, run_id, workflow_name, start_time, end_time);
-    create_or_update_entity_by_entity_id(config, workflow_id, run_entity);
+    create_or_update_run_entity(config, workflow_id, run_id, workflow_name);
 }
 
 /// Create or replace an RO-Crate entity for a file.
