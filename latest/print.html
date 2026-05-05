@@ -2589,45 +2589,55 @@ provenance entities</li>
 <h2 id="automatic-entity-generation"><a class="header" href="#automatic-entity-generation">Automatic Entity Generation</a></h2>
 <h3 id="always-recorded-all-workflows"><a class="header" href="#always-recorded-all-workflows">Always recorded (all workflows)</a></h3>
 <p>During workflow initialization, Torc creates <strong>SoftwareApplication</strong> entities for the torc binaries
-(server, job runner, etc.) that processed the workflow. These record the software name and version,
-providing a baseline provenance record even when full RO-Crate tracking is not enabled.</p>
+(server, CLI, job runner, etc.) that processed the workflow. In the current model, these are written
+as both <code>SoftwareApplication</code> and <code>prov:SoftwareAgent</code> so the exported RO-Crate uses a PROV-shaped
+provenance model.</p>
 <h3 id="when-enable_ro_crate-true"><a class="header" href="#when-enable_ro_crate-true">When <code>enable_ro_crate: true</code></a></h3>
 <p>When you enable RO-Crate on a workflow, Torc additionally creates file and job provenance entities:</p>
 <p><strong>During workflow initialization:</strong></p>
 <ul>
 <li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
 <li>Entities include MIME type inference, file size, and modification date</li>
+<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code></li>
 </ul>
 <p><strong>When jobs complete successfully:</strong></p>
 <ul>
 <li>File entities are created for all <strong>output files</strong></li>
 <li>CreateAction entities are created for each job (provenance)</li>
-<li>Output files are linked to their producing job via <code>wasGeneratedBy</code></li>
+<li>Output files are linked to their producing job via <code>prov:wasGeneratedBy</code></li>
+<li>Output files are linked to the workflow run via <code>prov:wasAttributedTo</code></li>
+<li>Output files are linked to file inputs via <code>prov:wasDerivedFrom</code></li>
 </ul>
 <p>This creates a complete provenance graph linking inputs → jobs → outputs.</p>
 <h3 id="entity-structure"><a class="header" href="#entity-structure">Entity Structure</a></h3>
 <p>Automatically generated File entities include:</p>
 <pre><code class="language-json">{
   "@id": "data/output.csv",
-  "@type": "File",
+  "@type": ["File", "prov:Entity"],
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "contentSize": 1024,
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
-  "wasGeneratedBy": { "@id": "#job-42-attempt-1" }
+  "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasDerivedFrom": { "@id": "data/input.csv" }
 }
 </code></pre>
 <p>File entities include SHA256 hashes for integrity verification when the file is readable.</p>
 <p>Job provenance is captured as CreateAction entities:</p>
 <pre><code class="language-json">{
   "@id": "#job-42-attempt-1",
-  "@type": "CreateAction",
+  "@type": ["CreateAction", "prov:Activity"],
   "name": "process_data",
-  "instrument": { "@id": "#workflow-123" },
+  "prov:hadPlan": { "@id": "#torc-workflow" },
+  "isPartOf": { "@id": "#torc-run-1" },
+  "instrument": { "@id": "#software-torc-run-1" },
+  "prov:used": { "@id": "data/input.csv" },
   "result": [{ "@id": "data/output.csv" }]
 }
 </code></pre>
+<p>The exported <code>@context</code> includes the <code>prov</code> namespace.</p>
 <h2 id="enabling-automatic-ro-crate"><a class="header" href="#enabling-automatic-ro-crate">Enabling Automatic RO-Crate</a></h2>
 <p>Add <code>enable_ro_crate: true</code> to your workflow specification:</p>
 <pre><code class="language-yaml">name: my_workflow
@@ -2652,8 +2662,9 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 <p>After running this workflow:</p>
 <ul>
 <li><code>input_data</code> will have an RO-Crate File entity (created during initialization)</li>
-<li><code>output_data</code> will have an RO-Crate File entity with <code>wasGeneratedBy</code> linking to the job</li>
+<li><code>output_data</code> will have an RO-Crate File entity with <code>prov:wasGeneratedBy</code> linking to the job</li>
 <li>A CreateAction entity will describe the <code>process</code> job execution</li>
+<li><code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> will describe the workflow plan and run activity</li>
 </ul>
 <h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
 <p>Many workflows produce directory-based outputs rather than single files—for example,
@@ -2683,9 +2694,9 @@ contents</li>
 <h3 id="hash-modes"><a class="header" href="#hash-modes">Hash Modes</a></h3>
 <p>Torc supports three hash modes for datasets:</p>
 <div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th><th>Speed</th><th>Detects</th></tr></thead><tbody>
-<tr><td><code>manifest</code></td><td>Hash of sorted (path, size, mtime) list</td><td>Fast</td><td>File additions, deletions, renames</td></tr>
-<tr><td><code>content</code></td><td>SHA256 of all file contents (Merkle tree)</td><td>Slow</td><td>Any content change</td></tr>
-<tr><td><code>none</code></td><td>No hash, only file count and size</td><td>Fastest</td><td>Nothing (stats only)</td></tr>
+<tr><td><code>manifest</code></td><td>Hash of sorted path/size/mtime</td><td>Fast</td><td>Additions, deletions, move</td></tr>
+<tr><td><code>content</code></td><td>SHA256 of all file contents</td><td>Slow</td><td>Any content change</td></tr>
+<tr><td><code>none</code></td><td>No hash, only file count and size</td><td>Fastest</td><td>Nothing</td></tr>
 </tbody></table>
 </div>
 <p>For large datasets, <code>manifest</code> mode provides a good balance—it detects structural changes without
@@ -4774,8 +4785,10 @@ workflow is created. Files that exist get their modification time recorded.</p>
 <ul>
 <li><strong>Input files</strong> (files that exist on disk) get File entities created during workflow
 initialization</li>
-<li><strong>Output files</strong> get File entities with provenance (<code>wasGeneratedBy</code>) created when jobs complete</li>
-<li><strong>Jobs</strong> get CreateAction entities linking to their output files</li>
+<li><strong>Output files</strong> get File entities with provenance (<code>prov:wasGeneratedBy</code>) created when jobs
+complete</li>
+<li><strong>Jobs</strong> get CreateAction entities linking inputs, outputs, plan, and run metadata</li>
+<li><strong>Workflow runs</strong> get <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> provenance entities</li>
 </ul>
 <p>After running the workflow, export the metadata:</p>
 <pre><code class="language-bash">torc ro-crate export 123 -o ro-crate-metadata.json
@@ -4783,10 +4796,11 @@ initialization</li>
 <p>The exported document includes complete provenance:</p>
 <pre><code class="language-json">{
   "@id": "data/output.csv",
-  "@type": "File",
+  "@type": ["File", "prov:Entity"],
   "name": "output.csv",
   "encodingFormat": "text/csv",
-  "wasGeneratedBy": { "@id": "#job-1-attempt-1" }
+  "prov:wasGeneratedBy": { "@id": "#job-1-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" }
 }
 </code></pre>
 <h2 id="manual-entity-creation"><a class="header" href="#manual-entity-creation">Manual Entity Creation</a></h2>
@@ -4811,7 +4825,7 @@ torc ro-crate export 123 -o ro-crate-metadata.json
 </tbody></table>
 </div>
 <p>Entities are stored per-workflow. The <code>export</code> command assembles them into a complete RO-Crate
-document with the required metadata descriptor and root dataset.</p>
+document with the required metadata descriptor, root dataset, and PROV-aware context.</p>
 <h2 id="creating-entities"><a class="header" href="#creating-entities">Creating Entities</a></h2>
 <h3 id="file-entity"><a class="header" href="#file-entity">File entity</a></h3>
 <p>Describe a single output file:</p>
@@ -4961,7 +4975,10 @@ torc ro-crate export 123
 </code></pre>
 <p>The exported document has this structure:</p>
 <pre><code class="language-json">{
-  "@context": "https://w3id.org/ro/crate/1.1/context",
+  "@context": [
+    "https://w3id.org/ro/crate/1.1/context",
+    { "prov": "http://www.w3.org/ns/prov#" }
+  ],
   "@graph": [
     {
       "@id": "ro-crate-metadata.json",
@@ -4980,21 +4997,22 @@ torc ro-crate export 123
     },
     {
       "@id": "data/output.parquet",
-      "@type": "File",
+      "@type": ["File", "prov:Entity"],
       "name": "Simulation Output",
-      "encodingFormat": "application/x-parquet"
+      "encodingFormat": "application/x-parquet",
+      "prov:wasGeneratedBy": {"@id": "#job-1-attempt-1"}
     },
     {
       "@id": "https://example.com/simulation/v2.1",
-      "@type": "SoftwareApplication",
+      "@type": ["SoftwareApplication", "prov:SoftwareAgent"],
       "name": "My Simulation",
       "version": "2.1.0"
     }
   ]
 }
 </code></pre>
-<p>The <code>@id</code> and <code>@type</code> fields are always set from the entity record, overriding any values in the
-metadata JSON.</p>
+<p>Torc preserves any explicit <code>@id</code> and <code>@type</code> already present in the stored metadata. If either
+field is missing, the exporter fills it in from the entity record.</p>
 <h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
 <p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
 imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>
@@ -21636,6 +21654,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 <li><a href="specialized/design/./ai-assisted-recovery.html">AI-Assisted Recovery Design</a> - AI-assisted error classification</li>
 <li><a href="specialized/design/./workflow-graph.html">Workflow Graph</a> - Dependency graph implementation</li>
 <li><a href="specialized/design/./interfaces.html">Interface Architecture</a> - Interface design patterns</li>
+<li><a href="specialized/design/./ro-crate.html">RO-Crate Generation Design</a> - RO-Crate entity lifecycle and provenance flow</li>
 <li><a href="specialized/design/./srun-monitoring.html">Slurm Job Step Monitoring</a> - srun wrapping, sstat monitoring, sacct
 collection</li>
 </ul>
@@ -24252,6 +24271,136 @@ Rust-emitted spec</li>
 <li><strong>Generated API clients</strong> from a single OpenAPI spec</li>
 <li><strong>Interface-specific adapters</strong> that translate between user expectations and API semantics</li>
 <li><strong>Consistent data models</strong> shared across all implementations</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="ro-crate-generation-design"><a class="header" href="#ro-crate-generation-design">RO-Crate Generation Design</a></h1>
+<p>This page describes how Torc creates and updates automatic RO-Crate provenance entities in the
+current branch.</p>
+<h2 id="current-model"><a class="header" href="#current-model">Current Model</a></h2>
+<p>The important identity rules are:</p>
+<ul>
+<li>Workflow plan entity: one per workflow, <code>#torc-workflow</code></li>
+<li>Workflow run entity: one per run, <code>#torc-run-{run_id}</code></li>
+<li>Torc software entities: one per run, <code>#software-{binary_name}-run-{run_id}</code></li>
+<li>Job execution entities: one per job attempt, <code>#job-{job_id}-attempt-{attempt_id}</code></li>
+<li>File entities: one per file record/path, updated in place across runs</li>
+</ul>
+<p>That last point is why <code>build_file_entity()</code> does not take <code>run_id</code>. Plain file entities are not
+modeled as run-scoped records. Run-scoped provenance is attached through relationships:</p>
+<ul>
+<li>Output files link to the workflow run with <code>prov:wasAttributedTo</code></li>
+<li>Output files link to the producing job with <code>prov:wasGeneratedBy</code></li>
+<li>Job <code>CreateAction</code> entities link to the run with <code>isPartOf</code></li>
+<li>Job <code>CreateAction</code> entities link to software agents with <code>instrument</code> and <code>prov:wasAssociatedWith</code></li>
+</ul>
+<p>If <code>run_id</code> were written directly into the base file entity metadata again, it would mix a stable
+file identity with run-specific state. The current code instead keeps file identity stable and
+updates the same file entity as a file moves from "input known at initialization" to "output with
+provenance after job completion".</p>
+<p>This design is also consistent with the multi-run behavior covered by
+<code>test_auto_ro_crate_second_run_replaces_entities</code>: file entities are replaced in place, while
+software and job execution entities accumulate across runs and attempts.</p>
+<h2 id="entity-creation-flow"><a class="header" href="#entity-creation-flow">Entity Creation Flow</a></h2>
+<pre class="mermaid">flowchart TD
+    A[Workflow initialize_jobs] --&gt; B{enable_ro_crate?}
+    A --&gt; C[Server creates&lt;br/&gt;#software-torc-server-run-N]
+    A --&gt; D[Client attempts to create&lt;br/&gt;#software-torc-run-N&lt;br/&gt;and optional&lt;br/&gt;#software-torc-slurm-job-runner-run-N]
+
+    B --&gt;|yes| E[Server upserts input File entities&lt;br/&gt;from DB rows with st_mtime]
+    B --&gt;|yes| F[Client creates or updates&lt;br/&gt;#torc-workflow and #torc-run-N]
+    B --&gt;|yes| G[Client creates or updates&lt;br/&gt;input File entities]
+    B --&gt;|no| H[No automatic file provenance]
+
+    G --&gt; I[Workflow execution]
+    E --&gt; I
+    F --&gt; I
+    C --&gt; I
+    D --&gt; I
+
+    I --&gt; J[Job completes successfully]
+    J --&gt; J2{Job has output files?}
+    J2 --&gt;|yes| K[Client refreshes&lt;br/&gt;#torc-workflow and #torc-run-N]
+    J2 --&gt;|yes| L[Client creates&lt;br/&gt;#job-job_id-attempt-attempt_id]
+    J2 --&gt;|yes| M[Client creates or updates&lt;br/&gt;output File entity]
+    J2 --&gt;|no| P[No additional automatic&lt;br/&gt;RO-Crate entities for this job]
+
+    L --&gt; N[Job CreateAction metadata]
+    N --&gt; N1[prov:hadPlan -&gt; #torc-workflow]
+    N --&gt; N2[isPartOf -&gt; #torc-run-N]
+    N --&gt; N3[instrument -&gt; #software-torc-run-N]
+    N --&gt; N4[prov:used -&gt; input file paths]
+    N --&gt; N5[result -&gt; output file paths]
+
+    M --&gt; O[Output File metadata]
+    O --&gt; O1[prov:wasGeneratedBy -&gt; job CreateAction]
+    O --&gt; O2[prov:wasAttributedTo -&gt; #torc-run-N]
+    O --&gt; O3[prov:wasDerivedFrom -&gt; input file paths]
+
+    classDef init fill:#dbeafe,stroke:#1d4ed8,color:#0f172a,stroke-width:2px;
+    classDef software fill:#dcfce7,stroke:#15803d,color:#0f172a,stroke-width:2px;
+    classDef input fill:#fef3c7,stroke:#b45309,color:#0f172a,stroke-width:2px;
+    classDef run fill:#ede9fe,stroke:#6d28d9,color:#0f172a,stroke-width:2px;
+    classDef job fill:#fee2e2,stroke:#b91c1c,color:#0f172a,stroke-width:2px;
+    classDef output fill:#cffafe,stroke:#0f766e,color:#0f172a,stroke-width:2px;
+    classDef disabled fill:#e5e7eb,stroke:#4b5563,color:#111827,stroke-dasharray: 5 3;
+
+    class A,I,J init;
+    class C,D software;
+    class E,G input;
+    class F,K run;
+    class L,N,N1,N2,N3,N4,N5 job;
+    class M,O,O1,O2,O3 output;
+    class H,P disabled;
+</pre>
+<h2 id="what-gets-created"><a class="header" href="#what-gets-created">What Gets Created</a></h2>
+<h3 id="torc-binaries"><a class="header" href="#torc-binaries">Torc binaries</a></h3>
+<ul>
+<li>The server always creates <code>#software-torc-server-run-{run_id}</code> during <code>initialize_jobs()</code></li>
+<li>The client attempts to create run-scoped software entities for <code>torc</code> and, on Linux,
+<code>torc-slurm-job-runner</code></li>
+<li>Client-side software entities are skipped when the corresponding binary cannot be found next to
+the current executable or on <code>PATH</code></li>
+<li>These are <code>SoftwareApplication</code> plus <code>prov:SoftwareAgent</code></li>
+</ul>
+<h3 id="jobs-1"><a class="header" href="#jobs-1">Jobs</a></h3>
+<ul>
+<li>The client creates one <code>CreateAction</code> per successful job completion <strong>that has at least one output
+file</strong></li>
+<li>The entity id is <code>#job-{job_id}-attempt-{attempt_id}</code></li>
+<li>Jobs with no output files currently do not emit an automatic <code>CreateAction</code></li>
+<li>When present, the job entity is the main join point between inputs, outputs, workflow run, and
+software agents</li>
+</ul>
+<h3 id="input-files"><a class="header" href="#input-files">Input files</a></h3>
+<ul>
+<li>Input files are detected by <code>st_mtime IS NOT NULL</code></li>
+<li>During initialization, both the server and the client currently upsert the same input file entity</li>
+<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code></li>
+<li>Input file entities are expected to exist before jobs run, but the code does not rely on them
+being create-only; it is intentionally upsert-based</li>
+</ul>
+<h3 id="output-files"><a class="header" href="#output-files">Output files</a></h3>
+<ul>
+<li>Output file entities are created or replaced after a job succeeds and the file record has been
+refreshed</li>
+<li>If a file already had an entity from initialization or a prior run, the same DB row is updated
+rather than creating a new file entity for each run</li>
+<li>Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
+run-specific identity</li>
+<li>The same successful-job path also refreshes <code>#torc-workflow</code>, refreshes <code>#torc-run-{run_id}</code>, and
+creates the job <code>CreateAction</code>, but only when there is at least one output file to process</li>
+</ul>
+<h2 id="important-asymmetries"><a class="header" href="#important-asymmetries">Important Asymmetries</a></h2>
+<ul>
+<li>Software entities are run-scoped and accumulate across runs</li>
+<li>Job <code>CreateAction</code> entities are attempt-scoped and accumulate across attempts</li>
+<li>File entities are file-scoped and are replaced in place across runs</li>
+</ul>
+<p>These asymmetries are intentional and match <code>tests/test_auto_ro_crate.rs</code>, especially
+<code>test_auto_ro_crate_second_run_replaces_entities</code>, which expects:</p>
+<ul>
+<li>file entity count to stay stable across runs</li>
+<li>software entity count to grow across runs</li>
+<li>output file provenance to point at the newer <code>#torc-run-{run_id}</code></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="api-generation-architecture"><a class="header" href="#api-generation-architecture">API Generation Architecture</a></h1>
 <p>This document describes how Torc's HTTP API contract and generated clients are produced.</p>

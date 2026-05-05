@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Design &amp; Architecture - Torc Documentation</title>
+        <title>RO-Crate Generation Design - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/design/index.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/design/ro-crate.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,34 +184,146 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="design--architecture"><a class="header" href="#design--architecture">Design &amp; Architecture</a></h1>
-<p>Internal design documentation for developers.</p>
+                        <h1 id="ro-crate-generation-design"><a class="header" href="#ro-crate-generation-design">RO-Crate Generation Design</a></h1>
+<p>This page describes how Torc creates and updates automatic RO-Crate provenance entities in the
+current branch.</p>
+<h2 id="current-model"><a class="header" href="#current-model">Current Model</a></h2>
+<p>The important identity rules are:</p>
 <ul>
-<li><a href="./client.html">Client Architecture</a> - Torc client design</li>
-<li><a href="./http-api.html">HTTP API Design</a> - REST API conventions and design principles</li>
-<li><a href="./workflow-actions.html">Workflow Actions</a> - Workflow action system</li>
-<li><a href="./dashboard.html">Web Dashboard Design</a> - Dashboard architecture</li>
-<li><a href="./server.html">Server API Handler</a> - Server implementation</li>
-<li><a href="./database.html">Central Database</a> - Database schema and design</li>
-<li><a href="./recovery.html">Workflow Recovery Design</a> - Recovery system architecture</li>
-<li><a href="./failure-handlers.html">Failure Handler Design</a> - Failure handler implementation</li>
-<li><a href="./ai-assisted-recovery.html">AI-Assisted Recovery Design</a> - AI-assisted error classification</li>
-<li><a href="./workflow-graph.html">Workflow Graph</a> - Dependency graph implementation</li>
-<li><a href="./interfaces.html">Interface Architecture</a> - Interface design patterns</li>
-<li><a href="./ro-crate.html">RO-Crate Generation Design</a> - RO-Crate entity lifecycle and provenance flow</li>
-<li><a href="./srun-monitoring.html">Slurm Job Step Monitoring</a> - srun wrapping, sstat monitoring, sacct
-collection</li>
+<li>Workflow plan entity: one per workflow, <code>#torc-workflow</code></li>
+<li>Workflow run entity: one per run, <code>#torc-run-{run_id}</code></li>
+<li>Torc software entities: one per run, <code>#software-{binary_name}-run-{run_id}</code></li>
+<li>Job execution entities: one per job attempt, <code>#job-{job_id}-attempt-{attempt_id}</code></li>
+<li>File entities: one per file record/path, updated in place across runs</li>
+</ul>
+<p>That last point is why <code>build_file_entity()</code> does not take <code>run_id</code>. Plain file entities are not
+modeled as run-scoped records. Run-scoped provenance is attached through relationships:</p>
+<ul>
+<li>Output files link to the workflow run with <code>prov:wasAttributedTo</code></li>
+<li>Output files link to the producing job with <code>prov:wasGeneratedBy</code></li>
+<li>Job <code>CreateAction</code> entities link to the run with <code>isPartOf</code></li>
+<li>Job <code>CreateAction</code> entities link to software agents with <code>instrument</code> and <code>prov:wasAssociatedWith</code></li>
+</ul>
+<p>If <code>run_id</code> were written directly into the base file entity metadata again, it would mix a stable
+file identity with run-specific state. The current code instead keeps file identity stable and
+updates the same file entity as a file moves from "input known at initialization" to "output with
+provenance after job completion".</p>
+<p>This design is also consistent with the multi-run behavior covered by
+<code>test_auto_ro_crate_second_run_replaces_entities</code>: file entities are replaced in place, while
+software and job execution entities accumulate across runs and attempts.</p>
+<h2 id="entity-creation-flow"><a class="header" href="#entity-creation-flow">Entity Creation Flow</a></h2>
+<pre class="mermaid">flowchart TD
+    A[Workflow initialize_jobs] --&gt; B{enable_ro_crate?}
+    A --&gt; C[Server creates&lt;br/&gt;#software-torc-server-run-N]
+    A --&gt; D[Client attempts to create&lt;br/&gt;#software-torc-run-N&lt;br/&gt;and optional&lt;br/&gt;#software-torc-slurm-job-runner-run-N]
+
+    B --&gt;|yes| E[Server upserts input File entities&lt;br/&gt;from DB rows with st_mtime]
+    B --&gt;|yes| F[Client creates or updates&lt;br/&gt;#torc-workflow and #torc-run-N]
+    B --&gt;|yes| G[Client creates or updates&lt;br/&gt;input File entities]
+    B --&gt;|no| H[No automatic file provenance]
+
+    G --&gt; I[Workflow execution]
+    E --&gt; I
+    F --&gt; I
+    C --&gt; I
+    D --&gt; I
+
+    I --&gt; J[Job completes successfully]
+    J --&gt; J2{Job has output files?}
+    J2 --&gt;|yes| K[Client refreshes&lt;br/&gt;#torc-workflow and #torc-run-N]
+    J2 --&gt;|yes| L[Client creates&lt;br/&gt;#job-job_id-attempt-attempt_id]
+    J2 --&gt;|yes| M[Client creates or updates&lt;br/&gt;output File entity]
+    J2 --&gt;|no| P[No additional automatic&lt;br/&gt;RO-Crate entities for this job]
+
+    L --&gt; N[Job CreateAction metadata]
+    N --&gt; N1[prov:hadPlan -&gt; #torc-workflow]
+    N --&gt; N2[isPartOf -&gt; #torc-run-N]
+    N --&gt; N3[instrument -&gt; #software-torc-run-N]
+    N --&gt; N4[prov:used -&gt; input file paths]
+    N --&gt; N5[result -&gt; output file paths]
+
+    M --&gt; O[Output File metadata]
+    O --&gt; O1[prov:wasGeneratedBy -&gt; job CreateAction]
+    O --&gt; O2[prov:wasAttributedTo -&gt; #torc-run-N]
+    O --&gt; O3[prov:wasDerivedFrom -&gt; input file paths]
+
+    classDef init fill:#dbeafe,stroke:#1d4ed8,color:#0f172a,stroke-width:2px;
+    classDef software fill:#dcfce7,stroke:#15803d,color:#0f172a,stroke-width:2px;
+    classDef input fill:#fef3c7,stroke:#b45309,color:#0f172a,stroke-width:2px;
+    classDef run fill:#ede9fe,stroke:#6d28d9,color:#0f172a,stroke-width:2px;
+    classDef job fill:#fee2e2,stroke:#b91c1c,color:#0f172a,stroke-width:2px;
+    classDef output fill:#cffafe,stroke:#0f766e,color:#0f172a,stroke-width:2px;
+    classDef disabled fill:#e5e7eb,stroke:#4b5563,color:#111827,stroke-dasharray: 5 3;
+
+    class A,I,J init;
+    class C,D software;
+    class E,G input;
+    class F,K run;
+    class L,N,N1,N2,N3,N4,N5 job;
+    class M,O,O1,O2,O3 output;
+    class H,P disabled;
+</pre>
+<h2 id="what-gets-created"><a class="header" href="#what-gets-created">What Gets Created</a></h2>
+<h3 id="torc-binaries"><a class="header" href="#torc-binaries">Torc binaries</a></h3>
+<ul>
+<li>The server always creates <code>#software-torc-server-run-{run_id}</code> during <code>initialize_jobs()</code></li>
+<li>The client attempts to create run-scoped software entities for <code>torc</code> and, on Linux,
+<code>torc-slurm-job-runner</code></li>
+<li>Client-side software entities are skipped when the corresponding binary cannot be found next to
+the current executable or on <code>PATH</code></li>
+<li>These are <code>SoftwareApplication</code> plus <code>prov:SoftwareAgent</code></li>
+</ul>
+<h3 id="jobs"><a class="header" href="#jobs">Jobs</a></h3>
+<ul>
+<li>The client creates one <code>CreateAction</code> per successful job completion <strong>that has at least one output
+file</strong></li>
+<li>The entity id is <code>#job-{job_id}-attempt-{attempt_id}</code></li>
+<li>Jobs with no output files currently do not emit an automatic <code>CreateAction</code></li>
+<li>When present, the job entity is the main join point between inputs, outputs, workflow run, and
+software agents</li>
+</ul>
+<h3 id="input-files"><a class="header" href="#input-files">Input files</a></h3>
+<ul>
+<li>Input files are detected by <code>st_mtime IS NOT NULL</code></li>
+<li>During initialization, both the server and the client currently upsert the same input file entity</li>
+<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code></li>
+<li>Input file entities are expected to exist before jobs run, but the code does not rely on them
+being create-only; it is intentionally upsert-based</li>
+</ul>
+<h3 id="output-files"><a class="header" href="#output-files">Output files</a></h3>
+<ul>
+<li>Output file entities are created or replaced after a job succeeds and the file record has been
+refreshed</li>
+<li>If a file already had an entity from initialization or a prior run, the same DB row is updated
+rather than creating a new file entity for each run</li>
+<li>Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
+run-specific identity</li>
+<li>The same successful-job path also refreshes <code>#torc-workflow</code>, refreshes <code>#torc-run-{run_id}</code>, and
+creates the job <code>CreateAction</code>, but only when there is at least one output file to process</li>
+</ul>
+<h2 id="important-asymmetries"><a class="header" href="#important-asymmetries">Important Asymmetries</a></h2>
+<ul>
+<li>Software entities are run-scoped and accumulate across runs</li>
+<li>Job <code>CreateAction</code> entities are attempt-scoped and accumulate across attempts</li>
+<li>File entities are file-scoped and are replaced in place across runs</li>
+</ul>
+<p>These asymmetries are intentional and match <code>tests/test_auto_ro_crate.rs</code>, especially
+<code>test_auto_ro_crate_second_run_replaces_entities</code>, which expects:</p>
+<ul>
+<li>file entity count to stay stable across runs</li>
+<li>software entity count to grow across runs</li>
+<li>output file provenance to point at the newer <code>#torc-run-{run_id}</code></li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../specialized/tools/shell-completions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../specialized/design/interfaces.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../specialized/design/client.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../specialized/design/api-generation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -221,11 +333,11 @@ collection</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../specialized/tools/shell-completions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../specialized/design/interfaces.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../specialized/design/client.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../specialized/design/api-generation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -215,8 +215,10 @@ workflow is created. Files that exist get their modification time recorded.</p>
 <ul>
 <li><strong>Input files</strong> (files that exist on disk) get File entities created during workflow
 initialization</li>
-<li><strong>Output files</strong> get File entities with provenance (<code>wasGeneratedBy</code>) created when jobs complete</li>
-<li><strong>Jobs</strong> get CreateAction entities linking to their output files</li>
+<li><strong>Output files</strong> get File entities with provenance (<code>prov:wasGeneratedBy</code>) created when jobs
+complete</li>
+<li><strong>Jobs</strong> get CreateAction entities linking inputs, outputs, plan, and run metadata</li>
+<li><strong>Workflow runs</strong> get <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> provenance entities</li>
 </ul>
 <p>After running the workflow, export the metadata:</p>
 <pre><code class="language-bash">torc ro-crate export 123 -o ro-crate-metadata.json
@@ -224,10 +226,11 @@ initialization</li>
 <p>The exported document includes complete provenance:</p>
 <pre><code class="language-json">{
   "@id": "data/output.csv",
-  "@type": "File",
+  "@type": ["File", "prov:Entity"],
   "name": "output.csv",
   "encodingFormat": "text/csv",
-  "wasGeneratedBy": { "@id": "#job-1-attempt-1" }
+  "prov:wasGeneratedBy": { "@id": "#job-1-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" }
 }
 </code></pre>
 <h2 id="manual-entity-creation"><a class="header" href="#manual-entity-creation">Manual Entity Creation</a></h2>
@@ -252,7 +255,7 @@ torc ro-crate export 123 -o ro-crate-metadata.json
 </tbody></table>
 </div>
 <p>Entities are stored per-workflow. The <code>export</code> command assembles them into a complete RO-Crate
-document with the required metadata descriptor and root dataset.</p>
+document with the required metadata descriptor, root dataset, and PROV-aware context.</p>
 <h2 id="creating-entities"><a class="header" href="#creating-entities">Creating Entities</a></h2>
 <h3 id="file-entity"><a class="header" href="#file-entity">File entity</a></h3>
 <p>Describe a single output file:</p>
@@ -402,7 +405,10 @@ torc ro-crate export 123
 </code></pre>
 <p>The exported document has this structure:</p>
 <pre><code class="language-json">{
-  "@context": "https://w3id.org/ro/crate/1.1/context",
+  "@context": [
+    "https://w3id.org/ro/crate/1.1/context",
+    { "prov": "http://www.w3.org/ns/prov#" }
+  ],
   "@graph": [
     {
       "@id": "ro-crate-metadata.json",
@@ -421,21 +427,22 @@ torc ro-crate export 123
     },
     {
       "@id": "data/output.parquet",
-      "@type": "File",
+      "@type": ["File", "prov:Entity"],
       "name": "Simulation Output",
-      "encodingFormat": "application/x-parquet"
+      "encodingFormat": "application/x-parquet",
+      "prov:wasGeneratedBy": {"@id": "#job-1-attempt-1"}
     },
     {
       "@id": "https://example.com/simulation/v2.1",
-      "@type": "SoftwareApplication",
+      "@type": ["SoftwareApplication", "prov:SoftwareAgent"],
       "name": "My Simulation",
       "version": "2.1.0"
     }
   ]
 }
 </code></pre>
-<p>The <code>@id</code> and <code>@type</code> fields are always set from the entity record, overriding any values in the
-metadata JSON.</p>
+<p>Torc preserves any explicit <code>@id</code> and <code>@type</code> already present in the stored metadata. If either
+field is missing, the exporter fills it in from the entity record.</p>
 <h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
 <p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
 imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>

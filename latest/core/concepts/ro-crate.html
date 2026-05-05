@@ -211,45 +211,55 @@ provenance entities</li>
 <h2 id="automatic-entity-generation"><a class="header" href="#automatic-entity-generation">Automatic Entity Generation</a></h2>
 <h3 id="always-recorded-all-workflows"><a class="header" href="#always-recorded-all-workflows">Always recorded (all workflows)</a></h3>
 <p>During workflow initialization, Torc creates <strong>SoftwareApplication</strong> entities for the torc binaries
-(server, job runner, etc.) that processed the workflow. These record the software name and version,
-providing a baseline provenance record even when full RO-Crate tracking is not enabled.</p>
+(server, CLI, job runner, etc.) that processed the workflow. In the current model, these are written
+as both <code>SoftwareApplication</code> and <code>prov:SoftwareAgent</code> so the exported RO-Crate uses a PROV-shaped
+provenance model.</p>
 <h3 id="when-enable_ro_crate-true"><a class="header" href="#when-enable_ro_crate-true">When <code>enable_ro_crate: true</code></a></h3>
 <p>When you enable RO-Crate on a workflow, Torc additionally creates file and job provenance entities:</p>
 <p><strong>During workflow initialization:</strong></p>
 <ul>
 <li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
 <li>Entities include MIME type inference, file size, and modification date</li>
+<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code></li>
 </ul>
 <p><strong>When jobs complete successfully:</strong></p>
 <ul>
 <li>File entities are created for all <strong>output files</strong></li>
 <li>CreateAction entities are created for each job (provenance)</li>
-<li>Output files are linked to their producing job via <code>wasGeneratedBy</code></li>
+<li>Output files are linked to their producing job via <code>prov:wasGeneratedBy</code></li>
+<li>Output files are linked to the workflow run via <code>prov:wasAttributedTo</code></li>
+<li>Output files are linked to file inputs via <code>prov:wasDerivedFrom</code></li>
 </ul>
 <p>This creates a complete provenance graph linking inputs → jobs → outputs.</p>
 <h3 id="entity-structure"><a class="header" href="#entity-structure">Entity Structure</a></h3>
 <p>Automatically generated File entities include:</p>
 <pre><code class="language-json">{
   "@id": "data/output.csv",
-  "@type": "File",
+  "@type": ["File", "prov:Entity"],
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "contentSize": 1024,
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
-  "wasGeneratedBy": { "@id": "#job-42-attempt-1" }
+  "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasDerivedFrom": { "@id": "data/input.csv" }
 }
 </code></pre>
 <p>File entities include SHA256 hashes for integrity verification when the file is readable.</p>
 <p>Job provenance is captured as CreateAction entities:</p>
 <pre><code class="language-json">{
   "@id": "#job-42-attempt-1",
-  "@type": "CreateAction",
+  "@type": ["CreateAction", "prov:Activity"],
   "name": "process_data",
-  "instrument": { "@id": "#workflow-123" },
+  "prov:hadPlan": { "@id": "#torc-workflow" },
+  "isPartOf": { "@id": "#torc-run-1" },
+  "instrument": { "@id": "#software-torc-run-1" },
+  "prov:used": { "@id": "data/input.csv" },
   "result": [{ "@id": "data/output.csv" }]
 }
 </code></pre>
+<p>The exported <code>@context</code> includes the <code>prov</code> namespace.</p>
 <h2 id="enabling-automatic-ro-crate"><a class="header" href="#enabling-automatic-ro-crate">Enabling Automatic RO-Crate</a></h2>
 <p>Add <code>enable_ro_crate: true</code> to your workflow specification:</p>
 <pre><code class="language-yaml">name: my_workflow
@@ -274,8 +284,9 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 <p>After running this workflow:</p>
 <ul>
 <li><code>input_data</code> will have an RO-Crate File entity (created during initialization)</li>
-<li><code>output_data</code> will have an RO-Crate File entity with <code>wasGeneratedBy</code> linking to the job</li>
+<li><code>output_data</code> will have an RO-Crate File entity with <code>prov:wasGeneratedBy</code> linking to the job</li>
 <li>A CreateAction entity will describe the <code>process</code> job execution</li>
+<li><code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> will describe the workflow plan and run activity</li>
 </ul>
 <h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
 <p>Many workflows produce directory-based outputs rather than single files—for example,
@@ -305,9 +316,9 @@ contents</li>
 <h3 id="hash-modes"><a class="header" href="#hash-modes">Hash Modes</a></h3>
 <p>Torc supports three hash modes for datasets:</p>
 <div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th><th>Speed</th><th>Detects</th></tr></thead><tbody>
-<tr><td><code>manifest</code></td><td>Hash of sorted (path, size, mtime) list</td><td>Fast</td><td>File additions, deletions, renames</td></tr>
-<tr><td><code>content</code></td><td>SHA256 of all file contents (Merkle tree)</td><td>Slow</td><td>Any content change</td></tr>
-<tr><td><code>none</code></td><td>No hash, only file count and size</td><td>Fastest</td><td>Nothing (stats only)</td></tr>
+<tr><td><code>manifest</code></td><td>Hash of sorted path/size/mtime</td><td>Fast</td><td>Additions, deletions, move</td></tr>
+<tr><td><code>content</code></td><td>SHA256 of all file contents</td><td>Slow</td><td>Any content change</td></tr>
+<tr><td><code>none</code></td><td>No hash, only file count and size</td><td>Fastest</td><td>Nothing</td></tr>
 </tbody></table>
 </div>
 <p>For large datasets, <code>manifest</code> mode provides a good balance—it detects structural changes without
