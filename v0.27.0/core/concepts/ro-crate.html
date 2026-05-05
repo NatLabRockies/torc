@@ -1,0 +1,415 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>RO-Crate Provenance - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.27.0/docs/src/core/concepts/ro-crate.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ro-crate-provenance-tracking"><a class="header" href="#ro-crate-provenance-tracking">RO-Crate Provenance Tracking</a></h1>
+<p>Torc supports <a href="https://www.researchobject.org/ro-crate/">Research Object Crate (RO-Crate)</a>, a
+community standard for packaging research data with machine-readable metadata. This enables tracking
+of data provenance—knowing which jobs produced which outputs, what inputs they consumed, and when
+the data was created.</p>
+<h2 id="what-is-ro-crate"><a class="header" href="#what-is-ro-crate">What is RO-Crate?</a></h2>
+<p>RO-Crate is a lightweight approach to packaging research data with JSON-LD metadata. It provides:</p>
+<ul>
+<li><strong>Standardized metadata format</strong> — Compatible with Schema.org and linked data tools</li>
+<li><strong>Provenance tracking</strong> — Records how data was produced and transformed</li>
+<li><strong>Interoperability</strong> — Works with repositories, archives, and other research tools</li>
+</ul>
+<h2 id="how-torc-uses-ro-crate"><a class="header" href="#how-torc-uses-ro-crate">How Torc Uses RO-Crate</a></h2>
+<p>Torc stores RO-Crate entities per workflow. Each entity describes a file, dataset, software, or
+other research object with JSON-LD properties. Entities can be:</p>
+<ol>
+<li><strong>Created always</strong> — SoftwareApplication entities for the torc binaries are recorded during
+workflow initialization, regardless of the <code>enable_ro_crate</code> setting. This ensures every workflow
+has basic software provenance.</li>
+<li><strong>Created automatically</strong> when <code>enable_ro_crate: true</code> is set on a workflow — file and job
+provenance entities</li>
+<li><strong>Created manually</strong> using the <code>torc ro-crate create</code> command</li>
+<li><strong>Exported</strong> as a standard <code>ro-crate-metadata.json</code> document</li>
+</ol>
+<h2 id="automatic-entity-generation"><a class="header" href="#automatic-entity-generation">Automatic Entity Generation</a></h2>
+<h3 id="always-recorded-all-workflows"><a class="header" href="#always-recorded-all-workflows">Always recorded (all workflows)</a></h3>
+<p>During workflow initialization, Torc creates <strong>SoftwareApplication</strong> entities for the torc binaries
+(server, CLI, job runner, etc.) that processed the workflow. In the current model, these are written
+as both <code>SoftwareApplication</code> and <code>prov:SoftwareAgent</code> so the exported RO-Crate uses a PROV-shaped
+provenance model.</p>
+<h3 id="when-enable_ro_crate-true"><a class="header" href="#when-enable_ro_crate-true">When <code>enable_ro_crate: true</code></a></h3>
+<p>When you enable RO-Crate on a workflow, Torc additionally creates file and job provenance entities:</p>
+<p><strong>During workflow initialization:</strong></p>
+<ul>
+<li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
+<li>Entities include MIME type inference, file size, and modification date</li>
+<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code></li>
+</ul>
+<p><strong>When jobs complete successfully:</strong></p>
+<ul>
+<li>File entities are created for all <strong>output files</strong></li>
+<li>CreateAction entities are created for each job (provenance)</li>
+<li>Output files are linked to their producing job via <code>prov:wasGeneratedBy</code></li>
+<li>Output files are linked to the workflow run via <code>prov:wasAttributedTo</code></li>
+<li>Output files are linked to file inputs via <code>prov:wasDerivedFrom</code></li>
+</ul>
+<p>This creates a complete provenance graph linking inputs → jobs → outputs.</p>
+<h3 id="entity-structure"><a class="header" href="#entity-structure">Entity Structure</a></h3>
+<p>Automatically generated File entities include:</p>
+<pre><code class="language-json">{
+  "@id": "data/output.csv",
+  "@type": ["File", "prov:Entity"],
+  "name": "output.csv",
+  "encodingFormat": "text/csv",
+  "contentSize": 1024,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "dateModified": "2024-01-01T00:00:00Z",
+  "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasDerivedFrom": { "@id": "data/input.csv" }
+}
+</code></pre>
+<p>File entities include SHA256 hashes for integrity verification when the file is readable.</p>
+<p>Job provenance is captured as CreateAction entities:</p>
+<pre><code class="language-json">{
+  "@id": "#job-42-attempt-1",
+  "@type": ["CreateAction", "prov:Activity"],
+  "name": "process_data",
+  "prov:hadPlan": { "@id": "#torc-workflow" },
+  "isPartOf": { "@id": "#torc-run-1" },
+  "instrument": { "@id": "#software-torc-run-1" },
+  "prov:used": { "@id": "data/input.csv" },
+  "result": [{ "@id": "data/output.csv" }]
+}
+</code></pre>
+<p>The exported <code>@context</code> includes the <code>prov</code> namespace.</p>
+<h2 id="enabling-automatic-ro-crate"><a class="header" href="#enabling-automatic-ro-crate">Enabling Automatic RO-Crate</a></h2>
+<p>Add <code>enable_ro_crate: true</code> to your workflow specification:</p>
+<pre><code class="language-yaml">name: my_workflow
+user: researcher
+enable_ro_crate: true
+
+files:
+  - name: input_data
+    path: data/input.csv  # Must exist on disk when workflow is created
+
+  - name: output_data
+    path: data/output.csv  # Will be created by the job
+
+jobs:
+  - name: process
+    command: python process.py
+    input_files: [input_data]
+    output_files: [output_data]
+</code></pre>
+<p>Torc automatically detects input vs output files by checking if each file exists on disk when the
+workflow is created. Files that exist are marked as inputs; files that don't exist are outputs.</p>
+<p>After running this workflow:</p>
+<ul>
+<li><code>input_data</code> will have an RO-Crate File entity (created during initialization)</li>
+<li><code>output_data</code> will have an RO-Crate File entity with <code>prov:wasGeneratedBy</code> linking to the job</li>
+<li>A CreateAction entity will describe the <code>process</code> job execution</li>
+<li><code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> will describe the workflow plan and run activity</li>
+</ul>
+<h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
+<p>Many workflows produce directory-based outputs rather than single files—for example,
+hive-partitioned Parquet datasets with thousands of files. For these, use <strong>Dataset entities</strong>
+instead of File entities.</p>
+<h3 id="why-datasets"><a class="header" href="#why-datasets">Why Datasets?</a></h3>
+<ul>
+<li><strong>Efficiency</strong> — One metadata record instead of thousands of File entities</li>
+<li><strong>Appropriate granularity</strong> — The directory is the meaningful unit, not individual partition files</li>
+<li><strong>Integrity verification</strong> — Manifest-based hashing detects changes without reading all file
+contents</li>
+</ul>
+<h3 id="dataset-structure"><a class="header" href="#dataset-structure">Dataset Structure</a></h3>
+<p>Dataset entities include file count, total size, and an optional hash:</p>
+<pre><code class="language-json">{
+  "@id": "output/training.parquet/",
+  "@type": "Dataset",
+  "name": "training_output",
+  "description": "Hive-partitioned training results",
+  "contentSize": 15032385536,
+  "fileCount": 2847,
+  "sha256": "a1b2c3...",
+  "hashMode": "manifest",
+  "encodingFormat": "application/vnd.apache.parquet"
+}
+</code></pre>
+<h3 id="hash-modes"><a class="header" href="#hash-modes">Hash Modes</a></h3>
+<p>Torc supports three hash modes for datasets:</p>
+<div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th><th>Speed</th><th>Detects</th></tr></thead><tbody>
+<tr><td><code>manifest</code></td><td>Hash of sorted path/size/mtime</td><td>Fast</td><td>Additions, deletions, move</td></tr>
+<tr><td><code>content</code></td><td>SHA256 of all file contents</td><td>Slow</td><td>Any content change</td></tr>
+<tr><td><code>none</code></td><td>No hash, only file count and size</td><td>Fastest</td><td>Nothing</td></tr>
+</tbody></table>
+</div>
+<p>For large datasets, <code>manifest</code> mode provides a good balance—it detects structural changes without
+the I/O cost of reading terabytes of data.</p>
+<h3 id="creating-dataset-entities"><a class="header" href="#creating-dataset-entities">Creating Dataset Entities</a></h3>
+<p>Use the <code>add-dataset</code> command to create a Dataset entity for a directory:</p>
+<pre><code class="language-bash">torc ro-crate add-dataset \
+  --workflow-id 123 \
+  --name training_output \
+  --path output/training.parquet/ \
+  --hash-mode manifest
+</code></pre>
+<p>See <a href="../how-to/ro-crate-metadata.html">How to Add RO-Crate Metadata</a> for detailed usage.</p>
+<h2 id="when-to-use-ro-crate"><a class="header" href="#when-to-use-ro-crate">When to Use RO-Crate</a></h2>
+<p>RO-Crate is valuable when you need to:</p>
+<ul>
+<li><strong>Track data lineage</strong> — Know which jobs produced each output</li>
+<li><strong>Archive workflows</strong> — Export metadata with your results for long-term storage</li>
+<li><strong>Share reproducible research</strong> — Provide machine-readable provenance to collaborators</li>
+<li><strong>Meet compliance requirements</strong> — Document data processing for audits or regulations</li>
+</ul>
+<h2 id="comparison-automatic-vs-manual"><a class="header" href="#comparison-automatic-vs-manual">Comparison: Automatic vs Manual</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Automatic (<code>enable_ro_crate</code>)</th><th>Manual (<code>torc ro-crate create</code>)</th></tr></thead><tbody>
+<tr><td>Input files</td><td>Created on initialization</td><td>Must create manually</td></tr>
+<tr><td>Output files</td><td>Created on job completion</td><td>Must create manually</td></tr>
+<tr><td>Job provenance</td><td>CreateAction entities</td><td>Must create manually</td></tr>
+<tr><td>Custom metadata</td><td>Basic (name, type, size, date)</td><td>Full control over properties</td></tr>
+<tr><td>External entities</td><td>Not created</td><td>Can add software, datasets, etc</td></tr>
+</tbody></table>
+</div>
+<p>For most workflows, enable automatic generation and add manual entities only for external references
+(software versions, related datasets, etc.).</p>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../how-to/ro-crate-metadata.html">How to Add RO-Crate Metadata</a> — Step-by-step guide</li>
+<li><a href="https://www.researchobject.org/ro-crate/">RO-Crate Specification</a> — Official documentation</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/concepts/intelligent-restart.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/workflows/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/concepts/intelligent-restart.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/workflows/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
