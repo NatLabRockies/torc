@@ -664,7 +664,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
 ///
 /// This tests:
 /// - CreateAction entity_id (e.g., #job-42-attempt-1) is remapped to new job ID
-/// - File entity metadata with wasGeneratedBy is remapped to new job ID
+/// - File entity metadata with prov:wasGeneratedBy is remapped to new job ID
 /// - file_id references in entities are also remapped
 #[rstest]
 fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
@@ -701,7 +701,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     let create_action_entity_id = format!("#job-{}-attempt-1", job_id);
     let create_action_metadata = serde_json::json!({
         "@id": create_action_entity_id,
-        "@type": "CreateAction",
+        "@type": ["CreateAction", "prov:Activity"],
         "name": "process_data",
         "instrument": { "@id": format!("#workflow-{}", workflow_id) },
         "result": [{ "@id": "data/output.csv" }]
@@ -717,13 +717,13 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     apis::ro_crate_api::create_ro_crate_entity(config, create_action)
         .expect("Failed to create CreateAction entity");
 
-    // 2. File entity with wasGeneratedBy reference to job
+    // 2. File entity with prov:wasGeneratedBy reference to job
     let file_metadata = serde_json::json!({
         "@id": "data/output.csv",
-        "@type": "File",
+        "@type": ["File", "prov:Entity"],
         "name": "output.csv",
         "encodingFormat": "text/csv",
-        "wasGeneratedBy": { "@id": format!("#job-{}-attempt-1", job_id) }
+        "prov:wasGeneratedBy": { "@id": format!("#job-{}-attempt-1", job_id) }
     });
     let file_entity = torc::models::RoCrateEntityModel {
         id: None,
@@ -827,7 +827,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         "CreateAction @id in metadata should be remapped"
     );
 
-    // Find the File entity and verify its wasGeneratedBy was remapped
+    // Find the File entity and verify its prov:wasGeneratedBy was remapped
     let file_entity = imported_entities
         .iter()
         .find(|e| e.entity_type == "File")
@@ -836,8 +836,8 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     let file_metadata: Value =
         serde_json::from_str(&file_entity.metadata).expect("Failed to parse File metadata");
     assert_eq!(
-        file_metadata["wasGeneratedBy"]["@id"], expected_new_entity_id,
-        "File wasGeneratedBy should reference the new job ID"
+        file_metadata["prov:wasGeneratedBy"]["@id"], expected_new_entity_id,
+        "File prov:wasGeneratedBy should reference the new job ID"
     );
 
     // Verify file_id was also remapped

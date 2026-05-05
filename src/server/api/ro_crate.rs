@@ -13,6 +13,7 @@ use crate::server::api_responses::{
 };
 
 use crate::models;
+use crate::ro_crate_json_ld::typed_entity;
 
 use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
 
@@ -149,14 +150,6 @@ impl RoCrateApiImpl {
     ///
     /// This is called during `initialize_jobs` when `enable_ro_crate` is true.
     pub async fn create_entities_for_input_files(&self, workflow_id: i64) -> Result<i64, ApiError> {
-        // Get the current run_id from workflow
-        let run_id: i64 =
-            sqlx::query_scalar!("SELECT run_id FROM workflow WHERE id = $1", workflow_id,)
-                .fetch_optional(self.context.pool.as_ref())
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
-                .unwrap_or(0);
-
         // Get all files with st_mtime set (input files)
         let input_files = match sqlx::query!(
             r#"
@@ -179,8 +172,12 @@ impl RoCrateApiImpl {
         };
 
         // Get existing RO-Crate entities by file_id for upsert
-        let existing_entities: std::collections::HashMap<i64, i64> = match sqlx::query!(
-            r#"SELECT id, file_id FROM ro_crate_entity WHERE workflow_id = $1 AND file_id IS NOT NULL"#,
+        let existing_entities: std::collections::HashMap<i64, (i64, String)> = match sqlx::query!(
+            r#"
+            SELECT id, file_id, metadata
+            FROM ro_crate_entity
+            WHERE workflow_id = $1 AND file_id IS NOT NULL
+            "#,
             workflow_id
         )
         .fetch_all(self.context.pool.as_ref())
@@ -188,7 +185,7 @@ impl RoCrateApiImpl {
         {
             Ok(rows) => rows
                 .into_iter()
-                .filter_map(|r| r.file_id.map(|fid| (fid, r.id)))
+                .filter_map(|r| r.file_id.map(|fid| (fid, (r.id, r.metadata))))
                 .collect(),
             Err(e) => {
                 return Err(super::database_error_with_msg(
@@ -212,14 +209,24 @@ impl RoCrateApiImpl {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| file.path.clone());
 
-            // Build metadata JSON
-            let mut metadata = serde_json::json!({
-                "@id": file.path,
-                "@type": "File",
-                "name": basename,
-                "encodingFormat": mime_type,
-                "torc:run_id": run_id
-            });
+            // The server cannot inspect workflow files on disk. Preserve any richer
+            // client-provided metadata already stored for this entity and only refresh
+            // fields derivable from database state.
+            let mut metadata = existing_entities
+                .get(&file.id)
+                .and_then(|(_, existing_metadata)| {
+                    serde_json::from_str::<serde_json::Value>(existing_metadata).ok()
+                })
+                .unwrap_or_else(|| serde_json::json!({}));
+
+            if !metadata.is_object() {
+                metadata = serde_json::json!({});
+            }
+
+            metadata["@id"] = serde_json::json!(file.path);
+            metadata["@type"] = typed_entity("File", "prov:Entity");
+            metadata["name"] = serde_json::json!(basename);
+            metadata["encodingFormat"] = serde_json::json!(mime_type);
 
             // Add dateModified if st_mtime is available
             if let Some(st_mtime) = file.st_mtime
@@ -232,7 +239,7 @@ impl RoCrateApiImpl {
             let metadata_str = metadata.to_string();
 
             // Update existing entity or create new one
-            let result = if let Some(&entity_db_id) = existing_entities.get(&file.id) {
+            let result = if let Some(&(entity_db_id, _)) = existing_entities.get(&file.id) {
                 sqlx::query!(
                     r#"
                     UPDATE ro_crate_entity SET metadata = $1 WHERE id = $2
@@ -245,7 +252,8 @@ impl RoCrateApiImpl {
             } else {
                 sqlx::query!(
                     r#"
-                    INSERT INTO ro_crate_entity (workflow_id, file_id, entity_id, entity_type, metadata)
+                    INSERT INTO ro_crate_entity
+                        (workflow_id, file_id, entity_id, entity_type, metadata)
                     VALUES ($1, $2, $3, $4, $5)
                     "#,
                     workflow_id,
@@ -327,11 +335,10 @@ impl RoCrateApiImpl {
 
         let metadata = serde_json::json!({
             "@id": entity_id,
-            "@type": "SoftwareApplication",
+            "@type": typed_entity("SoftwareApplication", "prov:SoftwareAgent"),
             "name": "torc-server",
             "version": version,
             "url": exe_path,
-            "torc:run_id": run_id,
             "torc:git_hash": GIT_HASH,
         });
 
@@ -353,7 +360,8 @@ impl RoCrateApiImpl {
         {
             Ok(_) => {
                 debug!(
-                    "Created SoftwareApplication entity for torc-server version={} (workflow_id={})",
+                    "Created SoftwareApplication entity for torc-server version={} \
+                     (workflow_id={})",
                     version, workflow_id
                 );
             }

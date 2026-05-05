@@ -60,6 +60,8 @@ jobs:
         run: cargo clippy --all --all-targets --all-features -- -D warnings
 
       - name: Check Rust-owned OpenAPI artifacts
+        env:
+          DATABASE_URL: sqlite:db/sqlite/dev.db
         run: |
           cargo test --lib --no-default-features --features openapi-codegen
           bash api/check_openapi_codegen_parity.sh

@@ -12,6 +12,7 @@ use crate::client::commands::{
 use crate::models;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use tabled::Tabled;
 
 #[derive(Tabled)]
@@ -332,7 +333,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 Some(id) => *id,
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
-            handle_export(config, selected_workflow_id, output.as_deref(), format);
+            handle_export(config, selected_workflow_id, output.as_deref());
         }
         RoCrateCommands::AddDataset {
             workflow_id,
@@ -375,15 +376,10 @@ fn read_metadata_input(metadata: &str) -> String {
     }
 }
 
-fn handle_export(
-    config: &Configuration,
-    workflow_id: i64,
-    output_path: Option<&str>,
-    format: &str,
-) {
-    // Fetch the workflow name for the root dataset
-    let workflow_name = match apis::workflows_api::get_workflow(config, workflow_id) {
-        Ok(w) => w.name,
+fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&str>) {
+    // Fetch the workflow name and current run for the root dataset.
+    let (workflow_name, run_id) = match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(workflow) => (workflow.name, workflow.run_id.unwrap_or(0)),
         Err(e) => {
             print_error("getting workflow", &e);
             std::process::exit(1);
@@ -400,61 +396,81 @@ fn handle_export(
             }
         };
 
-    if format == "json" {
-        // In JSON format mode, just output the raw entities list
-        if let Ok(json) = serde_json::to_string_pretty(&entities) {
-            println!("{}", json);
-        }
-        return;
+    let mut existing_ids: HashSet<String> = entities.iter().map(|e| e.entity_id.clone()).collect();
+    let run_entity_id = format!("#torc-run-{}", run_id);
+    let mut synthetic_entities: Vec<serde_json::Value> = Vec::new();
+
+    if !existing_ids.contains("#torc-workflow") {
+        synthetic_entities.push(serde_json::json!({
+            "@id": "#torc-workflow",
+            "@type": ["SoftwareApplication", "prov:Plan"],
+            "name": workflow_name.clone()
+        }));
+        existing_ids.insert("#torc-workflow".to_string());
     }
 
-    // Build the RO-Crate metadata document
-    let mut graph: Vec<serde_json::Value> = Vec::new();
+    if !existing_ids.contains(&run_entity_id) {
+        let run_entity = serde_json::json!({
+            "@id": run_entity_id.clone(),
+            "@type": ["CreateAction", "prov:Activity"],
+            "name": format!("{} Run {}", workflow_name, run_id),
+            "prov:hadPlan": { "@id": "#torc-workflow" },
+            "instrument": { "@id": format!("#software-torc-run-{}", run_id) },
+            "prov:wasAssociatedWith": [
+                { "@id": format!("#software-torc-run-{}", run_id) },
+                { "@id": format!("#software-torc-server-run-{}", run_id) }
+            ]
+        });
+        synthetic_entities.push(run_entity);
+    }
 
-    // 1. The metadata descriptor entity
-    graph.push(serde_json::json!({
-        "@id": "ro-crate-metadata.json",
-        "@type": "CreativeWork",
-        "about": {"@id": "./"},
-        "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"}
-    }));
-
-    // 2. Collect hasPart references from user entities
-    let has_part: Vec<serde_json::Value> = entities
-        .iter()
-        .map(|e| serde_json::json!({"@id": e.entity_id}))
-        .collect();
-
-    // 3. The root dataset entity
-    graph.push(serde_json::json!({
-        "@id": "./",
-        "@type": "Dataset",
-        "name": workflow_name,
-        "hasPart": has_part
-    }));
-
-    // 4. User entities
+    // Build user and synthetic entities first so hasPart can include the final set.
+    let mut graph_entities: Vec<serde_json::Value> = synthetic_entities;
     for entity in &entities {
         if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&entity.metadata) {
-            // Ensure @id and @type are set from the entity record
             if let Some(obj) = parsed.as_object_mut() {
-                obj.insert("@id".to_string(), serde_json::json!(entity.entity_id));
-                obj.insert("@type".to_string(), serde_json::json!(entity.entity_type));
+                obj.entry("@id".to_string())
+                    .or_insert_with(|| serde_json::json!(entity.entity_id));
+                obj.entry("@type".to_string())
+                    .or_insert_with(|| serde_json::json!(entity.entity_type));
             }
-            graph.push(parsed);
+            graph_entities.push(parsed);
         } else {
-            // Fallback: create a minimal entity
-            graph.push(serde_json::json!({
+            graph_entities.push(serde_json::json!({
                 "@id": entity.entity_id,
                 "@type": entity.entity_type
             }));
         }
     }
 
+    let has_part: Vec<serde_json::Value> = graph_entities
+        .iter()
+        .filter_map(|entity| entity.get("@id").cloned())
+        .map(|id| serde_json::json!({ "@id": id }))
+        .collect();
+
+    let mut graph: Vec<serde_json::Value> = Vec::new();
+    graph.push(serde_json::json!({
+        "@id": "ro-crate-metadata.json",
+        "@type": "CreativeWork",
+        "about": {"@id": "./"},
+        "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"}
+    }));
+    graph.push(serde_json::json!({
+        "@id": "./",
+        "@type": "Dataset",
+        "name": workflow_name,
+        "hasPart": has_part
+    }));
+    graph.extend(graph_entities);
+
     let ro_crate = serde_json::json!({
         "@context": [
             "https://w3id.org/ro/crate/1.1/context",
-            {"torc": "https://github.com/NatLabRockies/torc/terms/"}
+            {
+                "prov": "http://www.w3.org/ns/prov#",
+                "torc": "https://github.com/NatLabRockies/torc/terms/"
+            }
         ],
         "@graph": graph
     });

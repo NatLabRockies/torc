@@ -7,12 +7,27 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::version_check;
 use crate::models::{FileModel, JobModel, RoCrateEntityModel};
+use crate::ro_crate_json_ld::typed_entity;
 use chrono::{DateTime, Utc};
 use log::{debug, warn};
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufReader, Read as IoRead};
 use std::path::Path;
+
+fn id_ref(id: impl AsRef<str>) -> serde_json::Value {
+    serde_json::json!({ "@id": id.as_ref() })
+}
+
+fn refs_value(ids: &[String]) -> Option<serde_json::Value> {
+    match ids {
+        [] => None,
+        [id] => Some(id_ref(id)),
+        ids => Some(serde_json::Value::Array(
+            ids.iter().map(id_ref).collect::<Vec<_>>(),
+        )),
+    }
+}
 
 /// Compute the SHA256 hash of a file.
 ///
@@ -55,10 +70,9 @@ pub fn compute_file_sha256(path: &str) -> Option<String> {
 /// - `contentSize`: file size (when available)
 /// - `sha256`: SHA256 hash (when available)
 /// - `dateModified`: ISO8601 from st_mtime
-/// - `torc:run_id`: workflow run that recorded this entity
+/// - `@type` is emitted as `["File", "prov:Entity"]`
 pub fn build_file_entity(
     workflow_id: i64,
-    run_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
     sha256: Option<String>,
@@ -78,10 +92,9 @@ pub fn build_file_entity(
     // Build metadata JSON object
     let mut metadata = serde_json::json!({
         "@id": file_path,
-        "@type": "File",
+        "@type": typed_entity("File", "prov:Entity"),
         "name": basename,
-        "encodingFormat": mime_type,
-        "torc:run_id": run_id
+        "encodingFormat": mime_type
     });
 
     // Add content size if available
@@ -112,7 +125,8 @@ pub fn build_file_entity(
 
 /// Build an RO-Crate File entity with provenance linking to a CreateAction.
 ///
-/// For output files, includes `wasGeneratedBy` linking to the job's CreateAction entity.
+/// For output files, includes `prov:wasGeneratedBy` linking to the job's CreateAction entity.
+#[allow(clippy::too_many_arguments)]
 pub fn build_file_entity_with_provenance(
     workflow_id: i64,
     run_id: i64,
@@ -121,6 +135,7 @@ pub fn build_file_entity_with_provenance(
     sha256: Option<String>,
     job_id: i64,
     attempt_id: i64,
+    derived_from_paths: &[String],
 ) -> RoCrateEntityModel {
     let file_path = &file.path;
     let basename = Path::new(file_path)
@@ -140,11 +155,11 @@ pub fn build_file_entity_with_provenance(
     // Build metadata JSON object with provenance
     let mut metadata = serde_json::json!({
         "@id": file_path,
-        "@type": "File",
+        "@type": typed_entity("File", "prov:Entity"),
         "name": basename,
         "encodingFormat": mime_type,
-        "wasGeneratedBy": { "@id": create_action_id },
-        "torc:run_id": run_id
+        "prov:wasGeneratedBy": { "@id": create_action_id },
+        "prov:wasAttributedTo": id_ref(format!("#torc-run-{}", run_id))
     });
 
     // Add content size if available
@@ -163,6 +178,10 @@ pub fn build_file_entity_with_provenance(
         metadata["dateModified"] = serde_json::json!(datetime.to_rfc3339());
     }
 
+    if let Some(derived_from) = refs_value(derived_from_paths) {
+        metadata["prov:wasDerivedFrom"] = derived_from;
+    }
+
     RoCrateEntityModel {
         id: None,
         workflow_id,
@@ -177,15 +196,17 @@ pub fn build_file_entity_with_provenance(
 ///
 /// Creates a JSON-LD entity representing the job execution:
 /// - `@id`: `#job-{job_id}-attempt-{attempt_id}`
-/// - `@type`: "CreateAction"
+/// - `@type`: `["CreateAction", "prov:Activity"]`
 /// - `name`: job name
-/// - `instrument`: reference to workflow
+/// - `prov:hadPlan`: reference to the workflow plan entity
+/// - `instrument`: reference to the run-specific software agent
 /// - `result`: references to output file entities
 pub fn build_create_action_entity(
     workflow_id: i64,
     run_id: i64,
     job: &JobModel,
     attempt_id: i64,
+    input_file_paths: &[String],
     output_file_paths: &[String],
 ) -> RoCrateEntityModel {
     let action_id = format!("#job-{}-attempt-{}", job.id.unwrap_or(0), attempt_id);
@@ -196,14 +217,24 @@ pub fn build_create_action_entity(
         .map(|path| serde_json::json!({ "@id": path }))
         .collect();
 
-    let metadata = serde_json::json!({
+    let mut metadata = serde_json::json!({
         "@id": action_id,
-        "@type": "CreateAction",
+        "@type": typed_entity("CreateAction", "prov:Activity"),
         "name": job.name,
-        "instrument": { "@id": format!("#workflow-{}", workflow_id) },
+        "prov:hadPlan": id_ref("#torc-workflow"),
+        "isPartOf": id_ref(format!("#torc-run-{}", run_id)),
+        "instrument": id_ref(format!("#software-torc-run-{}", run_id)),
         "result": results,
-        "torc:run_id": run_id
+        "prov:wasAssociatedWith": [
+            id_ref(format!("#software-torc-run-{}", run_id)),
+            id_ref(format!("#software-torc-server-run-{}", run_id))
+        ]
     });
+
+    if let Some(inputs) = refs_value(input_file_paths) {
+        metadata["object"] = inputs.clone();
+        metadata["prov:used"] = inputs;
+    }
 
     RoCrateEntityModel {
         id: None,
@@ -213,6 +244,99 @@ pub fn build_create_action_entity(
         entity_type: "CreateAction".to_string(),
         metadata: metadata.to_string(),
     }
+}
+
+fn build_workflow_plan_entity(workflow_id: i64, workflow_name: &str) -> RoCrateEntityModel {
+    let metadata = serde_json::json!({
+        "@id": "#torc-workflow",
+        "@type": typed_entity("SoftwareApplication", "prov:Plan"),
+        "name": workflow_name
+    });
+
+    RoCrateEntityModel {
+        id: None,
+        workflow_id,
+        file_id: None,
+        entity_id: "#torc-workflow".to_string(),
+        entity_type: "SoftwareApplication".to_string(),
+        metadata: metadata.to_string(),
+    }
+}
+
+fn build_workflow_run_entity_base(
+    workflow_id: i64,
+    run_id: i64,
+    workflow_name: &str,
+) -> RoCrateEntityModel {
+    let metadata = serde_json::json!({
+        "@id": format!("#torc-run-{}", run_id),
+        "@type": typed_entity("CreateAction", "prov:Activity"),
+        "name": format!("{} Run {}", workflow_name, run_id),
+        "prov:hadPlan": id_ref("#torc-workflow"),
+        "instrument": id_ref(format!("#software-torc-run-{}", run_id)),
+        "prov:wasAssociatedWith": [
+            id_ref(format!("#software-torc-run-{}", run_id)),
+            id_ref(format!("#software-torc-server-run-{}", run_id))
+        ]
+    });
+
+    RoCrateEntityModel {
+        id: None,
+        workflow_id,
+        file_id: None,
+        entity_id: format!("#torc-run-{}", run_id),
+        entity_type: "CreateAction".to_string(),
+        metadata: metadata.to_string(),
+    }
+}
+
+fn apply_workflow_run_entity_times(
+    entity: &mut RoCrateEntityModel,
+    start_time: DateTime<Utc>,
+    end_time: Option<DateTime<Utc>>,
+) -> bool {
+    let mut metadata = match serde_json::from_str::<serde_json::Value>(&entity.metadata) {
+        Ok(value) => value,
+        Err(e) => {
+            warn!(
+                "Failed to parse RO-Crate run entity metadata for '{}': {}",
+                entity.entity_id, e
+            );
+            return false;
+        }
+    };
+
+    let Some(obj) = metadata.as_object_mut() else {
+        warn!(
+            "RO-Crate run entity metadata for '{}' is not a JSON object",
+            entity.entity_id
+        );
+        return false;
+    };
+
+    obj.insert(
+        "startTime".to_string(),
+        serde_json::json!(start_time.to_rfc3339()),
+    );
+    if let Some(end_time) = end_time {
+        obj.insert(
+            "endTime".to_string(),
+            serde_json::json!(end_time.to_rfc3339()),
+        );
+    } else {
+        obj.remove("endTime");
+    }
+
+    entity.metadata = metadata.to_string();
+    true
+}
+
+fn parse_entity_datetime(entity: &RoCrateEntityModel, field: &str) -> Option<DateTime<Utc>> {
+    let metadata = serde_json::from_str::<serde_json::Value>(&entity.metadata).ok()?;
+    let value = metadata.get(field)?.as_str()?;
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
 }
 
 /// Find an existing RO-Crate entity for a file.
@@ -232,6 +356,20 @@ pub fn find_entity_for_file(
     }
 }
 
+pub fn find_entity_by_entity_id(
+    config: &Configuration,
+    workflow_id: i64,
+    entity_id: &str,
+) -> Option<RoCrateEntityModel> {
+    match apis::ro_crate_api::find_ro_crate_entity_by_entity_id(config, workflow_id, entity_id) {
+        Ok(entity) => entity,
+        Err(e) => {
+            warn!("Failed to check for existing RO-Crate entities: {}", e);
+            None
+        }
+    }
+}
+
 /// Check if an RO-Crate entity already exists for a file.
 ///
 /// Returns true if an entity with the given file_id already exists.
@@ -239,17 +377,118 @@ pub fn entity_exists_for_file(config: &Configuration, workflow_id: i64, file_id:
     find_entity_for_file(config, workflow_id, file_id).is_some()
 }
 
+fn create_or_update_entity_by_entity_id(
+    config: &Configuration,
+    workflow_id: i64,
+    entity: RoCrateEntityModel,
+) {
+    if let Some(existing) = find_entity_by_entity_id(config, workflow_id, &entity.entity_id) {
+        let entity_db_id = match existing.id {
+            Some(id) => id,
+            None => {
+                warn!("Existing entity has no ID, cannot update");
+                return;
+            }
+        };
+
+        let updated_entity = RoCrateEntityModel {
+            id: Some(entity_db_id),
+            ..entity
+        };
+
+        if let Err(e) = apis::ro_crate_entities_api::update_ro_crate_entity(
+            config,
+            entity_db_id,
+            updated_entity,
+        ) {
+            warn!(
+                "Failed to update RO-Crate entity '{}' (entity_id={}): {}",
+                existing.entity_type, existing.entity_id, e
+            );
+        }
+        return;
+    }
+
+    if let Err(e) = apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
+        warn!("Failed to create RO-Crate entity: {}", e);
+    }
+}
+
+fn create_or_update_run_entity(
+    config: &Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    workflow_name: &str,
+) {
+    let run_entity_id = format!("#torc-run-{}", run_id);
+    if let Some(existing_run_entity) = find_entity_by_entity_id(config, workflow_id, &run_entity_id)
+    {
+        let entity_db_id = match existing_run_entity.id {
+            Some(id) => id,
+            None => {
+                warn!("Existing run entity has no ID, cannot update");
+                return;
+            }
+        };
+
+        let start_time =
+            parse_entity_datetime(&existing_run_entity, "startTime").unwrap_or_else(Utc::now);
+        let end_time = parse_entity_datetime(&existing_run_entity, "endTime");
+        let mut updated_run_entity = RoCrateEntityModel {
+            id: Some(entity_db_id),
+            ..build_workflow_run_entity_base(workflow_id, run_id, workflow_name)
+        };
+        if !apply_workflow_run_entity_times(&mut updated_run_entity, start_time, end_time) {
+            return;
+        }
+
+        if let Err(e) = apis::ro_crate_entities_api::update_ro_crate_entity(
+            config,
+            entity_db_id,
+            updated_run_entity,
+        ) {
+            warn!(
+                "Failed to update RO-Crate run entity '{}' (entity_id={}): {}",
+                existing_run_entity.entity_type, existing_run_entity.entity_id, e
+            );
+        }
+        return;
+    }
+
+    let mut new_run_entity = build_workflow_run_entity_base(workflow_id, run_id, workflow_name);
+    if !apply_workflow_run_entity_times(&mut new_run_entity, Utc::now(), None) {
+        return;
+    }
+    if let Err(e) = apis::ro_crate_entities_api::create_ro_crate_entity(config, new_run_entity) {
+        warn!(
+            "Failed to create RO-Crate run entity '{}': {}",
+            run_entity_id, e
+        );
+    }
+}
+
+pub fn create_workflow_provenance_entities(
+    config: &Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    workflow_name: &str,
+) {
+    let plan_entity = build_workflow_plan_entity(workflow_id, workflow_name);
+    create_or_update_entity_by_entity_id(config, workflow_id, plan_entity);
+
+    create_or_update_run_entity(config, workflow_id, run_id, workflow_name);
+}
+
 /// Create or replace an RO-Crate entity for a file.
 ///
 /// If an entity already exists for this file, it is updated with fresh metadata
-/// (hash, size, timestamps, run_id). Otherwise a new entity is created.
+/// (hash, size, timestamps). Otherwise a new entity is created.
 ///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
 pub fn create_ro_crate_entity_for_file(
     config: &Configuration,
     workflow_id: i64,
-    run_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
 ) {
@@ -265,7 +504,7 @@ pub fn create_ro_crate_entity_for_file(
     let sha256 = compute_file_sha256(&file.path);
 
     // Build the entity
-    let entity = build_file_entity(workflow_id, run_id, file, content_size, sha256);
+    let entity = build_file_entity(workflow_id, file, content_size, sha256);
 
     // Check if entity already exists - if so, update it
     if let Some(existing) = find_entity_for_file(config, workflow_id, file_id) {
@@ -321,10 +560,11 @@ pub fn create_ro_crate_entity_for_file(
 ///
 /// Creates the File entity and links it to the job's CreateAction. If an entity
 /// already exists for this file (e.g., created during initialization), updates it
-/// to add the `wasGeneratedBy` provenance field.
+/// to add the `prov:wasGeneratedBy` provenance field.
 ///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
+#[allow(clippy::too_many_arguments)]
 pub fn create_ro_crate_entity_for_output_file(
     config: &Configuration,
     workflow_id: i64,
@@ -333,6 +573,7 @@ pub fn create_ro_crate_entity_for_output_file(
     content_size: Option<u64>,
     job_id: i64,
     attempt_id: i64,
+    derived_from_paths: &[String],
 ) {
     let file_id = match file.id {
         Some(id) => id,
@@ -354,6 +595,7 @@ pub fn create_ro_crate_entity_for_output_file(
         sha256,
         job_id,
         attempt_id,
+        derived_from_paths,
     );
 
     // Check if entity already exists - if so, replace it
@@ -418,10 +660,17 @@ pub fn create_create_action_entity(
     run_id: i64,
     job: &JobModel,
     attempt_id: i64,
+    input_file_paths: &[String],
     output_file_paths: &[String],
 ) {
-    let entity =
-        build_create_action_entity(workflow_id, run_id, job, attempt_id, output_file_paths);
+    let entity = build_create_action_entity(
+        workflow_id,
+        run_id,
+        job,
+        attempt_id,
+        input_file_paths,
+        output_file_paths,
+    );
 
     match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
         Ok(created) => {
@@ -447,7 +696,6 @@ pub fn create_create_action_entity(
 pub fn create_entities_for_input_files(
     config: &Configuration,
     workflow_id: i64,
-    run_id: i64,
     files: &[FileModel],
 ) {
     for file in files {
@@ -456,7 +704,7 @@ pub fn create_entities_for_input_files(
             // Get file size if the file exists
             let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
 
-            create_ro_crate_entity_for_file(config, workflow_id, run_id, file, content_size);
+            create_ro_crate_entity_for_file(config, workflow_id, file, content_size);
         }
     }
 }
@@ -502,11 +750,10 @@ fn build_software_entity(
 
     let metadata = serde_json::json!({
         "@id": entity_id,
-        "@type": "SoftwareApplication",
+        "@type": typed_entity("SoftwareApplication", "prov:SoftwareAgent"),
         "name": name,
         "version": version,
         "url": binary_path,
-        "torc:run_id": run_id,
         "torc:git_hash": git_hash,
     });
 
@@ -611,7 +858,7 @@ mod tests {
             st_mtime: Some(1704067200.0), // 2024-01-01T00:00:00Z
         };
 
-        let entity = build_file_entity(100, 1, &file, Some(1024), None);
+        let entity = build_file_entity(100, &file, Some(1024), None);
 
         assert_eq!(entity.workflow_id, 100);
         assert_eq!(entity.file_id, Some(1));
@@ -620,11 +867,12 @@ mod tests {
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["@id"], "data/output.csv");
-        assert_eq!(metadata["@type"], "File");
+        assert_eq!(metadata["@type"][0], "File");
+        assert_eq!(metadata["@type"][1], "prov:Entity");
         assert_eq!(metadata["name"], "output.csv");
         assert_eq!(metadata["encodingFormat"], "text/csv");
         assert_eq!(metadata["contentSize"], 1024);
-        assert_eq!(metadata["torc:run_id"], 1);
+        assert!(metadata.get("prov:wasAttributedTo").is_none());
     }
 
     #[test]
@@ -637,11 +885,11 @@ mod tests {
             st_mtime: Some(1704067200.0),
         };
 
-        let entity = build_file_entity_with_provenance(100, 1, &file, None, None, 42, 1);
+        let entity = build_file_entity_with_provenance(100, 1, &file, None, None, 42, 1, &[]);
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
-        assert_eq!(metadata["wasGeneratedBy"]["@id"], "#job-42-attempt-1");
-        assert_eq!(metadata["torc:run_id"], 1);
+        assert_eq!(metadata["prov:wasGeneratedBy"]["@id"], "#job-42-attempt-1");
+        assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-1");
     }
 
     #[test]
@@ -654,23 +902,28 @@ mod tests {
         let mut job_with_id = job;
         job_with_id.id = Some(42);
 
+        let input_files = vec!["input/source.csv".to_string()];
         let output_files = vec![
             "output/result1.json".to_string(),
             "output/result2.json".to_string(),
         ];
 
-        let entity = build_create_action_entity(100, 1, &job_with_id, 1, &output_files);
+        let entity =
+            build_create_action_entity(100, 1, &job_with_id, 1, &input_files, &output_files);
 
         assert_eq!(entity.entity_id, "#job-42-attempt-1");
         assert_eq!(entity.entity_type, "CreateAction");
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
-        assert_eq!(metadata["@type"], "CreateAction");
+        assert_eq!(metadata["@type"][0], "CreateAction");
+        assert_eq!(metadata["@type"][1], "prov:Activity");
         assert_eq!(metadata["name"], "process_data");
-        assert_eq!(metadata["instrument"]["@id"], "#workflow-100");
+        assert_eq!(metadata["instrument"]["@id"], "#software-torc-run-1");
+        assert_eq!(metadata["prov:hadPlan"]["@id"], "#torc-workflow");
+        assert_eq!(metadata["prov:used"]["@id"], "input/source.csv");
         assert!(metadata["result"].is_array());
         assert_eq!(metadata["result"][0]["@id"], "output/result1.json");
-        assert_eq!(metadata["torc:run_id"], 1);
+        assert_eq!(metadata["isPartOf"]["@id"], "#torc-run-1");
     }
 
     #[test]
@@ -687,7 +940,7 @@ mod tests {
                 st_mtime: None,
             };
 
-            let entity = build_file_entity(1, 1, &file, None, None);
+            let entity = build_file_entity(1, &file, None, None);
             let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
@@ -711,7 +964,7 @@ mod tests {
                 st_mtime: None,
             };
 
-            let entity = build_file_entity(1, 1, &file, None, None);
+            let entity = build_file_entity(1, &file, None, None);
             let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
@@ -798,7 +1051,7 @@ mod tests {
         };
 
         let sha256 = Some("abc123def456".to_string());
-        let entity = build_file_entity(100, 1, &file, Some(1024), sha256);
+        let entity = build_file_entity(100, &file, Some(1024), sha256);
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "abc123def456");
@@ -815,11 +1068,11 @@ mod tests {
         };
 
         let sha256 = Some("deadbeef".to_string());
-        let entity = build_file_entity_with_provenance(100, 1, &file, None, sha256, 42, 1);
+        let entity = build_file_entity_with_provenance(100, 1, &file, None, sha256, 42, 1, &[]);
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "deadbeef");
-        assert_eq!(metadata["wasGeneratedBy"]["@id"], "#job-42-attempt-1");
+        assert_eq!(metadata["prov:wasGeneratedBy"]["@id"], "#job-42-attempt-1");
     }
 
     #[test]
@@ -833,10 +1086,10 @@ mod tests {
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["@id"], "#software-torc-run-3");
-        assert_eq!(metadata["@type"], "SoftwareApplication");
+        assert_eq!(metadata["@type"][0], "SoftwareApplication");
+        assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
         assert_eq!(metadata["name"], "torc");
         assert_eq!(metadata["url"], "/usr/local/bin/torc");
-        assert_eq!(metadata["torc:run_id"], 3);
         // Version and git_hash are compile-time constants
         assert!(metadata.get("version").is_some());
         assert!(metadata.get("torc:git_hash").is_some());
@@ -852,6 +1105,28 @@ mod tests {
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["name"], "torc-server");
         assert_eq!(metadata["url"], "/opt/torc/torc-server");
-        assert_eq!(metadata["torc:run_id"], 1);
+        assert_eq!(metadata["@type"][0], "SoftwareApplication");
+        assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
+        assert!(metadata.get("version").is_some());
+        assert!(metadata.get("torc:git_hash").is_some());
+    }
+
+    #[test]
+    fn test_parse_entity_datetime() {
+        let entity = crate::models::RoCrateEntityModel {
+            id: Some(1),
+            workflow_id: 100,
+            file_id: None,
+            entity_id: "#torc-run-7".to_string(),
+            entity_type: "CreateAction".to_string(),
+            metadata: serde_json::json!({
+                "startTime": "2024-01-01T00:00:00Z"
+            })
+            .to_string(),
+        };
+
+        let parsed = parse_entity_datetime(&entity, "startTime").unwrap();
+        assert_eq!(parsed.to_rfc3339(), "2024-01-01T00:00:00+00:00");
+        assert!(parse_entity_datetime(&entity, "endTime").is_none());
     }
 }

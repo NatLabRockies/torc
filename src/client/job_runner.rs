@@ -47,7 +47,7 @@ use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    BatchCompleteJobsRequest, ComputeNodesResources, JobCompletionEntry, JobStatus,
+    BatchCompleteJobsRequest, ComputeNodesResources, FileModel, JobCompletionEntry, JobStatus,
     ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
 };
 
@@ -337,6 +337,12 @@ pub struct JobRunner {
     is_subtask: bool,
     running_jobs: HashMap<i64, AsyncCliCommand>,
     job_resources: HashMap<i64, ResourceRequirementsModel>,
+    /// Best-effort cache of file models keyed by file_id.
+    ///
+    /// This avoids repeated `get_file` API calls when many jobs share the same
+    /// input files (fan-in) and also reuses file metadata across output-file
+    /// validation and RO-Crate provenance generation.
+    file_model_cache: HashMap<i64, FileModel>,
     /// Pool of GPU device identifiers available to this runner (e.g. `"0"`, `"1"` or UUIDs).
     ///
     /// When running in direct mode, Torc sets `CUDA_VISIBLE_DEVICES` (and friends) itself
@@ -540,6 +546,7 @@ impl JobRunner {
             );
         }
         let job_resources: HashMap<i64, ResourceRequirementsModel> = HashMap::new();
+        let file_model_cache: HashMap<i64, FileModel> = HashMap::new();
 
         let mut resources = resources;
         let available_gpu_devices = if execution_config.effective_mode() == ExecutionMode::Slurm {
@@ -619,6 +626,7 @@ impl JobRunner {
             is_subtask,
             running_jobs,
             job_resources,
+            file_model_cache,
             all_gpu_devices: Vec::from(available_gpu_devices.clone()),
             gpu_fallback_counter: 0,
             available_gpu_devices,
@@ -664,6 +672,25 @@ impl JobRunner {
         result.map_err(|err| {
             Box::new(JobRunnerApiError(err.to_string())) as Box<dyn std::error::Error>
         })
+    }
+
+    fn get_file_model_cached(
+        &mut self,
+        file_id: i64,
+    ) -> Result<FileModel, Box<dyn std::error::Error>> {
+        if let Some(file_model) = self.file_model_cache.get(&file_id) {
+            return Ok(file_model.clone());
+        }
+
+        let file_model = self.send_with_retries(|| {
+            Self::box_retry_error(apis::files_api::get_file(&self.config, file_id))
+        })?;
+        self.file_model_cache.insert(file_id, file_model.clone());
+        Ok(file_model)
+    }
+
+    fn cache_file_model(&mut self, file_id: i64, file_model: FileModel) {
+        self.file_model_cache.insert(file_id, file_model);
     }
 
     /// Atomically claim a workflow action for execution.
@@ -746,6 +773,20 @@ impl JobRunner {
             std::fs::create_dir_all(&self.output_dir)?;
             info!("Created output directory: {}", self.output_dir.display());
         }
+
+        if self.workflow.enable_ro_crate == Some(true) {
+            crate::client::ro_crate_utils::create_workflow_provenance_entities(
+                &self.config,
+                self.workflow_id,
+                self.run_id,
+                &self.workflow.name,
+            );
+        }
+        crate::client::ro_crate_utils::create_software_entities(
+            &self.config,
+            self.workflow_id,
+            self.run_id,
+        );
 
         // Check and log server version
         let version_result = version_check::check_version(&self.config);
@@ -1462,7 +1503,7 @@ impl JobRunner {
 
     /// Validate that all expected output files exist and update their st_mtime
     fn validate_and_update_output_files(
-        &self,
+        &mut self,
         job_id: i64,
         output_file_ids: &Option<Vec<i64>>,
     ) -> Result<(), String> {
@@ -1483,9 +1524,7 @@ impl JobRunner {
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
-            let file_model = match self.send_with_retries(|| {
-                Self::box_retry_error(apis::files_api::get_file(&self.config, *file_id))
-            }) {
+            let file_model = match self.get_file_model_cached(*file_id) {
                 Ok(file) => file,
                 Err(e) => {
                     return Err(format!(
@@ -1542,12 +1581,10 @@ impl JobRunner {
         }
 
         // Update st_mtime for all files and collect file models for RO-Crate
-        let mut updated_file_models: Vec<crate::models::FileModel> = Vec::new();
+        let mut updated_file_models: Vec<FileModel> = Vec::new();
 
         for (file_id, st_mtime) in files_to_update {
-            let mut file_model = match self.send_with_retries(|| {
-                Self::box_retry_error(apis::files_api::get_file(&self.config, file_id))
-            }) {
+            let mut file_model = match self.get_file_model_cached(file_id) {
                 Ok(file) => file,
                 Err(e) => {
                     error!(
@@ -1568,6 +1605,7 @@ impl JobRunner {
             }) {
                 Ok(_) => {
                     debug!("Updated st_mtime for file_id {} to {}", file_id, st_mtime);
+                    self.cache_file_model(file_id, file_model.clone());
                     updated_file_models.push(file_model);
                 }
                 Err(e) => {
@@ -1594,9 +1632,9 @@ impl JobRunner {
     /// Creates both File entities with provenance and a CreateAction entity for the job.
     /// This is a non-blocking operation - warnings are logged but errors don't fail the job.
     fn create_ro_crate_entities_for_output_files(
-        &self,
+        &mut self,
         job_id: i64,
-        output_files: &[crate::models::FileModel],
+        output_files: &[FileModel],
     ) {
         // Check if RO-Crate is enabled
         if self.workflow.enable_ro_crate != Some(true) {
@@ -1627,8 +1665,23 @@ impl JobRunner {
             }
         };
 
-        // Use run_id as the attempt_id for the CreateAction
-        let attempt_id = self.run_id;
+        let attempt_id = job.attempt_id.unwrap_or(1);
+
+        let mut input_file_paths = Vec::new();
+        if let Some(input_file_ids) = job.input_file_ids.clone() {
+            input_file_paths.reserve(input_file_ids.len());
+            for file_id in input_file_ids {
+                match self.get_file_model_cached(file_id) {
+                    Ok(file) => input_file_paths.push(file.path),
+                    Err(e) => {
+                        warn!(
+                            "Could not fetch input file {} for RO-Crate creation on job {}: {}",
+                            file_id, job_id, e
+                        );
+                    }
+                }
+            }
+        }
 
         // Collect output file paths for the CreateAction
         let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();
@@ -1640,6 +1693,7 @@ impl JobRunner {
             self.run_id,
             &job,
             attempt_id,
+            &input_file_paths,
             &output_file_paths,
         );
 
@@ -1656,6 +1710,7 @@ impl JobRunner {
                 content_size,
                 job_id,
                 attempt_id,
+                &input_file_paths,
             );
         }
     }
