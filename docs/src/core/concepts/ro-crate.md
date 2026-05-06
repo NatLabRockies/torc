@@ -43,7 +43,7 @@ When you enable RO-Crate on a workflow, Torc additionally creates file and job p
 
 - File entities are created for all **input files** (files that exist on disk)
 - Entities include MIME type inference, file size, and modification date
-- Torc creates workflow-level provenance entities: `#torc-workflow` and `#torc-run-{run_id}`
+- Torc creates workflow-level provenance entities: `#torc-workflow` and `#torc-run-id-{run_id}`
 
 **When jobs complete successfully:**
 
@@ -69,7 +69,7 @@ Automatically generated File entities include:
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
   "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
-  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-id-1" },
   "prov:wasDerivedFrom": { "@id": "data/input.csv" }
 }
 ```
@@ -84,8 +84,8 @@ Job provenance is captured as CreateAction entities:
   "@type": ["CreateAction", "prov:Activity"],
   "name": "process_data",
   "prov:hadPlan": { "@id": "#torc-workflow" },
-  "isPartOf": { "@id": "#torc-run-1" },
-  "instrument": { "@id": "#software-torc-run-1" },
+  "isPartOf": { "@id": "#torc-run-id-1" },
+  "instrument": { "@id": "#software-torc-run-id-1" },
   "prov:used": { "@id": "data/input.csv" },
   "result": [{ "@id": "data/output.csv" }]
 }
@@ -124,7 +124,7 @@ After running this workflow:
 - `input_data` will have an RO-Crate File entity (created during initialization)
 - `output_data` will have an RO-Crate File entity with `prov:wasGeneratedBy` linking to the job
 - A CreateAction entity will describe the `process` job execution
-- `#torc-workflow` and `#torc-run-{run_id}` will describe the workflow plan and run activity
+- `#torc-workflow` and `#torc-run-id-{run_id}` will describe the workflow plan and run activity
 
 ## Dataset Entities for Directories
 

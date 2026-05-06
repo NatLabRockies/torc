@@ -39,7 +39,7 @@ When automatic generation is enabled:
 - **Output files** get File entities with provenance (`prov:wasGeneratedBy`) created when jobs
   complete
 - **Jobs** get CreateAction entities linking inputs, outputs, plan, and run metadata
-- **Workflow runs** get `#torc-workflow` and `#torc-run-{run_id}` provenance entities
+- **Workflow runs** get `#torc-workflow` and `#torc-run-id-{run_id}` provenance entities
 
 After running the workflow, export the metadata:
 
@@ -56,7 +56,7 @@ The exported document includes complete provenance:
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "prov:wasGeneratedBy": { "@id": "#job-1-attempt-1" },
-  "prov:wasAttributedTo": { "@id": "#torc-run-1" }
+  "prov:wasAttributedTo": { "@id": "#torc-run-id-1" }
 }
 ```
 

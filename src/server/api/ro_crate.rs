@@ -295,7 +295,7 @@ impl RoCrateApiImpl {
     /// Create a SoftwareApplication RO-Crate entity for the torc-server binary.
     ///
     /// Records the server's version, binary path, and SHA256 hash. Skips if an
-    /// entity with `#software-torc-server-run-{run_id}` already exists for this workflow.
+    /// entity with `#software-torc-server-run-id-{run_id}` already exists for this workflow.
     ///
     /// Called during `initialize_jobs` regardless of `enable_ro_crate`.
     pub async fn create_server_software_entity(&self, workflow_id: i64) -> Result<(), ApiError> {
@@ -307,7 +307,7 @@ impl RoCrateApiImpl {
                 .map_err(|e| database_error_with_msg(e, "Failed to get workflow run_id"))?
                 .unwrap_or(0);
 
-        let entity_id = format!("#software-torc-server-run-{}", run_id);
+        let entity_id = format!("#software-torc-server-run-id-{}", run_id);
 
         // Check if entity already exists
         let exists = sqlx::query_scalar!(

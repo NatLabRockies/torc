@@ -397,7 +397,7 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
         };
 
     let mut existing_ids: HashSet<String> = entities.iter().map(|e| e.entity_id.clone()).collect();
-    let run_entity_id = format!("#torc-run-{}", run_id);
+    let run_entity_id = format!("#torc-run-id-{}", run_id);
     let mut synthetic_entities: Vec<serde_json::Value> = Vec::new();
 
     if !existing_ids.contains("#torc-workflow") {
@@ -415,10 +415,10 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
             "@type": ["CreateAction", "prov:Activity"],
             "name": format!("{} Run {}", workflow_name, run_id),
             "prov:hadPlan": { "@id": "#torc-workflow" },
-            "instrument": { "@id": format!("#software-torc-run-{}", run_id) },
+            "instrument": { "@id": format!("#software-torc-run-id-{}", run_id) },
             "prov:wasAssociatedWith": [
-                { "@id": format!("#software-torc-run-{}", run_id) },
-                { "@id": format!("#software-torc-server-run-{}", run_id) }
+                { "@id": format!("#software-torc-run-id-{}", run_id) },
+                { "@id": format!("#software-torc-server-run-id-{}", run_id) }
             ]
         });
         synthetic_entities.push(run_entity);
@@ -469,7 +469,7 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
             "https://w3id.org/ro/crate/1.1/context",
             {
                 "prov": "http://www.w3.org/ns/prov#",
-                "torc": "https://github.com/NatLabRockies/torc/terms/"
+                "torc": "https://github.com/NatLabRockies/torc/"
             }
         ],
         "@graph": graph
