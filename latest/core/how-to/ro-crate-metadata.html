@@ -218,7 +218,7 @@ initialization</li>
 <li><strong>Output files</strong> get File entities with provenance (<code>prov:wasGeneratedBy</code>) created when jobs
 complete</li>
 <li><strong>Jobs</strong> get CreateAction entities linking inputs, outputs, plan, and run metadata</li>
-<li><strong>Workflow runs</strong> get <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> provenance entities</li>
+<li><strong>Workflow runs</strong> get <code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> provenance entities</li>
 </ul>
 <p>After running the workflow, export the metadata:</p>
 <pre><code class="language-bash">torc ro-crate export 123 -o ro-crate-metadata.json
@@ -230,7 +230,7 @@ complete</li>
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "prov:wasGeneratedBy": { "@id": "#job-1-attempt-1" },
-  "prov:wasAttributedTo": { "@id": "#torc-run-1" }
+  "prov:wasAttributedTo": { "@id": "#torc-run-id-1" }
 }
 </code></pre>
 <h2 id="manual-entity-creation"><a class="header" href="#manual-entity-creation">Manual Entity Creation</a></h2>

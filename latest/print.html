@@ -2598,7 +2598,7 @@ provenance model.</p>
 <ul>
 <li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
 <li>Entities include MIME type inference, file size, and modification date</li>
-<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code></li>
+<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code></li>
 </ul>
 <p><strong>When jobs complete successfully:</strong></p>
 <ul>
@@ -2620,7 +2620,7 @@ provenance model.</p>
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
   "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
-  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-id-1" },
   "prov:wasDerivedFrom": { "@id": "data/input.csv" }
 }
 </code></pre>
@@ -2631,8 +2631,8 @@ provenance model.</p>
   "@type": ["CreateAction", "prov:Activity"],
   "name": "process_data",
   "prov:hadPlan": { "@id": "#torc-workflow" },
-  "isPartOf": { "@id": "#torc-run-1" },
-  "instrument": { "@id": "#software-torc-run-1" },
+  "isPartOf": { "@id": "#torc-run-id-1" },
+  "instrument": { "@id": "#software-torc-run-id-1" },
   "prov:used": { "@id": "data/input.csv" },
   "result": [{ "@id": "data/output.csv" }]
 }
@@ -2664,7 +2664,7 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 <li><code>input_data</code> will have an RO-Crate File entity (created during initialization)</li>
 <li><code>output_data</code> will have an RO-Crate File entity with <code>prov:wasGeneratedBy</code> linking to the job</li>
 <li>A CreateAction entity will describe the <code>process</code> job execution</li>
-<li><code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> will describe the workflow plan and run activity</li>
+<li><code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> will describe the workflow plan and run activity</li>
 </ul>
 <h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
 <p>Many workflows produce directory-based outputs rather than single files—for example,
@@ -4788,7 +4788,7 @@ initialization</li>
 <li><strong>Output files</strong> get File entities with provenance (<code>prov:wasGeneratedBy</code>) created when jobs
 complete</li>
 <li><strong>Jobs</strong> get CreateAction entities linking inputs, outputs, plan, and run metadata</li>
-<li><strong>Workflow runs</strong> get <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> provenance entities</li>
+<li><strong>Workflow runs</strong> get <code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> provenance entities</li>
 </ul>
 <p>After running the workflow, export the metadata:</p>
 <pre><code class="language-bash">torc ro-crate export 123 -o ro-crate-metadata.json
@@ -4800,7 +4800,7 @@ complete</li>
   "name": "output.csv",
   "encodingFormat": "text/csv",
   "prov:wasGeneratedBy": { "@id": "#job-1-attempt-1" },
-  "prov:wasAttributedTo": { "@id": "#torc-run-1" }
+  "prov:wasAttributedTo": { "@id": "#torc-run-id-1" }
 }
 </code></pre>
 <h2 id="manual-entity-creation"><a class="header" href="#manual-entity-creation">Manual Entity Creation</a></h2>
@@ -24279,8 +24279,8 @@ current branch.</p>
 <p>The important identity rules are:</p>
 <ul>
 <li>Workflow plan entity: one per workflow, <code>#torc-workflow</code></li>
-<li>Workflow run entity: one per run, <code>#torc-run-{run_id}</code></li>
-<li>Torc software entities: one per run, <code>#software-{binary_name}-run-{run_id}</code></li>
+<li>Workflow run entity: one per run, <code>#torc-run-id-{run_id}</code></li>
+<li>Torc software entities: one per run, <code>#software-{binary_name}-run-id-{run_id}</code></li>
 <li>Job execution entities: one per job attempt, <code>#job-{job_id}-attempt-{attempt_id}</code></li>
 <li>File entities: one per file record/path, updated in place across runs</li>
 </ul>
@@ -24302,11 +24302,11 @@ software and job execution entities accumulate across runs and attempts.</p>
 <h2 id="entity-creation-flow"><a class="header" href="#entity-creation-flow">Entity Creation Flow</a></h2>
 <pre class="mermaid">flowchart TD
     A[Workflow initialize_jobs] --&gt; B{enable_ro_crate?}
-    A --&gt; C[Server creates&lt;br/&gt;#software-torc-server-run-N]
-    A --&gt; D[Client attempts to create&lt;br/&gt;#software-torc-run-N&lt;br/&gt;and optional&lt;br/&gt;#software-torc-slurm-job-runner-run-N]
+    A --&gt; C[Server creates&lt;br/&gt;#software-torc-server-run-id-N]
+    A --&gt; D[Client attempts to create&lt;br/&gt;#software-torc-run-id-N&lt;br/&gt;and optional&lt;br/&gt;#software-torc-slurm-job-runner-run-id-N]
 
     B --&gt;|yes| E[Server upserts input File entities&lt;br/&gt;from DB rows with st_mtime]
-    B --&gt;|yes| F[Client creates or updates&lt;br/&gt;#torc-workflow and #torc-run-N]
+    B --&gt;|yes| F[Client creates or updates&lt;br/&gt;#torc-workflow and #torc-run-id-N]
     B --&gt;|yes| G[Client creates or updates&lt;br/&gt;input File entities]
     B --&gt;|no| H[No automatic file provenance]
 
@@ -24318,21 +24318,21 @@ software and job execution entities accumulate across runs and attempts.</p>
 
     I --&gt; J[Job completes successfully]
     J --&gt; J2{Job has output files?}
-    J2 --&gt;|yes| K[Client refreshes&lt;br/&gt;#torc-workflow and #torc-run-N]
+    J2 --&gt;|yes| K[Client refreshes&lt;br/&gt;#torc-workflow and #torc-run-id-N]
     J2 --&gt;|yes| L[Client creates&lt;br/&gt;#job-job_id-attempt-attempt_id]
     J2 --&gt;|yes| M[Client creates or updates&lt;br/&gt;output File entity]
     J2 --&gt;|no| P[No additional automatic&lt;br/&gt;RO-Crate entities for this job]
 
     L --&gt; N[Job CreateAction metadata]
     N --&gt; N1[prov:hadPlan -&gt; #torc-workflow]
-    N --&gt; N2[isPartOf -&gt; #torc-run-N]
-    N --&gt; N3[instrument -&gt; #software-torc-run-N]
+    N --&gt; N2[isPartOf -&gt; #torc-run-id-N]
+    N --&gt; N3[instrument -&gt; #software-torc-run-id-N]
     N --&gt; N4[prov:used -&gt; input file paths]
     N --&gt; N5[result -&gt; output file paths]
 
     M --&gt; O[Output File metadata]
     O --&gt; O1[prov:wasGeneratedBy -&gt; job CreateAction]
-    O --&gt; O2[prov:wasAttributedTo -&gt; #torc-run-N]
+    O --&gt; O2[prov:wasAttributedTo -&gt; #torc-run-id-N]
     O --&gt; O3[prov:wasDerivedFrom -&gt; input file paths]
 
     classDef init fill:#dbeafe,stroke:#1d4ed8,color:#0f172a,stroke-width:2px;
@@ -24354,7 +24354,7 @@ software and job execution entities accumulate across runs and attempts.</p>
 <h2 id="what-gets-created"><a class="header" href="#what-gets-created">What Gets Created</a></h2>
 <h3 id="torc-binaries"><a class="header" href="#torc-binaries">Torc binaries</a></h3>
 <ul>
-<li>The server always creates <code>#software-torc-server-run-{run_id}</code> during <code>initialize_jobs()</code></li>
+<li>The server always creates <code>#software-torc-server-run-id-{run_id}</code> during <code>initialize_jobs()</code></li>
 <li>The client attempts to create run-scoped software entities for <code>torc</code> and, on Linux,
 <code>torc-slurm-job-runner</code></li>
 <li>Client-side software entities are skipped when the corresponding binary cannot be found next to
@@ -24386,8 +24386,8 @@ refreshed</li>
 rather than creating a new file entity for each run</li>
 <li>Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
 run-specific identity</li>
-<li>The same successful-job path also refreshes <code>#torc-workflow</code>, refreshes <code>#torc-run-{run_id}</code>, and
-creates the job <code>CreateAction</code>, but only when there is at least one output file to process</li>
+<li>The same successful-job path also refreshes <code>#torc-workflow</code>, refreshes <code>#torc-run-id-{run_id}</code>,
+and creates the job <code>CreateAction</code>, but only when there is at least one output file to process</li>
 </ul>
 <h2 id="important-asymmetries"><a class="header" href="#important-asymmetries">Important Asymmetries</a></h2>
 <ul>
@@ -24400,7 +24400,7 @@ creates the job <code>CreateAction</code>, but only when there is at least one o
 <ul>
 <li>file entity count to stay stable across runs</li>
 <li>software entity count to grow across runs</li>
-<li>output file provenance to point at the newer <code>#torc-run-{run_id}</code></li>
+<li>output file provenance to point at the newer <code>#torc-run-id-{run_id}</code></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="api-generation-architecture"><a class="header" href="#api-generation-architecture">API Generation Architecture</a></h1>
 <p>This document describes how Torc's HTTP API contract and generated clients are produced.</p>

@@ -220,7 +220,7 @@ provenance model.</p>
 <ul>
 <li>File entities are created for all <strong>input files</strong> (files that exist on disk)</li>
 <li>Entities include MIME type inference, file size, and modification date</li>
-<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-{run_id}</code></li>
+<li>Torc creates workflow-level provenance entities: <code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code></li>
 </ul>
 <p><strong>When jobs complete successfully:</strong></p>
 <ul>
@@ -242,7 +242,7 @@ provenance model.</p>
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "dateModified": "2024-01-01T00:00:00Z",
   "prov:wasGeneratedBy": { "@id": "#job-42-attempt-1" },
-  "prov:wasAttributedTo": { "@id": "#torc-run-1" },
+  "prov:wasAttributedTo": { "@id": "#torc-run-id-1" },
   "prov:wasDerivedFrom": { "@id": "data/input.csv" }
 }
 </code></pre>
@@ -253,8 +253,8 @@ provenance model.</p>
   "@type": ["CreateAction", "prov:Activity"],
   "name": "process_data",
   "prov:hadPlan": { "@id": "#torc-workflow" },
-  "isPartOf": { "@id": "#torc-run-1" },
-  "instrument": { "@id": "#software-torc-run-1" },
+  "isPartOf": { "@id": "#torc-run-id-1" },
+  "instrument": { "@id": "#software-torc-run-id-1" },
   "prov:used": { "@id": "data/input.csv" },
   "result": [{ "@id": "data/output.csv" }]
 }
@@ -286,7 +286,7 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 <li><code>input_data</code> will have an RO-Crate File entity (created during initialization)</li>
 <li><code>output_data</code> will have an RO-Crate File entity with <code>prov:wasGeneratedBy</code> linking to the job</li>
 <li>A CreateAction entity will describe the <code>process</code> job execution</li>
-<li><code>#torc-workflow</code> and <code>#torc-run-{run_id}</code> will describe the workflow plan and run activity</li>
+<li><code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> will describe the workflow plan and run activity</li>
 </ul>
 <h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
 <p>Many workflows produce directory-based outputs rather than single files—for example,
