@@ -159,7 +159,7 @@ pub fn build_file_entity_with_provenance(
         "name": basename,
         "encodingFormat": mime_type,
         "prov:wasGeneratedBy": { "@id": create_action_id },
-        "prov:wasAttributedTo": id_ref(format!("#torc-run-{}", run_id))
+        "prov:wasAttributedTo": id_ref(format!("#torc-run-id-{}", run_id))
     });
 
     // Add content size if available
@@ -222,12 +222,12 @@ pub fn build_create_action_entity(
         "@type": typed_entity("CreateAction", "prov:Activity"),
         "name": job.name,
         "prov:hadPlan": id_ref("#torc-workflow"),
-        "isPartOf": id_ref(format!("#torc-run-{}", run_id)),
-        "instrument": id_ref(format!("#software-torc-run-{}", run_id)),
+        "isPartOf": id_ref(format!("#torc-run-id-{}", run_id)),
+        "instrument": id_ref(format!("#software-torc-run-id-{}", run_id)),
         "result": results,
         "prov:wasAssociatedWith": [
-            id_ref(format!("#software-torc-run-{}", run_id)),
-            id_ref(format!("#software-torc-server-run-{}", run_id))
+            id_ref(format!("#software-torc-run-id-{}", run_id)),
+            id_ref(format!("#software-torc-server-run-id-{}", run_id))
         ]
     });
 
@@ -269,14 +269,14 @@ fn build_workflow_run_entity_base(
     workflow_name: &str,
 ) -> RoCrateEntityModel {
     let metadata = serde_json::json!({
-        "@id": format!("#torc-run-{}", run_id),
+        "@id": format!("#torc-run-id-{}", run_id),
         "@type": typed_entity("CreateAction", "prov:Activity"),
         "name": format!("{} Run {}", workflow_name, run_id),
         "prov:hadPlan": id_ref("#torc-workflow"),
-        "instrument": id_ref(format!("#software-torc-run-{}", run_id)),
+        "instrument": id_ref(format!("#software-torc-run-id-{}", run_id)),
         "prov:wasAssociatedWith": [
-            id_ref(format!("#software-torc-run-{}", run_id)),
-            id_ref(format!("#software-torc-server-run-{}", run_id))
+            id_ref(format!("#software-torc-run-id-{}", run_id)),
+            id_ref(format!("#software-torc-server-run-id-{}", run_id))
         ]
     });
 
@@ -284,7 +284,7 @@ fn build_workflow_run_entity_base(
         id: None,
         workflow_id,
         file_id: None,
-        entity_id: format!("#torc-run-{}", run_id),
+        entity_id: format!("#torc-run-id-{}", run_id),
         entity_type: "CreateAction".to_string(),
         metadata: metadata.to_string(),
     }
@@ -420,7 +420,7 @@ fn create_or_update_run_entity(
     run_id: i64,
     workflow_name: &str,
 ) {
-    let run_entity_id = format!("#torc-run-{}", run_id);
+    let run_entity_id = format!("#torc-run-id-{}", run_id);
     if let Some(existing_run_entity) = find_entity_by_entity_id(config, workflow_id, &run_entity_id)
     {
         let entity_db_id = match existing_run_entity.id {
@@ -742,7 +742,7 @@ fn build_software_entity(
     name: &str,
     binary_path: &str,
 ) -> RoCrateEntityModel {
-    let entity_id = format!("#software-{}-run-{}", name, run_id);
+    let entity_id = format!("#software-{}-run-id-{}", name, run_id);
 
     // Use compile-time constants for version identification
     let version = version_check::full_version();
@@ -806,7 +806,7 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
         };
 
     for name in binary_names {
-        let entity_id = format!("#software-{}-run-{}", name, run_id);
+        let entity_id = format!("#software-{}-run-id-{}", name, run_id);
         if existing_ids.contains(&entity_id) {
             debug!(
                 "SoftwareApplication entity '{}' already exists, skipping",
@@ -889,7 +889,7 @@ mod tests {
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["prov:wasGeneratedBy"]["@id"], "#job-42-attempt-1");
-        assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-1");
+        assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-id-1");
     }
 
     #[test]
@@ -918,12 +918,12 @@ mod tests {
         assert_eq!(metadata["@type"][0], "CreateAction");
         assert_eq!(metadata["@type"][1], "prov:Activity");
         assert_eq!(metadata["name"], "process_data");
-        assert_eq!(metadata["instrument"]["@id"], "#software-torc-run-1");
+        assert_eq!(metadata["instrument"]["@id"], "#software-torc-run-id-1");
         assert_eq!(metadata["prov:hadPlan"]["@id"], "#torc-workflow");
         assert_eq!(metadata["prov:used"]["@id"], "input/source.csv");
         assert!(metadata["result"].is_array());
         assert_eq!(metadata["result"][0]["@id"], "output/result1.json");
-        assert_eq!(metadata["isPartOf"]["@id"], "#torc-run-1");
+        assert_eq!(metadata["isPartOf"]["@id"], "#torc-run-id-1");
     }
 
     #[test]
@@ -1081,11 +1081,11 @@ mod tests {
 
         assert_eq!(entity.workflow_id, 100);
         assert_eq!(entity.file_id, None);
-        assert_eq!(entity.entity_id, "#software-torc-run-3");
+        assert_eq!(entity.entity_id, "#software-torc-run-id-3");
         assert_eq!(entity.entity_type, "SoftwareApplication");
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
-        assert_eq!(metadata["@id"], "#software-torc-run-3");
+        assert_eq!(metadata["@id"], "#software-torc-run-id-3");
         assert_eq!(metadata["@type"][0], "SoftwareApplication");
         assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
         assert_eq!(metadata["name"], "torc");
@@ -1099,7 +1099,7 @@ mod tests {
     fn test_build_software_entity_different_binary() {
         let entity = build_software_entity(42, 1, "torc-server", "/opt/torc/torc-server");
 
-        assert_eq!(entity.entity_id, "#software-torc-server-run-1");
+        assert_eq!(entity.entity_id, "#software-torc-server-run-id-1");
         assert_eq!(entity.entity_type, "SoftwareApplication");
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
@@ -1117,7 +1117,7 @@ mod tests {
             id: Some(1),
             workflow_id: 100,
             file_id: None,
-            entity_id: "#torc-run-7".to_string(),
+            entity_id: "#torc-run-id-7".to_string(),
             entity_type: "CreateAction".to_string(),
             metadata: serde_json::json!({
                 "startTime": "2024-01-01T00:00:00Z"

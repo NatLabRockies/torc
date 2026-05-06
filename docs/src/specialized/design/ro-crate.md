@@ -8,8 +8,8 @@ current branch.
 The important identity rules are:
 
 - Workflow plan entity: one per workflow, `#torc-workflow`
-- Workflow run entity: one per run, `#torc-run-{run_id}`
-- Torc software entities: one per run, `#software-{binary_name}-run-{run_id}`
+- Workflow run entity: one per run, `#torc-run-id-{run_id}`
+- Torc software entities: one per run, `#software-{binary_name}-run-id-{run_id}`
 - Job execution entities: one per job attempt, `#job-{job_id}-attempt-{attempt_id}`
 - File entities: one per file record/path, updated in place across runs
 
@@ -35,11 +35,11 @@ software and job execution entities accumulate across runs and attempts.
 ```mermaid
 flowchart TD
     A[Workflow initialize_jobs] --> B{enable_ro_crate?}
-    A --> C[Server creates<br/>#software-torc-server-run-N]
-    A --> D[Client attempts to create<br/>#software-torc-run-N<br/>and optional<br/>#software-torc-slurm-job-runner-run-N]
+    A --> C[Server creates<br/>#software-torc-server-run-id-N]
+    A --> D[Client attempts to create<br/>#software-torc-run-id-N<br/>and optional<br/>#software-torc-slurm-job-runner-run-id-N]
 
     B -->|yes| E[Server upserts input File entities<br/>from DB rows with st_mtime]
-    B -->|yes| F[Client creates or updates<br/>#torc-workflow and #torc-run-N]
+    B -->|yes| F[Client creates or updates<br/>#torc-workflow and #torc-run-id-N]
     B -->|yes| G[Client creates or updates<br/>input File entities]
     B -->|no| H[No automatic file provenance]
 
@@ -51,21 +51,21 @@ flowchart TD
 
     I --> J[Job completes successfully]
     J --> J2{Job has output files?}
-    J2 -->|yes| K[Client refreshes<br/>#torc-workflow and #torc-run-N]
+    J2 -->|yes| K[Client refreshes<br/>#torc-workflow and #torc-run-id-N]
     J2 -->|yes| L[Client creates<br/>#job-job_id-attempt-attempt_id]
     J2 -->|yes| M[Client creates or updates<br/>output File entity]
     J2 -->|no| P[No additional automatic<br/>RO-Crate entities for this job]
 
     L --> N[Job CreateAction metadata]
     N --> N1[prov:hadPlan -> #torc-workflow]
-    N --> N2[isPartOf -> #torc-run-N]
-    N --> N3[instrument -> #software-torc-run-N]
+    N --> N2[isPartOf -> #torc-run-id-N]
+    N --> N3[instrument -> #software-torc-run-id-N]
     N --> N4[prov:used -> input file paths]
     N --> N5[result -> output file paths]
 
     M --> O[Output File metadata]
     O --> O1[prov:wasGeneratedBy -> job CreateAction]
-    O --> O2[prov:wasAttributedTo -> #torc-run-N]
+    O --> O2[prov:wasAttributedTo -> #torc-run-id-N]
     O --> O3[prov:wasDerivedFrom -> input file paths]
 
     classDef init fill:#dbeafe,stroke:#1d4ed8,color:#0f172a,stroke-width:2px;
@@ -89,7 +89,7 @@ flowchart TD
 
 ### Torc binaries
 
-- The server always creates `#software-torc-server-run-{run_id}` during `initialize_jobs()`
+- The server always creates `#software-torc-server-run-id-{run_id}` during `initialize_jobs()`
 - The client attempts to create run-scoped software entities for `torc` and, on Linux,
   `torc-slurm-job-runner`
 - Client-side software entities are skipped when the corresponding binary cannot be found next to
@@ -121,8 +121,8 @@ flowchart TD
   rather than creating a new file entity for each run
 - Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
   run-specific identity
-- The same successful-job path also refreshes `#torc-workflow`, refreshes `#torc-run-{run_id}`, and
-  creates the job `CreateAction`, but only when there is at least one output file to process
+- The same successful-job path also refreshes `#torc-workflow`, refreshes `#torc-run-id-{run_id}`,
+  and creates the job `CreateAction`, but only when there is at least one output file to process
 
 ## Important Asymmetries
 
@@ -135,4 +135,4 @@ These asymmetries are intentional and match `tests/test_auto_ro_crate.rs`, espec
 
 - file entity count to stay stable across runs
 - software entity count to grow across runs
-- output file provenance to point at the newer `#torc-run-{run_id}`
+- output file provenance to point at the newer `#torc-run-id-{run_id}`

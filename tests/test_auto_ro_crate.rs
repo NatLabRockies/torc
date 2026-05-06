@@ -357,7 +357,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
         metadata["prov:wasGeneratedBy"]["@id"],
         format!("#job-{}-attempt-1", job_id),
     );
-    assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-0");
+    assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-id-0");
 
     let workflow_plan = items.iter().find(|e| e.entity_id == "#torc-workflow");
     assert!(
@@ -365,7 +365,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
         "Should have a synthetic workflow plan entity"
     );
 
-    let workflow_run = items.iter().find(|e| e.entity_id == "#torc-run-0");
+    let workflow_run = items.iter().find(|e| e.entity_id == "#torc-run-id-0");
     assert!(
         workflow_run.is_some(),
         "Should have a synthetic workflow run entity"
@@ -612,7 +612,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
         create_actions.len()
     );
 
-    let workflow_run = final_items.iter().find(|e| e.entity_id == "#torc-run-0");
+    let workflow_run = final_items.iter().find(|e| e.entity_id == "#torc-run-id-0");
     assert!(
         workflow_run.is_some(),
         "Should have a synthetic workflow run entity"
@@ -832,7 +832,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         "Output file entity should still have prov:wasGeneratedBy provenance"
     );
     assert_eq!(
-        output_meta_run2["prov:wasAttributedTo"]["@id"], "#torc-run-1",
+        output_meta_run2["prov:wasAttributedTo"]["@id"], "#torc-run-id-1",
         "Output file should be attributed to the second workflow run"
     );
 }

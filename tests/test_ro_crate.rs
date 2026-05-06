@@ -150,7 +150,7 @@ fn test_ro_crate_list_filters(start_server: &ServerProcess) {
         id: None,
         workflow_id,
         file_id: None,
-        entity_id: "#software-test-run-1".to_string(),
+        entity_id: "#software-test-run-id-1".to_string(),
         entity_type: "SoftwareApplication".to_string(),
         metadata: json!({"name": "Test Software"}).to_string(),
     };
@@ -179,13 +179,13 @@ fn test_ro_crate_list_filters(start_server: &ServerProcess) {
         Some(0),
         Some(10),
         None,
-        Some("#software-test-run-1"),
+        Some("#software-test-run-id-1"),
         None,
         None,
     )
     .expect("Failed to list filtered by entity_id");
     assert_eq!(by_entity.items.len(), 1);
-    assert_eq!(by_entity.items[0].entity_id, "#software-test-run-1");
+    assert_eq!(by_entity.items[0].entity_id, "#software-test-run-id-1");
 
     let by_both = apis::ro_crate_api::list_ro_crate_entities_with_filters(
         config,
@@ -276,7 +276,7 @@ fn test_ro_crate_list_filters(start_server: &ServerProcess) {
     let found_by_entity = apis::ro_crate_api::find_ro_crate_entity_by_entity_id(
         config,
         workflow_id,
-        "#software-test-run-1",
+        "#software-test-run-id-1",
     )
     .expect("Failed to lookup by entity_id");
     assert_eq!(
