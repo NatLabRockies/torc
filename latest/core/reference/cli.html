@@ -354,7 +354,8 @@ server load for large workflows.</li>
 <code>1.5</code></li>
 <li><code>--retry-unknown</code> — Also retry jobs with unknown failure causes (not just OOM or timeout)</li>
 <li><code>--recovery-hook &lt;RECOVERY_HOOK&gt;</code> — Custom recovery script for unknown failures. The workflow ID
-is passed as an argument and via <code>TORC_WORKFLOW_ID</code> environment variable.</li>
+is passed as the final argument; the hook also receives <code>TORC_WORKFLOW_ID</code>, <code>TORC_RUN_ID</code>, and
+<code>TORC_API_URL</code> in its environment.</li>
 </ul>
 <p><strong>Auto-scheduling:</strong></p>
 <ul>

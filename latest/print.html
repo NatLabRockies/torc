@@ -4928,6 +4928,30 @@ torc ro-crate add-dataset 123 \
   Hash (manifest): 7cbcd407fae0631505a1fe289356ee07c8825e41e9441fafca44c001bd6ce75d
 Created RO-Crate Dataset entity with ID: 42
 </code></pre>
+<h3 id="linking-the-dataset-to-its-provenance-job"><a class="header" href="#linking-the-dataset-to-its-provenance-job">Linking the Dataset to its Provenance Job</a></h3>
+<p>Use <code>--metadata</code> to merge extra JSON-LD fields into the entity. The most common use is connecting
+the dataset to the job that produced it via <code>prov:wasGeneratedBy</code>, which references the
+<code>CreateAction</code> entity Torc emits for each job attempt (<code>#job-{job_id}-attempt-{attempt_id}</code>).</p>
+<p>When this command runs from inside a job, every job has the
+<a href="core/how-to/../reference/environment-variables.html"><code>TORC_WORKFLOW_ID</code>, <code>TORC_RUN_ID</code>, <code>TORC_JOB_ID</code>, and <code>TORC_ATTEMPT_ID</code></a>
+environment variables set, so the entity can be wired up automatically:</p>
+<pre><code class="language-bash">torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name simulation_results \
+  --path output/results.parquet/ \
+  --metadata "{
+    \"prov:wasGeneratedBy\": {\"@id\": \"#job-${TORC_JOB_ID}-attempt-${TORC_ATTEMPT_ID}\"},
+    \"prov:wasAttributedTo\": {\"@id\": \"#torc-run-id-${TORC_RUN_ID}\"}
+  }"
+</code></pre>
+<p>The argument must be a JSON object. Its top-level fields are applied as a shallow merge over the
+auto-computed metadata: user-supplied keys replace the auto-generated ones (<code>@id</code>, <code>@type</code>, <code>name</code>,
+<code>contentSize</code>, ...) entirely on conflict, and nested objects are not deep-merged. Pass <code>-</code> to read
+the JSON from stdin for larger blobs:</p>
+<pre><code class="language-bash">torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name simulation_results \
+  --path output/results.parquet/ \
+  --metadata - &lt; dataset_provenance.json
+</code></pre>
 <h3 id="when-to-use-add-dataset-vs-create"><a class="header" href="#when-to-use-add-dataset-vs-create">When to Use add-dataset vs create</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Command</th></tr></thead><tbody>
 <tr><td>Directory with many files</td><td><code>add-dataset</code></td></tr>
@@ -8616,7 +8640,8 @@ server load for large workflows.</li>
 <code>1.5</code></li>
 <li><code>--retry-unknown</code> — Also retry jobs with unknown failure causes (not just OOM or timeout)</li>
 <li><code>--recovery-hook &lt;RECOVERY_HOOK&gt;</code> — Custom recovery script for unknown failures. The workflow ID
-is passed as an argument and via <code>TORC_WORKFLOW_ID</code> environment variable.</li>
+is passed as the final argument; the hook also receives <code>TORC_WORKFLOW_ID</code>, <code>TORC_RUN_ID</code>, and
+<code>TORC_API_URL</code> in its environment.</li>
 </ul>
 <p><strong>Auto-scheduling:</strong></p>
 <ul>
@@ -11067,6 +11092,21 @@ workflow</li>
 mkdir -p "/data/results/workflow_${TORC_WORKFLOW_ID}"
 echo "Processing data..." &gt; "/data/results/workflow_${TORC_WORKFLOW_ID}/output.txt"
 </code></pre>
+<h3 id="torc_run_id"><a class="header" href="#torc_run_id">TORC_RUN_ID</a></h3>
+<p>The current run number for the workflow. Starts at 1 and increments each time the workflow is
+restarted (<code>torc workflows restart</code>).</p>
+<ul>
+<li><strong>Type</strong>: Integer (provided as string)</li>
+<li><strong>Example</strong>: <code>"1"</code> (first run), <code>"2"</code> (after first restart), etc.</li>
+<li><strong>Use case</strong>: Tag outputs or RO-Crate provenance entities by run, segregate per-run output
+directories, or reference the run-scoped Torc entities (<code>#torc-run-id-{N}</code>)</li>
+</ul>
+<pre><code class="language-bash"># Example: Link a Dataset entity to the current run's provenance graph
+torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name "${TORC_JOB_NAME}_output" \
+  --path "output/${TORC_JOB_NAME}/" \
+  --metadata "{\"prov:wasAttributedTo\": {\"@id\": \"#torc-run-id-${TORC_RUN_ID}\"}}"
+</code></pre>
 <h3 id="torc_job_id"><a class="header" href="#torc_job_id">TORC_JOB_ID</a></h3>
 <p>The unique identifier of the currently executing job.</p>
 <ul>
@@ -11184,6 +11224,7 @@ jobs:
 
       echo "=== Job Environment ==="
       echo "Workflow ID: ${TORC_WORKFLOW_ID}"
+      echo "Run ID: ${TORC_RUN_ID}"
       echo "Job ID: ${TORC_JOB_ID}"
       echo "Job Name: ${TORC_JOB_NAME}"
       echo "Attempt: ${TORC_ATTEMPT_ID}"
@@ -11202,6 +11243,7 @@ jobs:
 <h2 id="summary-table-1"><a class="header" href="#summary-table-1">Summary Table</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Type</th><th>Available In</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>TORC_WORKFLOW_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Workflow identifier</td></tr>
+<tr><td><code>TORC_RUN_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Workflow run number (1, 2, 3...)</td></tr>
 <tr><td><code>TORC_JOB_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Job identifier</td></tr>
 <tr><td><code>TORC_JOB_NAME</code></td><td>String</td><td>Jobs, Recovery Scripts</td><td>Job name from workflow spec</td></tr>
 <tr><td><code>TORC_API_URL</code></td><td>URL</td><td>Jobs, Recovery Scripts</td><td>Torc server API endpoint</td></tr>

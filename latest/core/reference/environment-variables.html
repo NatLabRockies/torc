@@ -201,6 +201,21 @@ workflow</li>
 mkdir -p "/data/results/workflow_${TORC_WORKFLOW_ID}"
 echo "Processing data..." &gt; "/data/results/workflow_${TORC_WORKFLOW_ID}/output.txt"
 </code></pre>
+<h3 id="torc_run_id"><a class="header" href="#torc_run_id">TORC_RUN_ID</a></h3>
+<p>The current run number for the workflow. Starts at 1 and increments each time the workflow is
+restarted (<code>torc workflows restart</code>).</p>
+<ul>
+<li><strong>Type</strong>: Integer (provided as string)</li>
+<li><strong>Example</strong>: <code>"1"</code> (first run), <code>"2"</code> (after first restart), etc.</li>
+<li><strong>Use case</strong>: Tag outputs or RO-Crate provenance entities by run, segregate per-run output
+directories, or reference the run-scoped Torc entities (<code>#torc-run-id-{N}</code>)</li>
+</ul>
+<pre><code class="language-bash"># Example: Link a Dataset entity to the current run's provenance graph
+torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name "${TORC_JOB_NAME}_output" \
+  --path "output/${TORC_JOB_NAME}/" \
+  --metadata "{\"prov:wasAttributedTo\": {\"@id\": \"#torc-run-id-${TORC_RUN_ID}\"}}"
+</code></pre>
 <h3 id="torc_job_id"><a class="header" href="#torc_job_id">TORC_JOB_ID</a></h3>
 <p>The unique identifier of the currently executing job.</p>
 <ul>
@@ -318,6 +333,7 @@ jobs:
 
       echo "=== Job Environment ==="
       echo "Workflow ID: ${TORC_WORKFLOW_ID}"
+      echo "Run ID: ${TORC_RUN_ID}"
       echo "Job ID: ${TORC_JOB_ID}"
       echo "Job Name: ${TORC_JOB_NAME}"
       echo "Attempt: ${TORC_ATTEMPT_ID}"
@@ -336,6 +352,7 @@ jobs:
 <h2 id="summary-table"><a class="header" href="#summary-table">Summary Table</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Type</th><th>Available In</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>TORC_WORKFLOW_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Workflow identifier</td></tr>
+<tr><td><code>TORC_RUN_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Workflow run number (1, 2, 3...)</td></tr>
 <tr><td><code>TORC_JOB_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Job identifier</td></tr>
 <tr><td><code>TORC_JOB_NAME</code></td><td>String</td><td>Jobs, Recovery Scripts</td><td>Job name from workflow spec</td></tr>
 <tr><td><code>TORC_API_URL</code></td><td>URL</td><td>Jobs, Recovery Scripts</td><td>Torc server API endpoint</td></tr>
