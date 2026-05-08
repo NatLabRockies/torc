@@ -1984,6 +1984,7 @@ impl JobRunner {
         let output = crate::client::utils::shell_command()
             .arg(script)
             .env("TORC_WORKFLOW_ID", self.workflow_id.to_string())
+            .env("TORC_RUN_ID", self.run_id.to_string())
             .env("TORC_JOB_ID", job_id.to_string())
             .env("TORC_JOB_NAME", job_name)
             .env("TORC_API_URL", &self.config.base_path)

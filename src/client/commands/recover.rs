@@ -360,7 +360,7 @@ pub fn recover_workflow(
             "{} job(s) with unknown failure cause - running recovery hook...",
             result.other_failures
         );
-        run_recovery_hook(args.workflow_id, hook_cmd)?;
+        run_recovery_hook(config, args.workflow_id, hook_cmd)?;
     }
 
     // Check if there are any jobs to retry
@@ -843,7 +843,11 @@ pub fn reinitialize_workflow(config: &Configuration, workflow_id: i64) -> Result
 }
 
 /// Run the user's custom recovery hook command
-pub fn run_recovery_hook(workflow_id: i64, hook_command: &str) -> Result<(), String> {
+pub fn run_recovery_hook(
+    config: &Configuration,
+    workflow_id: i64,
+    hook_command: &str,
+) -> Result<(), String> {
     info!("Running recovery hook: {}", hook_command);
 
     // Parse the command using shell-like quoting rules
@@ -871,8 +875,23 @@ pub fn run_recovery_hook(workflow_id: i64, hook_command: &str) -> Result<(), Str
     // Add workflow ID as final argument
     cmd.arg(workflow_id.to_string());
 
-    // Also set as environment variable for convenience
+    // Mirror the env surface JobRunner exposes to per-job recovery scripts so
+    // workflow-level hooks can also tag artifacts by run and call the API.
+    // Best-effort fetch of run_id: if the lookup fails we still run the hook
+    // with TORC_WORKFLOW_ID + TORC_API_URL set; we just skip TORC_RUN_ID.
     cmd.env("TORC_WORKFLOW_ID", workflow_id.to_string());
+    cmd.env("TORC_API_URL", &config.base_path);
+    match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(workflow) => {
+            cmd.env("TORC_RUN_ID", workflow.run_id.unwrap_or(0).to_string());
+        }
+        Err(e) => {
+            warn!(
+                "Failed to fetch workflow_id={} for recovery hook env: {} - TORC_RUN_ID will not be set",
+                workflow_id, e
+            );
+        }
+    }
 
     let output = cmd
         .output()
@@ -1461,7 +1480,7 @@ fn recover_workflow_interactive(
         && let Some(ref hook_cmd) = args.recovery_hook
     {
         info!("Running recovery hook...");
-        run_recovery_hook(args.workflow_id, hook_cmd)?;
+        run_recovery_hook(config, args.workflow_id, hook_cmd)?;
     }
 
     // Reset failed jobs

@@ -238,6 +238,38 @@ Computing dataset statistics for: output/results.parquet/ (using 8 threads)
 Created RO-Crate Dataset entity with ID: 42
 ```
 
+### Linking the Dataset to its Provenance Job
+
+Use `--metadata` to merge extra JSON-LD fields into the entity. The most common use is connecting
+the dataset to the job that produced it via `prov:wasGeneratedBy`, which references the
+`CreateAction` entity Torc emits for each job attempt (`#job-{job_id}-attempt-{attempt_id}`).
+
+When this command runs from inside a job, every job has the
+[`TORC_WORKFLOW_ID`, `TORC_RUN_ID`, `TORC_JOB_ID`, and `TORC_ATTEMPT_ID`](../reference/environment-variables.md)
+environment variables set, so the entity can be wired up automatically:
+
+```bash
+torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name simulation_results \
+  --path output/results.parquet/ \
+  --metadata "{
+    \"prov:wasGeneratedBy\": {\"@id\": \"#job-${TORC_JOB_ID}-attempt-${TORC_ATTEMPT_ID}\"},
+    \"prov:wasAttributedTo\": {\"@id\": \"#torc-run-id-${TORC_RUN_ID}\"}
+  }"
+```
+
+The argument must be a JSON object. Its top-level fields are applied as a shallow merge over the
+auto-computed metadata: user-supplied keys replace the auto-generated ones (`@id`, `@type`, `name`,
+`contentSize`, ...) entirely on conflict, and nested objects are not deep-merged. Pass `-` to read
+the JSON from stdin for larger blobs:
+
+```bash
+torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name simulation_results \
+  --path output/results.parquet/ \
+  --metadata - < dataset_provenance.json
+```
+
 ### When to Use add-dataset vs create
 
 | Scenario                       | Command       |
