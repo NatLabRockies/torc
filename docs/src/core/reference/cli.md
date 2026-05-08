@@ -204,7 +204,8 @@ resource requirements, and resubmits jobs.
   `1.5`
 - `--retry-unknown` — Also retry jobs with unknown failure causes (not just OOM or timeout)
 - `--recovery-hook <RECOVERY_HOOK>` — Custom recovery script for unknown failures. The workflow ID
-  is passed as an argument and via `TORC_WORKFLOW_ID` environment variable.
+  is passed as the final argument; the hook also receives `TORC_WORKFLOW_ID`, `TORC_RUN_ID`, and
+  `TORC_API_URL` in its environment.
 
 **Auto-scheduling:**
 

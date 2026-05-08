@@ -21,6 +21,24 @@ mkdir -p "/data/results/workflow_${TORC_WORKFLOW_ID}"
 echo "Processing data..." > "/data/results/workflow_${TORC_WORKFLOW_ID}/output.txt"
 ```
 
+### TORC_RUN_ID
+
+The current run number for the workflow. Starts at 1 and increments each time the workflow is
+restarted (`torc workflows restart`).
+
+- **Type**: Integer (provided as string)
+- **Example**: `"1"` (first run), `"2"` (after first restart), etc.
+- **Use case**: Tag outputs or RO-Crate provenance entities by run, segregate per-run output
+  directories, or reference the run-scoped Torc entities (`#torc-run-id-{N}`)
+
+```bash
+# Example: Link a Dataset entity to the current run's provenance graph
+torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
+  --name "${TORC_JOB_NAME}_output" \
+  --path "output/${TORC_JOB_NAME}/" \
+  --metadata "{\"prov:wasAttributedTo\": {\"@id\": \"#torc-run-id-${TORC_RUN_ID}\"}}"
+```
+
 ### TORC_JOB_ID
 
 The unique identifier of the currently executing job.
@@ -161,6 +179,7 @@ jobs:
 
       echo "=== Job Environment ==="
       echo "Workflow ID: ${TORC_WORKFLOW_ID}"
+      echo "Run ID: ${TORC_RUN_ID}"
       echo "Job ID: ${TORC_JOB_ID}"
       echo "Job Name: ${TORC_JOB_NAME}"
       echo "Attempt: ${TORC_ATTEMPT_ID}"
@@ -182,6 +201,7 @@ jobs:
 | Variable           | Type    | Available In           | Description                         |
 | ------------------ | ------- | ---------------------- | ----------------------------------- |
 | `TORC_WORKFLOW_ID` | Integer | Jobs, Recovery Scripts | Workflow identifier                 |
+| `TORC_RUN_ID`      | Integer | Jobs, Recovery Scripts | Workflow run number (1, 2, 3...)    |
 | `TORC_JOB_ID`      | Integer | Jobs, Recovery Scripts | Job identifier                      |
 | `TORC_JOB_NAME`    | String  | Jobs, Recovery Scripts | Job name from workflow spec         |
 | `TORC_API_URL`     | URL     | Jobs, Recovery Scripts | Torc server API endpoint            |

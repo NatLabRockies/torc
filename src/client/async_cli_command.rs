@@ -244,6 +244,7 @@ impl AsyncCliCommand {
         let job_id_str = self.job_id.to_string();
         let workflow_id_str = workflow_id.to_string();
         let attempt_id_str = attempt_id.to_string();
+        let run_id_str = run_id.to_string();
 
         // Create output directory for stdio files (unless we're not capturing anything)
         if *stdio_mode != StdioMode::None {
@@ -361,6 +362,7 @@ impl AsyncCliCommand {
 
         let child = cmd
             .env("TORC_WORKFLOW_ID", workflow_id_str)
+            .env("TORC_RUN_ID", run_id_str)
             .env("TORC_JOB_ID", job_id_str)
             .env("TORC_JOB_NAME", &self.job.name)
             .env("TORC_OUTPUT_DIR", output_dir.to_string_lossy().to_string())

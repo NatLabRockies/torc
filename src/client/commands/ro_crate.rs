@@ -105,6 +105,11 @@ pub enum RoCrateCommands {
     /// Creates an RO-Crate Dataset entity representing a directory of files,
     /// such as a hive-partitioned Parquet dataset. Computes file count, total
     /// size, and optionally a manifest or content hash.
+    ///
+    /// Use `--metadata` to add JSON-LD fields to the entity, such as
+    /// `prov:wasGeneratedBy` to link the dataset to the job that created it.
+    /// The merge is shallow at the top level: user-supplied keys replace
+    /// auto-computed ones entirely (no deep object merge).
     #[command(name = "add-dataset")]
     AddDataset {
         /// Workflow ID (optional - will prompt if not provided)
@@ -128,6 +133,15 @@ pub enum RoCrateCommands {
         /// Number of threads for parallel processing (default: number of CPUs)
         #[arg(long, short = 't')]
         threads: Option<usize>,
+        /// Extra JSON-LD metadata applied as a top-level merge over the
+        /// entity (or "-" to read from stdin). Must be a JSON object. The
+        /// merge is shallow: each user-supplied top-level field replaces the
+        /// auto-computed one with the same key (`@id`, `@type`, `name`,
+        /// `contentSize`, ...) entirely; nested objects are not deep-merged.
+        ///
+        /// Example: `--metadata '{"prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}'`
+        #[arg(long)]
+        metadata: Option<String>,
     },
 }
 
@@ -343,12 +357,14 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             description,
             encoding_format,
             threads,
+            metadata,
         } => {
             let user_name = get_env_user_name();
             let selected_workflow_id = match workflow_id {
                 Some(id) => *id,
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
+            let extra_metadata = metadata.as_deref().map(read_metadata_input);
             handle_add_dataset(
                 config,
                 selected_workflow_id,
@@ -358,6 +374,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 description.as_deref(),
                 encoding_format.as_deref(),
                 *threads,
+                extra_metadata.as_deref(),
                 format,
             );
         }
@@ -367,9 +384,10 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
 fn read_metadata_input(metadata: &str) -> String {
     if metadata == "-" {
         let mut buf = String::new();
-        std::io::stdin()
-            .read_to_string(&mut buf)
-            .expect("Failed to read metadata from stdin");
+        if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+            eprintln!("Error reading metadata from stdin: {}", e);
+            std::process::exit(1);
+        }
         buf
     } else {
         metadata.to_string()
@@ -659,6 +677,31 @@ fn compute_content_hash_parallel(
     Ok(format!("{:x}", final_hasher.finalize()))
 }
 
+/// Merge user-supplied JSON-LD metadata into auto-generated dataset metadata.
+///
+/// The merge is **shallow**: each top-level key in `extra` replaces the
+/// matching key in `base` entirely (nested objects are not recursed into).
+/// Keys present only in one side are preserved. The base value must already
+/// be a JSON object; if `extra` does not parse as a JSON object an `Err` is
+/// returned with a user-facing message.
+fn merge_dataset_metadata(
+    mut base: serde_json::Value,
+    extra: &str,
+) -> Result<serde_json::Value, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(extra).map_err(|e| format!("--metadata is not valid JSON: {}", e))?;
+    let extra_obj = parsed
+        .as_object()
+        .ok_or_else(|| "--metadata must be a JSON object".to_string())?;
+    let base_obj = base
+        .as_object_mut()
+        .expect("dataset metadata is constructed as a JSON object");
+    for (key, value) in extra_obj {
+        base_obj.insert(key.clone(), value.clone());
+    }
+    Ok(base)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle_add_dataset(
     config: &Configuration,
@@ -669,6 +712,7 @@ fn handle_add_dataset(
     description: Option<&str>,
     encoding_format: Option<&str>,
     threads: Option<usize>,
+    extra_metadata: Option<&str>,
     format: &str,
 ) {
     // Validate hash mode
@@ -750,6 +794,19 @@ fn handle_add_dataset(
         metadata["encodingFormat"] = serde_json::json!(enc);
     }
 
+    // Apply user-supplied metadata last as a shallow top-level merge, so
+    // explicit fields like prov:wasGeneratedBy land in the final entity and
+    // any colliding top-level keys are replaced by the user-supplied value.
+    if let Some(extra) = extra_metadata {
+        metadata = match merge_dataset_metadata(metadata, extra) {
+            Ok(merged) => merged,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        };
+    }
+
     // Create the RO-Crate entity
     let entity = models::RoCrateEntityModel::new(
         workflow_id,
@@ -773,5 +830,62 @@ fn handle_add_dataset(
             print_error("creating RO-Crate Dataset entity", &e);
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn base_dataset_metadata() -> serde_json::Value {
+        json!({
+            "@id": "data/output.parquet/",
+            "@type": "Dataset",
+            "name": "training_output",
+            "contentSize": 1024,
+            "fileCount": 4,
+            "hashMode": "manifest",
+        })
+    }
+
+    #[test]
+    fn merge_dataset_metadata_adds_provenance_fields() {
+        let extra = r##"{"prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
+        let merged = merge_dataset_metadata(base_dataset_metadata(), extra).unwrap();
+        assert_eq!(
+            merged["prov:wasGeneratedBy"],
+            json!({"@id": "#job-42-attempt-1"})
+        );
+        // Auto-computed fields are preserved when the user doesn't touch them.
+        assert_eq!(merged["fileCount"], json!(4));
+        assert_eq!(merged["@type"], json!("Dataset"));
+    }
+
+    #[test]
+    fn merge_dataset_metadata_user_fields_override_defaults() {
+        let extra = r#"{"name": "custom_name", "@type": ["Dataset", "prov:Entity"]}"#;
+        let merged = merge_dataset_metadata(base_dataset_metadata(), extra).unwrap();
+        assert_eq!(merged["name"], json!("custom_name"));
+        assert_eq!(merged["@type"], json!(["Dataset", "prov:Entity"]));
+    }
+
+    #[test]
+    fn merge_dataset_metadata_rejects_invalid_json() {
+        let err = merge_dataset_metadata(base_dataset_metadata(), "{not json").unwrap_err();
+        assert!(err.contains("not valid JSON"), "got: {}", err);
+    }
+
+    #[test]
+    fn merge_dataset_metadata_rejects_non_object() {
+        let err = merge_dataset_metadata(base_dataset_metadata(), "[1, 2, 3]").unwrap_err();
+        assert!(err.contains("must be a JSON object"), "got: {}", err);
+    }
+
+    #[test]
+    fn merge_dataset_metadata_empty_object_is_noop() {
+        let original = base_dataset_metadata();
+        let merged = merge_dataset_metadata(original.clone(), "{}").unwrap();
+        assert_eq!(merged, original);
     }
 }

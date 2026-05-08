@@ -927,7 +927,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                 "\n{} job(s) with unknown failure cause - running recovery hook...",
                 recovery_result.other_failures
             );
-            if let Err(e) = run_recovery_hook(args.workflow_id, hook_cmd) {
+            if let Err(e) = run_recovery_hook(config, args.workflow_id, hook_cmd) {
                 error!("Recovery hook failed: {}", e);
                 std::process::exit(1);
             }
