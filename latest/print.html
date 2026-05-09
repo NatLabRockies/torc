@@ -425,9 +425,9 @@ listed below.</p>
 <h3 id="nlr-kestrel"><a class="header" href="#nlr-kestrel">NLR Kestrel</a></h3>
 <p><strong>Pre-installed binaries</strong> are available at:</p>
 <pre><code>/scratch/dthom/torc/
-├── 0.28.0/
+├── 0.28.1/
 ├── ...
-└── latest -&gt; 0.28.0  (symlink to current version)
+└── latest -&gt; 0.28.1  (symlink to current version)
 </code></pre>
 <blockquote>
 <p><strong>Recommended</strong>: Use the <code>latest</code> directory. Torc maintains backwards compatibility, so you'll
@@ -10226,6 +10226,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>project</code></td><td>string</td><td>none</td><td>Project name or identifier for grouping workflows</td></tr>
 <tr><td><code>metadata</code></td><td>string</td><td>none</td><td>Arbitrary metadata as JSON string</td></tr>
 <tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Shared parameters that can be used by jobs and files via <code>use_parameters</code></td></tr>
+<tr><td><code>variables</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Workflow-level constants substituted via <code>{name}</code> into every string field</td></tr>
 <tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for every job in the workflow</td></tr>
 <tr><td><code>jobs</code></td><td>[<a href="core/reference/workflow-spec.html#jobspec">JobSpec</a>]</td><td><em>required</em></td><td>Jobs that make up this workflow</td></tr>
 <tr><td><code>files</code></td><td>[<a href="core/reference/workflow-spec.html#filespec">FileSpec</a>]</td><td>none</td><td>Files associated with this workflow</td></tr>
@@ -10779,10 +10780,109 @@ parameter ranges.</p>
     parameters:
       experiment: "['baseline','ablation','full']"
 </code></pre>
+<h2 id="workflow-variables"><a class="header" href="#workflow-variables">Workflow Variables</a></h2>
+<p>Workflow-level <code>variables</code> are constants that get substituted into every string field of the spec
+before parameter expansion. Use them to remove repetition of fixed strings -- paths, account codes,
+image tags, project IDs -- that appear across many jobs, files, schedulers, or env entries.</p>
+<p>Variables are not the same as <code>parameters</code>:</p>
+<ul>
+<li><code>variables</code> are constants. Each <code>{name}</code> reference is replaced once with the variable's value. The
+number of jobs/files does not change.</li>
+<li><code>parameters</code> are sweep dimensions. They expand into multiple instances via Cartesian (or zip)
+product.</li>
+</ul>
+<p>The two mechanisms compose freely: a single command string can mix <code>{variable}</code> references and
+<code>{parameter}</code> references. Variables resolve first; parameters drive expansion afterwards.</p>
+<h3 id="basic-usage-3"><a class="header" href="#basic-usage-3">Basic Usage</a></h3>
+<pre><code class="language-yaml">name: variables_demo
+variables:
+  data_root: /scratch/proj42
+  results_root: /shared/proj42/results
+  project: proj42
+  account: my_hpc_account
+
+env:
+  PROJECT: "{project}"
+
+jobs:
+  - name: prepare_inputs
+    command: "python prepare.py --in {data_root}/raw --out {data_root}/clean"
+
+  # Variables compose with parameters: {data_root} is a constant,
+  # {i} drives expansion into 4 jobs.
+  - name: "train_{i:02d}"
+    command: "python train.py --shard {i} --in {data_root}/clean"
+    parameters:
+      i: "1:4"
+
+slurm_schedulers:
+  - name: shared_sched
+    account: "{account}"
+    partition: short
+    walltime: "01:00:00"
+    nodes: 1
+</code></pre>
+<h3 id="validation-rules"><a class="header" href="#validation-rules">Validation Rules</a></h3>
+<ul>
+<li><strong>Variable names must be valid identifiers</strong> (<code>[A-Za-z_][A-Za-z0-9_]*</code>).</li>
+<li><strong>No collisions.</strong> A variable name must not match any parameter name (at the workflow level or in
+any job/file/user_data <code>parameters</code> map). Spec loading fails with an error pointing at the
+offending name.</li>
+<li><strong>No undefined references.</strong> A <code>{name}</code> token whose name is neither a variable nor a parameter is
+rejected as a typo. Tokens with non-identifier inner text (e.g. <code>find ... {} \;</code> or JSON-like
+fragments) are ignored. Shell-style <code>${...}</code> expansion (used by <code>${TORC_JOB_ID}</code>,
+<code>${files.input.X}</code>, etc.) is left alone -- the workflow variables system only consumes bare
+<code>{name}</code> tokens.</li>
+<li><strong>Variable values must be plain literal strings.</strong> Any <code>{name}</code> template reference inside a
+variable's value is rejected, whether it points at another variable, a parameter, or a typo. This
+keeps semantics simple and deterministic. Compose at the use site instead: <code>command: "{base}/sub"</code>
+rather than <code>inputs: "{base}/sub"</code>. Shell-style <code>${...}</code> expansion (e.g. <code>${HOME}</code>,
+<code>${TORC_JOB_ID}</code>) is allowed in variable values -- it is preserved verbatim and expanded at
+runtime, not by the spec loader. Note that you can still reference a variable from a parameter
+range: <code>i: "1:{n_max}"</code> works because that's a parameter value, not a variable value.</li>
+<li>Variables apply everywhere a string appears in the spec, including descriptions, env values,
+scheduler fields, action arguments, file paths, commands, and parameter range values. They do not
+apply to identifier fields (<code>parameters</code> keys, <code>use_parameters</code> entries).</li>
+</ul>
+<h3 id="kdl-syntax"><a class="header" href="#kdl-syntax">KDL Syntax</a></h3>
+<pre><code class="language-kdl">variables {
+    data_root "/scratch/proj42"
+    project "proj42"
+    account "my_hpc_account"
+}
+
+job "train_{i:02d}" {
+    command "python train.py --shard {i} --in {data_root}/clean"
+    parameters {
+        i "1:4"
+    }
+}
+</code></pre>
+<h3 id="json5-syntax"><a class="header" href="#json5-syntax">JSON5 Syntax</a></h3>
+<pre><code class="language-json5">{
+  variables: {
+    data_root: "/scratch/proj42",
+    project: "proj42",
+  },
+  jobs: [
+    {
+      name: "train_{i:02d}",
+      command: "python train.py --shard {i} --in {data_root}/clean",
+      parameters: { i: "1:4" },
+    },
+  ],
+}
+</code></pre>
+<h3 id="when-to-reach-for-variables-vs-shared-parameters"><a class="header" href="#when-to-reach-for-variables-vs-shared-parameters">When to Reach for Variables vs. Shared Parameters</a></h3>
+<p>Use <code>variables</code> for plain constants (single value, no expansion) -- they DRY up the spec without
+changing job counts and don't require any opt-in field on each job or file.</p>
+<p>Use shared <code>parameters</code> with <code>use_parameters</code> (next section) when the same <em>sweep dimension</em> drives
+expansion across multiple jobs and files. Shared parameters are still the right tool for
+hyperparameter sweeps.</p>
 <h2 id="shared-workflow-level-parameters"><a class="header" href="#shared-workflow-level-parameters">Shared (Workflow-Level) Parameters</a></h2>
 <p>Define parameters once at the workflow level and reuse them across multiple jobs and files using
 <code>use_parameters</code>:</p>
-<h3 id="basic-usage-3"><a class="header" href="#basic-usage-3">Basic Usage</a></h3>
+<h3 id="basic-usage-4"><a class="header" href="#basic-usage-4">Basic Usage</a></h3>
 <pre><code class="language-yaml">name: hyperparameter_sweep
 parameters:
   lr: "[0.0001,0.001,0.01]"
@@ -10862,7 +10962,7 @@ jobs:
     parameters:
       lr: "[0.01,0.1]"  # Local override - ignores workflow's lr
 </code></pre>
-<h3 id="kdl-syntax"><a class="header" href="#kdl-syntax">KDL Syntax</a></h3>
+<h3 id="kdl-syntax-1"><a class="header" href="#kdl-syntax-1">KDL Syntax</a></h3>
 <pre><code class="language-kdl">parameters {
     lr "[0.0001,0.001,0.01]"
     batch_size "[16,32,64]"
@@ -10873,7 +10973,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
     use_parameters "lr" "batch_size"
 }
 </code></pre>
-<h3 id="json5-syntax"><a class="header" href="#json5-syntax">JSON5 Syntax</a></h3>
+<h3 id="json5-syntax-1"><a class="header" href="#json5-syntax-1">JSON5 Syntax</a></h3>
 <pre><code class="language-json5">{
   parameters: {
     lr: "[0.0001,0.001,0.01]",
@@ -10930,7 +11030,7 @@ error:</p>
 <pre><code>All parameters must have the same number of values when using 'zip' mode.
 Parameter 'dataset' has 3 values, but 'model' has 2 values.
 </code></pre>
-<h3 id="kdl-syntax-1"><a class="header" href="#kdl-syntax-1">KDL Syntax</a></h3>
+<h3 id="kdl-syntax-2"><a class="header" href="#kdl-syntax-2">KDL Syntax</a></h3>
 <pre><code class="language-kdl">job "train_{dataset}_{model}" {
     command "python train.py --dataset={dataset} --model={model}"
     parameters {
@@ -10940,7 +11040,7 @@ Parameter 'dataset' has 3 values, but 'model' has 2 values.
     parameter_mode "zip"
 }
 </code></pre>
-<h3 id="json5-syntax-1"><a class="header" href="#json5-syntax-1">JSON5 Syntax</a></h3>
+<h3 id="json5-syntax-2"><a class="header" href="#json5-syntax-2">JSON5 Syntax</a></h3>
 <pre><code class="language-json5">{
   name: "train_{dataset}_{model}",
   command: "python train.py --dataset={dataset} --model={model}",
@@ -10965,6 +11065,8 @@ definitions</li>
 <li><strong>Use selective inheritance</strong> - Only inherit the parameters each job actually needs</li>
 <li><strong>Use zip mode for paired parameters</strong> - When parameters have a 1:1 correspondence, use
 <code>parameter_mode: zip</code></li>
+<li><strong>Use <code>variables</code> for repeated constants</strong> - Lift fixed strings (paths, account codes, image
+tags) into the workflow-level <code>variables</code> map rather than copying them across jobs and files</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="resource-requirements-reference"><a class="header" href="#resource-requirements-reference">Resource Requirements Reference</a></h1>
 <p>Technical reference for job resource specifications and allocation strategies.</p>
