@@ -206,18 +206,14 @@ pub(super) struct ResetWorkflowStatusQuery {
 pub(super) fn parse_delete_compute_nodes_query(
     query: Option<&str>,
 ) -> Result<DeleteComputeNodesQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(DeleteComputeNodesQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
     })
 }
 
 pub(super) fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNodesQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
 
     Ok(ComputeNodesQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
@@ -232,9 +228,7 @@ pub(super) fn parse_compute_nodes_query(query: Option<&str>) -> Result<ComputeNo
 }
 
 pub(super) fn parse_events_query(query: Option<&str>) -> Result<EventsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
 
     let workflow_id = parse_required_i64(&params, "workflow_id")?;
     Ok(EventsQuery {
@@ -249,9 +243,7 @@ pub(super) fn parse_events_query(query: Option<&str>) -> Result<EventsQuery, Str
 }
 
 pub(super) fn parse_files_query(query: Option<&str>) -> Result<FilesQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
 
     let workflow_id = parse_required_i64(&params, "workflow_id")?;
     Ok(FilesQuery {
@@ -270,9 +262,7 @@ pub(super) fn parse_files_query(query: Option<&str>) -> Result<FilesQuery, Strin
 pub(super) fn parse_local_schedulers_query(
     query: Option<&str>,
 ) -> Result<LocalSchedulersQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
 
     let workflow_id = parse_required_i64(&params, "workflow_id")?;
     Ok(LocalSchedulersQuery {
@@ -287,9 +277,7 @@ pub(super) fn parse_local_schedulers_query(
 }
 
 pub(super) fn parse_results_query(query: Option<&str>) -> Result<ResultsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
 
     let workflow_id = parse_required_i64(&params, "workflow_id")?;
     Ok(ResultsQuery {
@@ -308,9 +296,7 @@ pub(super) fn parse_results_query(query: Option<&str>) -> Result<ResultsQuery, S
 }
 
 pub(super) fn parse_user_data_query(query: Option<&str>) -> Result<UserDataQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
 
     let workflow_id = parse_required_i64(&params, "workflow_id")?;
     Ok(UserDataQuery {
@@ -329,9 +315,7 @@ pub(super) fn parse_user_data_query(query: Option<&str>) -> Result<UserDataQuery
 pub(super) fn parse_user_data_create_query(
     query: Option<&str>,
 ) -> Result<UserDataCreateQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(UserDataCreateQuery {
         consumer_job_id: parse_optional_i64(&params, "consumer_job_id")?,
         producer_job_id: parse_optional_i64(&params, "producer_job_id")?,
@@ -341,9 +325,7 @@ pub(super) fn parse_user_data_create_query(
 pub(super) fn parse_scheduled_compute_nodes_query(
     query: Option<&str>,
 ) -> Result<ScheduledComputeNodesQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ScheduledComputeNodesQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
         offset: parse_optional_i64(&params, "offset")?,
@@ -359,9 +341,7 @@ pub(super) fn parse_scheduled_compute_nodes_query(
 pub(super) fn parse_slurm_schedulers_query(
     query: Option<&str>,
 ) -> Result<SlurmSchedulersQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(SlurmSchedulersQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
         offset: parse_optional_i64(&params, "offset")?,
@@ -374,9 +354,7 @@ pub(super) fn parse_slurm_schedulers_query(
 pub(super) fn parse_access_pagination_query(
     query: Option<&str>,
 ) -> Result<AccessPaginationQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(AccessPaginationQuery {
         offset: parse_optional_i64(&params, "offset")?,
         limit: parse_optional_i64(&params, "limit")?,
@@ -386,9 +364,7 @@ pub(super) fn parse_access_pagination_query(
 pub(super) fn parse_resource_requirements_query(
     query: Option<&str>,
 ) -> Result<ResourceRequirementsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ResourceRequirementsQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
         job_id: parse_optional_i64(&params, "job_id")?,
@@ -406,9 +382,7 @@ pub(super) fn parse_resource_requirements_query(
 }
 
 pub(super) fn parse_slurm_stats_query(query: Option<&str>) -> Result<SlurmStatsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(SlurmStatsQuery {
         workflow_id: parse_required_i64(&params, "workflow_id")?,
         job_id: parse_optional_i64(&params, "job_id")?,
@@ -420,9 +394,7 @@ pub(super) fn parse_slurm_stats_query(query: Option<&str>) -> Result<SlurmStatsQ
 }
 
 pub(super) fn parse_workflows_query(query: Option<&str>) -> Result<WorkflowsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(WorkflowsQuery {
         offset: parse_optional_i64(&params, "offset")?,
         sort_by: params.get("sort_by").cloned(),
@@ -438,9 +410,7 @@ pub(super) fn parse_workflows_query(query: Option<&str>) -> Result<WorkflowsQuer
 pub(super) fn parse_workflow_relationships_query(
     query: Option<&str>,
 ) -> Result<WorkflowRelationshipsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(WorkflowRelationshipsQuery {
         offset: parse_optional_i64(&params, "offset")?,
         limit: parse_optional_i64(&params, "limit")?,
@@ -467,9 +437,7 @@ pub(super) fn parse_pending_actions_query(
 pub(super) fn parse_initialize_jobs_query(
     query: Option<&str>,
 ) -> Result<InitializeJobsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(InitializeJobsQuery {
         only_uninitialized: parse_optional_bool(&params, "only_uninitialized")?,
         clear_ephemeral_user_data: parse_optional_bool(&params, "clear_ephemeral_user_data")?,
@@ -480,9 +448,7 @@ pub(super) fn parse_initialize_jobs_query(
 pub(super) fn parse_claim_jobs_based_on_resources_query(
     query: Option<&str>,
 ) -> Result<ClaimJobsBasedOnResourcesQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ClaimJobsBasedOnResourcesQuery {
         strict_scheduler_match: parse_optional_bool(&params, "strict_scheduler_match")?,
     })
@@ -491,9 +457,7 @@ pub(super) fn parse_claim_jobs_based_on_resources_query(
 pub(super) fn parse_claim_next_jobs_query(
     query: Option<&str>,
 ) -> Result<ClaimNextJobsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ClaimNextJobsQuery {
         limit: parse_optional_i64(&params, "limit")?,
     })
@@ -502,9 +466,7 @@ pub(super) fn parse_claim_next_jobs_query(
 pub(super) fn parse_process_changed_job_inputs_query(
     query: Option<&str>,
 ) -> Result<ProcessChangedJobInputsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ProcessChangedJobInputsQuery {
         dry_run: parse_optional_bool(&params, "dry_run")?,
     })
@@ -513,9 +475,7 @@ pub(super) fn parse_process_changed_job_inputs_query(
 pub(super) fn parse_get_ready_job_requirements_query(
     query: Option<&str>,
 ) -> Result<GetReadyJobRequirementsQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(GetReadyJobRequirementsQuery {
         scheduler_config_id: parse_optional_i64(&params, "scheduler_config_id")?,
     })
@@ -524,9 +484,7 @@ pub(super) fn parse_get_ready_job_requirements_query(
 pub(super) fn parse_reset_job_status_query(
     query: Option<&str>,
 ) -> Result<ResetJobStatusQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ResetJobStatusQuery {
         failed_only: parse_optional_bool(&params, "failed_only")?,
     })
@@ -535,12 +493,21 @@ pub(super) fn parse_reset_job_status_query(
 pub(super) fn parse_reset_workflow_status_query(
     query: Option<&str>,
 ) -> Result<ResetWorkflowStatusQuery, String> {
-    let params: HashMap<String, String> = form_urlencoded::parse(query.unwrap_or("").as_bytes())
-        .into_owned()
-        .collect();
+    let params = parse_params(query);
     Ok(ResetWorkflowStatusQuery {
         force: parse_optional_bool(&params, "force")?,
     })
+}
+
+/// Decode a percent-encoded query string into a `HashMap` of (key, value) pairs.
+///
+/// Used by every `parse_*_query` helper as the first step. Behaves identically to the inline
+/// `form_urlencoded::parse(query.unwrap_or("").as_bytes()).into_owned().collect()` it replaces:
+/// missing query string -> empty map; repeated keys -> last value wins.
+pub(super) fn parse_params(query: Option<&str>) -> HashMap<String, String> {
+    form_urlencoded::parse(query.unwrap_or("").as_bytes())
+        .into_owned()
+        .collect()
 }
 
 pub(super) fn parse_required_i64(

@@ -30,8 +30,13 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListAccessGroupsApiResponse, ApiError> {
-        authorize_admin!(self, context, ListAccessGroupsApiResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_admin_and_paginate!(
+            self,
+            context,
+            ListAccessGroupsApiResponse,
+            offset,
+            limit
+        );
         self.access_groups_api
             .list_access_groups(offset, limit, context)
             .await
@@ -92,8 +97,8 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListGroupMembersResponse, ApiError> {
-        authorize_admin!(self, context, ListGroupMembersResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) =
+            authorize_admin_and_paginate!(self, context, ListGroupMembersResponse, offset, limit);
         self.access_groups_api
             .list_group_members(group_id, offset, limit, context)
             .await
@@ -163,8 +168,14 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListWorkflowGroupsResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListWorkflowGroupsResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListWorkflowGroupsResponse,
+            offset,
+            limit
+        );
         self.access_groups_api
             .list_workflow_groups(workflow_id, offset, limit, context)
             .await

@@ -74,13 +74,14 @@ where
         status: Option<String>,
         context: &C,
     ) -> Result<ListScheduledComputeNodesResponse, ApiError> {
-        authorize_workflow!(
+        let (offset, limit) = authorize_workflow_and_paginate!(
             self,
             workflow_id,
             context,
-            ListScheduledComputeNodesResponse
+            ListScheduledComputeNodesResponse,
+            offset,
+            limit
         );
-        let (offset, limit) = process_pagination_params(offset, limit)?;
         self.schedulers_api
             .list_scheduled_compute_nodes(
                 workflow_id,

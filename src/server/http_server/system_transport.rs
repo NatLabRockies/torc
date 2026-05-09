@@ -9,10 +9,7 @@ where
         &self,
         context: &C,
     ) -> Result<GetVersionResponse, ApiError> {
-        debug!(
-            "get_version() - X-Span-ID: {:?}",
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
+        log_call!(debug, context, "get_version()");
         if self.authorization_service.enforce_access_control() {
             Ok(GetVersionResponse::SuccessfulResponse(serde_json::json!({
                 "version": full_version(),
@@ -28,10 +25,7 @@ where
     }
 
     pub(super) async fn transport_ping(&self, context: &C) -> Result<PingResponse, ApiError> {
-        debug!(
-            "ping() - X-Span-ID: {:?}",
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
+        log_call!(debug, context, "ping()");
         Ok(PingResponse::SuccessfulResponse(
             serde_json::json!({"status": "ok"}),
         ))
@@ -41,22 +35,17 @@ where
         &self,
         context: &C,
     ) -> Result<ReloadAuthResponse, ApiError> {
-        debug!(
-            "reload_auth() - X-Span-ID: {:?}",
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
+        log_call!(debug, context, "reload_auth()");
 
         authorize_admin!(self, context, ReloadAuthResponse);
 
         let auth_file_path = match &self.auth_file_path {
             Some(path) => path.clone(),
             None => {
-                return Ok(ReloadAuthResponse::DefaultErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "NoAuthFile",
-                        "message": "No auth file configured. Start the server with --auth-file to enable auth reloading."
-                    })),
-                ));
+                return Ok(ReloadAuthResponse::DefaultErrorResponse(error_payload!(
+                    "NoAuthFile",
+                    "No auth file configured. Start the server with --auth-file to enable auth reloading."
+                )));
             }
         };
 
@@ -94,12 +83,10 @@ where
             }
             Err(e) => {
                 error!("Failed to reload htpasswd file: {}", e);
-                Ok(ReloadAuthResponse::DefaultErrorResponse(
-                    models::ErrorResponse::new(serde_json::json!({
-                        "error": "ReloadFailed",
-                        "message": format!("Failed to reload htpasswd file: {}", e)
-                    })),
-                ))
+                Ok(ReloadAuthResponse::DefaultErrorResponse(error_payload!(
+                    "ReloadFailed",
+                    format!("Failed to reload htpasswd file: {}", e)
+                )))
             }
         }
     }

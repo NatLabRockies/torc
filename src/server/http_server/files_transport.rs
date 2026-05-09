@@ -35,8 +35,14 @@ where
         is_output: Option<bool>,
         context: &C,
     ) -> Result<ListFilesResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListFilesResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListFilesResponse,
+            offset,
+            limit
+        );
         self.files_api
             .list_files(
                 workflow_id,

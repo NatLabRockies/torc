@@ -41,9 +41,14 @@ where
         is_ephemeral: Option<bool>,
         context: &C,
     ) -> Result<ListUserDataResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListUserDataResponse);
-
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListUserDataResponse,
+            offset,
+            limit
+        );
         self.user_data_api
             .list_user_data(
                 workflow_id,

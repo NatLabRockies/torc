@@ -42,8 +42,14 @@ where
         reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListRoCrateEntitiesResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListRoCrateEntitiesResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListRoCrateEntitiesResponse,
+            offset,
+            limit
+        );
         self.ro_crate_api
             .list_ro_crate_entities(
                 workflow_id,

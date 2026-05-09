@@ -42,8 +42,14 @@ where
         num_cpus: Option<i64>,
         context: &C,
     ) -> Result<ListLocalSchedulersResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListLocalSchedulersResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListLocalSchedulersResponse,
+            offset,
+            limit
+        );
         self.schedulers_api
             .list_local_schedulers(
                 workflow_id,

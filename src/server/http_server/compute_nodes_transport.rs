@@ -60,8 +60,14 @@ where
         scheduled_compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListComputeNodesResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListComputeNodesResponse,
+            offset,
+            limit
+        );
         self.compute_nodes_api
             .list_compute_nodes(
                 workflow_id,

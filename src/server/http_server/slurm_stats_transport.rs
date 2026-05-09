@@ -24,15 +24,22 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListSlurmStatsResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListSlurmStatsResponse);
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListSlurmStatsResponse,
+            offset,
+            limit
+        );
         self.slurm_stats_api
             .list_slurm_stats(
                 workflow_id,
                 job_id,
                 run_id,
                 attempt_id,
-                offset.unwrap_or(0),
-                limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT),
+                offset,
+                limit,
                 context,
             )
             .await

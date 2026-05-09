@@ -40,8 +40,14 @@ where
         reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListSlurmSchedulersResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListSlurmSchedulersResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListSlurmSchedulersResponse,
+            offset,
+            limit
+        );
         self.schedulers_api
             .list_slurm_schedulers(workflow_id, offset, limit, sort_by, reverse_sort, context)
             .await
