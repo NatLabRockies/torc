@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO ro_crate_entity\n                        (workflow_id, file_id, entity_id, entity_type, metadata)\n                    VALUES ($1, $2, $3, $4, $5)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "f0c87c852c9acb25674a1cdde06ec105d8822b4cbc27823bc212e7fc11c8dc79"
+}
