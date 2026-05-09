@@ -975,6 +975,382 @@ impl ExecutionConfig {
     }
 }
 
+/// Apply workflow-level `variables` substitution to every string in the spec value.
+///
+/// Runs before `serde_json::from_value` so that all string fields -- including ones
+/// that are not currently parameter-substituted -- benefit. The `variables` map is
+/// preserved in the output Value for round-trip serialization.
+///
+/// Skip rules: keys of `parameters` maps and entries of `use_parameters` arrays are
+/// identifiers, not user-facing strings, so they are not substituted.
+fn apply_workflow_variables(
+    mut value: serde_json::Value,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let serde_json::Value::Object(ref map) = value else {
+        return Ok(value);
+    };
+    let Some(vars_value) = map.get("variables") else {
+        return Ok(value);
+    };
+    let serde_json::Value::Object(vars_map) = vars_value else {
+        return Err("workflow `variables` must be an object of string key/value pairs".into());
+    };
+    if vars_map.is_empty() {
+        return Ok(value);
+    }
+
+    let mut variables: HashMap<String, ParameterValue> = HashMap::with_capacity(vars_map.len());
+    for (name, value) in vars_map {
+        if !is_identifier(name) {
+            return Err(format!(
+                "workflow variable name '{}' must be a valid identifier \
+                 ([A-Za-z_][A-Za-z0-9_]*). Rename the variable.",
+                name
+            )
+            .into());
+        }
+        let serde_json::Value::String(s) = value else {
+            return Err(format!(
+                "workflow variable '{}' must be a string (got {})",
+                name,
+                json_value_kind(value)
+            )
+            .into());
+        };
+        variables.insert(name.clone(), ParameterValue::String(s.clone()));
+    }
+
+    let mut parameter_names: HashSet<String> = HashSet::new();
+    collect_parameter_names(&value, &mut parameter_names);
+    let mut collisions: Vec<&String> = variables
+        .keys()
+        .filter(|name| parameter_names.contains(*name))
+        .collect();
+    if !collisions.is_empty() {
+        collisions.sort();
+        return Err(format!(
+            "workflow `variables` collide with parameter names: {}. \
+             Rename the variable(s) or the parameter(s) so each name appears in only one map.",
+            collisions
+                .iter()
+                .map(|n| n.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+        .into());
+    }
+
+    // Variable values must be plain literal strings: no `{...}` template
+    // references at all (shell-style `${...}` is allowed, since it is reserved
+    // for shell expansion and the `${files.input.X}` family). Allowing template
+    // references inside variable values would either (a) make resolution
+    // order-dependent when one variable references another (HashMap iteration
+    // is randomized and cycles would not be detected), or (b) leak unresolved
+    // parameter tokens into wherever the variable is used. Composition belongs
+    // at the use site -- e.g. `command: "{base}/{sub}"`, not
+    // `combo: "{base}/{sub}"`.
+    for (name, vars_value) in vars_map {
+        let serde_json::Value::String(s) = vars_value else {
+            continue; // shape already validated above; non-strings already errored
+        };
+        check_variable_value_tokens(name, s, &variables)?;
+    }
+
+    let valid_token_names: HashSet<String> = variables
+        .keys()
+        .cloned()
+        .chain(parameter_names.iter().cloned())
+        .collect();
+
+    substitute_variables_in_value(&mut value, &variables, &valid_token_names, false)?;
+
+    Ok(value)
+}
+
+/// Validate the tokens inside a workflow variable's value.
+///
+/// Variable values must be plain literal strings: any `{name}` template
+/// reference is rejected. Shell-style `${...}` is allowed (it is reserved for
+/// shell expansion and for the `${files.input.X}` / `${user_data.input.X}`
+/// substitution that runs later in the workflow lifecycle).
+///
+/// The "references another variable" branch produces a more pointed error;
+/// every other template reference (parameter names, undefined names) is
+/// rejected with the same uniform "must be a literal" message.
+fn check_variable_value_tokens(
+    var_name: &str,
+    s: &str,
+    variables: &HashMap<String, ParameterValue>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        if i > 0 && bytes[i - 1] == b'$' {
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        let mut j = start;
+        while j < bytes.len() && bytes[j] != b'}' && bytes[j] != b'{' {
+            j += 1;
+        }
+        if j >= bytes.len() || bytes[j] != b'}' {
+            i += 1;
+            continue;
+        }
+        let inner = &s[start..j];
+        let token_name = inner.split(':').next().unwrap_or("");
+        if !is_identifier(token_name) {
+            i = j + 1;
+            continue;
+        }
+        return if variables.contains_key(token_name) {
+            Err(format!(
+                "variable '{}' value '{}' references another variable '{{{}}}'. \
+                 Variable values may not reference other variables; resolution \
+                 order would be undefined. Inline the constant or compose at the \
+                 use site.",
+                var_name, s, inner
+            )
+            .into())
+        } else {
+            Err(format!(
+                "variable '{}' value '{}' contains template reference '{{{}}}'. \
+                 Variable values must be plain literal strings (shell-style \
+                 `${{...}}` is allowed). Compose at the use site instead.",
+                var_name, s, inner
+            )
+            .into())
+        };
+    }
+    Ok(())
+}
+
+fn json_value_kind(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "boolean",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
+}
+
+/// Collect every parameter name declared anywhere in the spec value.
+/// Looks at top-level `parameters`, and at `parameters` inside any object found
+/// in the `jobs`, `files`, or `user_data` arrays.
+fn collect_parameter_names(value: &serde_json::Value, out: &mut HashSet<String>) {
+    let serde_json::Value::Object(map) = value else {
+        return;
+    };
+    if let Some(serde_json::Value::Object(params)) = map.get("parameters") {
+        for k in params.keys() {
+            out.insert(k.clone());
+        }
+    }
+    for field in ["jobs", "files", "user_data"] {
+        let Some(serde_json::Value::Array(items)) = map.get(field) else {
+            continue;
+        };
+        for item in items {
+            let serde_json::Value::Object(item_map) = item else {
+                continue;
+            };
+            if let Some(serde_json::Value::Object(params)) = item_map.get("parameters") {
+                for k in params.keys() {
+                    out.insert(k.clone());
+                }
+            }
+        }
+    }
+}
+
+/// Recursively walk a JSON value, substituting `{var}` and `{var:fmt}` in every
+/// string node. Tokens whose name matches a parameter (rather than a variable)
+/// are left intact for later parameter expansion. Tokens whose name matches
+/// neither are reported as undefined-variable errors.
+///
+/// `inside_variables` is true when the caller has descended into the top-level
+/// `variables` map; in that scope the values must not be touched (they are the
+/// substitution source itself).
+fn substitute_variables_in_value(
+    value: &mut serde_json::Value,
+    variables: &HashMap<String, ParameterValue>,
+    valid_token_names: &HashSet<String>,
+    inside_variables: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match value {
+        serde_json::Value::String(s) => {
+            if !inside_variables {
+                check_undefined_tokens(s, valid_token_names)?;
+                *s = substitute_workflow_variables_in_string(s, variables);
+            }
+            Ok(())
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                substitute_variables_in_value(
+                    item,
+                    variables,
+                    valid_token_names,
+                    inside_variables,
+                )?;
+            }
+            Ok(())
+        }
+        serde_json::Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                if inside_variables {
+                    // Don't substitute inside the variables map -- those strings define
+                    // the substitution source, not consumers of it.
+                    continue;
+                }
+                if key == "variables" {
+                    substitute_variables_in_value(child, variables, valid_token_names, true)?;
+                    continue;
+                }
+                if key == "parameters" {
+                    // Substitute only in the values of the parameters map; keys are
+                    // identifiers and must remain untouched.
+                    if let serde_json::Value::Object(params) = child {
+                        for v in params.values_mut() {
+                            substitute_variables_in_value(v, variables, valid_token_names, false)?;
+                        }
+                    }
+                    continue;
+                }
+                if key == "use_parameters" {
+                    // Identifiers, not user-facing strings.
+                    continue;
+                }
+                substitute_variables_in_value(child, variables, valid_token_names, false)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Scan a string for `{name}` and `{name:fmt}` tokens; error if any token's name
+/// does not appear in `valid_token_names`. Tokens with a non-identifier name
+/// (e.g. format-only `{:>5}`, JSON-like `{"x": 1}`) are ignored on the assumption
+/// they are unrelated to template substitution.
+///
+/// `${...}` blocks are skipped: that syntax is reserved for shell-style variable
+/// expansion and the repo's existing `${files.input.X}` / `${user_data.input.X}`
+/// substitution. They are never treated as workflow variable references.
+fn check_undefined_tokens(
+    s: &str,
+    valid_token_names: &HashSet<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        // Skip `${...}` -- that's shell-style variable expansion, not a workflow
+        // variable reference.
+        if i > 0 && bytes[i - 1] == b'$' {
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        let mut j = start;
+        while j < bytes.len() && bytes[j] != b'}' && bytes[j] != b'{' {
+            j += 1;
+        }
+        if j >= bytes.len() || bytes[j] != b'}' {
+            i += 1;
+            continue;
+        }
+        let inner = &s[start..j];
+        let name = inner.split(':').next().unwrap_or("");
+        if is_identifier(name) && !valid_token_names.contains(name) {
+            return Err(format!(
+                "undefined template name '{{{}}}' in '{}': not declared in `variables` \
+                 or any `parameters` map. Add it to `variables` or fix the typo.",
+                inner, s
+            )
+            .into());
+        }
+        i = j + 1;
+    }
+    Ok(())
+}
+
+fn is_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Substitute workflow variables into a string in a single pass.
+///
+/// Replaces `{name}` and `{name:fmt}` with the value of `variables[name]` when
+/// `name` matches a key. Unmatched tokens (parameter names that get expanded
+/// later, or tokens whose name is non-identifier text) are left intact.
+///
+/// Critically, `${...}` blocks are skipped entirely so that shell-style
+/// expansions like `${HOME}` or `${TORC_JOB_ID}` are preserved verbatim --
+/// even when a variable happens to share a name with a shell variable. This
+/// is what `substitute_parameters` (used by parameter expansion) does *not*
+/// guarantee, since it relies on naive `string.replace`.
+fn substitute_workflow_variables_in_string(
+    s: &str,
+    variables: &HashMap<String, ParameterValue>,
+) -> String {
+    let mut result = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut last_copied = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        if i > 0 && bytes[i - 1] == b'$' {
+            // Shell-style ${...}; do not substitute.
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        let Some(rel_end) = s[start..].find('}') else {
+            i += 1;
+            continue;
+        };
+        let inner_end = start + rel_end;
+        let inner = &s[start..inner_end];
+        let (name, fmt) = match inner.split_once(':') {
+            Some((n, f)) => (n, Some(f)),
+            None => (inner, None),
+        };
+        let Some(value) = variables.get(name) else {
+            // Not a workflow variable -- leave intact (it might be a parameter
+            // name that gets expanded later, or just literal text).
+            i = inner_end + 1;
+            continue;
+        };
+        result.push_str(&s[last_copied..i]);
+        result.push_str(&value.format(fmt));
+        i = inner_end + 1;
+        last_copied = i;
+    }
+    result.push_str(&s[last_copied..]);
+    result
+}
+
 /// Specification for a complete workflow
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -991,6 +1367,12 @@ pub struct WorkflowSpec {
     /// Jobs/files can reference these by setting use_parameters to parameter names
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<HashMap<String, String>>,
+    /// Workflow-level constants substituted into every string field of the spec.
+    /// Unlike `parameters`, variables do not trigger Cartesian expansion -- each
+    /// `{name}` reference is replaced once with the variable's value before the
+    /// spec is processed. Variable names must not collide with any parameter name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variables: Option<HashMap<String, String>>,
     /// Environment variables exported for every job in the workflow
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<HashMap<String, String>>,
@@ -1067,6 +1449,7 @@ impl WorkflowSpec {
             user: Some(user),
             description,
             parameters: None,
+            variables: None,
             env: None,
             compute_node_expiration_buffer_seconds: None,
             compute_node_wait_for_new_jobs_seconds: None,
@@ -1105,6 +1488,7 @@ impl WorkflowSpec {
                     .into(),
             );
         }
+        let value = apply_workflow_variables(value)?;
         Ok(serde_json::from_value(value)?)
     }
 
@@ -4452,6 +4836,11 @@ impl WorkflowSpec {
                         obj.insert("parameters".to_string(), params);
                     }
                 }
+                "variables" => {
+                    if let Some(vars) = Self::kdl_string_map_to_json(node, "Variable")? {
+                        obj.insert("variables".to_string(), vars);
+                    }
+                }
                 "env" => {
                     if let Some(env) = Self::kdl_string_map_to_json(node, "Environment key")? {
                         obj.insert("env".to_string(), env);
@@ -4598,6 +4987,18 @@ impl WorkflowSpec {
         {
             lines.push("parameters {".to_string());
             for (key, value) in params {
+                lines.push(format!("    {} {}", key, kdl_escape(value)));
+            }
+            lines.push("}".to_string());
+        }
+        // Variables (workflow-level constants)
+        if let Some(ref vars) = self.variables
+            && !vars.is_empty()
+        {
+            lines.push("variables {".to_string());
+            let mut entries: Vec<_> = vars.iter().collect();
+            entries.sort_by_key(|(left, _)| *left);
+            for (key, value) in entries {
                 lines.push(format!("    {} {}", key, kdl_escape(value)));
             }
             lines.push("}".to_string());
@@ -5809,6 +6210,7 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             compute_node_ignore_workflow_completion: None,
             compute_node_wait_for_new_jobs_seconds: None,
             parameters: None,
+            variables: None,
             env: None,
             jobs: vec![JobSpec {
                 name: "job_{i}".to_string(),
@@ -7053,5 +7455,448 @@ resource_requirements:
 "#;
         let spec: WorkflowSpec = serde_yaml::from_str(yaml).expect("Failed to parse YAML");
         assert!(spec.validate_scheduler_resources().is_empty());
+    }
+
+    #[test]
+    fn test_workflow_variables_substitute_into_strings() {
+        let yaml = r#"
+name: vars_demo
+variables:
+  base_path: /scratch/proj
+  image: pytorch:2.4
+jobs:
+  - name: train
+    command: "{base_path}/run.sh --img {image}"
+files:
+  - name: out
+    path: "{base_path}/out.txt"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variables substitution should succeed");
+        assert_eq!(
+            spec.jobs[0].command,
+            "/scratch/proj/run.sh --img pytorch:2.4"
+        );
+        assert_eq!(
+            spec.files.as_ref().unwrap()[0].path,
+            "/scratch/proj/out.txt"
+        );
+        // The variables map itself must be preserved for round-trip serialization.
+        let vars = spec.variables.expect("variables map preserved");
+        assert_eq!(
+            vars.get("base_path").map(String::as_str),
+            Some("/scratch/proj")
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_combined_with_parameters() {
+        let yaml = r#"
+name: vars_and_params
+variables:
+  base_path: /scratch/proj
+jobs:
+  - name: "job_{i:03d}"
+    command: "{base_path}/run.sh --idx {i}"
+    parameters:
+      i: "1:3"
+"#;
+        let mut spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variables + parameters should parse");
+        spec.expand_parameters().expect("expansion should succeed");
+        assert_eq!(spec.jobs.len(), 3);
+        assert_eq!(spec.jobs[0].name, "job_001");
+        assert_eq!(spec.jobs[0].command, "/scratch/proj/run.sh --idx 1");
+        assert_eq!(spec.jobs[2].name, "job_003");
+        assert_eq!(spec.jobs[2].command, "/scratch/proj/run.sh --idx 3");
+    }
+
+    #[test]
+    fn test_workflow_variables_collide_with_parameter_name() {
+        let yaml = r#"
+name: collision
+variables:
+  i: not_an_index
+jobs:
+  - name: "job_{i}"
+    command: "echo {i}"
+    parameters:
+      i: "1:3"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("collision must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("collide with parameter names"),
+            "expected collision error, got: {msg}"
+        );
+        assert!(msg.contains('i'), "expected colliding name 'i', got: {msg}");
+    }
+
+    #[test]
+    fn test_workflow_variables_undefined_token_rejected() {
+        let yaml = r#"
+name: typo
+variables:
+  base_path: /scratch/proj
+jobs:
+  - name: train
+    command: "{baes_path}/run.sh"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("undefined token must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("undefined template name"),
+            "expected undefined-token error, got: {msg}"
+        );
+        assert!(
+            msg.contains("baes_path"),
+            "error should name the typo: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_substitute_into_parameter_value() {
+        let yaml = r#"
+name: var_in_param_value
+variables:
+  n_max: "5"
+jobs:
+  - name: "job_{i}"
+    command: "echo {i}"
+    parameters:
+      i: "1:{n_max}"
+"#;
+        let mut spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variable inside parameter value should be substituted");
+        spec.expand_parameters().expect("expansion should succeed");
+        assert_eq!(spec.jobs.len(), 5);
+    }
+
+    #[test]
+    fn test_workflow_variables_substitute_into_env_and_scheduler() {
+        let yaml = r#"
+name: env_and_scheduler
+variables:
+  proj: my_project
+env:
+  PROJECT: "{proj}"
+jobs:
+  - name: t
+    command: echo
+    scheduler: "{proj}_sched"
+slurm_schedulers:
+  - name: "{proj}_sched"
+    account: "{proj}"
+    partition: short
+    walltime: "PT1H"
+    nodes: 1
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variables in env and scheduler should substitute");
+        assert_eq!(
+            spec.env
+                .as_ref()
+                .and_then(|e| e.get("PROJECT"))
+                .map(String::as_str),
+            Some("my_project")
+        );
+        assert_eq!(spec.jobs[0].scheduler.as_deref(), Some("my_project_sched"));
+        let sched = &spec.slurm_schedulers.as_ref().unwrap()[0];
+        assert_eq!(sched.name.as_deref(), Some("my_project_sched"));
+        assert_eq!(sched.account, "my_project");
+    }
+
+    #[test]
+    fn test_workflow_variables_does_not_reject_shell_style_expansion() {
+        // `${...}` is shell-style variable expansion (and is also used by the
+        // existing `${files.input.X}` / `${TORC_*}` substitution). The
+        // workflow-level variables system must leave those alone, even when
+        // `variables` is set.
+        let yaml = r#"
+name: shell_vars_ok
+variables:
+  base_path: /scratch/proj
+jobs:
+  - name: t
+    command: "echo ${TORC_JOB_ID} ${HOME} {base_path}/run.sh"
+    env:
+      OUT: "${TORC_JOB_ID}.log"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("shell-style ${...} must not trigger undefined-token errors");
+        assert_eq!(
+            spec.jobs[0].command,
+            "echo ${TORC_JOB_ID} ${HOME} /scratch/proj/run.sh"
+        );
+        assert_eq!(
+            spec.jobs[0]
+                .env
+                .as_ref()
+                .and_then(|e| e.get("OUT"))
+                .map(String::as_str),
+            Some("${TORC_JOB_ID}.log")
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_undefined_token_inside_variable_value() {
+        // A typo in a variable's value should be rejected at load time; otherwise
+        // it would silently propagate to wherever the variable is used.
+        let yaml = r#"
+name: typo_in_var_value
+variables:
+  base_path: /scratch/proj
+  bad: "{baes_path}/sub"
+jobs:
+  - name: t
+    command: "echo {bad}"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("typo inside a variable value must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("variable 'bad'"),
+            "error should name the offending variable, got: {msg}"
+        );
+        assert!(
+            msg.contains("baes_path"),
+            "error should name the typo, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_substitution_preserves_shell_expansion_with_colliding_name() {
+        // Even when a workflow variable's name matches a shell variable used
+        // in the spec via `${...}` syntax, the substitution must leave the
+        // shell expansion alone. Naive `string.replace` would corrupt
+        // `${HOME}` into `$<value>`; the workflow-variables substituter is
+        // `${...}`-aware to avoid that.
+        let yaml = r#"
+name: shell_collision
+variables:
+  HOME: /should/not/leak
+  base: /scratch/proj
+jobs:
+  - name: t
+    command: "echo ${HOME} {base}/run.sh"
+    env:
+      OUT_DIR: "${HOME}-{base}"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variable named HOME must not corrupt ${HOME}");
+        assert_eq!(
+            spec.jobs[0].command, "echo ${HOME} /scratch/proj/run.sh",
+            "${{HOME}} must be preserved verbatim even though `HOME` is a workflow variable"
+        );
+        assert_eq!(
+            spec.jobs[0]
+                .env
+                .as_ref()
+                .and_then(|e| e.get("OUT_DIR"))
+                .map(String::as_str),
+            Some("${HOME}-/scratch/proj"),
+            "${{HOME}} in env must also be preserved while {{base}} is substituted"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_value_with_parameter_reference_rejected() {
+        // Variable values must be plain literal strings; even a
+        // valid-looking `{i}` referencing a parameter is rejected so the rule
+        // stays uniform. Composition belongs at the use site.
+        let yaml = r#"
+name: param_ref_in_var_value
+variables:
+  output_pattern: "results-{i}.json"
+jobs:
+  - name: "job_{i}"
+    command: "echo {output_pattern}"
+    parameters:
+      i: "1:3"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("parameter reference inside a variable value must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must be plain literal strings"),
+            "expected literal-only error, got: {msg}"
+        );
+        assert!(
+            msg.contains("variable 'output_pattern'"),
+            "error should name the offending variable, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_value_referencing_another_variable_rejected() {
+        // Variable values must not reference other variables: HashMap iteration
+        // order would otherwise determine whether the inner reference resolves
+        // or leaks through as a literal token.
+        let yaml = r#"
+name: nested_vars_rejected
+variables:
+  base: /scratch
+  inputs: "{base}/inputs"
+jobs:
+  - name: t
+    command: "ls {inputs}"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("variable referencing another variable must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("references another variable"),
+            "expected explicit cross-variable error, got: {msg}"
+        );
+        assert!(
+            msg.contains("variable 'inputs'") && msg.contains("{base}"),
+            "error should name both the variable and its bad reference, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_invalid_name_rejected() {
+        // Variable names must be valid identifiers so they participate in typo
+        // detection and serialize cleanly to KDL.
+        let yaml = r#"
+name: bad_var_name
+variables:
+  "foo.bar": x
+jobs:
+  - name: t
+    command: echo
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("non-identifier variable name must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must be a valid identifier"),
+            "expected identifier-validation error, got: {msg}"
+        );
+        assert!(
+            msg.contains("foo.bar"),
+            "error should name the offending name, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_round_trip_json() {
+        let yaml = r#"
+name: roundtrip
+variables:
+  base: /a/b
+jobs:
+  - name: t
+    command: "{base}/run"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml").unwrap();
+        let json = serde_json::to_string(&spec).unwrap();
+        // Reparsing the serialized form must succeed (substitutions are baked in,
+        // so the variables map is harmless on a second pass).
+        let spec2 = WorkflowSpec::from_spec_file_content(&json, "json").unwrap();
+        assert_eq!(spec.jobs[0].command, spec2.jobs[0].command);
+        assert_eq!(spec.variables, spec2.variables);
+    }
+
+    fn assert_variables_demo_substituted(spec: &WorkflowSpec) {
+        assert_eq!(spec.name, "variables_demo");
+        let prepare = spec
+            .jobs
+            .iter()
+            .find(|j| j.name == "prepare_inputs")
+            .expect("prepare_inputs job present");
+        assert_eq!(
+            prepare.command,
+            "python prepare.py --in /scratch/proj42/raw --out /scratch/proj42/clean"
+        );
+        let train = spec
+            .jobs
+            .iter()
+            .find(|j| j.name.starts_with("train_"))
+            .expect("train job template present");
+        assert!(
+            train.command.contains("--img pytorch:2.4"),
+            "image_tag should be substituted, got: {}",
+            train.command
+        );
+        assert!(
+            train.command.contains("--in /scratch/proj42/clean"),
+            "data_root should be substituted, got: {}",
+            train.command
+        );
+        let aggregate = spec
+            .jobs
+            .iter()
+            .find(|j| j.name == "aggregate")
+            .expect("aggregate job present");
+        assert_eq!(
+            aggregate.command,
+            "python aggregate.py --in /shared/proj42/results --tag proj42"
+        );
+        let env = spec.env.as_ref().expect("env block present");
+        assert_eq!(env.get("PROJECT").map(String::as_str), Some("proj42"));
+        assert_eq!(env.get("IMAGE").map(String::as_str), Some("pytorch:2.4"));
+        let schedulers = spec
+            .slurm_schedulers
+            .as_ref()
+            .expect("slurm_schedulers present");
+        for sched in schedulers {
+            assert_eq!(
+                sched.account, "my_hpc_account",
+                "scheduler account should be substituted, got: {}",
+                sched.account
+            );
+        }
+    }
+
+    #[test]
+    fn test_variables_demo_yaml_example() {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/yaml/variables_demo.yaml");
+        let mut spec =
+            WorkflowSpec::from_spec_file(&path).expect("YAML variables_demo should parse");
+        spec.expand_parameters()
+            .expect("YAML variables_demo should expand");
+        // 3 jobs declared; train_{i:02d} expands i=1..=4, plus prepare and aggregate -> 6 total.
+        assert_eq!(spec.jobs.len(), 6);
+        assert_variables_demo_substituted(&spec);
+    }
+
+    #[test]
+    fn test_variables_demo_json_example() {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/json/variables_demo.json");
+        let mut spec =
+            WorkflowSpec::from_spec_file(&path).expect("JSON variables_demo should parse");
+        spec.expand_parameters()
+            .expect("JSON variables_demo should expand");
+        assert_eq!(spec.jobs.len(), 6);
+        assert_variables_demo_substituted(&spec);
+    }
+
+    #[test]
+    fn test_variables_demo_json5_example() {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/json/variables_demo.json5");
+        let mut spec =
+            WorkflowSpec::from_spec_file(&path).expect("JSON5 variables_demo should parse");
+        spec.expand_parameters()
+            .expect("JSON5 variables_demo should expand");
+        assert_eq!(spec.jobs.len(), 6);
+        assert_variables_demo_substituted(&spec);
+    }
+
+    #[test]
+    fn test_variables_demo_kdl_example() {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/kdl/variables_demo.kdl");
+        let mut spec =
+            WorkflowSpec::from_spec_file(&path).expect("KDL variables_demo should parse");
+        spec.expand_parameters()
+            .expect("KDL variables_demo should expand");
+        assert_eq!(spec.jobs.len(), 6);
+        assert_variables_demo_substituted(&spec);
     }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT run_id FROM workflow_status WHERE id = $1",
+  "query": "SELECT run_id FROM workflow WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "b86c184a2b669f92255cbdb7be68e2c67898e947f0560d3b944cd70ca2258318"
+  "hash": "2a0bf40600d0a6a28a8bc33f482d495efad48a853df95ab87a4b4ef421ce19e1"
 }

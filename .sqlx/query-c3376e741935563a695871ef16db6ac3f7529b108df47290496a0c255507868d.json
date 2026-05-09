@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT j.id, r.return_code\n        FROM job j\n        JOIN result r ON j.id = r.job_id\n        JOIN workflow w ON j.workflow_id = w.id AND r.run_id = w.run_id\n        WHERE j.workflow_id = ?\n          AND j.status IN (?, ?, ?, ?)\n          AND j.unblocking_processed = 0\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "return_code",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "c3376e741935563a695871ef16db6ac3f7529b108df47290496a0c255507868d"
+}

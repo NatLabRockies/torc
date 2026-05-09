@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT COUNT(*) as total FROM ro_crate_entity WHERE workflow_id = $1",
+  "query": "SELECT run_id FROM workflow WHERE id = ?",
   "describe": {
     "columns": [
       {
-        "name": "total",
+        "name": "run_id",
         "ordinal": 0,
         "type_info": "Integer"
       }
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "67e128d9ce384ee620e239c70ef555a6b8d0ea2f39443f0bdf739778a1af49dd"
+  "hash": "17b0ff689068143898c9c217439cbffe59e443af89bb375e9f7f306dc0f0321b"
 }

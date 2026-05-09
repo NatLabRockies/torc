@@ -15,6 +15,7 @@ The top-level container for a complete workflow definition.
 | `project`                                        | string                                                  | none         | Project name or identifier for grouping workflows                         |
 | `metadata`                                       | string                                                  | none         | Arbitrary metadata as JSON string                                         |
 | `parameters`                                     | map\<string, string\>                                   | none         | Shared parameters that can be used by jobs and files via `use_parameters` |
+| `variables`                                      | map\<string, string\>                                   | none         | Workflow-level constants substituted via `{name}` into every string field |
 | `env`                                            | map\<string, string\>                                   | none         | Environment variables exported for every job in the workflow              |
 | `jobs`                                           | [[JobSpec](#jobspec)]                                   | _required_   | Jobs that make up this workflow                                           |
 | `files`                                          | [[FileSpec](#filespec)]                                 | none         | Files associated with this workflow                                       |

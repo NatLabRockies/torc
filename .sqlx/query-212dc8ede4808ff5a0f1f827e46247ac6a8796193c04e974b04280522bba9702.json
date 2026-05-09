@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workflow\n            SET is_canceled = 0,\n                is_archived = 0,\n                run_id = run_id + 1\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "212dc8ede4808ff5a0f1f827e46247ac6a8796193c04e974b04280522bba9702"
+}
