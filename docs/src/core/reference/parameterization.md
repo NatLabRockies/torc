@@ -250,16 +250,21 @@ slurm_schedulers:
 
 ### Validation Rules
 
+- **Variable names must be valid identifiers** (`[A-Za-z_][A-Za-z0-9_]*`).
 - **No collisions.** A variable name must not match any parameter name (at the workflow level or in
   any job/file/user_data `parameters` map). Spec loading fails with an error pointing at the
   offending name.
 - **No undefined references.** A `{name}` token whose name is neither a variable nor a parameter is
   rejected as a typo. Tokens with non-identifier inner text (e.g. `find ... {} \;` or JSON-like
-  fragments) are ignored.
+  fragments) are ignored. Shell-style `${...}` expansion (used by `${TORC_JOB_ID}`,
+  `${files.input.X}`, etc.) is left alone -- the workflow variables system only consumes bare
+  `{name}` tokens.
+- **Variable values may not reference other variables.** They _may_ reference parameter names (so
+  `i: "1:{n_max}"` works to drive a parameter range from a variable), but a variable value like
+  `inputs: "{base}/sub"` is rejected. Compose at the use site instead: `command: "{base}/sub"`.
 - Variables apply everywhere a string appears in the spec, including descriptions, env values,
-  scheduler fields, action arguments, file paths, commands, and parameter range values (so
-  `i: "1:{n_max}"` works). They do not apply to identifier fields (`parameters` keys,
-  `use_parameters` entries).
+  scheduler fields, action arguments, file paths, commands, and parameter range values. They do not
+  apply to identifier fields (`parameters` keys, `use_parameters` entries).
 
 ### KDL Syntax
 

@@ -1001,6 +1001,14 @@ fn apply_workflow_variables(
 
     let mut variables: HashMap<String, ParameterValue> = HashMap::with_capacity(vars_map.len());
     for (name, value) in vars_map {
+        if !is_identifier(name) {
+            return Err(format!(
+                "workflow variable name '{}' must be a valid identifier \
+                 ([A-Za-z_][A-Za-z0-9_]*). Rename the variable.",
+                name
+            )
+            .into());
+        }
         let serde_json::Value::String(s) = value else {
             return Err(format!(
                 "workflow variable '{}' must be a string (got {})",
@@ -1032,29 +1040,90 @@ fn apply_workflow_variables(
         .into());
     }
 
+    // Variable values may reference parameter names (e.g. `i: "1:{n_max}"` works
+    // because `n_max` is the variable being substituted into a parameter value),
+    // but they may NOT reference other variables. Cross-variable references would
+    // make resolution order-dependent (HashMap iteration is randomized) and could
+    // form cycles; forbidding them keeps semantics simple and deterministic.
+    for (name, vars_value) in vars_map {
+        let serde_json::Value::String(s) = vars_value else {
+            continue; // shape already validated above; non-strings already errored
+        };
+        check_variable_value_tokens(name, s, &variables, &parameter_names)?;
+    }
+
     let valid_token_names: HashSet<String> = variables
         .keys()
         .cloned()
         .chain(parameter_names.iter().cloned())
         .collect();
 
-    // Validate variable values themselves: a typo like `{baes_path}` in a
-    // variable's value would otherwise get spliced verbatim into wherever the
-    // variable is referenced and only surface as a confusing error downstream.
-    for (name, vars_value) in vars_map {
-        let serde_json::Value::String(s) = vars_value else {
-            continue; // shape already validated above; non-strings already errored
-        };
-        check_undefined_tokens(s, &valid_token_names).map_err(
-            |e| -> Box<dyn std::error::Error> {
-                format!("in variable '{}' value: {}", name, e).into()
-            },
-        )?;
-    }
-
     substitute_variables_in_value(&mut value, &variables, &valid_token_names, false)?;
 
     Ok(value)
+}
+
+/// Validate the tokens inside a workflow variable's value.
+///
+/// Variable values are intentionally restricted: they may reference parameter
+/// names (so `i: "1:{n_max}"` works for parameter ranges that depend on a
+/// variable), but they may NOT reference other variables. Cross-variable
+/// references would make resolution order-dependent and could form cycles.
+///
+/// `${...}` blocks are skipped (shell-style expansion).
+fn check_variable_value_tokens(
+    var_name: &str,
+    s: &str,
+    variables: &HashMap<String, ParameterValue>,
+    parameter_names: &HashSet<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        if i > 0 && bytes[i - 1] == b'$' {
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        let mut j = start;
+        while j < bytes.len() && bytes[j] != b'}' && bytes[j] != b'{' {
+            j += 1;
+        }
+        if j >= bytes.len() || bytes[j] != b'}' {
+            i += 1;
+            continue;
+        }
+        let inner = &s[start..j];
+        let token_name = inner.split(':').next().unwrap_or("");
+        if !is_identifier(token_name) {
+            i = j + 1;
+            continue;
+        }
+        if variables.contains_key(token_name) {
+            return Err(format!(
+                "variable '{}' value '{}' references another variable '{{{}}}'. \
+                 Variable values may not reference other variables; resolution order \
+                 would be undefined. Inline the constant or compose at the use site.",
+                var_name, s, inner
+            )
+            .into());
+        }
+        if !parameter_names.contains(token_name) {
+            return Err(format!(
+                "in variable '{}' value: undefined template name '{{{}}}'. \
+                 Variable values may only reference parameter names. \
+                 Add a parameter with this name or fix the typo.",
+                var_name, inner
+            )
+            .into());
+        }
+        i = j + 1;
+    }
+    Ok(())
 }
 
 fn json_value_kind(value: &serde_json::Value) -> &'static str {
@@ -7535,6 +7604,58 @@ jobs:
         assert!(
             msg.contains("baes_path"),
             "error should name the typo, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_value_referencing_another_variable_rejected() {
+        // Variable values must not reference other variables: HashMap iteration
+        // order would otherwise determine whether the inner reference resolves
+        // or leaks through as a literal token.
+        let yaml = r#"
+name: nested_vars_rejected
+variables:
+  base: /scratch
+  inputs: "{base}/inputs"
+jobs:
+  - name: t
+    command: "ls {inputs}"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("variable referencing another variable must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("references another variable"),
+            "expected explicit cross-variable error, got: {msg}"
+        );
+        assert!(
+            msg.contains("variable 'inputs'") && msg.contains("{base}"),
+            "error should name both the variable and its bad reference, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_invalid_name_rejected() {
+        // Variable names must be valid identifiers so they participate in typo
+        // detection and serialize cleanly to KDL.
+        let yaml = r#"
+name: bad_var_name
+variables:
+  "foo.bar": x
+jobs:
+  - name: t
+    command: echo
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("non-identifier variable name must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must be a valid identifier"),
+            "expected identifier-validation error, got: {msg}"
+        );
+        assert!(
+            msg.contains("foo.bar"),
+            "error should name the offending name, got: {msg}"
         );
     }
 
