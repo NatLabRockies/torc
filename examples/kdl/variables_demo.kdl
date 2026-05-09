@@ -1,0 +1,79 @@
+// Workflow Variables Demo (KDL)
+//
+// `variables` is a workflow-level map of constants substituted via {name} into
+// every string field of the spec before parameter expansion. Use it to DRY up
+// repeated paths, account codes, image tags, etc.
+//
+// Variables do NOT trigger expansion (a single substitution per occurrence).
+// Variable names must not collide with any parameter name.
+
+name "variables_demo"
+
+variables {
+    data_root "/scratch/proj42"
+    results_root "/shared/proj42/results"
+    project "proj42"
+    image_tag "pytorch:2.4"
+    account "my_hpc_account"
+}
+
+env {
+    PROJECT "{project}"
+    IMAGE "{image_tag}"
+}
+
+file "clean_data" path="{data_root}/clean/all.parquet"
+
+resource_requirements "small_job" {
+    num_cpus 1
+    memory "2g"
+    runtime "PT15M"
+}
+
+resource_requirements "gpu_job" {
+    num_cpus 4
+    num_gpus 1
+    memory "16g"
+    runtime "PT2H"
+}
+
+slurm_scheduler "shared_sched" {
+    account "{account}"
+    partition "short"
+    walltime "01:00:00"
+    nodes 1
+}
+
+slurm_scheduler "gpu_sched" {
+    account "{account}"
+    partition "gpu"
+    gres "gpu:1"
+    walltime "04:00:00"
+    nodes 1
+}
+
+job "prepare_inputs" {
+    command "python prepare.py --in {data_root}/raw --out {data_root}/clean"
+    resource_requirements "small_job"
+    output_file "clean_data"
+    scheduler "shared_sched"
+}
+
+// Variables compose with parameters: {data_root} comes from variables,
+// {i} comes from local parameters and drives expansion.
+job "train_{i:02d}" {
+    command "python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt"
+    resource_requirements "gpu_job"
+    depends_on "prepare_inputs"
+    parameters {
+        i "1:4"
+    }
+    scheduler "gpu_sched"
+}
+
+job "aggregate" {
+    command "python aggregate.py --in {results_root} --tag {project}"
+    resource_requirements "small_job"
+    depends_on_regexes "^train_.*$"
+    scheduler "shared_sched"
+}

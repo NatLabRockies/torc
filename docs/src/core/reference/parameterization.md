@@ -200,6 +200,111 @@ user_data:
       experiment: "['baseline','ablation','full']"
 ```
 
+## Workflow Variables
+
+Workflow-level `variables` are constants that get substituted into every string field of the spec
+before parameter expansion. Use them to remove repetition of fixed strings -- paths, account codes,
+image tags, project IDs -- that appear across many jobs, files, schedulers, or env entries.
+
+Variables are not the same as `parameters`:
+
+- `variables` are constants. Each `{name}` reference is replaced once with the variable's value. The
+  number of jobs/files does not change.
+- `parameters` are sweep dimensions. They expand into multiple instances via Cartesian (or zip)
+  product.
+
+The two mechanisms compose freely: a single command string can mix `{variable}` references and
+`{parameter}` references. Variables resolve first; parameters drive expansion afterwards.
+
+### Basic Usage
+
+```yaml
+name: variables_demo
+variables:
+  data_root: /scratch/proj42
+  results_root: /shared/proj42/results
+  project: proj42
+  account: my_hpc_account
+
+env:
+  PROJECT: "{project}"
+
+jobs:
+  - name: prepare_inputs
+    command: "python prepare.py --in {data_root}/raw --out {data_root}/clean"
+
+  # Variables compose with parameters: {data_root} is a constant,
+  # {i} drives expansion into 4 jobs.
+  - name: "train_{i:02d}"
+    command: "python train.py --shard {i} --in {data_root}/clean"
+    parameters:
+      i: "1:4"
+
+slurm_schedulers:
+  - name: shared_sched
+    account: "{account}"
+    partition: short
+    walltime: "01:00:00"
+    nodes: 1
+```
+
+### Validation Rules
+
+- **No collisions.** A variable name must not match any parameter name (at the workflow level or in
+  any job/file/user_data `parameters` map). Spec loading fails with an error pointing at the
+  offending name.
+- **No undefined references.** A `{name}` token whose name is neither a variable nor a parameter is
+  rejected as a typo. Tokens with non-identifier inner text (e.g. `find ... {} \;` or JSON-like
+  fragments) are ignored.
+- Variables apply everywhere a string appears in the spec, including descriptions, env values,
+  scheduler fields, action arguments, file paths, commands, and parameter range values (so
+  `i: "1:{n_max}"` works). They do not apply to identifier fields (`parameters` keys,
+  `use_parameters` entries).
+
+### KDL Syntax
+
+```kdl
+variables {
+    data_root "/scratch/proj42"
+    project "proj42"
+    account "my_hpc_account"
+}
+
+job "train_{i:02d}" {
+    command "python train.py --shard {i} --in {data_root}/clean"
+    parameters {
+        i "1:4"
+    }
+}
+```
+
+### JSON5 Syntax
+
+```json5
+{
+  variables: {
+    data_root: "/scratch/proj42",
+    project: "proj42",
+  },
+  jobs: [
+    {
+      name: "train_{i:02d}",
+      command: "python train.py --shard {i} --in {data_root}/clean",
+      parameters: { i: "1:4" },
+    },
+  ],
+}
+```
+
+### When to Reach for Variables vs. Shared Parameters
+
+Use `variables` for plain constants (single value, no expansion) -- they DRY up the spec without
+changing job counts and don't require any opt-in field on each job or file.
+
+Use shared `parameters` with `use_parameters` (next section) when the same _sweep dimension_ drives
+expansion across multiple jobs and files. Shared parameters are still the right tool for
+hyperparameter sweeps.
+
 ## Shared (Workflow-Level) Parameters
 
 Define parameters once at the workflow level and reuse them across multiple jobs and files using
@@ -425,3 +530,5 @@ job "train_{dataset}_{model}" {
 7. **Use selective inheritance** - Only inherit the parameters each job actually needs
 8. **Use zip mode for paired parameters** - When parameters have a 1:1 correspondence, use
    `parameter_mode: zip`
+9. **Use `variables` for repeated constants** - Lift fixed strings (paths, account codes, image
+   tags) into the workflow-level `variables` map rather than copying them across jobs and files
