@@ -2085,9 +2085,11 @@ where
             ));
         }
 
-        // Validate immutable fields. Relationship-id vectors and `env` are immutable
-        // after job creation; the *_changed flags above already use set-comparison
-        // semantics, so a single check per field is enough.
+        // Validate immutable fields. `input_file_ids`, `output_file_ids`,
+        // `input_user_data_ids`, `output_user_data_ids`, and `env` are immutable after
+        // job creation (`depends_on_job_ids` is mutable and handled separately below).
+        // The *_changed flags above already use set-comparison semantics, so a single
+        // check per field is enough.
         if input_file_ids_changed {
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(

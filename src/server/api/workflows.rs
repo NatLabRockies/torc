@@ -644,7 +644,7 @@ where
 
         if result.rows_affected() == 0 {
             let _ = tx.rollback().await;
-            return Ok(CancelWorkflowResponse::DefaultErrorResponse(
+            return Ok(CancelWorkflowResponse::NotFoundErrorResponse(
                 resource_not_found_response("Workflow", id),
             ));
         }

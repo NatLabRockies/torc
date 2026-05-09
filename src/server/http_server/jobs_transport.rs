@@ -162,15 +162,15 @@ macro_rules! translate_get_job_response {
         match $source {
             GetJobResponse::SuccessfulResponse(job) => Ok(job),
             GetJobResponse::ForbiddenErrorResponse(err) => {
-                error!("Access denied for job {}: {:?}", $id, err);
+                error!("Access denied job_id={} error={:?}", $id, err);
                 Err($target::ForbiddenErrorResponse(err))
             }
             GetJobResponse::NotFoundErrorResponse(err) => {
-                error!("Job not found {}: {:?}", $id, err);
+                error!("Job not found job_id={} error={:?}", $id, err);
                 Err($target::NotFoundErrorResponse(err))
             }
             GetJobResponse::DefaultErrorResponse(err) => {
-                error!("Failed to get job {}: {:?}", $id, err);
+                error!("Failed to get job job_id={} error={:?}", $id, err);
                 Err($target::DefaultErrorResponse(err))
             }
         }
