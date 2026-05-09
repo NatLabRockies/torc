@@ -14,7 +14,10 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
+use super::{
+    ApiContext, SqlQueryBuilder, database_error_with_msg, parse_job_status,
+    resource_not_found_response,
+};
 
 /// Trait defining result-related API operations
 #[async_trait]
@@ -263,14 +266,7 @@ where
             }
         };
 
-        let status_int = record.status;
-        let status = match models::JobStatus::from_int(status_int as i32) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to parse job status '{}': {}", status_int, e);
-                return Err(ApiError(format!("Failed to parse job status: {}", e)));
-            }
-        };
+        let status = parse_job_status(record.status as i32)?;
 
         let result_model = models::ResultModel {
             id: Some(record.id),
@@ -369,9 +365,7 @@ where
         }
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if RESULT_COLUMNS.contains(&col.as_str()) {
                 // If we have a join (show_all_results is false), prefix with "r." if it's a result column
                 if !show_all_results {
@@ -390,14 +384,7 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(
-                offset,
-                limit,
-                validated_sort_by,
-                reverse_sort,
-                "id",
-                RESULT_COLUMNS,
-            )
+            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id", RESULT_COLUMNS)
             .build();
 
         debug!("Executing query: {}", query);
@@ -435,13 +422,7 @@ where
         let mut items: Vec<models::ResultModel> = Vec::new();
         for record in records {
             let status_int: i64 = record.get("status");
-            let status = match models::JobStatus::from_int(status_int as i32) {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("Failed to parse job status '{}': {}", status_int, e);
-                    return Err(ApiError(format!("Failed to parse job status: {}", e)));
-                }
-            };
+            let status = parse_job_status(status_int as i32)?;
             items.push(models::ResultModel {
                 id: Some(record.get("id")),
                 workflow_id: record.get("workflow_id"),

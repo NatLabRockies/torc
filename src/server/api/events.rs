@@ -213,9 +213,7 @@ where
         let _category = category; // Acknowledge the parameter to avoid unused warnings
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if EVENT_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -229,14 +227,7 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(
-                offset,
-                limit,
-                validated_sort_by,
-                reverse_sort,
-                "id",
-                EVENT_COLUMNS,
-            )
+            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id", EVENT_COLUMNS)
             .build();
 
         debug!("Executing query: {}", query);

@@ -406,9 +406,7 @@ where
         }
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if USER_DATA_COLUMNS.contains(&col.as_str()) {
                 Some(format!("ud.{}", col))
             } else {
@@ -425,7 +423,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 "ud.id",
                 USER_DATA_COLUMNS,

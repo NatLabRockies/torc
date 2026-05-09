@@ -1,7 +1,7 @@
 use super::*;
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, database_lock_aware_error,
-    message_error_response, resource_not_found_response,
+    message_error_response, parse_job_status, resource_not_found_response,
 };
 
 const RESOURCE_CLAIM_ORDER_BY: &str = "\
@@ -250,10 +250,7 @@ fn claim_candidate_row(
         return Ok(false);
     }
 
-    let status = models::JobStatus::from_int(row.get::<i64, _>("status") as i32).map_err(|e| {
-        error!("Failed to parse job status: {}", e);
-        ApiError("Invalid job status".to_string())
-    })?;
+    let status = parse_job_status(row.get::<i64, _>("status") as i32)?;
 
     if status != models::JobStatus::Ready {
         error!("Expected job status to be Ready, but got: {}", status);
@@ -1238,15 +1235,8 @@ where
                 id, job_row.status, e
             )))
         })?;
-        let current_status = match models::JobStatus::from_int(status_i32) {
-            Ok(s) => s,
-            Err(e) => {
-                return Err(CompletionMutationError::Transport(ApiError(format!(
-                    "Failed to parse job status for job_id={}: {}",
-                    id, e
-                ))));
-            }
-        };
+        let current_status =
+            parse_job_status(status_i32).map_err(CompletionMutationError::Transport)?;
 
         if let Some(expected_workflow_id) = expected_workflow_id
             && job_workflow_id != expected_workflow_id

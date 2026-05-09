@@ -237,18 +237,6 @@ impl WorkflowsApiImpl {
             context.get().0.clone()
         );
 
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
-            if WORKFLOW_COLUMNS.contains(&col.as_str()) {
-                Some(col.clone())
-            } else {
-                debug!("Invalid sort column requested: {}", col);
-                None // Fall back to default
-            }
-        } else {
-            None
-        };
-
         let base_query = "
             SELECT
                 id
@@ -328,7 +316,7 @@ impl WorkflowsApiImpl {
                 .with_pagination_and_sorting(
                     offset,
                     limit,
-                    validated_sort_by,
+                    sort_by,
                     reverse_sort,
                     "id",
                     WORKFLOW_COLUMNS,
@@ -340,7 +328,7 @@ impl WorkflowsApiImpl {
                 .with_pagination_and_sorting(
                     offset,
                     limit,
-                    validated_sort_by,
+                    sort_by,
                     reverse_sort,
                     "id",
                     WORKFLOW_COLUMNS,
@@ -673,29 +661,25 @@ where
         });
         let event_data_str = event_data.to_string();
 
-        match sqlx::query(
-            r#"
-            INSERT INTO event (workflow_id, timestamp, data)
-            VALUES ($1, $2, $3)
-            "#,
-        )
-        .bind(id)
-        .bind(timestamp)
-        .bind(&event_data_str)
-        .execute(&mut *tx)
-        .await
-        {
-            Ok(_) => {
-                debug!("Created workflow_canceled event for workflow {}", id);
-            }
-            Err(e) => {
-                let _ = tx.rollback().await;
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to create workflow cancellation event",
-                ));
-            }
-        }
+        crate::tx_try!(
+            tx,
+            sqlx::query(
+                r#"
+                INSERT INTO event (workflow_id, timestamp, data)
+                VALUES ($1, $2, $3)
+                "#,
+            )
+            .bind(id)
+            .bind(timestamp)
+            .bind(&event_data_str)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(
+                e,
+                "Failed to create workflow cancellation event"
+            ))
+        );
+        debug!("Created workflow_canceled event for workflow_id={}", id);
 
         // Cancel all running and pending jobs in the workflow
         let submitted_status = models::JobStatus::Running.to_int();
@@ -1611,7 +1595,7 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
+        let sort_by = match sort_by.as_deref() {
             Some("job_id") => Some("jb.job_id".to_string()),
             Some("job_name") => Some("j1.name".to_string()),
             Some("depends_on_job_id") => Some("jb.depends_on_job_id".to_string()),
@@ -1642,7 +1626,7 @@ where
         .with_pagination_and_sorting(
             offset_val,
             limit_val,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "jb.job_id",
             JOB_DEPENDENCY_COLUMNS,
@@ -1734,7 +1718,7 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
+        let sort_by = match sort_by.as_deref() {
             Some("file_id") => Some("f.id".to_string()),
             Some("file_name") => Some("f.name".to_string()),
             Some("file_path") => Some("f.path".to_string()),
@@ -1775,7 +1759,7 @@ where
         .with_pagination_and_sorting(
             offset_val,
             limit_val,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "f.id",
             JOB_FILE_RELATIONSHIP_COLUMNS,
@@ -1894,7 +1878,7 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
+        let sort_by = match sort_by.as_deref() {
             Some("user_data_id") => Some("ud.id".to_string()),
             Some("user_data_name") => Some("ud.name".to_string()),
             Some("producer_job_id") => Some("joud.job_id".to_string()),
@@ -1934,7 +1918,7 @@ where
         .with_pagination_and_sorting(
             offset_val,
             limit_val,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "ud.id",
             JOB_USER_DATA_RELATIONSHIP_COLUMNS,

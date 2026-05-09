@@ -664,9 +664,7 @@ where
 
         // Build WHERE clause
         let where_clause = "workflow_id = ?".to_string();
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if LOCAL_SCHEDULER_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -683,7 +681,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 "id",
                 LOCAL_SCHEDULER_COLUMNS,
@@ -793,9 +791,7 @@ where
         }
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if SCHEDULED_COMPUTE_NODE_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -812,7 +808,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 "id",
                 SCHEDULED_COMPUTE_NODE_COLUMNS,
@@ -926,9 +922,7 @@ where
 
         // Build WHERE clause
         let where_clause = "workflow_id = ?".to_string();
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if SLURM_SCHEDULER_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -945,7 +939,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 "id",
                 SLURM_SCHEDULER_COLUMNS,

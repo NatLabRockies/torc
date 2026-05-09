@@ -1,5 +1,7 @@
 use super::*;
-use crate::server::api::{begin_immediate, database_error_with_msg, database_lock_aware_error};
+use crate::server::api::{
+    begin_immediate, database_error_with_msg, database_lock_aware_error, parse_job_status,
+};
 
 impl<C> Server<C> {
     pub(super) async fn manage_job_status_change(
@@ -36,16 +38,7 @@ impl<C> Server<C> {
                 }
             };
 
-        let current_status = match models::JobStatus::from_int(current_job.status as i32) {
-            Ok(status) => status,
-            Err(e) => {
-                error!(
-                    "Failed to parse current job status '{}': {}",
-                    current_job.status, e
-                );
-                return Err(ApiError("Invalid current job status".to_string()));
-            }
-        };
+        let current_status = parse_job_status(current_job.status as i32)?;
 
         if current_status == *new_status {
             debug!(

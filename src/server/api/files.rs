@@ -280,9 +280,7 @@ where
         }
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if FILE_COLUMNS.contains(&col.as_str()) {
                 // If we have a join (needs_join is true), prefix with "f." if it's a file column
                 if needs_join {
@@ -306,7 +304,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 sort_column,
                 FILE_COLUMNS,

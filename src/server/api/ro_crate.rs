@@ -518,15 +518,6 @@ where
 
         let limit = std::cmp::min(limit, MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
-            Some(col) if RO_CRATE_ENTITY_COLUMNS.contains(&col) => Some(col.to_string()),
-            Some(col) => {
-                debug!("Invalid sort column requested: {}", col);
-                None
-            }
-            None => None,
-        };
-
         let mut where_clauses = vec!["workflow_id = ?".to_string()];
         if file_id.is_some() {
             where_clauses.push("file_id = ?".to_string());
@@ -543,7 +534,7 @@ where
         .with_pagination_and_sorting(
             offset,
             limit,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "id",
             RO_CRATE_ENTITY_COLUMNS,
