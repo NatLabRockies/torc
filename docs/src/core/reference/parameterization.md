@@ -259,9 +259,13 @@ slurm_schedulers:
   fragments) are ignored. Shell-style `${...}` expansion (used by `${TORC_JOB_ID}`,
   `${files.input.X}`, etc.) is left alone -- the workflow variables system only consumes bare
   `{name}` tokens.
-- **Variable values may not reference other variables.** They _may_ reference parameter names (so
-  `i: "1:{n_max}"` works to drive a parameter range from a variable), but a variable value like
-  `inputs: "{base}/sub"` is rejected. Compose at the use site instead: `command: "{base}/sub"`.
+- **Variable values must be plain literal strings.** Any `{name}` template reference inside a
+  variable's value is rejected, whether it points at another variable, a parameter, or a typo. This
+  keeps semantics simple and deterministic. Compose at the use site instead: `command: "{base}/sub"`
+  rather than `inputs: "{base}/sub"`. Shell-style `${...}` expansion (e.g. `${HOME}`,
+  `${TORC_JOB_ID}`) is allowed in variable values -- it is preserved verbatim and expanded at
+  runtime, not by the spec loader. Note that you can still reference a variable from a parameter
+  range: `i: "1:{n_max}"` works because that's a parameter value, not a variable value.
 - Variables apply everywhere a string appears in the spec, including descriptions, env values,
   scheduler fields, action arguments, file paths, commands, and parameter range values. They do not
   apply to identifier fields (`parameters` keys, `use_parameters` entries).

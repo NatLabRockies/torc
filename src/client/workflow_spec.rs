@@ -1040,16 +1040,20 @@ fn apply_workflow_variables(
         .into());
     }
 
-    // Variable values may reference parameter names (e.g. `i: "1:{n_max}"` works
-    // because `n_max` is the variable being substituted into a parameter value),
-    // but they may NOT reference other variables. Cross-variable references would
-    // make resolution order-dependent (HashMap iteration is randomized) and could
-    // form cycles; forbidding them keeps semantics simple and deterministic.
+    // Variable values must be plain literal strings: no `{...}` template
+    // references at all (shell-style `${...}` is allowed, since it is reserved
+    // for shell expansion and the `${files.input.X}` family). Allowing template
+    // references inside variable values would either (a) make resolution
+    // order-dependent when one variable references another (HashMap iteration
+    // is randomized and cycles would not be detected), or (b) leak unresolved
+    // parameter tokens into wherever the variable is used. Composition belongs
+    // at the use site -- e.g. `command: "{base}/{sub}"`, not
+    // `combo: "{base}/{sub}"`.
     for (name, vars_value) in vars_map {
         let serde_json::Value::String(s) = vars_value else {
             continue; // shape already validated above; non-strings already errored
         };
-        check_variable_value_tokens(name, s, &variables, &parameter_names)?;
+        check_variable_value_tokens(name, s, &variables)?;
     }
 
     let valid_token_names: HashSet<String> = variables
@@ -1065,17 +1069,18 @@ fn apply_workflow_variables(
 
 /// Validate the tokens inside a workflow variable's value.
 ///
-/// Variable values are intentionally restricted: they may reference parameter
-/// names (so `i: "1:{n_max}"` works for parameter ranges that depend on a
-/// variable), but they may NOT reference other variables. Cross-variable
-/// references would make resolution order-dependent and could form cycles.
+/// Variable values must be plain literal strings: any `{name}` template
+/// reference is rejected. Shell-style `${...}` is allowed (it is reserved for
+/// shell expansion and for the `${files.input.X}` / `${user_data.input.X}`
+/// substitution that runs later in the workflow lifecycle).
 ///
-/// `${...}` blocks are skipped (shell-style expansion).
+/// The "references another variable" branch produces a more pointed error;
+/// every other template reference (parameter names, undefined names) is
+/// rejected with the same uniform "must be a literal" message.
 fn check_variable_value_tokens(
     var_name: &str,
     s: &str,
     variables: &HashMap<String, ParameterValue>,
-    parameter_names: &HashSet<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let bytes = s.as_bytes();
     let mut i = 0;
@@ -1103,25 +1108,24 @@ fn check_variable_value_tokens(
             i = j + 1;
             continue;
         }
-        if variables.contains_key(token_name) {
-            return Err(format!(
+        return if variables.contains_key(token_name) {
+            Err(format!(
                 "variable '{}' value '{}' references another variable '{{{}}}'. \
-                 Variable values may not reference other variables; resolution order \
-                 would be undefined. Inline the constant or compose at the use site.",
+                 Variable values may not reference other variables; resolution \
+                 order would be undefined. Inline the constant or compose at the \
+                 use site.",
                 var_name, s, inner
             )
-            .into());
-        }
-        if !parameter_names.contains(token_name) {
-            return Err(format!(
-                "in variable '{}' value: undefined template name '{{{}}}'. \
-                 Variable values may only reference parameter names. \
-                 Add a parameter with this name or fix the typo.",
-                var_name, inner
+            .into())
+        } else {
+            Err(format!(
+                "variable '{}' value '{}' contains template reference '{{{}}}'. \
+                 Variable values must be plain literal strings (shell-style \
+                 `${{...}}` is allowed). Compose at the use site instead.",
+                var_name, s, inner
             )
-            .into());
-        }
-        i = j + 1;
+            .into())
+        };
     }
     Ok(())
 }
@@ -1184,7 +1188,7 @@ fn substitute_variables_in_value(
         serde_json::Value::String(s) => {
             if !inside_variables {
                 check_undefined_tokens(s, valid_token_names)?;
-                *s = substitute_parameters(s, variables);
+                *s = substitute_workflow_variables_in_string(s, variables);
             }
             Ok(())
         }
@@ -1290,6 +1294,61 @@ fn is_identifier(s: &str) -> bool {
         return false;
     }
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Substitute workflow variables into a string in a single pass.
+///
+/// Replaces `{name}` and `{name:fmt}` with the value of `variables[name]` when
+/// `name` matches a key. Unmatched tokens (parameter names that get expanded
+/// later, or tokens whose name is non-identifier text) are left intact.
+///
+/// Critically, `${...}` blocks are skipped entirely so that shell-style
+/// expansions like `${HOME}` or `${TORC_JOB_ID}` are preserved verbatim --
+/// even when a variable happens to share a name with a shell variable. This
+/// is what `substitute_parameters` (used by parameter expansion) does *not*
+/// guarantee, since it relies on naive `string.replace`.
+fn substitute_workflow_variables_in_string(
+    s: &str,
+    variables: &HashMap<String, ParameterValue>,
+) -> String {
+    let mut result = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut last_copied = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        if i > 0 && bytes[i - 1] == b'$' {
+            // Shell-style ${...}; do not substitute.
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        let Some(rel_end) = s[start..].find('}') else {
+            i += 1;
+            continue;
+        };
+        let inner_end = start + rel_end;
+        let inner = &s[start..inner_end];
+        let (name, fmt) = match inner.split_once(':') {
+            Some((n, f)) => (n, Some(f)),
+            None => (inner, None),
+        };
+        let Some(value) = variables.get(name) else {
+            // Not a workflow variable -- leave intact (it might be a parameter
+            // name that gets expanded later, or just literal text).
+            i = inner_end + 1;
+            continue;
+        };
+        result.push_str(&s[last_copied..i]);
+        result.push_str(&value.format(fmt));
+        i = inner_end + 1;
+        last_copied = i;
+    }
+    result.push_str(&s[last_copied..]);
+    result
 }
 
 /// Specification for a complete workflow
@@ -7604,6 +7663,69 @@ jobs:
         assert!(
             msg.contains("baes_path"),
             "error should name the typo, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_substitution_preserves_shell_expansion_with_colliding_name() {
+        // Even when a workflow variable's name matches a shell variable used
+        // in the spec via `${...}` syntax, the substitution must leave the
+        // shell expansion alone. Naive `string.replace` would corrupt
+        // `${HOME}` into `$<value>`; the workflow-variables substituter is
+        // `${...}`-aware to avoid that.
+        let yaml = r#"
+name: shell_collision
+variables:
+  HOME: /should/not/leak
+  base: /scratch/proj
+jobs:
+  - name: t
+    command: "echo ${HOME} {base}/run.sh"
+    env:
+      OUT_DIR: "${HOME}-{base}"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variable named HOME must not corrupt ${HOME}");
+        assert_eq!(
+            spec.jobs[0].command, "echo ${HOME} /scratch/proj/run.sh",
+            "${{HOME}} must be preserved verbatim even though `HOME` is a workflow variable"
+        );
+        assert_eq!(
+            spec.jobs[0]
+                .env
+                .as_ref()
+                .and_then(|e| e.get("OUT_DIR"))
+                .map(String::as_str),
+            Some("${HOME}-/scratch/proj"),
+            "${{HOME}} in env must also be preserved while {{base}} is substituted"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_value_with_parameter_reference_rejected() {
+        // Variable values must be plain literal strings; even a
+        // valid-looking `{i}` referencing a parameter is rejected so the rule
+        // stays uniform. Composition belongs at the use site.
+        let yaml = r#"
+name: param_ref_in_var_value
+variables:
+  output_pattern: "results-{i}.json"
+jobs:
+  - name: "job_{i}"
+    command: "echo {output_pattern}"
+    parameters:
+      i: "1:3"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("parameter reference inside a variable value must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must be plain literal strings"),
+            "expected literal-only error, got: {msg}"
+        );
+        assert!(
+            msg.contains("variable 'output_pattern'"),
+            "error should name the offending variable, got: {msg}"
         );
     }
 
