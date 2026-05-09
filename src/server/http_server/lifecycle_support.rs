@@ -38,7 +38,7 @@ impl<C> Server<C> {
                 }
             };
 
-        let current_status = parse_job_status(current_job.status as i32)?;
+        let current_status = parse_job_status(current_job.status as i32, job_id)?;
 
         if current_status == *new_status {
             debug!(

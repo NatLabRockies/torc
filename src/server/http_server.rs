@@ -2557,9 +2557,10 @@ impl<C> Server<C>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync,
 {
-    /// Record a fire-and-forget "user_action" audit event. The `extra` value must be a JSON
-    /// object; this helper merges in the standard `category`/`action`/`user` fields. Failures
-    /// are logged but never propagated — audit events should not break user-facing requests.
+    /// Record a best-effort "user_action" audit event. The event is awaited inline, but any
+    /// failure is logged and swallowed so audit failures cannot break the user-facing request.
+    /// The `extra` value must be a JSON object; this helper merges in the standard
+    /// `category`/`action`/`user` fields.
     async fn record_user_action_event(
         &self,
         workflow_id: i64,

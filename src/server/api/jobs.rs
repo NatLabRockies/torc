@@ -348,7 +348,7 @@ impl JobsApiImpl {
         };
 
         let status_int: i32 = record.get("status");
-        let status = parse_job_status(status_int)?;
+        let status = parse_job_status(status_int, id)?;
 
         // Get depends_on relationships
         let depends_on_records = match sqlx::query!(
@@ -544,7 +544,7 @@ impl JobsApiImpl {
             let current_status_int = job_row.status as i32;
 
             // Parse the current status; skip jobs whose status integer cannot be decoded.
-            let Ok(current_status) = parse_job_status(current_status_int) else {
+            let Ok(current_status) = parse_job_status(current_status_int, job_id) else {
                 continue;
             };
 
@@ -1867,7 +1867,7 @@ where
             } else {
                 // Create job model without relationships for better performance
                 let status_int: i32 = record.get("status");
-                let status = parse_job_status(status_int)?;
+                let status = parse_job_status(status_int, job_id)?;
 
                 items.push(models::JobModel {
                     id: Some(record.get("id")),
@@ -2881,7 +2881,7 @@ where
         // Note: Running is allowed because the job runner may call retry_job before complete_job
         // when handling failure recovery (the job has finished locally but the server hasn't been
         // notified yet).
-        let current_status = match parse_job_status(status_int) {
+        let current_status = match parse_job_status(status_int, job_id) {
             Ok(s) => s,
             Err(e) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;

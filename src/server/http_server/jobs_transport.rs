@@ -250,7 +250,10 @@ fn claim_candidate_row(
         return Ok(false);
     }
 
-    let status = parse_job_status(row.get::<i64, _>("status") as i32)?;
+    let status = parse_job_status(
+        row.get::<i64, _>("status") as i32,
+        row.get::<i64, _>("job_id"),
+    )?;
 
     if status != models::JobStatus::Ready {
         error!("Expected job status to be Ready, but got: {}", status);
@@ -1236,7 +1239,7 @@ where
             )))
         })?;
         let current_status =
-            parse_job_status(status_i32).map_err(CompletionMutationError::Transport)?;
+            parse_job_status(status_i32, id).map_err(CompletionMutationError::Transport)?;
 
         if let Some(expected_workflow_id) = expected_workflow_id
             && job_workflow_id != expected_workflow_id

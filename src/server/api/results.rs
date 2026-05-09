@@ -266,7 +266,7 @@ where
             }
         };
 
-        let status = parse_job_status(record.status as i32)?;
+        let status = parse_job_status(record.status as i32, record.job_id)?;
 
         let result_model = models::ResultModel {
             id: Some(record.id),
@@ -422,11 +422,12 @@ where
         let mut items: Vec<models::ResultModel> = Vec::new();
         for record in records {
             let status_int: i64 = record.get("status");
-            let status = parse_job_status(status_int as i32)?;
+            let job_id: i64 = record.get("job_id");
+            let status = parse_job_status(status_int as i32, job_id)?;
             items.push(models::ResultModel {
                 id: Some(record.get("id")),
                 workflow_id: record.get("workflow_id"),
-                job_id: record.get("job_id"),
+                job_id,
                 run_id: record.get("run_id"),
                 attempt_id: Some(record.get("attempt_id")),
                 compute_node_id: record.get("compute_node_id"),

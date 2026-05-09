@@ -133,11 +133,19 @@ pub async fn begin_immediate(
 /// of range (e.g. after a downgrade from a future schema), `JobStatus::from_int`
 /// reports the failure. This helper centralises the log line and the
 /// `ApiError` conversion so handlers can write
-/// `let status = parse_job_status(status_int)?;` instead of a 7-line match.
-pub fn parse_job_status(status_int: i32) -> Result<models::JobStatus, ApiError> {
+/// `let status = parse_job_status(status_int, job_id)?;` instead of a 7-line
+/// match. The `job_id` is included in the log line so the offending row can
+/// be located.
+pub fn parse_job_status(status_int: i32, job_id: i64) -> Result<models::JobStatus, ApiError> {
     models::JobStatus::from_int(status_int).map_err(|e| {
-        error!("Failed to parse job status='{}': {}", status_int, e);
-        ApiError(format!("Failed to parse job status: {}", e))
+        error!(
+            "Failed to parse job status job_id={} status={} error={}",
+            job_id, status_int, e
+        );
+        ApiError(format!(
+            "Failed to parse job status for job_id={}: {}",
+            job_id, e
+        ))
     })
 }
 
