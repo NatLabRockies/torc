@@ -1038,6 +1038,20 @@ fn apply_workflow_variables(
         .chain(parameter_names.iter().cloned())
         .collect();
 
+    // Validate variable values themselves: a typo like `{baes_path}` in a
+    // variable's value would otherwise get spliced verbatim into wherever the
+    // variable is referenced and only surface as a confusing error downstream.
+    for (name, vars_value) in vars_map {
+        let serde_json::Value::String(s) = vars_value else {
+            continue; // shape already validated above; non-strings already errored
+        };
+        check_undefined_tokens(s, &valid_token_names).map_err(
+            |e| -> Box<dyn std::error::Error> {
+                format!("in variable '{}' value: {}", name, e).into()
+            },
+        )?;
+    }
+
     substitute_variables_in_value(&mut value, &variables, &valid_token_names, false)?;
 
     Ok(value)
@@ -1153,6 +1167,10 @@ fn substitute_variables_in_value(
 /// does not appear in `valid_token_names`. Tokens with a non-identifier name
 /// (e.g. format-only `{:>5}`, JSON-like `{"x": 1}`) are ignored on the assumption
 /// they are unrelated to template substitution.
+///
+/// `${...}` blocks are skipped: that syntax is reserved for shell-style variable
+/// expansion and the repo's existing `${files.input.X}` / `${user_data.input.X}`
+/// substitution. They are never treated as workflow variable references.
 fn check_undefined_tokens(
     s: &str,
     valid_token_names: &HashSet<String>,
@@ -1161,6 +1179,12 @@ fn check_undefined_tokens(
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] != b'{' {
+            i += 1;
+            continue;
+        }
+        // Skip `${...}` -- that's shell-style variable expansion, not a workflow
+        // variable reference.
+        if i > 0 && bytes[i - 1] == b'$' {
             i += 1;
             continue;
         }
@@ -7454,6 +7478,64 @@ slurm_schedulers:
         let sched = &spec.slurm_schedulers.as_ref().unwrap()[0];
         assert_eq!(sched.name.as_deref(), Some("my_project_sched"));
         assert_eq!(sched.account, "my_project");
+    }
+
+    #[test]
+    fn test_workflow_variables_does_not_reject_shell_style_expansion() {
+        // `${...}` is shell-style variable expansion (and is also used by the
+        // existing `${files.input.X}` / `${TORC_*}` substitution). The
+        // workflow-level variables system must leave those alone, even when
+        // `variables` is set.
+        let yaml = r#"
+name: shell_vars_ok
+variables:
+  base_path: /scratch/proj
+jobs:
+  - name: t
+    command: "echo ${TORC_JOB_ID} ${HOME} {base_path}/run.sh"
+    env:
+      OUT: "${TORC_JOB_ID}.log"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("shell-style ${...} must not trigger undefined-token errors");
+        assert_eq!(
+            spec.jobs[0].command,
+            "echo ${TORC_JOB_ID} ${HOME} /scratch/proj/run.sh"
+        );
+        assert_eq!(
+            spec.jobs[0]
+                .env
+                .as_ref()
+                .and_then(|e| e.get("OUT"))
+                .map(String::as_str),
+            Some("${TORC_JOB_ID}.log")
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_undefined_token_inside_variable_value() {
+        // A typo in a variable's value should be rejected at load time; otherwise
+        // it would silently propagate to wherever the variable is used.
+        let yaml = r#"
+name: typo_in_var_value
+variables:
+  base_path: /scratch/proj
+  bad: "{baes_path}/sub"
+jobs:
+  - name: t
+    command: "echo {bad}"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("typo inside a variable value must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("variable 'bad'"),
+            "error should name the offending variable, got: {msg}"
+        );
+        assert!(
+            msg.contains("baes_path"),
+            "error should name the typo, got: {msg}"
+        );
     }
 
     #[test]
