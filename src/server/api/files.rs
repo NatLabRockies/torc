@@ -14,7 +14,7 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
 
 /// Trait defining file-related API operations
 #[async_trait]
@@ -182,10 +182,9 @@ where
         {
             Ok(Some(rec)) => rec,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("File not found with ID: {}", id)
-                }));
-                return Ok(GetFileResponse::NotFoundErrorResponse(error_response));
+                return Ok(GetFileResponse::NotFoundErrorResponse(
+                    resource_not_found_response("File", id),
+                ));
             }
             Err(e) => {
                 return Err(database_error_with_msg(e, "Failed to fetch file"));
@@ -383,28 +382,18 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response =
+            crate::paginated_list_response!(models::ListFilesResponse, items, offset, total_count);
 
         debug!(
             "list_files({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListFilesResponse::SuccessfulResponse(
-            models::ListFilesResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListFilesResponse::SuccessfulResponse(response))
     }
 
     /// Return files that are marked as required to exist but don't exist.
@@ -501,10 +490,9 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("File not found with ID: {}", id)
-            }));
-            return Ok(UpdateFileResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateFileResponse::NotFoundErrorResponse(
+                resource_not_found_response("File", id),
+            ));
         }
 
         // Return the updated file by fetching it again

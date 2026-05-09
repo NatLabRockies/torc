@@ -949,7 +949,7 @@ fn test_jobs_delete_multiple(start_server: &ServerProcess) {
     // Verify all jobs are actually removed
     for job_id in [job1_id, job2_id, job3_id] {
         let get_result = apis::jobs_api::get_job(config, job_id);
-        assert!(get_result.is_err(), "Job {} should be deleted", job_id);
+        assert!(get_result.is_err(), "job_id={} should be deleted", job_id);
     }
 }
 

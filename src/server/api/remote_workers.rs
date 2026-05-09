@@ -10,7 +10,9 @@ use crate::server::api_responses::{
     CreateRemoteWorkersResponse, DeleteRemoteWorkerResponse, ListRemoteWorkersResponse,
 };
 
-use super::{ApiContext, database_error_with_msg};
+use super::{
+    ApiContext, database_error_with_msg, message_error_response, resource_not_found_response,
+};
 
 /// Trait defining remote worker API operations
 #[async_trait]
@@ -77,11 +79,8 @@ where
         {
             Ok(Some(_)) => {}
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Workflow not found with ID: {}", workflow_id)
-                }));
                 return Ok(CreateRemoteWorkersResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Workflow", workflow_id),
                 ));
             }
             Err(e) => {
@@ -147,11 +146,8 @@ where
         {
             Ok(Some(_)) => {}
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Workflow not found with ID: {}", workflow_id)
-                }));
                 return Ok(ListRemoteWorkersResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Workflow", workflow_id),
                 ));
             }
             Err(e) => {
@@ -215,11 +211,8 @@ where
         {
             Ok(Some(_)) => {}
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Workflow not found with ID: {}", workflow_id)
-                }));
                 return Ok(DeleteRemoteWorkerResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Workflow", workflow_id),
                 ));
             }
             Err(e) => {
@@ -241,11 +234,11 @@ where
         {
             Ok(result) => {
                 if result.rows_affected() == 0 {
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": format!("Worker '{}' not found for workflow {}", worker, workflow_id)
-                    }));
                     return Ok(DeleteRemoteWorkerResponse::NotFoundErrorResponse(
-                        error_response,
+                        message_error_response(format!(
+                            "Worker '{}' not found for workflow {}",
+                            worker, workflow_id
+                        )),
                     ));
                 }
                 info!(

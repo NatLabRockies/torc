@@ -23,8 +23,8 @@ use crate::models::{self as models, JobStatus};
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
-    database_error_with_msg, deserialize_env_map, normalize_env_map, serialize_env_map,
-    validate_env_map,
+    database_error_with_msg, deserialize_env_map, message_error_response, normalize_env_map,
+    resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
 /// Trait defining job-related API operations
@@ -1176,19 +1176,16 @@ where
         let supports_termination = job.supports_termination.unwrap_or(false);
         let priority = job.priority.unwrap_or(0);
         if priority < 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
-            }));
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(format!(
+                    "priority must be >= 0, got {} for job '{}'",
+                    priority, job.name
+                )),
             ));
         }
         if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": err.0
-            }));
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(err.0),
             ));
         }
         let status = JobStatus::Uninitialized;
@@ -1416,11 +1413,8 @@ where
         for mut job in body.jobs {
             if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
                 let _ = transaction.rollback().await;
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": err.0
-                }));
                 return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(err.0),
                 ));
             }
             let workflow_env = match workflow_env_cache.get(&job.workflow_id) {
@@ -1452,11 +1446,11 @@ where
             let priority = job.priority.unwrap_or(0);
             if priority < 0 {
                 let _ = transaction.rollback().await;
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
-                }));
                 return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(format!(
+                        "priority must be >= 0, got {} for job '{}'",
+                        priority, job.name
+                    )),
                 ));
             }
             let status = JobStatus::Uninitialized;
@@ -1692,12 +1686,9 @@ where
         debug!("get_job({}) - X-Span-ID: {:?}", id, context.get().0.clone());
         match self.get_job_with_relationships(id).await {
             Ok(job) => Ok(GetJobResponse::SuccessfulResponse(job)),
-            Err(ApiError(msg)) if msg.contains("not found") => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
-                Ok(GetJobResponse::NotFoundErrorResponse(error_response))
-            }
+            Err(ApiError(msg)) if msg.contains("not found") => Ok(
+                GetJobResponse::NotFoundErrorResponse(resource_not_found_response("Job", id)),
+            ),
             Err(e) => Err(e),
         }
     }
@@ -1963,28 +1954,18 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response =
+            crate::paginated_list_response!(models::ListJobsResponse, items, offset, total_count);
 
         debug!(
             "list_jobs({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListJobsResponse::SuccessfulResponse(
-            models::ListJobsResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListJobsResponse::SuccessfulResponse(response))
     }
 
     /// Update a job.
@@ -2016,10 +1997,9 @@ where
         let existing_job = match self.get_job_with_relationships(id).await {
             Ok(job) => job,
             Err(ApiError(msg)) if msg.contains("not found") => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
-                return Ok(UpdateJobResponse::NotFoundErrorResponse(error_response));
+                return Ok(UpdateJobResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Job", id),
+                ));
             }
             Err(e) => return Err(e),
         };
@@ -2028,11 +2008,8 @@ where
         let existing_status = match existing_job.status {
             Some(status) => status,
             None => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot update job - job has no status set"
-                }));
                 return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response("Cannot update job - job has no status set"),
                 ));
             }
         };
@@ -2106,18 +2083,15 @@ where
                 changed_fields.push("depends_on_job_ids".to_string());
             }
 
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
                     "Cannot update job {} when status is '{}' - most updates are only allowed when status is 'uninitialized'. \
                      Only scheduler_id and resource_requirements_id can be updated at any time. \
                      Changed fields: [{}]",
                     id,
                     existing_status,
                     changed_fields.join(", ")
-                )
-            }));
-            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                )),
             ));
         }
 
@@ -2127,11 +2101,10 @@ where
             && *new_status != *existing_status
             && *new_status != models::JobStatus::Disabled
         {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot update job status - this field is immutable after job creation (except to Disabled)"
-            }));
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(
+                    "Cannot update job status - this field is immutable after job creation (except to Disabled)",
+                ),
             ));
         }
 
@@ -2162,11 +2135,10 @@ where
             body_sorted.sort();
             existing_sorted.sort();
             if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify input_file_ids - this field is immutable after job creation"
-                }));
                 return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(
+                        "Cannot modify input_file_ids - this field is immutable after job creation",
+                    ),
                 ));
             }
         }
@@ -2179,11 +2151,10 @@ where
             body_sorted.sort();
             existing_sorted.sort();
             if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify output_file_ids - this field is immutable after job creation"
-                }));
                 return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(
+                        "Cannot modify output_file_ids - this field is immutable after job creation",
+                    ),
                 ));
             }
         }
@@ -2199,11 +2170,10 @@ where
             body_sorted.sort();
             existing_sorted.sort();
             if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify input_user_data_ids - this field is immutable after job creation"
-                }));
                 return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(
+                        "Cannot modify input_user_data_ids - this field is immutable after job creation",
+                    ),
                 ));
             }
         }
@@ -2219,21 +2189,19 @@ where
             body_sorted.sort();
             existing_sorted.sort();
             if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify output_user_data_ids - this field is immutable after job creation"
-                }));
                 return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(
+                        "Cannot modify output_user_data_ids - this field is immutable after job creation",
+                    ),
                 ));
             }
         }
 
         if env_changed {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot modify env - this field is immutable after job creation"
-            }));
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(
+                    "Cannot modify env - this field is immutable after job creation",
+                ),
             ));
         }
 
@@ -2243,11 +2211,8 @@ where
         if let Some(p) = body.priority
             && p < 0
         {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("priority must be >= 0, got {}", p)
-            }));
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(format!("priority must be >= 0, got {}", p)),
             ));
         }
 
@@ -2287,10 +2252,9 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job not found with ID: {}", id)
-            }));
-            return Ok(UpdateJobResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateJobResponse::NotFoundErrorResponse(
+                resource_not_found_response("Job", id),
+            ));
         }
 
         // If depends_on_job_ids was modified, update the relationships
@@ -2383,10 +2347,9 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job not found with ID: {}", id)
-            }));
-            return Ok(UpdateJobResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateJobResponse::NotFoundErrorResponse(
+                resource_not_found_response("Job", id),
+            ));
         }
 
         // Return the updated job by fetching it again with relationships
@@ -2697,7 +2660,7 @@ where
             // Compare hashes
             if current_hash != stored_hash {
                 debug!(
-                    "Job {} ({}) input hash changed: stored={}, current={}",
+                    "job_id={} name='{}' input hash changed: stored={}, current={}",
                     job_id, job_name, stored_hash, current_hash
                 );
                 jobs_to_reinitialize.push((job_id, job_name.clone()));
@@ -2954,10 +2917,9 @@ where
             Ok(Some(record)) => record,
             Ok(None) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
-                return Ok(RetryJobResponse::NotFoundErrorResponse(error_response));
+                return Ok(RetryJobResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Job", id),
+                ));
             }
             Err(e) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
@@ -2986,14 +2948,11 @@ where
         // Verify run_id matches
         if workflow_run_id != run_id {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
+            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
                     "Run ID mismatch: provided {} but workflow is at run {}",
                     run_id, workflow_run_id
-                )
-            }));
-            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                )),
             ));
         }
 
@@ -3015,28 +2974,22 @@ where
             && current_status != JobStatus::Terminated
         {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
+            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
                     "Job cannot be retried: status is {:?}, must be Running, Failed, or Terminated",
                     current_status
-                )
-            }));
-            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                )),
             ));
         }
 
         // Validate max_retries (server-side enforcement)
         if attempt_id >= max_retries as i64 {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job cannot be retried: attempt_id {} >= max_retries {}",
-                    attempt_id, max_retries
-                )
-            }));
             return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(format!(
+                    "Job cannot be retried: attempt_id={} >= max_retries={}",
+                    attempt_id, max_retries
+                )),
             ));
         }
 

@@ -1807,17 +1807,17 @@ pub fn regroup_job_resources(
 
     for (i, group) in groups.iter().enumerate() {
         if group.job_ids.is_empty() {
-            errors.push(format!("Group {} has no job_ids", i));
+            errors.push(format!("Group index={} has no job_ids", i));
         }
         for &job_id in &group.job_ids {
             if !job_map.contains_key(&job_id) {
                 errors.push(format!(
-                    "Job {} in group {} does not belong to workflow {}",
+                    "job_id={} in group index={} does not belong to workflow_id={}",
                     job_id, i, workflow_id
                 ));
             }
             if !all_job_ids.insert(job_id) {
-                errors.push(format!("Job {} appears in multiple groups", job_id));
+                errors.push(format!("job_id={} appears in multiple groups", job_id));
             }
         }
     }

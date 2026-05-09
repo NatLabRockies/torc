@@ -1,6 +1,7 @@
 use super::*;
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, database_lock_aware_error,
+    message_error_response, resource_not_found_response,
 };
 
 const RESOURCE_CLAIM_ORDER_BY: &str = "\
@@ -197,36 +198,28 @@ fn validate_result_matches_target(
     result: &models::ResultModel,
 ) -> Result<(), models::ErrorResponse> {
     if result.job_id != id {
-        return Err(models::ErrorResponse::new(serde_json::json!({
-            "message": format!(
-                "ResultModel job_id {} does not match target job_id {}",
-                result.job_id, id
-            )
-        })));
+        return Err(message_error_response(format!(
+            "ResultModel job_id={} does not match target job_id={}",
+            result.job_id, id
+        )));
     }
     if result.workflow_id != job_workflow_id {
-        return Err(models::ErrorResponse::new(serde_json::json!({
-            "message": format!(
-                "ResultModel workflow_id {} does not match job's workflow_id {}",
-                result.workflow_id, job_workflow_id
-            )
-        })));
+        return Err(message_error_response(format!(
+            "ResultModel workflow_id={} does not match job's workflow_id={}",
+            result.workflow_id, job_workflow_id
+        )));
     }
     if result.status != status {
-        return Err(models::ErrorResponse::new(serde_json::json!({
-            "message": format!(
-                "ResultModel status '{}' does not match target status '{}'",
-                result.status, status
-            )
-        })));
+        return Err(message_error_response(format!(
+            "ResultModel status='{}' does not match target status='{}'",
+            result.status, status
+        )));
     }
     if result.run_id != run_id {
-        return Err(models::ErrorResponse::new(serde_json::json!({
-            "message": format!(
-                "ResultModel run_id {} does not match target run_id {}",
-                result.run_id, run_id
-            )
-        })));
+        return Err(message_error_response(format!(
+            "ResultModel run_id={} does not match target run_id={}",
+            result.run_id, run_id
+        )));
     }
     Ok(())
 }
@@ -453,14 +446,11 @@ where
         let first_workflow_id = body.jobs[0].workflow_id;
         for job in &body.jobs {
             if job.workflow_id != first_workflow_id {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!(
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
                         "All jobs in a batch must have the same workflow_id. Found workflow_ids: {} and {}",
                         first_workflow_id, job.workflow_id
-                    )
-                }));
-                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    )),
                 ));
             }
         }
@@ -748,14 +738,13 @@ where
                 "manage_status_change: cannot set completion status '{}' for job_id={}. Use complete_job instead.",
                 status, id
             );
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Cannot set completion status '{}' via manage_status_change. Use complete_job API instead.",
-                    status
-                )
-            }));
             return Ok(
-                ManageStatusChangeResponse::UnprocessableContentErrorResponse(error_response),
+                ManageStatusChangeResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "Cannot set completion status '{}' via manage_status_change. Use complete_job API instead.",
+                        status
+                    )),
+                ),
             );
         }
 
@@ -789,9 +778,10 @@ where
 
         if let Err(e) = self.validate_run_id(job.workflow_id, run_id).await {
             error!("manage_status_change: job_id={}, {}", id, e);
-            let error_response = models::ErrorResponse::new(serde_json::json!({ "message": e }));
             return Ok(
-                ManageStatusChangeResponse::UnprocessableContentErrorResponse(error_response),
+                ManageStatusChangeResponse::UnprocessableContentErrorResponse(
+                    message_error_response(e),
+                ),
             );
         }
 
@@ -822,22 +812,18 @@ where
                 })?;
 
             if exists.is_none() {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
                 return Ok(ManageStatusChangeResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Job", id),
                 ));
             }
 
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job {} status was concurrently modified (expected '{}'), please retry",
-                    id, current_status
-                )
-            }));
             return Ok(
-                ManageStatusChangeResponse::UnprocessableContentErrorResponse(error_response),
+                ManageStatusChangeResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "job_id={} status was concurrently modified (expected status='{}'), please retry",
+                        id, current_status
+                    )),
+                ),
             );
         }
 
@@ -859,11 +845,8 @@ where
                 "Failed to reinitialize downstream jobs for job {}: {}",
                 id, e
             );
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Failed to reinitialize downstream jobs"
-            }));
             return Ok(ManageStatusChangeResponse::DefaultErrorResponse(
-                error_response,
+                message_error_response("Failed to reinitialize downstream jobs"),
             ));
         }
 
@@ -911,14 +894,14 @@ where
                     id, status
                 );
                 return Err(ApiError(format!(
-                    "Job {} has invalid status {:?}. Expected SubmittedPending for job start.",
+                    "job_id={} has invalid status={:?}. Expected SubmittedPending for job start.",
                     id, status
                 )));
             }
             None => {
                 error!("start_job: Job status not set for job_id={}", id);
                 return Err(ApiError(format!(
-                    "Job {} has no status set. Expected SubmittedPending for job start.",
+                    "job_id={} has no status set. Expected SubmittedPending for job start.",
                     id
                 )));
             }
@@ -926,9 +909,8 @@ where
 
         if let Err(e) = self.validate_run_id(job.workflow_id, run_id).await {
             error!("start_job: job_id={}, {}", id, e);
-            let error_response = models::ErrorResponse::new(serde_json::json!({ "message": e }));
             return Ok(StartJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(e),
             ));
         }
 
@@ -953,7 +935,7 @@ where
                 id
             );
             return Err(ApiError(format!(
-                "Job {} status was concurrently modified, cannot start",
+                "job_id={} status was concurrently modified, cannot start",
                 id
             )));
         }
@@ -1065,14 +1047,13 @@ where
         if let Some(expected_workflow_id) = expected_workflow_id
             && job.workflow_id != expected_workflow_id
         {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job {} belongs to workflow {} but batch target is workflow {}",
-                    id, job.workflow_id, expected_workflow_id
-                )
-            }));
             return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                    format!(
+                        "job_id={} belongs to workflow_id={} but batch target is workflow_id={}",
+                        id, job.workflow_id, expected_workflow_id
+                    ),
+                )),
             )));
         }
 
@@ -1080,14 +1061,16 @@ where
             && current_status.is_complete()
         {
             error!(
-                "Job {} is already complete with status {:?}",
+                "job_id={} is already complete with status={:?}",
                 id, current_status
             );
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job {} is already complete with status {:?}", id, current_status)
-            }));
             return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                    format!(
+                        "job_id={} is already complete with status={:?}",
+                        id, current_status
+                    ),
+                )),
             )));
         }
 
@@ -1233,11 +1216,10 @@ where
         {
             Ok(Some(row)) => row,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
                 return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::NotFoundErrorResponse(error_response),
+                    CompleteJobResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "Job", id,
+                    )),
                 )));
             }
             Err(e) => {
@@ -1252,7 +1234,7 @@ where
         let job_command = job_row.command;
         let status_i32 = i32::try_from(job_row.status).map_err(|e| {
             CompletionMutationError::Transport(ApiError(format!(
-                "Job {} has out-of-range status value {} in database: {}",
+                "job_id={} has out-of-range status value={} in database: {}",
                 id, job_row.status, e
             )))
         })?;
@@ -1260,7 +1242,7 @@ where
             Ok(s) => s,
             Err(e) => {
                 return Err(CompletionMutationError::Transport(ApiError(format!(
-                    "Failed to parse job status for job {}: {}",
+                    "Failed to parse job status for job_id={}: {}",
                     id, e
                 ))));
             }
@@ -1269,23 +1251,24 @@ where
         if let Some(expected_workflow_id) = expected_workflow_id
             && job_workflow_id != expected_workflow_id
         {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job {} belongs to workflow {} but batch target is workflow {}",
-                    id, job_workflow_id, expected_workflow_id
-                )
-            }));
             return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                    format!(
+                        "job_id={} belongs to workflow_id={} but batch target is workflow_id={}",
+                        id, job_workflow_id, expected_workflow_id
+                    ),
+                )),
             )));
         }
 
         if current_status.is_complete() {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job {} is already complete with status {:?}", id, current_status)
-            }));
             return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                    format!(
+                        "job_id={} is already complete with status={:?}",
+                        id, current_status
+                    ),
+                )),
             )));
         }
 
@@ -1312,25 +1295,23 @@ where
         match workflow_run_id_row {
             Some(row) if row.run_id == run_id => {}
             Some(row) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!(
-                        "Run ID mismatch: provided {} but workflow status has {}",
-                        run_id, row.run_id
-                    )
-                }));
                 return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                    CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                        format!(
+                            "Run ID mismatch: provided {} but workflow status has {}",
+                            run_id, row.run_id
+                        ),
+                    )),
                 )));
             }
             None => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!(
-                        "Workflow status not found for workflow ID: {}",
-                        job_workflow_id
-                    )
-                }));
                 return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                    CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                        format!(
+                            "Workflow status not found for workflow ID: {}",
+                            job_workflow_id
+                        ),
+                    )),
                 )));
             }
         }
@@ -1452,21 +1433,23 @@ where
                     let current_status = models::JobStatus::from_int(status_int as i32)
                         .unwrap_or(models::JobStatus::Failed);
                     if current_status.is_complete() {
-                        let error_response = models::ErrorResponse::new(serde_json::json!({
-                            "message": format!("Job {} is already complete with status {:?}", id, current_status)
-                        }));
                         return Err(CompletionMutationError::Response(Box::new(
-                            CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
+                            CompleteJobResponse::UnprocessableContentErrorResponse(
+                                message_error_response(format!(
+                                    "job_id={} is already complete with status={:?}",
+                                    id, current_status
+                                )),
+                            ),
                         )));
                     }
                     return Err(CompletionMutationError::Transport(ApiError(format!(
-                        "Job {} is in unexpected status {:?}",
+                        "job_id={} is in unexpected status={:?}",
                         id, current_status
                     ))));
                 }
                 None => {
                     return Err(CompletionMutationError::Transport(ApiError(format!(
-                        "Job {} not found",
+                        "job_id={} not found",
                         id
                     ))));
                 }
@@ -1752,11 +1735,8 @@ where
             })?;
 
         if workflow_exists.is_none() {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", workflow_id)
-            }));
             return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Workflow", workflow_id),
             ));
         }
 

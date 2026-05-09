@@ -946,7 +946,7 @@ fn run_monitoring_loop(
                     && memory_bytes > limit
                 {
                     warn!(
-                        "Job {} (PID {}) exceeded memory limit: {}MB > {}MB",
+                        "job_id={} pid={} exceeded memory limit: {}MB > {}MB",
                         job.job_id,
                         pid,
                         memory_bytes / (1024 * 1024),
@@ -959,7 +959,10 @@ fn run_monitoring_loop(
                         memory_bytes,
                         limit_bytes: limit,
                     }) {
-                        error!("Failed to send OOM violation for job {}: {}", job.job_id, e);
+                        error!(
+                            "Failed to send OOM violation for job_id={}: {}",
+                            job.job_id, e
+                        );
                     }
                 }
 
@@ -968,7 +971,7 @@ fn run_monitoring_loop(
                 }
 
                 debug!(
-                    "Job {} (PID {}): CPU={:.1}%, Mem={:.1}MB, Procs={}",
+                    "job_id={} pid={}: CPU={:.1}%, Mem={:.1}MB, Procs={}",
                     job.job_id,
                     pid,
                     cpu_percent,

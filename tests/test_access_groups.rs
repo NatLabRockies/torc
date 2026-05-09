@@ -1371,7 +1371,7 @@ fn test_comprehensive_access_control_workflow_execution(
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
-            "Job {} should be completed. actual status: {:?}",
+            "job name='{}' should be completed. actual status={:?}",
             job.name,
             job.status
         );

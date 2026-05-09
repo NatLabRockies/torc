@@ -17,7 +17,7 @@ use crate::memory_utils::memory_string_to_bytes;
 use crate::models;
 use crate::time_utils::duration_string_to_seconds;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
 
 /// Trait defining resource requirements-related API operations
 #[async_trait]
@@ -283,11 +283,8 @@ where
         {
             Ok(Some(rec)) => rec,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Resource requirements not found with ID: {}", id)
-                }));
                 return Ok(GetResourceRequirementsResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Resource requirements", id),
                 ));
             }
             Err(e) => {
@@ -518,27 +515,23 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListResourceRequirementsResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_resource_requirements({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
         Ok(ListResourceRequirementsResponse::SuccessfulResponse(
-            models::ListResourceRequirementsResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
+            response,
         ))
     }
 

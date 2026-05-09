@@ -655,7 +655,7 @@ fn apply_upscale_for_adjustment(
                 (adjustment.job_ids.first(), adjustment.job_names.first())
             {
                 info!(
-                    "Job {} ({}): memory violation, increasing memory {} -> {} \
+                    "job_id={} name='{}': memory violation, increasing memory {} -> {} \
                      ({}x fallback for OOM without reliable peak data)",
                     job_id, job_name, adjustment.current_memory, new_memory, opts.memory_multiplier
                 );
@@ -675,7 +675,7 @@ fn apply_upscale_for_adjustment(
                 (adjustment.job_ids.first(), adjustment.job_names.first())
             {
                 info!(
-                    "Job {} ({}): memory violation, peak usage {} -> allocating {} ({}x)",
+                    "job_id={} name='{}': memory violation, peak usage {} -> allocating {} ({}x)",
                     job_id,
                     job_name,
                     format_memory_bytes_short(max_peak),
@@ -717,7 +717,7 @@ fn apply_upscale_for_adjustment(
             (adjustment.job_ids.first(), adjustment.job_names.first())
         {
             info!(
-                "Job {} ({}): Timeout detected, increasing runtime {} -> {}",
+                "job_id={} name='{}': Timeout detected, increasing runtime {} -> {}",
                 job_id, job_name, adjustment.current_runtime, new_runtime
             );
         }
@@ -755,7 +755,7 @@ fn apply_upscale_for_adjustment(
                     (adjustment.job_ids.first(), adjustment.job_names.first())
                 {
                     info!(
-                        "Job {} ({}): Runtime violation detected, peak {}m -> allocating {} ({}x)",
+                        "job_id={} name='{}': Runtime violation detected, peak {}m -> allocating {} ({}x)",
                         job_id, job_name, max_peak_runtime, new_runtime, opts.runtime_multiplier
                     );
                 }
@@ -792,7 +792,7 @@ fn apply_upscale_for_adjustment(
                 (adjustment.job_ids.first(), adjustment.job_names.first())
             {
                 info!(
-                    "Job {} ({}): CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
+                    "job_id={} name='{}': CPU over-utilization detected, peak {}% -> allocating {} CPUs ({:.1}x safety margin)",
                     job_id, job_name, max_peak_cpu, new_cpus, opts.cpu_multiplier
                 );
             }

@@ -230,7 +230,7 @@ fn test_prepare_next_jobs_marks_jobs_pending(start_server: &ServerProcess) {
         assert_eq!(
             job.status.expect("Job status should be present"),
             models::JobStatus::Pending,
-            "Job {} should be marked as Pending",
+            "job name='{}' should be marked as Pending",
             job.name
         );
 
@@ -299,7 +299,7 @@ fn test_prepare_next_jobs_exhaust_all_jobs(start_server: &ServerProcess) {
             let job_id = job.id.expect("Job should have ID");
             assert!(
                 all_job_ids.insert(job_id),
-                "Job {} returned multiple times",
+                "job_id={} returned multiple times",
                 job_id
             );
             total_jobs_received += 1;

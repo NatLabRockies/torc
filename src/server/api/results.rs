@@ -14,7 +14,7 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
 
 /// Trait defining result-related API operations
 #[async_trait]
@@ -254,12 +254,9 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(
-                    serde_json::json!({
-                        "message": format!("Result not found with ID: {}", id)
-                    })
-                );
-                return Ok(GetResultResponse::NotFoundErrorResponse(error_response));
+                return Ok(GetResultResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Result", id),
+                ));
             }
             Err(e) => {
                 return Err(database_error_with_msg(e, "Failed to fetch result"));
@@ -498,28 +495,22 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListResultsResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_results({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListResultsResponse::SuccessfulResponse(
-            models::ListResultsResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListResultsResponse::SuccessfulResponse(response))
     }
 
     /// Update a result.
@@ -583,10 +574,9 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Result not found with ID: {}", id)
-            }));
-            return Ok(UpdateResultResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateResultResponse::NotFoundErrorResponse(
+                resource_not_found_response("Result", id),
+            ));
         }
 
         // Return the updated result by fetching it again

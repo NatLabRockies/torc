@@ -15,7 +15,10 @@ use crate::server::api_responses::{
 use crate::models;
 use crate::ro_crate_json_ld::typed_entity;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
+    message_error_response, resource_not_found_response,
+};
 
 const RO_CRATE_ENTITY_COLUMNS: &[&str] = &[
     "id",
@@ -420,12 +423,9 @@ where
                         body.file_id,
                         &body.entity_id,
                     );
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": message
-                    }));
                     return Ok(
                         CreateRoCrateEntityResponse::UnprocessableContentErrorResponse(
-                            error_response,
+                            message_error_response(message),
                         ),
                     );
                 }
@@ -468,11 +468,8 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("RO-Crate entity not found with ID: {}", id)
-                }));
                 return Ok(GetRoCrateEntityResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("RO-Crate entity", id),
                 ));
             }
             Err(e) => {
@@ -583,8 +580,6 @@ where
             })
             .collect();
 
-        let count = items.len() as i64;
-
         // Get total count with the same filters but without pagination.
         let count_query = format!(
             "SELECT COUNT(*) as total FROM ro_crate_entity WHERE {}",
@@ -611,17 +606,13 @@ where
             }
         };
 
-        let has_more = offset + count < total_count;
-
         Ok(ListRoCrateEntitiesResponse::SuccessfulResponse(
-            models::ListRoCrateEntitiesResponse {
+            crate::paginated_list_response!(
+                models::ListRoCrateEntitiesResponse,
                 items,
                 offset,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count,
-                total_count,
-                has_more,
-            },
+                total_count
+            ),
         ))
     }
 
@@ -665,12 +656,9 @@ where
                         body.file_id,
                         &body.entity_id,
                     );
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": message
-                    }));
                     return Ok(
                         UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
-                            error_response,
+                            message_error_response(message),
                         ),
                     );
                 }
@@ -682,11 +670,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("RO-Crate entity not found with ID: {}", id)
-            }));
             return Ok(UpdateRoCrateEntityResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("RO-Crate entity", id),
             ));
         }
 
@@ -721,11 +706,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("RO-Crate entity not found with ID: {}", id)
-            }));
             return Ok(DeleteRoCrateEntityResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("RO-Crate entity", id),
             ));
         }
 

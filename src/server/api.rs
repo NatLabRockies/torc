@@ -1,5 +1,6 @@
 //! Common API module with shared imports and traits
 
+use crate::models;
 use crate::server::transport_types::context_types::ApiError;
 use log::{debug, error, info};
 use sqlx::sqlite::SqlitePool;
@@ -126,6 +127,27 @@ pub async fn begin_immediate(
     pool.begin_with("BEGIN IMMEDIATE").await
 }
 
+/// Build an `ErrorResponse` whose body is `{"message": <text>}`.
+///
+/// API handlers historically construct this shape inline with
+/// `models::ErrorResponse::new(serde_json::json!({"message": ...}))`. Use this
+/// helper to keep call sites focused on intent.
+pub fn message_error_response(message: impl Into<String>) -> models::ErrorResponse {
+    models::ErrorResponse::new(serde_json::json!({"message": message.into()}))
+}
+
+/// Build a `"<resource> not found with ID: <id>"` error response.
+///
+/// `resource` is the human-readable resource name (e.g., `"Workflow"`, `"Job"`).
+/// The wording matches what handlers already produce, so error bodies remain
+/// stable for clients.
+pub fn resource_not_found_response(
+    resource: &str,
+    id: impl std::fmt::Display,
+) -> models::ErrorResponse {
+    message_error_response(format!("{} not found with ID: {}", resource, id))
+}
+
 /// Escape SQL LIKE wildcard characters in user input.
 /// Escapes `%`, `_`, and `\` with a backslash prefix.
 pub fn escape_like_pattern(input: &str) -> String {
@@ -219,6 +241,56 @@ mod tests {
         .expect_err("invalid env map should fail");
         assert!(err.0.contains("BAD-NAME"));
     }
+}
+
+/// Build a paginated list response model with the canonical
+/// `(items, offset, max_limit, count, total_count, has_more)` shape.
+///
+/// Every `ListXxxResponse` model shares this field layout, so most list
+/// endpoints recompute `count = items.len() as i64` and
+/// `has_more = offset + count < total_count` by hand. Use this macro to
+/// collapse that boilerplate into a single struct-literal expression.
+///
+/// `max_limit` defaults to [`MAX_RECORD_TRANSFER_COUNT`]. Pass
+/// `max_limit = <expr>` to override (e.g. when the response should echo back
+/// the caller's clamped page size rather than the global cap).
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::paginated_list_response;
+/// let response = paginated_list_response!(
+///     models::ListJobsResponse,
+///     items,
+///     offset,
+///     total_count
+/// );
+/// ```
+#[macro_export]
+macro_rules! paginated_list_response {
+    ($model:path, $items:expr, $offset:expr, $total_count:expr $(,)?) => {
+        $crate::paginated_list_response!(
+            $model,
+            $items,
+            $offset,
+            $total_count,
+            max_limit = $crate::MAX_RECORD_TRANSFER_COUNT
+        )
+    };
+    ($model:path, $items:expr, $offset:expr, $total_count:expr, max_limit = $max_limit:expr $(,)?) => {{
+        let items = $items;
+        let offset: i64 = $offset;
+        let total_count: i64 = $total_count;
+        let count = items.len() as i64;
+        $model {
+            items,
+            offset,
+            max_limit: $max_limit,
+            count,
+            total_count,
+            has_more: offset + count < total_count,
+        }
+    }};
 }
 
 /// Common pagination response structure

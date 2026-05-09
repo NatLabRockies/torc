@@ -554,7 +554,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
         assert_eq!(
             job.status,
             Some(models::JobStatus::Completed),
-            "Job {} should be completed",
+            "job name='{}' should be completed",
             job.name
         );
     }

@@ -188,17 +188,15 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
                         node_list: r.node_list,
                     })
                     .collect();
-                let count = items.len() as i64;
-                let has_more = offset + count < total_count;
-                let mut response = models::ListSlurmStatsResponse::new(
-                    offset,
-                    limit,
-                    count,
-                    total_count,
-                    has_more,
-                );
-                response.items = items;
-                Ok(ListSlurmStatsResponse::SuccessfulResponse(response))
+                Ok(ListSlurmStatsResponse::SuccessfulResponse(
+                    crate::paginated_list_response!(
+                        models::ListSlurmStatsResponse,
+                        items,
+                        offset,
+                        total_count,
+                        max_limit = limit
+                    ),
+                ))
             }
             Err(e) => Err(database_error_with_msg(e, "Failed to list slurm_stats")),
         }

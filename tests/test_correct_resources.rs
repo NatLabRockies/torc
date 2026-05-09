@@ -948,7 +948,7 @@ fn claim_and_complete_jobs(
         // Verify this job was claimed
         assert!(
             claimed.iter().any(|j| j.id == Some(*job_id)),
-            "Job {} should have been claimed",
+            "job_id={} should have been claimed",
             job_id
         );
 

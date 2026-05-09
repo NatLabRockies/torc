@@ -19,7 +19,7 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
 
 /// Trait defining scheduler-related API operations
 #[async_trait]
@@ -508,11 +508,8 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Local scheduler not found with ID: {}", id)
-                }));
                 return Ok(GetLocalSchedulerResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Local scheduler", id),
                 ));
             }
             Err(e) => {
@@ -558,11 +555,8 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Scheduled compute node not found with ID: {}", id)
-                }));
                 return Ok(GetScheduledComputeNodeResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Scheduled compute node", id),
                 ));
             }
             Err(e) => {
@@ -610,11 +604,8 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Slurm scheduler not found with ID: {}", id)
-                }));
                 return Ok(GetSlurmSchedulerResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Slurm scheduler", id),
                 ));
             }
             Err(e) => {
@@ -742,28 +733,22 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListLocalSchedulersResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_local_schedulers({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListLocalSchedulersResponse::HTTP(
-            models::ListLocalSchedulersResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListLocalSchedulersResponse::HTTP(response))
     }
 
     /// Retrieve scheduled compute node records for one workflow.
@@ -895,27 +880,23 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListScheduledComputeNodesResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_scheduled_compute_nodes({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
         Ok(ListScheduledComputeNodesResponse::SuccessfulResponse(
-            models::ListScheduledComputeNodesResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
+            response,
         ))
     }
 
@@ -1022,28 +1003,22 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListSlurmSchedulersResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_slurm_schedulers({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListSlurmSchedulersResponse::SuccessfulResponse(
-            models::ListSlurmSchedulersResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListSlurmSchedulersResponse::SuccessfulResponse(response))
     }
 
     /// Update a local scheduler.
@@ -1097,11 +1072,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Local scheduler not found with ID: {}", id)
-            }));
             return Ok(UpdateLocalSchedulerResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Local scheduler", id),
             ));
         }
 
@@ -1180,11 +1152,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Scheduled compute node not found with ID: {}", id)
-            }));
             return Ok(UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Scheduled compute node", id),
             ));
         }
 
@@ -1278,11 +1247,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Slurm scheduler not found with ID: {}", id)
-            }));
             return Ok(UpdateSlurmSchedulerResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Slurm scheduler", id),
             ));
         }
 

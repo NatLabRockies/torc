@@ -308,7 +308,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
         assert_eq!(
             job.status.unwrap(),
             JobStatus::Uninitialized,
-            "Job {} should be Uninitialized after completion reversal",
+            "job_id={} should be Uninitialized after completion reversal",
             job_id
         );
     }
