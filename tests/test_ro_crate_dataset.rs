@@ -249,7 +249,7 @@ fn compute_manifest_hash_for_test(dir: &Path) -> String {
 
     manifest_entries.sort();
     let manifest = manifest_entries.join("\n");
-    format!("{:x}", Sha256::digest(manifest.as_bytes()))
+    hex::encode(Sha256::digest(manifest.as_bytes()))
 }
 
 fn compute_content_hash_for_test(dir: &Path, num_threads: usize) -> String {
@@ -289,7 +289,7 @@ fn compute_content_hash_for_test(dir: &Path, num_threads: usize) -> String {
                     hasher.update(&buffer[..n]);
                 }
 
-                (rel_path.clone(), format!("{:x}", hasher.finalize()))
+                (rel_path.clone(), hex::encode(hasher.finalize()))
             })
             .collect()
     });
@@ -303,5 +303,5 @@ fn compute_content_hash_for_test(dir: &Path, num_threads: usize) -> String {
         final_hasher.update(format!("{}:{}\n", path, hash).as_bytes());
     }
 
-    format!("{:x}", final_hasher.finalize())
+    hex::encode(final_hasher.finalize())
 }

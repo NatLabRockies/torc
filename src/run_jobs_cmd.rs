@@ -16,7 +16,7 @@ use log::{LevelFilter, error, info};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use sysinfo::{CpuRefreshKind, RefreshKind, System, SystemExt};
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
 pub enum LogStream {
     Stdout,
@@ -306,11 +306,11 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
 
     // Use new_with_specifics to only refresh CPU and memory, avoiding user enumeration
     // which can crash on HPC systems with large LDAP user databases
-    let refresh_kind = RefreshKind::new()
+    let refresh_kind = RefreshKind::nothing()
         .with_cpu(CpuRefreshKind::everything())
-        .with_memory();
+        .with_memory(MemoryRefreshKind::everything());
     let mut system = System::new_with_specifics(refresh_kind);
-    system.refresh_cpu();
+    system.refresh_cpu_all();
     system.refresh_memory();
     let system_cpus = system.cpus().len() as i64;
     let system_memory_gb = (system.total_memory() as f64) / (1024.0 * 1024.0 * 1024.0);

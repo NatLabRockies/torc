@@ -297,6 +297,7 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
         working_directory: None,
         environment: None,
         autostart: true, // Start automatically on boot
+        restart_policy: RestartPolicy::default(),
     };
 
     // Install the service
