@@ -7,6 +7,7 @@ use crate::server::api::{
     WorkflowsApiImpl,
 };
 use crate::server::api_event_stream::ApiEventBroadcaster;
+use crate::server::api_stats::ApiStatsRing;
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::authorization::AuthorizationService;
 use crate::server::event_broadcast::EventBroadcaster;
@@ -23,6 +24,7 @@ pub struct LiveServerState {
     pub authorization_service: AuthorizationService,
     pub event_broadcaster: EventBroadcaster,
     pub api_event_broadcaster: ApiEventBroadcaster,
+    pub api_stats: ApiStatsRing,
     pub htpasswd: SharedHtpasswd,
     pub auth_file_path: Option<String>,
     pub credential_cache: SharedCredentialCache,
@@ -63,6 +65,7 @@ impl LiveServerState {
             authorization_service,
             event_broadcaster: EventBroadcaster::new(512),
             api_event_broadcaster: ApiEventBroadcaster::default(),
+            api_stats: ApiStatsRing::new(),
             htpasswd,
             auth_file_path,
             credential_cache,

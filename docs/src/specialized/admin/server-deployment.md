@@ -716,6 +716,40 @@ optional query parameter, `include_bodies=true`. Like other admin endpoints (e.g
 `/admin/reload-auth`), it requires standard server authentication but no additional admin role —
 restrict access via your htpasswd file or upstream proxy.
 
+## Server Load Stats
+
+For an at-a-glance view of how busy the server is — without streaming individual requests — use
+`torc admin api-stats`. The server keeps a 1-hour ring of per-second counters; the CLI fetches an
+aggregated snapshot and renders it as a table.
+
+```bash
+# Last hour, in 1-minute buckets (default)
+torc admin api-stats
+
+# Last 5 minutes, in 30-second buckets
+torc admin api-stats --window 300 --interval 30
+
+# Raw JSON for scripts or jq
+torc -f json admin api-stats
+```
+
+Each row reports request count, requests-per-second, bytes in / bytes out, and a 2xx / 4xx / 5xx
+status breakdown for that interval. A trailing `Total:` line sums the entire window.
+
+### Counters
+
+The capture middleware records every request — independent of whether anyone is connected to
+`tail-api`, so the ring is always up to date. Bytes are read from the `Content-Length` request and
+response headers; chunked or streaming responses (notably the SSE event streams themselves) do not
+advertise a length and contribute `0` bytes, although the request itself is still counted. Stats are
+in-memory only and reset on server restart.
+
+### Endpoint
+
+The underlying endpoint is `GET /torc-service/v1/admin/api-stats`, with optional `window_seconds`
+(default `3600`, capped at the ring size) and `interval_seconds` (default `60`) query parameters.
+Buckets are returned newest-first.
+
 ## Log Rotation Strategy
 
 The server uses automatic size-based rotation with the following defaults:

@@ -5,6 +5,9 @@ use crate::server::api_event_stream::{
     ApiEventBroadcaster, ApiRequestEvent, BODY_CAPTURE_HARD_CAP_BYTES, CapturedBody,
     body_capture_limit,
 };
+use crate::server::api_stats::{
+    ApiStatsRing, ApiStatsSnapshot, DEFAULT_INTERVAL_SECONDS, DEFAULT_WINDOW_SECONDS,
+};
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::credential_cache::CredentialCache;
 use crate::server::dashboard::serve_dashboard;
@@ -293,6 +296,7 @@ pub fn app_router(state: LiveRouterState) -> Router {
             "/torc-service/v1/admin/api-events/stream",
             get(admin_api_events_stream),
         )
+        .route("/torc-service/v1/admin/api-stats", get(admin_api_stats))
         .route(
             "/torc-service/v1/workflows",
             get(list_workflows).post(create_workflow),
@@ -378,7 +382,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
         )
         .fallback(dashboard_fallback)
         .layer(middleware::from_fn_with_state(
-            state.server.api_event_broadcaster.clone(),
+            CaptureState {
+                bus: state.server.api_event_broadcaster.clone(),
+                stats: state.server.api_stats.clone(),
+            },
             capture_api_event,
         ))
         .layer(middleware::from_fn_with_state(
@@ -386,6 +393,12 @@ pub fn app_router(state: LiveRouterState) -> Router {
             inject_request_context,
         ))
         .with_state(state)
+}
+
+#[derive(Clone)]
+struct CaptureState {
+    bus: ApiEventBroadcaster,
+    stats: ApiStatsRing,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -603,6 +616,52 @@ pub async fn admin_api_events_stream(
         .header("X-Accel-Buffering", "no")
         .body(Body::from_stream(stream))
         .expect("valid SSE response")
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ApiStatsQuery {
+    /// Total span of time to report on, in seconds. Defaults to 3600
+    /// (1 hour). Capped at the ring buffer's retention (3600s).
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub window_seconds: Option<u64>,
+    /// Aggregation bucket width in seconds. Defaults to 60.
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub interval_seconds: Option<u64>,
+}
+
+#[utoipa::path(
+    get,
+    tag = "system",
+    path = "/admin/api-stats",
+    operation_id = "admin_api_stats",
+    params(ApiStatsQuery),
+    responses(
+        (status = 200, description = "Aggregated request counts and bytes per bucket")
+    )
+)]
+pub async fn admin_api_stats(
+    State(state): State<LiveRouterState>,
+    Query(params): Query<ApiStatsQuery>,
+) -> Response<Body> {
+    let window = params.window_seconds.unwrap_or(DEFAULT_WINDOW_SECONDS);
+    let interval = params.interval_seconds.unwrap_or(DEFAULT_INTERVAL_SECONDS);
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let snapshot: ApiStatsSnapshot = state.server.api_stats.snapshot(now_ms, window, interval);
+    json_response_ok(&snapshot)
+}
+
+fn json_response_ok<T: serde::Serialize>(value: &T) -> Response<Body> {
+    match serde_json::to_vec(value) {
+        Ok(body) => Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .expect("valid json response"),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+    }
 }
 
 async fn dashboard_fallback(request: Request) -> Response<Body> {
@@ -4189,12 +4248,25 @@ async fn inject_request_context(
 }
 
 async fn capture_api_event(
-    State(bus): State<ApiEventBroadcaster>,
+    State(capture): State<CaptureState>,
     request: Request,
     next: Next,
 ) -> Response<Body> {
-    if bus.receiver_count() == 0 {
-        return next.run(request).await;
+    let CaptureState { bus, stats } = capture;
+    let bytes_in = content_length_header(request.headers());
+    let want_event = bus.receiver_count() > 0;
+    let want_bodies = want_event && bus.body_subscriber_count() > 0;
+
+    if !want_event {
+        let response = next.run(request).await;
+        let bytes_out = content_length_header(response.headers());
+        stats.record(
+            chrono::Utc::now().timestamp_millis(),
+            response.status().as_u16(),
+            bytes_in,
+            bytes_out,
+        );
+        return response;
     }
 
     let started = std::time::Instant::now();
@@ -4227,7 +4299,6 @@ async fn capture_api_event(
         None => (None, advisory_user),
     };
 
-    let want_bodies = bus.body_subscriber_count() > 0;
     let display_limit = body_capture_limit();
 
     let (request, request_body) = if want_bodies {
@@ -4244,12 +4315,17 @@ async fn capture_api_event(
         (response, None)
     };
 
+    let bytes_out = content_length_header(response.headers());
+    let timestamp_ms = chrono::Utc::now().timestamp_millis();
+    let status = response.status().as_u16();
+    stats.record(timestamp_ms, status, bytes_in, bytes_out);
+
     let event = ApiRequestEvent {
-        timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        timestamp_ms,
         method,
         path,
         query,
-        status: response.status().as_u16(),
+        status,
         latency_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         request_id,
         user,
@@ -4259,6 +4335,14 @@ async fn capture_api_event(
 
     bus.broadcast(event);
     response
+}
+
+fn content_length_header(headers: &axum::http::HeaderMap) -> u64 {
+    headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0)
 }
 
 async fn capture_request_body(
@@ -4523,6 +4607,60 @@ mod live_router_tests {
         // metadata receiver is connected.
         assert!(event.request_body.is_none());
         assert!(event.response_body.is_none());
+    }
+
+    #[tokio::test]
+    async fn api_stats_endpoint_reports_recorded_requests() {
+        let server = test_server_with_schema().await;
+        let router = test_router(server);
+
+        // Drive a few requests through the middleware so the ring has
+        // something to report.
+        for _ in 0..3 {
+            let resp = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri("/torc-service/v1/ping")
+                        .body(Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("router response");
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/admin/api-stats?window_seconds=60&interval_seconds=60")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let snap: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("valid api-stats response");
+        let buckets = snap["buckets"].as_array().expect("buckets array");
+        assert!(!buckets.is_empty());
+        // 3 ping requests + the api-stats request itself = at least 3
+        let total_requests: u64 = buckets
+            .iter()
+            .map(|b| b["request_count"].as_u64().unwrap_or(0))
+            .sum();
+        assert!(
+            total_requests >= 3,
+            "expected at least 3 recorded requests, got {total_requests}"
+        );
     }
 
     #[tokio::test]
