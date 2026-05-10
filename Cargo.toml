@@ -120,7 +120,7 @@ schemars = "1.0"
 # Dashboard-specific
 uuid = { version = "1.23", features = ["v4"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
-utoipa = { version = "5.3", features = ["axum_extras", "yaml"] }
+utoipa = { version = "5.5", features = ["axum_extras", "yaml"] }
 
 # TLS
 tokio-openssl = "0.6"
