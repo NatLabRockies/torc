@@ -81,7 +81,7 @@ inspections don't conflict.
 
 For allocations that span multiple compute nodes, the standalone server doesn't work — the job
 runners on other nodes can't reach `127.0.0.1` on the script's node. Start a regular torc-server
-bound to a routable hostname and have `srun` launch a runner on each node:
+bound to all interfaces and point clients at whichever hostname routes between compute nodes:
 
 ```bash
 #!/bin/bash
@@ -89,19 +89,42 @@ bound to a routable hostname and have `srun` launch a runner on each node:
 #SBATCH --time=01:00:00
 #SBATCH --nodes=10
 
-torc-server run --host $(hostname) --port 8080 &
+# Accept connections on every interface — the server doesn't need to know
+# which one compute nodes will use.
+torc-server run --host 0.0.0.0 --port 8080 &
 server_pid=$!
 trap "kill $server_pid" EXIT
 
-export TORC_API_URL="http://$(hostname):8080/torc-service/v1"
+# Point clients at the short hostname, which on most clusters resolves
+# to an in-allocation IP via shared /etc/hosts or internal DNS. If your
+# cluster needs the high-speed-interconnect (HSN) name instead, see
+# "Find the routable hostname" below.
+export TORC_API_URL="http://$(hostname -s):8080/torc-service/v1"
 sleep 2   # let the server bind before clients connect
 
-srun torc run workflow.yaml
+srun torc run workflow.yaml   # srun propagates TORC_API_URL by default
 ```
 
-On many HPC systems `$(hostname)` returns the default interface rather than the high-speed
-interconnect one that compute nodes route through. See [HPC Deployment](./hpc-deployment.md) for
-hostname selection on specific systems.
+**Why `0.0.0.0` and `hostname -s`?** Binding to `0.0.0.0` lets the server accept on every interface,
+so it doesn't matter which one the cluster uses. `hostname -s` (the short name) usually resolves to
+a cluster-internal IP via `/etc/hosts` or local DNS; the full `hostname` / `hostname -f` often
+returns a domain that points at a management interface compute nodes can't reach. If `hostname -s`
+doesn't resolve on your cluster either, fall back to the HSN name (next section).
+
+**Find the routable hostname** (run from a login node on your cluster):
+
+```bash
+hostname -A                       # every name/interface attached to this host
+grep $(hostname -s) /etc/hosts    # often shows the HSN alias explicitly
+getent hosts $(hostname -s)       # canonical address lookup
+```
+
+On NREL Kestrel, for example, the HSN hostname follows the pattern
+`<shortname>.hsn.cm.kestrel.hpc.nrel.gov`. See
+[HPC Deployment → Finding the Internal Hostname](./hpc-deployment.md#finding-the-internal-hostname)
+for cluster-specific hostnames and
+[Network Connectivity → Scenario 3](../../core/concepts/network-connectivity.md#scenario-3-hpc-with-non-routable-hostname)
+for the broader pattern.
 
 ## See Also
 
