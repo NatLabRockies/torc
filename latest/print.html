@@ -17108,6 +17108,9 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 <code>./torc-server-snapshot.db</code>). See
 <a href="specialized/admin/server-deployment.html#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>.</li>
 <li><code>TORC_SERVER_SNAPSHOT_KEEP</code>: Number of snapshots to retain (default <code>5</code>, minimum <code>1</code>)</li>
+<li><code>TORC_API_EVENT_BODY_MAX_BYTES</code>: Per-direction cap on captured request/response bodies surfaced
+through <code>torc admin tail-api</code> (default <code>8192</code>). See
+<a href="specialized/admin/server-deployment.html#live-api-request-inspection">Live API Request Inspection</a>.</li>
 </ul>
 <p>Example:</p>
 <pre><code class="language-bash">export TORC_LOG_DIR=/var/log/torc
@@ -17509,6 +17512,92 @@ torc admin reload-auth
 <p>For Docker/Kubernetes deployments, call <code>torc admin reload-auth</code> after updating the htpasswd file
 instead of restarting the container. See
 <a href="specialized/admin/./authentication.html#hot-reloading-credentials">Hot-Reloading Credentials</a> for details.</p>
+<h2 id="live-api-request-inspection"><a class="header" href="#live-api-request-inspection">Live API Request Inspection</a></h2>
+<p><code>torc admin tail-api</code> streams a structured event for every inbound HTTP request the server
+processes, delivered over Server-Sent Events. It is intended for debugging traffic against a running
+server without tailing log files: events are network-accessible, structured, and emitted in real
+time.</p>
+<pre><code class="language-bash"># Watch all API requests as they arrive
+torc admin tail-api
+
+# Include captured request and response bodies (subject to size caps)
+torc admin tail-api --include-bodies
+
+# Stream JSON, one event per line, e.g. for piping to jq
+torc -f json admin tail-api | jq .
+</code></pre>
+<p>Each event includes the HTTP method, path, query string, status code, latency in milliseconds, the
+<code>x-span-id</code> assigned by the server, and the authenticated user (when one was resolved). Output
+fields:</p>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>timestamp_ms</code></td><td>Unix epoch milliseconds at which the request finished.</td></tr>
+<tr><td><code>method</code></td><td>HTTP method (<code>GET</code>, <code>POST</code>, …).</td></tr>
+<tr><td><code>path</code></td><td>URL path (without query string).</td></tr>
+<tr><td><code>query</code></td><td>URL query string, when present.</td></tr>
+<tr><td><code>status</code></td><td>Final HTTP status code returned to the client.</td></tr>
+<tr><td><code>latency_ms</code></td><td>Wall-clock duration spent inside the router.</td></tr>
+<tr><td><code>request_id</code></td><td>Server-assigned <code>x-span-id</code> for cross-referencing log lines.</td></tr>
+<tr><td><code>user</code></td><td>Authenticated subject, or advisory client user (see below).</td></tr>
+<tr><td><code>request_body</code></td><td>Captured request body, only when <code>--include-bodies</code> is set (see below).</td></tr>
+<tr><td><code>response_body</code></td><td>Captured response body, only when <code>--include-bodies</code> is set (see below).</td></tr>
+</tbody></table>
+</div>
+<h3 id="body-capture"><a class="header" href="#body-capture">Body capture</a></h3>
+<p>Body capture is <strong>opt-in</strong>. When <code>--include-bodies</code> is set, the server captures up to <strong>8 KiB</strong> per
+direction and includes truncated UTF-8 text in each event. Override the per-direction display cap
+with <code>TORC_API_EVENT_BODY_MAX_BYTES</code>.</p>
+<p>Independent of the display cap, the server enforces a <strong>1 MiB hard ceiling</strong> on bytes it will buffer
+in memory and only captures bodies whose size is advertised up front (via <code>Content-Length</code> or the
+body's size hint). Larger payloads, chunked uploads with no advertised length, and SSE response
+streams (e.g. <code>/workflows/{id}/events/stream</code>) are passed through untouched and emitted with no
+body. Binary payloads are still recorded — <code>bytes</code> reflects the total length — but the <code>text</code> field
+is omitted so consumers can detect non-UTF-8 content.</p>
+<p><code>Authorization</code> and <code>Cookie</code> headers are never captured under any setting.</p>
+<h3 id="how-the-user-field-is-populated"><a class="header" href="#how-the-user-field-is-populated">How the <code>user</code> field is populated</a></h3>
+<p>When the server is running with <code>--auth-file</code>, the <code>user</code> field contains the authenticated subject
+resolved from Basic Auth. When the server is running <strong>without</strong> <code>--auth-file</code>, every request would
+otherwise resolve to <code>anonymous</code>, which is not very useful for debugging. To improve that, the
+<code>torc</code> CLI sends an advisory <code>X-Torc-Client-User</code> header on every API call, sourced from
+<code>TORC_USERNAME</code> / <code>USER</code> / <code>USERNAME</code>. The capture middleware uses this header <strong>only as a
+fallback</strong> when no real authentication was resolved.</p>
+<p>The advisory header is <strong>trivially spoofable</strong> by any client and is never used for authorization or
+workflow-ownership decisions — only for labeling events in this stream. If you need a trustworthy
+<code>user</code> field, run the server with <code>--auth-file</code> and <code>--require-auth</code>.</p>
+<h3 id="performance"><a class="header" href="#performance">Performance</a></h3>
+<p>When no admin client is connected to the stream, the capture middleware short-circuits — no bodies
+are buffered and no event is constructed, so the runtime cost on the request hot path is negligible.
+Subscribing one or more admins begins event construction; subscribing <em>with</em> <code>--include-bodies</code> is
+what triggers body buffering.</p>
+<h3 id="endpoint"><a class="header" href="#endpoint">Endpoint</a></h3>
+<p>The underlying endpoint is <code>GET /torc-service/v1/admin/api-events/stream</code>. It accepts a single
+optional query parameter, <code>include_bodies=true</code>. Like other admin endpoints (e.g.
+<code>/admin/reload-auth</code>), it requires standard server authentication but no additional admin role —
+restrict access via your htpasswd file or upstream proxy.</p>
+<h2 id="server-load-stats"><a class="header" href="#server-load-stats">Server Load Stats</a></h2>
+<p>For an at-a-glance view of how busy the server is — without streaming individual requests — use
+<code>torc admin api-stats</code>. The server keeps a 1-hour ring of per-second counters; the CLI fetches an
+aggregated snapshot and renders it as a table.</p>
+<pre><code class="language-bash"># Last hour, in 1-minute buckets (default)
+torc admin api-stats
+
+# Last 5 minutes, in 30-second buckets
+torc admin api-stats --window 300 --interval 30
+
+# Raw JSON for scripts or jq
+torc -f json admin api-stats
+</code></pre>
+<p>Each row reports request count, requests-per-second, bytes in / bytes out, and a 2xx / 4xx / 5xx
+status breakdown for that interval. A trailing <code>Total:</code> line sums the entire window.</p>
+<h3 id="counters"><a class="header" href="#counters">Counters</a></h3>
+<p>The capture middleware records every request — independent of whether anyone is connected to
+<code>tail-api</code>, so the ring is always up to date. Bytes are read from the <code>Content-Length</code> request and
+response headers; chunked or streaming responses (notably the SSE event streams themselves) do not
+advertise a length and contribute <code>0</code> bytes, although the request itself is still counted. Stats are
+in-memory only and reset on server restart.</p>
+<h3 id="endpoint-1"><a class="header" href="#endpoint-1">Endpoint</a></h3>
+<p>The underlying endpoint is <code>GET /torc-service/v1/admin/api-stats</code>, with optional <code>window_seconds</code>
+(default <code>3600</code>, capped at the ring size) and <code>interval_seconds</code> (default <code>60</code>) query parameters.
+Buckets are returned newest-first.</p>
 <h2 id="log-rotation-strategy"><a class="header" href="#log-rotation-strategy">Log Rotation Strategy</a></h2>
 <p>The server uses automatic size-based rotation with the following defaults:</p>
 <ul>
