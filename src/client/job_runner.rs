@@ -1064,11 +1064,23 @@ impl JobRunner {
         #[cfg(feature = "plot_resources")]
         {
             let output_dir = db_path.parent().unwrap_or(&self.output_dir).to_path_buf();
+            // Derive the plot filename prefix from the DB stem so aggregate plots
+            // (system_timeline, summary, cpu_all_jobs, etc.) from different
+            // workflow runs / compute-node allocations don't overwrite each other
+            // when they share an output directory. The DB is named
+            // `resource_metrics_<unique_label>.db`; the unique_label already
+            // disambiguates by workflow + host + run (or slurm job + pid).
+            let prefix = db_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| s.strip_prefix("resource_metrics_"))
+                .unwrap_or("")
+                .to_string();
             let args = crate::plot_resources_cmd::Args {
                 db_paths: vec![db_path.to_path_buf()],
                 output_dir,
                 job_ids: Vec::new(),
-                prefix: String::new(),
+                prefix,
                 format: "html".to_string(),
             };
             info!(
