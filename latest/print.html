@@ -15023,24 +15023,43 @@ inspections don't conflict.</p>
 <h2 id="multi-node-alternative"><a class="header" href="#multi-node-alternative">Multi-Node Alternative</a></h2>
 <p>For allocations that span multiple compute nodes, the standalone server doesn't work — the job
 runners on other nodes can't reach <code>127.0.0.1</code> on the script's node. Start a regular torc-server
-bound to a routable hostname and have <code>srun</code> launch a runner on each node:</p>
+bound to all interfaces and point clients at whichever hostname routes between compute nodes:</p>
 <pre><code class="language-bash">#!/bin/bash
 #SBATCH --account=my-account
 #SBATCH --time=01:00:00
 #SBATCH --nodes=10
 
-torc-server run --host $(hostname) --port 8080 &amp;
+# Accept connections on every interface — the server doesn't need to know
+# which one compute nodes will use.
+torc-server run --host 0.0.0.0 --port 8080 &amp;
 server_pid=$!
 trap "kill $server_pid" EXIT
 
-export TORC_API_URL="http://$(hostname):8080/torc-service/v1"
+# Point clients at the short hostname, which on most clusters resolves
+# to an in-allocation IP via shared /etc/hosts or internal DNS. If your
+# cluster needs the high-speed-interconnect (HSN) name instead, see
+# "Find the routable hostname" below.
+export TORC_API_URL="http://$(hostname -s):8080/torc-service/v1"
 sleep 2   # let the server bind before clients connect
 
-srun torc run workflow.yaml
+srun torc run workflow.yaml   # srun propagates TORC_API_URL by default
 </code></pre>
-<p>On many HPC systems <code>$(hostname)</code> returns the default interface rather than the high-speed
-interconnect one that compute nodes route through. See <a href="specialized/hpc/./hpc-deployment.html">HPC Deployment</a> for
-hostname selection on specific systems.</p>
+<p><strong>Why <code>0.0.0.0</code> and <code>hostname -s</code>?</strong> Binding to <code>0.0.0.0</code> lets the server accept on every interface,
+so it doesn't matter which one the cluster uses. <code>hostname -s</code> (the short name) usually resolves to
+a cluster-internal IP via <code>/etc/hosts</code> or local DNS; the full <code>hostname</code> / <code>hostname -f</code> often
+returns a domain that points at a management interface compute nodes can't reach. If <code>hostname -s</code>
+doesn't resolve on your cluster either, fall back to the HSN name (next section).</p>
+<p><strong>Find the routable hostname</strong> (run from a login node on your cluster):</p>
+<pre><code class="language-bash">hostname -A                       # every name/interface attached to this host
+grep $(hostname -s) /etc/hosts    # often shows the HSN alias explicitly
+getent hosts $(hostname -s)       # canonical address lookup
+</code></pre>
+<p>On NREL Kestrel, for example, the HSN hostname follows the pattern
+<code>&lt;shortname&gt;.hsn.cm.kestrel.hpc.nrel.gov</code>. See
+<a href="specialized/hpc/./hpc-deployment.html#finding-the-internal-hostname">HPC Deployment → Finding the Internal Hostname</a>
+for cluster-specific hostnames and
+<a href="specialized/hpc/../../core/concepts/network-connectivity.html#scenario-3-hpc-with-non-routable-hostname">Network Connectivity → Scenario 3</a>
+for the broader pattern.</p>
 <h2 id="see-also-31"><a class="header" href="#see-also-31">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/how-to/run-inline-commands.html">Run Inline Commands (<code>torc exec</code>)</a> — full <code>exec</code> flag
