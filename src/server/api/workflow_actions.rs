@@ -13,7 +13,9 @@ use crate::server::api_responses::{
 use crate::models;
 use crate::models::JobStatus;
 
-use super::{ApiContext, database_error_with_msg};
+use super::{
+    ApiContext, database_error_with_msg, message_error_response, resource_not_found_response,
+};
 
 /// Validate action_config based on action_type
 fn validate_action_config(
@@ -191,11 +193,10 @@ where
             validate_action_config(&body.action_type, &body.action_config)
         {
             error!("Invalid action_config: {}", validation_error);
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Invalid action_config: {}", validation_error)
-            }));
             return Ok(
-                CreateWorkflowActionResponse::UnprocessableContentErrorResponse(error_response),
+                CreateWorkflowActionResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!("Invalid action_config: {}", validation_error)),
+                ),
             );
         }
 
@@ -250,11 +251,8 @@ where
             }
             Err(e) => {
                 error!("Failed to create workflow action: {}", e);
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Failed to create workflow action: {}", e)
-                }));
                 Ok(CreateWorkflowActionResponse::DefaultErrorResponse(
-                    error_response,
+                    message_error_response(format!("Failed to create workflow action: {}", e)),
                 ))
             }
         }
@@ -319,22 +317,19 @@ where
                     Ok(actions) => Ok(GetWorkflowActionsResponse::SuccessfulResponse(actions)),
                     Err(e) => {
                         error!("Failed to parse workflow actions: {}", e);
-                        let error_response = models::ErrorResponse::new(serde_json::json!({
-                            "message": format!("Failed to parse workflow actions: {}", e)
-                        }));
                         Ok(GetWorkflowActionsResponse::DefaultErrorResponse(
-                            error_response,
+                            message_error_response(format!(
+                                "Failed to parse workflow actions: {}",
+                                e
+                            )),
                         ))
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to get workflow actions: {}", e);
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Failed to get workflow actions: {}", e)
-                }));
                 Ok(GetWorkflowActionsResponse::DefaultErrorResponse(
-                    error_response,
+                    message_error_response(format!("Failed to get workflow actions: {}", e)),
                 ))
             }
         }
@@ -434,22 +429,19 @@ where
                     Ok(actions) => Ok(GetPendingActionsResponse::SuccessfulResponse(actions)),
                     Err(e) => {
                         error!("Failed to parse pending actions: {}", e);
-                        let error_response = models::ErrorResponse::new(serde_json::json!({
-                            "message": format!("Failed to parse pending actions: {}", e)
-                        }));
                         Ok(GetPendingActionsResponse::DefaultErrorResponse(
-                            error_response,
+                            message_error_response(format!(
+                                "Failed to parse pending actions: {}",
+                                e
+                            )),
                         ))
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to get pending actions: {}", e);
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Failed to get pending actions: {}", e)
-                }));
                 Ok(GetPendingActionsResponse::DefaultErrorResponse(
-                    error_response,
+                    message_error_response(format!("Failed to get pending actions: {}", e)),
                 ))
             }
         }
@@ -486,13 +478,12 @@ where
                 let persistent_col: i32 = record.get("persistent");
 
                 if workflow_id_col != workflow_id {
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": format!(
+                    return Ok(ClaimActionResponse::NotFoundErrorResponse(
+                        message_error_response(format!(
                             "Action {} does not belong to workflow {}",
                             action_id, workflow_id
-                        )
-                    }));
-                    return Ok(ClaimActionResponse::NotFoundErrorResponse(error_response));
+                        )),
+                    ));
                 }
                 // For non-persistent actions, check if already executed
                 let is_persistent = persistent_col != 0;
@@ -507,10 +498,9 @@ where
                 is_persistent
             }
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Action not found with ID: {}", action_id)
-                }));
-                return Ok(ClaimActionResponse::NotFoundErrorResponse(error_response));
+                return Ok(ClaimActionResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Action", action_id),
+                ));
             }
             Err(e) => {
                 return Err(database_error_with_msg(
@@ -573,10 +563,9 @@ where
             }
             Err(e) => {
                 error!("Failed to claim action: {}", e);
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Failed to claim action: {}", e)
-                }));
-                Ok(ClaimActionResponse::DefaultErrorResponse(error_response))
+                Ok(ClaimActionResponse::DefaultErrorResponse(
+                    message_error_response(format!("Failed to claim action: {}", e)),
+                ))
             }
         }
     }
@@ -747,7 +736,7 @@ impl WorkflowActionsApiImpl {
                 {
                     Ok(Some(status)) => status,
                     Ok(None) => {
-                        debug!("Job {} not found in workflow {}", job_id, workflow_id);
+                        debug!("job_id={} not found in workflow_id={}", job_id, workflow_id);
                         continue;
                     }
                     Err(e) => {

@@ -99,7 +99,7 @@ fn verify_diamond_workflow_completion(
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
-            "Job {} should be completed. actual status: {:?}",
+            "job name='{}' should be completed. actual status={:?}",
             job.name,
             job.status
         );
@@ -428,7 +428,7 @@ fn verify_many_jobs_completion(
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
-            "Job {} should be completed. actual status: {:?}",
+            "job name='{}' should be completed. actual status={:?}",
             job.name,
             job.status
         );
@@ -790,7 +790,7 @@ resource_requirements:
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
-            "Job {} should be completed after second run, got {:?}",
+            "job name='{}' should be completed after second run, got status={:?}",
             job.name,
             job.status
         );
@@ -1121,7 +1121,7 @@ resource_requirements:
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
-            "Job {} should be completed after second run, got {:?}",
+            "job name='{}' should be completed after second run, got status={:?}",
             job.name,
             job.status
         );

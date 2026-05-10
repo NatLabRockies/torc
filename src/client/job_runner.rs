@@ -1241,12 +1241,12 @@ impl JobRunner {
             // First pass: send termination signal to all running jobs
             for (job_id, async_job) in self.running_jobs.iter_mut() {
                 info!(
-                    "Job {} workflow_id={} job_id={}",
+                    "Sending signal={} workflow_id={} job_id={}",
                     termination_signal, self.workflow_id, job_id
                 );
                 if let Err(e) = async_job.send_signal(termination_signal) {
                     warn!(
-                        "Job {} failed workflow_id={} job_id={} error={}",
+                        "Failed to send signal={} workflow_id={} job_id={} error={}",
                         termination_signal, self.workflow_id, job_id, e
                     );
                 }
@@ -1574,7 +1574,7 @@ impl JobRunner {
         // If any files are missing, return error
         if !missing_files.is_empty() {
             return Err(format!(
-                "Job {} completed successfully but expected output files are missing: {}",
+                "job_id={} completed successfully but expected output files are missing: {}",
                 job_id,
                 missing_files.join(", ")
             ));

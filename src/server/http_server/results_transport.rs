@@ -37,8 +37,10 @@ where
         all_runs: Option<bool>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError> {
-        debug!(
-            "list_results({}, {:?}, {:?}, {:?}, {:?}, compute_node_id={:?}, {:?}, {:?}, {:?}, {:?}, all_runs={:?}) - X-Span-ID: {:?}",
+        log_call!(
+            debug,
+            context,
+            "list_results({}, {:?}, {:?}, {:?}, {:?}, compute_node_id={:?}, {:?}, {:?}, {:?}, {:?}, all_runs={:?})",
             workflow_id,
             job_id,
             run_id,
@@ -50,12 +52,16 @@ where
             sort_by,
             reverse_sort,
             all_runs,
-            Has::<XSpanIdString>::get(context).0.clone()
         );
 
-        authorize_workflow!(self, workflow_id, context, ListResultsResponse);
-
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListResultsResponse,
+            offset,
+            limit
+        );
         self.results_api
             .list_results(
                 workflow_id,

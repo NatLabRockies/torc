@@ -23,8 +23,8 @@ use crate::models::{self as models, JobStatus};
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
-    database_error_with_msg, deserialize_env_map, normalize_env_map, serialize_env_map,
-    validate_env_map,
+    database_error_with_msg, deserialize_env_map, message_error_response, normalize_env_map,
+    parse_job_status, resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
 /// Trait defining job-related API operations
@@ -168,6 +168,28 @@ const JOB_COLUMNS: &[&str] = &[
     "failure_handler_id",
     "attempt_id",
 ];
+
+/// Returns true if `body_field` is `Some` and its contents differ from `existing_field`
+/// when both are compared as **sets** (order-independent).
+///
+/// `update_job` treats relationship-id vectors (`input_file_ids`, `depends_on_job_ids`,
+/// etc.) as sets: a request that sends the same IDs in a different order is not a
+/// modification. This helper centralises the sort-then-compare so the call sites can
+/// stay one-liners.
+fn vec_id_set_changed<T: Ord + Clone>(
+    body_field: &Option<Vec<T>>,
+    existing_field: &Option<Vec<T>>,
+) -> bool {
+    let Some(body_vec) = body_field else {
+        return false;
+    };
+    let mut body_sorted = body_vec.clone();
+    body_sorted.sort();
+    let empty: Vec<T> = Vec::new();
+    let mut existing_sorted = existing_field.as_ref().unwrap_or(&empty).clone();
+    existing_sorted.sort();
+    body_sorted != existing_sorted
+}
 
 impl JobsApiImpl {
     pub fn new(context: ApiContext) -> Self {
@@ -326,16 +348,7 @@ impl JobsApiImpl {
         };
 
         let status_int: i32 = record.get("status");
-        let status = match JobStatus::from_int(status_int) {
-            Ok(s) => s,
-            Err(e) => {
-                error!(
-                    "Failed to parse job status '{}' for job {}: {}",
-                    status_int, id, e
-                );
-                return Err(ApiError(format!("Failed to parse job status: {}", e)));
-            }
-        };
+        let status = parse_job_status(status_int, id)?;
 
         // Get depends_on relationships
         let depends_on_records = match sqlx::query!(
@@ -530,16 +543,9 @@ impl JobsApiImpl {
             let job_id = job_row.id;
             let current_status_int = job_row.status as i32;
 
-            // Parse the current status
-            let current_status = match JobStatus::from_int(current_status_int) {
-                Ok(status) => status,
-                Err(e) => {
-                    error!(
-                        "Failed to parse current job status '{}': {}",
-                        current_status_int, e
-                    );
-                    continue;
-                }
+            // Parse the current status; skip jobs whose status integer cannot be decoded.
+            let Ok(current_status) = parse_job_status(current_status_int, job_id) else {
+                continue;
             };
 
             // Reset the job status
@@ -1176,19 +1182,16 @@ where
         let supports_termination = job.supports_termination.unwrap_or(false);
         let priority = job.priority.unwrap_or(0);
         if priority < 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
-            }));
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(format!(
+                    "priority must be >= 0, got {} for job '{}'",
+                    priority, job.name
+                )),
             ));
         }
         if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": err.0
-            }));
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(err.0),
             ));
         }
         let status = JobStatus::Uninitialized;
@@ -1205,21 +1208,12 @@ where
             }
         };
 
-        let workflow_env = match Self::fetch_workflow_env(&mut *tx, job.workflow_id).await {
-            Ok(env) => env,
-            Err(e) => {
-                let _ = tx.rollback().await;
-                return Err(e);
-            }
-        };
+        let workflow_env = crate::tx_try!(
+            tx,
+            Self::fetch_workflow_env(&mut *tx, job.workflow_id).await
+        );
         job.env = Self::merge_env(workflow_env.as_ref(), job.env.as_ref());
-        let job_env = match serialize_env_map(job.env.clone(), "job env") {
-            Ok(env) => env,
-            Err(e) => {
-                let _ = tx.rollback().await;
-                return Err(e);
-            }
-        };
+        let job_env = crate::tx_try!(tx, serialize_env_map(job.env.clone(), "job env"));
 
         let job_result = match sqlx::query(
             r#"
@@ -1270,21 +1264,25 @@ where
         // Handle job dependencies
         if let Some(depends_on_job_ids) = &job.depends_on_job_ids {
             for blocking_id in depends_on_job_ids {
-                if let Err(e) = self
-                    .add_depends_on_association(&mut *tx, job_id, *blocking_id, job.workflow_id)
+                crate::tx_try!(
+                    tx,
+                    self.add_depends_on_association(
+                        &mut *tx,
+                        job_id,
+                        *blocking_id,
+                        job.workflow_id
+                    )
                     .await
-                {
-                    let _ = tx.rollback().await;
-                    return Err(e);
-                }
+                );
             }
         }
 
         // Handle input files
         if let Some(input_file_ids) = &job.input_file_ids {
             for file_id in input_file_ids {
-                if let Err(e) = self
-                    .add_job_file_association(
+                crate::tx_try!(
+                    tx,
+                    self.add_job_file_association(
                         &mut *tx,
                         job_id,
                         *file_id,
@@ -1292,18 +1290,16 @@ where
                         "job_input_file",
                     )
                     .await
-                {
-                    let _ = tx.rollback().await;
-                    return Err(e);
-                }
+                );
             }
         }
 
         // Handle output files
         if let Some(output_file_ids) = &job.output_file_ids {
             for file_id in output_file_ids {
-                if let Err(e) = self
-                    .add_job_file_association(
+                crate::tx_try!(
+                    tx,
+                    self.add_job_file_association(
                         &mut *tx,
                         job_id,
                         *file_id,
@@ -1311,46 +1307,39 @@ where
                         "job_output_file",
                     )
                     .await
-                {
-                    let _ = tx.rollback().await;
-                    return Err(e);
-                }
+                );
             }
         }
 
         // Handle input user_data
         if let Some(input_user_data_ids) = &job.input_user_data_ids {
             for user_data_id in input_user_data_ids {
-                if let Err(e) = self
-                    .add_job_user_data_association(
+                crate::tx_try!(
+                    tx,
+                    self.add_job_user_data_association(
                         &mut *tx,
                         job_id,
                         *user_data_id,
                         "job_input_user_data",
                     )
                     .await
-                {
-                    let _ = tx.rollback().await;
-                    return Err(e);
-                }
+                );
             }
         }
 
         // Handle output user_data
         if let Some(output_user_data_ids) = &job.output_user_data_ids {
             for user_data_id in output_user_data_ids {
-                if let Err(e) = self
-                    .add_job_user_data_association(
+                crate::tx_try!(
+                    tx,
+                    self.add_job_user_data_association(
                         &mut *tx,
                         job_id,
                         *user_data_id,
                         "job_output_user_data",
                     )
                     .await
-                {
-                    let _ = tx.rollback().await;
-                    return Err(e);
-                }
+                );
             }
         }
 
@@ -1416,11 +1405,8 @@ where
         for mut job in body.jobs {
             if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
                 let _ = transaction.rollback().await;
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": err.0
-                }));
                 return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(err.0),
                 ));
             }
             let workflow_env = match workflow_env_cache.get(&job.workflow_id) {
@@ -1452,11 +1438,11 @@ where
             let priority = job.priority.unwrap_or(0);
             if priority < 0 {
                 let _ = transaction.rollback().await;
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("priority must be >= 0, got {} for job '{}'", priority, job.name)
-                }));
                 return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response(format!(
+                        "priority must be >= 0, got {} for job '{}'",
+                        priority, job.name
+                    )),
                 ));
             }
             let status = JobStatus::Uninitialized;
@@ -1692,12 +1678,9 @@ where
         debug!("get_job({}) - X-Span-ID: {:?}", id, context.get().0.clone());
         match self.get_job_with_relationships(id).await {
             Ok(job) => Ok(GetJobResponse::SuccessfulResponse(job)),
-            Err(ApiError(msg)) if msg.contains("not found") => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
-                Ok(GetJobResponse::NotFoundErrorResponse(error_response))
-            }
+            Err(ApiError(msg)) if msg.contains("not found") => Ok(
+                GetJobResponse::NotFoundErrorResponse(resource_not_found_response("Job", id)),
+            ),
             Err(e) => Err(e),
         }
     }
@@ -1820,9 +1803,7 @@ where
         }
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if JOB_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -1836,14 +1817,7 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(
-                offset,
-                limit,
-                validated_sort_by,
-                reverse_sort,
-                "id",
-                JOB_COLUMNS,
-            )
+            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id", JOB_COLUMNS)
             .build();
 
         debug!("Executing query: {}", query);
@@ -1893,16 +1867,7 @@ where
             } else {
                 // Create job model without relationships for better performance
                 let status_int: i32 = record.get("status");
-                let status = match JobStatus::from_int(status_int) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        error!(
-                            "Failed to parse job status '{}' for job {}: {}",
-                            status_int, job_id, e
-                        );
-                        return Err(ApiError(format!("Failed to parse job status: {}", e)));
-                    }
-                };
+                let status = parse_job_status(status_int, job_id)?;
 
                 items.push(models::JobModel {
                     id: Some(record.get("id")),
@@ -1963,28 +1928,18 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response =
+            crate::paginated_list_response!(models::ListJobsResponse, items, offset, total_count);
 
         debug!(
             "list_jobs({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListJobsResponse::SuccessfulResponse(
-            models::ListJobsResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListJobsResponse::SuccessfulResponse(response))
     }
 
     /// Update a job.
@@ -2016,10 +1971,9 @@ where
         let existing_job = match self.get_job_with_relationships(id).await {
             Ok(job) => job,
             Err(ApiError(msg)) if msg.contains("not found") => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
-                return Ok(UpdateJobResponse::NotFoundErrorResponse(error_response));
+                return Ok(UpdateJobResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Job", id),
+                ));
             }
             Err(e) => return Err(e),
         };
@@ -2028,11 +1982,8 @@ where
         let existing_status = match existing_job.status {
             Some(status) => status,
             None => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot update job - job has no status set"
-                }));
                 return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
+                    message_error_response("Cannot update job - job has no status set"),
                 ));
             }
         };
@@ -2041,23 +1992,26 @@ where
         // (scheduler_id and resource_requirements_id can be updated regardless of status)
         // All fields are checked by comparing to existing values, since the client may
         // send the full job object with only scheduler_id/resource_requirements_id changed
-        // Note: If body field is None, we treat it as "not changing" that field
+        // Note: If body field is None, we treat it as "not changing" that field.
+        // Vector relationship fields are compared as sets (order-independent) so a
+        // re-send of the same IDs in a different order is not flagged as a change.
         let name_changed = body.name != existing_job.name;
         let command_changed = body.command != existing_job.command;
         let body_env = normalize_env_map(body.env.clone());
         let env_changed = body.env.is_some() && body_env != existing_job.env;
-        // Treat None as "not changing" - only compare if body.status is Some
         let status_changed = body.status.is_some() && body.status != existing_job.status;
         let input_file_ids_changed =
-            body.input_file_ids.is_some() && body.input_file_ids != existing_job.input_file_ids;
+            vec_id_set_changed(&body.input_file_ids, &existing_job.input_file_ids);
         let output_file_ids_changed =
-            body.output_file_ids.is_some() && body.output_file_ids != existing_job.output_file_ids;
-        let input_user_data_ids_changed = body.input_user_data_ids.is_some()
-            && body.input_user_data_ids != existing_job.input_user_data_ids;
-        let output_user_data_ids_changed = body.output_user_data_ids.is_some()
-            && body.output_user_data_ids != existing_job.output_user_data_ids;
-        let depends_on_job_ids_changed = body.depends_on_job_ids.is_some()
-            && body.depends_on_job_ids != existing_job.depends_on_job_ids;
+            vec_id_set_changed(&body.output_file_ids, &existing_job.output_file_ids);
+        let input_user_data_ids_changed =
+            vec_id_set_changed(&body.input_user_data_ids, &existing_job.input_user_data_ids);
+        let output_user_data_ids_changed = vec_id_set_changed(
+            &body.output_user_data_ids,
+            &existing_job.output_user_data_ids,
+        );
+        let depends_on_job_ids_changed =
+            vec_id_set_changed(&body.depends_on_job_ids, &existing_job.depends_on_job_ids);
 
         let has_restricted_updates = name_changed
             || command_changed
@@ -2106,18 +2060,15 @@ where
                 changed_fields.push("depends_on_job_ids".to_string());
             }
 
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
                     "Cannot update job {} when status is '{}' - most updates are only allowed when status is 'uninitialized'. \
                      Only scheduler_id and resource_requirements_id can be updated at any time. \
                      Changed fields: [{}]",
                     id,
                     existing_status,
                     changed_fields.join(", ")
-                )
-            }));
-            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                )),
             ));
         }
 
@@ -2127,113 +2078,51 @@ where
             && *new_status != *existing_status
             && *new_status != models::JobStatus::Disabled
         {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot update job status - this field is immutable after job creation (except to Disabled)"
-            }));
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(
+                    "Cannot update job status - this field is immutable after job creation (except to Disabled)",
+                ),
             ));
         }
 
-        // Check if depends_on_job_ids is being modified
-        let mut depends_on_job_ids_modified = false;
-        if let Some(depends_on_ids) = &body.depends_on_job_ids {
-            let empty_vec = vec![];
-            let existing_depends_on = existing_job
-                .depends_on_job_ids
-                .as_ref()
-                .unwrap_or(&empty_vec);
-            let mut body_sorted = depends_on_ids.clone();
-            let mut existing_sorted = existing_depends_on.clone();
-            body_sorted.sort();
-            existing_sorted.sort();
-            if body_sorted != existing_sorted {
-                depends_on_job_ids_modified = true;
-            }
-        }
-
-        // Validate other immutable fields - return error if they are set in body but don't match current job
-
-        if let Some(input_file_ids) = &body.input_file_ids {
-            let empty_vec = vec![];
-            let existing_input_files = existing_job.input_file_ids.as_ref().unwrap_or(&empty_vec);
-            let mut body_sorted = input_file_ids.clone();
-            let mut existing_sorted = existing_input_files.clone();
-            body_sorted.sort();
-            existing_sorted.sort();
-            if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify input_file_ids - this field is immutable after job creation"
-                }));
-                return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
-                ));
-            }
-        }
-
-        if let Some(output_file_ids) = &body.output_file_ids {
-            let empty_vec = vec![];
-            let existing_output_files = existing_job.output_file_ids.as_ref().unwrap_or(&empty_vec);
-            let mut body_sorted = output_file_ids.clone();
-            let mut existing_sorted = existing_output_files.clone();
-            body_sorted.sort();
-            existing_sorted.sort();
-            if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify output_file_ids - this field is immutable after job creation"
-                }));
-                return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
-                ));
-            }
-        }
-
-        if let Some(input_user_data_ids) = &body.input_user_data_ids {
-            let empty_vec = vec![];
-            let existing_input_user_data = existing_job
-                .input_user_data_ids
-                .as_ref()
-                .unwrap_or(&empty_vec);
-            let mut body_sorted = input_user_data_ids.clone();
-            let mut existing_sorted = existing_input_user_data.clone();
-            body_sorted.sort();
-            existing_sorted.sort();
-            if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify input_user_data_ids - this field is immutable after job creation"
-                }));
-                return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
-                ));
-            }
-        }
-
-        if let Some(output_user_data_ids) = &body.output_user_data_ids {
-            let empty_vec = vec![];
-            let existing_output_user_data = existing_job
-                .output_user_data_ids
-                .as_ref()
-                .unwrap_or(&empty_vec);
-            let mut body_sorted = output_user_data_ids.clone();
-            let mut existing_sorted = existing_output_user_data.clone();
-            body_sorted.sort();
-            existing_sorted.sort();
-            if body_sorted != existing_sorted {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot modify output_user_data_ids - this field is immutable after job creation"
-                }));
-                return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                    error_response,
-                ));
-            }
-        }
-
-        if env_changed {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot modify env - this field is immutable after job creation"
-            }));
+        // Validate immutable fields. `input_file_ids`, `output_file_ids`,
+        // `input_user_data_ids`, `output_user_data_ids`, and `env` are immutable after
+        // job creation (`depends_on_job_ids` is mutable and handled separately below).
+        // The *_changed flags above already use set-comparison semantics, so a single
+        // check per field is enough.
+        if input_file_ids_changed {
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(
+                    "Cannot modify input_file_ids - this field is immutable after job creation",
+                ),
+            ));
+        }
+        if output_file_ids_changed {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify output_file_ids - this field is immutable after job creation",
+                ),
+            ));
+        }
+        if input_user_data_ids_changed {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify input_user_data_ids - this field is immutable after job creation",
+                ),
+            ));
+        }
+        if output_user_data_ids_changed {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify output_user_data_ids - this field is immutable after job creation",
+                ),
+            ));
+        }
+        if env_changed {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify env - this field is immutable after job creation",
+                ),
             ));
         }
 
@@ -2243,11 +2132,8 @@ where
         if let Some(p) = body.priority
             && p < 0
         {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("priority must be >= 0, got {}", p)
-            }));
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(format!("priority must be >= 0, got {}", p)),
             ));
         }
 
@@ -2287,14 +2173,13 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job not found with ID: {}", id)
-            }));
-            return Ok(UpdateJobResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateJobResponse::NotFoundErrorResponse(
+                resource_not_found_response("Job", id),
+            ));
         }
 
         // If depends_on_job_ids was modified, update the relationships
-        if depends_on_job_ids_modified {
+        if depends_on_job_ids_changed {
             // Start a transaction for relationship updates
             let mut tx = match self.context.pool.begin().await {
                 Ok(tx) => tx,
@@ -2302,32 +2187,32 @@ where
             };
 
             // Delete existing depends_on relationships for this job
-            if let Err(e) = sqlx::query!("DELETE FROM job_depends_on WHERE job_id = $1", id)
-                .execute(&mut *tx)
-                .await
-            {
-                let _ = tx.rollback().await;
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to delete old job dependencies",
-                ));
-            }
+            crate::tx_try!(
+                tx,
+                sqlx::query!("DELETE FROM job_depends_on WHERE job_id = $1", id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| database_error_with_msg(
+                        e,
+                        "Failed to delete old job dependencies"
+                    ))
+            );
 
             // Add new depends_on relationships if provided
             if let Some(depends_on_ids) = &body.depends_on_job_ids {
                 for blocking_id in depends_on_ids {
-                    if let Err(e) = sqlx::query!(
-                        "INSERT INTO job_depends_on (job_id, depends_on_job_id, workflow_id) VALUES ($1, $2, $3)",
-                        id,
-                        *blocking_id,
-                        existing_job.workflow_id
-                    )
-                    .execute(&mut *tx)
-                    .await
-                    {
-                        let _ = tx.rollback().await;
-                        return Err(database_error_with_msg(e, "Failed to update job dependencies"));
-                    }
+                    crate::tx_try!(
+                        tx,
+                        sqlx::query!(
+                            "INSERT INTO job_depends_on (job_id, depends_on_job_id, workflow_id) VALUES ($1, $2, $3)",
+                            id,
+                            *blocking_id,
+                            existing_job.workflow_id
+                        )
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| database_error_with_msg(e, "Failed to update job dependencies"))
+                    );
                 }
             }
 
@@ -2383,10 +2268,9 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Job not found with ID: {}", id)
-            }));
-            return Ok(UpdateJobResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateJobResponse::NotFoundErrorResponse(
+                resource_not_found_response("Job", id),
+            ));
         }
 
         // Return the updated job by fetching it again with relationships
@@ -2697,7 +2581,7 @@ where
             // Compare hashes
             if current_hash != stored_hash {
                 debug!(
-                    "Job {} ({}) input hash changed: stored={}, current={}",
+                    "job_id={} name='{}' input hash changed: stored={}, current={}",
                     job_id, job_name, stored_hash, current_hash
                 );
                 jobs_to_reinitialize.push((job_id, job_name.clone()));
@@ -2954,10 +2838,9 @@ where
             Ok(Some(record)) => record,
             Ok(None) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Job not found with ID: {}", id)
-                }));
-                return Ok(RetryJobResponse::NotFoundErrorResponse(error_response));
+                return Ok(RetryJobResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Job", id),
+                ));
             }
             Err(e) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
@@ -2986,14 +2869,11 @@ where
         // Verify run_id matches
         if workflow_run_id != run_id {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
+            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
                     "Run ID mismatch: provided {} but workflow is at run {}",
                     run_id, workflow_run_id
-                )
-            }));
-            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                )),
             ));
         }
 
@@ -3001,12 +2881,11 @@ where
         // Note: Running is allowed because the job runner may call retry_job before complete_job
         // when handling failure recovery (the job has finished locally but the server hasn't been
         // notified yet).
-        let current_status = match JobStatus::from_int(status_int) {
+        let current_status = match parse_job_status(status_int, job_id) {
             Ok(s) => s,
             Err(e) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                error!("Failed to parse job status: {}", e);
-                return Err(ApiError(format!("Failed to parse job status: {}", e)));
+                return Err(e);
             }
         };
 
@@ -3015,28 +2894,22 @@ where
             && current_status != JobStatus::Terminated
         {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
+            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
                     "Job cannot be retried: status is {:?}, must be Running, Failed, or Terminated",
                     current_status
-                )
-            }));
-            return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                )),
             ));
         }
 
         // Validate max_retries (server-side enforcement)
         if attempt_id >= max_retries as i64 {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!(
-                    "Job cannot be retried: attempt_id {} >= max_retries {}",
-                    attempt_id, max_retries
-                )
-            }));
             return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(format!(
+                    "Job cannot be retried: attempt_id={} >= max_retries={}",
+                    attempt_id, max_retries
+                )),
             ));
         }
 

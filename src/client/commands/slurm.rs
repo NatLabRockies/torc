@@ -3076,11 +3076,11 @@ fn fetch_sacct_for_workflow(
                                 let output_file = dir.join(format!("sacct_{}.json", slurm_job_id));
                                 if let Err(e) = fs::write(&output_file, stdout.as_bytes()) {
                                     error!(
-                                        "Failed to write sacct output for job {}: {}",
+                                        "Failed to write sacct output for slurm_job_id={}: {}",
                                         slurm_job_id, e
                                     );
                                     errors.push(format!(
-                                        "Job {}: Failed to write output: {}",
+                                        "slurm_job_id={}: Failed to write output: {}",
                                         slurm_job_id, e
                                     ));
                                 } else {
@@ -3089,21 +3089,35 @@ fn fetch_sacct_for_workflow(
                             }
                         }
                         Err(e) => {
-                            error!("Failed to parse sacct JSON for job {}: {}", slurm_job_id, e);
-                            errors
-                                .push(format!("Job {}: Invalid JSON output: {}", slurm_job_id, e));
+                            error!(
+                                "Failed to parse sacct JSON for slurm_job_id={}: {}",
+                                slurm_job_id, e
+                            );
+                            errors.push(format!(
+                                "slurm_job_id={}: Invalid JSON output: {}",
+                                slurm_job_id, e
+                            ));
                         }
                     }
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    error!("sacct command failed for job {}: {}", slurm_job_id, stderr);
-                    errors.push(format!("Job {}: sacct failed: {}", slurm_job_id, stderr));
+                    error!(
+                        "sacct command failed for slurm_job_id={}: {}",
+                        slurm_job_id, stderr
+                    );
+                    errors.push(format!(
+                        "slurm_job_id={}: sacct failed: {}",
+                        slurm_job_id, stderr
+                    ));
                 }
             }
             Err(e) => {
-                error!("Failed to run sacct for job {}: {}", slurm_job_id, e);
+                error!(
+                    "Failed to run sacct for slurm_job_id={}: {}",
+                    slurm_job_id, e
+                );
                 errors.push(format!(
-                    "Job {}: Failed to execute sacct: {}",
+                    "slurm_job_id={}: Failed to execute sacct: {}",
                     slurm_job_id, e
                 ));
             }

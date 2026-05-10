@@ -1,5 +1,7 @@
 use super::*;
-use crate::server::api::{begin_immediate, database_error_with_msg, database_lock_aware_error};
+use crate::server::api::{
+    begin_immediate, database_error_with_msg, database_lock_aware_error, parse_job_status,
+};
 
 impl<C> Server<C> {
     pub(super) async fn manage_job_status_change(
@@ -27,7 +29,7 @@ impl<C> Server<C> {
             {
                 Ok(Some(row)) => row,
                 Ok(None) => {
-                    error!("Job not found with ID: {}", job_id);
+                    error!("Job not found job_id={}", job_id);
                     return Err(ApiError("Job not found".to_string()));
                 }
                 Err(e) => {
@@ -36,16 +38,7 @@ impl<C> Server<C> {
                 }
             };
 
-        let current_status = match models::JobStatus::from_int(current_job.status as i32) {
-            Ok(status) => status,
-            Err(e) => {
-                error!(
-                    "Failed to parse current job status '{}': {}",
-                    current_job.status, e
-                );
-                return Err(ApiError("Invalid current job status".to_string()));
-            }
-        };
+        let current_status = parse_job_status(current_job.status as i32, job_id)?;
 
         if current_status == *new_status {
             debug!(
@@ -82,10 +75,7 @@ impl<C> Server<C> {
             };
 
             if result_record.is_none() {
-                error!(
-                    "No result found for job ID {} and run_id {}",
-                    job_id, run_id
-                );
+                error!("No result found for job_id={} run_id={}", job_id, run_id);
                 return Err(ApiError(
                     "No result found when transitioning to terminal status".to_string(),
                 ));
@@ -133,23 +123,23 @@ impl<C> Server<C> {
                                     .unwrap_or(models::JobStatus::Failed);
                                 if status.is_complete() {
                                     debug!(
-                                        "Job {} already in terminal status {:?}, treating as idempotent success",
+                                        "job_id={} already in terminal status={:?}, treating as idempotent success",
                                         job_id, status
                                     );
                                     return Ok(());
                                 }
                                 error!(
-                                    "Job {} has unexpected status {:?} after conditional update matched 0 rows",
+                                    "job_id={} has unexpected status={:?} after conditional update matched 0 rows",
                                     job_id, status
                                 );
                                 return Err(ApiError(format!(
-                                    "Job {} is in unexpected status {:?}",
+                                    "job_id={} is in unexpected status={:?}",
                                     job_id, status
                                 )));
                             }
                             None => {
-                                error!("Job {} was deleted during status transition", job_id);
-                                return Err(ApiError(format!("Job {} not found", job_id)));
+                                error!("job_id={} was deleted during status transition", job_id);
+                                return Err(ApiError(format!("job_id={} not found", job_id)));
                             }
                         }
                     }
@@ -160,7 +150,7 @@ impl<C> Server<C> {
             }
             self.signal_job_completion();
             debug!(
-                "Marked job {} as complete, unblocking will be processed by background task",
+                "Marked job_id={} as complete, unblocking will be processed by background task",
                 job_id
             );
         } else {
@@ -175,7 +165,7 @@ impl<C> Server<C> {
                 Ok(result) => {
                     if result.rows_affected() == 0 {
                         error!(
-                            "No rows affected for job ID {} when updating status",
+                            "No rows affected for job_id={} when updating status",
                             job_id
                         );
                         return Err(ApiError(

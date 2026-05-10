@@ -1,5 +1,6 @@
 //! Common API module with shared imports and traits
 
+use crate::models;
 use crate::server::transport_types::context_types::ApiError;
 use log::{debug, error, info};
 use sqlx::sqlite::SqlitePool;
@@ -126,6 +127,49 @@ pub async fn begin_immediate(
     pool.begin_with("BEGIN IMMEDIATE").await
 }
 
+/// Parse a job status integer into a [`models::JobStatus`].
+///
+/// Database row reads return the encoded integer value; if the integer is out
+/// of range (e.g. after a downgrade from a future schema), `JobStatus::from_int`
+/// reports the failure. This helper centralises the log line and the
+/// `ApiError` conversion so handlers can write
+/// `let status = parse_job_status(status_int, job_id)?;` instead of a 7-line
+/// match. The `job_id` is included in the log line so the offending row can
+/// be located.
+pub fn parse_job_status(status_int: i32, job_id: i64) -> Result<models::JobStatus, ApiError> {
+    models::JobStatus::from_int(status_int).map_err(|e| {
+        error!(
+            "Failed to parse job status job_id={} status={} error={}",
+            job_id, status_int, e
+        );
+        ApiError(format!(
+            "Failed to parse job status for job_id={}: {}",
+            job_id, e
+        ))
+    })
+}
+
+/// Build an `ErrorResponse` whose body is `{"message": <text>}`.
+///
+/// API handlers historically construct this shape inline with
+/// `models::ErrorResponse::new(serde_json::json!({"message": ...}))`. Use this
+/// helper to keep call sites focused on intent.
+pub fn message_error_response(message: impl Into<String>) -> models::ErrorResponse {
+    models::ErrorResponse::new(serde_json::json!({"message": message.into()}))
+}
+
+/// Build a `"<resource> not found with ID: <id>"` error response.
+///
+/// `resource` is the human-readable resource name (e.g., `"Workflow"`, `"Job"`).
+/// The wording matches what handlers already produce, so error bodies remain
+/// stable for clients.
+pub fn resource_not_found_response(
+    resource: &str,
+    id: impl std::fmt::Display,
+) -> models::ErrorResponse {
+    message_error_response(format!("{} not found with ID: {}", resource, id))
+}
+
 /// Escape SQL LIKE wildcard characters in user input.
 /// Escapes `%`, `_`, and `\` with a backslash prefix.
 pub fn escape_like_pattern(input: &str) -> String {
@@ -219,6 +263,86 @@ mod tests {
         .expect_err("invalid env map should fail");
         assert!(err.0.contains("BAD-NAME"));
     }
+}
+
+/// Inside an async fn that holds an open `sqlx::Transaction`, evaluate
+/// `$expr` (a `Result<_, _>`) and short-circuit on `Err` by rolling the
+/// transaction back and returning the error from the enclosing function.
+///
+/// This collapses the pervasive
+/// ```ignore
+/// let v = match $expr {
+///     Ok(v) => v,
+///     Err(e) => {
+///         let _ = $tx.rollback().await;
+///         return Err(e);
+///     }
+/// };
+/// ```
+/// pattern into a single line. Use it where the open transaction would
+/// otherwise be left dangling on the error path; without rollback the
+/// connection is stuck in `BEGIN IMMEDIATE` until the runtime drops it.
+#[macro_export]
+macro_rules! tx_try {
+    ($tx:expr, $expr:expr $(,)?) => {
+        match $expr {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = $tx.rollback().await;
+                return Err(e);
+            }
+        }
+    };
+}
+
+/// Build a paginated list response model with the canonical
+/// `(items, offset, max_limit, count, total_count, has_more)` shape.
+///
+/// Every `ListXxxResponse` model shares this field layout, so most list
+/// endpoints recompute `count = items.len() as i64` and
+/// `has_more = offset + count < total_count` by hand. Use this macro to
+/// collapse that boilerplate into a single struct-literal expression.
+///
+/// `max_limit` defaults to [`MAX_RECORD_TRANSFER_COUNT`]. Pass
+/// `max_limit = <expr>` to override (e.g. when the response should echo back
+/// the caller's clamped page size rather than the global cap).
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::paginated_list_response;
+/// let response = paginated_list_response!(
+///     models::ListJobsResponse,
+///     items,
+///     offset,
+///     total_count
+/// );
+/// ```
+#[macro_export]
+macro_rules! paginated_list_response {
+    ($model:path, $items:expr, $offset:expr, $total_count:expr $(,)?) => {
+        $crate::paginated_list_response!(
+            $model,
+            $items,
+            $offset,
+            $total_count,
+            max_limit = $crate::MAX_RECORD_TRANSFER_COUNT
+        )
+    };
+    ($model:path, $items:expr, $offset:expr, $total_count:expr, max_limit = $max_limit:expr $(,)?) => {{
+        let items = $items;
+        let offset: i64 = $offset;
+        let total_count: i64 = $total_count;
+        let count = items.len() as i64;
+        $model {
+            items,
+            offset,
+            max_limit: $max_limit,
+            count,
+            total_count,
+            has_more: offset + count < total_count,
+        }
+    }};
 }
 
 /// Common pagination response structure

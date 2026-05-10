@@ -3724,7 +3724,7 @@ fn test_subgraph_workflow_generated_actions_have_correct_triggers() {
         let sched = job
             .scheduler
             .as_ref()
-            .unwrap_or_else(|| panic!("Job {} should have scheduler assigned", job.name));
+            .unwrap_or_else(|| panic!("job name='{}' should have scheduler assigned", job.name));
         let trigger = scheduler_triggers
             .get(sched)
             .unwrap_or_else(|| panic!("Scheduler {} should have action", sched));
@@ -3737,7 +3737,7 @@ fn test_subgraph_workflow_generated_actions_have_correct_triggers() {
 
         assert_eq!(
             trigger, expected_trigger,
-            "Job {} (scheduler {}) should have trigger {}, got {}",
+            "job name='{}' scheduler='{}' should have trigger='{}', got trigger='{}'",
             job.name, sched, expected_trigger, trigger
         );
     }

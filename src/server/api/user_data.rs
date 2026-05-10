@@ -14,7 +14,9 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg, escape_like_pattern};
+use super::{
+    ApiContext, database_error_with_msg, escape_like_pattern, resource_not_found_response,
+};
 
 /// Trait defining user data-related API operations
 #[async_trait]
@@ -277,10 +279,9 @@ where
         {
             Ok(Some(row)) => row,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("User data not found with ID: {}", id)
-                }));
-                return Ok(GetUserDataResponse::NotFoundErrorResponse(error_response));
+                return Ok(GetUserDataResponse::NotFoundErrorResponse(
+                    resource_not_found_response("User data", id),
+                ));
             }
             Err(e) => {
                 return Err(database_error_with_msg(e, "Failed to fetch user data"));
@@ -405,9 +406,7 @@ where
         }
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if USER_DATA_COLUMNS.contains(&col.as_str()) {
                 Some(format!("ud.{}", col))
             } else {
@@ -424,7 +423,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 "ud.id",
                 USER_DATA_COLUMNS,
@@ -506,28 +505,22 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListUserDataResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_user_data({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListUserDataResponse::SuccessfulResponse(
-            models::ListUserDataResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListUserDataResponse::SuccessfulResponse(response))
     }
 
     /// Update user data.
@@ -595,11 +588,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("User data not found with ID: {}", id)
-            }));
             return Ok(UpdateUserDataResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("User data", id),
             ));
         }
 

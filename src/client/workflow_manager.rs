@@ -1020,7 +1020,7 @@ impl WorkflowManager {
             let job_status = match &job.status {
                 Some(status) => status,
                 None => {
-                    warn!("Job {} has no status, skipping", job_id);
+                    warn!("job_id={} has no status, skipping", job_id);
                     continue;
                 }
             };
@@ -1031,7 +1031,7 @@ impl WorkflowManager {
                     if dry_run {
                         // If dry run is true, just log the change
                         info!(
-                            "Dry run: Would reset job {} (name: '{}') from {:?} to Uninitialized due to file change in {} (id: {})",
+                            "Dry run: Would reset job_id={} name='{}' from status={:?} to Uninitialized due to file change in '{}' file_id={}",
                             job_id, &job.name, job_status, file.name, file_id
                         );
 
@@ -1056,7 +1056,7 @@ impl WorkflowManager {
                             };
 
                             info!(
-                                "Dry run: Would reset downstream job {} (name: '{}' status: {:?}) to Uninitialized",
+                                "Dry run: Would reset downstream job_id={} name='{}' status={:?} to Uninitialized",
                                 downstream_job_id, &downstream_job.name, downstream_job.status
                             );
                         }
@@ -1069,13 +1069,13 @@ impl WorkflowManager {
                         ) {
                             Ok(_) => {
                                 info!(
-                                    "Reset job {} (name: '{}') from {:?} to Uninitialized due to file change in {} (id: {})",
+                                    "Reset job_id={} name='{}' from status={:?} to Uninitialized due to file change in '{}' file_id={}",
                                     job_id, &job.name, job_status, file.name, file_id
                                 );
                             }
                             Err(err) => {
                                 panic!(
-                                    "Failed to reset job {} status due to file change: {}",
+                                    "Failed to reset job_id={} status due to file change: {}",
                                     job_id, err
                                 );
                             }
@@ -1085,7 +1085,7 @@ impl WorkflowManager {
                 _ => {
                     // Job is not Completed, Failed, or Canceled, no action needed
                     debug!(
-                        "Job {} (name: '{}') has status {:?}, no reset needed for file change in {} (id: {})",
+                        "job_id={} name='{}' has status={:?}, no reset needed for file change in '{}' file_id={}",
                         job_id, &job.name, job_status, file.name, file_id
                     );
                 }

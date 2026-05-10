@@ -1,5 +1,5 @@
 use super::*;
-use crate::server::api::{EventsApi, ResourceRequirementsApi};
+use crate::server::api::ResourceRequirementsApi;
 
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
@@ -62,8 +62,14 @@ where
         reverse_sort: Option<bool>,
         context: &C,
     ) -> Result<ListResourceRequirementsResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListResourceRequirementsResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListResourceRequirementsResponse,
+            offset,
+            limit
+        );
         self.resource_requirements_api
             .list_resource_requirements(
                 workflow_id,
@@ -88,11 +94,12 @@ where
         scheduler_config_id: Option<i64>,
         context: &C,
     ) -> Result<GetReadyJobRequirementsResponse, ApiError> {
-        debug!(
-            "get_ready_job_requirements({}, {:?}) - X-Span-ID: {:?}",
+        log_call!(
+            debug,
+            context,
+            "get_ready_job_requirements({}, {:?})",
             id,
             scheduler_config_id,
-            Has::<XSpanIdString>::get(context).0.clone()
         );
         authorize_workflow!(self, id, context, GetReadyJobRequirementsResponse);
         error!("get_ready_job_requirements operation is not implemented");
@@ -134,17 +141,10 @@ where
             .await?;
 
         if let UpdateResourceRequirementsResponse::SuccessfulResponse(ref rr) = result {
-            let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-            let username = auth
-                .map(|a| a.subject)
-                .unwrap_or_else(|| "unknown".to_string());
-
-            let event = models::EventModel::new(
+            self.record_user_action_event(
                 rr.workflow_id,
+                "update_resource_requirements",
                 serde_json::json!({
-                    "category": "user_action",
-                    "action": "update_resource_requirements",
-                    "user": username,
                     "resource_requirements_id": id,
                     "name": rr.name,
                     "num_cpus": rr.num_cpus,
@@ -153,13 +153,9 @@ where
                     "memory": rr.memory,
                     "runtime": rr.runtime,
                 }),
-            );
-            if let Err(e) = self.events_api.create_event(event, context).await {
-                error!(
-                    "Failed to create event for update_resource_requirements: {:?}",
-                    e
-                );
-            }
+                context,
+            )
+            .await;
         }
 
         Ok(result)

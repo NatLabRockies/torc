@@ -57,8 +57,14 @@ where
         limit: Option<i64>,
         context: &C,
     ) -> Result<ListFailureHandlersResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListFailureHandlersResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListFailureHandlersResponse,
+            offset,
+            limit
+        );
         self.failure_handlers_api
             .list_failure_handlers(workflow_id, offset, limit, context)
             .await
@@ -233,11 +239,7 @@ where
         id: i64,
         context: &C,
     ) -> Result<CancelWorkflowResponse, ApiError> {
-        info!(
-            "cancel_workflow(workflow_id={}) - X-Span-ID: {:?}",
-            id,
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
+        log_call!(info, context, "cancel_workflow(workflow_id={})", id);
         authorize_workflow!(self, id, context, CancelWorkflowResponse);
         let response = self.workflows_api.cancel_workflow(id, context).await?;
         Ok(response)
@@ -249,11 +251,12 @@ where
         body: models::ArchiveWorkflowRequest,
         context: &C,
     ) -> Result<ArchiveWorkflowResponse, ApiError> {
-        info!(
-            "archive_workflow(workflow_id={}, is_archived={}) - X-Span-ID: {:?}",
+        log_call!(
+            info,
+            context,
+            "archive_workflow(workflow_id={}, is_archived={})",
             id,
             body.is_archived,
-            Has::<XSpanIdString>::get(context).0.clone()
         );
         authorize_workflow!(self, id, context, ArchiveWorkflowResponse);
         // When archiving, drop the workflow from the failures cache (mirrors
@@ -286,8 +289,14 @@ where
         after_timestamp: Option<i64>,
         context: &C,
     ) -> Result<ListEventsResponse, ApiError> {
-        authorize_workflow!(self, workflow_id, context, ListEventsResponse);
-        let (offset, limit) = process_pagination_params(offset, limit)?;
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            workflow_id,
+            context,
+            ListEventsResponse,
+            offset,
+            limit
+        );
         self.events_api
             .list_events(
                 workflow_id,
@@ -431,11 +440,7 @@ where
         id: i64,
         context: &C,
     ) -> Result<DeleteWorkflowResponse, ApiError> {
-        info!(
-            "delete_workflow(workflow_id={}) - X-Span-ID: {:?}",
-            id,
-            Has::<XSpanIdString>::get(context).0.clone()
-        );
+        log_call!(info, context, "delete_workflow(workflow_id={})", id);
         authorize_workflow!(self, id, context, DeleteWorkflowResponse);
         if let Ok(mut set) = self.workflows_with_failures.write() {
             set.remove(&id);
@@ -449,11 +454,12 @@ where
         force: Option<bool>,
         context: &C,
     ) -> Result<ResetWorkflowStatusResponse, ApiError> {
-        info!(
-            "reset_workflow_status(workflow_id={}, force={:?}) - X-Span-ID: {:?}",
+        log_call!(
+            info,
+            context,
+            "reset_workflow_status(workflow_id={}, force={:?})",
             id,
             force,
-            Has::<XSpanIdString>::get(context).0.clone()
         );
 
         authorize_workflow!(self, id, context, ResetWorkflowStatusResponse);
@@ -468,24 +474,16 @@ where
             .await?;
 
         if let ResetWorkflowStatusResponse::SuccessfulResponse(_) = result {
-            let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
-            let username = auth
-                .map(|a| a.subject)
-                .unwrap_or_else(|| "unknown".to_string());
-
-            let event = models::EventModel::new(
+            self.record_user_action_event(
                 id,
+                "reset_workflow_status",
                 serde_json::json!({
-                    "category": "user_action",
-                    "action": "reset_workflow_status",
-                    "user": username,
                     "workflow_id": id,
                     "force": force_value,
                 }),
-            );
-            if let Err(e) = self.events_api.create_event(event, context).await {
-                error!("Failed to create event for reset_workflow_status: {:?}", e);
-            }
+                context,
+            )
+            .await;
         }
 
         Ok(result)
@@ -498,13 +496,14 @@ where
         strict_scheduler_match: Option<bool>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
-        debug!(
-            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?}) - X-Span-ID: {:?}",
+        log_call!(
+            debug,
+            context,
+            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?})",
             id,
             body,
             limit,
             strict_scheduler_match,
-            Has::<XSpanIdString>::get(context).0.clone()
         );
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);

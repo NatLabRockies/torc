@@ -14,7 +14,7 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg};
+use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
 
 /// Trait defining compute node-related API operations
 #[async_trait]
@@ -252,11 +252,8 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Compute node not found with ID: {}", id)
-                }));
                 return Ok(GetComputeNodeResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Compute node", id),
                 ));
             }
             Err(e) => {
@@ -369,9 +366,7 @@ where
             where_conditions.push("json_extract(scheduler, '$.scheduler_id') = ?".to_string());
         }
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if COMPUTE_NODE_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -387,7 +382,7 @@ where
             .with_pagination_and_sorting(
                 offset,
                 limit,
-                validated_sort_by,
+                sort_by,
                 reverse_sort,
                 "id",
                 COMPUTE_NODE_COLUMNS,
@@ -472,28 +467,22 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListComputeNodesResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_compute_nodes({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListComputeNodesResponse::SuccessfulResponse(
-            models::ListComputeNodesResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListComputeNodesResponse::SuccessfulResponse(response))
     }
 
     /// Update a compute node.
@@ -588,11 +577,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Compute node not found with ID: {}", id)
-            }));
             return Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Compute node", id),
             ));
         }
 

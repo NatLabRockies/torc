@@ -13,7 +13,9 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg};
+use super::{
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, database_error_with_msg, resource_not_found_response,
+};
 
 /// Trait defining failure handler-related API operations
 #[async_trait]
@@ -131,11 +133,8 @@ where
         {
             Ok(Some(record)) => record,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Failure handler not found with ID: {}", id)
-                }));
                 return Ok(GetFailureHandlerResponse::NotFoundErrorResponse(
-                    error_response,
+                    resource_not_found_response("Failure handler", id),
                 ));
             }
             Err(e) => {
@@ -210,8 +209,6 @@ where
             })
             .collect();
 
-        let count = items.len() as i64;
-
         // Get total count
         let total_count = match sqlx::query!(
             r#"SELECT COUNT(*) as total FROM failure_handler WHERE workflow_id = $1"#,
@@ -229,17 +226,13 @@ where
             }
         };
 
-        let has_more = offset + count < total_count;
-
         Ok(ListFailureHandlersResponse::SuccessfulResponse(
-            models::ListFailureHandlersResponse {
+            crate::paginated_list_response!(
+                models::ListFailureHandlersResponse,
                 items,
                 offset,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count,
-                total_count,
-                has_more,
-            },
+                total_count
+            ),
         ))
     }
 
@@ -269,11 +262,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Failure handler not found with ID: {}", id)
-            }));
             return Ok(DeleteFailureHandlerResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Failure handler", id),
             ));
         }
 

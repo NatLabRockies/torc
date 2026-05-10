@@ -271,7 +271,7 @@ fn test_get_statuses_multiple_jobs() {
     for job_id in &job_ids {
         assert!(
             statuses_map.contains_key(job_id),
-            "Job {} not found in statuses",
+            "job_id={} not found in statuses",
             job_id
         );
         assert_eq!(statuses_map[job_id], HpcJobStatus::Queued);
@@ -1658,7 +1658,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         assert_eq!(
             job.status.unwrap(),
             models::JobStatus::Completed,
-            "Job {} should be Completed",
+            "job name='{}' should be Completed",
             job.name
         );
     }

@@ -20,8 +20,8 @@ use crate::models;
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
-    deserialize_env_map, escape_like_pattern, normalize_env_map, serialize_env_map,
-    validate_env_map,
+    deserialize_env_map, escape_like_pattern, message_error_response, normalize_env_map,
+    resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
 /// Trait defining workflow-related API operations
@@ -237,18 +237,6 @@ impl WorkflowsApiImpl {
             context.get().0.clone()
         );
 
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
-            if WORKFLOW_COLUMNS.contains(&col.as_str()) {
-                Some(col.clone())
-            } else {
-                debug!("Invalid sort column requested: {}", col);
-                None // Fall back to default
-            }
-        } else {
-            None
-        };
-
         let base_query = "
             SELECT
                 id
@@ -305,14 +293,12 @@ impl WorkflowsApiImpl {
             if ids.is_empty() {
                 // No accessible workflows - return empty result
                 return Ok(ListWorkflowsResponse::SuccessfulResponse(
-                    models::ListWorkflowsResponse {
-                        items: Vec::new(),
+                    crate::paginated_list_response!(
+                        models::ListWorkflowsResponse,
+                        Vec::<models::WorkflowModel>::new(),
                         offset,
-                        max_limit: MAX_RECORD_TRANSFER_COUNT,
-                        count: 0,
-                        total_count: 0,
-                        has_more: false,
-                    },
+                        0_i64
+                    ),
                 ));
             }
             let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
@@ -330,7 +316,7 @@ impl WorkflowsApiImpl {
                 .with_pagination_and_sorting(
                     offset,
                     limit,
-                    validated_sort_by,
+                    sort_by,
                     reverse_sort,
                     "id",
                     WORKFLOW_COLUMNS,
@@ -342,7 +328,7 @@ impl WorkflowsApiImpl {
                 .with_pagination_and_sorting(
                     offset,
                     limit,
-                    validated_sort_by,
+                    sort_by,
                     reverse_sort,
                     "id",
                     WORKFLOW_COLUMNS,
@@ -465,27 +451,21 @@ impl WorkflowsApiImpl {
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListWorkflowsResponse,
+            items,
+            offset,
+            total_count
+        );
 
         debug!(
             "list_workflows_filtered({}/{}) - X-Span-ID: {:?}",
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListWorkflowsResponse::SuccessfulResponse(
-            models::ListWorkflowsResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListWorkflowsResponse::SuccessfulResponse(response))
     }
 }
 
@@ -518,11 +498,8 @@ where
 
         body.timestamp = Some(Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string());
         if let Err(err) = validate_env_map(body.env.as_ref(), "workflow env") {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": err.0
-            }));
             return Ok(CreateWorkflowResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(err.0),
             ));
         }
         body.env = normalize_env_map(body.env.take());
@@ -667,10 +644,9 @@ where
 
         if result.rows_affected() == 0 {
             let _ = tx.rollback().await;
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", id)
-            }));
-            return Ok(CancelWorkflowResponse::DefaultErrorResponse(error_response));
+            return Ok(CancelWorkflowResponse::NotFoundErrorResponse(
+                resource_not_found_response("Workflow", id),
+            ));
         }
 
         info!("Successfully canceled workflow with ID: {}", id);
@@ -685,29 +661,25 @@ where
         });
         let event_data_str = event_data.to_string();
 
-        match sqlx::query(
-            r#"
-            INSERT INTO event (workflow_id, timestamp, data)
-            VALUES ($1, $2, $3)
-            "#,
-        )
-        .bind(id)
-        .bind(timestamp)
-        .bind(&event_data_str)
-        .execute(&mut *tx)
-        .await
-        {
-            Ok(_) => {
-                debug!("Created workflow_canceled event for workflow {}", id);
-            }
-            Err(e) => {
-                let _ = tx.rollback().await;
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to create workflow cancellation event",
-                ));
-            }
-        }
+        crate::tx_try!(
+            tx,
+            sqlx::query(
+                r#"
+                INSERT INTO event (workflow_id, timestamp, data)
+                VALUES ($1, $2, $3)
+                "#,
+            )
+            .bind(id)
+            .bind(timestamp)
+            .bind(&event_data_str)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(
+                e,
+                "Failed to create workflow cancellation event"
+            ))
+        );
+        debug!("Created workflow_canceled event for workflow_id={}", id);
 
         // Cancel all running and pending jobs in the workflow
         let submitted_status = models::JobStatus::Running.to_int();
@@ -791,11 +763,8 @@ where
         .map_err(|e| database_error_with_msg(e, "Failed to update workflow archive flag"))?;
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", id)
-            }));
             return Ok(ArchiveWorkflowResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Workflow", id),
             ));
         }
 
@@ -901,12 +870,9 @@ where
                     is_archived: Some(row.get::<i64, _>("is_archived") != 0),
                 },
             )),
-            Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Workflow not found with ID: {}", id)
-                }));
-                Ok(GetWorkflowResponse::NotFoundErrorResponse(error_response))
-            }
+            Ok(None) => Ok(GetWorkflowResponse::NotFoundErrorResponse(
+                resource_not_found_response("Workflow", id),
+            )),
             Err(e) => Err(database_error_with_msg(e, "Failed to get workflow")),
         }
     }
@@ -932,11 +898,8 @@ where
             {
                 Ok(Some(v)) => v != 0,
                 Ok(None) => {
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": format!("Workflow not found with ID: {}", id)
-                    }));
                     return Ok(IsWorkflowCompleteResponse::NotFoundErrorResponse(
-                        error_response,
+                        resource_not_found_response("Workflow", id),
                     ));
                 }
                 Err(e) => {
@@ -1125,11 +1088,10 @@ where
         let enable_ro_crate_int = body.enable_ro_crate.map(|val| if val { 1 } else { 0 });
         let body_env = normalize_env_map(body.env.clone());
         if body.env.is_some() && body_env != current_workflow.env {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot modify env - this field is immutable after workflow creation"
-            }));
             return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
-                error_response,
+                message_error_response(
+                    "Cannot modify env - this field is immutable after workflow creation",
+                ),
             ));
         }
 
@@ -1178,11 +1140,8 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Workflow not found with ID: {}", id)
-            }));
             return Ok(UpdateWorkflowResponse::NotFoundErrorResponse(
-                error_response,
+                resource_not_found_response("Workflow", id),
             ));
         }
 
@@ -1467,11 +1426,12 @@ where
 
         // Check if workflow is archived
         if current_workflow.is_archived.unwrap_or(false) {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": "Cannot reset archived workflow status. Unarchive the workflow first."
-            }));
             return Ok(
-                ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(error_response),
+                ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "Cannot reset archived workflow status. Unarchive the workflow first.",
+                    ),
+                ),
             );
         }
 
@@ -1504,11 +1464,12 @@ where
                     id
                 );
             } else {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot reset workflow status: jobs are currently running or pending submission"
-                }));
                 return Ok(
-                    ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(error_response),
+                    ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(
+                        message_error_response(
+                            "Cannot reset workflow status: jobs are currently running or pending submission",
+                        ),
+                    ),
                 );
             }
         }
@@ -1534,11 +1495,12 @@ where
                     id
                 );
             } else {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": "Cannot reset workflow status: scheduled compute nodes are currently pending or active"
-                }));
                 return Ok(
-                    ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(error_response),
+                    ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(
+                        message_error_response(
+                            "Cannot reset workflow status: scheduled compute nodes are currently pending or active",
+                        ),
+                    ),
                 );
             }
         }
@@ -1633,7 +1595,7 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
+        let sort_by = match sort_by.as_deref() {
             Some("job_id") => Some("jb.job_id".to_string()),
             Some("job_name") => Some("j1.name".to_string()),
             Some("depends_on_job_id") => Some("jb.depends_on_job_id".to_string()),
@@ -1664,7 +1626,7 @@ where
         .with_pagination_and_sorting(
             offset_val,
             limit_val,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "jb.job_id",
             JOB_DEPENDENCY_COLUMNS,
@@ -1713,27 +1675,22 @@ where
             }
         };
 
-        let current_count = dependencies.len() as i64;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListJobDependenciesResponse,
+            dependencies,
+            offset_val,
+            total_count
+        );
 
         debug!(
             "list_job_dependencies({}) - returning {}/{} dependencies - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListJobDependenciesResponse::SuccessfulResponse(
-            models::ListJobDependenciesResponse {
-                items: dependencies,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListJobDependenciesResponse::SuccessfulResponse(response))
     }
 
     /// Retrieve job-file relationships for a workflow.
@@ -1761,7 +1718,7 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
+        let sort_by = match sort_by.as_deref() {
             Some("file_id") => Some("f.id".to_string()),
             Some("file_name") => Some("f.name".to_string()),
             Some("file_path") => Some("f.path".to_string()),
@@ -1802,7 +1759,7 @@ where
         .with_pagination_and_sorting(
             offset_val,
             limit_val,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "f.id",
             JOB_FILE_RELATIONSHIP_COLUMNS,
@@ -1876,26 +1833,23 @@ where
             }
         };
 
-        let current_count = relationships.len() as i64;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListJobFileRelationshipsResponse,
+            relationships,
+            offset_val,
+            total_count
+        );
 
         debug!(
             "list_job_file_relationships({}) - returning {}/{} relationships - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
         Ok(ListJobFileRelationshipsResponse::SuccessfulResponse(
-            models::ListJobFileRelationshipsResponse {
-                items: relationships,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
+            response,
         ))
     }
 
@@ -1924,7 +1878,7 @@ where
             .unwrap_or(MAX_RECORD_TRANSFER_COUNT)
             .min(MAX_RECORD_TRANSFER_COUNT);
 
-        let validated_sort_by = match sort_by.as_deref() {
+        let sort_by = match sort_by.as_deref() {
             Some("user_data_id") => Some("ud.id".to_string()),
             Some("user_data_name") => Some("ud.name".to_string()),
             Some("producer_job_id") => Some("joud.job_id".to_string()),
@@ -1964,7 +1918,7 @@ where
         .with_pagination_and_sorting(
             offset_val,
             limit_val,
-            validated_sort_by,
+            sort_by,
             reverse_sort,
             "ud.id",
             JOB_USER_DATA_RELATIONSHIP_COLUMNS,
@@ -2037,26 +1991,23 @@ where
             }
         };
 
-        let current_count = relationships.len() as i64;
-        let has_more = offset_val + current_count < total_count;
+        let response = crate::paginated_list_response!(
+            models::ListJobUserDataRelationshipsResponse,
+            relationships,
+            offset_val,
+            total_count
+        );
 
         debug!(
             "list_job_user_data_relationships({}) - returning {}/{} relationships - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
         Ok(ListJobUserDataRelationshipsResponse::SuccessfulResponse(
-            models::ListJobUserDataRelationshipsResponse {
-                items: relationships,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
+            response,
         ))
     }
 }

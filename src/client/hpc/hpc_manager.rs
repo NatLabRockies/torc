@@ -64,7 +64,7 @@ impl HpcManager {
     /// The current status of the job
     pub fn get_status(&self, job_id: &str) -> Result<HpcJobStatus> {
         let info = self.interface.get_status(job_id)?;
-        trace!("Job {} status: {:?}", job_id, info.status);
+        trace!("hpc_job_id={} status={:?}", job_id, info.status);
         Ok(info.status)
     }
 

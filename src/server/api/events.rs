@@ -16,8 +16,8 @@ use crate::server::api_responses::{
 use crate::models;
 
 use super::{
-    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
-    json_parse_error,
+    ApiContext, SqlQueryBuilder, database_error_with_msg, json_parse_error,
+    resource_not_found_response,
 };
 
 /// Trait defining event-related API operations
@@ -146,10 +146,9 @@ where
         {
             Ok(Some(rec)) => rec,
             Ok(None) => {
-                let error_response = models::ErrorResponse::new(serde_json::json!({
-                    "message": format!("Event not found with ID: {}", id)
-                }));
-                return Ok(GetEventResponse::NotFoundErrorResponse(error_response));
+                return Ok(GetEventResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Event", id),
+                ));
             }
             Err(e) => {
                 return Err(database_error_with_msg(e, "Failed to fetch event"));
@@ -214,9 +213,7 @@ where
         let _category = category; // Acknowledge the parameter to avoid unused warnings
 
         let where_clause = where_conditions.join(" AND ");
-
-        // Validate sort_by against whitelist
-        let validated_sort_by = if let Some(ref col) = sort_by {
+        let sort_by = if let Some(ref col) = sort_by {
             if EVENT_COLUMNS.contains(&col.as_str()) {
                 Some(col.clone())
             } else {
@@ -230,14 +227,7 @@ where
         // Build the complete query with pagination and sorting
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(
-                offset,
-                limit,
-                validated_sort_by,
-                reverse_sort,
-                "id",
-                EVENT_COLUMNS,
-            )
+            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id", EVENT_COLUMNS)
             .build();
 
         debug!("Executing query: {}", query);
@@ -298,28 +288,18 @@ where
             }
         };
 
-        let current_count = items.len() as i64;
-        let offset_val = offset;
-        let has_more = offset_val + current_count < total_count;
+        let response =
+            crate::paginated_list_response!(models::ListEventsResponse, items, offset, total_count);
 
         debug!(
             "list_events({}, {}/{}) - X-Span-ID: {:?}",
             workflow_id,
-            current_count,
+            response.count,
             total_count,
             context.get().0.clone()
         );
 
-        Ok(ListEventsResponse::SuccessfulResponse(
-            models::ListEventsResponse {
-                items,
-                offset: offset_val,
-                max_limit: MAX_RECORD_TRANSFER_COUNT,
-                count: current_count,
-                total_count,
-                has_more,
-            },
-        ))
+        Ok(ListEventsResponse::SuccessfulResponse(response))
     }
 
     /// Update an event.
@@ -371,10 +351,9 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let error_response = models::ErrorResponse::new(serde_json::json!({
-                "message": format!("Event not found with ID: {}", id)
-            }));
-            return Ok(UpdateEventResponse::NotFoundErrorResponse(error_response));
+            return Ok(UpdateEventResponse::NotFoundErrorResponse(
+                resource_not_found_response("Event", id),
+            ));
         }
 
         // Return the updated event by fetching it again

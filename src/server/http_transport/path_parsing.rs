@@ -6,6 +6,18 @@ pub(super) fn decode_path_segment(segment: &str) -> Option<String> {
         .map(|value| value.into_owned())
 }
 
+/// Strip `prefix` from the start of `path` and `suffix` from the end, returning the segment in
+/// between only when it is a single path segment (i.e. contains no `/`). This is the shared
+/// shape behind the `/torc-service/v1/<resource>/{id}/<sub>` helpers below.
+#[cfg(test)]
+fn strip_prefix_and_suffix<'a>(path: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    let middle = path.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    if middle.contains('/') {
+        return None;
+    }
+    Some(middle)
+}
+
 #[cfg(test)]
 pub(super) fn parse_group_member_path(path: &str) -> Option<(i64, String)> {
     let suffix = path.strip_prefix("/torc-service/v1/access_groups/")?;
@@ -18,32 +30,20 @@ pub(super) fn parse_group_member_path(path: &str) -> Option<(i64, String)> {
 
 #[cfg(test)]
 pub(super) fn parse_access_group_members_collection_path(path: &str) -> Option<i64> {
-    let group_id = path.strip_prefix("/torc-service/v1/access_groups/")?;
-    let group_id = group_id.strip_suffix("/members")?;
-    if group_id.contains('/') {
-        return None;
-    }
-    group_id.parse::<i64>().ok()
+    strip_prefix_and_suffix(path, "/torc-service/v1/access_groups/", "/members")?
+        .parse::<i64>()
+        .ok()
 }
 
 #[cfg(test)]
 pub(super) fn parse_user_groups_path(path: &str) -> Option<String> {
-    let user_name = path.strip_prefix("/torc-service/v1/users/")?;
-    let user_name = user_name.strip_suffix("/groups")?;
-    if user_name.contains('/') {
-        return None;
-    }
+    let user_name = strip_prefix_and_suffix(path, "/torc-service/v1/users/", "/groups")?;
     decode_path_segment(user_name)
 }
 
 #[cfg(test)]
 pub(super) fn parse_workflow_access_groups_collection_path(path: &str) -> Option<i64> {
-    let workflow_id = path.strip_prefix("/torc-service/v1/workflows/")?;
-    let workflow_id = workflow_id.strip_suffix("/access_groups")?;
-    if workflow_id.contains('/') {
-        return None;
-    }
-    workflow_id.parse::<i64>().ok()
+    parse_workflow_suffix_path(path, "/access_groups")
 }
 
 #[cfg(test)]
@@ -71,22 +71,14 @@ pub(super) fn parse_access_check_path(path: &str) -> Option<(i64, String)> {
 
 #[cfg(test)]
 pub(super) fn parse_workflow_failure_handlers_path(path: &str) -> Option<i64> {
-    let workflow_id = path.strip_prefix("/torc-service/v1/workflows/")?;
-    let workflow_id = workflow_id.strip_suffix("/failure_handlers")?;
-    if workflow_id.contains('/') {
-        return None;
-    }
-    workflow_id.parse::<i64>().ok()
+    parse_workflow_suffix_path(path, "/failure_handlers")
 }
 
 #[cfg(test)]
 pub(super) fn parse_workflow_suffix_path(path: &str, suffix: &str) -> Option<i64> {
-    let workflow_id = path.strip_prefix("/torc-service/v1/workflows/")?;
-    let workflow_id = workflow_id.strip_suffix(suffix)?;
-    if workflow_id.contains('/') {
-        return None;
-    }
-    workflow_id.parse::<i64>().ok()
+    strip_prefix_and_suffix(path, "/torc-service/v1/workflows/", suffix)?
+        .parse::<i64>()
+        .ok()
 }
 
 #[cfg(test)]

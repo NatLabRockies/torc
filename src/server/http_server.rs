@@ -45,21 +45,43 @@ pub(super) enum TaskCreation {
     /// An identical task is already active; returned idempotently. No work spawned.
     Existing(models::TaskModel),
 }
-macro_rules! forbidden_error {
-    ($reason:expr) => {
+/// Emit a structured log line that always includes the request's `X-Span-ID`. The format
+/// literal is what the call site provides; the trailing ` - X-Span-ID: {:?}` is appended by
+/// the macro so individual handlers don't reach into `Has::<XSpanIdString>::get(context)`.
+///
+/// Usage: `log_call!(debug, context, "name(args...)", arg1, arg2);`
+macro_rules! log_call {
+    ($level:ident, $context:expr, $fmt:literal $(, $arg:expr)* $(,)?) => {
+        log::$level!(
+            concat!($fmt, " - X-Span-ID: {:?}"),
+            $($arg,)*
+            Has::<XSpanIdString>::get($context).0.clone()
+        );
+    };
+}
+
+/// Build a `models::ErrorResponse` whose body is `{"error": <kind>, "message": <reason>}`.
+/// This is the standard shape returned by the live server for typed error responses; the
+/// `forbidden_error!`/`not_found_error!` aliases below cover the most common kinds, but
+/// transport handlers reaching for a custom error tag should use this directly.
+macro_rules! error_payload {
+    ($kind:expr, $reason:expr) => {
         models::ErrorResponse::new(serde_json::json!({
-            "error": "Forbidden",
+            "error": $kind,
             "message": $reason
         }))
     };
 }
 
+macro_rules! forbidden_error {
+    ($reason:expr) => {
+        error_payload!("Forbidden", $reason)
+    };
+}
+
 macro_rules! not_found_error {
     ($reason:expr) => {
-        models::ErrorResponse::new(serde_json::json!({
-            "error": "NotFound",
-            "message": $reason
-        }))
+        error_payload!("NotFound", $reason)
     };
 }
 
@@ -177,6 +199,25 @@ macro_rules! authorize_admin {
     };
 }
 
+/// Combined "auth + pagination unpack" scaffold for paginated workflow-scoped list handlers.
+/// Equivalent to writing `authorize_workflow!(...)` followed by `process_pagination_params(...)?`,
+/// but keeps the entire list-handler preamble in one expression. Returns the `(offset, limit)`
+/// pair on success; on auth failure or oversized limit it short-circuits the calling function.
+macro_rules! authorize_workflow_and_paginate {
+    ($self:ident, $workflow_id:expr, $context:expr, $response_enum:ident, $offset:expr, $limit:expr) => {{
+        authorize_workflow!($self, $workflow_id, $context, $response_enum);
+        process_pagination_params($offset, $limit)?
+    }};
+}
+
+/// Same shape as [`authorize_workflow_and_paginate!`] but for admin-only paginated list handlers.
+macro_rules! authorize_admin_and_paginate {
+    ($self:ident, $context:expr, $response_enum:ident, $offset:expr, $limit:expr) => {{
+        authorize_admin!($self, $context, $response_enum);
+        process_pagination_params($offset, $limit)?
+    }};
+}
+
 macro_rules! authorize_workflow_group {
     ($self:ident, $workflow_id:expr, $group_id:expr, $context:expr, $response_enum:ident) => {
         match $self
@@ -221,6 +262,18 @@ mod system_transport;
 mod unblock_processing;
 mod user_data_transport;
 mod workflows_transport;
+
+/// Extract the authenticated subject from the request context, falling back to "unknown" when
+/// the request is anonymous. Used for attribution fields on audit/user-action events.
+fn username_from_context<C>(context: &C) -> String
+where
+    C: Has<Option<Authorization>>,
+{
+    Has::<Option<Authorization>>::get(context)
+        .as_ref()
+        .map(|a| a.subject.clone())
+        .unwrap_or_else(|| "unknown".to_string())
+}
 
 /// Process optional offset and limit parameters and return concrete values.
 /// Returns (offset, limit) where:
@@ -2502,7 +2555,43 @@ where
 // Helper methods for Server (not part of the Api trait)
 impl<C> Server<C>
 where
-    C: Has<XSpanIdString> + Send + Sync,
+    C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync,
 {
-    // No additional helper methods needed
+    /// Record a best-effort "user_action" audit event. The event is awaited inline, but any
+    /// failure is logged and swallowed so audit failures cannot break the user-facing request.
+    /// The `extra` value must be a JSON object; this helper merges in the standard
+    /// `category`/`action`/`user` fields.
+    async fn record_user_action_event(
+        &self,
+        workflow_id: i64,
+        action: &str,
+        mut extra: serde_json::Value,
+        context: &C,
+    ) {
+        use crate::server::api::EventsApi;
+
+        let username = username_from_context(context);
+        if let Some(map) = extra.as_object_mut() {
+            map.insert(
+                "category".to_string(),
+                serde_json::Value::String("user_action".to_string()),
+            );
+            map.insert(
+                "action".to_string(),
+                serde_json::Value::String(action.to_string()),
+            );
+            map.insert("user".to_string(), serde_json::Value::String(username));
+        } else {
+            error!(
+                "record_user_action_event: extra payload for action '{}' must be a JSON object",
+                action
+            );
+            return;
+        }
+
+        let event = models::EventModel::new(workflow_id, extra);
+        if let Err(e) = self.events_api.create_event(event, context).await {
+            error!("Failed to create event for {}: {:?}", action, e);
+        }
+    }
 }

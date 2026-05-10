@@ -3128,7 +3128,7 @@ fn test_initialize_async_with_dependencies_completes_task_and_readies_jobs(
         assert_eq!(
             job.status,
             Some(models::JobStatus::Uninitialized),
-            "job {} should start Uninitialized, got {:?}",
+            "job_id={} should start Uninitialized, got status={:?}",
             id,
             job.status
         );
