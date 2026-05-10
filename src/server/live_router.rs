@@ -381,24 +381,25 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(workflow_events_stream_route),
         )
         .fallback(dashboard_fallback)
+        // Innermost: build SSE events for connected admin subscribers.
+        // Reads the auth context populated by `inject_request_context`.
         .layer(middleware::from_fn_with_state(
-            CaptureState {
-                bus: state.server.api_event_broadcaster.clone(),
-                stats: state.server.api_stats.clone(),
-            },
+            state.server.api_event_broadcaster.clone(),
             capture_api_event,
         ))
+        // Middle: resolve auth, inject request context, short-circuit
+        // on unauthenticated requests.
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             inject_request_context,
         ))
+        // Outermost: load-stats accounting. Lives outside the auth layer
+        // so that 401s are still counted in `/admin/api-stats`.
+        .layer(middleware::from_fn_with_state(
+            state.server.api_stats.clone(),
+            record_api_stats,
+        ))
         .with_state(state)
-}
-
-#[derive(Clone)]
-struct CaptureState {
-    bus: ApiEventBroadcaster,
-    stats: ApiStatsRing,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -556,8 +557,10 @@ pub async fn reload_auth(
 #[into_params(parameter_in = Query)]
 pub struct ApiEventStreamQuery {
     /// When true, captured request and response bodies are included in
-    /// each event (subject to size and content-type filtering). Defaults
-    /// to false so credentials/payloads aren't streamed unless requested.
+    /// each event. Bodies are only captured when the inbound size is known
+    /// up front (via `Content-Length` or body size hint) and at most
+    /// 1 MiB; SSE response streams are skipped. Defaults to false so
+    /// payloads aren't streamed unless requested.
     #[serde(default)]
     #[param(nullable = true)]
     pub include_bodies: Option<bool>,
@@ -579,7 +582,8 @@ pub async fn admin_api_events_stream(
 ) -> Response<Body> {
     let bus = state.server.api_event_broadcaster.clone();
     let mut receiver = bus.subscribe();
-    let body_guard = if params.include_bodies.unwrap_or(false) {
+    let include_bodies = params.include_bodies.unwrap_or(false);
+    let body_guard = if include_bodies {
         Some(bus.body_subscriber_guard())
     } else {
         None
@@ -591,7 +595,8 @@ pub async fn admin_api_events_stream(
         let _body_guard = body_guard;
         loop {
             match receiver.recv().await {
-                Ok(event) => {
+                Ok(mut event) => {
+                    redact_for_subscriber(&mut event, include_bodies);
                     let data = serde_json::to_string(&event).unwrap_or_default();
                     yield Ok::<_, std::convert::Infallible>(format!(
                         "event: api\ndata: {}\n\n",
@@ -4247,27 +4252,32 @@ async fn inject_request_context(
     response
 }
 
-async fn capture_api_event(
-    State(capture): State<CaptureState>,
+async fn record_api_stats(
+    State(stats): State<ApiStatsRing>,
     request: Request,
     next: Next,
 ) -> Response<Body> {
-    let CaptureState { bus, stats } = capture;
     let bytes_in = content_length_header(request.headers());
-    let want_event = bus.receiver_count() > 0;
-    let want_bodies = want_event && bus.body_subscriber_count() > 0;
+    let response = next.run(request).await;
+    let bytes_out = content_length_header(response.headers());
+    stats.record(
+        chrono::Utc::now().timestamp_millis(),
+        response.status().as_u16(),
+        bytes_in,
+        bytes_out,
+    );
+    response
+}
 
-    if !want_event {
-        let response = next.run(request).await;
-        let bytes_out = content_length_header(response.headers());
-        stats.record(
-            chrono::Utc::now().timestamp_millis(),
-            response.status().as_u16(),
-            bytes_in,
-            bytes_out,
-        );
-        return response;
+async fn capture_api_event(
+    State(bus): State<ApiEventBroadcaster>,
+    request: Request,
+    next: Next,
+) -> Response<Body> {
+    if bus.receiver_count() == 0 {
+        return next.run(request).await;
     }
+    let want_bodies = bus.body_subscriber_count() > 0;
 
     let started = std::time::Instant::now();
     let method = request.method().as_str().to_owned();
@@ -4315,17 +4325,12 @@ async fn capture_api_event(
         (response, None)
     };
 
-    let bytes_out = content_length_header(response.headers());
-    let timestamp_ms = chrono::Utc::now().timestamp_millis();
-    let status = response.status().as_u16();
-    stats.record(timestamp_ms, status, bytes_in, bytes_out);
-
     let event = ApiRequestEvent {
-        timestamp_ms,
+        timestamp_ms: chrono::Utc::now().timestamp_millis(),
         method,
         path,
         query,
-        status,
+        status: response.status().as_u16(),
         latency_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         request_id,
         user,
@@ -4352,18 +4357,7 @@ async fn capture_request_body(
     use http_body::Body as _;
     use http_body_util::BodyExt as _;
 
-    if let Some(len) = request
-        .headers()
-        .get(axum::http::header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        && len > BODY_CAPTURE_HARD_CAP_BYTES as u64
-    {
-        return (request, None);
-    }
-    if let Some(upper) = request.body().size_hint().upper()
-        && upper > BODY_CAPTURE_HARD_CAP_BYTES as u64
-    {
+    if !body_size_known_within_cap(request.headers(), request.body().size_hint().upper()) {
         return (request, None);
     }
 
@@ -4399,9 +4393,7 @@ async fn capture_response_body(
     if is_event_stream {
         return (response, None);
     }
-    if let Some(upper) = response.body().size_hint().upper()
-        && upper > BODY_CAPTURE_HARD_CAP_BYTES as u64
-    {
+    if !body_size_known_within_cap(response.headers(), response.body().size_hint().upper()) {
         return (response, None);
     }
 
@@ -4419,6 +4411,36 @@ async fn capture_response_body(
         }
         Err(_) => (Response::from_parts(parts, Body::empty()), None),
     }
+}
+
+/// Redact any captured bodies for subscribers that did not opt in to
+/// `include_bodies=true`. Bodies are captured at the broadcaster level
+/// when *any* subscriber wants them, so per-connection filtering happens
+/// here.
+fn redact_for_subscriber(event: &mut ApiRequestEvent, include_bodies: bool) {
+    if !include_bodies {
+        event.request_body = None;
+        event.response_body = None;
+    }
+}
+
+/// Returns `true` only when we can prove (from `Content-Length` or the
+/// body's own size hint) that the payload is at most
+/// [`BODY_CAPTURE_HARD_CAP_BYTES`]. Bodies whose size is unknown (e.g.
+/// chunked uploads with no advertised length) are treated as too big to
+/// safely buffer for capture.
+fn body_size_known_within_cap(headers: &axum::http::HeaderMap, hint_upper: Option<u64>) -> bool {
+    let cl = headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
+    let bounded = match (cl, hint_upper) {
+        (None, None) => return false,
+        (Some(c), None) => c,
+        (None, Some(u)) => u,
+        (Some(c), Some(u)) => c.max(u),
+    };
+    bounded <= BODY_CAPTURE_HARD_CAP_BYTES as u64
 }
 
 fn add_standard_response_headers(response: &mut Response<Body>, span_id: &XSpanIdString) {
@@ -4661,6 +4683,114 @@ mod live_router_tests {
             total_requests >= 3,
             "expected at least 3 recorded requests, got {total_requests}"
         );
+    }
+
+    #[tokio::test]
+    async fn api_stats_records_unauthenticated_requests() {
+        let server = test_server_with_schema().await;
+        let stats = server.api_stats.clone();
+        let router = test_router_with_auth(server, true);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 60, 60);
+        let total: u64 = snap.buckets.iter().map(|b| b.request_count).sum();
+        let total_4xx: u64 = snap.buckets.iter().map(|b| b.status_4xx).sum();
+        assert_eq!(total, 1, "the 401 should still be recorded");
+        assert_eq!(total_4xx, 1, "the 401 should be tallied as a 4xx");
+    }
+
+    #[test]
+    fn redact_for_subscriber_strips_bodies_when_not_opted_in() {
+        let mut event = ApiRequestEvent {
+            timestamp_ms: 1,
+            method: "POST".into(),
+            path: "/x".into(),
+            query: None,
+            status: 200,
+            latency_ms: 0,
+            request_id: None,
+            user: None,
+            request_body: Some(CapturedBody {
+                bytes: 5,
+                truncated: false,
+                text: Some("hello".into()),
+            }),
+            response_body: Some(CapturedBody {
+                bytes: 2,
+                truncated: false,
+                text: Some("ok".into()),
+            }),
+        };
+        redact_for_subscriber(&mut event, false);
+        assert!(event.request_body.is_none());
+        assert!(event.response_body.is_none());
+    }
+
+    #[test]
+    fn redact_for_subscriber_keeps_bodies_when_opted_in() {
+        let mut event = ApiRequestEvent {
+            timestamp_ms: 1,
+            method: "POST".into(),
+            path: "/x".into(),
+            query: None,
+            status: 200,
+            latency_ms: 0,
+            request_id: None,
+            user: None,
+            request_body: Some(CapturedBody {
+                bytes: 5,
+                truncated: false,
+                text: Some("hello".into()),
+            }),
+            response_body: None,
+        };
+        redact_for_subscriber(&mut event, true);
+        assert!(event.request_body.is_some());
+    }
+
+    #[test]
+    fn body_size_known_within_cap_handles_inputs() {
+        use axum::http::HeaderMap;
+        // Both unknown -> can't safely capture
+        assert!(!body_size_known_within_cap(&HeaderMap::new(), None));
+
+        // Content-Length set, small -> ok
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_static("128"),
+        );
+        assert!(body_size_known_within_cap(&headers, None));
+
+        // Content-Length set, oversized -> reject
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_static("99999999"),
+        );
+        assert!(!body_size_known_within_cap(&headers, None));
+
+        // No Content-Length, but body advertises a small upper bound
+        assert!(body_size_known_within_cap(&HeaderMap::new(), Some(256)));
+
+        // Both signals present, the larger one wins for the cap check
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_static("128"),
+        );
+        assert!(!body_size_known_within_cap(&headers, Some(99_999_999)));
     }
 
     #[tokio::test]
@@ -4961,12 +5091,16 @@ mod live_router_tests {
     }
 
     fn test_router(server: Server<EmptyContext>) -> Router {
+        test_router_with_auth(server, false)
+    }
+
+    fn test_router_with_auth(server: Server<EmptyContext>, require_auth: bool) -> Router {
         app_router(LiveRouterState {
             openapi_state: server.openapi_app_state(),
             server,
             auth: LiveAuthState {
                 htpasswd: Arc::new(RwLock::new(None)),
-                require_auth: false,
+                require_auth,
                 credential_cache: Arc::new(RwLock::new(None)),
             },
         })

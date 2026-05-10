@@ -682,10 +682,11 @@ direction and includes truncated UTF-8 text in each event. Override the per-dire
 with `TORC_API_EVENT_BODY_MAX_BYTES`.
 
 Independent of the display cap, the server enforces a **1 MiB hard ceiling** on bytes it will buffer
-in memory: requests or responses larger than that ceiling are passed through untouched and emitted
-with no body. SSE response streams (e.g. `/workflows/{id}/events/stream`) are likewise skipped
-because they are unbounded. Binary payloads are reported as metadata only — total byte count and a
-`binary` indicator — without UTF-8 text.
+in memory and only captures bodies whose size is advertised up front (via `Content-Length` or the
+body's size hint). Larger payloads, chunked uploads with no advertised length, and SSE response
+streams (e.g. `/workflows/{id}/events/stream`) are passed through untouched and emitted with no
+body. Binary payloads are still recorded — `bytes` reflects the total length — but the `text` field
+is omitted so consumers can detect non-UTF-8 content.
 
 `Authorization` and `Cookie` headers are never captured under any setting.
 
