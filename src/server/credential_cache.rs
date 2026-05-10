@@ -53,7 +53,7 @@ impl CredentialCache {
         hasher.update(username.as_bytes());
         hasher.update(b":");
         hasher.update(password.as_bytes());
-        format!("{:x}", hasher.finalize())
+        hex::encode(hasher.finalize())
     }
 
     /// Check if credentials are cached and still valid.

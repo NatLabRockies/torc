@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
-use sysinfo::{RefreshKind, System, SystemExt};
+use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -452,7 +452,9 @@ impl HpcInterface for SlurmInterface {
         // we can do when SLURM_MEM_PER_NODE is not set (the user did not set --mem).
         // Use new_with_specifics to only refresh memory, avoiding user enumeration
         // which can crash on HPC systems with large LDAP user databases
-        let sys = System::new_with_specifics(RefreshKind::new().with_memory());
+        let sys = System::new_with_specifics(
+            RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()),
+        );
         // sysinfo::System::total_memory() returns bytes; convert to GiB
         sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0)
     }

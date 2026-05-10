@@ -592,7 +592,7 @@ fn hash_file(path: &Path) -> std::io::Result<String> {
         hasher.update(&buffer[..n]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 /// Compute statistics for a directory, including optional hash.
@@ -625,7 +625,7 @@ fn compute_dataset_stats(
             manifest_entries.sort();
             let manifest = manifest_entries.join("\n");
             let hash = Sha256::digest(manifest.as_bytes());
-            Some(format!("{:x}", hash))
+            Some(hex::encode(hash))
         }
         "content" => {
             // Hash all file contents in parallel
@@ -674,7 +674,7 @@ fn compute_content_hash_parallel(
         final_hasher.update(format!("{}:{}\n", path, hash).as_bytes());
     }
 
-    Ok(format!("{:x}", final_hasher.finalize()))
+    Ok(hex::encode(final_hasher.finalize()))
 }
 
 /// Merge user-supplied JSON-LD metadata into auto-generated dataset metadata.

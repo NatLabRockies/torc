@@ -57,7 +57,7 @@ pub fn compute_file_sha256(path: &str) -> Option<String> {
         }
     }
 
-    Some(format!("{:x}", hasher.finalize()))
+    Some(hex::encode(hasher.finalize()))
 }
 
 /// Build an RO-Crate File entity for a workflow file.

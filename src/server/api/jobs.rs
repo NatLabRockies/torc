@@ -805,7 +805,7 @@ impl JobsApiImpl {
         let mut hasher = Sha256::new();
         hasher.update(json_string.as_bytes());
         let hash_bytes = hasher.finalize();
-        let hash_hex = format!("{:x}", hash_bytes);
+        let hash_hex = hex::encode(hash_bytes);
 
         debug!("Computed input hash for job {}: {}", job_id, hash_hex);
         Ok(hash_hex)
@@ -1080,7 +1080,7 @@ impl JobsApiImpl {
 
             let mut hasher = Sha256::new();
             hasher.update(json_string.as_bytes());
-            let hash_hex = format!("{:x}", hasher.finalize());
+            let hash_hex = hex::encode(hasher.finalize());
 
             hash_pairs.push((job_id, hash_hex));
         }

@@ -7,7 +7,8 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use sysinfo::{
-    CpuExt, CpuRefreshKind, Pid, ProcessExt, ProcessRefreshKind, RefreshKind, System, SystemExt,
+    CpuRefreshKind, MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind,
+    System,
 };
 
 const DB_FILENAME_PREFIX: &str = "resource_metrics";
@@ -583,10 +584,10 @@ fn run_monitoring_loop(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use new_with_specifics to only refresh processes, CPU, and memory, avoiding user enumeration
     // which can crash on HPC systems with large LDAP user databases
-    let refresh_kind = RefreshKind::new()
+    let refresh_kind = RefreshKind::nothing()
         .with_processes(ProcessRefreshKind::everything())
         .with_cpu(CpuRefreshKind::everything())
-        .with_memory();
+        .with_memory(MemoryRefreshKind::everything());
     let mut sys = System::new_with_specifics(refresh_kind);
     let mut monitored_jobs: HashMap<u32, MonitoredJob> = HashMap::new();
     let sample_interval = Duration::from_secs(config.sample_interval_seconds as u64);
@@ -714,11 +715,11 @@ fn run_monitoring_loop(
                 }
                 MonitorCommand::Shutdown { response_tx } => {
                     if let Some(compute_node_config) = &compute_node_config {
-                        sys.refresh_cpu();
+                        sys.refresh_cpu_all();
                         sys.refresh_memory();
                         let timestamp = chrono::Utc::now().timestamp();
                         let cpu_percent = if compute_node_config.cpu {
-                            sys.global_cpu_info().cpu_usage() as f64
+                            sys.global_cpu_usage() as f64
                         } else {
                             0.0
                         };
@@ -775,10 +776,10 @@ fn run_monitoring_loop(
                 .values()
                 .any(|j| matches!(j.source, MonitorJobSource::Local { .. }));
             if has_local_jobs || compute_node_config.is_some() {
-                sys.refresh_processes();
+                sys.refresh_processes(ProcessesToUpdate::All, true);
             }
             if compute_node_config.is_some() {
-                sys.refresh_cpu();
+                sys.refresh_cpu_all();
                 sys.refresh_memory();
             }
 
@@ -851,7 +852,7 @@ fn run_monitoring_loop(
             let mut sampled_jobs = Vec::new();
             if let Some(compute_node_config) = &compute_node_config {
                 let cpu_percent = if compute_node_config.cpu {
-                    sys.global_cpu_info().cpu_usage() as f64
+                    sys.global_cpu_usage() as f64
                 } else {
                     0.0
                 };
