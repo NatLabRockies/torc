@@ -210,8 +210,29 @@ impl Configuration {
             };
             req_builder = req_builder.header("X-API-Key", value);
         }
+        // Advisory client identity, used by the server's API event stream
+        // when the request is not otherwise authenticated. Trivially
+        // spoofable; never used for authorization.
+        if let Some(value) = client_user_header_value() {
+            req_builder = req_builder.header(CLIENT_USER_HEADER, value);
+        }
         req_builder
     }
+}
+
+/// Header that carries the advisory client OS username for unauthenticated
+/// requests. Inspected by the server's `tail-api` event stream and ignored
+/// by every other code path.
+pub const CLIENT_USER_HEADER: &str = "X-Torc-Client-User";
+
+/// Resolve the value to send in [`CLIENT_USER_HEADER`], skipping empty or
+/// non-ASCII values that reqwest would reject.
+pub fn client_user_header_value() -> Option<String> {
+    let user = crate::get_username();
+    if user.is_empty() || !user.is_ascii() {
+        return None;
+    }
+    Some(user)
 }
 
 impl Default for Configuration {

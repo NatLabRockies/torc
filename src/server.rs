@@ -6,7 +6,9 @@
 pub mod api;
 pub mod api_constants;
 pub mod api_contract;
+pub mod api_event_stream;
 pub mod api_responses;
+pub mod api_stats;
 pub mod auth;
 pub mod authorization;
 pub mod context;

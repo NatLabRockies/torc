@@ -3,7 +3,9 @@
 //! This module provides a client for connecting to the SSE endpoint and
 //! receiving real-time job events from the server.
 
-use crate::client::apis::configuration::Configuration;
+use crate::client::apis::configuration::{
+    CLIENT_USER_HEADER, Configuration, client_user_header_value,
+};
 use crate::models::EventSeverity;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
@@ -101,6 +103,9 @@ impl SseConnection {
 
         // Build request and apply authentication from Configuration
         let mut request = client.get(&url).header("Accept", "text/event-stream");
+        if let Some(value) = client_user_header_value() {
+            request = request.header(CLIENT_USER_HEADER, value);
+        }
 
         // Apply basic authentication if configured
         if let Some((ref username, ref password)) = config.basic_auth {

@@ -1,6 +1,13 @@
 use crate::models;
 use crate::openapi_spec::{OpenApiAppState, PingResponse, VersionResponse};
 use crate::server::api_contract::TransportApiCore;
+use crate::server::api_event_stream::{
+    ApiEventBroadcaster, ApiRequestEvent, BODY_CAPTURE_HARD_CAP_BYTES, CapturedBody,
+    body_capture_limit,
+};
+use crate::server::api_stats::{
+    ApiStatsRing, ApiStatsSnapshot, DEFAULT_INTERVAL_SECONDS, DEFAULT_WINDOW_SECONDS,
+};
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::credential_cache::CredentialCache;
 use crate::server::dashboard::serve_dashboard;
@@ -8,11 +15,11 @@ use crate::server::htpasswd::HtpasswdFile;
 use crate::server::http_server::Server;
 use crate::server::http_transport::*;
 use crate::server::transport_types::auth_types::{AuthData, Authorization, Scopes, from_headers};
-use crate::server::transport_types::context_types::{EmptyContext, Push, XSpanIdString};
+use crate::server::transport_types::context_types::{EmptyContext, Has, Push, XSpanIdString};
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
-use axum::http::header::{HeaderName, HeaderValue};
+use axum::http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use axum::http::{Response, StatusCode};
 use axum::middleware::{self, Next};
 use axum::routing::{delete, get, post, put};
@@ -286,6 +293,11 @@ pub fn app_router(state: LiveRouterState) -> Router {
         )
         .route("/torc-service/v1/admin/reload-auth", post(reload_auth))
         .route(
+            "/torc-service/v1/admin/api-events/stream",
+            get(admin_api_events_stream),
+        )
+        .route("/torc-service/v1/admin/api-stats", get(admin_api_stats))
+        .route(
             "/torc-service/v1/workflows",
             get(list_workflows).post(create_workflow),
         )
@@ -369,9 +381,23 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(workflow_events_stream_route),
         )
         .fallback(dashboard_fallback)
+        // Innermost: build SSE events for connected admin subscribers.
+        // Reads the auth context populated by `inject_request_context`.
+        .layer(middleware::from_fn_with_state(
+            state.server.api_event_broadcaster.clone(),
+            capture_api_event,
+        ))
+        // Middle: resolve auth, inject request context, short-circuit
+        // on unauthenticated requests.
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             inject_request_context,
+        ))
+        // Outermost: load-stats accounting. Lives outside the auth layer
+        // so that 401s are still counted in `/admin/api-stats`.
+        .layer(middleware::from_fn_with_state(
+            state.server.api_stats.clone(),
+            record_api_stats,
         ))
         .with_state(state)
 }
@@ -524,6 +550,122 @@ pub async fn reload_auth(
     match state.server.reload_auth(&context).await {
         Ok(response) => reload_auth_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ApiEventStreamQuery {
+    /// When true, captured request and response bodies are included in
+    /// each event. Bodies are only captured when the inbound size is known
+    /// up front (via `Content-Length` or body size hint) and at most
+    /// 1 MiB; SSE response streams are skipped. Defaults to false so
+    /// payloads aren't streamed unless requested.
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub include_bodies: Option<bool>,
+}
+
+#[utoipa::path(
+    get,
+    tag = "system",
+    path = "/admin/api-events/stream",
+    operation_id = "admin_api_events_stream",
+    params(ApiEventStreamQuery),
+    responses(
+        (status = 200, description = "Server-Sent Events stream of inbound API requests")
+    )
+)]
+pub async fn admin_api_events_stream(
+    State(state): State<LiveRouterState>,
+    Query(params): Query<ApiEventStreamQuery>,
+) -> Response<Body> {
+    let bus = state.server.api_event_broadcaster.clone();
+    let mut receiver = bus.subscribe();
+    let include_bodies = params.include_bodies.unwrap_or(false);
+    let body_guard = if include_bodies {
+        Some(bus.body_subscriber_guard())
+    } else {
+        None
+    };
+
+    let stream = async_stream::stream! {
+        // Keep the body-subscriber count elevated for the lifetime of
+        // this connection.
+        let _body_guard = body_guard;
+        loop {
+            match receiver.recv().await {
+                Ok(mut event) => {
+                    redact_for_subscriber(&mut event, include_bodies);
+                    let data = serde_json::to_string(&event).unwrap_or_default();
+                    yield Ok::<_, std::convert::Infallible>(format!(
+                        "event: api\ndata: {}\n\n",
+                        data
+                    ));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                    yield Ok::<_, std::convert::Infallible>(format!(
+                        "event: warning\ndata: {{\"dropped\": {}}}\n\n",
+                        count
+                    ));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "text/event-stream")
+        .header("Cache-Control", "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(Body::from_stream(stream))
+        .expect("valid SSE response")
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ApiStatsQuery {
+    /// Total span of time to report on, in seconds. Defaults to 3600
+    /// (1 hour). Capped at the ring buffer's retention (3600s).
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub window_seconds: Option<u64>,
+    /// Aggregation bucket width in seconds. Defaults to 60.
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub interval_seconds: Option<u64>,
+}
+
+#[utoipa::path(
+    get,
+    tag = "system",
+    path = "/admin/api-stats",
+    operation_id = "admin_api_stats",
+    params(ApiStatsQuery),
+    responses(
+        (status = 200, description = "Aggregated request counts and bytes per bucket")
+    )
+)]
+pub async fn admin_api_stats(
+    State(state): State<LiveRouterState>,
+    Query(params): Query<ApiStatsQuery>,
+) -> Response<Body> {
+    let window = params.window_seconds.unwrap_or(DEFAULT_WINDOW_SECONDS);
+    let interval = params.interval_seconds.unwrap_or(DEFAULT_INTERVAL_SECONDS);
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let snapshot: ApiStatsSnapshot = state.server.api_stats.snapshot(now_ms, window, interval);
+    json_response_ok(&snapshot)
+}
+
+fn json_response_ok<T: serde::Serialize>(value: &T) -> Response<Body> {
+    match serde_json::to_vec(value) {
+        Ok(body) => Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .expect("valid json response"),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     }
 }
 
@@ -4110,6 +4252,218 @@ async fn inject_request_context(
     response
 }
 
+async fn record_api_stats(
+    State(stats): State<ApiStatsRing>,
+    request: Request,
+    next: Next,
+) -> Response<Body> {
+    let bytes_in = content_length_header(request.headers());
+    let response = next.run(request).await;
+    let bytes_out = content_length_header(response.headers());
+    stats.record(
+        chrono::Utc::now().timestamp_millis(),
+        response.status().as_u16(),
+        bytes_in,
+        bytes_out,
+    );
+    response
+}
+
+async fn capture_api_event(
+    State(bus): State<ApiEventBroadcaster>,
+    request: Request,
+    next: Next,
+) -> Response<Body> {
+    if bus.receiver_count() == 0 {
+        return next.run(request).await;
+    }
+    let want_bodies = bus.body_subscriber_count() > 0;
+
+    let started = std::time::Instant::now();
+    let method = request.method().as_str().to_owned();
+    let path = request.uri().path().to_owned();
+    let query = request.uri().query().map(|s| s.to_owned());
+
+    let advisory_user = request
+        .headers()
+        .get("x-torc-client-user")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_owned());
+
+    let (request_id, user) = match request.extensions().get::<EmptyContext>() {
+        Some(ctx) => {
+            let span_id: &XSpanIdString = ctx.get();
+            let auth: &Option<Authorization> = ctx.get();
+            let resolved = auth.as_ref().map(|a| a.subject.clone());
+            // When the server runs without `--auth-file`, every request
+            // resolves to "anonymous" — fall back to the advisory client
+            // header so the event stream surfaces who's calling.
+            let user = match resolved.as_deref() {
+                None | Some("anonymous") => advisory_user.or(resolved),
+                Some(_) => resolved,
+            };
+            (Some(span_id.0.clone()), user)
+        }
+        None => (None, advisory_user),
+    };
+
+    let display_limit = body_capture_limit();
+
+    let (request, request_body) = if want_bodies {
+        match capture_request_body(request, display_limit).await {
+            Ok(pair) => pair,
+            Err(early) => return early,
+        }
+    } else {
+        (request, None)
+    };
+
+    let response = next.run(request).await;
+
+    let (response, response_body) = if want_bodies {
+        match capture_response_body(response, display_limit).await {
+            Ok(pair) => pair,
+            Err(early) => return early,
+        }
+    } else {
+        (response, None)
+    };
+
+    let event = ApiRequestEvent {
+        timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        method,
+        path,
+        query,
+        status: response.status().as_u16(),
+        latency_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+        request_id,
+        user,
+        request_body,
+        response_body,
+    };
+
+    bus.broadcast(event);
+    response
+}
+
+fn content_length_header(headers: &axum::http::HeaderMap) -> u64 {
+    headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+/// Outcome of attempting to capture a request body.
+///
+/// `Err(response)` means the body could not be read and the middleware
+/// should short-circuit with the contained error response rather than
+/// silently substituting an empty body for the handler.
+async fn capture_request_body(
+    request: Request,
+    display_limit: usize,
+) -> Result<(Request, Option<CapturedBody>), Response<Body>> {
+    use http_body::Body as _;
+    use http_body_util::BodyExt as _;
+
+    if !body_size_known_within_cap(request.headers(), request.body().size_hint().upper()) {
+        return Ok((request, None));
+    }
+
+    let (parts, body) = request.into_parts();
+    match body.collect().await {
+        Ok(collected) => {
+            let bytes = collected.to_bytes();
+            let captured = if bytes.len() > BODY_CAPTURE_HARD_CAP_BYTES {
+                None
+            } else {
+                Some(CapturedBody::from_bytes(&bytes, display_limit))
+            };
+            let new_req = Request::from_parts(parts, Body::from(bytes));
+            Ok((new_req, captured))
+        }
+        Err(_) => Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "request body could not be read".to_string(),
+        )),
+    }
+}
+
+/// Outcome of attempting to capture a response body. `Err(response)`
+/// means the handler's body errored mid-stream while we were buffering
+/// it for capture; we replace the broken response with a synthesized
+/// 502 rather than truncating it to an empty body.
+async fn capture_response_body(
+    response: Response<Body>,
+    display_limit: usize,
+) -> Result<(Response<Body>, Option<CapturedBody>), Response<Body>> {
+    use http_body::Body as _;
+    use http_body_util::BodyExt as _;
+
+    let is_event_stream = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.starts_with("text/event-stream"))
+        .unwrap_or(false);
+    if is_event_stream {
+        return Ok((response, None));
+    }
+    if !body_size_known_within_cap(response.headers(), response.body().size_hint().upper()) {
+        return Ok((response, None));
+    }
+
+    let (parts, body) = response.into_parts();
+    match body.collect().await {
+        Ok(collected) => {
+            let bytes = collected.to_bytes();
+            let captured = if bytes.len() > BODY_CAPTURE_HARD_CAP_BYTES {
+                None
+            } else {
+                Some(CapturedBody::from_bytes(&bytes, display_limit))
+            };
+            let new_resp = Response::from_parts(parts, Body::from(bytes));
+            Ok((new_resp, captured))
+        }
+        Err(_) => Err(error_response(
+            StatusCode::BAD_GATEWAY,
+            "response body could not be read".to_string(),
+        )),
+    }
+}
+
+/// Redact any captured bodies for subscribers that did not opt in to
+/// `include_bodies=true`. Bodies are captured at the broadcaster level
+/// when *any* subscriber wants them, so per-connection filtering happens
+/// here.
+fn redact_for_subscriber(event: &mut ApiRequestEvent, include_bodies: bool) {
+    if !include_bodies {
+        event.request_body = None;
+        event.response_body = None;
+    }
+}
+
+/// Returns `true` only when we can prove (from `Content-Length` or the
+/// body's own size hint) that the payload is at most
+/// [`BODY_CAPTURE_HARD_CAP_BYTES`]. Bodies whose size is unknown (e.g.
+/// chunked uploads with no advertised length) are treated as too big to
+/// safely buffer for capture.
+fn body_size_known_within_cap(headers: &axum::http::HeaderMap, hint_upper: Option<u64>) -> bool {
+    let cl = headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
+    let bounded = match (cl, hint_upper) {
+        (None, None) => return false,
+        (Some(c), None) => c,
+        (None, Some(u)) => u,
+        (Some(c), Some(u)) => c.max(u),
+    };
+    bounded <= BODY_CAPTURE_HARD_CAP_BYTES as u64
+}
+
 fn add_standard_response_headers(response: &mut Response<Body>, span_id: &XSpanIdString) {
     response.headers_mut().insert(
         HeaderName::from_static("x-span-id"),
@@ -4260,6 +4614,303 @@ mod live_router_tests {
             .expect("router response");
 
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn capture_middleware_publishes_event_for_each_request() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        let mut rx = bus.subscribe();
+        let router = test_router(server);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping?probe=1")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event broadcast within 1s")
+            .expect("broadcast succeeded");
+
+        assert_eq!(event.method, "GET");
+        assert_eq!(event.path, "/torc-service/v1/ping");
+        assert_eq!(event.query.as_deref(), Some("probe=1"));
+        assert_eq!(event.status, 200);
+        assert!(event.request_id.is_some(), "x-span-id should be set");
+        // Without a body subscriber, bodies stay None even though a
+        // metadata receiver is connected.
+        assert!(event.request_body.is_none());
+        assert!(event.response_body.is_none());
+    }
+
+    #[tokio::test]
+    async fn api_stats_endpoint_reports_recorded_requests() {
+        let server = test_server_with_schema().await;
+        let router = test_router(server);
+
+        // Drive a few requests through the middleware so the ring has
+        // something to report.
+        for _ in 0..3 {
+            let resp = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri("/torc-service/v1/ping")
+                        .body(Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("router response");
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/admin/api-stats?window_seconds=60&interval_seconds=60")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let snap: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("valid api-stats response");
+        let buckets = snap["buckets"].as_array().expect("buckets array");
+        assert!(!buckets.is_empty());
+        // 3 ping requests + the api-stats request itself = at least 3
+        let total_requests: u64 = buckets
+            .iter()
+            .map(|b| b["request_count"].as_u64().unwrap_or(0))
+            .sum();
+        assert!(
+            total_requests >= 3,
+            "expected at least 3 recorded requests, got {total_requests}"
+        );
+    }
+
+    #[tokio::test]
+    async fn api_stats_records_unauthenticated_requests() {
+        let server = test_server_with_schema().await;
+        let stats = server.api_stats.clone();
+        let router = test_router_with_auth(server, true);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 60, 60);
+        let total: u64 = snap.buckets.iter().map(|b| b.request_count).sum();
+        let total_4xx: u64 = snap.buckets.iter().map(|b| b.status_4xx).sum();
+        assert_eq!(total, 1, "the 401 should still be recorded");
+        assert_eq!(total_4xx, 1, "the 401 should be tallied as a 4xx");
+    }
+
+    #[test]
+    fn redact_for_subscriber_strips_bodies_when_not_opted_in() {
+        let mut event = ApiRequestEvent {
+            timestamp_ms: 1,
+            method: "POST".into(),
+            path: "/x".into(),
+            query: None,
+            status: 200,
+            latency_ms: 0,
+            request_id: None,
+            user: None,
+            request_body: Some(CapturedBody {
+                bytes: 5,
+                truncated: false,
+                text: Some("hello".into()),
+            }),
+            response_body: Some(CapturedBody {
+                bytes: 2,
+                truncated: false,
+                text: Some("ok".into()),
+            }),
+        };
+        redact_for_subscriber(&mut event, false);
+        assert!(event.request_body.is_none());
+        assert!(event.response_body.is_none());
+    }
+
+    #[test]
+    fn redact_for_subscriber_keeps_bodies_when_opted_in() {
+        let mut event = ApiRequestEvent {
+            timestamp_ms: 1,
+            method: "POST".into(),
+            path: "/x".into(),
+            query: None,
+            status: 200,
+            latency_ms: 0,
+            request_id: None,
+            user: None,
+            request_body: Some(CapturedBody {
+                bytes: 5,
+                truncated: false,
+                text: Some("hello".into()),
+            }),
+            response_body: None,
+        };
+        redact_for_subscriber(&mut event, true);
+        assert!(event.request_body.is_some());
+    }
+
+    #[tokio::test]
+    async fn capture_short_circuits_on_request_body_error() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        // Hold a subscriber + body guard so the middleware tries to
+        // capture the request body.
+        let _rx = bus.subscribe();
+        let _body_guard = bus.body_subscriber_guard();
+        let router = test_router(server);
+
+        // Stream yields a single error; the middleware's collect() will
+        // surface it. Content-Length keeps the size-known check happy
+        // so we actually exercise the collect path.
+        let bad_stream = futures::stream::iter(vec![Err::<&[u8], std::io::Error>(
+            std::io::Error::other("boom"),
+        )]);
+        let bad_body = Body::from_stream(bad_stream);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/torc-service/v1/workflows")
+                    .header(CONTENT_TYPE, "application/json")
+                    .header(axum::http::header::CONTENT_LENGTH, "10")
+                    .body(bad_body)
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+
+        // Middleware short-circuits with 400 instead of forwarding an
+        // empty body to the handler.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn body_size_known_within_cap_handles_inputs() {
+        use axum::http::HeaderMap;
+        // Both unknown -> can't safely capture
+        assert!(!body_size_known_within_cap(&HeaderMap::new(), None));
+
+        // Content-Length set, small -> ok
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_static("128"),
+        );
+        assert!(body_size_known_within_cap(&headers, None));
+
+        // Content-Length set, oversized -> reject
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_static("99999999"),
+        );
+        assert!(!body_size_known_within_cap(&headers, None));
+
+        // No Content-Length, but body advertises a small upper bound
+        assert!(body_size_known_within_cap(&HeaderMap::new(), Some(256)));
+
+        // Both signals present, the larger one wins for the cap check
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_static("128"),
+        );
+        assert!(!body_size_known_within_cap(&headers, Some(99_999_999)));
+    }
+
+    #[tokio::test]
+    async fn capture_middleware_falls_back_to_client_user_header() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        let mut rx = bus.subscribe();
+        let router = test_router(server);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .header("X-Torc-Client-User", "alice")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event broadcast within 1s")
+            .expect("broadcast succeeded");
+
+        // Without auth configured the resolved subject would be
+        // "anonymous"; the advisory header takes its place.
+        assert_eq!(event.user.as_deref(), Some("alice"));
+    }
+
+    #[tokio::test]
+    async fn capture_middleware_streams_bodies_when_subscriber_requests_them() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        let mut rx = bus.subscribe();
+        let _body_guard = bus.body_subscriber_guard();
+        let router = test_router(server);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event broadcast within 1s")
+            .expect("broadcast succeeded");
+
+        assert_eq!(event.path, "/torc-service/v1/ping");
+        let resp_body = event
+            .response_body
+            .expect("response body should be captured");
+        assert!(!resp_body.truncated);
+        assert!(resp_body.text.is_some());
     }
 
     #[tokio::test]
@@ -4497,12 +5148,16 @@ mod live_router_tests {
     }
 
     fn test_router(server: Server<EmptyContext>) -> Router {
+        test_router_with_auth(server, false)
+    }
+
+    fn test_router_with_auth(server: Server<EmptyContext>, require_auth: bool) -> Router {
         app_router(LiveRouterState {
             openapi_state: server.openapi_app_state(),
             server,
             auth: LiveAuthState {
                 htpasswd: Arc::new(RwLock::new(None)),
-                require_auth: false,
+                require_auth,
                 credential_cache: Arc::new(RwLock::new(None)),
             },
         })

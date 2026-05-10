@@ -141,6 +141,9 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
   `./torc-server-snapshot.db`). See
   [In-Memory Database with Snapshots](#in-memory-database-with-snapshots-advanced).
 - `TORC_SERVER_SNAPSHOT_KEEP`: Number of snapshots to retain (default `5`, minimum `1`)
+- `TORC_API_EVENT_BODY_MAX_BYTES`: Per-direction cap on captured request/response bodies surfaced
+  through `torc admin tail-api` (default `8192`). See
+  [Live API Request Inspection](#live-api-request-inspection).
 
 Example:
 
@@ -636,6 +639,117 @@ torc admin reload-auth
 For Docker/Kubernetes deployments, call `torc admin reload-auth` after updating the htpasswd file
 instead of restarting the container. See
 [Hot-Reloading Credentials](./authentication.md#hot-reloading-credentials) for details.
+
+## Live API Request Inspection
+
+`torc admin tail-api` streams a structured event for every inbound HTTP request the server
+processes, delivered over Server-Sent Events. It is intended for debugging traffic against a running
+server without tailing log files: events are network-accessible, structured, and emitted in real
+time.
+
+```bash
+# Watch all API requests as they arrive
+torc admin tail-api
+
+# Include captured request and response bodies (subject to size caps)
+torc admin tail-api --include-bodies
+
+# Stream JSON, one event per line, e.g. for piping to jq
+torc -f json admin tail-api | jq .
+```
+
+Each event includes the HTTP method, path, query string, status code, latency in milliseconds, the
+`x-span-id` assigned by the server, and the authenticated user (when one was resolved). Output
+fields:
+
+| Field           | Description                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| `timestamp_ms`  | Unix epoch milliseconds at which the request finished.                   |
+| `method`        | HTTP method (`GET`, `POST`, …).                                          |
+| `path`          | URL path (without query string).                                         |
+| `query`         | URL query string, when present.                                          |
+| `status`        | Final HTTP status code returned to the client.                           |
+| `latency_ms`    | Wall-clock duration spent inside the router.                             |
+| `request_id`    | Server-assigned `x-span-id` for cross-referencing log lines.             |
+| `user`          | Authenticated subject, or advisory client user (see below).              |
+| `request_body`  | Captured request body, only when `--include-bodies` is set (see below).  |
+| `response_body` | Captured response body, only when `--include-bodies` is set (see below). |
+
+### Body capture
+
+Body capture is **opt-in**. When `--include-bodies` is set, the server captures up to **8 KiB** per
+direction and includes truncated UTF-8 text in each event. Override the per-direction display cap
+with `TORC_API_EVENT_BODY_MAX_BYTES`.
+
+Independent of the display cap, the server enforces a **1 MiB hard ceiling** on bytes it will buffer
+in memory and only captures bodies whose size is advertised up front (via `Content-Length` or the
+body's size hint). Larger payloads, chunked uploads with no advertised length, and SSE response
+streams (e.g. `/workflows/{id}/events/stream`) are passed through untouched and emitted with no
+body. Binary payloads are still recorded — `bytes` reflects the total length — but the `text` field
+is omitted so consumers can detect non-UTF-8 content.
+
+`Authorization` and `Cookie` headers are never captured under any setting.
+
+### How the `user` field is populated
+
+When the server is running with `--auth-file`, the `user` field contains the authenticated subject
+resolved from Basic Auth. When the server is running **without** `--auth-file`, every request would
+otherwise resolve to `anonymous`, which is not very useful for debugging. To improve that, the
+`torc` CLI sends an advisory `X-Torc-Client-User` header on every API call, sourced from
+`TORC_USERNAME` / `USER` / `USERNAME`. The capture middleware uses this header **only as a
+fallback** when no real authentication was resolved.
+
+The advisory header is **trivially spoofable** by any client and is never used for authorization or
+workflow-ownership decisions — only for labeling events in this stream. If you need a trustworthy
+`user` field, run the server with `--auth-file` and `--require-auth`.
+
+### Performance
+
+When no admin client is connected to the stream, the capture middleware short-circuits — no bodies
+are buffered and no event is constructed, so the runtime cost on the request hot path is negligible.
+Subscribing one or more admins begins event construction; subscribing _with_ `--include-bodies` is
+what triggers body buffering.
+
+### Endpoint
+
+The underlying endpoint is `GET /torc-service/v1/admin/api-events/stream`. It accepts a single
+optional query parameter, `include_bodies=true`. Like other admin endpoints (e.g.
+`/admin/reload-auth`), it requires standard server authentication but no additional admin role —
+restrict access via your htpasswd file or upstream proxy.
+
+## Server Load Stats
+
+For an at-a-glance view of how busy the server is — without streaming individual requests — use
+`torc admin api-stats`. The server keeps a 1-hour ring of per-second counters; the CLI fetches an
+aggregated snapshot and renders it as a table.
+
+```bash
+# Last hour, in 1-minute buckets (default)
+torc admin api-stats
+
+# Last 5 minutes, in 30-second buckets
+torc admin api-stats --window 300 --interval 30
+
+# Raw JSON for scripts or jq
+torc -f json admin api-stats
+```
+
+Each row reports request count, requests-per-second, bytes in / bytes out, and a 2xx / 4xx / 5xx
+status breakdown for that interval. A trailing `Total:` line sums the entire window.
+
+### Counters
+
+The capture middleware records every request — independent of whether anyone is connected to
+`tail-api`, so the ring is always up to date. Bytes are read from the `Content-Length` request and
+response headers; chunked or streaming responses (notably the SSE event streams themselves) do not
+advertise a length and contribute `0` bytes, although the request itself is still counted. Stats are
+in-memory only and reset on server restart.
+
+### Endpoint
+
+The underlying endpoint is `GET /torc-service/v1/admin/api-stats`, with optional `window_seconds`
+(default `3600`, capped at the ring size) and `interval_seconds` (default `60`) query parameters.
+Buckets are returned newest-first.
 
 ## Log Rotation Strategy
 
