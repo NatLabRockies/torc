@@ -4312,7 +4312,10 @@ async fn capture_api_event(
     let display_limit = body_capture_limit();
 
     let (request, request_body) = if want_bodies {
-        capture_request_body(request, display_limit).await
+        match capture_request_body(request, display_limit).await {
+            Ok(pair) => pair,
+            Err(early) => return early,
+        }
     } else {
         (request, None)
     };
@@ -4320,7 +4323,10 @@ async fn capture_api_event(
     let response = next.run(request).await;
 
     let (response, response_body) = if want_bodies {
-        capture_response_body(response, display_limit).await
+        match capture_response_body(response, display_limit).await {
+            Ok(pair) => pair,
+            Err(early) => return early,
+        }
     } else {
         (response, None)
     };
@@ -4350,15 +4356,20 @@ fn content_length_header(headers: &axum::http::HeaderMap) -> u64 {
         .unwrap_or(0)
 }
 
+/// Outcome of attempting to capture a request body.
+///
+/// `Err(response)` means the body could not be read and the middleware
+/// should short-circuit with the contained error response rather than
+/// silently substituting an empty body for the handler.
 async fn capture_request_body(
     request: Request,
     display_limit: usize,
-) -> (Request, Option<CapturedBody>) {
+) -> Result<(Request, Option<CapturedBody>), Response<Body>> {
     use http_body::Body as _;
     use http_body_util::BodyExt as _;
 
     if !body_size_known_within_cap(request.headers(), request.body().size_hint().upper()) {
-        return (request, None);
+        return Ok((request, None));
     }
 
     let (parts, body) = request.into_parts();
@@ -4371,16 +4382,23 @@ async fn capture_request_body(
                 Some(CapturedBody::from_bytes(&bytes, display_limit))
             };
             let new_req = Request::from_parts(parts, Body::from(bytes));
-            (new_req, captured)
+            Ok((new_req, captured))
         }
-        Err(_) => (Request::from_parts(parts, Body::empty()), None),
+        Err(_) => Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "request body could not be read".to_string(),
+        )),
     }
 }
 
+/// Outcome of attempting to capture a response body. `Err(response)`
+/// means the handler's body errored mid-stream while we were buffering
+/// it for capture; we replace the broken response with a synthesized
+/// 502 rather than truncating it to an empty body.
 async fn capture_response_body(
     response: Response<Body>,
     display_limit: usize,
-) -> (Response<Body>, Option<CapturedBody>) {
+) -> Result<(Response<Body>, Option<CapturedBody>), Response<Body>> {
     use http_body::Body as _;
     use http_body_util::BodyExt as _;
 
@@ -4391,10 +4409,10 @@ async fn capture_response_body(
         .map(|ct| ct.starts_with("text/event-stream"))
         .unwrap_or(false);
     if is_event_stream {
-        return (response, None);
+        return Ok((response, None));
     }
     if !body_size_known_within_cap(response.headers(), response.body().size_hint().upper()) {
-        return (response, None);
+        return Ok((response, None));
     }
 
     let (parts, body) = response.into_parts();
@@ -4407,9 +4425,12 @@ async fn capture_response_body(
                 Some(CapturedBody::from_bytes(&bytes, display_limit))
             };
             let new_resp = Response::from_parts(parts, Body::from(bytes));
-            (new_resp, captured)
+            Ok((new_resp, captured))
         }
-        Err(_) => (Response::from_parts(parts, Body::empty()), None),
+        Err(_) => Err(error_response(
+            StatusCode::BAD_GATEWAY,
+            "response body could not be read".to_string(),
+        )),
     }
 }
 
@@ -4757,6 +4778,42 @@ mod live_router_tests {
         };
         redact_for_subscriber(&mut event, true);
         assert!(event.request_body.is_some());
+    }
+
+    #[tokio::test]
+    async fn capture_short_circuits_on_request_body_error() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        // Hold a subscriber + body guard so the middleware tries to
+        // capture the request body.
+        let _rx = bus.subscribe();
+        let _body_guard = bus.body_subscriber_guard();
+        let router = test_router(server);
+
+        // Stream yields a single error; the middleware's collect() will
+        // surface it. Content-Length keeps the size-known check happy
+        // so we actually exercise the collect path.
+        let bad_stream = futures::stream::iter(vec![Err::<&[u8], std::io::Error>(
+            std::io::Error::other("boom"),
+        )]);
+        let bad_body = Body::from_stream(bad_stream);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/torc-service/v1/workflows")
+                    .header(CONTENT_TYPE, "application/json")
+                    .header(axum::http::header::CONTENT_LENGTH, "10")
+                    .body(bad_body)
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+
+        // Middleware short-circuits with 400 instead of forwarding an
+        // empty body to the handler.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
