@@ -29,7 +29,6 @@ impl RotatingWriter {
             AppendCount::new(5),                   // Keep 5 rotated files
             ContentLimit::Bytes(10 * 1024 * 1024), // 10 MiB
             Compression::None,
-            #[cfg(unix)]
             None,
         );
 
