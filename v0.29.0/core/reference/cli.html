@@ -1,0 +1,1987 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>CLI Reference - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.29.0/docs/src/core/reference/cli.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
+<p>This document contains the help content for the <code>torc</code> command-line program.</p>
+<p><strong>Command Overview:</strong></p>
+<ul>
+<li><a href="#torc"><code>torc</code></a></li>
+<li><a href="#torc-run"><code>torc run</code></a></li>
+<li><a href="#torc-submit"><code>torc submit</code></a></li>
+<li><a href="#torc-submit-slurm"><code>torc slurm generate</code> + <code>torc submit</code></a></li>
+<li><a href="#torc-watch"><code>torc watch</code></a></li>
+<li><a href="#torc-recover"><code>torc recover</code></a></li>
+<li><a href="#torc-workflows"><code>torc workflows</code></a></li>
+<li><a href="#torc-compute-nodes"><code>torc compute-nodes</code></a></li>
+<li><a href="#torc-files"><code>torc files</code></a></li>
+<li><a href="#torc-jobs"><code>torc jobs</code></a></li>
+<li><a href="#torc-tasks"><code>torc tasks</code></a></li>
+<li><a href="#torc-job-dependencies"><code>torc job-dependencies</code></a></li>
+<li><a href="#torc-resource-requirements"><code>torc resource-requirements</code></a></li>
+<li><a href="#torc-events"><code>torc events</code></a></li>
+<li><a href="#torc-results"><code>torc results</code></a></li>
+<li><a href="#torc-user-data"><code>torc user-data</code></a></li>
+<li><a href="#torc-slurm"><code>torc slurm</code></a></li>
+<li><a href="#torc-remote"><code>torc remote</code></a></li>
+<li><a href="#torc-scheduled-compute-nodes"><code>torc scheduled-compute-nodes</code></a></li>
+<li><a href="#torc-hpc"><code>torc hpc</code></a></li>
+<li><a href="#torc-reports"><code>torc reports</code></a></li>
+<li><a href="#torc-config"><code>torc config</code></a></li>
+<li><a href="#torc-tui"><code>torc tui</code></a></li>
+<li><a href="#torc-plot-resources"><code>torc plot-resources</code></a></li>
+<li><a href="#torc-completions"><code>torc completions</code></a></li>
+</ul>
+<h2 id="torc"><a class="header" href="#torc"><code>torc</code></a></h2>
+<p>Torc workflow orchestration system</p>
+<p><strong>Usage:</strong> <code>torc [OPTIONS] &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands"><a class="header" href="#subcommands"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>run</code> — Run a workflow locally (create from spec file or run existing workflow by ID)</li>
+<li><code>submit</code> — Submit a workflow to scheduler (create from spec file or submit existing workflow by
+ID)</li>
+<li><code>slurm generate</code> + <code>submit</code> — Submit a workflow to Slurm with auto-generated schedulers</li>
+<li><code>watch</code> — Watch a workflow and automatically recover from failures</li>
+<li><code>recover</code> — Recover a Slurm workflow from failures (one-shot)</li>
+<li><code>workflows</code> — Workflow management commands</li>
+<li><code>compute-nodes</code> — Compute node management commands</li>
+<li><code>files</code> — File management commands</li>
+<li><code>jobs</code> — Job management commands</li>
+<li><code>job-dependencies</code> — Job dependency and relationship queries</li>
+<li><code>resource-requirements</code> — Resource requirements management commands</li>
+<li><code>events</code> — Event management commands</li>
+<li><code>results</code> — Result management commands</li>
+<li><code>user-data</code> — User data management commands</li>
+<li><code>slurm</code> — Slurm scheduler commands</li>
+<li><code>remote</code> — Remote worker execution commands (SSH-based distributed execution)</li>
+<li><code>scheduled-compute-nodes</code> — Scheduled compute node management commands</li>
+<li><code>hpc</code> — HPC system profiles and partition information</li>
+<li><code>reports</code> — Generate reports and analytics</li>
+<li><code>config</code> — Manage configuration files and settings</li>
+<li><code>tui</code> — Interactive terminal UI for managing workflows</li>
+<li><code>plot-resources</code> — Generate interactive HTML plots from resource monitoring data</li>
+<li><code>completions</code> — Generate shell completions</li>
+</ul>
+<h6 id="options"><a class="header" href="#options"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--log-level &lt;LOG_LEVEL&gt;</code> — Log level (error, warn, info, debug, trace)</li>
+<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (table or json). Default: <code>table</code></li>
+<li><code>--url &lt;URL&gt;</code> — URL of torc server</li>
+<li><code>--username &lt;USERNAME&gt;</code> — Username for basic authentication</li>
+<li><code>--password &lt;PASSWORD&gt;</code> — Password for basic authentication (will prompt if username provided but
+password not)</li>
+</ul>
+<h2 id="torc-run"><a class="header" href="#torc-run"><code>torc run</code></a></h2>
+<p>Run a workflow locally (create from spec file or run existing workflow by ID)</p>
+<p><strong>Usage:</strong> <code>torc run [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
+<h6 id="arguments"><a class="header" href="#arguments"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID</li>
+</ul>
+<h6 id="options-1"><a class="header" href="#options-1"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--max-parallel-jobs &lt;MAX_PARALLEL_JOBS&gt;</code> — Maximum number of parallel jobs to run concurrently</li>
+<li><code>--num-cpus &lt;NUM_CPUS&gt;</code> — Number of CPUs available</li>
+<li><code>--memory-gb &lt;MEMORY_GB&gt;</code> — Memory in GB</li>
+<li><code>--num-gpus &lt;NUM_GPUS&gt;</code> — Number of GPUs available</li>
+<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Job completion poll interval in seconds</li>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for jobs</li>
+<li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
+Default: <code>false</code></li>
+</ul>
+<h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
+<p>Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)</p>
+<p>Requires workflow to have an on_workflow_start action with schedule_nodes. For Slurm workflows
+without pre-configured schedulers, use <code>slurm generate</code> + <code>submit</code> instead.</p>
+<p><strong>Usage:</strong> <code>torc submit [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
+<h6 id="arguments-1"><a class="header" href="#arguments-1"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID</li>
+</ul>
+<h6 id="options-2"><a class="header" href="#options-2"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-i</code>, <code>--ignore-missing-data</code> — Ignore missing data. Default: <code>false</code></li>
+<li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
+Default: <code>false</code></li>
+</ul>
+<h2 id="torc-slurm-generate--torc-submit"><a class="header" href="#torc-slurm-generate--torc-submit"><code>torc slurm generate</code> + <code>torc submit</code></a></h2>
+<p>Submit a workflow to Slurm with auto-generated schedulers</p>
+<p>Automatically generates Slurm schedulers based on job resource requirements and HPC profile.</p>
+<p>WARNING: This command uses heuristics to generate schedulers and workflow actions. For complex
+workflows with unusual dependency patterns, the generated configuration may not be optimal and could
+waste allocation time.</p>
+<p>RECOMMENDED: Preview the generated configuration first with:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;account&gt; workflow.yaml
+</code></pre>
+<p>Review the schedulers and actions to ensure they are appropriate for your workflow before
+submitting. You can save the output and submit manually:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;account&gt; -o workflow_with_schedulers.yaml workflow.yaml
+torc submit workflow_with_schedulers.yaml
+</code></pre>
+<p><strong>Usage:</strong></p>
+<pre><code class="language-bash">torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;
+torc submit &lt;OUTPUT_FILE&gt;
+</code></pre>
+<p>See <a href="#torc-slurm-generate"><code>torc slurm generate</code></a> for full options.</p>
+<h2 id="torc-watch"><a class="header" href="#torc-watch"><code>torc watch</code></a></h2>
+<p>Watch a workflow and automatically recover from failures.</p>
+<p>Monitors a workflow until completion. With <code>--recover</code>, automatically diagnoses failures, adjusts
+resource requirements, and resubmits jobs.</p>
+<p><strong>Usage:</strong> <code>torc watch [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
+<h3 id="usage-modes"><a class="header" href="#usage-modes">Usage Modes</a></h3>
+<ol>
+<li>
+<p><strong>Basic monitoring</strong> (no recovery):</p>
+<pre><code class="language-bash">torc watch 123
+</code></pre>
+<p>Reports failures and exits. Use for manual intervention or AI-assisted recovery.</p>
+</li>
+<li>
+<p><strong>With automatic recovery</strong> (<code>--recover</code>):</p>
+<pre><code class="language-bash">torc watch 123 --recover
+</code></pre>
+<p>Automatically diagnoses OOM/timeout failures, adjusts resources, and retries. Runs until all jobs
+complete. Use <code>--max-retries</code> to limit recovery attempts.</p>
+</li>
+<li>
+<p><strong>With auto-scheduling</strong> (<code>--auto-schedule</code>):</p>
+<pre><code class="language-bash">torc watch 123 --auto-schedule
+</code></pre>
+<p>Automatically submits new Slurm allocations when retry jobs are waiting. Essential for workflows
+using failure handlers that create retry jobs.</p>
+</li>
+</ol>
+<h3 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h3>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to watch</li>
+</ul>
+<h3 id="options-3"><a class="header" href="#options-3">Options</a></h3>
+<p><strong>Polling:</strong></p>
+<ul>
+<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds. Default: <code>60</code></li>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job files. Default: <code>output</code></li>
+<li><code>-s</code>, <code>--show-job-counts</code> — Show job counts by status during polling. WARNING: Can cause high
+server load for large workflows.</li>
+</ul>
+<p><strong>Recovery:</strong></p>
+<ul>
+<li><code>-r</code>, <code>--recover</code> — Enable automatic failure recovery</li>
+<li><code>-m</code>, <code>--max-retries &lt;MAX_RETRIES&gt;</code> — Maximum number of recovery attempts. Default: unlimited</li>
+<li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for OOM failures. Default: <code>1.5</code></li>
+<li><code>--runtime-multiplier &lt;RUNTIME_MULTIPLIER&gt;</code> — Runtime multiplier for timeout failures. Default:
+<code>1.5</code></li>
+<li><code>--retry-unknown</code> — Also retry jobs with unknown failure causes (not just OOM or timeout)</li>
+<li><code>--recovery-hook &lt;RECOVERY_HOOK&gt;</code> — Custom recovery script for unknown failures. The workflow ID
+is passed as the final argument; the hook also receives <code>TORC_WORKFLOW_ID</code>, <code>TORC_RUN_ID</code>, and
+<code>TORC_API_URL</code> in its environment.</li>
+</ul>
+<p><strong>Auto-scheduling:</strong></p>
+<ul>
+<li><code>--auto-schedule</code> — Automatically schedule new compute nodes when needed</li>
+<li><code>--auto-schedule-threshold &lt;N&gt;</code> — Minimum retry jobs before auto-scheduling when schedulers exist.
+Default: <code>5</code></li>
+<li><code>--auto-schedule-cooldown &lt;SECONDS&gt;</code> — Cooldown between auto-schedule attempts. Default: <code>1800</code>
+(30 min)</li>
+<li><code>--auto-schedule-stranded-timeout &lt;SECONDS&gt;</code> — Schedule stranded jobs after this timeout even if
+below threshold. Default: <code>7200</code> (2 hrs). Set to <code>0</code> to disable.</li>
+</ul>
+<p><strong>Scheduler overrides:</strong></p>
+<ul>
+<li><code>--partition &lt;PARTITION&gt;</code> — Fixed Slurm partition for regenerated schedulers. Bypasses automatic
+partition selection. Node count is still calculated dynamically.</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Fixed Slurm walltime for regenerated schedulers (format: <code>HH:MM:SS</code> or
+<code>D-HH:MM:SS</code>). Bypasses automatic walltime calculation. Node count is still calculated
+dynamically.</li>
+</ul>
+<h3 id="auto-scheduling-behavior"><a class="header" href="#auto-scheduling-behavior">Auto-Scheduling Behavior</a></h3>
+<p>When <code>--auto-schedule</code> is enabled:</p>
+<ol>
+<li><strong>No schedulers available</strong>: Immediately submits new allocations if ready jobs exist.</li>
+<li><strong>Threshold exceeded</strong>: If retry jobs (attempt_id &gt; 1) exceed <code>--auto-schedule-threshold</code> while
+schedulers are running, submits additional allocations after cooldown.</li>
+<li><strong>Stranded jobs</strong>: If retry jobs are below threshold but waiting longer than
+<code>--auto-schedule-stranded-timeout</code>, schedules anyway to prevent indefinite waiting.</li>
+</ol>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<pre><code class="language-bash"># Basic: watch until completion, report failures
+torc watch 123
+
+# Recovery: automatically fix OOM/timeout failures
+torc watch 123 --recover
+
+# Recovery with aggressive resource increases
+torc watch 123 --recover --memory-multiplier 2.0 --runtime-multiplier 2.0
+
+# Recovery including unknown failures (transient errors)
+torc watch 123 --recover --retry-unknown
+
+# Auto-schedule: ensure retry jobs get scheduled
+torc watch 123 --auto-schedule
+
+# Full production setup: recovery + auto-scheduling
+torc watch 123 --recover --auto-schedule
+
+# Custom auto-schedule settings
+torc watch 123 --auto-schedule \
+    --auto-schedule-threshold 10 \
+    --auto-schedule-cooldown 3600 \
+    --auto-schedule-stranded-timeout 14400
+
+# Fixed partition and walltime (dynamic node count only)
+# Useful for long-running checkpointable jobs
+torc watch 123 --auto-schedule --partition standard --walltime 04:00:00
+</code></pre>
+<h3 id="see-also"><a class="header" href="#see-also">See Also</a></h3>
+<ul>
+<li><a href="#torc-recover"><code>torc recover</code></a> — One-shot recovery (no continuous monitoring)</li>
+<li><a href="../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
+guide</li>
+</ul>
+<h2 id="torc-recover"><a class="header" href="#torc-recover"><code>torc recover</code></a></h2>
+<p>Recover a Slurm workflow from failures (one-shot).</p>
+<p>Diagnoses job failures (OOM, timeout), adjusts resource requirements, and resubmits jobs. Use after
+a workflow has completed with failures. For continuous monitoring, use <code>torc watch --recover</code>
+instead.</p>
+<p>By default, runs an interactive wizard that displays failed jobs, lets you choose per-category
+actions (retry with adjusted resources or skip), select a Slurm scheduler, and confirm before
+executing. Use <code>--no-prompts</code> to skip the wizard and apply heuristics automatically. When stdin is
+not a terminal (e.g., piped or scripted), non-interactive mode is used automatically.</p>
+<p><strong>Usage:</strong> <code>torc recover [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
+<h3 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h3>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to recover</li>
+</ul>
+<h3 id="options-4"><a class="header" href="#options-4">Options</a></h3>
+<ul>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job files. Default: <code>output</code></li>
+<li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for OOM failures. Default: <code>1.5</code></li>
+<li><code>--runtime-multiplier &lt;RUNTIME_MULTIPLIER&gt;</code> — Runtime multiplier for timeout failures. Default:
+<code>1.4</code></li>
+<li><code>--retry-unknown</code> — Also retry jobs with unknown failure causes</li>
+<li><code>--recovery-hook &lt;RECOVERY_HOOK&gt;</code> — Custom recovery script for unknown failures</li>
+<li><code>--dry-run</code> — Show what would be done without making any changes</li>
+<li><code>--no-prompts</code> — Skip interactive wizard and apply heuristics automatically</li>
+</ul>
+<h3 id="when-to-use"><a class="header" href="#when-to-use">When to Use</a></h3>
+<p>Use <code>torc recover</code> for:</p>
+<ul>
+<li>One-shot recovery after a workflow has completed with failures</li>
+<li>Manual investigation before retrying (use <code>--dry-run</code> first)</li>
+<li>Workflows where you want to inspect failures before retrying</li>
+</ul>
+<p>Use <code>torc watch --recover</code> instead for:</p>
+<ul>
+<li>Continuous monitoring of long-running workflows</li>
+<li>Fully automated recovery without manual intervention</li>
+<li>Production workflows that should self-heal</li>
+</ul>
+<h3 id="examples-1"><a class="header" href="#examples-1">Examples</a></h3>
+<pre><code class="language-bash"># Interactive recovery (default)
+torc recover 123
+
+# Dry run to preview changes without modifying anything
+torc recover 123 --dry-run
+
+# Skip interactive prompts (for scripting)
+torc recover 123 --no-prompts
+
+# Custom resource multipliers
+torc recover 123 --memory-multiplier 2.0 --runtime-multiplier 1.5
+
+# Also retry unknown failures (not just OOM/timeout)
+torc recover 123 --retry-unknown
+
+# With custom recovery hook for domain-specific fixes
+torc recover 123 --recovery-hook 'bash fix-cluster.sh'
+</code></pre>
+<h3 id="see-also-1"><a class="header" href="#see-also-1">See Also</a></h3>
+<ul>
+<li><a href="#torc-watch"><code>torc watch --recover</code></a> — Continuous monitoring with automatic recovery</li>
+<li><a href="../../specialized/fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Detailed
+guide</li>
+</ul>
+<h2 id="torc-workflows"><a class="header" href="#torc-workflows"><code>torc workflows</code></a></h2>
+<p>Workflow management commands</p>
+<p><strong>Usage:</strong> <code>torc workflows &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-1"><a class="header" href="#subcommands-1"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>new</code> — Create a new empty workflow</li>
+<li><code>init</code> — Initialize workflow dependencies</li>
+<li><code>reinit</code> — Reinitialize jobs with changed inputs</li>
+<li><code>reset-status</code> — Reset workflow and job statuses</li>
+<li><code>is-complete</code> — Check if workflow is complete</li>
+<li><code>sync-status</code> — Detect orphaned jobs from ended Slurm allocations</li>
+<li><code>list</code> — List workflows</li>
+<li><code>get</code> — Get a specific workflow by ID</li>
+<li><code>execution-plan</code> — Show the execution plan for a workflow specification or existing workflow</li>
+<li><code>list-actions</code> — List workflow actions and their statuses</li>
+<li><code>update</code> — Update workflow properties</li>
+<li><code>archive</code> — Archive or unarchive workflows</li>
+<li><code>correct-resources</code> — Correct resource requirements based on actual job usage</li>
+<li><code>check-resources</code> — Check for resource utilization violations</li>
+<li><code>export</code> — Export a workflow to JSON</li>
+<li><code>import</code> — Import a workflow from JSON</li>
+</ul>
+<p>Note: Lifecycle commands (<code>create</code>, <code>run</code>, <code>submit</code>, <code>status</code>, <code>cancel</code>, <code>delete</code>) are at the top
+level. Run <code>torc --help</code> to see all commands.</p>
+<h2 id="torc-create"><a class="header" href="#torc-create"><code>torc create</code></a></h2>
+<p>Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)</p>
+<p><strong>Usage:</strong> <code>torc create [OPTIONS] --user &lt;USER&gt; &lt;FILE&gt;</code></p>
+<h6 id="arguments-4"><a class="header" href="#arguments-4"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec. Supported formats: JSON (.json),
+JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is auto-detected from file extension.</li>
+</ul>
+<h6 id="options-5"><a class="header" href="#options-5"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User that owns the workflow (defaults to USER environment variable)</li>
+<li><code>--no-resource-monitoring</code> — Disable resource monitoring (default: enabled with summary
+granularity and 5s sample rate). Default: <code>false</code></li>
+<li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
+Default: <code>false</code></li>
+<li><code>--dry-run</code> — Validate the workflow specification without creating it (dry-run mode). Returns a
+summary of what would be created including job count after parameter expansion.</li>
+</ul>
+<h2 id="torc-workflows-new"><a class="header" href="#torc-workflows-new"><code>torc workflows new</code></a></h2>
+<p>Create a new empty workflow</p>
+<p><strong>Usage:</strong> <code>torc workflows new [OPTIONS] --name &lt;NAME&gt; --user &lt;USER&gt;</code></p>
+<h6 id="options-6"><a class="header" href="#options-6"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the workflow</li>
+<li><code>-d</code>, <code>--description &lt;DESCRIPTION&gt;</code> — Description of the workflow</li>
+<li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User that owns the workflow (defaults to USER environment variable)</li>
+</ul>
+<h2 id="torc-workflows-list"><a class="header" href="#torc-workflows-list"><code>torc workflows list</code></a></h2>
+<p>List workflows</p>
+<p><strong>Usage:</strong> <code>torc workflows list [OPTIONS]</code></p>
+<h6 id="options-7"><a class="header" href="#options-7"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
+<li><code>--all-users</code> — List workflows for all users (overrides --user)</li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of workflows to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>--reverse-sort</code> — Reverse sort order</li>
+<li><code>--archived-only</code> — Show only archived workflows. Default: <code>false</code></li>
+<li><code>--include-archived</code> — Include both archived and non-archived workflows. Default: <code>false</code></li>
+</ul>
+<h2 id="torc-workflows-get"><a class="header" href="#torc-workflows-get"><code>torc workflows get</code></a></h2>
+<p>Get a specific workflow by ID</p>
+<p><strong>Usage:</strong> <code>torc workflows get [OPTIONS] [ID]</code></p>
+<h6 id="arguments-5"><a class="header" href="#arguments-5"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the workflow to get (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-8"><a class="header" href="#options-8"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
+</ul>
+<h2 id="torc-workflows-update"><a class="header" href="#torc-workflows-update"><code>torc workflows update</code></a></h2>
+<p>Update an existing workflow</p>
+<p><strong>Usage:</strong> <code>torc workflows update [OPTIONS] [ID]</code></p>
+<h6 id="arguments-6"><a class="header" href="#arguments-6"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the workflow to update (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-9"><a class="header" href="#options-9"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the workflow</li>
+<li><code>-d</code>, <code>--description &lt;DESCRIPTION&gt;</code> — Description of the workflow</li>
+<li><code>--owner-user &lt;OWNER_USER&gt;</code> — User that owns the workflow</li>
+</ul>
+<h2 id="torc-cancel"><a class="header" href="#torc-cancel"><code>torc cancel</code></a></h2>
+<p>Cancel a workflow and all associated Slurm jobs</p>
+<p><strong>Usage:</strong> <code>torc cancel [WORKFLOW_ID]</code></p>
+<h6 id="arguments-7"><a class="header" href="#arguments-7"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to cancel (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-delete"><a class="header" href="#torc-delete"><code>torc delete</code></a></h2>
+<p>Delete one or more workflows</p>
+<p><strong>Usage:</strong> <code>torc delete [OPTIONS] [IDS]...</code></p>
+<h6 id="arguments-8"><a class="header" href="#arguments-8"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;IDS&gt;</code> — IDs of workflows to remove (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-10"><a class="header" href="#options-10"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--no-prompts</code> — Skip confirmation prompt</li>
+<li><code>--force</code> — Force deletion even if workflow belongs to a different user</li>
+</ul>
+<h2 id="torc-workflows-archive"><a class="header" href="#torc-workflows-archive"><code>torc workflows archive</code></a></h2>
+<p>Archive or unarchive one or more workflows</p>
+<p><strong>Usage:</strong> <code>torc workflows archive &lt;IS_ARCHIVED&gt; [WORKFLOW_IDS]...</code></p>
+<h6 id="arguments-9"><a class="header" href="#arguments-9"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;IS_ARCHIVED&gt;</code> — Set to true to archive, false to unarchive</li>
+<li><code>&lt;WORKFLOW_IDS&gt;</code> — IDs of workflows to archive/unarchive (if empty, will prompt for selection)</li>
+</ul>
+<h2 id="torc-workflows-init"><a class="header" href="#torc-workflows-init"><code>torc workflows init</code></a></h2>
+<p>Initialize a workflow, including all job statuses.</p>
+<p>Initialization runs asynchronously on the server. By default the command blocks until the
+server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
+fails. Use <code>--async</code> to return the task handle immediately — useful for scripting where you want to
+do other work and resume with <a href="#torc-tasks"><code>torc tasks wait</code></a> later.</p>
+<p><strong>Usage:</strong> <code>torc workflows init [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-10"><a class="header" href="#arguments-10"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to start (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-11"><a class="header" href="#options-11"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--force</code> — If false, fail the operation if missing data is present. Default: <code>false</code></li>
+<li><code>--no-prompts</code> — Skip confirmation prompt</li>
+<li><code>--dry-run</code> — Perform a dry run without making changes</li>
+<li><code>--async</code> — Return immediately with a task handle instead of waiting for init to finish</li>
+<li><code>--wait-timeout &lt;SECONDS&gt;</code> — When waiting (default mode), give up after this many seconds. If the
+timeout expires, the task keeps running on the server; resume with <code>torc tasks wait &lt;id&gt;</code></li>
+</ul>
+<h2 id="torc-workflows-reinit"><a class="header" href="#torc-workflows-reinit"><code>torc workflows reinit</code></a></h2>
+<p>Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
+pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
+user_data record has changed.</p>
+<p>Reinitialization runs asynchronously on the server. By default the command blocks until the
+server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
+fails. Use <code>--async</code> to return the task handle immediately — useful for scripting where you want to
+do other work and resume with <a href="#torc-tasks"><code>torc tasks wait</code></a> later.</p>
+<p><strong>Usage:</strong> <code>torc workflows reinit [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-11"><a class="header" href="#arguments-11"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to reinitialize (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-12"><a class="header" href="#options-12"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--force</code> — If false, fail the operation if missing data is present. Default: <code>false</code></li>
+<li><code>--dry-run</code> — Perform a dry run without making changes</li>
+<li><code>--async</code> — Return immediately with a task handle instead of waiting for reinit to finish</li>
+<li><code>--wait-timeout &lt;SECONDS&gt;</code> — When waiting (default mode), give up after this many seconds. If the
+timeout expires, the task keeps running on the server; resume with <code>torc tasks wait &lt;id&gt;</code></li>
+</ul>
+<h2 id="torc-status"><a class="header" href="#torc-status"><code>torc status</code></a></h2>
+<p>Get workflow status</p>
+<p><strong>Usage:</strong> <code>torc status [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-12"><a class="header" href="#arguments-12"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to get status for (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-13"><a class="header" href="#options-13"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by (defaults to USER environment variable)</li>
+</ul>
+<h2 id="torc-workflows-reset-status"><a class="header" href="#torc-workflows-reset-status"><code>torc workflows reset-status</code></a></h2>
+<p>Reset workflow and job status</p>
+<p><strong>Usage:</strong> <code>torc workflows reset-status [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-13"><a class="header" href="#arguments-13"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to reset status for (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-14"><a class="header" href="#options-14"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--failed-only</code> — Only reset failed jobs. Default: <code>false</code></li>
+<li><code>-r</code>, <code>--reinitialize</code> — Reinitialize the workflow after resetting status. Default: <code>false</code></li>
+<li><code>--force</code> — Force reset even if there are active jobs (ignores running/pending jobs check).
+Default: <code>false</code></li>
+<li><code>--no-prompts</code> — Skip confirmation prompt</li>
+</ul>
+<h2 id="torc-workflows-execution-plan"><a class="header" href="#torc-workflows-execution-plan"><code>torc workflows execution-plan</code></a></h2>
+<p>Show the execution plan for a workflow specification or existing workflow</p>
+<p><strong>Usage:</strong> <code>torc workflows execution-plan &lt;SPEC_OR_ID&gt;</code></p>
+<h6 id="arguments-14"><a class="header" href="#arguments-14"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;SPEC_OR_ID&gt;</code> — Path to specification file OR workflow ID</li>
+</ul>
+<h2 id="torc-workflows-list-actions"><a class="header" href="#torc-workflows-list-actions"><code>torc workflows list-actions</code></a></h2>
+<p>List workflow actions and their statuses (useful for debugging action triggers)</p>
+<p><strong>Usage:</strong> <code>torc workflows list-actions [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-15"><a class="header" href="#arguments-15"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to show actions for (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-15"><a class="header" href="#options-15"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User to filter by when selecting workflow interactively (defaults to USER
+environment variable)</li>
+</ul>
+<h2 id="torc-workflows-is-complete"><a class="header" href="#torc-workflows-is-complete"><code>torc workflows is-complete</code></a></h2>
+<p>Check if a workflow is complete</p>
+<p><strong>Usage:</strong> <code>torc workflows is-complete [ID]</code></p>
+<h6 id="arguments-16"><a class="header" href="#arguments-16"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the workflow to check (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-workflows-export"><a class="header" href="#torc-workflows-export"><code>torc workflows export</code></a></h2>
+<p>Export a workflow to a portable JSON file</p>
+<p>Creates a self-contained export that can be imported into the same or different torc-server
+instance. All entity IDs are preserved in the export and remapped during import.</p>
+<p><strong>Usage:</strong> <code>torc workflows export [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-17"><a class="header" href="#arguments-17"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to export (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-16"><a class="header" href="#options-16"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (default: stdout)</li>
+<li><code>--include-results</code> — Include job results in export</li>
+<li><code>--include-events</code> — Include events (workflow history) in export</li>
+</ul>
+<h6 id="examples-2"><a class="header" href="#examples-2"><strong>Examples:</strong></a></h6>
+<pre><code class="language-bash"># Export workflow to stdout
+torc workflows export 123
+
+# Export to a file
+torc workflows export 123 -o workflow.json
+
+# Include job results in export
+torc workflows export 123 --include-results -o backup.json
+
+# Export with all optional data
+torc workflows export 123 --include-results --include-events -o complete.json
+</code></pre>
+<h2 id="torc-workflows-import"><a class="header" href="#torc-workflows-import"><code>torc workflows import</code></a></h2>
+<p>Import a workflow from an exported JSON file</p>
+<p>Imports a workflow that was previously exported. All entity IDs are remapped to new IDs assigned by
+the server. By default, all job statuses are reset to uninitialized for a fresh start.</p>
+<p><strong>Usage:</strong> <code>torc workflows import [OPTIONS] &lt;FILE&gt;</code></p>
+<h6 id="arguments-18"><a class="header" href="#arguments-18"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;FILE&gt;</code> — Path to the exported workflow JSON file (use '-' for stdin)</li>
+</ul>
+<h6 id="options-17"><a class="header" href="#options-17"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--name &lt;NAME&gt;</code> — Override the workflow name</li>
+<li><code>--skip-results</code> — Skip importing results even if present in export</li>
+<li><code>--skip-events</code> — Skip importing events even if present in export</li>
+</ul>
+<h6 id="examples-3"><a class="header" href="#examples-3"><strong>Examples:</strong></a></h6>
+<pre><code class="language-bash"># Import a workflow (resets job statuses by default)
+torc workflows import workflow.json
+
+# Import from stdin
+cat workflow.json | torc workflows import -
+
+# Import with a different name
+torc workflows import workflow.json --name 'my-copy'
+
+# Skip importing results even if present in file
+torc workflows import workflow.json --skip-results
+</code></pre>
+<h2 id="torc-workflows-sync-status"><a class="header" href="#torc-workflows-sync-status"><code>torc workflows sync-status</code></a></h2>
+<p>Synchronize job statuses with Slurm (detect and fail orphaned jobs)</p>
+<p>This command detects jobs that are stuck in "running" status because their Slurm allocation
+terminated unexpectedly (e.g., due to timeout, node failure, or admin intervention). It marks these
+orphaned jobs as failed so the workflow can be recovered or restarted.</p>
+<p>Use this when:</p>
+<ul>
+<li><code>torc recover</code> reports "there are active Slurm allocations" but <code>squeue</code> shows none</li>
+<li>Jobs appear stuck in "running" status after a Slurm allocation ended</li>
+<li>You want to clean up workflow state before running <code>torc recover</code></li>
+</ul>
+<p><strong>Usage:</strong> <code>torc workflows sync-status [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-19"><a class="header" href="#arguments-19"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to sync (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-18"><a class="header" href="#options-18"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--dry-run</code> — Preview changes without applying them</li>
+</ul>
+<h6 id="examples-4"><a class="header" href="#examples-4"><strong>Examples:</strong></a></h6>
+<pre><code class="language-bash"># Preview what would be cleaned up
+torc workflows sync-status 123 --dry-run
+
+# Clean up orphaned jobs
+torc workflows sync-status 123
+
+# Get JSON output for scripting
+torc -f json workflows sync-status 123
+</code></pre>
+<h2 id="torc-workflows-correct-resources"><a class="header" href="#torc-workflows-correct-resources"><code>torc workflows correct-resources</code></a></h2>
+<p>Correct resource requirements based on actual job usage (proactive optimization)</p>
+<p>Analyzes completed jobs and adjusts resource requirements to better match actual usage. Unlike
+<code>torc recover</code>, this command does NOT reset or rerun jobs — it only updates resource requirements
+for future runs.</p>
+<p>The command both <strong>upscales</strong> resources for jobs that exceeded their limits and <strong>downsizes</strong>
+resources that are significantly over-allocated. Downsizing only considers successfully completed
+jobs (return code 0) and requires all jobs sharing a resource requirement to have peak usage data.</p>
+<p><strong>Usage:</strong> <code>torc workflows correct-resources [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-20"><a class="header" href="#arguments-20"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow to analyze (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-19"><a class="header" href="#options-19"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--memory-multiplier &lt;MEMORY_MULTIPLIER&gt;</code> — Memory multiplier for jobs that exceeded memory.
+Default: <code>1.2</code></li>
+<li><code>--cpu-multiplier &lt;CPU_MULTIPLIER&gt;</code> — CPU multiplier for jobs that exceeded CPU allocation.
+Default: <code>1.2</code></li>
+<li><code>--runtime-multiplier &lt;RUNTIME_MULTIPLIER&gt;</code> — Runtime multiplier for jobs that exceeded runtime.
+Default: <code>1.2</code></li>
+<li><code>--job-ids &lt;JOB_IDS&gt;</code> — Only correct resource requirements for specific jobs (comma-separated
+IDs). Filters both upscaling and downsizing.</li>
+<li><code>--dry-run</code> — Show what would be changed without applying</li>
+<li><code>--no-downsize</code> — Disable downsizing of over-allocated resources (downsizing is on by default)</li>
+</ul>
+<h6 id="examples-5"><a class="header" href="#examples-5"><strong>Examples:</strong></a></h6>
+<pre><code class="language-bash"># Preview corrections (dry-run)
+torc workflows correct-resources 123 --dry-run
+
+# Apply corrections (upscale + downsize)
+torc workflows correct-resources 123
+
+# Only upscale, don't reduce over-allocated resources
+torc workflows correct-resources 123 --no-downsize
+
+# Apply corrections only to specific jobs
+torc workflows correct-resources 123 --job-ids 45,67,89
+
+# Use custom multipliers
+torc workflows correct-resources 123 --memory-multiplier 1.5 --cpu-multiplier 1.3
+
+# Output as JSON for programmatic use
+torc -f json workflows correct-resources 123 --dry-run
+</code></pre>
+<h2 id="torc-tasks"><a class="header" href="#torc-tasks"><code>torc tasks</code></a></h2>
+<p>Wait for async tasks created by commands such as <code>torc workflows reinit</code>.</p>
+<p><strong>Usage:</strong> <code>torc tasks &lt;COMMAND&gt;</code></p>
+<h6 id="commands"><a class="header" href="#commands"><strong>Commands:</strong></a></h6>
+<ul>
+<li><code>wait</code> — Block until a task reaches a terminal state (<code>succeeded</code> or <code>failed</code>)</li>
+</ul>
+<h3 id="torc-tasks-wait"><a class="header" href="#torc-tasks-wait"><code>torc tasks wait</code></a></h3>
+<p>Wait for a task to complete. Uses the workflow SSE stream to wake early on completion, with periodic
+polling as a fallback. Exits with status 0 when the task succeeded, or 1 if it failed or the timeout
+expired.</p>
+<p><strong>Usage:</strong> <code>torc tasks wait [OPTIONS] &lt;ID&gt;</code></p>
+<h6 id="arguments-21"><a class="header" href="#arguments-21"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — Task ID returned by the async operation that created it</li>
+</ul>
+<h6 id="options-20"><a class="header" href="#options-20"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--timeout &lt;SECONDS&gt;</code> — Give up after this many seconds (default: wait forever)</li>
+<li><code>--poll-fallback-interval &lt;SECONDS&gt;</code> — How often to poll if no SSE event arrives. Default: <code>10</code></li>
+</ul>
+<h6 id="example"><a class="header" href="#example"><strong>Example:</strong></a></h6>
+<pre><code class="language-bash"># Kick off a reinit and resume later
+task_id=$(torc -f json workflows reinit 123 --async | jq -r .task_id)
+# ... do other work ...
+torc tasks wait --timeout 300 "$task_id"
+</code></pre>
+<h2 id="torc-compute-nodes"><a class="header" href="#torc-compute-nodes"><code>torc compute-nodes</code></a></h2>
+<p>Compute node management commands</p>
+<p><strong>Usage:</strong> <code>torc compute-nodes &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-2"><a class="header" href="#subcommands-2"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>get</code> — Get a specific compute node by ID</li>
+<li><code>list</code> — List compute nodes for a workflow</li>
+</ul>
+<h2 id="torc-compute-nodes-get"><a class="header" href="#torc-compute-nodes-get"><code>torc compute-nodes get</code></a></h2>
+<p>Get a specific compute node by ID</p>
+<p><strong>Usage:</strong> <code>torc compute-nodes get &lt;ID&gt;</code></p>
+<h6 id="arguments-22"><a class="header" href="#arguments-22"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the compute node</li>
+</ul>
+<h2 id="torc-compute-nodes-list"><a class="header" href="#torc-compute-nodes-list"><code>torc compute-nodes list</code></a></h2>
+<p>List compute nodes for a workflow</p>
+<p><strong>Usage:</strong> <code>torc compute-nodes list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-23"><a class="header" href="#arguments-23"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List compute nodes for this workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-21"><a class="header" href="#options-21"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of compute nodes to return. Default: <code>100000</code></li>
+<li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
+<li><code>--scheduled-compute-node &lt;SCHEDULED_COMPUTE_NODE&gt;</code> — Filter by scheduled compute node ID</li>
+</ul>
+<h2 id="torc-files"><a class="header" href="#torc-files"><code>torc files</code></a></h2>
+<p>File management commands</p>
+<p><strong>Usage:</strong> <code>torc files &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-3"><a class="header" href="#subcommands-3"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>create</code> — Create a new file</li>
+<li><code>list</code> — List files</li>
+<li><code>get</code> — Get a specific file by ID</li>
+<li><code>update</code> — Update an existing file</li>
+<li><code>delete</code> — Delete a file</li>
+<li><code>list-required-existing</code> — List required existing files for a workflow</li>
+</ul>
+<h2 id="torc-files-create"><a class="header" href="#torc-files-create"><code>torc files create</code></a></h2>
+<p>Create a new file</p>
+<p><strong>Usage:</strong> <code>torc files create --name &lt;NAME&gt; --path &lt;PATH&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-24"><a class="header" href="#arguments-24"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Create the file in this workflow</li>
+</ul>
+<h6 id="options-22"><a class="header" href="#options-22"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the job</li>
+<li><code>-p</code>, <code>--path &lt;PATH&gt;</code> — Path of the file</li>
+</ul>
+<h2 id="torc-files-list"><a class="header" href="#torc-files-list"><code>torc files list</code></a></h2>
+<p>List files</p>
+<p><strong>Usage:</strong> <code>torc files list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-25"><a class="header" href="#arguments-25"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List files for this workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-23"><a class="header" href="#options-23"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--produced-by-job-id &lt;PRODUCED_BY_JOB_ID&gt;</code> — Filter by job ID that produced the files</li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of files to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>--reverse-sort</code> — Reverse sort order</li>
+</ul>
+<h2 id="torc-files-get"><a class="header" href="#torc-files-get"><code>torc files get</code></a></h2>
+<p>Get a specific file by ID</p>
+<p><strong>Usage:</strong> <code>torc files get &lt;ID&gt;</code></p>
+<h6 id="arguments-26"><a class="header" href="#arguments-26"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the file to get</li>
+</ul>
+<h2 id="torc-files-update"><a class="header" href="#torc-files-update"><code>torc files update</code></a></h2>
+<p>Update an existing file</p>
+<p><strong>Usage:</strong> <code>torc files update [OPTIONS] &lt;ID&gt;</code></p>
+<h6 id="arguments-27"><a class="header" href="#arguments-27"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the file to update</li>
+</ul>
+<h6 id="options-24"><a class="header" href="#options-24"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the file</li>
+<li><code>-p</code>, <code>--path &lt;PATH&gt;</code> — Path of the file</li>
+</ul>
+<h2 id="torc-files-delete"><a class="header" href="#torc-files-delete"><code>torc files delete</code></a></h2>
+<p>Delete a file</p>
+<p><strong>Usage:</strong> <code>torc files delete &lt;ID&gt;</code></p>
+<h6 id="arguments-28"><a class="header" href="#arguments-28"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the file to remove</li>
+</ul>
+<h2 id="torc-files-list-required-existing"><a class="header" href="#torc-files-list-required-existing"><code>torc files list-required-existing</code></a></h2>
+<p>List required existing files for a workflow</p>
+<p><strong>Usage:</strong> <code>torc files list-required-existing [WORKFLOW_ID]</code></p>
+<h6 id="arguments-29"><a class="header" href="#arguments-29"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List required existing files for this workflow (optional - will prompt if not
+provided)</li>
+</ul>
+<h2 id="torc-jobs"><a class="header" href="#torc-jobs"><code>torc jobs</code></a></h2>
+<p>Job management commands</p>
+<p><strong>Usage:</strong> <code>torc jobs &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-4"><a class="header" href="#subcommands-4"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>create</code> — Create a new job</li>
+<li><code>create-from-file</code> — Create multiple jobs from a text file containing one command per line</li>
+<li><code>list</code> — List jobs</li>
+<li><code>get</code> — Get a specific job by ID</li>
+<li><code>update</code> — Update an existing job</li>
+<li><code>delete</code> — Delete one or more jobs</li>
+<li><code>delete-all</code> — Delete all jobs for a workflow</li>
+<li><code>list-resource-requirements</code> — List jobs with their resource requirements</li>
+</ul>
+<h2 id="torc-jobs-create"><a class="header" href="#torc-jobs-create"><code>torc jobs create</code></a></h2>
+<p>Create a new job</p>
+<p><strong>Usage:</strong> <code>torc jobs create [OPTIONS] --name &lt;NAME&gt; --command &lt;COMMAND&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-30"><a class="header" href="#arguments-30"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Create the job in this workflow</li>
+</ul>
+<h6 id="options-25"><a class="header" href="#options-25"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the job</li>
+<li><code>-c</code>, <code>--command &lt;COMMAND&gt;</code> — Command to execute</li>
+<li><code>-r</code>, <code>--resource-requirements-id &lt;RESOURCE_REQUIREMENTS_ID&gt;</code> — Resource requirements ID for this
+job</li>
+<li><code>-b</code>, <code>--blocking-job-ids &lt;BLOCKING_JOB_IDS&gt;</code> — Job IDs that block this job</li>
+<li><code>-i</code>, <code>--input-file-ids &lt;INPUT_FILE_IDS&gt;</code> — Input files needed by this job</li>
+<li><code>-o</code>, <code>--output-file-ids &lt;OUTPUT_FILE_IDS&gt;</code> — Output files produced by this job</li>
+</ul>
+<h2 id="torc-jobs-create-from-file"><a class="header" href="#torc-jobs-create-from-file"><code>torc jobs create-from-file</code></a></h2>
+<p>Create multiple jobs from a text file containing one command per line</p>
+<p>This command reads a text file where each line contains a job command. Lines starting with '#' are
+treated as comments and ignored. Empty lines are also ignored.</p>
+<p>Jobs will be named sequentially as job1, job2, job3, etc., starting from the current job count + 1
+to avoid naming conflicts.</p>
+<p>All jobs created will share the same resource requirements, which are automatically created and
+assigned.</p>
+<p>Example: <code>torc jobs create-from-file 123 batch_jobs.txt --cpus-per-job 4 --memory-per-job 8g</code></p>
+<p><strong>Usage:</strong> <code>torc jobs create-from-file [OPTIONS] &lt;WORKFLOW_ID&gt; &lt;FILE&gt;</code></p>
+<h6 id="arguments-31"><a class="header" href="#arguments-31"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to create jobs for</li>
+<li><code>&lt;FILE&gt;</code> — Path to text file containing job commands (one per line). File format: One command per
+line, lines starting with # are comments (ignored), empty lines are ignored.</li>
+</ul>
+<h6 id="options-26"><a class="header" href="#options-26"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--cpus-per-job &lt;CPUS_PER_JOB&gt;</code> — Number of CPUs per job. Default: <code>1</code></li>
+<li><code>--memory-per-job &lt;MEMORY_PER_JOB&gt;</code> — Memory per job (e.g., "1m", "2g", "16g"). Default: <code>1m</code></li>
+<li><code>--runtime-per-job &lt;RUNTIME_PER_JOB&gt;</code> — Runtime per job (ISO 8601 duration format). Examples:
+P0DT1M = 1 minute, P0DT30M = 30 minutes, P0DT2H = 2 hours, P1DT0H = 1 day. Default: <code>P0DT1M</code></li>
+</ul>
+<h2 id="torc-jobs-list"><a class="header" href="#torc-jobs-list"><code>torc jobs list</code></a></h2>
+<p>List jobs</p>
+<p><strong>Usage:</strong> <code>torc jobs list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-32"><a class="header" href="#arguments-32"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List jobs for this workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-27"><a class="header" href="#options-27"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status</li>
+<li><code>--upstream-job-id &lt;UPSTREAM_JOB_ID&gt;</code> — Filter by upstream job ID (jobs that depend on this job)</li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of jobs to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>--reverse-sort</code> — Reverse sort order</li>
+<li><code>--include-relationships</code> — Include job relationships (depends_on_job_ids, input/output
+file/user_data IDs) - slower but more complete</li>
+</ul>
+<h2 id="torc-jobs-get"><a class="header" href="#torc-jobs-get"><code>torc jobs get</code></a></h2>
+<p>Get a specific job by ID</p>
+<p><strong>Usage:</strong> <code>torc jobs get &lt;ID&gt;</code></p>
+<h6 id="arguments-33"><a class="header" href="#arguments-33"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the job to get</li>
+</ul>
+<h2 id="torc-jobs-update"><a class="header" href="#torc-jobs-update"><code>torc jobs update</code></a></h2>
+<p>Update an existing job</p>
+<p><strong>Usage:</strong> <code>torc jobs update [OPTIONS] &lt;ID&gt;</code></p>
+<h6 id="arguments-34"><a class="header" href="#arguments-34"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the job to update</li>
+</ul>
+<h6 id="options-28"><a class="header" href="#options-28"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the job</li>
+<li><code>-c</code>, <code>--command &lt;COMMAND&gt;</code> — Command to execute</li>
+</ul>
+<h2 id="torc-jobs-delete"><a class="header" href="#torc-jobs-delete"><code>torc jobs delete</code></a></h2>
+<p>Delete one or more jobs</p>
+<p><strong>Usage:</strong> <code>torc jobs delete [IDS]...</code></p>
+<h6 id="arguments-35"><a class="header" href="#arguments-35"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;IDS&gt;</code> — IDs of the jobs to remove</li>
+</ul>
+<h2 id="torc-jobs-delete-all"><a class="header" href="#torc-jobs-delete-all"><code>torc jobs delete-all</code></a></h2>
+<p>Delete all jobs for a workflow</p>
+<p><strong>Usage:</strong> <code>torc jobs delete-all [WORKFLOW_ID]</code></p>
+<h6 id="arguments-36"><a class="header" href="#arguments-36"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to delete all jobs from (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-jobs-list-resource-requirements"><a class="header" href="#torc-jobs-list-resource-requirements"><code>torc jobs list-resource-requirements</code></a></h2>
+<p>List jobs with their resource requirements</p>
+<p><strong>Usage:</strong> <code>torc jobs list-resource-requirements [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-37"><a class="header" href="#arguments-37"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to list jobs from (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-29"><a class="header" href="#options-29"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-j</code>, <code>--job-id &lt;JOB_ID&gt;</code> — Filter by specific job ID</li>
+</ul>
+<h2 id="torc-job-dependencies"><a class="header" href="#torc-job-dependencies"><code>torc job-dependencies</code></a></h2>
+<p>Job dependency and relationship queries</p>
+<p><strong>Usage:</strong> <code>torc job-dependencies &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-5"><a class="header" href="#subcommands-5"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>job-job</code> — List job-to-job dependencies for a workflow</li>
+<li><code>job-file</code> — List job-file relationships for a workflow</li>
+<li><code>job-user-data</code> — List job-user_data relationships for a workflow</li>
+</ul>
+<h2 id="torc-job-dependencies-job-job"><a class="header" href="#torc-job-dependencies-job-job"><code>torc job-dependencies job-job</code></a></h2>
+<p>List job-to-job dependencies for a workflow</p>
+<p><strong>Usage:</strong> <code>torc job-dependencies job-job [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-38"><a class="header" href="#arguments-38"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-30"><a class="header" href="#options-30"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of dependencies to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+</ul>
+<h2 id="torc-job-dependencies-job-file"><a class="header" href="#torc-job-dependencies-job-file"><code>torc job-dependencies job-file</code></a></h2>
+<p>List job-file relationships for a workflow</p>
+<p><strong>Usage:</strong> <code>torc job-dependencies job-file [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-39"><a class="header" href="#arguments-39"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-31"><a class="header" href="#options-31"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+</ul>
+<h2 id="torc-job-dependencies-job-user-data"><a class="header" href="#torc-job-dependencies-job-user-data"><code>torc job-dependencies job-user-data</code></a></h2>
+<p>List job-user_data relationships for a workflow</p>
+<p><strong>Usage:</strong> <code>torc job-dependencies job-user-data [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-40"><a class="header" href="#arguments-40"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — ID of the workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-32"><a class="header" href="#options-32"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of relationships to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+</ul>
+<h2 id="torc-resource-requirements"><a class="header" href="#torc-resource-requirements"><code>torc resource-requirements</code></a></h2>
+<p>Resource requirements management commands</p>
+<p><strong>Usage:</strong> <code>torc resource-requirements &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-6"><a class="header" href="#subcommands-6"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>create</code> — Create new resource requirements</li>
+<li><code>list</code> — List resource requirements</li>
+<li><code>get</code> — Get a specific resource requirement by ID</li>
+<li><code>update</code> — Update existing resource requirements</li>
+<li><code>delete</code> — Delete resource requirements</li>
+</ul>
+<h2 id="torc-resource-requirements-create"><a class="header" href="#torc-resource-requirements-create"><code>torc resource-requirements create</code></a></h2>
+<p>Create new resource requirements</p>
+<p><strong>Usage:</strong> <code>torc resource-requirements create [OPTIONS] --name &lt;NAME&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-41"><a class="header" href="#arguments-41"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Create resource requirements in this workflow</li>
+</ul>
+<h6 id="options-33"><a class="header" href="#options-33"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the resource requirements</li>
+<li><code>--num-cpus &lt;NUM_CPUS&gt;</code> — Number of CPUs required. Default: <code>1</code></li>
+<li><code>--num-gpus &lt;NUM_GPUS&gt;</code> — Number of GPUs required. Default: <code>0</code></li>
+<li><code>--num-nodes &lt;NUM_NODES&gt;</code> — Number of nodes required. Default: <code>1</code></li>
+<li><code>-m</code>, <code>--memory &lt;MEMORY&gt;</code> — Amount of memory required (e.g., "20g"). Default: <code>1m</code></li>
+<li><code>-r</code>, <code>--runtime &lt;RUNTIME&gt;</code> — Maximum runtime in ISO 8601 duration format (e.g., "P0DT1H").
+Default: <code>P0DT1M</code></li>
+</ul>
+<h2 id="torc-resource-requirements-list"><a class="header" href="#torc-resource-requirements-list"><code>torc resource-requirements list</code></a></h2>
+<p>List resource requirements</p>
+<p><strong>Usage:</strong> <code>torc resource-requirements list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-42"><a class="header" href="#arguments-42"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List resource requirements for this workflow (optional - will prompt if not
+provided)</li>
+</ul>
+<h6 id="options-34"><a class="header" href="#options-34"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of resource requirements to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>--reverse-sort</code> — Reverse sort order</li>
+</ul>
+<h2 id="torc-resource-requirements-get"><a class="header" href="#torc-resource-requirements-get"><code>torc resource-requirements get</code></a></h2>
+<p>Get a specific resource requirement by ID</p>
+<p><strong>Usage:</strong> <code>torc resource-requirements get &lt;ID&gt;</code></p>
+<h6 id="arguments-43"><a class="header" href="#arguments-43"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the resource requirement to get</li>
+</ul>
+<h2 id="torc-resource-requirements-update"><a class="header" href="#torc-resource-requirements-update"><code>torc resource-requirements update</code></a></h2>
+<p>Update existing resource requirements</p>
+<p><strong>Usage:</strong> <code>torc resource-requirements update [OPTIONS] &lt;ID&gt;</code></p>
+<h6 id="arguments-44"><a class="header" href="#arguments-44"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the resource requirement to update</li>
+</ul>
+<h6 id="options-35"><a class="header" href="#options-35"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the resource requirements</li>
+<li><code>--num-cpus &lt;NUM_CPUS&gt;</code> — Number of CPUs required</li>
+<li><code>--num-gpus &lt;NUM_GPUS&gt;</code> — Number of GPUs required</li>
+<li><code>--num-nodes &lt;NUM_NODES&gt;</code> — Number of nodes required</li>
+<li><code>--memory &lt;MEMORY&gt;</code> — Amount of memory required (e.g., "20g")</li>
+<li><code>--runtime &lt;RUNTIME&gt;</code> — Maximum runtime (e.g., "1h", "30m")</li>
+</ul>
+<h2 id="torc-resource-requirements-delete"><a class="header" href="#torc-resource-requirements-delete"><code>torc resource-requirements delete</code></a></h2>
+<p>Delete resource requirements</p>
+<p><strong>Usage:</strong> <code>torc resource-requirements delete &lt;ID&gt;</code></p>
+<h6 id="arguments-45"><a class="header" href="#arguments-45"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the resource requirement to remove</li>
+</ul>
+<h2 id="torc-events"><a class="header" href="#torc-events"><code>torc events</code></a></h2>
+<p>Event management commands</p>
+<p><strong>Usage:</strong> <code>torc events &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-7"><a class="header" href="#subcommands-7"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>create</code> — Create a new event</li>
+<li><code>list</code> — List events for a workflow</li>
+<li><code>monitor</code> — Monitor events for a workflow in real-time</li>
+<li><code>get-latest-event</code> — Get the latest event for a workflow</li>
+<li><code>delete</code> — Delete an event</li>
+</ul>
+<h2 id="torc-events-create"><a class="header" href="#torc-events-create"><code>torc events create</code></a></h2>
+<p>Create a new event</p>
+<p><strong>Usage:</strong> <code>torc events create --data &lt;DATA&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-46"><a class="header" href="#arguments-46"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Create the event in this workflow</li>
+</ul>
+<h6 id="options-36"><a class="header" href="#options-36"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-d</code>, <code>--data &lt;DATA&gt;</code> — JSON data for the event</li>
+</ul>
+<h2 id="torc-events-list"><a class="header" href="#torc-events-list"><code>torc events list</code></a></h2>
+<p>List events for a workflow</p>
+<p><strong>Usage:</strong> <code>torc events list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-47"><a class="header" href="#arguments-47"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List events for this workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-37"><a class="header" href="#options-37"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-c</code>, <code>--category &lt;CATEGORY&gt;</code> — Filter events by category</li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of events to return. Default: <code>100000</code></li>
+<li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
+</ul>
+<h2 id="torc-events-monitor"><a class="header" href="#torc-events-monitor"><code>torc events monitor</code></a></h2>
+<p>Monitor events for a workflow in real-time</p>
+<p><strong>Usage:</strong> <code>torc events monitor [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-48"><a class="header" href="#arguments-48"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Monitor events for this workflow (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-38"><a class="header" href="#options-38"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-d</code>, <code>--duration &lt;DURATION&gt;</code> — Duration to monitor in minutes (default: infinite)</li>
+<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds. Default: <code>60</code></li>
+<li><code>-c</code>, <code>--category &lt;CATEGORY&gt;</code> — Filter events by category</li>
+</ul>
+<h2 id="torc-events-get-latest-event"><a class="header" href="#torc-events-get-latest-event"><code>torc events get-latest-event</code></a></h2>
+<p>Get the latest event for a workflow</p>
+<p><strong>Usage:</strong> <code>torc events get-latest-event [WORKFLOW_ID]</code></p>
+<h6 id="arguments-49"><a class="header" href="#arguments-49"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Get the latest event for this workflow (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-events-delete"><a class="header" href="#torc-events-delete"><code>torc events delete</code></a></h2>
+<p>Delete an event</p>
+<p><strong>Usage:</strong> <code>torc events delete &lt;ID&gt;</code></p>
+<h6 id="arguments-50"><a class="header" href="#arguments-50"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the event to remove</li>
+</ul>
+<h2 id="torc-results"><a class="header" href="#torc-results"><code>torc results</code></a></h2>
+<p>Result management commands</p>
+<p><strong>Usage:</strong> <code>torc results &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-8"><a class="header" href="#subcommands-8"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>list</code> — List results</li>
+<li><code>get</code> — Get a specific result by ID</li>
+<li><code>delete</code> — Delete a result</li>
+</ul>
+<h2 id="torc-results-list"><a class="header" href="#torc-results-list"><code>torc results list</code></a></h2>
+<p>List results</p>
+<p><strong>Usage:</strong> <code>torc results list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-51"><a class="header" href="#arguments-51"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List results for this workflow (optional - will prompt if not provided). By
+default, only lists results for the latest run of the workflow.</li>
+</ul>
+<h6 id="options-39"><a class="header" href="#options-39"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-j</code>, <code>--job-id &lt;JOB_ID&gt;</code> — List results for this job</li>
+<li><code>-r</code>, <code>--run-id &lt;RUN_ID&gt;</code> — List results for this run_id</li>
+<li><code>--return-code &lt;RETURN_CODE&gt;</code> — Filter by return code</li>
+<li><code>--failed</code> — Show only failed jobs (non-zero return code)</li>
+<li><code>-s</code>, <code>--status &lt;STATUS&gt;</code> — Filter by job status (uninitialized, blocked, canceled, terminated,
+done, ready, scheduled, running, pending, disabled)</li>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of results to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>--reverse-sort</code> — Reverse sort order</li>
+<li><code>--all-runs</code> — Show all historical results (default: false, only shows current results)</li>
+<li><code>--compute-node &lt;COMPUTE_NODE&gt;</code> — Filter by compute node ID</li>
+</ul>
+<h2 id="torc-results-get"><a class="header" href="#torc-results-get"><code>torc results get</code></a></h2>
+<p>Get a specific result by ID</p>
+<p><strong>Usage:</strong> <code>torc results get &lt;ID&gt;</code></p>
+<h6 id="arguments-52"><a class="header" href="#arguments-52"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the result to get</li>
+</ul>
+<h2 id="torc-results-delete"><a class="header" href="#torc-results-delete"><code>torc results delete</code></a></h2>
+<p>Delete a result</p>
+<p><strong>Usage:</strong> <code>torc results delete &lt;ID&gt;</code></p>
+<h6 id="arguments-53"><a class="header" href="#arguments-53"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the result to remove</li>
+</ul>
+<h2 id="torc-user-data"><a class="header" href="#torc-user-data"><code>torc user-data</code></a></h2>
+<p>User data management commands</p>
+<p><strong>Usage:</strong> <code>torc user-data &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-9"><a class="header" href="#subcommands-9"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>create</code> — Create a new user data record</li>
+<li><code>list</code> — List user data records</li>
+<li><code>get</code> — Get a specific user data record</li>
+<li><code>update</code> — Update a user data record</li>
+<li><code>delete</code> — Delete a user data record</li>
+<li><code>delete-all</code> — Delete all user data records for a workflow</li>
+<li><code>list-missing</code> — List missing user data for a workflow</li>
+</ul>
+<h2 id="torc-user-data-create"><a class="header" href="#torc-user-data-create"><code>torc user-data create</code></a></h2>
+<p>Create a new user data record</p>
+<p><strong>Usage:</strong> <code>torc user-data create [OPTIONS] --name &lt;NAME&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-54"><a class="header" href="#arguments-54"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-40"><a class="header" href="#options-40"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of the data object</li>
+<li><code>-d</code>, <code>--data &lt;DATA&gt;</code> — JSON data content</li>
+<li><code>--ephemeral</code> — Whether the data is ephemeral (cleared between runs)</li>
+<li><code>--consumer-job-id &lt;CONSUMER_JOB_ID&gt;</code> — Consumer job ID (optional)</li>
+<li><code>--producer-job-id &lt;PRODUCER_JOB_ID&gt;</code> — Producer job ID (optional)</li>
+</ul>
+<h2 id="torc-user-data-list"><a class="header" href="#torc-user-data-list"><code>torc user-data list</code></a></h2>
+<p>List user data records</p>
+<p><strong>Usage:</strong> <code>torc user-data list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-55"><a class="header" href="#arguments-55"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (if not provided, will be selected interactively)</li>
+</ul>
+<h6 id="options-41"><a class="header" href="#options-41"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of records to return. Default: <code>50</code></li>
+<li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Number of records to skip. Default: <code>0</code></li>
+<li><code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>--reverse-sort</code> — Reverse sort order</li>
+<li><code>--name &lt;NAME&gt;</code> — Filter by name</li>
+<li><code>--is-ephemeral &lt;IS_EPHEMERAL&gt;</code> — Filter by ephemeral status. Possible values: <code>true</code>, <code>false</code></li>
+<li><code>--consumer-job-id &lt;CONSUMER_JOB_ID&gt;</code> — Filter by consumer job ID</li>
+<li><code>--producer-job-id &lt;PRODUCER_JOB_ID&gt;</code> — Filter by producer job ID</li>
+</ul>
+<h2 id="torc-user-data-get"><a class="header" href="#torc-user-data-get"><code>torc user-data get</code></a></h2>
+<p>Get a specific user data record</p>
+<p><strong>Usage:</strong> <code>torc user-data get &lt;ID&gt;</code></p>
+<h6 id="arguments-56"><a class="header" href="#arguments-56"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — User data record ID</li>
+</ul>
+<h2 id="torc-user-data-update"><a class="header" href="#torc-user-data-update"><code>torc user-data update</code></a></h2>
+<p>Update a user data record</p>
+<p><strong>Usage:</strong> <code>torc user-data update [OPTIONS] &lt;ID&gt;</code></p>
+<h6 id="arguments-57"><a class="header" href="#arguments-57"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — User data record ID</li>
+</ul>
+<h6 id="options-42"><a class="header" href="#options-42"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — New name for the data object</li>
+<li><code>-d</code>, <code>--data &lt;DATA&gt;</code> — New JSON data content</li>
+<li><code>--ephemeral &lt;EPHEMERAL&gt;</code> — Update ephemeral status. Possible values: <code>true</code>, <code>false</code></li>
+</ul>
+<h2 id="torc-user-data-delete"><a class="header" href="#torc-user-data-delete"><code>torc user-data delete</code></a></h2>
+<p>Delete a user data record</p>
+<p><strong>Usage:</strong> <code>torc user-data delete &lt;ID&gt;</code></p>
+<h6 id="arguments-58"><a class="header" href="#arguments-58"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — User data record ID</li>
+</ul>
+<h2 id="torc-user-data-delete-all"><a class="header" href="#torc-user-data-delete-all"><code>torc user-data delete-all</code></a></h2>
+<p>Delete all user data records for a workflow</p>
+<p><strong>Usage:</strong> <code>torc user-data delete-all &lt;WORKFLOW_ID&gt;</code></p>
+<h6 id="arguments-59"><a class="header" href="#arguments-59"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h2 id="torc-user-data-list-missing"><a class="header" href="#torc-user-data-list-missing"><code>torc user-data list-missing</code></a></h2>
+<p>List missing user data for a workflow</p>
+<p><strong>Usage:</strong> <code>torc user-data list-missing &lt;WORKFLOW_ID&gt;</code></p>
+<h6 id="arguments-60"><a class="header" href="#arguments-60"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h2 id="torc-slurm"><a class="header" href="#torc-slurm"><code>torc slurm</code></a></h2>
+<p>Slurm scheduler commands</p>
+<p><strong>Usage:</strong> <code>torc slurm &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-10"><a class="header" href="#subcommands-10"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>create</code> — Add a Slurm config to the database</li>
+<li><code>update</code> — Modify a Slurm config in the database</li>
+<li><code>list</code> — Show the current Slurm configs in the database</li>
+<li><code>get</code> — Get a specific Slurm config by ID</li>
+<li><code>delete</code> — Delete a Slurm config by ID</li>
+<li><code>schedule-nodes</code> — Schedule compute nodes using Slurm</li>
+<li><code>parse-logs</code> — Parse Slurm log files for known error messages</li>
+<li><code>sacct</code> — Call sacct for scheduled compute nodes and display summary</li>
+<li><code>stats</code> — Show per-job Slurm accounting stats stored in the database</li>
+<li><code>generate</code> — Generate Slurm schedulers for a workflow based on job resource requirements</li>
+<li><code>regenerate</code> — Regenerate Slurm schedulers for an existing workflow based on pending jobs</li>
+</ul>
+<h2 id="torc-slurm-create"><a class="header" href="#torc-slurm-create"><code>torc slurm create</code></a></h2>
+<p>Add a Slurm config to the database</p>
+<p><strong>Usage:</strong> <code>torc slurm create [OPTIONS] --name &lt;NAME&gt; --account &lt;ACCOUNT&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-61"><a class="header" href="#arguments-61"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-43"><a class="header" href="#options-43"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Name of config</li>
+<li><code>-a</code>, <code>--account &lt;ACCOUNT&gt;</code> — HPC account</li>
+<li><code>-g</code>, <code>--gres &lt;GRES&gt;</code> — Request nodes that have at least this number of GPUs. Ex: 'gpu:2'</li>
+<li><code>-m</code>, <code>--mem &lt;MEM&gt;</code> — Request nodes that have at least this amount of memory. Ex: '180G'</li>
+<li><code>-N</code>, <code>--nodes &lt;NODES&gt;</code> — Number of nodes to use for each job. Default: <code>1</code></li>
+<li><code>-p</code>, <code>--partition &lt;PARTITION&gt;</code> — HPC partition. Default is determined by the scheduler</li>
+<li><code>-q</code>, <code>--qos &lt;QOS&gt;</code> — Controls priority of the jobs. Default: <code>normal</code></li>
+<li><code>-t</code>, <code>--tmp &lt;TMP&gt;</code> — Request nodes that have at least this amount of storage scratch space</li>
+<li><code>-W</code>, <code>--walltime &lt;WALLTIME&gt;</code> — Slurm job walltime. Default: <code>04:00:00</code></li>
+<li><code>-e</code>, <code>--extra &lt;EXTRA&gt;</code> — Add extra Slurm parameters, for example
+--extra='--reservation=my-reservation'</li>
+</ul>
+<h2 id="torc-slurm-update"><a class="header" href="#torc-slurm-update"><code>torc slurm update</code></a></h2>
+<p>Modify a Slurm config in the database</p>
+<p><strong>Usage:</strong> <code>torc slurm update [OPTIONS] &lt;SCHEDULER_ID&gt;</code></p>
+<h6 id="arguments-62"><a class="header" href="#arguments-62"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;SCHEDULER_ID&gt;</code></li>
+</ul>
+<h6 id="options-44"><a class="header" href="#options-44"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-N</code>, <code>--name &lt;NAME&gt;</code> — Name of config</li>
+<li><code>-a</code>, <code>--account &lt;ACCOUNT&gt;</code> — HPC account</li>
+<li><code>-g</code>, <code>--gres &lt;GRES&gt;</code> — Request nodes that have at least this number of GPUs. Ex: 'gpu:2'</li>
+<li><code>-m</code>, <code>--mem &lt;MEM&gt;</code> — Request nodes that have at least this amount of memory. Ex: '180G'</li>
+<li><code>-n</code>, <code>--nodes &lt;NODES&gt;</code> — Number of nodes to use for each job</li>
+<li><code>-p</code>, <code>--partition &lt;PARTITION&gt;</code> — HPC partition</li>
+<li><code>-q</code>, <code>--qos &lt;QOS&gt;</code> — Controls priority of the jobs</li>
+<li><code>-t</code>, <code>--tmp &lt;TMP&gt;</code> — Request nodes that have at least this amount of storage scratch space</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Slurm job walltime</li>
+<li><code>-e</code>, <code>--extra &lt;EXTRA&gt;</code> — Add extra Slurm parameters</li>
+</ul>
+<h2 id="torc-slurm-list"><a class="header" href="#torc-slurm-list"><code>torc slurm list</code></a></h2>
+<p>Show the current Slurm configs in the database</p>
+<p><strong>Usage:</strong> <code>torc slurm list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-63"><a class="header" href="#arguments-63"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-45"><a class="header" href="#options-45"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of configs to return. Default: <code>100000</code></li>
+<li><code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+</ul>
+<h2 id="torc-slurm-get"><a class="header" href="#torc-slurm-get"><code>torc slurm get</code></a></h2>
+<p>Get a specific Slurm config by ID</p>
+<p><strong>Usage:</strong> <code>torc slurm get &lt;ID&gt;</code></p>
+<h6 id="arguments-64"><a class="header" href="#arguments-64"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the Slurm config to get</li>
+</ul>
+<h2 id="torc-slurm-delete"><a class="header" href="#torc-slurm-delete"><code>torc slurm delete</code></a></h2>
+<p>Delete a Slurm config by ID</p>
+<p><strong>Usage:</strong> <code>torc slurm delete &lt;ID&gt;</code></p>
+<h6 id="arguments-65"><a class="header" href="#arguments-65"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the Slurm config to delete</li>
+</ul>
+<h2 id="torc-slurm-schedule-nodes"><a class="header" href="#torc-slurm-schedule-nodes"><code>torc slurm schedule-nodes</code></a></h2>
+<p>Schedule compute nodes using Slurm</p>
+<p><strong>Usage:</strong> <code>torc slurm schedule-nodes [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-66"><a class="header" href="#arguments-66"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-46"><a class="header" href="#options-46"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-j</code>, <code>--job-prefix &lt;JOB_PREFIX&gt;</code> — Job prefix for the Slurm job names. Default: empty</li>
+<li><code>--keep-submission-scripts</code> — Keep submission scripts after job submission. Default: <code>false</code></li>
+<li><code>-m</code>, <code>--max-parallel-jobs &lt;MAX_PARALLEL_JOBS&gt;</code> — Maximum number of parallel jobs</li>
+<li><code>-n</code>, <code>--num-hpc-jobs &lt;NUM_HPC_JOBS&gt;</code> — Number of HPC jobs to submit. Default: <code>1</code></li>
+<li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output directory for job output files. Default: <code>output</code></li>
+<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds. Default: <code>60</code></li>
+<li><code>--scheduler-config-id &lt;SCHEDULER_CONFIG_ID&gt;</code> — Scheduler config ID</li>
+<li><code>--start-one-worker-per-node</code> — Start one worker per node. Default: <code>false</code></li>
+</ul>
+<h2 id="torc-slurm-parse-logs"><a class="header" href="#torc-slurm-parse-logs"><code>torc slurm parse-logs</code></a></h2>
+<p>Parse Slurm log files for known error messages</p>
+<p><strong>Usage:</strong> <code>torc slurm parse-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-67"><a class="header" href="#arguments-67"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-47"><a class="header" href="#options-47"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory containing Slurm log files. Default: <code>output</code></li>
+<li><code>--errors-only</code> — Only show errors (skip warnings). Default: <code>false</code></li>
+</ul>
+<h2 id="torc-slurm-sacct"><a class="header" href="#torc-slurm-sacct"><code>torc slurm sacct</code></a></h2>
+<p>Call sacct for scheduled compute nodes and display summary</p>
+<p><strong>Usage:</strong> <code>torc slurm sacct [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-68"><a class="header" href="#arguments-68"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-48"><a class="header" href="#options-48"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for sacct JSON files (only used with
+--save-json). Default: <code>output</code></li>
+<li><code>--save-json</code> — Save full JSON output to files in addition to displaying summary. Default: <code>false</code></li>
+</ul>
+<h2 id="torc-slurm-stats"><a class="header" href="#torc-slurm-stats"><code>torc slurm stats</code></a></h2>
+<p>Show per-job Slurm accounting stats stored in the database</p>
+<p><strong>Usage:</strong> <code>torc slurm stats [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
+<h6 id="arguments-69"><a class="header" href="#arguments-69"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-49"><a class="header" href="#options-49"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--job-id &lt;JOB_ID&gt;</code> — Filter by job ID</li>
+</ul>
+<h2 id="torc-slurm-generate"><a class="header" href="#torc-slurm-generate"><code>torc slurm generate</code></a></h2>
+<p>Generate Slurm schedulers for a workflow based on job resource requirements</p>
+<p><strong>Usage:</strong> <code>torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;</code></p>
+<h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL)</li>
+</ul>
+<h6 id="options-50"><a class="header" href="#options-50"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use</li>
+<li><code>--profile &lt;PROFILE&gt;</code> — HPC profile to use (if not specified, tries to detect current system)</li>
+<li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (if not specified, prints to stdout)</li>
+<li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler. By default,
+creates one Slurm allocation per node (N×1 mode). With this flag, creates one large allocation
+with all nodes (1×N mode).</li>
+<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values: <code>partition</code>
+(default), <code>resource-requirements</code></li>
+<li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
+<code>max-job-runtime</code> (default), <code>max-partition-time</code>. <code>max-job-runtime</code> uses the maximum job runtime
+multiplied by <code>--walltime-multiplier</code>. <code>max-partition-time</code> uses the partition's maximum allowed
+walltime.</li>
+<li><code>--walltime-multiplier &lt;MULTIPLIER&gt;</code> — Multiplier for job runtime when using
+<code>--walltime-strategy=max-job-runtime</code>. Default: <code>1.5</code></li>
+<li><code>--no-actions</code> — Don't add workflow actions for scheduling nodes</li>
+<li><code>--overwrite</code> — Overwrite existing schedulers in the workflow</li>
+<li><code>--dry-run</code> — Show what would be generated without writing to output</li>
+</ul>
+<h2 id="torc-slurm-regenerate"><a class="header" href="#torc-slurm-regenerate"><code>torc slurm regenerate</code></a></h2>
+<p>Regenerate Slurm schedulers for an existing workflow based on pending jobs</p>
+<p>Analyzes jobs that are uninitialized, ready, or blocked and generates new Slurm schedulers to run
+them. Uses existing scheduler configurations as defaults for account, partition, and other settings.</p>
+<p>This is useful for recovery after job failures: update job resources, reset failed jobs, then
+regenerate schedulers to submit new allocations.</p>
+<p><strong>Usage:</strong> <code>torc slurm regenerate [OPTIONS] &lt;WORKFLOW_ID&gt;</code></p>
+<h6 id="arguments-71"><a class="header" href="#arguments-71"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+</ul>
+<h6 id="options-51"><a class="header" href="#options-51"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--account &lt;ACCOUNT&gt;</code> — Slurm account to use (defaults to account from existing schedulers)</li>
+<li><code>--profile &lt;PROFILE&gt;</code> — HPC profile to use (if not specified, tries to detect current system)</li>
+<li><code>--partition &lt;PARTITION&gt;</code> — Fixed Slurm partition (bypasses automatic partition selection). Node
+count is still calculated dynamically.</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Fixed Slurm walltime (format: <code>HH:MM:SS</code> or <code>D-HH:MM:SS</code>). Bypasses
+automatic walltime calculation. Node count is still calculated dynamically.</li>
+<li><code>--single-allocation</code> — Bundle all nodes into a single Slurm allocation per scheduler</li>
+<li><code>--submit</code> — Submit the generated allocations immediately</li>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job output files (used when submitting).
+Default: <code>output</code></li>
+<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds (used when submitting).
+Default: <code>60</code></li>
+<li><code>--group-by &lt;GROUP_BY&gt;</code> — Strategy for grouping jobs into schedulers. Possible values: <code>partition</code>
+(default), <code>resource-requirements</code></li>
+<li><code>--walltime-strategy &lt;STRATEGY&gt;</code> — Strategy for determining Slurm job walltime. Possible values:
+<code>max-job-runtime</code> (default), <code>max-partition-time</code>. Ignored when <code>--walltime</code> is set.</li>
+<li><code>--walltime-multiplier &lt;MULTIPLIER&gt;</code> — Multiplier for job runtime when using
+<code>--walltime-strategy=max-job-runtime</code>. Default: <code>1.5</code>. Ignored when <code>--walltime</code> is set.</li>
+<li><code>--dry-run</code> — Show what would be created without making changes</li>
+<li><code>--include-job-ids &lt;JOB_IDS&gt;</code> — Include specific job IDs in planning regardless of their status
+(useful for recovery dry-run to include failed jobs)</li>
+</ul>
+<h2 id="torc-remote"><a class="header" href="#torc-remote"><code>torc remote</code></a></h2>
+<p>Remote worker execution commands (SSH-based distributed execution)</p>
+<p><strong>Usage:</strong> <code>torc remote &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-11"><a class="header" href="#subcommands-11"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>add-workers</code> — Add one or more remote workers to a workflow</li>
+<li><code>add-workers-from-file</code> — Add remote workers to a workflow from a file</li>
+<li><code>remove-worker</code> — Remove a remote worker from a workflow</li>
+<li><code>list-workers</code> — List remote workers stored in the database for a workflow</li>
+<li><code>run</code> — Run workers on remote machines via SSH</li>
+<li><code>status</code> — Check status of remote workers</li>
+<li><code>stop</code> — Stop workers on remote machines</li>
+<li><code>collect-logs</code> — Collect logs from remote workers</li>
+<li><code>delete-logs</code> — Delete logs from remote workers</li>
+</ul>
+<h2 id="torc-remote-add-workers"><a class="header" href="#torc-remote-add-workers"><code>torc remote add-workers</code></a></h2>
+<p>Add one or more remote workers to a workflow</p>
+<p>Workers are stored in the database and used by subsequent commands. Format: [user@]hostname[:port]</p>
+<p><strong>Usage:</strong> <code>torc remote add-workers &lt;WORKFLOW_ID&gt; &lt;WORKERS&gt;...</code></p>
+<h6 id="arguments-72"><a class="header" href="#arguments-72"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+<li><code>&lt;WORKERS&gt;</code> — Worker addresses (format: [user@]hostname[:port])</li>
+</ul>
+<h2 id="torc-remote-add-workers-from-file"><a class="header" href="#torc-remote-add-workers-from-file"><code>torc remote add-workers-from-file</code></a></h2>
+<p>Add remote workers to a workflow from a file</p>
+<p>Each line in the file should be a worker address. Lines starting with # are comments.</p>
+<p><strong>Usage:</strong> <code>torc remote add-workers-from-file &lt;WORKER_FILE&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-73"><a class="header" href="#arguments-73"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKER_FILE&gt;</code> — Path to worker file listing remote machines</li>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-remote-remove-worker"><a class="header" href="#torc-remote-remove-worker"><code>torc remote remove-worker</code></a></h2>
+<p>Remove a remote worker from a workflow</p>
+<p><strong>Usage:</strong> <code>torc remote remove-worker &lt;WORKER&gt; [WORKFLOW_ID]</code></p>
+<h6 id="arguments-74"><a class="header" href="#arguments-74"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKER&gt;</code> — Worker address to remove</li>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-remote-list-workers"><a class="header" href="#torc-remote-list-workers"><code>torc remote list-workers</code></a></h2>
+<p>List remote workers stored in the database for a workflow</p>
+<p><strong>Usage:</strong> <code>torc remote list-workers [WORKFLOW_ID]</code></p>
+<h6 id="arguments-75"><a class="header" href="#arguments-75"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-remote-run"><a class="header" href="#torc-remote-run"><code>torc remote run</code></a></h2>
+<p>Run workers on remote machines via SSH</p>
+<p>SSH into each stored worker and start a torc worker process. Workers run detached (via nohup) and
+survive SSH disconnection. Use add-workers first, or provide --workers to add and run in one step.</p>
+<p><strong>Usage:</strong> <code>torc remote run [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-76"><a class="header" href="#arguments-76"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to run (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-52"><a class="header" href="#options-52"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-w</code>, <code>--workers &lt;WORKERS&gt;</code> — Path to worker file (optional - adds workers before running)</li>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory on remote machines (relative to home).
+Default: <code>torc_output</code></li>
+<li><code>--max-parallel-ssh &lt;MAX_PARALLEL_SSH&gt;</code> — Maximum parallel SSH connections. Default: <code>10</code></li>
+<li><code>-p</code>, <code>--poll-interval &lt;POLL_INTERVAL&gt;</code> — Poll interval in seconds for workers. Default: <code>5.0</code></li>
+<li><code>--max-parallel-jobs &lt;MAX_PARALLEL_JOBS&gt;</code> — Maximum number of parallel jobs per worker</li>
+<li><code>--num-cpus &lt;NUM_CPUS&gt;</code> — Number of CPUs per worker (auto-detect if not specified)</li>
+<li><code>--memory-gb &lt;MEMORY_GB&gt;</code> — Memory in GB per worker (auto-detect if not specified)</li>
+<li><code>--num-gpus &lt;NUM_GPUS&gt;</code> — Number of GPUs per worker (auto-detect if not specified)</li>
+<li><code>--skip-version-check</code> — Skip version check (not recommended). Default: <code>false</code></li>
+</ul>
+<h2 id="torc-remote-status"><a class="header" href="#torc-remote-status"><code>torc remote status</code></a></h2>
+<p>Check status of remote workers</p>
+<p><strong>Usage:</strong> <code>torc remote status [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-77"><a class="header" href="#arguments-77"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-53"><a class="header" href="#options-53"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Remote output directory (must match what was used in run). Default:
+<code>torc_output</code></li>
+<li><code>--max-parallel-ssh &lt;MAX_PARALLEL_SSH&gt;</code> — Maximum parallel SSH connections. Default: <code>10</code></li>
+</ul>
+<h2 id="torc-remote-stop"><a class="header" href="#torc-remote-stop"><code>torc remote stop</code></a></h2>
+<p>Stop workers on remote machines</p>
+<p><strong>Usage:</strong> <code>torc remote stop [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-78"><a class="header" href="#arguments-78"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-54"><a class="header" href="#options-54"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Remote output directory (must match what was used in run). Default:
+<code>torc_output</code></li>
+<li><code>--max-parallel-ssh &lt;MAX_PARALLEL_SSH&gt;</code> — Maximum parallel SSH connections. Default: <code>10</code></li>
+<li><code>--force</code> — Force kill (SIGKILL instead of SIGTERM). Default: <code>false</code></li>
+</ul>
+<h2 id="torc-remote-collect-logs"><a class="header" href="#torc-remote-collect-logs"><code>torc remote collect-logs</code></a></h2>
+<p>Collect logs from remote workers</p>
+<p><strong>Usage:</strong> <code>torc remote collect-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-79"><a class="header" href="#arguments-79"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-55"><a class="header" href="#options-55"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--local-output-dir &lt;LOCAL_OUTPUT_DIR&gt;</code> — Local directory to save collected logs. Default:
+<code>remote_logs</code></li>
+<li><code>--remote-output-dir &lt;REMOTE_OUTPUT_DIR&gt;</code> — Remote output directory (must match what was used in
+run). Default: <code>torc_output</code></li>
+<li><code>--max-parallel-ssh &lt;MAX_PARALLEL_SSH&gt;</code> — Maximum parallel SSH connections. Default: <code>10</code></li>
+<li><code>--delete</code> — Delete remote logs after successful collection. Default: <code>false</code></li>
+</ul>
+<h2 id="torc-remote-delete-logs"><a class="header" href="#torc-remote-delete-logs"><code>torc remote delete-logs</code></a></h2>
+<p>Delete logs from remote workers</p>
+<p>Removes the output directory from all remote workers. Use collect-logs --delete to safely collect
+before deleting.</p>
+<p><strong>Usage:</strong> <code>torc remote delete-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-80"><a class="header" href="#arguments-80"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-56"><a class="header" href="#options-56"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--remote-output-dir &lt;REMOTE_OUTPUT_DIR&gt;</code> — Remote output directory to delete (must match what was
+used in run). Default: <code>torc_output</code></li>
+<li><code>--max-parallel-ssh &lt;MAX_PARALLEL_SSH&gt;</code> — Maximum parallel SSH connections. Default: <code>10</code></li>
+</ul>
+<h2 id="torc-scheduled-compute-nodes"><a class="header" href="#torc-scheduled-compute-nodes"><code>torc scheduled-compute-nodes</code></a></h2>
+<p>Scheduled compute node management commands</p>
+<p><strong>Usage:</strong> <code>torc scheduled-compute-nodes &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-12"><a class="header" href="#subcommands-12"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>get</code> — Get a scheduled compute node by ID</li>
+<li><code>list</code> — List scheduled compute nodes for a workflow</li>
+<li><code>list-jobs</code> — List jobs that ran under a scheduled compute node</li>
+</ul>
+<h2 id="torc-scheduled-compute-nodes-get"><a class="header" href="#torc-scheduled-compute-nodes-get"><code>torc scheduled-compute-nodes get</code></a></h2>
+<p>Get a scheduled compute node by ID</p>
+<p><strong>Usage:</strong> <code>torc scheduled-compute-nodes get &lt;ID&gt;</code></p>
+<h6 id="arguments-81"><a class="header" href="#arguments-81"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the scheduled compute node</li>
+</ul>
+<h2 id="torc-scheduled-compute-nodes-list"><a class="header" href="#torc-scheduled-compute-nodes-list"><code>torc scheduled-compute-nodes list</code></a></h2>
+<p>List scheduled compute nodes for a workflow</p>
+<p><strong>Usage:</strong> <code>torc scheduled-compute-nodes list [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-82"><a class="header" href="#arguments-82"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — List scheduled compute nodes for this workflow (optional - will prompt if not
+provided)</li>
+</ul>
+<h6 id="options-57"><a class="header" href="#options-57"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-l</code>, <code>--limit &lt;LIMIT&gt;</code> — Maximum number of scheduled compute nodes to return. Default: <code>100000</code></li>
+<li><code>-o</code>, <code>--offset &lt;OFFSET&gt;</code> — Offset for pagination (0-based). Default: <code>0</code></li>
+<li><code>-s</code>, <code>--sort-by &lt;SORT_BY&gt;</code> — Field to sort by</li>
+<li><code>-r</code>, <code>--reverse-sort</code> — Reverse sort order. Default: <code>false</code></li>
+<li><code>--scheduler-id &lt;SCHEDULER_ID&gt;</code> — Filter by scheduler ID</li>
+<li><code>--scheduler-config-id &lt;SCHEDULER_CONFIG_ID&gt;</code> — Filter by scheduler config ID</li>
+<li><code>--status &lt;STATUS&gt;</code> — Filter by status</li>
+</ul>
+<h2 id="torc-scheduled-compute-nodes-list-jobs"><a class="header" href="#torc-scheduled-compute-nodes-list-jobs"><code>torc scheduled-compute-nodes list-jobs</code></a></h2>
+<p>List jobs that ran under a scheduled compute node</p>
+<p><strong>Usage:</strong> <code>torc scheduled-compute-nodes list-jobs &lt;ID&gt;</code></p>
+<h6 id="arguments-83"><a class="header" href="#arguments-83"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;ID&gt;</code> — ID of the scheduled compute node</li>
+</ul>
+<h2 id="torc-hpc"><a class="header" href="#torc-hpc"><code>torc hpc</code></a></h2>
+<p>HPC system profiles and partition information</p>
+<p><strong>Usage:</strong> <code>torc hpc &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-13"><a class="header" href="#subcommands-13"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>list</code> — List known HPC system profiles</li>
+<li><code>detect</code> — Detect the current HPC system</li>
+<li><code>show</code> — Show details of an HPC profile</li>
+<li><code>partitions</code> — Show partitions for an HPC profile</li>
+<li><code>match</code> — Find partitions matching resource requirements</li>
+<li><code>generate</code> — Generate an HPC profile configuration from the current Slurm cluster</li>
+</ul>
+<h2 id="torc-hpc-list"><a class="header" href="#torc-hpc-list"><code>torc hpc list</code></a></h2>
+<p>List known HPC system profiles</p>
+<p><strong>Usage:</strong> <code>torc hpc list</code></p>
+<h2 id="torc-hpc-detect"><a class="header" href="#torc-hpc-detect"><code>torc hpc detect</code></a></h2>
+<p>Detect the current HPC system. If no built-in or custom profile matches but Slurm is available, a
+dynamic profile is generated from the current cluster.</p>
+<p><strong>Usage:</strong> <code>torc hpc detect</code></p>
+<h2 id="torc-hpc-show"><a class="header" href="#torc-hpc-show"><code>torc hpc show</code></a></h2>
+<p>Show details of an HPC profile</p>
+<p><strong>Usage:</strong> <code>torc hpc show &lt;NAME&gt;</code></p>
+<h6 id="arguments-84"><a class="header" href="#arguments-84"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;NAME&gt;</code> — Profile name (e.g., "kestrel") or "slurm" for dynamically detected cluster</li>
+</ul>
+<h2 id="torc-hpc-partitions"><a class="header" href="#torc-hpc-partitions"><code>torc hpc partitions</code></a></h2>
+<p>Show partitions for an HPC profile</p>
+<p><strong>Usage:</strong> <code>torc hpc partitions [OPTIONS] [NAME]</code></p>
+<h6 id="arguments-85"><a class="header" href="#arguments-85"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>[NAME]</code> — Profile name (e.g., "kestrel", "slurm"). If not specified, tries to detect current
+system.</li>
+</ul>
+<h6 id="options-58"><a class="header" href="#options-58"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--gpu</code> — Filter to GPU partitions only</li>
+<li><code>--shared</code> — Filter to shared partitions</li>
+</ul>
+<h2 id="torc-hpc-match"><a class="header" href="#torc-hpc-match"><code>torc hpc match</code></a></h2>
+<p>Find partitions matching resource requirements</p>
+<p><strong>Usage:</strong> <code>torc hpc match [OPTIONS] [PROFILE]</code></p>
+<h6 id="arguments-86"><a class="header" href="#arguments-86"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>[PROFILE]</code> — Profile name (if not specified, tries to detect current system)</li>
+</ul>
+<h6 id="options-59"><a class="header" href="#options-59"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--cpus &lt;CPUS&gt;</code> — Number of CPUs required</li>
+<li><code>--memory &lt;MEMORY&gt;</code> — Memory required (e.g., "100g", "512m", or MB as number)</li>
+<li><code>--walltime &lt;WALLTIME&gt;</code> — Wall time required (e.g., "4:00:00", "2-00:00:00")</li>
+<li><code>--gpus &lt;GPUS&gt;</code> — Number of GPUs required</li>
+</ul>
+<h2 id="torc-hpc-generate"><a class="header" href="#torc-hpc-generate"><code>torc hpc generate</code></a></h2>
+<p>Generate an HPC profile configuration from the current Slurm cluster</p>
+<p><strong>Usage:</strong> <code>torc hpc generate [OPTIONS]</code></p>
+<h6 id="options-60"><a class="header" href="#options-60"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-n</code>, <code>--name &lt;NAME&gt;</code> — Profile name (e.g., "kestrel")</li>
+<li><code>-d</code>, <code>--display-name &lt;DISPLAY_NAME&gt;</code> — Human-readable display name</li>
+<li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (prints to stdout if not specified)</li>
+<li><code>--skip-stdby</code> — Skip standby partitions (ones ending in -stdby)</li>
+</ul>
+<h2 id="torc-reports"><a class="header" href="#torc-reports"><code>torc reports</code></a></h2>
+<p>Generate reports and analytics</p>
+<p><strong>Usage:</strong> <code>torc reports &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-14"><a class="header" href="#subcommands-14"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>check-resource-utilization</code> — Check resource utilization and report jobs that exceeded their
+specified requirements</li>
+<li><code>results</code> — Generate a comprehensive JSON report of job results including all log file paths</li>
+<li><code>summary</code> — Generate a summary of workflow results (requires workflow to be complete)</li>
+</ul>
+<h2 id="torc-workflows-check-resources"><a class="header" href="#torc-workflows-check-resources"><code>torc workflows check-resources</code></a></h2>
+<p>Check resource utilization and report jobs that exceeded their specified requirements</p>
+<p><strong>Usage:</strong> <code>torc workflows check-resources [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-87"><a class="header" href="#arguments-87"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-61"><a class="header" href="#options-61"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-r</code>, <code>--run-id &lt;RUN_ID&gt;</code> — Run ID to analyze (optional - analyzes latest run if not provided)</li>
+<li><code>-a</code>, <code>--all</code> — Show all jobs (default: only show jobs that exceeded requirements)</li>
+<li><code>--include-failed</code> — Include failed and terminated jobs in the analysis (for recovery diagnostics)</li>
+<li><code>--min-over-utilization &lt;MIN_OVER_UTILIZATION&gt;</code> — Minimum over-utilization percentage to flag as
+violation (default: 1.0%)</li>
+</ul>
+<h2 id="torc-results-list---include-logs"><a class="header" href="#torc-results-list---include-logs"><code>torc results list --include-logs</code></a></h2>
+<p>Generate a comprehensive JSON report of job results including all log file paths</p>
+<p><strong>Usage:</strong> <code>torc results list --include-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<h6 id="arguments-88"><a class="header" href="#arguments-88"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to analyze (optional - will prompt if not provided)</li>
+</ul>
+<h6 id="options-62"><a class="header" href="#options-62"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory (where job logs are stored, passed in
+<code>torc run</code> and <code>torc submit</code>). Default: <code>output</code></li>
+<li><code>--all-runs</code> — Include all runs for each job (default: only latest run)</li>
+</ul>
+<h2 id="torc-status-1"><a class="header" href="#torc-status-1"><code>torc status</code></a></h2>
+<p>Generate a summary of workflow results (requires workflow to be complete)</p>
+<p><strong>Usage:</strong> <code>torc status [WORKFLOW_ID]</code></p>
+<h6 id="arguments-89"><a class="header" href="#arguments-89"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID to summarize (optional - will prompt if not provided)</li>
+</ul>
+<h2 id="torc-config"><a class="header" href="#torc-config"><code>torc config</code></a></h2>
+<p>Manage configuration files and settings</p>
+<p><strong>Usage:</strong> <code>torc config &lt;COMMAND&gt;</code></p>
+<h6 id="subcommands-15"><a class="header" href="#subcommands-15"><strong>Subcommands:</strong></a></h6>
+<ul>
+<li><code>show</code> — Show the effective configuration (merged from all sources)</li>
+<li><code>paths</code> — Show configuration file paths</li>
+<li><code>init</code> — Initialize a configuration file with defaults</li>
+<li><code>validate</code> — Validate the current configuration</li>
+</ul>
+<h2 id="torc-config-show"><a class="header" href="#torc-config-show"><code>torc config show</code></a></h2>
+<p>Show the effective configuration (merged from all sources)</p>
+<p><strong>Usage:</strong> <code>torc config show [OPTIONS]</code></p>
+<h6 id="options-63"><a class="header" href="#options-63"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (toml or json). Default: <code>toml</code></li>
+</ul>
+<h2 id="torc-config-paths"><a class="header" href="#torc-config-paths"><code>torc config paths</code></a></h2>
+<p>Show configuration file paths</p>
+<p><strong>Usage:</strong> <code>torc config paths</code></p>
+<h2 id="torc-config-init"><a class="header" href="#torc-config-init"><code>torc config init</code></a></h2>
+<p>Initialize a configuration file with defaults</p>
+<p><strong>Usage:</strong> <code>torc config init [OPTIONS]</code></p>
+<h6 id="options-64"><a class="header" href="#options-64"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--system</code> — Create system-wide config (/etc/torc/config.toml)</li>
+<li><code>--user</code> — Create user config (~/.config/torc/config.toml)</li>
+<li><code>--local</code> — Create project-local config (./torc.toml)</li>
+<li><code>-f</code>, <code>--force</code> — Force overwrite if file exists</li>
+</ul>
+<h2 id="torc-config-validate"><a class="header" href="#torc-config-validate"><code>torc config validate</code></a></h2>
+<p>Validate the current configuration</p>
+<p><strong>Usage:</strong> <code>torc config validate</code></p>
+<h2 id="torc-tui"><a class="header" href="#torc-tui"><code>torc tui</code></a></h2>
+<p>Interactive terminal UI for managing workflows</p>
+<p><strong>Usage:</strong> <code>torc tui [OPTIONS]</code></p>
+<h6 id="options-65"><a class="header" href="#options-65"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>--standalone</code> — Start in standalone mode: automatically start a torc-server</li>
+<li><code>--port &lt;PORT&gt;</code> — Port for the server in standalone mode. Default: <code>8080</code></li>
+<li><code>--database &lt;DATABASE&gt;</code> — Database path for standalone mode</li>
+</ul>
+<h2 id="torc-plot-resources"><a class="header" href="#torc-plot-resources"><code>torc plot-resources</code></a></h2>
+<p>Generate interactive HTML plots from resource monitoring data</p>
+<p><strong>Usage:</strong> <code>torc plot-resources [OPTIONS] &lt;DB_PATHS&gt;...</code></p>
+<h6 id="arguments-90"><a class="header" href="#arguments-90"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;DB_PATHS&gt;</code> — Path to the resource metrics database file(s)</li>
+</ul>
+<h6 id="options-66"><a class="header" href="#options-66"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for generated plots (default: current
+directory). Default: <code>.</code></li>
+<li><code>-j</code>, <code>--job-ids &lt;JOB_IDS&gt;</code> — Only plot specific job IDs (comma-separated)</li>
+<li><code>-p</code>, <code>--prefix &lt;PREFIX&gt;</code> — Prefix for output filenames. Default: <code>resource_plot</code></li>
+<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format: html or json. Default: <code>html</code></li>
+</ul>
+<h2 id="torc-completions"><a class="header" href="#torc-completions"><code>torc completions</code></a></h2>
+<p>Generate shell completions</p>
+<p><strong>Usage:</strong> <code>torc completions &lt;SHELL&gt;</code></p>
+<h6 id="arguments-91"><a class="header" href="#arguments-91"><strong>Arguments:</strong></a></h6>
+<ul>
+<li><code>&lt;SHELL&gt;</code> — The shell to generate completions for. Possible values: <code>bash</code>, <code>elvish</code>, <code>fish</code>,
+<code>powershell</code>, <code>zsh</code></li>
+</ul>
+<hr/>
+<p><small><i>This document was generated automatically by
+<a href="https://crates.io/crates/clap-markdown"><code>clap-markdown</code></a>.</i></small></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/reference/cli-cheatsheet.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/reference/workflow-spec.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/reference/cli-cheatsheet.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/reference/workflow-spec.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
