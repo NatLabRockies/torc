@@ -1,6 +1,10 @@
 use crate::models;
 use crate::openapi_spec::{OpenApiAppState, PingResponse, VersionResponse};
 use crate::server::api_contract::TransportApiCore;
+use crate::server::api_event_stream::{
+    ApiEventBroadcaster, ApiRequestEvent, BODY_CAPTURE_HARD_CAP_BYTES, CapturedBody,
+    body_capture_limit,
+};
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::credential_cache::CredentialCache;
 use crate::server::dashboard::serve_dashboard;
@@ -8,11 +12,11 @@ use crate::server::htpasswd::HtpasswdFile;
 use crate::server::http_server::Server;
 use crate::server::http_transport::*;
 use crate::server::transport_types::auth_types::{AuthData, Authorization, Scopes, from_headers};
-use crate::server::transport_types::context_types::{EmptyContext, Push, XSpanIdString};
+use crate::server::transport_types::context_types::{EmptyContext, Has, Push, XSpanIdString};
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
-use axum::http::header::{HeaderName, HeaderValue};
+use axum::http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use axum::http::{Response, StatusCode};
 use axum::middleware::{self, Next};
 use axum::routing::{delete, get, post, put};
@@ -286,6 +290,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
         )
         .route("/torc-service/v1/admin/reload-auth", post(reload_auth))
         .route(
+            "/torc-service/v1/admin/api-events/stream",
+            get(admin_api_events_stream),
+        )
+        .route(
             "/torc-service/v1/workflows",
             get(list_workflows).post(create_workflow),
         )
@@ -369,6 +377,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(workflow_events_stream_route),
         )
         .fallback(dashboard_fallback)
+        .layer(middleware::from_fn_with_state(
+            state.server.api_event_broadcaster.clone(),
+            capture_api_event,
+        ))
         .layer(middleware::from_fn_with_state(
             state.auth.clone(),
             inject_request_context,
@@ -525,6 +537,72 @@ pub async fn reload_auth(
         Ok(response) => reload_auth_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ApiEventStreamQuery {
+    /// When true, captured request and response bodies are included in
+    /// each event (subject to size and content-type filtering). Defaults
+    /// to false so credentials/payloads aren't streamed unless requested.
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub include_bodies: Option<bool>,
+}
+
+#[utoipa::path(
+    get,
+    tag = "system",
+    path = "/admin/api-events/stream",
+    operation_id = "admin_api_events_stream",
+    params(ApiEventStreamQuery),
+    responses(
+        (status = 200, description = "Server-Sent Events stream of inbound API requests")
+    )
+)]
+pub async fn admin_api_events_stream(
+    State(state): State<LiveRouterState>,
+    Query(params): Query<ApiEventStreamQuery>,
+) -> Response<Body> {
+    let bus = state.server.api_event_broadcaster.clone();
+    let mut receiver = bus.subscribe();
+    let body_guard = if params.include_bodies.unwrap_or(false) {
+        Some(bus.body_subscriber_guard())
+    } else {
+        None
+    };
+
+    let stream = async_stream::stream! {
+        // Keep the body-subscriber count elevated for the lifetime of
+        // this connection.
+        let _body_guard = body_guard;
+        loop {
+            match receiver.recv().await {
+                Ok(event) => {
+                    let data = serde_json::to_string(&event).unwrap_or_default();
+                    yield Ok::<_, std::convert::Infallible>(format!(
+                        "event: api\ndata: {}\n\n",
+                        data
+                    ));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                    yield Ok::<_, std::convert::Infallible>(format!(
+                        "event: warning\ndata: {{\"dropped\": {}}}\n\n",
+                        count
+                    ));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "text/event-stream")
+        .header("Cache-Control", "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(Body::from_stream(stream))
+        .expect("valid SSE response")
 }
 
 async fn dashboard_fallback(request: Request) -> Response<Body> {
@@ -4110,6 +4188,155 @@ async fn inject_request_context(
     response
 }
 
+async fn capture_api_event(
+    State(bus): State<ApiEventBroadcaster>,
+    request: Request,
+    next: Next,
+) -> Response<Body> {
+    if bus.receiver_count() == 0 {
+        return next.run(request).await;
+    }
+
+    let started = std::time::Instant::now();
+    let method = request.method().as_str().to_owned();
+    let path = request.uri().path().to_owned();
+    let query = request.uri().query().map(|s| s.to_owned());
+
+    let advisory_user = request
+        .headers()
+        .get("x-torc-client-user")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_owned());
+
+    let (request_id, user) = match request.extensions().get::<EmptyContext>() {
+        Some(ctx) => {
+            let span_id: &XSpanIdString = ctx.get();
+            let auth: &Option<Authorization> = ctx.get();
+            let resolved = auth.as_ref().map(|a| a.subject.clone());
+            // When the server runs without `--auth-file`, every request
+            // resolves to "anonymous" — fall back to the advisory client
+            // header so the event stream surfaces who's calling.
+            let user = match resolved.as_deref() {
+                None | Some("anonymous") => advisory_user.or(resolved),
+                Some(_) => resolved,
+            };
+            (Some(span_id.0.clone()), user)
+        }
+        None => (None, advisory_user),
+    };
+
+    let want_bodies = bus.body_subscriber_count() > 0;
+    let display_limit = body_capture_limit();
+
+    let (request, request_body) = if want_bodies {
+        capture_request_body(request, display_limit).await
+    } else {
+        (request, None)
+    };
+
+    let response = next.run(request).await;
+
+    let (response, response_body) = if want_bodies {
+        capture_response_body(response, display_limit).await
+    } else {
+        (response, None)
+    };
+
+    let event = ApiRequestEvent {
+        timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        method,
+        path,
+        query,
+        status: response.status().as_u16(),
+        latency_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+        request_id,
+        user,
+        request_body,
+        response_body,
+    };
+
+    bus.broadcast(event);
+    response
+}
+
+async fn capture_request_body(
+    request: Request,
+    display_limit: usize,
+) -> (Request, Option<CapturedBody>) {
+    use http_body::Body as _;
+    use http_body_util::BodyExt as _;
+
+    if let Some(len) = request
+        .headers()
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        && len > BODY_CAPTURE_HARD_CAP_BYTES as u64
+    {
+        return (request, None);
+    }
+    if let Some(upper) = request.body().size_hint().upper()
+        && upper > BODY_CAPTURE_HARD_CAP_BYTES as u64
+    {
+        return (request, None);
+    }
+
+    let (parts, body) = request.into_parts();
+    match body.collect().await {
+        Ok(collected) => {
+            let bytes = collected.to_bytes();
+            let captured = if bytes.len() > BODY_CAPTURE_HARD_CAP_BYTES {
+                None
+            } else {
+                Some(CapturedBody::from_bytes(&bytes, display_limit))
+            };
+            let new_req = Request::from_parts(parts, Body::from(bytes));
+            (new_req, captured)
+        }
+        Err(_) => (Request::from_parts(parts, Body::empty()), None),
+    }
+}
+
+async fn capture_response_body(
+    response: Response<Body>,
+    display_limit: usize,
+) -> (Response<Body>, Option<CapturedBody>) {
+    use http_body::Body as _;
+    use http_body_util::BodyExt as _;
+
+    let is_event_stream = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.starts_with("text/event-stream"))
+        .unwrap_or(false);
+    if is_event_stream {
+        return (response, None);
+    }
+    if let Some(upper) = response.body().size_hint().upper()
+        && upper > BODY_CAPTURE_HARD_CAP_BYTES as u64
+    {
+        return (response, None);
+    }
+
+    let (parts, body) = response.into_parts();
+    match body.collect().await {
+        Ok(collected) => {
+            let bytes = collected.to_bytes();
+            let captured = if bytes.len() > BODY_CAPTURE_HARD_CAP_BYTES {
+                None
+            } else {
+                Some(CapturedBody::from_bytes(&bytes, display_limit))
+            };
+            let new_resp = Response::from_parts(parts, Body::from(bytes));
+            (new_resp, captured)
+        }
+        Err(_) => (Response::from_parts(parts, Body::empty()), None),
+    }
+}
+
 fn add_standard_response_headers(response: &mut Response<Body>, span_id: &XSpanIdString) {
     response.headers_mut().insert(
         HeaderName::from_static("x-span-id"),
@@ -4260,6 +4487,105 @@ mod live_router_tests {
             .expect("router response");
 
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn capture_middleware_publishes_event_for_each_request() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        let mut rx = bus.subscribe();
+        let router = test_router(server);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping?probe=1")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event broadcast within 1s")
+            .expect("broadcast succeeded");
+
+        assert_eq!(event.method, "GET");
+        assert_eq!(event.path, "/torc-service/v1/ping");
+        assert_eq!(event.query.as_deref(), Some("probe=1"));
+        assert_eq!(event.status, 200);
+        assert!(event.request_id.is_some(), "x-span-id should be set");
+        // Without a body subscriber, bodies stay None even though a
+        // metadata receiver is connected.
+        assert!(event.request_body.is_none());
+        assert!(event.response_body.is_none());
+    }
+
+    #[tokio::test]
+    async fn capture_middleware_falls_back_to_client_user_header() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        let mut rx = bus.subscribe();
+        let router = test_router(server);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .header("X-Torc-Client-User", "alice")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event broadcast within 1s")
+            .expect("broadcast succeeded");
+
+        // Without auth configured the resolved subject would be
+        // "anonymous"; the advisory header takes its place.
+        assert_eq!(event.user.as_deref(), Some("alice"));
+    }
+
+    #[tokio::test]
+    async fn capture_middleware_streams_bodies_when_subscriber_requests_them() {
+        let server = test_server_with_schema().await;
+        let bus = server.api_event_broadcaster.clone();
+        let mut rx = bus.subscribe();
+        let _body_guard = bus.body_subscriber_guard();
+        let router = test_router(server);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event broadcast within 1s")
+            .expect("broadcast succeeded");
+
+        assert_eq!(event.path, "/torc-service/v1/ping");
+        let resp_body = event
+            .response_body
+            .expect("response body should be captured");
+        assert!(!resp_body.truncated);
+        assert!(resp_body.text.is_some());
     }
 
     #[tokio::test]

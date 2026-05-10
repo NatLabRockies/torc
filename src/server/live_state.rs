@@ -6,6 +6,7 @@ use crate::server::api::{
     RoCrateApiImpl, SchedulersApiImpl, SlurmStatsApiImpl, UserDataApiImpl, WorkflowActionsApiImpl,
     WorkflowsApiImpl,
 };
+use crate::server::api_event_stream::ApiEventBroadcaster;
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::authorization::AuthorizationService;
 use crate::server::event_broadcast::EventBroadcaster;
@@ -21,6 +22,7 @@ pub struct LiveServerState {
     pub workflows_with_failures: Arc<std::sync::RwLock<HashSet<i64>>>,
     pub authorization_service: AuthorizationService,
     pub event_broadcaster: EventBroadcaster,
+    pub api_event_broadcaster: ApiEventBroadcaster,
     pub htpasswd: SharedHtpasswd,
     pub auth_file_path: Option<String>,
     pub credential_cache: SharedCredentialCache,
@@ -60,6 +62,7 @@ impl LiveServerState {
             workflows_with_failures: Arc::new(std::sync::RwLock::new(HashSet::new())),
             authorization_service,
             event_broadcaster: EventBroadcaster::new(512),
+            api_event_broadcaster: ApiEventBroadcaster::default(),
             htpasswd,
             auth_file_path,
             credential_cache,
