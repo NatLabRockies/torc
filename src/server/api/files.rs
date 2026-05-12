@@ -8,13 +8,16 @@ use log::{debug, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    CreateFileResponse, DeleteFileResponse, DeleteFilesResponse, GetFileResponse,
-    ListFilesResponse, ListRequiredExistingFilesResponse, UpdateFileResponse,
+    CreateFileResponse, CreateFilesResponse, DeleteFileResponse, DeleteFilesResponse,
+    GetFileResponse, ListFilesResponse, ListRequiredExistingFilesResponse, UpdateFileResponse,
 };
 
 use crate::models;
 
-use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
+use super::{
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
+    database_error_with_msg, message_error_response, resource_not_found_response,
+};
 
 /// Trait defining file-related API operations
 #[async_trait]
@@ -25,6 +28,13 @@ pub trait FilesApi<C> {
         mut file: models::FileModel,
         context: &C,
     ) -> Result<CreateFileResponse, ApiError>;
+
+    /// Store many files in a single transaction.
+    async fn create_files(
+        &self,
+        body: models::FilesModel,
+        context: &C,
+    ) -> Result<CreateFilesResponse, ApiError>;
 
     /// Delete all files for one workflow.
     async fn delete_files(
@@ -129,6 +139,145 @@ where
 
         file.id = Some(result.id);
         Ok(CreateFileResponse::SuccessfulResponse(file))
+    }
+
+    /// Store many files in a single transaction.
+    ///
+    /// Uses multi-row `INSERT … VALUES (…), (…), … RETURNING id, name` so a
+    /// 20k-file batch becomes a few dozen statements rather than 20k prepared
+    /// INSERTs. SQLite's `RETURNING` order is undefined, so we look up each
+    /// generated `id` by `name` (validated unique below) and rebuild the
+    /// response in the caller's input order before committing.
+    async fn create_files(
+        &self,
+        body: models::FilesModel,
+        context: &C,
+    ) -> Result<CreateFilesResponse, ApiError> {
+        debug!(
+            "create_files({} files) - X-Span-ID: {:?}",
+            body.files.len(),
+            context.get().0.clone()
+        );
+
+        // The transport layer rejects empty batches with 422 so an unauthenticated
+        // caller can't reach this method without a workflow_id to authorize against.
+        // Mirror that contract here for in-process callers that bypass the transport.
+        if body.files.is_empty() {
+            return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Bulk file creation requires a non-empty `files` array".to_string(),
+                ),
+            ));
+        }
+
+        // Oversized batches are a client input error → 422, not 500.
+        if body.files.len() > MAX_RECORD_TRANSFER_COUNT as usize {
+            return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "Too many files in batch: {}. Maximum is {}",
+                    body.files.len(),
+                    MAX_RECORD_TRANSFER_COUNT
+                )),
+            ));
+        }
+
+        // Preflight: a `file` table has no UNIQUE (workflow_id, name) constraint, so
+        // duplicate names in one request would silently commit two rows and then
+        // confuse the post-insert response rebuild. Reject up front with 422.
+        {
+            let mut seen: std::collections::HashSet<&str> =
+                std::collections::HashSet::with_capacity(body.files.len());
+            for file in &body.files {
+                if !seen.insert(file.name.as_str()) {
+                    return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "Duplicate file name '{}' in bulk create request",
+                            file.name
+                        )),
+                    ));
+                }
+            }
+        }
+
+        // Acquire the SQLite write lock up front to avoid SQLITE_BUSY_SNAPSHOT under
+        // BEGIN DEFERRED if another writer commits between our INSERTs.
+        let mut transaction = match begin_immediate(&self.context.pool).await {
+            Ok(tx) => tx,
+            Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
+        };
+
+        // 4 bound parameters per row × 500 rows = 2000 params, well under SQLite's
+        // SQLITE_MAX_VARIABLE_NUMBER limit (32766 since 3.32).
+        const ROWS_PER_INSERT: usize = 500;
+        let mut id_by_name: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::with_capacity(body.files.len());
+
+        for chunk in body.files.chunks(ROWS_PER_INSERT) {
+            let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+                "INSERT INTO file (workflow_id, name, path, st_mtime) ",
+            );
+            qb.push_values(chunk, |mut row, file| {
+                row.push_bind(file.workflow_id)
+                    .push_bind(&file.name)
+                    .push_bind(&file.path)
+                    .push_bind(file.st_mtime);
+            });
+            qb.push(" RETURNING id, name");
+
+            let rows = match qb.build().fetch_all(&mut *transaction).await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    let _ = transaction.rollback().await;
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to create file records in bulk",
+                    ));
+                }
+            };
+            for row in rows {
+                let id: i64 = row.get("id");
+                let name: String = row.get("name");
+                id_by_name.insert(name, id);
+            }
+        }
+
+        // Rebuild the response in the caller's input order BEFORE committing so any
+        // unexpected name mismatch can still roll back the transaction. The preflight
+        // uniqueness check above means each name should resolve exactly once; if it
+        // doesn't, something is wrong with the RETURNING projection itself.
+        let total_input = body.files.len();
+        let mut created_files = Vec::with_capacity(total_input);
+        for mut file in body.files {
+            match id_by_name.remove(&file.name) {
+                Some(id) => file.id = Some(id),
+                None => {
+                    let _ = transaction.rollback().await;
+                    return Err(ApiError(format!(
+                        "Bulk file insert returned no id for name '{}'",
+                        file.name
+                    )));
+                }
+            }
+            created_files.push(file);
+        }
+
+        if let Err(e) = transaction.commit().await {
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
+        }
+
+        // `created_files` is non-empty here — the empty-input branch returns above.
+        let workflow_id = created_files[0].workflow_id;
+        info!(
+            "Files created workflow_id={} count={}",
+            workflow_id,
+            created_files.len()
+        );
+
+        Ok(CreateFilesResponse::SuccessfulResponse(
+            models::CreateFilesResponse {
+                files: Some(created_files),
+            },
+        ))
     }
 
     /// Delete all files for one workflow.

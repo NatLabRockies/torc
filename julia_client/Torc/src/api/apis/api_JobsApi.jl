@@ -78,6 +78,10 @@ end
 
 const _returntypes_create_jobs_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => CreateJobsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_create_jobs(_api::JobsApi, jobs_model::JobsModel; _mediaType=nothing)

@@ -26,13 +26,16 @@ from torc.openapi_client.models.claim_next_jobs_response import ClaimNextJobsRes
 from torc.openapi_client.models.compute_node_model import ComputeNodeModel
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources
+from torc.openapi_client.models.create_files_response import CreateFilesResponse
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse
+from torc.openapi_client.models.create_user_data_list_response import CreateUserDataListResponse
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse
 from torc.openapi_client.models.delete_ro_crate_entities_response import DeleteRoCrateEntitiesResponse
 from torc.openapi_client.models.error_response import ErrorResponse
 from torc.openapi_client.models.event_model import EventModel
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel
+from torc.openapi_client.models.files_model import FilesModel
 from torc.openapi_client.models.get_ready_job_requirements_response import GetReadyJobRequirementsResponse
 from torc.openapi_client.models.is_complete_response import IsCompleteResponse
 from torc.openapi_client.models.is_uninitialized_response import IsUninitializedResponse
@@ -81,6 +84,7 @@ from torc.openapi_client.models.slurm_scheduler_model import SlurmSchedulerModel
 from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel
 from torc.openapi_client.models.task_model import TaskModel
 from torc.openapi_client.models.task_status import TaskStatus
+from torc.openapi_client.models.user_data_list_model import UserDataListModel
 from torc.openapi_client.models.user_data_model import UserDataModel
 from torc.openapi_client.models.user_group_membership_model import UserGroupMembershipModel
 from torc.openapi_client.models.version_response import VersionResponse

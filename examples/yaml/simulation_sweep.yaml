@@ -59,8 +59,11 @@ jobs:
       temp: "250:400:50"
       pressure: "1:100:25"
 
-  # Generate phase diagram from all analysis results
-  - name: generate_phase_diagram
+  # Generate one phase diagram per (temperature, pressure) combination.
+  # Both varying parameters appear in the name so post-expansion names are
+  # unique; using a bare `generate_phase_diagram` template with the same
+  # parameters would expand into duplicate names and be rejected.
+  - name: generate_phase_diagram_T{temp}_P{pressure:03d}
     command: python scripts/phase_diagram.py --input-dir=/analysis --output=/results/phase_diagram.png
     resource_requirements: minimal
     depends_on:

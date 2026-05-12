@@ -52,9 +52,14 @@
         "analysis_type": "['summary','trends','anomalies']"
       }
     },
+    // Generate one report per (dataset, analysis_type) combination. Both
+    // varying parameters appear in the name so post-expansion names are
+    // unique; if `analysis_type` were dropped from the name we'd get 4 jobs
+    // called `report_sales` (one per analysis_type) and the spec would be
+    // rejected as a duplicate-name error.
     {
-      "name": "report_{dataset}",
-      "command": "python scripts/generate_report.py \\\n  --dataset={dataset} \\\n  --input-dir=/results \\\n  --output=/reports/{dataset}_report.html\n",
+      "name": "report_{dataset}_{analysis_type}",
+      "command": "python scripts/generate_report.py \\\n  --dataset={dataset} \\\n  --input-dir=/results \\\n  --output=/reports/{dataset}_{analysis_type}_report.html\n",
       "resource_requirements": "minimal",
       "depends_on": [
         "analyze_{dataset}_{analysis_type}"
@@ -67,12 +72,17 @@
         "analysis_type": "['summary','trends','anomalies']"
       }
     },
+    // Create executive summary per dataset. `{dataset}` appears in the name
+    // template so the 4 expanded jobs have unique names. Each one waits on
+    // all three of its parameterized reports.
     {
-      "name": "executive_summary",
-      "command": "python scripts/executive_summary.py --input-dir=/reports --output=/reports/executive_summary.pdf",
+      "name": "executive_summary_{dataset}",
+      "command": "python scripts/executive_summary.py --input-dir=/reports --output=/reports/executive_summary_{dataset}.pdf",
       "resource_requirements": "minimal",
       "depends_on": [
-        "report_{dataset}"
+        "report_{dataset}_summary",
+        "report_{dataset}_trends",
+        "report_{dataset}_anomalies"
       ],
       "parameters": {
         "dataset": "['sales','inventory','customers','products']"

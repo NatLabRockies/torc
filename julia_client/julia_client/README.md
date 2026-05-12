@@ -51,6 +51,7 @@ Class | Method
 *FailureHandlersApi* | [**get_failure_handler**](docs/FailureHandlersApi.md#get_failure_handler)<br/>**GET** /failure_handlers/{id}<br/>
 *FailureHandlersApi* | [**list_failure_handlers**](docs/FailureHandlersApi.md#list_failure_handlers)<br/>**GET** /workflows/{id}/failure_handlers<br/>
 *FilesApi* | [**create_file**](docs/FilesApi.md#create_file)<br/>**POST** /files<br/>
+*FilesApi* | [**create_files**](docs/FilesApi.md#create_files)<br/>**POST** /bulk_files<br/>
 *FilesApi* | [**delete_file**](docs/FilesApi.md#delete_file)<br/>**DELETE** /files/{id}<br/>
 *FilesApi* | [**delete_files**](docs/FilesApi.md#delete_files)<br/>**DELETE** /files<br/>
 *FilesApi* | [**get_file**](docs/FilesApi.md#get_file)<br/>**GET** /files/{id}<br/>
@@ -112,6 +113,7 @@ Class | Method
 *SystemApi* | [**ping**](docs/SystemApi.md#ping)<br/>**GET** /ping<br/>
 *TasksApi* | [**get_task**](docs/TasksApi.md#get_task)<br/>**GET** /tasks/{id}<br/>
 *UserDataApi* | [**create_user_data**](docs/UserDataApi.md#create_user_data)<br/>**POST** /user_data<br/>
+*UserDataApi* | [**create_user_data_list**](docs/UserDataApi.md#create_user_data_list)<br/>**POST** /bulk_user_data<br/>
 *UserDataApi* | [**delete_all_user_data**](docs/UserDataApi.md#delete_all_user_data)<br/>**DELETE** /user_data<br/>
 *UserDataApi* | [**delete_user_data**](docs/UserDataApi.md#delete_user_data)<br/>**DELETE** /user_data/{id}<br/>
 *UserDataApi* | [**get_user_data**](docs/UserDataApi.md#get_user_data)<br/>**GET** /user_data/{id}<br/>
@@ -162,13 +164,16 @@ Class | Method
  - [ComputeNodeModel](docs/ComputeNodeModel.md)
  - [ComputeNodeSchedule](docs/ComputeNodeSchedule.md)
  - [ComputeNodesResources](docs/ComputeNodesResources.md)
+ - [CreateFilesResponse](docs/CreateFilesResponse.md)
  - [CreateJobsResponse](docs/CreateJobsResponse.md)
+ - [CreateUserDataListResponse](docs/CreateUserDataListResponse.md)
  - [DeleteCountResponse](docs/DeleteCountResponse.md)
  - [DeleteRoCrateEntitiesResponse](docs/DeleteRoCrateEntitiesResponse.md)
  - [ErrorResponse](docs/ErrorResponse.md)
  - [EventModel](docs/EventModel.md)
  - [FailureHandlerModel](docs/FailureHandlerModel.md)
  - [FileModel](docs/FileModel.md)
+ - [FilesModel](docs/FilesModel.md)
  - [GetReadyJobRequirementsResponse](docs/GetReadyJobRequirementsResponse.md)
  - [IsCompleteResponse](docs/IsCompleteResponse.md)
  - [IsUninitializedResponse](docs/IsUninitializedResponse.md)
@@ -217,6 +222,7 @@ Class | Method
  - [SlurmStatsModel](docs/SlurmStatsModel.md)
  - [TaskModel](docs/TaskModel.md)
  - [TaskStatus](docs/TaskStatus.md)
+ - [UserDataListModel](docs/UserDataListModel.md)
  - [UserDataModel](docs/UserDataModel.md)
  - [UserGroupMembershipModel](docs/UserGroupMembershipModel.md)
  - [VersionResponse](docs/VersionResponse.md)

@@ -59,13 +59,16 @@ __all__ = [
     "ComputeNodeModel",
     "ComputeNodeSchedule",
     "ComputeNodesResources",
+    "CreateFilesResponse",
     "CreateJobsResponse",
+    "CreateUserDataListResponse",
     "DeleteCountResponse",
     "DeleteRoCrateEntitiesResponse",
     "ErrorResponse",
     "EventModel",
     "FailureHandlerModel",
     "FileModel",
+    "FilesModel",
     "GetReadyJobRequirementsResponse",
     "IsCompleteResponse",
     "IsUninitializedResponse",
@@ -114,6 +117,7 @@ __all__ = [
     "SlurmStatsModel",
     "TaskModel",
     "TaskStatus",
+    "UserDataListModel",
     "UserDataModel",
     "UserGroupMembershipModel",
     "VersionResponse",
@@ -168,13 +172,16 @@ from torc.openapi_client.models.claim_next_jobs_response import ClaimNextJobsRes
 from torc.openapi_client.models.compute_node_model import ComputeNodeModel as ComputeNodeModel
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule as ComputeNodeSchedule
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources as ComputeNodesResources
+from torc.openapi_client.models.create_files_response import CreateFilesResponse as CreateFilesResponse
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse as CreateJobsResponse
+from torc.openapi_client.models.create_user_data_list_response import CreateUserDataListResponse as CreateUserDataListResponse
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse as DeleteCountResponse
 from torc.openapi_client.models.delete_ro_crate_entities_response import DeleteRoCrateEntitiesResponse as DeleteRoCrateEntitiesResponse
 from torc.openapi_client.models.error_response import ErrorResponse as ErrorResponse
 from torc.openapi_client.models.event_model import EventModel as EventModel
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel as FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel as FileModel
+from torc.openapi_client.models.files_model import FilesModel as FilesModel
 from torc.openapi_client.models.get_ready_job_requirements_response import GetReadyJobRequirementsResponse as GetReadyJobRequirementsResponse
 from torc.openapi_client.models.is_complete_response import IsCompleteResponse as IsCompleteResponse
 from torc.openapi_client.models.is_uninitialized_response import IsUninitializedResponse as IsUninitializedResponse
@@ -223,6 +230,7 @@ from torc.openapi_client.models.slurm_scheduler_model import SlurmSchedulerModel
 from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel as SlurmStatsModel
 from torc.openapi_client.models.task_model import TaskModel as TaskModel
 from torc.openapi_client.models.task_status import TaskStatus as TaskStatus
+from torc.openapi_client.models.user_data_list_model import UserDataListModel as UserDataListModel
 from torc.openapi_client.models.user_data_model import UserDataModel as UserDataModel
 from torc.openapi_client.models.user_group_membership_model import UserGroupMembershipModel as UserGroupMembershipModel
 from torc.openapi_client.models.version_response import VersionResponse as VersionResponse

@@ -35,7 +35,7 @@
       }
     },
     {
-      "name": "aggregate_results",
+      "name": "aggregate_results_m{model}_s{scenario}",
       "command": "echo \"All simulations completed successfully!\"",
       "depends_on": ["simulate_m{model}_s{scenario}"],
       "parameters": {

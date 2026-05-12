@@ -1,5 +1,5 @@
 use super::*;
-use crate::server::api::UserDataApi;
+use crate::server::api::{UserDataApi, message_error_response};
 
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
@@ -16,6 +16,45 @@ where
         authorize_workflow!(self, body.workflow_id, context, CreateUserDataResponse);
         self.user_data_api
             .create_user_data(body, consumer_job_id, producer_job_id, context)
+            .await
+    }
+    pub(super) async fn transport_create_user_data_list(
+        &self,
+        body: models::UserDataListModel,
+        context: &C,
+    ) -> Result<CreateUserDataListResponse, ApiError> {
+        // Empty batches have no workflow_id to authorize against and create no rows,
+        // so the only sensible response is 422 — the alternative is letting an
+        // unauthenticated caller hit the route and get a 200. The api impl still
+        // defends in depth.
+        if body.user_data.is_empty() {
+            return Ok(
+                CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "Bulk user_data creation requires a non-empty `user_data` array"
+                            .to_string(),
+                    ),
+                ),
+            );
+        }
+
+        let first_workflow_id = body.user_data[0].workflow_id;
+        for entry in &body.user_data {
+            if entry.workflow_id != first_workflow_id {
+                return Ok(
+                    CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "All user_data entries in a batch must have the same workflow_id. Found workflow_ids: {} and {}",
+                            first_workflow_id, entry.workflow_id
+                        )),
+                    ),
+                );
+            }
+        }
+
+        authorize_workflow!(self, first_workflow_id, context, CreateUserDataListResponse);
+        self.user_data_api
+            .create_user_data_list(body, context)
             .await
     }
     pub(super) async fn transport_delete_all_user_data(

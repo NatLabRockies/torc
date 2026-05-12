@@ -8,14 +8,16 @@ use log::{debug, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    CreateUserDataResponse, DeleteAllUserDataResponse, DeleteUserDataResponse, GetUserDataResponse,
-    ListMissingUserDataResponse, ListUserDataResponse, UpdateUserDataResponse,
+    CreateUserDataListResponse, CreateUserDataResponse, DeleteAllUserDataResponse,
+    DeleteUserDataResponse, GetUserDataResponse, ListMissingUserDataResponse, ListUserDataResponse,
+    UpdateUserDataResponse,
 };
 
 use crate::models;
 
 use super::{
-    ApiContext, database_error_with_msg, escape_like_pattern, resource_not_found_response,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, begin_immediate, database_error_with_msg,
+    escape_like_pattern, message_error_response, resource_not_found_response,
 };
 
 /// Trait defining user data-related API operations
@@ -29,6 +31,13 @@ pub trait UserDataApi<C> {
         producer_job_id: Option<i64>,
         context: &C,
     ) -> Result<CreateUserDataResponse, ApiError>;
+
+    /// Store many user data records in a single transaction.
+    async fn create_user_data_list(
+        &self,
+        body: models::UserDataListModel,
+        context: &C,
+    ) -> Result<CreateUserDataListResponse, ApiError>;
 
     /// Delete all user data for one workflow.
     async fn delete_all_user_data(
@@ -215,6 +224,186 @@ where
 
         debug!("User data inserted with id: {:?}", user_data_result.id);
         Ok(CreateUserDataResponse::SuccessfulResponse(body))
+    }
+
+    /// Store many user data records in a single transaction.
+    ///
+    /// Uses multi-row `INSERT … VALUES (…), (…), … RETURNING id, name`. JSON
+    /// values are serialized once into a side buffer before the chunked INSERT
+    /// so the bind closure stays infallible. SQLite's `RETURNING` order is
+    /// undefined, so the response is rebuilt in input order via a name lookup
+    /// (user_data names are unique per workflow).
+    async fn create_user_data_list(
+        &self,
+        body: models::UserDataListModel,
+        context: &C,
+    ) -> Result<CreateUserDataListResponse, ApiError> {
+        debug!(
+            "create_user_data_list({} entries) - X-Span-ID: {:?}",
+            body.user_data.len(),
+            context.get().0.clone()
+        );
+
+        // The transport layer rejects empty batches with 422 so an unauthenticated
+        // caller can't reach this method without a workflow_id to authorize against.
+        // Mirror that contract here for in-process callers that bypass the transport.
+        if body.user_data.is_empty() {
+            return Ok(
+                CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "Bulk user_data creation requires a non-empty `user_data` array"
+                            .to_string(),
+                    ),
+                ),
+            );
+        }
+
+        // Oversized batches are a client input error → 422, not 500.
+        if body.user_data.len() > MAX_RECORD_TRANSFER_COUNT as usize {
+            return Ok(
+                CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "Too many user_data entries in batch: {}. Maximum is {}",
+                        body.user_data.len(),
+                        MAX_RECORD_TRANSFER_COUNT
+                    )),
+                ),
+            );
+        }
+
+        // Preflight: the user_data table has no UNIQUE (workflow_id, name) constraint,
+        // so duplicate names in one request would commit two rows and confuse the
+        // post-insert response rebuild. Reject up front with 422.
+        {
+            let mut seen: std::collections::HashSet<&str> =
+                std::collections::HashSet::with_capacity(body.user_data.len());
+            for entry in &body.user_data {
+                if !seen.insert(entry.name.as_str()) {
+                    return Ok(
+                        CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                            message_error_response(format!(
+                                "Duplicate user_data name '{}' in bulk create request",
+                                entry.name
+                            )),
+                        ),
+                    );
+                }
+            }
+        }
+
+        // Pre-serialize the `data` JSON column so the chunked INSERT bind closure can stay
+        // infallible. `None` means the SQL column is NULL (either no value supplied or the
+        // supplied value was JSON null), mirroring the single-row create_user_data path.
+        // A failure here means the caller supplied a `data` value we can't encode →
+        // 422, not 500.
+        let total_input = body.user_data.len();
+        let mut serialized_data: Vec<Option<String>> = Vec::with_capacity(total_input);
+        for entry in &body.user_data {
+            match &entry.data {
+                Some(value) if !value.is_null() => match serde_json::to_string(value) {
+                    Ok(s) => serialized_data.push(Some(s)),
+                    Err(e) => {
+                        return Ok(
+                            CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                                message_error_response(format!(
+                                    "Failed to serialize data for user_data '{}': {}",
+                                    entry.name, e
+                                )),
+                            ),
+                        );
+                    }
+                },
+                _ => serialized_data.push(None),
+            }
+        }
+
+        // Take the write lock up front so the batch INSERTs do not contend with other
+        // writers between rows (mirrors the bulk-jobs path).
+        let mut transaction = match begin_immediate(&self.context.pool).await {
+            Ok(tx) => tx,
+            Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
+        };
+
+        // 4 bound parameters per row × 500 rows = 2000 params, well under
+        // SQLITE_MAX_VARIABLE_NUMBER (32766).
+        const ROWS_PER_INSERT: usize = 500;
+        let mut id_by_name: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::with_capacity(total_input);
+
+        for (chunk_idx, chunk) in body.user_data.chunks(ROWS_PER_INSERT).enumerate() {
+            let data_slice = &serialized_data[chunk_idx * ROWS_PER_INSERT..][..chunk.len()];
+
+            let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+                "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) ",
+            );
+            qb.push_values(
+                chunk.iter().zip(data_slice.iter()),
+                |mut row, (entry, data)| {
+                    let is_ephemeral_int: i64 = if entry.is_ephemeral.unwrap_or(false) {
+                        1
+                    } else {
+                        0
+                    };
+                    row.push_bind(entry.workflow_id)
+                        .push_bind(&entry.name)
+                        .push_bind(is_ephemeral_int)
+                        .push_bind(data.as_deref());
+                },
+            );
+            qb.push(" RETURNING id, name");
+
+            let rows = match qb.build().fetch_all(&mut *transaction).await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    let _ = transaction.rollback().await;
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to create user_data records in bulk",
+                    ));
+                }
+            };
+            for row in rows {
+                let id: i64 = row.get("id");
+                let name: String = row.get("name");
+                id_by_name.insert(name, id);
+            }
+        }
+
+        // Rebuild the response in the caller's input order BEFORE committing so any
+        // unexpected name mismatch can still roll back the transaction. The preflight
+        // uniqueness check above means each name should resolve exactly once.
+        let mut created = Vec::with_capacity(total_input);
+        for mut entry in body.user_data {
+            match id_by_name.remove(&entry.name) {
+                Some(id) => entry.id = Some(id),
+                None => {
+                    let _ = transaction.rollback().await;
+                    return Err(ApiError(format!(
+                        "Bulk user_data insert returned no id for name '{}'",
+                        entry.name
+                    )));
+                }
+            }
+            created.push(entry);
+        }
+
+        if let Err(e) = transaction.commit().await {
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
+        }
+
+        // `created` is non-empty here — the empty-input branch returns above.
+        let workflow_id = created[0].workflow_id;
+        info!(
+            "User data created workflow_id={} count={}",
+            workflow_id,
+            created.len()
+        );
+
+        Ok(CreateUserDataListResponse::SuccessfulResponse(
+            models::CreateUserDataListResponse {
+                user_data: Some(created),
+            },
+        ))
     }
 
     /// Delete all user data for one workflow.

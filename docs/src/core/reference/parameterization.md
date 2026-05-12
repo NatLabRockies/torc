@@ -196,9 +196,16 @@ user_data:
     data:
       experiment: "{experiment}"
       learning_rate: 0.001
+      output_dir: /results/{experiment}
     parameters:
       experiment: "['baseline','ablation','full']"
 ```
+
+Parameter tokens (`{name}` / `{name:fmt}`) are substituted into the user_data `name` and into every
+string value found recursively inside `data` -- object values, array elements, and nested
+substructures. Non-string values (numbers, bools, null) pass through unchanged. The same
+`use_parameters` opt-in for inheriting workflow-level parameters applies to user_data as well. See
+`examples/yaml/parameterized_user_data.yaml` for a runnable example.
 
 ## Workflow Variables
 

@@ -439,8 +439,16 @@ where
         mut body: models::JobsModel,
         context: &C,
     ) -> Result<CreateJobsResponse, ApiError> {
+        // Empty batches have no workflow_id to authorize against and create no rows,
+        // so the only sensible response is 422 — the alternative is letting an
+        // unauthenticated caller hit the route and get a 200. The api impl still
+        // defends in depth.
         if body.jobs.is_empty() {
-            return self.jobs_api.create_jobs(body, context).await;
+            return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Bulk job creation requires a non-empty `jobs` array".to_string(),
+                ),
+            ));
         }
 
         let first_workflow_id = body.jobs[0].workflow_id;

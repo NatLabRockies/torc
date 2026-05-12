@@ -14,6 +14,16 @@ use serde::{Deserialize, Serialize};
 static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
 
+/// Matches the four workflow-variable forms understood by [`substitute_and_extract`]:
+///   `${files.input.NAME}`, `${files.output.NAME}`,
+///   `${user_data.input.NAME}`, `${user_data.output.NAME}`.
+/// Group 1 = namespace (`files`|`user_data`), group 2 = direction
+/// (`input`|`output`), group 3 = name (any character except `}`).
+static WORKFLOW_VARIABLE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\$\{(files|user_data)\.(input|output)\.([^}]+)\}")
+        .expect("hardcoded regex must compile")
+});
+
 pub(crate) fn validate_srun_mpi_value(value: &str) -> Result<(), String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -184,6 +194,100 @@ pub struct UserDataSpec {
     /// The data content as JSON value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    /// Optional parameters for generating multiple user_data records
+    /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]").
+    /// Tokens of the form `{param_name}` or `{param_name:format}` are substituted into
+    /// `name` and into any string value found inside `data` (recursively).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<HashMap<String, String>>,
+    /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
+    /// With "zip", parameters are combined element-wise (all must have the same length)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameter_mode: Option<String>,
+    /// Names of workflow-level parameters to use for this user_data
+    /// If set, only these parameters from the workflow will be used
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_parameters: Option<Vec<String>>,
+}
+
+impl UserDataSpec {
+    /// Expand this UserDataSpec into multiple UserDataSpecs based on its parameters.
+    /// Returns a single-element vec if no parameters are present.
+    ///
+    /// Parameter tokens (`{name}` / `{name:fmt}`) are substituted into `name` and into
+    /// every string value found anywhere inside `data` (recursively walking objects and
+    /// arrays). Non-string JSON values (numbers, bools, null) are not modified, even
+    /// though they could in principle be rewritten -- substitution is string-only,
+    /// matching how FileSpec handles `name` and `path`.
+    pub fn expand(&self) -> Result<Vec<UserDataSpec>, String> {
+        // If no parameters, return a clone
+        let Some(ref params) = self.parameters else {
+            return Ok(vec![self.clone()]);
+        };
+
+        // Parse all parameter values
+        let mut parsed_params: HashMap<String, Vec<ParameterValue>> = HashMap::new();
+        for (name, value) in params {
+            let values = parse_parameter_value(value)?;
+            parsed_params.insert(name.clone(), values);
+        }
+
+        // Generate combinations based on parameter_mode
+        let mode = self.parameter_mode.as_deref().unwrap_or("product");
+        let combinations = match mode {
+            "zip" => zip_parameters(&parsed_params)?,
+            _ => cartesian_product(&parsed_params),
+        };
+
+        // Create a UserDataSpec for each combination
+        let mut expanded = Vec::new();
+        for combo in combinations {
+            let mut new_spec = self.clone();
+            new_spec.parameters = None; // Remove parameters from expanded specs
+            new_spec.parameter_mode = None; // Remove parameter_mode from expanded specs
+
+            // Substitute parameters in name (if any)
+            if let Some(ref n) = self.name {
+                new_spec.name = Some(substitute_parameters(n, &combo));
+            }
+
+            // Substitute parameters recursively inside data, if present
+            if let Some(ref data) = self.data {
+                let mut substituted = data.clone();
+                substitute_parameters_in_json(&mut substituted, &combo);
+                new_spec.data = Some(substituted);
+            }
+
+            expanded.push(new_spec);
+        }
+
+        Ok(expanded)
+    }
+}
+
+/// Recursively walk a `serde_json::Value` and substitute parameter tokens
+/// (`{name}` / `{name:fmt}`) in every string node. Object keys are not rewritten
+/// (they are identifiers); only string values inside objects/arrays change.
+fn substitute_parameters_in_json(
+    value: &mut serde_json::Value,
+    params: &HashMap<String, ParameterValue>,
+) {
+    match value {
+        serde_json::Value::String(s) => {
+            *s = substitute_parameters(s, params);
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                substitute_parameters_in_json(item, params);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for v in map.values_mut() {
+                substitute_parameters_in_json(v, params);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Workflow action specification for defining conditional actions
@@ -1492,12 +1596,13 @@ impl WorkflowSpec {
         Ok(serde_json::from_value(value)?)
     }
 
-    /// Expand all parameterized jobs and files in this workflow spec
+    /// Expand all parameterized jobs, files, and user_data in this workflow spec
     /// This modifies the spec in-place, replacing parameterized specs with their expanded versions
     ///
     /// Parameter resolution order:
-    /// 1. If job/file has its own `parameters`, use those (local params override workflow params)
-    /// 2. If job/file has `use_parameters`, select only those from workflow-level params
+    /// 1. If job/file/user_data has its own `parameters`, use those (local params override
+    ///    workflow params)
+    /// 2. If job/file/user_data has `use_parameters`, select only those from workflow-level params
     pub fn expand_parameters(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let workflow_params = self.parameters.clone();
         let workflow_env_params: Option<HashMap<String, ParameterValue>> =
@@ -1562,6 +1667,26 @@ impl WorkflowSpec {
             self.files = Some(expanded_files);
         }
 
+        // Expand all user_data
+        if let Some(ref user_data) = self.user_data {
+            let mut expanded_user_data = Vec::new();
+            for ud in user_data {
+                // Resolve parameters for this user_data record
+                let mut ud_with_params = ud.clone();
+                ud_with_params.parameters =
+                    Self::resolve_parameters(&ud.parameters, &ud.use_parameters, &workflow_params);
+                // Clear use_parameters after resolution
+                ud_with_params.use_parameters = None;
+
+                let label = ud.name.as_deref().unwrap_or("<unnamed>");
+                let expanded = ud_with_params
+                    .expand()
+                    .map_err(|e| format!("Failed to expand user_data '{}': {}", label, e))?;
+                expanded_user_data.extend(expanded);
+            }
+            self.user_data = Some(expanded_user_data);
+        }
+
         Ok(())
     }
 
@@ -1620,6 +1745,68 @@ impl WorkflowSpec {
                 for key in env.keys() {
                     validate_env_var_name(key)
                         .map_err(|err| format!("Job '{}': {}", job.name, err))?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Verify that every job and every file in `self.jobs` / `self.files` has a unique
+    /// name. Run this *after* [`Self::expand_parameters`] so it catches the most common
+    /// authoring mistake: declaring a parameterized job or file with no `{…}` placeholder
+    /// in its name (e.g. `use_parameters: [lr]` on `name: aggregate_results`), which
+    /// silently expands into N records that share a name and then trample each other in
+    /// the name→id maps the rest of the creation pipeline relies on. The remedy is
+    /// usually to use `depends_on_regexes` / `input_file_regexes` for fan-in instead of
+    /// parameterizing the consumer; see `examples/yaml/fan_in_with_regexes.yaml`.
+    fn validate_unique_names_after_expansion(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut seen_jobs: HashSet<&str> = HashSet::with_capacity(self.jobs.len());
+        for job in &self.jobs {
+            if !seen_jobs.insert(job.name.as_str()) {
+                return Err(format!(
+                    "Duplicate job name '{}' after parameter expansion. A parameterized \
+                     job's name template must include a placeholder for every parameter \
+                     in `parameters` / `use_parameters`, otherwise expansion produces \
+                     multiple jobs with identical names. For fan-in patterns (a single \
+                     consumer of many parameterized producers), use `depends_on_regexes` \
+                     and `input_file_regexes` instead of parameterizing the consumer.",
+                    job.name
+                )
+                .into());
+            }
+        }
+
+        if let Some(files) = &self.files {
+            let mut seen_files: HashSet<&str> = HashSet::with_capacity(files.len());
+            for file in files {
+                if !seen_files.insert(file.name.as_str()) {
+                    return Err(format!(
+                        "Duplicate file name '{}' after parameter expansion. A \
+                         parameterized file's name template must include a placeholder \
+                         for every parameter in `parameters` / `use_parameters`.",
+                        file.name
+                    )
+                    .into());
+                }
+            }
+        }
+
+        if let Some(user_data) = &self.user_data {
+            let mut seen_user_data: HashSet<&str> = HashSet::with_capacity(user_data.len());
+            for ud in user_data {
+                // user_data names are optional; only check duplicates when a name is set.
+                let Some(name) = ud.name.as_deref() else {
+                    continue;
+                };
+                if !seen_user_data.insert(name) {
+                    return Err(format!(
+                        "Duplicate user_data name '{}' after parameter expansion. A \
+                         parameterized user_data's name template must include a placeholder \
+                         for every parameter in `parameters` / `use_parameters`.",
+                        name
+                    )
+                    .into());
                 }
             }
         }
@@ -2046,6 +2233,7 @@ impl WorkflowSpec {
     ) -> Result<WorkflowSpec, Box<dyn std::error::Error>> {
         let mut spec = Self::from_spec_file(path)?;
         spec.expand_parameters()?;
+        spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
 
         spec.validate_scheduler_node_requirements()?;
@@ -2076,6 +2264,10 @@ impl WorkflowSpec {
         };
         if let Err(e) = spec.expand_parameters() {
             eprintln!("Error expanding parameters: {}", e);
+            std::process::exit(1);
+        }
+        if let Err(e) = spec.validate_unique_names_after_expansion() {
+            eprintln!("Validation error: {}", e);
             std::process::exit(1);
         }
         if let Err(e) = spec.validate_env_maps() {
@@ -2661,6 +2853,7 @@ impl WorkflowSpec {
             });
         }
         spec.expand_parameters()?;
+        spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
@@ -2974,7 +3167,18 @@ impl WorkflowSpec {
             .ok_or("Created workflow missing ID".into())
     }
 
-    /// Create FileModels and build name-to-id mapping
+    /// Create FileModels and build name-to-id mapping.
+    ///
+    /// Files are created via the bulk `create_files` endpoint in batches of
+    /// `MAX_RECORD_TRANSFER_COUNT`, so a workflow with thousands of files
+    /// reaches the server in a handful of requests instead of one per file.
+    ///
+    /// Only files that are referenced as an input by at least one job get a
+    /// `std::fs::metadata` call to populate `st_mtime`. The server uses
+    /// `st_mtime IS NOT NULL` as the marker that distinguishes inputs from
+    /// outputs (see `ro_crate.rs::WHERE st_mtime IS NOT NULL`), and stat'ing
+    /// the 10k+ outputs of a large parameter sweep is both wasted work and
+    /// risks misclassifying them as inputs if they happen to exist on disk.
     fn create_files(
         config: &Configuration,
         workflow_id: i64,
@@ -2982,46 +3186,111 @@ impl WorkflowSpec {
     ) -> Result<HashMap<String, i64>, Box<dyn std::error::Error>> {
         let mut file_name_to_id = HashMap::new();
 
-        if let Some(files) = &spec.files {
-            for file_spec in files {
-                // Check for duplicate names
-                if file_name_to_id.contains_key(&file_spec.name) {
-                    return Err(format!("Duplicate file name: {}", file_spec.name).into());
-                }
+        let Some(files) = &spec.files else {
+            return Ok(file_name_to_id);
+        };
 
-                // Determine st_mtime: use spec value if provided, otherwise check filesystem
-                let st_mtime = match file_spec.st_mtime {
-                    Some(t) => Some(t), // User explicitly specified a timestamp
-                    None => {
-                        // Check if file exists on disk and get its modification time
-                        std::fs::metadata(&file_spec.path)
-                            .and_then(|m| m.modified())
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs_f64())
-                    }
-                };
+        // Collect the set of file names referenced as inputs by any job. `substitute_variables`
+        // has already populated `job.input_files` from `${files.input.NAME}` tokens before
+        // we reach this point, so this captures both explicitly declared inputs and the
+        // implicit inputs extracted from job commands.
+        let input_file_names: HashSet<&str> = spec
+            .jobs
+            .iter()
+            .flat_map(|job| job.input_files.iter().flatten().map(String::as_str))
+            .collect();
 
-                let file_model = models::FileModel {
-                    id: None, // Server will assign ID
-                    workflow_id,
-                    name: file_spec.name.clone(),
-                    path: file_spec.path.clone(),
-                    st_mtime,
-                };
-
-                let created_file = apis::files_api::create_file(config, file_model)
-                    .map_err(|e| format!("Failed to create file {}: {:?}", file_spec.name, e))?;
-
-                let file_id = created_file.id.ok_or("Created file missing ID")?;
-                file_name_to_id.insert(file_spec.name.clone(), file_id);
+        // Build the full list of FileModels up front. file_name_to_id holds sentinel
+        // zeros for every requested name; each batch's response replaces them with the
+        // server-assigned ids. Looking the id up by the *returned* model's `name` field
+        // (rather than positional iteration) means we do not depend on the server
+        // preserving request order — SQLite's `RETURNING` order is officially undefined.
+        let mut file_models = Vec::with_capacity(files.len());
+        for file_spec in files {
+            if !file_name_to_id.contains_key(&file_spec.name) {
+                // Sentinel until the server assigns the real ID below.
+                file_name_to_id.insert(file_spec.name.clone(), 0);
+            } else {
+                return Err(format!("Duplicate file name: {}", file_spec.name).into());
             }
+
+            // Use the spec-provided value when given; otherwise stat the path only for
+            // files used as inputs. Output-only files stay `None`, which is the marker
+            // the server uses to identify outputs.
+            let st_mtime = match file_spec.st_mtime {
+                Some(t) => Some(t),
+                None if input_file_names.contains(file_spec.name.as_str()) => {
+                    std::fs::metadata(&file_spec.path)
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs_f64())
+                }
+                None => None,
+            };
+
+            file_models.push(models::FileModel {
+                id: None,
+                workflow_id,
+                name: file_spec.name.clone(),
+                path: file_spec.path.clone(),
+                st_mtime,
+            });
+        }
+
+        let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
+        for batch in file_models.chunks(batch_size) {
+            let body = models::FilesModel::new(batch.to_vec());
+            let response = apis::files_api::create_files(config, body)
+                .map_err(|e| format!("Failed to bulk-create files: {:?}", e))?;
+            let created = response
+                .files
+                .ok_or("create_files response missing files array")?;
+            if created.len() != batch.len() {
+                return Err(format!(
+                    "create_files returned {} files, expected {}",
+                    created.len(),
+                    batch.len()
+                )
+                .into());
+            }
+            for created_file in created {
+                let file_id = created_file.id.ok_or("Created file missing ID")?;
+                // The server echoes back the same name we sent. Look up the entry by
+                // that name — order-independent.
+                match file_name_to_id.get_mut(&created_file.name) {
+                    Some(slot) => *slot = file_id,
+                    None => {
+                        return Err(format!(
+                            "create_files returned unknown file name '{}'",
+                            created_file.name
+                        )
+                        .into());
+                    }
+                }
+            }
+        }
+
+        // Final guard: every name we inserted as a sentinel `0` above must have been
+        // replaced by a positive server-assigned id. Surface a hard error rather than
+        // letting a stale `0` substitute as a job's input_file_id downstream.
+        if let Some((name, _)) = file_name_to_id.iter().find(|&(_, &id)| id == 0) {
+            return Err(format!(
+                "create_files did not return an id for file '{}'; the server response \
+                 omitted this name (possible API contract violation)",
+                name
+            )
+            .into());
         }
 
         Ok(file_name_to_id)
     }
 
-    /// Create UserDataModels and build name-to-id mapping
+    /// Create UserDataModels and build name-to-id mapping.
+    ///
+    /// Like [`create_files`], records are pushed in bulk batches keyed off
+    /// `MAX_RECORD_TRANSFER_COUNT` so large user_data lists don't translate to
+    /// one HTTP round trip per entry.
     fn create_user_data(
         config: &Configuration,
         workflow_id: i64,
@@ -3029,31 +3298,78 @@ impl WorkflowSpec {
     ) -> Result<HashMap<String, i64>, Box<dyn std::error::Error>> {
         let mut user_data_name_to_id = HashMap::new();
 
-        if let Some(user_data_list) = &spec.user_data {
-            for user_data_spec in user_data_list {
-                if let Some(name) = &user_data_spec.name {
-                    // Check for duplicate names
-                    if user_data_name_to_id.contains_key(name) {
-                        return Err(format!("Duplicate user data name: {}", name).into());
+        let Some(user_data_list) = &spec.user_data else {
+            return Ok(user_data_name_to_id);
+        };
+
+        // `user_data_name_to_id` holds sentinel zeros for every requested name; each
+        // batch's response replaces them with the server-assigned ids. Looking the id
+        // up by the *returned* entry's `name` field (rather than positional iteration)
+        // means we do not depend on the server preserving request order — SQLite's
+        // `RETURNING` order is officially undefined.
+        let mut user_data_models = Vec::new();
+        for user_data_spec in user_data_list {
+            // Spec entries without a name are not addressable by jobs and are skipped here,
+            // matching the legacy per-record path.
+            let Some(name) = &user_data_spec.name else {
+                continue;
+            };
+            if user_data_name_to_id.contains_key(name) {
+                return Err(format!("Duplicate user data name: {}", name).into());
+            }
+            user_data_name_to_id.insert(name.clone(), 0);
+            user_data_models.push(models::UserDataModel {
+                id: None,
+                workflow_id,
+                is_ephemeral: user_data_spec.is_ephemeral,
+                name: name.clone(),
+                data: user_data_spec.data.clone(),
+            });
+        }
+
+        let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
+        for batch in user_data_models.chunks(batch_size) {
+            let body = models::UserDataListModel::new(batch.to_vec());
+            let response = apis::user_data_api::create_user_data_list(config, body)
+                .map_err(|e| format!("Failed to bulk-create user_data: {:?}", e))?;
+            let created = response
+                .user_data
+                .ok_or("create_user_data_list response missing user_data array")?;
+            if created.len() != batch.len() {
+                return Err(format!(
+                    "create_user_data_list returned {} records, expected {}",
+                    created.len(),
+                    batch.len()
+                )
+                .into());
+            }
+            for created_entry in created {
+                let user_data_id = created_entry.id.ok_or("Created user data missing ID")?;
+                // The server echoes back the same name we sent. Look up by that name
+                // — order-independent.
+                match user_data_name_to_id.get_mut(&created_entry.name) {
+                    Some(slot) => *slot = user_data_id,
+                    None => {
+                        return Err(format!(
+                            "create_user_data_list returned unknown user_data name '{}'",
+                            created_entry.name
+                        )
+                        .into());
                     }
-
-                    let user_data_model = models::UserDataModel {
-                        id: None, // Server will assign ID
-                        workflow_id,
-                        is_ephemeral: user_data_spec.is_ephemeral,
-                        name: name.clone(),
-                        data: user_data_spec.data.clone(),
-                    };
-
-                    let created_user_data =
-                        apis::user_data_api::create_user_data(config, user_data_model, None, None)
-                            .map_err(|e| format!("Failed to create user data {}: {:?}", name, e))?;
-
-                    let user_data_id =
-                        created_user_data.id.ok_or("Created user data missing ID")?;
-                    user_data_name_to_id.insert(name.clone(), user_data_id);
                 }
             }
+        }
+
+        // Final guard: every name we inserted as a sentinel `0` above must have been
+        // replaced by a positive server-assigned id. Surface a hard error rather than
+        // letting a stale `0` substitute as a job's input_user_data_id downstream.
+        if let Some((name, _)) = user_data_name_to_id.iter().find(|&(_, &id)| id == 0) {
+            return Err(format!(
+                "create_user_data_list did not return an id for user_data '{}'; the \
+                 server response omitted this name (possible API contract violation)",
+                name
+            )
+            .into());
         }
 
         Ok(user_data_name_to_id)
@@ -5638,7 +5954,22 @@ impl WorkflowSpec {
         Ok(())
     }
 
-    /// Substitute variables and extract input/output dependencies
+    /// Substitute variables and extract input/output dependencies.
+    ///
+    /// Scans the command exactly once with a single regex pass that matches all four
+    /// workflow-variable forms. Previously this iterated every declared file/user_data
+    /// entry and did a `format!`+`String::contains` per entry, which is `O(jobs * files)`
+    /// across the workflow and dominates creation time once either side reaches the
+    /// thousands. The regex pass is `O(command_length + matches_in_command)`.
+    ///
+    /// Behavior preserved from the legacy implementation:
+    /// - Unknown names are left in the command verbatim (the original silently skipped
+    ///   them via `contains` returning `false`).
+    /// - Returned name vectors are deduplicated; a token that appears N times in the
+    ///   command contributes a single entry. The vectors now follow command order
+    ///   rather than `HashMap` iteration order, which is deterministic but did not
+    ///   exist before.
+    ///
     /// Returns: (substituted_string, input_files, output_files, input_user_data, output_user_data)
     #[allow(clippy::type_complexity)]
     fn substitute_and_extract(
@@ -5649,52 +5980,72 @@ impl WorkflowSpec {
         (String, Vec<String>, Vec<String>, Vec<String>, Vec<String>),
         Box<dyn std::error::Error>,
     > {
-        let mut result = input.to_string();
-        let mut input_files = Vec::new();
-        let mut output_files = Vec::new();
-        let mut input_user_data = Vec::new();
-        let mut output_user_data = Vec::new();
+        let mut input_files: Vec<String> = Vec::new();
+        let mut output_files: Vec<String> = Vec::new();
+        let mut input_user_data: Vec<String> = Vec::new();
+        let mut output_user_data: Vec<String> = Vec::new();
+        // Hoist the first JSON serialization error out of the closure; `replace_all`
+        // can't propagate `Result`, so we stash it and surface it below.
+        let mut serialization_error: Option<Box<dyn std::error::Error>> = None;
 
-        // Extract and replace ${files.input.NAME}
-        for (name, path) in file_name_to_path {
-            let input_pattern = format!("${{files.input.{}}}", name);
-            if result.contains(&input_pattern) {
-                result = result.replace(&input_pattern, path);
-                input_files.push(name.clone());
+        // Per-command vectors stay small (handful of files/user_data refs), so a linear
+        // `iter().any` dedup beats spinning up a HashSet.
+        fn push_unique(vec: &mut Vec<String>, name: &str) {
+            if !vec.iter().any(|n| n == name) {
+                vec.push(name.to_string());
             }
         }
 
-        // Extract and replace ${files.output.NAME}
-        for (name, path) in file_name_to_path {
-            let output_pattern = format!("${{files.output.{}}}", name);
-            if result.contains(&output_pattern) {
-                result = result.replace(&output_pattern, path);
-                output_files.push(name.clone());
-            }
-        }
+        let result = WORKFLOW_VARIABLE_REGEX.replace_all(input, |caps: &regex::Captures<'_>| {
+            let full_match = caps.get(0).expect("match always present").as_str();
+            let namespace = caps.get(1).expect("group 1 always captured").as_str();
+            let direction = caps.get(2).expect("group 2 always captured").as_str();
+            let name = caps.get(3).expect("group 3 always captured").as_str();
 
-        // Extract and replace ${user_data.input.NAME}
-        for (name, data) in user_data_name_to_data {
-            let input_pattern = format!("${{user_data.input.{}}}", name);
-            if result.contains(&input_pattern) {
-                let data_str = serde_json::to_string(data)?;
-                result = result.replace(&input_pattern, &data_str);
-                input_user_data.push(name.clone());
+            match namespace {
+                "files" => match file_name_to_path.get(name) {
+                    Some(path) => {
+                        let bucket = if direction == "input" {
+                            &mut input_files
+                        } else {
+                            &mut output_files
+                        };
+                        push_unique(bucket, name);
+                        path.clone()
+                    }
+                    None => full_match.to_string(),
+                },
+                "user_data" => match user_data_name_to_data.get(name) {
+                    Some(data) => match serde_json::to_string(data) {
+                        Ok(serialized) => {
+                            let bucket = if direction == "input" {
+                                &mut input_user_data
+                            } else {
+                                &mut output_user_data
+                            };
+                            push_unique(bucket, name);
+                            serialized
+                        }
+                        Err(e) => {
+                            if serialization_error.is_none() {
+                                serialization_error = Some(Box::new(e));
+                            }
+                            // Leave the token in place so the failure points at the source.
+                            full_match.to_string()
+                        }
+                    },
+                    None => full_match.to_string(),
+                },
+                _ => full_match.to_string(), // regex restricts to the two namespaces above
             }
-        }
+        });
 
-        // Extract and replace ${user_data.output.NAME}
-        for (name, data) in user_data_name_to_data {
-            let output_pattern = format!("${{user_data.output.{}}}", name);
-            if result.contains(&output_pattern) {
-                let data_str = serde_json::to_string(data)?;
-                result = result.replace(&output_pattern, &data_str);
-                output_user_data.push(name.clone());
-            }
+        if let Some(err) = serialization_error {
+            return Err(err);
         }
 
         Ok((
-            result,
+            result.into_owned(),
             input_files,
             output_files,
             input_user_data,
@@ -5952,7 +6303,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
         // After expansion:
         // - 2 prepare jobs (unchanged)
         // - 18 training jobs (3 lr * 3 batch_size * 2 optimizer)
-        // - 18 aggregate jobs (expanded from template)
+        // - 18 aggregate jobs (parameterized name includes every parameter
+        //   so post-expansion names are unique)
         // Total: 2 + 18 + 18 = 38 jobs
         assert_eq!(spec.jobs.len(), 38);
 
@@ -6113,6 +6465,151 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
         assert_eq!(expanded[0].path, "/data/output_1.txt");
         assert_eq!(expanded[2].name, "output_3");
         assert_eq!(expanded[2].path, "/data/output_3.txt");
+    }
+
+    #[test]
+    fn test_user_data_parameterization() {
+        // A parameterized user_data with a string substitution inside its data payload.
+        let mut ud = UserDataSpec {
+            is_ephemeral: Some(false),
+            name: Some("config_{experiment}".to_string()),
+            data: Some(serde_json::json!({
+                "experiment": "{experiment}",
+                "learning_rate": 0.001,
+                "tags": ["base", "{experiment}"],
+                "nested": { "label": "exp-{experiment}" },
+            })),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: None,
+        };
+        let mut params = HashMap::new();
+        params.insert(
+            "experiment".to_string(),
+            "['baseline','ablation','full']".to_string(),
+        );
+        ud.parameters = Some(params);
+
+        let expanded = ud.expand().expect("Failed to expand user_data");
+        assert_eq!(expanded.len(), 3);
+
+        // Find the baseline copy and verify substitution in name + every string slot of data.
+        let baseline = expanded
+            .iter()
+            .find(|u| u.name.as_deref() == Some("config_baseline"))
+            .expect("baseline copy must exist");
+
+        // parameters/parameter_mode are cleared after expansion.
+        assert!(baseline.parameters.is_none());
+        assert!(baseline.parameter_mode.is_none());
+
+        let data = baseline.data.as_ref().expect("data preserved");
+        assert_eq!(data["experiment"], serde_json::json!("baseline"));
+        // Non-string values are passed through unchanged.
+        assert_eq!(data["learning_rate"], serde_json::json!(0.001));
+        // Array string elements are substituted; non-template strings pass through.
+        assert_eq!(data["tags"], serde_json::json!(["base", "baseline"]));
+        // Nested object string values are substituted too.
+        assert_eq!(data["nested"]["label"], serde_json::json!("exp-baseline"));
+    }
+
+    #[test]
+    fn test_user_data_parameterization_from_yaml() {
+        // End-to-end YAML parse → expand_parameters round-trip: mirrors the shape of
+        // examples/yaml/parameterized_user_data.yaml.
+        let yaml = r#"
+name: ud_yaml_test
+jobs:
+  - name: train_{experiment}
+    command: "python train.py --config-name config_{experiment}"
+    input_user_data:
+      - config_{experiment}
+    parameters:
+      experiment: "['baseline','ablation','full']"
+user_data:
+  - name: config_{experiment}
+    data:
+      experiment: "{experiment}"
+      learning_rate: 0.001
+      output_dir: /results/{experiment}
+    parameters:
+      experiment: "['baseline','ablation','full']"
+"#;
+        let mut spec =
+            WorkflowSpec::from_spec_file_content(yaml, "yaml").expect("YAML parse must succeed");
+        spec.expand_parameters().expect("expand must succeed");
+
+        // 3 expanded jobs and 3 expanded user_data records, names lining up.
+        assert_eq!(spec.jobs.len(), 3);
+        let job_names: Vec<&str> = spec.jobs.iter().map(|j| j.name.as_str()).collect();
+        assert!(job_names.contains(&"train_baseline"));
+        assert!(job_names.contains(&"train_ablation"));
+        assert!(job_names.contains(&"train_full"));
+
+        let ud = spec.user_data.as_ref().expect("user_data preserved");
+        assert_eq!(ud.len(), 3);
+        let baseline = ud
+            .iter()
+            .find(|u| u.name.as_deref() == Some("config_baseline"))
+            .expect("baseline user_data exists");
+        let data = baseline.data.as_ref().unwrap();
+        assert_eq!(data["experiment"], serde_json::json!("baseline"));
+        assert_eq!(data["output_dir"], serde_json::json!("/results/baseline"));
+        // Number values pass through unchanged.
+        assert_eq!(data["learning_rate"], serde_json::json!(0.001));
+    }
+
+    #[test]
+    fn test_user_data_no_parameters_returns_clone() {
+        // Without `parameters`, expand() yields the input unchanged.
+        let ud = UserDataSpec {
+            is_ephemeral: Some(true),
+            name: Some("config".to_string()),
+            data: Some(serde_json::json!({"key": "value"})),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: None,
+        };
+        let expanded = ud.expand().expect("expand should succeed");
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0], ud);
+    }
+
+    #[test]
+    fn test_workflow_spec_expand_parameters_user_data() {
+        // End-to-end check: workflow-level params reach user_data via use_parameters,
+        // and the user_data section is expanded alongside jobs/files.
+        let mut spec = WorkflowSpec::new(
+            "ud_param_test".to_string(),
+            "tester".to_string(),
+            None,
+            vec![],
+        );
+        spec.parameters = Some(HashMap::from([("i".to_string(), "1:2".to_string())]));
+        spec.user_data = Some(vec![UserDataSpec {
+            is_ephemeral: Some(false),
+            name: Some("config_{i}".to_string()),
+            data: Some(serde_json::json!({"index": "{i}"})),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: Some(vec!["i".to_string()]),
+        }]);
+
+        spec.expand_parameters()
+            .expect("expand_parameters must succeed");
+
+        let expanded = spec.user_data.as_ref().expect("user_data preserved");
+        assert_eq!(expanded.len(), 2);
+        assert_eq!(expanded[0].name.as_deref(), Some("config_1"));
+        assert_eq!(expanded[1].name.as_deref(), Some("config_2"));
+        assert_eq!(
+            expanded[0].data.as_ref().unwrap()["index"],
+            serde_json::json!("1")
+        );
+        assert_eq!(
+            expanded[1].data.as_ref().unwrap()["index"],
+            serde_json::json!("2")
+        );
     }
 
     #[test]
@@ -6741,10 +7238,11 @@ jobs:
         spec.expand_parameters()
             .expect("Failed to expand parameters");
 
-        // Should have same structure as non-shared version (hyperparameter_sweep.yaml):
+        // After expansion:
         // - 2 prepare jobs (no parameters)
         // - 18 training jobs (3 lr * 3 batch_size * 2 optimizer)
-        // - 18 aggregate jobs (expanded from template)
+        // - 18 aggregate jobs (parameterized name includes every parameter
+        //   so post-expansion names are unique)
         // Total: 2 + 18 + 18 = 38 jobs
         assert_eq!(spec.jobs.len(), 38);
 
@@ -6770,7 +7268,8 @@ jobs:
         spec.expand_parameters()
             .expect("Failed to expand parameters");
 
-        // Should have same structure as YAML version: 38 jobs, 38 files
+        // Same structure as the YAML version: 38 jobs (2 prep + 18 train +
+        // 18 parameterized aggregate), 38 files (2 data + 18 model + 18 metrics).
         assert_eq!(spec.jobs.len(), 38);
         assert_eq!(spec.files.as_ref().unwrap().len(), 38);
     }
@@ -6789,7 +7288,7 @@ jobs:
         spec.expand_parameters()
             .expect("Failed to expand parameters");
 
-        // Should have same structure as YAML/KDL versions: 38 jobs, 38 files
+        // Same structure as the YAML/KDL versions: 38 jobs, 38 files.
         assert_eq!(spec.jobs.len(), 38);
         assert_eq!(spec.files.as_ref().unwrap().len(), 38);
     }

@@ -222,6 +222,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReloadAuthResponse'
+  /bulk_files:
+    post:
+      tags:
+      - files
+      operationId: create_files
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FilesModel'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateFilesResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g., mixed workflow_ids, oversized batch, duplicate names)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /bulk_jobs:
     post:
       tags:
@@ -235,11 +277,77 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateJobsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g., mixed workflow_ids, oversized batch, duplicate names, invalid priority)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /bulk_user_data:
+    post:
+      tags:
+      - user_data
+      operationId: create_user_data_list
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserDataListModel'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserDataListResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g., mixed workflow_ids, oversized batch, duplicate names, unencodable data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /compute_nodes:
     get:
       tags:
@@ -5392,6 +5500,15 @@ components:
           type:
           - string
           - 'null'
+    CreateFilesResponse:
+      type: object
+      properties:
+        files:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/FileModel'
     CreateJobsResponse:
       type: object
       properties:
@@ -5401,6 +5518,15 @@ components:
           - 'null'
           items:
             $ref: '#/components/schemas/JobModel'
+    CreateUserDataListResponse:
+      type: object
+      properties:
+        user_data:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/UserDataModel'
     DeleteCountResponse:
       type: object
       required:
@@ -5502,6 +5628,15 @@ components:
         workflow_id:
           type: integer
           format: int64
+    FilesModel:
+      type: object
+      required:
+      - files
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileModel'
     GetReadyJobRequirementsResponse:
       type: object
       required:
@@ -6757,6 +6892,15 @@ components:
       - running
       - succeeded
       - failed
+    UserDataListModel:
+      type: object
+      required:
+      - user_data
+      properties:
+        user_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserDataModel'
     UserDataModel:
       type: object
       required:

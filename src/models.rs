@@ -751,6 +751,32 @@ pub struct CreateJobsResponse {
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FilesModel {
+    pub files: Vec<FileModel>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateFilesResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<Vec<FileModel>>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UserDataListModel {
+    pub user_data: Vec<UserDataModel>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateUserDataListResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_data: Option<Vec<UserDataModel>>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResourceRequirementsModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
@@ -1260,6 +1286,30 @@ impl JobStatus {
 impl JobsModel {
     pub fn new(jobs: Vec<JobModel>) -> JobsModel {
         JobsModel { jobs }
+    }
+}
+
+impl FilesModel {
+    pub fn new(files: Vec<FileModel>) -> FilesModel {
+        FilesModel { files }
+    }
+}
+
+impl CreateFilesResponse {
+    pub fn new() -> CreateFilesResponse {
+        CreateFilesResponse { files: None }
+    }
+}
+
+impl UserDataListModel {
+    pub fn new(user_data: Vec<UserDataModel>) -> UserDataListModel {
+        UserDataListModel { user_data }
+    }
+}
+
+impl CreateUserDataListResponse {
+    pub fn new() -> CreateUserDataListResponse {
+        CreateUserDataListResponse { user_data: None }
     }
 }
 

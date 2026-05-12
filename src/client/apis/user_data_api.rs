@@ -24,6 +24,17 @@ pub enum CreateUserDataError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`create_user_data_list`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CreateUserDataListError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`delete_all_user_data`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -131,6 +142,61 @@ pub fn create_user_data(
     } else {
         let content = resp.text()?;
         let entity: Option<CreateUserDataError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+pub fn create_user_data_list(
+    configuration: &configuration::Configuration,
+    user_data_list_model: models::UserDataListModel,
+) -> Result<models::CreateUserDataListResponse, Error<CreateUserDataListError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_user_data_list_model = user_data_list_model;
+
+    let uri_str = format!("{}/bulk_user_data", configuration.base_path);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = configuration.apply_auth(req_builder);
+    req_builder = req_builder.json(&p_body_user_data_list_model);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => {
+                return Err(Error::from(serde_json::Error::custom(
+                    "Received `text/plain` content type response that cannot be converted to `models::CreateUserDataListResponse`",
+                )));
+            }
+            ContentType::Unsupported(unknown_type) => {
+                return Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::CreateUserDataListResponse`"
+                ))));
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<CreateUserDataListError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

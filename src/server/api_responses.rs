@@ -80,6 +80,36 @@ pub enum CreateJobsResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum CreateFilesResponse {
+    /// Successful response
+    SuccessfulResponse(models::CreateFilesResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Workflow not found
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (e.g., files have different workflow_ids)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum CreateUserDataListResponse {
+    /// Successful response
+    SuccessfulResponse(models::CreateUserDataListResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Workflow not found
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (e.g., entries have different workflow_ids)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum CreateLocalSchedulerResponse {
     /// Successful response
     SuccessfulResponse(models::LocalSchedulerModel),
