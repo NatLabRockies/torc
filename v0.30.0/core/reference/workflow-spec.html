@@ -1,0 +1,666 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Workflow Specification - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.30.0/docs/src/core/reference/workflow-spec.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="workflow-specification-reference"><a class="header" href="#workflow-specification-reference">Workflow Specification Reference</a></h1>
+<p>This page documents all data models used in workflow specification files. Workflow specs can be
+written in YAML, JSON, JSON5, or KDL formats.</p>
+<h2 id="workflowspec"><a class="header" href="#workflowspec">WorkflowSpec</a></h2>
+<p>The top-level container for a complete workflow definition.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the workflow</td></tr>
+<tr><td><code>user</code></td><td>string</td><td>current user</td><td>User who owns this workflow</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>none</td><td>Description of the workflow</td></tr>
+<tr><td><code>project</code></td><td>string</td><td>none</td><td>Project name or identifier for grouping workflows</td></tr>
+<tr><td><code>metadata</code></td><td>string</td><td>none</td><td>Arbitrary metadata as JSON string</td></tr>
+<tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Shared parameters that can be used by jobs and files via <code>use_parameters</code></td></tr>
+<tr><td><code>variables</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Workflow-level constants substituted via <code>{name}</code> into every string field</td></tr>
+<tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for every job in the workflow</td></tr>
+<tr><td><code>jobs</code></td><td>[<a href="#jobspec">JobSpec</a>]</td><td><em>required</em></td><td>Jobs that make up this workflow</td></tr>
+<tr><td><code>files</code></td><td>[<a href="#filespec">FileSpec</a>]</td><td>none</td><td>Files associated with this workflow</td></tr>
+<tr><td><code>user_data</code></td><td>[<a href="#userdataspec">UserDataSpec</a>]</td><td>none</td><td>User data associated with this workflow</td></tr>
+<tr><td><code>resource_requirements</code></td><td>[<a href="#resourcerequirementsspec">ResourceRequirementsSpec</a>]</td><td>none</td><td>Resource requirements available for this workflow</td></tr>
+<tr><td><code>failure_handlers</code></td><td>[<a href="#failurehandlerspec">FailureHandlerSpec</a>]</td><td>none</td><td>Failure handlers available for this workflow</td></tr>
+<tr><td><code>slurm_schedulers</code></td><td>[<a href="#slurmschedulerspec">SlurmSchedulerSpec</a>]</td><td>none</td><td>Slurm schedulers available for this workflow</td></tr>
+<tr><td><code>slurm_defaults</code></td><td><a href="#slurmdefaultsspec">SlurmDefaultsSpec</a></td><td>none</td><td>Default Slurm parameters to apply to all schedulers</td></tr>
+<tr><td><code>resource_monitor</code></td><td><a href="#resourcemonitorconfig">ResourceMonitorConfig</a></td><td>none</td><td>Resource monitoring configuration</td></tr>
+<tr><td><code>actions</code></td><td>[<a href="#workflowactionspec">WorkflowActionSpec</a>]</td><td>none</td><td>Actions to execute based on workflow/job state transitions</td></tr>
+<tr><td><code>use_pending_failed</code></td><td>boolean</td><td>false</td><td>Use PendingFailed status for failed jobs (enables AI-assisted recovery)</td></tr>
+<tr><td><code>execution_config</code></td><td><a href="#executionconfig">ExecutionConfig</a></td><td>none</td><td>Execution mode and termination settings</td></tr>
+<tr><td><code>compute_node_wait_for_new_jobs_seconds</code></td><td>integer</td><td>none</td><td>Compute nodes wait for new jobs this long before exiting</td></tr>
+<tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
+<tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
+<tr><td><code>enable_ro_crate</code></td><td>boolean</td><td>false</td><td>Enable automatic <a href="../concepts/ro-crate.html">RO-Crate</a> provenance tracking</td></tr>
+</tbody></table>
+</div>
+<h3 id="examples-with-project-metadata-and-shared-environment"><a class="header" href="#examples-with-project-metadata-and-shared-environment">Examples with project, metadata, and shared environment</a></h3>
+<p>The <code>project</code> and <code>metadata</code> fields are useful for organizing and categorizing workflows. For more
+detailed guidance on organizing workflows, see
+<a href="../workflows/organizing-workflows.html">Organizing and Managing Workflows</a>.</p>
+<p>Use the top-level <code>env</code> map to export environment variables for every job in the workflow. Jobs can
+also define their own <code>env</code> map to add variables or override workflow-level values with the same
+key.</p>
+<p><strong>YAML example:</strong></p>
+<pre><code class="language-yaml">name: "ml_training_workflow"
+project: "customer-churn-prediction"
+metadata: '{"environment":"staging","version":"1.0.0","team":"ml-engineering"}'
+description: "Train and evaluate churn prediction model"
+env:
+  DATA_ROOT: "/scratch/churn"
+  LOG_LEVEL: "info"
+jobs:
+  - name: "preprocess"
+    command: "python preprocess.py"
+  - name: "train"
+    command: "python train.py"
+    env:
+      LOG_LEVEL: "debug"
+    depends_on: ["preprocess"]
+</code></pre>
+<p><strong>JSON example:</strong></p>
+<pre><code class="language-json">{
+  "name": "data_pipeline",
+  "project": "analytics-platform",
+  "metadata": "{\"cost_center\":\"eng-data\",\"priority\":\"high\"}",
+  "description": "Daily data processing pipeline",
+  "env": {
+    "DATA_ROOT": "/scratch/analytics",
+    "LOG_LEVEL": "info"
+  },
+  "jobs": [
+    {
+      "name": "extract",
+      "command": "python extract.py",
+      "env": {
+        "LOG_LEVEL": "debug"
+      }
+    }
+  ]
+}
+</code></pre>
+<h2 id="jobspec"><a class="header" href="#jobspec">JobSpec</a></h2>
+<p>Defines a single computational task within a workflow.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the job</td></tr>
+<tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
+<tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
+<tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
+<tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for this job</td></tr>
+<tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>
+<tr><td><code>failure_handler</code></td><td>string</td><td>none</td><td>Name of a <a href="#failurehandlerspec">FailureHandlerSpec</a> to use</td></tr>
+<tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>Name of the scheduler to use for this job</td></tr>
+<tr><td><code>cancel_on_blocking_job_failure</code></td><td>boolean</td><td>false</td><td>Cancel this job if a blocking job fails</td></tr>
+<tr><td><code>depends_on</code></td><td>[string]</td><td>none</td><td>Job names that must complete before this job runs (exact matches)</td></tr>
+<tr><td><code>depends_on_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for job dependencies</td></tr>
+<tr><td><code>input_files</code></td><td>[string]</td><td>none</td><td>File names this job reads (exact matches)</td></tr>
+<tr><td><code>input_file_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for input files</td></tr>
+<tr><td><code>output_files</code></td><td>[string]</td><td>none</td><td>File names this job produces (exact matches)</td></tr>
+<tr><td><code>output_file_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for output files</td></tr>
+<tr><td><code>input_user_data</code></td><td>[string]</td><td>none</td><td>User data names this job reads (exact matches)</td></tr>
+<tr><td><code>input_user_data_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for input user data</td></tr>
+<tr><td><code>output_user_data</code></td><td>[string]</td><td>none</td><td>User data names this job produces (exact matches)</td></tr>
+<tr><td><code>output_user_data_regexes</code></td><td>[string]</td><td>none</td><td>Regex patterns for output user data</td></tr>
+<tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Local parameters for generating multiple jobs</td></tr>
+<tr><td><code>parameter_mode</code></td><td>string</td><td><code>"product"</code></td><td>How to combine parameters: <code>"product"</code> (Cartesian) or <code>"zip"</code></td></tr>
+<tr><td><code>use_parameters</code></td><td>[string]</td><td>none</td><td>Workflow parameter names to use for this job</td></tr>
+<tr><td><code>stdio</code></td><td><a href="#stdioconfig">StdioConfig</a></td><td>none</td><td>Per-job override for stdout/stderr capture (overrides workflow-level)</td></tr>
+</tbody></table>
+</div>
+<p>When both workflow-level and job-level <code>env</code> maps are present, Torc merges them when the job is
+created and stores the effective environment on the job. Job-level values win on key conflicts. Torc
+exports these variables before running the job's <code>invocation_script</code>, if any.</p>
+<h2 id="filespec"><a class="header" href="#filespec">FileSpec</a></h2>
+<p>Defines input/output file artifacts that establish implicit job dependencies.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the file (used for referencing in jobs)</td></tr>
+<tr><td><code>path</code></td><td>string</td><td><em>required</em></td><td>File system path</td></tr>
+<tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Parameters for generating multiple files</td></tr>
+<tr><td><code>parameter_mode</code></td><td>string</td><td><code>"product"</code></td><td>How to combine parameters: <code>"product"</code> (Cartesian) or <code>"zip"</code></td></tr>
+<tr><td><code>use_parameters</code></td><td>[string]</td><td>none</td><td>Workflow parameter names to use for this file</td></tr>
+</tbody></table>
+</div>
+<h2 id="userdataspec"><a class="header" href="#userdataspec">UserDataSpec</a></h2>
+<p>Arbitrary JSON data that can establish dependencies between jobs.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td>none</td><td>Name of the user data (used for referencing in jobs)</td></tr>
+<tr><td><code>data</code></td><td>JSON</td><td>none</td><td>The data content as a JSON value</td></tr>
+<tr><td><code>is_ephemeral</code></td><td>boolean</td><td>false</td><td>Whether the user data is ephemeral</td></tr>
+</tbody></table>
+</div>
+<h2 id="resourcerequirementsspec"><a class="header" href="#resourcerequirementsspec">ResourceRequirementsSpec</a></h2>
+<p>Defines compute resource requirements for jobs.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of this resource configuration (referenced by jobs)</td></tr>
+<tr><td><code>num_cpus</code></td><td>integer</td><td><em>required</em></td><td>Number of CPUs required</td></tr>
+<tr><td><code>memory</code></td><td>string</td><td><em>required</em></td><td>Memory requirement (e.g., <code>"1m"</code>, <code>"2g"</code>, <code>"512k"</code>)</td></tr>
+<tr><td><code>num_gpus</code></td><td>integer</td><td><code>0</code></td><td>Number of GPUs required</td></tr>
+<tr><td><code>num_nodes</code></td><td>integer</td><td><code>1</code></td><td>Number of nodes per job (<code>srun --nodes</code>); allocation size is set via Slurm scheduler config</td></tr>
+<tr><td><code>runtime</code></td><td>string</td><td><code>"PT1H"</code></td><td>Runtime limit in ISO8601 duration format (e.g., <code>"PT30M"</code>, <code>"PT2H"</code>)</td></tr>
+</tbody></table>
+</div>
+<h2 id="failurehandlerspec"><a class="header" href="#failurehandlerspec">FailureHandlerSpec</a></h2>
+<p>Defines error recovery strategies for jobs.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the failure handler (referenced by jobs)</td></tr>
+<tr><td><code>rules</code></td><td>[<a href="#failurehandlerrulespec">FailureHandlerRuleSpec</a>]</td><td><em>required</em></td><td>Rules for handling different exit codes</td></tr>
+</tbody></table>
+</div>
+<h2 id="failurehandlerrulespec"><a class="header" href="#failurehandlerrulespec">FailureHandlerRuleSpec</a></h2>
+<p>A single rule within a failure handler for handling specific exit codes.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>exit_codes</code></td><td>[integer]</td><td><code>[]</code></td><td>Exit codes that trigger this rule</td></tr>
+<tr><td><code>match_all_exit_codes</code></td><td>boolean</td><td><code>false</code></td><td>If true, matches any non-zero exit code</td></tr>
+<tr><td><code>recovery_script</code></td><td>string</td><td>none</td><td>Optional script to run before retrying</td></tr>
+<tr><td><code>max_retries</code></td><td>integer</td><td><code>3</code></td><td>Maximum number of retry attempts</td></tr>
+</tbody></table>
+</div>
+<h2 id="slurmschedulerspec"><a class="header" href="#slurmschedulerspec">SlurmSchedulerSpec</a></h2>
+<p>Defines a Slurm HPC job scheduler configuration.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>string</td><td>none</td><td>Name of the scheduler (used for referencing)</td></tr>
+<tr><td><code>account</code></td><td>string</td><td><em>required</em></td><td>Slurm account</td></tr>
+<tr><td><code>partition</code></td><td>string</td><td>none</td><td>Slurm partition name</td></tr>
+<tr><td><code>nodes</code></td><td>integer</td><td><code>1</code></td><td>Number of nodes to allocate</td></tr>
+<tr><td><code>walltime</code></td><td>string</td><td><code>"01:00:00"</code></td><td>Wall time limit</td></tr>
+<tr><td><code>mem</code></td><td>string</td><td>none</td><td>Memory specification</td></tr>
+<tr><td><code>gres</code></td><td>string</td><td>none</td><td>Generic resources (e.g., GPUs)</td></tr>
+<tr><td><code>qos</code></td><td>string</td><td>none</td><td>Quality of service</td></tr>
+<tr><td><code>ntasks_per_node</code></td><td>integer</td><td>none</td><td>Number of tasks per node</td></tr>
+<tr><td><code>tmp</code></td><td>string</td><td>none</td><td>Temporary storage specification</td></tr>
+<tr><td><code>extra</code></td><td>string</td><td>none</td><td>Additional Slurm parameters</td></tr>
+</tbody></table>
+</div>
+<h2 id="executionconfig"><a class="header" href="#executionconfig">ExecutionConfig</a></h2>
+<p>Controls how jobs are executed and terminated. Fields are grouped by which execution mode they apply
+to. Setting a field that doesn't match the effective mode produces a validation error at workflow
+creation time.</p>
+<h3 id="shared-fields-both-modes"><a class="header" href="#shared-fields-both-modes">Shared fields (both modes)</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mode</code></td><td>string</td><td><code>"direct"</code></td><td>Execution mode: <code>"direct"</code>, <code>"slurm"</code>, or <code>"auto"</code></td></tr>
+<tr><td><code>sigkill_headroom_seconds</code></td><td>integer</td><td><code>60</code></td><td>Seconds before end_time for SIGKILL or srun --time</td></tr>
+<tr><td><code>timeout_exit_code</code></td><td>integer</td><td><code>152</code></td><td>Exit code for timed-out jobs (matches Slurm TIMEOUT)</td></tr>
+<tr><td><code>staggered_start</code></td><td>boolean</td><td><code>true</code></td><td>Stagger job runner startup to mitigate thundering herd</td></tr>
+<tr><td><code>stdio</code></td><td><a href="#stdioconfig">StdioConfig</a></td><td>see below</td><td>Workflow-level default for stdout/stderr capture</td></tr>
+</tbody></table>
+</div>
+<h3 id="direct-mode-fields"><a class="header" href="#direct-mode-fields">Direct mode fields</a></h3>
+<p>These fields only apply when the effective mode is <code>direct</code>. Setting them with <code>mode: slurm</code>
+produces a validation error. When <code>mode: auto</code>, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>limit_resources</code></td><td>boolean</td><td><code>true</code></td><td>Monitor memory/CPU and kill jobs that exceed limits</td></tr>
+<tr><td><code>termination_signal</code></td><td>string</td><td><code>"SIGTERM"</code></td><td>Signal to send before SIGKILL for graceful shutdown</td></tr>
+<tr><td><code>sigterm_lead_seconds</code></td><td>integer</td><td><code>30</code></td><td>Seconds before SIGKILL to send the termination signal</td></tr>
+<tr><td><code>oom_exit_code</code></td><td>integer</td><td><code>137</code></td><td>Exit code for OOM-killed jobs (128 + SIGKILL)</td></tr>
+</tbody></table>
+</div>
+<h3 id="slurm-mode-fields"><a class="header" href="#slurm-mode-fields">Slurm mode fields</a></h3>
+<p>These fields only apply when the effective mode is <code>slurm</code>. Setting them with <code>mode: direct</code>
+produces a validation error. When <code>mode: auto</code>, validation checks the effective mode based on
+whether Slurm schedulers are present in the spec.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>srun_termination_signal</code></td><td>string</td><td>none</td><td>Signal spec for <code>srun --signal=&lt;value&gt;</code></td></tr>
+<tr><td><code>enable_cpu_bind</code></td><td>boolean</td><td><code>false</code></td><td>Allow Slurm CPU binding (<code>--cpu-bind</code>)</td></tr>
+</tbody></table>
+</div>
+<h3 id="worker-per-node-slurm-launch-field"><a class="header" href="#worker-per-node-slurm-launch-field">Worker-per-node Slurm launch field</a></h3>
+<p>This field applies only when <code>execution_config.mode: direct</code> is combined with a <code>schedule_nodes</code>
+action that sets <code>start_one_worker_per_node: true</code>. In that mode, Torc launches one
+<code>torc-slurm-job-runner</code> per allocated node with an outer <code>srun</code>, and this field is passed to that
+launcher command.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>srun_mpi</code></td><td>string</td><td>none</td><td>MPI mode for the outer job-runner launch: <code>srun --mpi=&lt;value&gt; ...</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="stdioconfig"><a class="header" href="#stdioconfig">StdioConfig</a></h3>
+<p>Controls how stdout and stderr are captured for job processes.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>mode</code></td><td><a href="#stdiomode">StdioMode</a></td><td><code>"separate"</code></td><td>How to capture stdout/stderr</td></tr>
+<tr><td><code>delete_on_success</code></td><td>boolean</td><td><code>false</code></td><td>Delete captured files when a job completes successfully</td></tr>
+</tbody></table>
+</div>
+<h3 id="stdiomode"><a class="header" href="#stdiomode">StdioMode</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>separate</code></td><td>Separate stdout (<code>.o</code>) and stderr (<code>.e</code>) files per job (default)</td></tr>
+<tr><td><code>combined</code></td><td>Combine stdout and stderr into a single <code>.log</code> file per job</td></tr>
+<tr><td><code>no_stdout</code></td><td>Discard stdout (<code>/dev/null</code>); capture stderr only</td></tr>
+<tr><td><code>no_stderr</code></td><td>Discard stderr (<code>/dev/null</code>); capture stdout only</td></tr>
+<tr><td><code>none</code></td><td>Discard both stdout and stderr</td></tr>
+</tbody></table>
+</div>
+<p>Per-job overrides can be set via the <code>stdio</code> field on individual <a href="#jobspec">JobSpec</a> entries, which
+takes precedence over the workflow-level setting.</p>
+<h4 id="stdio-examples"><a class="header" href="#stdio-examples">Stdio Examples</a></h4>
+<p>Combine stdout and stderr into a single file, and delete it on success:</p>
+<pre><code class="language-yaml">execution_config:
+  stdio:
+    mode: combined
+    delete_on_success: true
+</code></pre>
+<p>Suppress stdout for most jobs, but keep separate files for a specific job:</p>
+<pre><code class="language-yaml">execution_config:
+  stdio:
+    mode: no_stdout
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py
+  - name: train
+    command: python train.py
+    stdio:
+      mode: separate
+</code></pre>
+<h3 id="execution-modes"><a class="header" href="#execution-modes">Execution Modes</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Mode</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>direct</code></td><td>Torc manages job execution directly (default). Works everywhere</td></tr>
+<tr><td><code>slurm</code></td><td>Jobs wrapped with <code>srun</code>. Slurm manages resource limits and termination</td></tr>
+<tr><td><code>auto</code></td><td>Selects <code>slurm</code> if <code>SLURM_JOB_ID</code> is set, otherwise <code>direct</code></td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Warning</strong>: <code>auto</code> will silently select slurm mode when running inside a Slurm allocation. Prefer
+setting the mode explicitly to avoid unexpected behavior.</p>
+</blockquote>
+<h3 id="direct-mode-example"><a class="header" href="#direct-mode-example">Direct Mode Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  limit_resources: true
+  termination_signal: SIGTERM
+  sigterm_lead_seconds: 30
+  sigkill_headroom_seconds: 60
+  timeout_exit_code: 152
+  oom_exit_code: 137
+</code></pre>
+<h3 id="direct-mode-worker-per-node-example"><a class="header" href="#direct-mode-worker-per-node-example">Direct Mode Worker-Per-Node Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+  srun_mpi: "none"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: multi_node
+    scheduler_type: slurm
+    start_one_worker_per_node: true
+</code></pre>
+<p>This launches the job runners with:</p>
+<pre><code class="language-console">srun --ntasks-per-node=1 --mpi=none torc-slurm-job-runner ...
+</code></pre>
+<h3 id="slurm-mode-example"><a class="header" href="#slurm-mode-example">Slurm Mode Example</a></h3>
+<pre><code class="language-yaml">execution_config:
+  mode: slurm
+  srun_termination_signal: "TERM@120"
+  sigkill_headroom_seconds: 180
+  enable_cpu_bind: false
+</code></pre>
+<h3 id="termination-timeline-direct-mode"><a class="header" href="#termination-timeline-direct-mode">Termination Timeline (Direct Mode)</a></h3>
+<p>With <code>sigkill_headroom_seconds=60</code> and <code>sigterm_lead_seconds=30</code>:</p>
+<ol>
+<li><code>end_time - 90s</code>: Send SIGTERM (or configured <code>termination_signal</code>)</li>
+<li><code>end_time - 60s</code>: Send SIGKILL to remaining jobs, set exit code to <code>timeout_exit_code</code></li>
+<li><code>end_time</code>: Job runner exits</li>
+</ol>
+<h3 id="slurm-mode-headroom"><a class="header" href="#slurm-mode-headroom">Slurm Mode Headroom</a></h3>
+<p>In Slurm mode, <code>sigkill_headroom_seconds</code> controls <code>srun --time</code>. The step time limit is set to
+<code>remaining_time - sigkill_headroom_seconds</code>, allowing the job runner to detect completion before the
+allocation expires.</p>
+<h2 id="slurmdefaultsspec"><a class="header" href="#slurmdefaultsspec">SlurmDefaultsSpec</a></h2>
+<p>Workflow-level default parameters applied to all Slurm schedulers. This is a map of parameter names
+to values.</p>
+<p>Any valid sbatch long option can be specified (without the leading <code>--</code>), except for parameters
+managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</code>, <code>time</code>, <code>mem</code>, <code>gres</code>, <code>name</code>, <code>job-name</code>.</p>
+<p>The <code>account</code> parameter is allowed as a workflow-level default.</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-yaml">slurm_defaults:
+  qos: "high"
+  constraint: "cpu"
+  mail-user: "user@example.com"
+  mail-type: "END,FAIL"
+</code></pre>
+<h2 id="workflowactionspec"><a class="header" href="#workflowactionspec">WorkflowActionSpec</a></h2>
+<p>Defines conditional actions triggered by workflow or job state changes.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>trigger_type</code></td><td>string</td><td><em>required</em></td><td>When to trigger: <code>"on_workflow_start"</code>, <code>"on_workflow_complete"</code>, <code>"on_jobs_ready"</code>, <code>"on_jobs_complete"</code></td></tr>
+<tr><td><code>action_type</code></td><td>string</td><td><em>required</em></td><td>What to do: <code>"run_commands"</code>, <code>"schedule_nodes"</code></td></tr>
+<tr><td><code>jobs</code></td><td>[string]</td><td>none</td><td>For job triggers: exact job names to match</td></tr>
+<tr><td><code>job_name_regexes</code></td><td>[string]</td><td>none</td><td>For job triggers: regex patterns to match job names</td></tr>
+<tr><td><code>commands</code></td><td>[string]</td><td>none</td><td>For <code>run_commands</code>: commands to execute</td></tr>
+<tr><td><code>scheduler</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler name</td></tr>
+<tr><td><code>scheduler_type</code></td><td>string</td><td>none</td><td>For <code>schedule_nodes</code>: scheduler type (<code>"slurm"</code>, <code>"local"</code>)</td></tr>
+<tr><td><code>num_allocations</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: number of node allocations</td></tr>
+<tr><td><code>start_one_worker_per_node</code></td><td>boolean</td><td>false</td><td>For <code>schedule_nodes</code>: launch one worker per node (direct mode only)</td></tr>
+<tr><td><code>max_parallel_jobs</code></td><td>integer</td><td>none</td><td>For <code>schedule_nodes</code>: maximum parallel jobs</td></tr>
+<tr><td><code>persistent</code></td><td>boolean</td><td>false</td><td>Whether the action persists and can be claimed by multiple workers</td></tr>
+</tbody></table>
+</div>
+<h2 id="resourcemonitorconfig"><a class="header" href="#resourcemonitorconfig">ResourceMonitorConfig</a></h2>
+<p>Configuration for resource usage monitoring.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Shared sampling interval in seconds</td></tr>
+<tr><td><code>flush_interval_seconds</code></td><td>integer</td><td><code>300</code></td><td>Flush interval for buffered time-series samples</td></tr>
+<tr><td><code>generate_plots</code></td><td>boolean</td><td><code>false</code></td><td>Generate resource usage plots</td></tr>
+<tr><td><code>jobs</code></td><td>JobMonitorConfig</td><td>none</td><td>Per-job monitoring config</td></tr>
+<tr><td><code>compute_node</code></td><td>ComputeNodeMonitorConfig</td><td>none</td><td>Overall compute-node monitoring</td></tr>
+</tbody></table>
+</div>
+<p>Example with per-job summary monitoring and overall compute-node time-series monitoring:</p>
+<pre><code class="language-yaml">resource_monitor:
+  sample_interval_seconds: 5
+  flush_interval_seconds: 300
+  jobs:
+    enabled: true
+    granularity: summary
+  compute_node:
+    enabled: true
+    granularity: time_series
+    cpu: true
+    memory: true
+</code></pre>
+<p><code>jobs.granularity</code> controls per-job monitoring. <code>compute_node.granularity</code> independently controls
+overall compute-node monitoring, so a workflow can store per-job summaries while collecting
+compute-node time series. Both scopes use the parent <code>sample_interval_seconds</code>; there is not a
+separate sampling interval per scope. When time-series monitoring is enabled, samples are flushed to
+SQLite every <code>flush_interval_seconds</code>, which trades lower commit overhead for a bounded amount of
+crash-exposed buffered data. The current compute-node monitor records CPU and memory; GPU monitoring
+is expected to use the same nested <code>compute_node</code> configuration in a future release.</p>
+<p>For backwards compatibility, top-level <code>enabled</code> and <code>granularity</code> fields are still accepted and
+apply to job monitoring when <code>jobs</code> is omitted. New workflow specs should use <code>jobs</code>.</p>
+<h3 id="jobmonitorconfig"><a class="header" href="#jobmonitorconfig">JobMonitorConfig</a></h3>
+<p>Configuration for per-job CPU and memory monitoring.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>enabled</code></td><td>boolean</td><td><code>false</code></td><td>Enable job monitoring</td></tr>
+<tr><td><code>granularity</code></td><td><a href="#monitorgranularity">MonitorGranularity</a></td><td><code>"Summary"</code></td><td>Summary or time-series collection</td></tr>
+</tbody></table>
+</div>
+<h3 id="computenodemonitorconfig"><a class="header" href="#computenodemonitorconfig">ComputeNodeMonitorConfig</a></h3>
+<p>Configuration for opt-in overall compute-node CPU and memory monitoring.</p>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>enabled</code></td><td>boolean</td><td><code>false</code></td><td>Enable compute-node monitoring</td></tr>
+<tr><td><code>granularity</code></td><td><a href="#monitorgranularity">MonitorGranularity</a></td><td><code>"Summary"</code></td><td>Summary or time-series collection</td></tr>
+<tr><td><code>cpu</code></td><td>boolean</td><td><code>true</code></td><td>Record overall CPU utilization</td></tr>
+<tr><td><code>memory</code></td><td>boolean</td><td><code>true</code></td><td>Record overall memory usage</td></tr>
+</tbody></table>
+</div>
+<h2 id="monitorgranularity"><a class="header" href="#monitorgranularity">MonitorGranularity</a></h2>
+<p>Enum specifying the level of detail for resource monitoring.</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>Summary</code></td><td>Collect summary statistics only</td></tr>
+<tr><td><code>TimeSeries</code></td><td>Collect detailed time series data</td></tr>
+</tbody></table>
+</div>
+<h2 id="job-priority"><a class="header" href="#job-priority">Job Priority</a></h2>
+<p>Use <code>priority</code> when some ready jobs should be claimed before others.</p>
+<ul>
+<li>Higher values are preferred over lower values</li>
+<li>The default is <code>0</code></li>
+<li><code>claim_next_jobs</code> uses a stable tie-breaker for jobs with the same priority</li>
+<li><code>claim_jobs_based_on_resources</code> prefers GPU jobs first within the same priority</li>
+<li>Priority affects both <code>claim_next_jobs</code> and <code>claim_jobs_based_on_resources</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-yaml">jobs:
+  - name: urgent_step
+    command: ./run_urgent.sh
+    priority: 100
+
+  - name: background_step
+    command: ./run_background.sh
+    priority: 10
+</code></pre>
+<h2 id="parameter-formats"><a class="header" href="#parameter-formats">Parameter Formats</a></h2>
+<p>Parameters support several formats for generating multiple jobs or files:</p>
+<div class="table-wrapper"><table><thead><tr><th>Format</th><th>Example</th><th>Description</th></tr></thead><tbody>
+<tr><td>Integer range</td><td><code>"1:100"</code></td><td>Inclusive range from 1 to 100</td></tr>
+<tr><td>Integer range with step</td><td><code>"0:100:10"</code></td><td>Range with step size</td></tr>
+<tr><td>Float range</td><td><code>"0.0:1.0:0.1"</code></td><td>Float range with step</td></tr>
+<tr><td>Integer list</td><td><code>"[1,5,10,100]"</code></td><td>Explicit list of integers</td></tr>
+<tr><td>Float list</td><td><code>"[0.1,0.5,0.9]"</code></td><td>Explicit list of floats</td></tr>
+<tr><td>String list</td><td><code>"['adam','sgd','rmsprop']"</code></td><td>Explicit list of strings</td></tr>
+</tbody></table>
+</div>
+<p><strong>Template substitution in strings:</strong></p>
+<ul>
+<li>Basic: <code>{param_name}</code> - Replace with parameter value</li>
+<li>Formatted integer: <code>{i:03d}</code> - Zero-padded (001, 042, 100)</li>
+<li>Formatted float: <code>{lr:.4f}</code> - Precision (0.0010, 0.1000)</li>
+</ul>
+<p>See the <a href="./parameterization.html">Job Parameterization</a> reference for more details.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/reference/cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/reference/parameterization.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/reference/cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/reference/parameterization.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
