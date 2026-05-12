@@ -10777,9 +10777,15 @@ parameter ranges.</p>
     data:
       experiment: "{experiment}"
       learning_rate: 0.001
+      output_dir: /results/{experiment}
     parameters:
       experiment: "['baseline','ablation','full']"
 </code></pre>
+<p>Parameter tokens (<code>{name}</code> / <code>{name:fmt}</code>) are substituted into the user_data <code>name</code> and into every
+string value found recursively inside <code>data</code> -- object values, array elements, and nested
+substructures. Non-string values (numbers, bools, null) pass through unchanged. The same
+<code>use_parameters</code> opt-in for inheriting workflow-level parameters applies to user_data as well. See
+<code>examples/yaml/parameterized_user_data.yaml</code> for a runnable example.</p>
 <h2 id="workflow-variables"><a class="header" href="#workflow-variables">Workflow Variables</a></h2>
 <p>Workflow-level <code>variables</code> are constants that get substituted into every string field of the spec
 before parameter expansion. Use them to remove repetition of fixed strings -- paths, account codes,
