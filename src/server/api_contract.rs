@@ -141,6 +141,13 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<CreateFileResponse, ApiError>;
 
+    /// Create files in bulk.
+    async fn create_files(
+        &self,
+        body: models::FilesModel,
+        context: &C,
+    ) -> Result<CreateFilesResponse, ApiError>;
+
     /// Store a job.
     async fn create_job(
         &self,
@@ -319,6 +326,13 @@ pub trait TransportApiCore<C: Send + Sync> {
         producer_job_id: Option<i64>,
         context: &C,
     ) -> Result<CreateUserDataResponse, ApiError>;
+
+    /// Create user data records in bulk.
+    async fn create_user_data_list(
+        &self,
+        body: models::UserDataListModel,
+        context: &C,
+    ) -> Result<CreateUserDataListResponse, ApiError>;
 
     /// Store a workflow.
     async fn create_workflow(

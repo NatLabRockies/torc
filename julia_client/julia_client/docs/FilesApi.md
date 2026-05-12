@@ -5,6 +5,7 @@ All URIs are relative to *http://localhost/torc-service/v1*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**create_file**](FilesApi.md#create_file) | **POST** /files | 
+[**create_files**](FilesApi.md#create_files) | **POST** /bulk_files | 
 [**delete_file**](FilesApi.md#delete_file) | **DELETE** /files/{id} | 
 [**delete_files**](FilesApi.md#delete_files) | **DELETE** /files | 
 [**get_file**](FilesApi.md#get_file) | **GET** /files/{id} | 
@@ -28,6 +29,34 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**FileModel**](FileModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **create_files**
+> create_files(_api::FilesApi, files_model::FilesModel; _mediaType=nothing) -> CreateFilesResponse, OpenAPI.Clients.ApiResponse <br/>
+> create_files(_api::FilesApi, response_stream::Channel, files_model::FilesModel; _mediaType=nothing) -> Channel{ CreateFilesResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **FilesApi** | API context | 
+**files_model** | [**FilesModel**](FilesModel.md) |  |
+
+### Return type
+
+[**CreateFilesResponse**](CreateFilesResponse.md)
 
 ### Authorization
 

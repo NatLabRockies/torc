@@ -1015,6 +1015,15 @@ where
         self.transport_create_file(file, context).await
     }
 
+    /// Create files in bulk.
+    async fn create_files(
+        &self,
+        body: models::FilesModel,
+        context: &C,
+    ) -> Result<CreateFilesResponse, ApiError> {
+        self.transport_create_files(body, context).await
+    }
+
     /// Store a job.
     async fn create_job(
         &self,
@@ -1266,6 +1275,15 @@ where
     ) -> Result<CreateUserDataResponse, ApiError> {
         self.transport_create_user_data(body, consumer_job_id, producer_job_id, context)
             .await
+    }
+
+    /// Create user data records in bulk.
+    async fn create_user_data_list(
+        &self,
+        body: models::UserDataListModel,
+        context: &C,
+    ) -> Result<CreateUserDataListResponse, ApiError> {
+        self.transport_create_user_data_list(body, context).await
     }
 
     /// Store a workflow.

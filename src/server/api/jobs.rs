@@ -27,6 +27,79 @@ use super::{
     parse_job_status, resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
+/// Per-job values prepared during the first pass of bulk `create_jobs` so the
+/// chunked INSERT in the second pass can stay infallible. `env_serialized` and the
+/// per-job booleans/priority that get NULL/default coalescing in the single-row
+/// path are materialized here once.
+struct PreparedJobRow {
+    job: models::JobModel,
+    env_serialized: Option<String>,
+    cancel_on_blocking_job_failure: bool,
+    supports_termination: bool,
+    priority: i64,
+    status_int: i32,
+}
+
+/// Bulk INSERT a relationship table whose row shape is `(i64, i64, i64)`
+/// (e.g. `job_depends_on`, `job_input_file`, `job_output_file`).
+///
+/// The caller passes the table name and the parenthesized column list as
+/// trusted static strings — they never come from request data. Rows are split
+/// into chunks sized so each statement stays below `SQLITE_MAX_VARIABLE_NUMBER`.
+async fn bulk_insert_job_3col(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    columns_paren: &str,
+    rows: &[(i64, i64, i64)],
+) -> Result<(), ApiError> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    // 3 cols × 1000 rows = 3000 bound parameters per statement.
+    const ROWS_PER_INSERT: usize = 1000;
+    for chunk in rows.chunks(ROWS_PER_INSERT) {
+        let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+            "INSERT INTO {} {} ",
+            table, columns_paren
+        ));
+        qb.push_values(chunk, |mut row, (a, b, c)| {
+            row.push_bind(*a).push_bind(*b).push_bind(*c);
+        });
+        qb.build().execute(&mut **tx).await.map_err(|e| {
+            database_error_with_msg(e, format!("Failed to bulk insert into {}", table))
+        })?;
+    }
+    Ok(())
+}
+
+/// Bulk INSERT a relationship table whose row shape is `(i64, i64)`
+/// (e.g. `job_input_user_data`, `job_output_user_data`).
+async fn bulk_insert_job_2col(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    table: &str,
+    columns_paren: &str,
+    rows: &[(i64, i64)],
+) -> Result<(), ApiError> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    // 2 cols × 1500 rows = 3000 bound parameters per statement.
+    const ROWS_PER_INSERT: usize = 1500;
+    for chunk in rows.chunks(ROWS_PER_INSERT) {
+        let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+            "INSERT INTO {} {} ",
+            table, columns_paren
+        ));
+        qb.push_values(chunk, |mut row, (a, b)| {
+            row.push_bind(*a).push_bind(*b);
+        });
+        qb.build().execute(&mut **tx).await.map_err(|e| {
+            database_error_with_msg(e, format!("Failed to bulk insert into {}", table))
+        })?;
+    }
+    Ok(())
+}
+
 /// Trait defining job-related API operations
 #[async_trait]
 pub trait JobsApi<C> {
@@ -1379,14 +1452,33 @@ where
                 body.jobs.len(),
                 MAX_RECORD_TRANSFER_COUNT
             );
-            return Err(ApiError(format!(
-                "Too many jobs in batch: {}. Maximum is {}",
-                body.jobs.len(),
-                MAX_RECORD_TRANSFER_COUNT
-            )));
+            return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "Too many jobs in batch: {}. Maximum is {}",
+                    body.jobs.len(),
+                    MAX_RECORD_TRANSFER_COUNT
+                )),
+            ));
         }
 
-        let mut added_jobs = Vec::new();
+        // Preflight: the `job` table has no UNIQUE (workflow_id, name) constraint;
+        // duplicate names in one request would silently commit two rows and then
+        // make the post-insert name→id lookup ambiguous. The client's
+        // `WorkflowSpec::validate_unique_names_after_expansion` already rejects
+        // this, but defend in depth against direct API callers. 422, not 500.
+        {
+            let mut seen: HashMap<&str, ()> = HashMap::with_capacity(body.jobs.len());
+            for job in &body.jobs {
+                if seen.insert(job.name.as_str(), ()).is_some() {
+                    return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "Duplicate job name '{}' in bulk create request",
+                            job.name
+                        )),
+                    ));
+                }
+            }
+        }
 
         // Acquire the SQLite write lock up front. `fetch_workflow_env` reads
         // before the per-job INSERTs, which would risk SQLITE_BUSY_SNAPSHOT
@@ -1396,12 +1488,12 @@ where
             Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
         };
 
-        // Cache workflow env per workflow_id to avoid re-fetching inside the loop.
-        // In practice all jobs in a single request share one workflow, so this usually
-        // collapses to a single query.
+        // Phase A: validate every job and prepare the values we'll INSERT later.
+        // This loop touches the DB only via `fetch_workflow_env` (per workflow_id, cached).
+        // Each job's env is merged with the workflow env and serialized here so the bulk
+        // INSERT closure stays infallible.
         let mut workflow_env_cache: HashMap<i64, Option<HashMap<String, String>>> = HashMap::new();
-
-        // Process each job
+        let mut prepared: Vec<PreparedJobRow> = Vec::with_capacity(body.jobs.len());
         for mut job in body.jobs {
             if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
                 let _ = transaction.rollback().await;
@@ -1425,8 +1517,7 @@ where
                 }
             };
             job.env = Self::merge_env(workflow_env.as_ref(), job.env.as_ref());
-            let invocation_script = job.invocation_script.clone();
-            let job_env = match serialize_env_map(job.env.clone(), "job env") {
+            let env_serialized = match serialize_env_map(job.env.clone(), "job env") {
                 Ok(env) => env,
                 Err(e) => {
                     let _ = transaction.rollback().await;
@@ -1449,175 +1540,177 @@ where
             let status_int = status.to_int();
             job.status = Some(status);
 
-            // Insert the job
-            let job_result = match sqlx::query(
-                r#"
-                INSERT INTO job
-                (
-                    workflow_id,
-                    name,
-                    command,
-                    cancel_on_blocking_job_failure,
-                    supports_termination,
-                    resource_requirements_id,
-                    invocation_script,
-                    env,
-                    status,
-                    scheduler_id,
-                    failure_handler_id,
-                    priority
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
-                "#,
-            )
-            .bind(job.workflow_id)
-            .bind(&job.name)
-            .bind(&job.command)
-            .bind(cancel_on_blocking_job_failure)
-            .bind(supports_termination)
-            .bind(job.resource_requirements_id)
-            .bind(&invocation_script)
-            .bind(job_env)
-            .bind(status_int)
-            .bind(job.scheduler_id)
-            .bind(job.failure_handler_id)
-            .bind(priority)
-            .fetch_one(&mut *transaction)
-            .await
-            {
-                Ok(result) => result,
+            prepared.push(PreparedJobRow {
+                job,
+                env_serialized,
+                cancel_on_blocking_job_failure,
+                supports_termination,
+                priority,
+                status_int,
+            });
+        }
+
+        // Phase B: bulk INSERT job rows in chunks, capturing each row's generated id
+        // by name. Job names are unique per workflow — duplicates after parameter
+        // expansion are rejected client-side by
+        // `WorkflowSpec::validate_unique_names_after_expansion`. SQLite's RETURNING
+        // order is undefined, but a name→id map is order-independent.
+        //
+        // 12 columns × 200 rows = 2400 bound parameters per statement, safely under
+        // SQLITE_MAX_VARIABLE_NUMBER (32766 since 3.32).
+        const JOB_ROWS_PER_INSERT: usize = 200;
+        let mut id_by_name: HashMap<String, i64> = HashMap::with_capacity(prepared.len());
+        for chunk in prepared.chunks(JOB_ROWS_PER_INSERT) {
+            let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+                "INSERT INTO job (\
+                    workflow_id, name, command, cancel_on_blocking_job_failure, \
+                    supports_termination, resource_requirements_id, invocation_script, \
+                    env, status, scheduler_id, failure_handler_id, priority\
+                ) ",
+            );
+            qb.push_values(chunk, |mut row, prep| {
+                row.push_bind(prep.job.workflow_id)
+                    .push_bind(&prep.job.name)
+                    .push_bind(&prep.job.command)
+                    .push_bind(prep.cancel_on_blocking_job_failure)
+                    .push_bind(prep.supports_termination)
+                    .push_bind(prep.job.resource_requirements_id)
+                    .push_bind(prep.job.invocation_script.as_deref())
+                    .push_bind(prep.env_serialized.as_deref())
+                    .push_bind(prep.status_int)
+                    .push_bind(prep.job.scheduler_id)
+                    .push_bind(prep.job.failure_handler_id)
+                    .push_bind(prep.priority);
+            });
+            qb.push(" RETURNING id, name");
+            let rows = match qb.build().fetch_all(&mut *transaction).await {
+                Ok(rows) => rows,
                 Err(e) => {
                     let _ = transaction.rollback().await;
                     return Err(database_error_with_msg(
                         e,
-                        "Failed to create job record in bulk",
+                        "Failed to create job records in bulk",
                     ));
                 }
             };
+            for row in rows {
+                let id: i64 = row.get("id");
+                let name: String = row.get("name");
+                id_by_name.insert(name, id);
+            }
+        }
 
-            let job_id: i64 = job_result.get("id");
+        // Phase C: attach ids to each JobModel in input order and gather relationship rows
+        // for the five join tables. Each `Vec<(...)>` will be fed into a single chunked
+        // INSERT below; for a 22k-job workflow this typically packs 100k+ rows into a few
+        // dozen statements instead of ~150k individual prepared INSERTs.
+        let mut added_jobs: Vec<models::JobModel> = Vec::with_capacity(prepared.len());
+        let mut depends_on_rows: Vec<(i64, i64, i64)> = Vec::new();
+        let mut input_file_rows: Vec<(i64, i64, i64)> = Vec::new();
+        let mut output_file_rows: Vec<(i64, i64, i64)> = Vec::new();
+        let mut input_user_data_rows: Vec<(i64, i64)> = Vec::new();
+        let mut output_user_data_rows: Vec<(i64, i64)> = Vec::new();
+
+        for prep in prepared {
+            let mut job = prep.job;
+            let job_id = match id_by_name.remove(&job.name) {
+                Some(id) => id,
+                None => {
+                    let _ = transaction.rollback().await;
+                    return Err(ApiError(format!(
+                        "Bulk job insert returned no id for name '{}'",
+                        job.name
+                    )));
+                }
+            };
             job.id = Some(job_id);
+            let workflow_id = job.workflow_id;
 
-            // Handle job dependencies
-            if let Some(depends_on_job_ids) = &job.depends_on_job_ids {
-                for blocking_id in depends_on_job_ids {
-                    if let Err(e) = sqlx::query!(
-                        r#"
-                        INSERT INTO job_depends_on (job_id, depends_on_job_id, workflow_id)
-                        VALUES ($1, $2, $3)
-                        "#,
-                        job_id,
-                        *blocking_id,
-                        job.workflow_id
-                    )
-                    .execute(&mut *transaction)
-                    .await
-                    {
-                        let _ = transaction.rollback().await;
-                        return Err(database_error_with_msg(
-                            e,
-                            "Failed to create job association in bulk",
-                        ));
-                    }
+            if let Some(ids) = &job.depends_on_job_ids {
+                for &blocking_id in ids {
+                    depends_on_rows.push((job_id, blocking_id, workflow_id));
                 }
             }
-
-            // Handle input files
-            if let Some(input_file_ids) = &job.input_file_ids {
-                for file_id in input_file_ids {
-                    if let Err(e) = sqlx::query!(
-                        r#"
-                        INSERT INTO job_input_file (job_id, file_id, workflow_id)
-                        VALUES ($1, $2, $3)
-                        "#,
-                        job_id,
-                        *file_id,
-                        job.workflow_id
-                    )
-                    .execute(&mut *transaction)
-                    .await
-                    {
-                        let _ = transaction.rollback().await;
-                        return Err(database_error_with_msg(
-                            e,
-                            "Failed to create job association in bulk",
-                        ));
-                    }
+            if let Some(ids) = &job.input_file_ids {
+                for &file_id in ids {
+                    input_file_rows.push((job_id, file_id, workflow_id));
                 }
             }
-
-            // Handle output files
-            if let Some(output_file_ids) = &job.output_file_ids {
-                for file_id in output_file_ids {
-                    if let Err(e) = sqlx::query!(
-                        r#"
-                        INSERT INTO job_output_file (job_id, file_id, workflow_id)
-                        VALUES ($1, $2, $3)
-                        "#,
-                        job_id,
-                        *file_id,
-                        job.workflow_id
-                    )
-                    .execute(&mut *transaction)
-                    .await
-                    {
-                        let _ = transaction.rollback().await;
-                        return Err(database_error_with_msg(
-                            e,
-                            "Failed to create job association in bulk",
-                        ));
-                    }
+            if let Some(ids) = &job.output_file_ids {
+                for &file_id in ids {
+                    output_file_rows.push((job_id, file_id, workflow_id));
                 }
             }
-
-            // Handle input user_data
-            if let Some(input_user_data_ids) = &job.input_user_data_ids {
-                for user_data_id in input_user_data_ids {
-                    if let Err(e) = sqlx::query!(
-                        r#"
-                        INSERT INTO job_input_user_data (job_id, user_data_id)
-                        VALUES ($1, $2)
-                        "#,
-                        job_id,
-                        *user_data_id
-                    )
-                    .execute(&mut *transaction)
-                    .await
-                    {
-                        let _ = transaction.rollback().await;
-                        return Err(database_error_with_msg(
-                            e,
-                            "Failed to create job association in bulk",
-                        ));
-                    }
+            if let Some(ids) = &job.input_user_data_ids {
+                for &user_data_id in ids {
+                    input_user_data_rows.push((job_id, user_data_id));
                 }
             }
-
-            // Handle output user_data
-            if let Some(output_user_data_ids) = &job.output_user_data_ids {
-                for user_data_id in output_user_data_ids {
-                    if let Err(e) = sqlx::query!(
-                        r#"
-                        INSERT INTO job_output_user_data (job_id, user_data_id)
-                        VALUES ($1, $2)
-                        "#,
-                        job_id,
-                        *user_data_id
-                    )
-                    .execute(&mut *transaction)
-                    .await
-                    {
-                        let _ = transaction.rollback().await;
-                        return Err(database_error_with_msg(
-                            e,
-                            "Failed to create job association in bulk",
-                        ));
-                    }
+            if let Some(ids) = &job.output_user_data_ids {
+                for &user_data_id in ids {
+                    output_user_data_rows.push((job_id, user_data_id));
                 }
             }
 
             added_jobs.push(job);
+        }
+
+        // Phase D: bulk INSERT each relationship table. The helpers chunk on a row budget
+        // sized for SQLite's bound-parameter limit (3 cols × 1000 = 3000 params).
+        if let Err(e) = bulk_insert_job_3col(
+            &mut transaction,
+            "job_depends_on",
+            "(job_id, depends_on_job_id, workflow_id)",
+            &depends_on_rows,
+        )
+        .await
+        {
+            let _ = transaction.rollback().await;
+            return Err(e);
+        }
+        if let Err(e) = bulk_insert_job_3col(
+            &mut transaction,
+            "job_input_file",
+            "(job_id, file_id, workflow_id)",
+            &input_file_rows,
+        )
+        .await
+        {
+            let _ = transaction.rollback().await;
+            return Err(e);
+        }
+        if let Err(e) = bulk_insert_job_3col(
+            &mut transaction,
+            "job_output_file",
+            "(job_id, file_id, workflow_id)",
+            &output_file_rows,
+        )
+        .await
+        {
+            let _ = transaction.rollback().await;
+            return Err(e);
+        }
+        if let Err(e) = bulk_insert_job_2col(
+            &mut transaction,
+            "job_input_user_data",
+            "(job_id, user_data_id)",
+            &input_user_data_rows,
+        )
+        .await
+        {
+            let _ = transaction.rollback().await;
+            return Err(e);
+        }
+        if let Err(e) = bulk_insert_job_2col(
+            &mut transaction,
+            "job_output_user_data",
+            "(job_id, user_data_id)",
+            &output_user_data_rows,
+        )
+        .await
+        {
+            let _ = transaction.rollback().await;
+            return Err(e);
         }
 
         // Commit the transaction

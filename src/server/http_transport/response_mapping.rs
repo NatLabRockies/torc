@@ -98,6 +98,8 @@ map_response!(
     ConflictErrorResponse => StatusCode::CONFLICT
 );
 map_response!(create_jobs_response, CreateJobsResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
+map_response!(create_files_response, CreateFilesResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
+map_response!(create_user_data_list_response, CreateUserDataListResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
 map_response!(
     create_failure_handler_response,
     CreateFailureHandlerResponse,

@@ -80,9 +80,14 @@ pub fn app_router(state: LiveRouterState) -> Router {
     Router::new()
         .merge(
             Router::new()
-                // Axum defaults JSON request bodies to 2 MiB, so bulk job creation needs an
+                // Axum defaults JSON request bodies to 2 MiB, so bulk creation endpoints need an
                 // explicit override to preserve large workflow submissions.
                 .route("/torc-service/v1/bulk_jobs", post(create_jobs))
+                .route("/torc-service/v1/bulk_files", post(create_files))
+                .route(
+                    "/torc-service/v1/bulk_user_data",
+                    post(create_user_data_list),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -679,7 +684,13 @@ async fn dashboard_fallback(request: Request) -> Response<Body> {
     path = "/bulk_jobs",
     operation_id = "create_jobs",
     request_body = models::JobsModel,
-    responses((status = 200, body = models::CreateJobsResponse))
+    responses(
+        (status = 200, description = "Successful response", body = models::CreateJobsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g., mixed workflow_ids, oversized batch, duplicate names, invalid priority)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn create_jobs(
     State(state): State<LiveRouterState>,
@@ -688,6 +699,56 @@ pub async fn create_jobs(
 ) -> Response<Body> {
     match state.server.create_jobs(body, &context).await {
         Ok(response) => create_jobs_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "files",
+    path = "/bulk_files",
+    operation_id = "create_files",
+    request_body = models::FilesModel,
+    responses(
+        (status = 200, description = "Successful response", body = models::CreateFilesResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g., mixed workflow_ids, oversized batch, duplicate names)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn create_files(
+    State(state): State<LiveRouterState>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::FilesModel>,
+) -> Response<Body> {
+    match state.server.create_files(body, &context).await {
+        Ok(response) => create_files_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "user_data",
+    path = "/bulk_user_data",
+    operation_id = "create_user_data_list",
+    request_body = models::UserDataListModel,
+    responses(
+        (status = 200, description = "Successful response", body = models::CreateUserDataListResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g., mixed workflow_ids, oversized batch, duplicate names, unencodable data)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn create_user_data_list(
+    State(state): State<LiveRouterState>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::UserDataListModel>,
+) -> Response<Body> {
+    match state.server.create_user_data_list(body, &context).await {
+        Ok(response) => create_user_data_list_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

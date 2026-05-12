@@ -51,8 +51,11 @@
         "pressure": "1:100:25"
       }
     },
+    // Generate one phase diagram per (temperature, pressure) combination.
+    // Both varying parameters appear in the name so post-expansion names
+    // are unique; omitting them would produce duplicates.
     {
-      "name": "generate_phase_diagram",
+      "name": "generate_phase_diagram_T{temp}_P{pressure:03d}",
       "command": "python scripts/phase_diagram.py --input-dir=/analysis --output=/results/phase_diagram.png",
       "resource_requirements": "minimal",
       "depends_on": [

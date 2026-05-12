@@ -51,10 +51,11 @@ job "simulate_m{model}_s{scenario}" {
     }
 }
 
-// Aggregate results after all simulations complete
-job "aggregate_results" {
+// Aggregate results for each simulation. Both varying parameters appear
+// in the name so post-expansion names are unique.
+job "aggregate_results_m{model}_s{scenario}" {
     command "echo \"All simulations completed successfully!\""
-    depends_on_job "simulate_m{model}_s{scenario}"
+    depends_on "simulate_m{model}_s{scenario}"
     parameters {
         model "0:2"
         scenario "0:2"

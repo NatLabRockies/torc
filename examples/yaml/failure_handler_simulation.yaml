@@ -47,8 +47,9 @@ jobs:
       model: "0:2"
       scenario: "0:2"
 
-  # Aggregate results after all simulations complete
-  - name: aggregate_results
+  # Aggregate results for each simulation. Both varying parameters appear
+  # in the name so post-expansion names are unique.
+  - name: aggregate_results_m{model}_s{scenario}
     command: echo "All simulations completed successfully!"
     depends_on:
       - simulate_m{model}_s{scenario}

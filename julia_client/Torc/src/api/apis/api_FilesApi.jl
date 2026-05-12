@@ -40,6 +40,36 @@ function create_file(_api::FilesApi, response_stream::Channel, file_model::FileM
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_create_files_FilesApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => CreateFilesResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_create_files(_api::FilesApi, files_model::FilesModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_files_FilesApi, "/bulk_files", [], files_model)
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- files_model::FilesModel (required)
+
+Return: CreateFilesResponse, OpenAPI.Clients.ApiResponse
+"""
+function create_files(_api::FilesApi, files_model::FilesModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_files(_api, files_model; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_files(_api::FilesApi, response_stream::Channel, files_model::FilesModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_files(_api, files_model; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_delete_file_FilesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => FileModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -208,6 +238,7 @@ function update_file(_api::FilesApi, response_stream::Channel, id::Int64, file_m
 end
 
 export create_file
+export create_files
 export delete_file
 export delete_files
 export get_file

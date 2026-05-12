@@ -9,8 +9,9 @@ use crate::api_version::HTTP_API_VERSION;
 use crate::models::{
     AccessCheckResponse, AccessGroupModel, ArchiveWorkflowRequest, BatchCompleteJobsRequest,
     BatchCompleteJobsResponse, ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources,
-    ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources, CreateJobsResponse,
-    DeleteCountResponse, DeleteRoCrateEntitiesResponse, EventModel, FailureHandlerModel, FileModel,
+    ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources, CreateFilesResponse,
+    CreateJobsResponse, CreateUserDataListResponse, DeleteCountResponse,
+    DeleteRoCrateEntitiesResponse, EventModel, FailureHandlerModel, FileModel, FilesModel,
     GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
     JobCompletionEntry, JobCompletionError, JobDependencyModel, JobFileRelationshipModel, JobModel,
     JobStatus, JobUserDataRelationshipModel, JobsModel, ListAccessGroupsResponse,
@@ -24,8 +25,8 @@ use crate::models::{
     LocalSchedulerModel, MessageResponse, ProcessChangedJobInputsResponse, ReloadAuthResponse,
     RemoteWorkerModel, ResetJobStatusResponse, ResourceRequirementsModel, ResultModel,
     RoCrateEntityModel, ScheduledComputeNodesModel, SlurmSchedulerModel, SlurmStatsModel,
-    UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
-    WorkflowModel,
+    UserDataListModel, UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel,
+    WorkflowActionModel, WorkflowModel,
 };
 
 #[allow(unused_imports)]
@@ -60,6 +61,16 @@ mod openapi_access_control_paths {
 #[allow(unused_imports)]
 mod openapi_bulk_job_paths {
     pub use crate::server::live_router::{__path_create_jobs, create_jobs};
+}
+
+#[allow(unused_imports)]
+mod openapi_bulk_file_paths {
+    pub use crate::server::live_router::{__path_create_files, create_files};
+}
+
+#[allow(unused_imports)]
+mod openapi_bulk_user_data_paths {
+    pub use crate::server::live_router::{__path_create_user_data_list, create_user_data_list};
 }
 
 #[allow(unused_imports)]
@@ -431,6 +442,8 @@ fn resolve_schema_properties<'a>(
         openapi_system_paths::ping,
         openapi_system_paths::version,
         openapi_bulk_job_paths::create_jobs,
+        openapi_bulk_file_paths::create_files,
+        openapi_bulk_user_data_paths::create_user_data_list,
         openapi_compute_node_paths::create_compute_node,
         openapi_compute_node_paths::delete_compute_nodes,
         openapi_compute_node_paths::list_compute_nodes,
@@ -552,6 +565,10 @@ fn resolve_schema_properties<'a>(
         AccessCheckResponse,
         JobsModel,
         CreateJobsResponse,
+        FilesModel,
+        CreateFilesResponse,
+        UserDataListModel,
+        CreateUserDataListResponse,
         ComputeNodeModel,
         ListComputeNodesResponse,
         DeleteCountResponse,
@@ -738,6 +755,33 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     );
     check_component_properties(&emitted, "JobsModel", &["jobs"], &mut issues);
     check_component_properties(&emitted, "CreateJobsResponse", &["jobs"], &mut issues);
+
+    check_operation_id(
+        source,
+        &emitted,
+        "/bulk_files",
+        "post",
+        "create_files",
+        &mut issues,
+    );
+    check_component_properties(&emitted, "FilesModel", &["files"], &mut issues);
+    check_component_properties(&emitted, "CreateFilesResponse", &["files"], &mut issues);
+
+    check_operation_id(
+        source,
+        &emitted,
+        "/bulk_user_data",
+        "post",
+        "create_user_data_list",
+        &mut issues,
+    );
+    check_component_properties(&emitted, "UserDataListModel", &["user_data"], &mut issues);
+    check_component_properties(
+        &emitted,
+        "CreateUserDataListResponse",
+        &["user_data"],
+        &mut issues,
+    );
 
     check_operation_id(
         source,

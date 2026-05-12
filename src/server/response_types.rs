@@ -15,13 +15,13 @@ pub mod access {
 
 pub mod artifacts {
     pub use crate::server::api_responses::{
-        CreateFileResponse, CreateResultResponse, CreateRoCrateEntityResponse,
-        CreateUserDataResponse, DeleteAllUserDataResponse, DeleteFileResponse, DeleteFilesResponse,
-        DeleteResultResponse, DeleteResultsResponse, DeleteRoCrateEntitiesResponse,
-        DeleteRoCrateEntityResponse, DeleteUserDataResponse, GetFileResponse, GetResultResponse,
-        GetRoCrateEntityResponse, GetUserDataResponse, ListFilesResponse,
-        ListMissingUserDataResponse, ListRequiredExistingFilesResponse, ListResultsResponse,
-        ListRoCrateEntitiesResponse, ListUserDataResponse, UpdateFileResponse,
+        CreateFileResponse, CreateFilesResponse, CreateResultResponse, CreateRoCrateEntityResponse,
+        CreateUserDataListResponse, CreateUserDataResponse, DeleteAllUserDataResponse,
+        DeleteFileResponse, DeleteFilesResponse, DeleteResultResponse, DeleteResultsResponse,
+        DeleteRoCrateEntitiesResponse, DeleteRoCrateEntityResponse, DeleteUserDataResponse,
+        GetFileResponse, GetResultResponse, GetRoCrateEntityResponse, GetUserDataResponse,
+        ListFilesResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
+        ListResultsResponse, ListRoCrateEntitiesResponse, ListUserDataResponse, UpdateFileResponse,
         UpdateResultResponse, UpdateRoCrateEntityResponse, UpdateUserDataResponse,
     };
 }

@@ -54,15 +54,17 @@ jobs:
       - batch_size
       - optimizer
 
-  # Aggregate results from all training runs
-  - name: aggregate_results
+  # Aggregate results for each training run. One aggregate job per
+  # (lr, batch_size, optimizer) combination, mirroring the training jobs.
+  # The name template includes every parameter so post-expansion names are
+  # unique (a name like `aggregate_results` with `use_parameters` would
+  # expand to 18 duplicates and be rejected as a duplicate-name error).
+  - name: aggregate_results_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
     command: python scripts/aggregate_metrics.py --input-dir=/results --output=/results/summary.csv
     resource_requirements: minimal
     depends_on:
-      # This will be expanded to wait for all 18 training jobs
       - train_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
     input_files:
-      # Wait for all metrics files
       - metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
     use_parameters:
       - lr

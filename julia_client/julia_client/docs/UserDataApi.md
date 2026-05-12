@@ -5,6 +5,7 @@ All URIs are relative to *http://localhost/torc-service/v1*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**create_user_data**](UserDataApi.md#create_user_data) | **POST** /user_data | 
+[**create_user_data_list**](UserDataApi.md#create_user_data_list) | **POST** /bulk_user_data | 
 [**delete_all_user_data**](UserDataApi.md#delete_all_user_data) | **DELETE** /user_data | 
 [**delete_user_data**](UserDataApi.md#delete_user_data) | **DELETE** /user_data/{id} | 
 [**get_user_data**](UserDataApi.md#get_user_data) | **GET** /user_data/{id} | 
@@ -35,6 +36,34 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**UserDataModel**](UserDataModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **create_user_data_list**
+> create_user_data_list(_api::UserDataApi, user_data_list_model::UserDataListModel; _mediaType=nothing) -> CreateUserDataListResponse, OpenAPI.Clients.ApiResponse <br/>
+> create_user_data_list(_api::UserDataApi, response_stream::Channel, user_data_list_model::UserDataListModel; _mediaType=nothing) -> Channel{ CreateUserDataListResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **UserDataApi** | API context | 
+**user_data_list_model** | [**UserDataListModel**](UserDataListModel.md) |  |
+
+### Return type
+
+[**CreateUserDataListResponse**](CreateUserDataListResponse.md)
 
 ### Authorization
 

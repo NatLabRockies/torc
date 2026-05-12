@@ -44,6 +44,36 @@ function create_user_data(_api::UserDataApi, response_stream::Channel, user_data
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_create_user_data_list_UserDataApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => CreateUserDataListResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_create_user_data_list(_api::UserDataApi, user_data_list_model::UserDataListModel; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_create_user_data_list_UserDataApi, "/bulk_user_data", [], user_data_list_model)
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- user_data_list_model::UserDataListModel (required)
+
+Return: CreateUserDataListResponse, OpenAPI.Clients.ApiResponse
+"""
+function create_user_data_list(_api::UserDataApi, user_data_list_model::UserDataListModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_user_data_list(_api, user_data_list_model; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function create_user_data_list(_api::UserDataApi, response_stream::Channel, user_data_list_model::UserDataListModel; _mediaType=nothing)
+    _ctx = _oacinternal_create_user_data_list(_api, user_data_list_model; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_delete_all_user_data_UserDataApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Any,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -212,6 +242,7 @@ function update_user_data(_api::UserDataApi, response_stream::Channel, id::Int64
 end
 
 export create_user_data
+export create_user_data_list
 export delete_all_user_data
 export delete_user_data
 export get_user_data
