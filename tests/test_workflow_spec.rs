@@ -123,11 +123,17 @@ fn test_workflow_specification_complete_serialization() {
             is_ephemeral: Some(true),
             name: Some("config".to_string()),
             data: Some(serde_json::json!({"key": "value"})),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: None,
         },
         UserDataSpec {
             is_ephemeral: Some(false),
             name: Some("results".to_string()),
             data: Some(serde_json::json!({"count": 42})),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: None,
         },
     ];
 
@@ -1013,6 +1019,9 @@ fn test_workflow_specification_with_all_resource_types() {
         is_ephemeral: Some(false),
         name: Some("config_data".to_string()),
         data: Some(serde_json::json!({"param": "value"})),
+        parameters: None,
+        parameter_mode: None,
+        use_parameters: None,
     }];
 
     let resource_requirements = vec![ResourceRequirementsSpec {
@@ -1187,6 +1196,9 @@ fn test_specification_structs_serialization() {
         is_ephemeral: Some(true),
         name: Some("test_data".to_string()),
         data: Some(serde_json::json!({"key": "value"})),
+        parameters: None,
+        parameter_mode: None,
+        use_parameters: None,
     };
 
     let resource_spec = ResourceRequirementsSpec {
@@ -1250,6 +1262,9 @@ fn test_workflow_specification_with_new_structs() {
         is_ephemeral: Some(false),
         name: Some("config".to_string()),
         data: Some(serde_json::json!({"batch_size": 100})),
+        parameters: None,
+        parameter_mode: None,
+        use_parameters: None,
     }];
 
     let resource_requirements = vec![ResourceRequirementsSpec {

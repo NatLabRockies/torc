@@ -194,6 +194,100 @@ pub struct UserDataSpec {
     /// The data content as JSON value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    /// Optional parameters for generating multiple user_data records
+    /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]").
+    /// Tokens of the form `{param_name}` or `{param_name:format}` are substituted into
+    /// `name` and into any string value found inside `data` (recursively).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<HashMap<String, String>>,
+    /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
+    /// With "zip", parameters are combined element-wise (all must have the same length)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameter_mode: Option<String>,
+    /// Names of workflow-level parameters to use for this user_data
+    /// If set, only these parameters from the workflow will be used
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_parameters: Option<Vec<String>>,
+}
+
+impl UserDataSpec {
+    /// Expand this UserDataSpec into multiple UserDataSpecs based on its parameters.
+    /// Returns a single-element vec if no parameters are present.
+    ///
+    /// Parameter tokens (`{name}` / `{name:fmt}`) are substituted into `name` and into
+    /// every string value found anywhere inside `data` (recursively walking objects and
+    /// arrays). Non-string JSON values (numbers, bools, null) are not modified, even
+    /// though they could in principle be rewritten -- substitution is string-only,
+    /// matching how FileSpec handles `name` and `path`.
+    pub fn expand(&self) -> Result<Vec<UserDataSpec>, String> {
+        // If no parameters, return a clone
+        let Some(ref params) = self.parameters else {
+            return Ok(vec![self.clone()]);
+        };
+
+        // Parse all parameter values
+        let mut parsed_params: HashMap<String, Vec<ParameterValue>> = HashMap::new();
+        for (name, value) in params {
+            let values = parse_parameter_value(value)?;
+            parsed_params.insert(name.clone(), values);
+        }
+
+        // Generate combinations based on parameter_mode
+        let mode = self.parameter_mode.as_deref().unwrap_or("product");
+        let combinations = match mode {
+            "zip" => zip_parameters(&parsed_params)?,
+            _ => cartesian_product(&parsed_params),
+        };
+
+        // Create a UserDataSpec for each combination
+        let mut expanded = Vec::new();
+        for combo in combinations {
+            let mut new_spec = self.clone();
+            new_spec.parameters = None; // Remove parameters from expanded specs
+            new_spec.parameter_mode = None; // Remove parameter_mode from expanded specs
+
+            // Substitute parameters in name (if any)
+            if let Some(ref n) = self.name {
+                new_spec.name = Some(substitute_parameters(n, &combo));
+            }
+
+            // Substitute parameters recursively inside data, if present
+            if let Some(ref data) = self.data {
+                let mut substituted = data.clone();
+                substitute_parameters_in_json(&mut substituted, &combo);
+                new_spec.data = Some(substituted);
+            }
+
+            expanded.push(new_spec);
+        }
+
+        Ok(expanded)
+    }
+}
+
+/// Recursively walk a `serde_json::Value` and substitute parameter tokens
+/// (`{name}` / `{name:fmt}`) in every string node. Object keys are not rewritten
+/// (they are identifiers); only string values inside objects/arrays change.
+fn substitute_parameters_in_json(
+    value: &mut serde_json::Value,
+    params: &HashMap<String, ParameterValue>,
+) {
+    match value {
+        serde_json::Value::String(s) => {
+            *s = substitute_parameters(s, params);
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                substitute_parameters_in_json(item, params);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for v in map.values_mut() {
+                substitute_parameters_in_json(v, params);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Workflow action specification for defining conditional actions
@@ -1502,12 +1596,13 @@ impl WorkflowSpec {
         Ok(serde_json::from_value(value)?)
     }
 
-    /// Expand all parameterized jobs and files in this workflow spec
+    /// Expand all parameterized jobs, files, and user_data in this workflow spec
     /// This modifies the spec in-place, replacing parameterized specs with their expanded versions
     ///
     /// Parameter resolution order:
-    /// 1. If job/file has its own `parameters`, use those (local params override workflow params)
-    /// 2. If job/file has `use_parameters`, select only those from workflow-level params
+    /// 1. If job/file/user_data has its own `parameters`, use those (local params override
+    ///    workflow params)
+    /// 2. If job/file/user_data has `use_parameters`, select only those from workflow-level params
     pub fn expand_parameters(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let workflow_params = self.parameters.clone();
         let workflow_env_params: Option<HashMap<String, ParameterValue>> =
@@ -1570,6 +1665,26 @@ impl WorkflowSpec {
                 expanded_files.extend(expanded);
             }
             self.files = Some(expanded_files);
+        }
+
+        // Expand all user_data
+        if let Some(ref user_data) = self.user_data {
+            let mut expanded_user_data = Vec::new();
+            for ud in user_data {
+                // Resolve parameters for this user_data record
+                let mut ud_with_params = ud.clone();
+                ud_with_params.parameters =
+                    Self::resolve_parameters(&ud.parameters, &ud.use_parameters, &workflow_params);
+                // Clear use_parameters after resolution
+                ud_with_params.use_parameters = None;
+
+                let label = ud.name.as_deref().unwrap_or("<unnamed>");
+                let expanded = ud_with_params
+                    .expand()
+                    .map_err(|e| format!("Failed to expand user_data '{}': {}", label, e))?;
+                expanded_user_data.extend(expanded);
+            }
+            self.user_data = Some(expanded_user_data);
         }
 
         Ok(())
@@ -1671,6 +1786,25 @@ impl WorkflowSpec {
                          parameterized file's name template must include a placeholder \
                          for every parameter in `parameters` / `use_parameters`.",
                         file.name
+                    )
+                    .into());
+                }
+            }
+        }
+
+        if let Some(user_data) = &self.user_data {
+            let mut seen_user_data: HashSet<&str> = HashSet::with_capacity(user_data.len());
+            for ud in user_data {
+                // user_data names are optional; only check duplicates when a name is set.
+                let Some(name) = ud.name.as_deref() else {
+                    continue;
+                };
+                if !seen_user_data.insert(name) {
+                    return Err(format!(
+                        "Duplicate user_data name '{}' after parameter expansion. A \
+                         parameterized user_data's name template must include a placeholder \
+                         for every parameter in `parameters` / `use_parameters`.",
+                        name
                     )
                     .into());
                 }
@@ -6307,6 +6441,151 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
         assert_eq!(expanded[0].path, "/data/output_1.txt");
         assert_eq!(expanded[2].name, "output_3");
         assert_eq!(expanded[2].path, "/data/output_3.txt");
+    }
+
+    #[test]
+    fn test_user_data_parameterization() {
+        // A parameterized user_data with a string substitution inside its data payload.
+        let mut ud = UserDataSpec {
+            is_ephemeral: Some(false),
+            name: Some("config_{experiment}".to_string()),
+            data: Some(serde_json::json!({
+                "experiment": "{experiment}",
+                "learning_rate": 0.001,
+                "tags": ["base", "{experiment}"],
+                "nested": { "label": "exp-{experiment}" },
+            })),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: None,
+        };
+        let mut params = HashMap::new();
+        params.insert(
+            "experiment".to_string(),
+            "['baseline','ablation','full']".to_string(),
+        );
+        ud.parameters = Some(params);
+
+        let expanded = ud.expand().expect("Failed to expand user_data");
+        assert_eq!(expanded.len(), 3);
+
+        // Find the baseline copy and verify substitution in name + every string slot of data.
+        let baseline = expanded
+            .iter()
+            .find(|u| u.name.as_deref() == Some("config_baseline"))
+            .expect("baseline copy must exist");
+
+        // parameters/parameter_mode are cleared after expansion.
+        assert!(baseline.parameters.is_none());
+        assert!(baseline.parameter_mode.is_none());
+
+        let data = baseline.data.as_ref().expect("data preserved");
+        assert_eq!(data["experiment"], serde_json::json!("baseline"));
+        // Non-string values are passed through unchanged.
+        assert_eq!(data["learning_rate"], serde_json::json!(0.001));
+        // Array string elements are substituted; non-template strings pass through.
+        assert_eq!(data["tags"], serde_json::json!(["base", "baseline"]));
+        // Nested object string values are substituted too.
+        assert_eq!(data["nested"]["label"], serde_json::json!("exp-baseline"));
+    }
+
+    #[test]
+    fn test_user_data_parameterization_from_yaml() {
+        // End-to-end YAML parse → expand_parameters round-trip: mirrors the shape of
+        // examples/yaml/parameterized_user_data.yaml.
+        let yaml = r#"
+name: ud_yaml_test
+jobs:
+  - name: train_{experiment}
+    command: "python train.py --config-name config_{experiment}"
+    input_user_data:
+      - config_{experiment}
+    parameters:
+      experiment: "['baseline','ablation','full']"
+user_data:
+  - name: config_{experiment}
+    data:
+      experiment: "{experiment}"
+      learning_rate: 0.001
+      output_dir: /results/{experiment}
+    parameters:
+      experiment: "['baseline','ablation','full']"
+"#;
+        let mut spec =
+            WorkflowSpec::from_spec_file_content(yaml, "yaml").expect("YAML parse must succeed");
+        spec.expand_parameters().expect("expand must succeed");
+
+        // 3 expanded jobs and 3 expanded user_data records, names lining up.
+        assert_eq!(spec.jobs.len(), 3);
+        let job_names: Vec<&str> = spec.jobs.iter().map(|j| j.name.as_str()).collect();
+        assert!(job_names.contains(&"train_baseline"));
+        assert!(job_names.contains(&"train_ablation"));
+        assert!(job_names.contains(&"train_full"));
+
+        let ud = spec.user_data.as_ref().expect("user_data preserved");
+        assert_eq!(ud.len(), 3);
+        let baseline = ud
+            .iter()
+            .find(|u| u.name.as_deref() == Some("config_baseline"))
+            .expect("baseline user_data exists");
+        let data = baseline.data.as_ref().unwrap();
+        assert_eq!(data["experiment"], serde_json::json!("baseline"));
+        assert_eq!(data["output_dir"], serde_json::json!("/results/baseline"));
+        // Number values pass through unchanged.
+        assert_eq!(data["learning_rate"], serde_json::json!(0.001));
+    }
+
+    #[test]
+    fn test_user_data_no_parameters_returns_clone() {
+        // Without `parameters`, expand() yields the input unchanged.
+        let ud = UserDataSpec {
+            is_ephemeral: Some(true),
+            name: Some("config".to_string()),
+            data: Some(serde_json::json!({"key": "value"})),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: None,
+        };
+        let expanded = ud.expand().expect("expand should succeed");
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0], ud);
+    }
+
+    #[test]
+    fn test_workflow_spec_expand_parameters_user_data() {
+        // End-to-end check: workflow-level params reach user_data via use_parameters,
+        // and the user_data section is expanded alongside jobs/files.
+        let mut spec = WorkflowSpec::new(
+            "ud_param_test".to_string(),
+            "tester".to_string(),
+            None,
+            vec![],
+        );
+        spec.parameters = Some(HashMap::from([("i".to_string(), "1:2".to_string())]));
+        spec.user_data = Some(vec![UserDataSpec {
+            is_ephemeral: Some(false),
+            name: Some("config_{i}".to_string()),
+            data: Some(serde_json::json!({"index": "{i}"})),
+            parameters: None,
+            parameter_mode: None,
+            use_parameters: Some(vec!["i".to_string()]),
+        }]);
+
+        spec.expand_parameters()
+            .expect("expand_parameters must succeed");
+
+        let expanded = spec.user_data.as_ref().expect("user_data preserved");
+        assert_eq!(expanded.len(), 2);
+        assert_eq!(expanded[0].name.as_deref(), Some("config_1"));
+        assert_eq!(expanded[1].name.as_deref(), Some("config_2"));
+        assert_eq!(
+            expanded[0].data.as_ref().unwrap()["index"],
+            serde_json::json!("1")
+        );
+        assert_eq!(
+            expanded[1].data.as_ref().unwrap()["index"],
+            serde_json::json!("2")
+        );
     }
 
     #[test]

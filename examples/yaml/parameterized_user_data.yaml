@@ -1,0 +1,40 @@
+# Parameterized user_data demo.
+#
+# Defines a single user_data template (`config_{experiment}`) that expands into
+# three records -- one per experiment -- with the `{experiment}` token substituted
+# into both the name and any string value inside the `data` payload.
+#
+# Each train_{experiment} job consumes its matching config_{experiment} record
+# via input_user_data, producing three parallel training runs.
+
+name: parameterized_user_data_demo
+description: Demonstrates parameter expansion of user_data records
+
+user_data:
+  - name: config_{experiment}
+    data:
+      experiment: "{experiment}"
+      learning_rate: 0.001
+      output_dir: /results/{experiment}
+    parameters:
+      experiment: "['baseline','ablation','full']"
+
+jobs:
+  - name: train_{experiment}
+    command: |
+      python train.py \
+        --config-name config_{experiment} \
+        --output-dir /results/{experiment}
+    resource_requirements: small
+    input_user_data:
+      - config_{experiment}
+    parameters:
+      experiment: "['baseline','ablation','full']"
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1g
+    runtime: PT5M
