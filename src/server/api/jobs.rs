@@ -1439,9 +1439,14 @@ where
             context.get().0.clone()
         );
 
+        // The transport layer rejects empty batches with 422 so an unauthenticated
+        // caller can't reach this method without a workflow_id to authorize against.
+        // Mirror that contract here for in-process callers that bypass the transport.
         if body.jobs.is_empty() {
-            return Ok(CreateJobsResponse::SuccessfulResponse(
-                models::CreateJobsResponse { jobs: Some(vec![]) },
+            return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Bulk job creation requires a non-empty `jobs` array".to_string(),
+                ),
             ));
         }
 

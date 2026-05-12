@@ -23,11 +23,19 @@ where
         body: models::UserDataListModel,
         context: &C,
     ) -> Result<CreateUserDataListResponse, ApiError> {
+        // Empty batches have no workflow_id to authorize against and create no rows,
+        // so the only sensible response is 422 — the alternative is letting an
+        // unauthenticated caller hit the route and get a 200. The api impl still
+        // defends in depth.
         if body.user_data.is_empty() {
-            return self
-                .user_data_api
-                .create_user_data_list(body, context)
-                .await;
+            return Ok(
+                CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "Bulk user_data creation requires a non-empty `user_data` array"
+                            .to_string(),
+                    ),
+                ),
+            );
         }
 
         let first_workflow_id = body.user_data[0].workflow_id;

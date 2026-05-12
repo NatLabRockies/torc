@@ -159,11 +159,14 @@ where
             context.get().0.clone()
         );
 
+        // The transport layer rejects empty batches with 422 so an unauthenticated
+        // caller can't reach this method without a workflow_id to authorize against.
+        // Mirror that contract here for in-process callers that bypass the transport.
         if body.files.is_empty() {
-            return Ok(CreateFilesResponse::SuccessfulResponse(
-                models::CreateFilesResponse {
-                    files: Some(vec![]),
-                },
+            return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Bulk file creation requires a non-empty `files` array".to_string(),
+                ),
             ));
         }
 
@@ -262,7 +265,8 @@ where
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        let workflow_id = created_files.first().map(|f| f.workflow_id).unwrap_or(0);
+        // `created_files` is non-empty here — the empty-input branch returns above.
+        let workflow_id = created_files[0].workflow_id;
         info!(
             "Files created workflow_id={} count={}",
             workflow_id,

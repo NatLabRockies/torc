@@ -19,8 +19,16 @@ where
         body: models::FilesModel,
         context: &C,
     ) -> Result<CreateFilesResponse, ApiError> {
+        // Empty batches have no workflow_id to authorize against and create no rows,
+        // so the only sensible response is 422 — the alternative is letting an
+        // unauthenticated caller hit the route and get a 200. The api impl still
+        // defends in depth.
         if body.files.is_empty() {
-            return self.files_api.create_files(body, context).await;
+            return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Bulk file creation requires a non-empty `files` array".to_string(),
+                ),
+            ));
         }
 
         let first_workflow_id = body.files[0].workflow_id;

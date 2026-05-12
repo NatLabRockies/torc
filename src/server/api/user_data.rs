@@ -244,12 +244,18 @@ where
             context.get().0.clone()
         );
 
+        // The transport layer rejects empty batches with 422 so an unauthenticated
+        // caller can't reach this method without a workflow_id to authorize against.
+        // Mirror that contract here for in-process callers that bypass the transport.
         if body.user_data.is_empty() {
-            return Ok(CreateUserDataListResponse::SuccessfulResponse(
-                models::CreateUserDataListResponse {
-                    user_data: Some(vec![]),
-                },
-            ));
+            return Ok(
+                CreateUserDataListResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "Bulk user_data creation requires a non-empty `user_data` array"
+                            .to_string(),
+                    ),
+                ),
+            );
         }
 
         // Oversized batches are a client input error → 422, not 500.
@@ -385,7 +391,8 @@ where
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        let workflow_id = created.first().map(|u| u.workflow_id).unwrap_or(0);
+        // `created` is non-empty here — the empty-input branch returns above.
+        let workflow_id = created[0].workflow_id;
         info!(
             "User data created workflow_id={} count={}",
             workflow_id,

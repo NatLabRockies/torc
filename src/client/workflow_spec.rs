@@ -3271,6 +3271,18 @@ impl WorkflowSpec {
             }
         }
 
+        // Final guard: every name we inserted as a sentinel `0` above must have been
+        // replaced by a positive server-assigned id. Surface a hard error rather than
+        // letting a stale `0` substitute as a job's input_file_id downstream.
+        if let Some((name, _)) = file_name_to_id.iter().find(|&(_, &id)| id == 0) {
+            return Err(format!(
+                "create_files did not return an id for file '{}'; the server response \
+                 omitted this name (possible API contract violation)",
+                name
+            )
+            .into());
+        }
+
         Ok(file_name_to_id)
     }
 
@@ -3346,6 +3358,18 @@ impl WorkflowSpec {
                     }
                 }
             }
+        }
+
+        // Final guard: every name we inserted as a sentinel `0` above must have been
+        // replaced by a positive server-assigned id. Surface a hard error rather than
+        // letting a stale `0` substitute as a job's input_user_data_id downstream.
+        if let Some((name, _)) = user_data_name_to_id.iter().find(|&(_, &id)| id == 0) {
+            return Err(format!(
+                "create_user_data_list did not return an id for user_data '{}'; the \
+                 server response omitted this name (possible API contract violation)",
+                name
+            )
+            .into());
         }
 
         Ok(user_data_name_to_id)
