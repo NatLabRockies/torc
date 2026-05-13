@@ -578,8 +578,9 @@ fn test_create_submission_script_with_srun() {
         fs::read_to_string(&script_path).expect("Failed to read submission script");
 
     assert!(
-        script_content.contains("srun --ntasks-per-node=1 "),
-        "Should have outer srun wrapper when start_one_worker_per_node is true"
+        script_content.contains("srun --ntasks-per-node=1 --wait=0 --kill-on-bad-exit=0 "),
+        "Should have outer srun wrapper with --wait=0 --kill-on-bad-exit=0 so torc's \
+         staggered worker exits don't cause SIGKILL of peers on clusters with WaitTime > 0"
     );
     assert!(
         script_content.contains("torc-slurm-job-runner"),
@@ -626,8 +627,9 @@ fn test_create_submission_script_with_srun_mpi() {
         fs::read_to_string(&script_path).expect("Failed to read submission script");
 
     assert!(
-        script_content.contains("srun --ntasks-per-node=1 --mpi=none "),
-        "Should include --mpi on the outer job-runner srun: {}",
+        script_content
+            .contains("srun --ntasks-per-node=1 --wait=0 --kill-on-bad-exit=0 --mpi=none "),
+        "Should include --mpi after the wait/kill flags on the outer job-runner srun: {}",
         script_content
     );
 

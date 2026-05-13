@@ -293,7 +293,15 @@ impl HpcInterface for SlurmInterface {
         script.push_str("unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU\n");
         if start_one_worker_per_node {
             command.push_str(" --is-subtask");
-            script.push_str("srun --ntasks-per-node=1 ");
+            // --wait=0: do not terminate remaining tasks when the first one exits.
+            //   torc workers self-retire when idle ("No jobs claimed for N seconds"),
+            //   so staggered exits are normal. Without this, clusters that set
+            //   slurm.conf's WaitTime > 0 (e.g. WaitTime=30 on LLNL Dane) will
+            //   SIGKILL the still-working peers shortly after the first worker
+            //   exits cleanly.
+            // --kill-on-bad-exit=0: a single worker crash must not take down peers
+            //   that are still running user jobs; failure handling is the server's job.
+            script.push_str("srun --ntasks-per-node=1 --wait=0 --kill-on-bad-exit=0 ");
             if let Some(mpi_mode) = srun_mpi {
                 validate_srun_mpi_value(mpi_mode).map_err(anyhow::Error::msg)?;
                 script.push_str(&format!("--mpi={} ", mpi_mode.trim()));
