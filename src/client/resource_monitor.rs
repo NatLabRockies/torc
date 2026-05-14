@@ -583,9 +583,22 @@ fn run_monitoring_loop(
     oom_tx: Sender<OomViolation>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use new_with_specifics to only refresh processes, CPU, and memory, avoiding user enumeration
-    // which can crash on HPC systems with large LDAP user databases
+    // which can crash on HPC systems with large LDAP user databases.
+    //
+    // `.without_tasks()` is CRITICAL on Linux: from sysinfo 0.30+ onward, the default
+    // `ProcessRefreshKind::everything()` enumerates each process's kernel threads (TIDs) by reading
+    // `/proc/<pid>/task/`, and inserts every TID as a flat entry in the process map with
+    // `parent() == TGID`. Each TID's `process.memory()` returns the *process-wide* RSS (threads
+    // share an address space), so `collect_process_tree_stats` — which walks descendants — would
+    // visit every thread of every process in the tree and add the same RSS once per thread. For a
+    // heavily threaded workload (e.g. Polars / OpenBLAS / DuckDB / Arrow / Python multiprocessing),
+    // this inflates the reported peak by ~ (1 + thread_count) and can produce peak-memory values
+    // that exceed total system RAM. Disabling task refresh restores the pre-0.30 behavior where
+    // `sys.processes()` contains one entry per TGID. sysinfo's own docs recommend this when thread
+    // info isn't needed, both for correctness here and because per-thread refresh is "quite
+    // expensive" on busy nodes.
     let refresh_kind = RefreshKind::nothing()
-        .with_processes(ProcessRefreshKind::everything())
+        .with_processes(ProcessRefreshKind::everything().without_tasks())
         .with_cpu(CpuRefreshKind::everything())
         .with_memory(MemoryRefreshKind::everything());
     let mut sys = System::new_with_specifics(refresh_kind);
@@ -1747,5 +1760,114 @@ mod tests {
         assert_eq!(job_sample_count, 0);
         assert_eq!(job_metadata_count, 0);
         assert!(system_sample_count >= 1);
+    }
+
+    /// Regression test: a heavily threaded child must not be reported as if its RSS were
+    /// duplicated once per kernel thread.
+    ///
+    /// Background: from sysinfo 0.30+ onward, `ProcessRefreshKind::everything()` enumerates kernel
+    /// threads (TIDs) from `/proc/<pid>/task/` and inserts them as flat entries in the global
+    /// process map with `parent() == TGID`. Each TID's `process.memory()` returns the
+    /// process-wide RSS (threads share an address space). Before the fix, the descendant walk in
+    /// `collect_process_tree_stats` visited every TID as a "child" of the TGID and added the
+    /// same RSS once per thread, producing peak-memory values that scaled with thread count and
+    /// could exceed total system RAM. See `run_monitoring_loop` for the `.without_tasks()` fix.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn collect_process_tree_stats_does_not_double_count_threads() {
+        // Skip cleanly if python3 isn't on PATH (this test is meaningful only on systems that
+        // can launch a multi-threaded child cheaply).
+        let python_probe = Command::new("python3").arg("--version").output();
+        if !matches!(&python_probe, Ok(o) if o.status.success()) {
+            eprintln!("skipping: python3 not available");
+            return;
+        }
+
+        const N_THREADS: usize = 20;
+        // Allocate ~64 MiB of resident memory in the main thread so RSS is large enough that
+        // the difference between "real RSS" and "real RSS × (1 + N_THREADS)" is unambiguous
+        // and well above page-rounding / runtime-overhead noise. Touch one byte per 4 KiB page
+        // to force commit without spending seconds in a 64M-iteration Python loop.
+        let script = format!(
+            "import threading, time\n\
+             buf = bytearray(64 * 1024 * 1024)\n\
+             for i in range(0, len(buf), 4096):\n\
+                 buf[i] = 1\n\
+             def f():\n\
+                 while True: time.sleep(1)\n\
+             for _ in range({N_THREADS}):\n\
+                 threading.Thread(target=f, daemon=True).start()\n\
+             time.sleep(30)\n"
+        );
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = ResourceMonitorConfig {
+            sample_interval_seconds: 1,
+            jobs: Some(JobMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::Summary,
+            }),
+            ..ResourceMonitorConfig::default()
+        };
+        let monitor =
+            ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "threads".into()).unwrap();
+
+        let mut child = Command::new("python3")
+            .args(["-u", "-c", &script])
+            .spawn()
+            .expect("spawn python3");
+        let pid = child.id();
+
+        monitor
+            .start_monitoring(pid, 1, "threaded-job".to_string(), None)
+            .unwrap();
+
+        // Wait long enough for the allocator to commit pages, the threads to spawn, and the
+        // 1s-interval sampler to fire at least twice.
+        thread::sleep(Duration::from_millis(2500));
+
+        // Read ground-truth VmRSS straight from /proc *before* tearing the child down; this is
+        // the same number sysinfo would report for the single TGID entry.
+        let status = std::fs::read_to_string(format!("/proc/{}/status", pid))
+            .expect("read /proc/<pid>/status");
+        let vm_rss_bytes: u64 = status
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix("VmRSS:")
+                    .and_then(|v| v.split_whitespace().next())
+            })
+            .and_then(|kb| kb.parse::<u64>().ok())
+            .map(|kb| kb * 1024)
+            .expect("parse VmRSS");
+
+        let metrics = monitor
+            .stop_monitoring(pid)
+            .expect("stop_monitoring returns metrics");
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = monitor.shutdown();
+
+        // Sanity check: VmRSS must be large enough that the bug would be obvious.
+        assert!(
+            vm_rss_bytes >= 32 * 1024 * 1024,
+            "VmRSS={vm_rss_bytes}B too small to make this test discriminating; \
+             did the 64 MiB allocation get optimized out?"
+        );
+
+        // With the bug, peak_memory_bytes would be ≥ (1 + N_THREADS) × VmRSS ≈ 21x. We require
+        // it to stay within 3x of true RSS, which is generous for sample-vs-final-read drift,
+        // any genuine helper subprocesses, and rounding, but still catches per-thread inflation
+        // by a wide margin.
+        let upper_bound = vm_rss_bytes.saturating_mul(3);
+        assert!(
+            metrics.peak_memory_bytes <= upper_bound,
+            "peak_memory_bytes={} exceeded 3x VmRSS={}B (with {} threads, the per-thread \
+             inflation bug would push this to ~{}B)",
+            metrics.peak_memory_bytes,
+            vm_rss_bytes,
+            N_THREADS,
+            vm_rss_bytes.saturating_mul((N_THREADS as u64) + 1),
+        );
     }
 }
