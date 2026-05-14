@@ -585,18 +585,12 @@ fn run_monitoring_loop(
     // Use new_with_specifics to only refresh processes, CPU, and memory, avoiding user enumeration
     // which can crash on HPC systems with large LDAP user databases.
     //
-    // `.without_tasks()` is CRITICAL on Linux: from sysinfo 0.30+ onward, the default
-    // `ProcessRefreshKind::everything()` enumerates each process's kernel threads (TIDs) by reading
-    // `/proc/<pid>/task/`, and inserts every TID as a flat entry in the process map with
-    // `parent() == TGID`. Each TID's `process.memory()` returns the *process-wide* RSS (threads
-    // share an address space), so `collect_process_tree_stats` — which walks descendants — would
-    // visit every thread of every process in the tree and add the same RSS once per thread. For a
-    // heavily threaded workload (e.g. Polars / OpenBLAS / DuckDB / Arrow / Python multiprocessing),
-    // this inflates the reported peak by ~ (1 + thread_count) and can produce peak-memory values
-    // that exceed total system RAM. Disabling task refresh restores the pre-0.30 behavior where
-    // `sys.processes()` contains one entry per TGID. sysinfo's own docs recommend this when thread
-    // info isn't needed, both for correctness here and because per-thread refresh is "quite
-    // expensive" on busy nodes.
+    // `.without_tasks()` here is mostly cosmetic — `System::new_with_specifics` doesn't drive the
+    // per-sample refresh; the real per-sample knob is the `ProcessRefreshKind` passed to
+    // `refresh_processes_specifics` further down. We carry `.without_tasks()` through both so a
+    // future reader who copies this `refresh_kind` into a different call site doesn't
+    // accidentally re-enable per-thread enumeration. See the per-sample refresh below for the
+    // full explanation of why tasks must stay off on Linux.
     let refresh_kind = RefreshKind::nothing()
         .with_processes(ProcessRefreshKind::everything().without_tasks())
         .with_cpu(CpuRefreshKind::everything())
@@ -785,11 +779,34 @@ fn run_monitoring_loop(
             && (!monitored_jobs.is_empty() || compute_node_config.is_some())
         {
             // Refresh sysinfo once for all local jobs.
+            //
+            // CRITICAL on Linux: use `refresh_processes_specifics` with `.without_tasks()`. The
+            // convenience `refresh_processes()` wrapper has a hardcoded
+            // `ProcessRefreshKind::nothing()...with_tasks()` and ignores any `RefreshKind`
+            // configured on the `System`, so it would silently re-enumerate every process's
+            // kernel threads from `/proc/<pid>/task/` on every poll regardless of how we built
+            // the `System`.
+            //
+            // With tasks enabled, sysinfo 0.30+ inserts every TID as a flat entry in the process
+            // map with `parent() == TGID`, and each TID's `process.memory()` returns the
+            // *process-wide* RSS because threads share an address space. The descendant walk in
+            // `collect_process_tree_stats` would then visit every thread as a "child" of the
+            // TGID and add the same RSS once per thread, inflating reported peaks by
+            // ~(1 + thread_count) per process in the job tree. For Polars / OpenBLAS / DuckDB /
+            // Arrow / Python-multiprocessing workloads on HPC nodes this routinely produced
+            // peak-memory values larger than total system RAM.
+            //
+            // sysinfo's own docs additionally call out that per-thread refresh is "quite
+            // expensive" on busy nodes, so `.without_tasks()` is also a real perf win.
             let has_local_jobs = monitored_jobs
                 .values()
                 .any(|j| matches!(j.source, MonitorJobSource::Local { .. }));
             if has_local_jobs || compute_node_config.is_some() {
-                sys.refresh_processes(ProcessesToUpdate::All, true);
+                sys.refresh_processes_specifics(
+                    ProcessesToUpdate::All,
+                    true,
+                    ProcessRefreshKind::everything().without_tasks(),
+                );
             }
             if compute_node_config.is_some() {
                 sys.refresh_cpu_all();
