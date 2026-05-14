@@ -1788,16 +1788,23 @@ mod tests {
         // the difference between "real RSS" and "real RSS × (1 + N_THREADS)" is unambiguous
         // and well above page-rounding / runtime-overhead noise. Touch one byte per 4 KiB page
         // to force commit without spending seconds in a 64M-iteration Python loop.
+        //
+        // Raw string is intentional: Rust's `\<newline>` line-continuation in a normal string
+        // literal consumes all subsequent ASCII whitespace, which would strip Python's
+        // indentation and produce `IndentationError: expected an indented block`. With a raw
+        // string the leading whitespace on each line is preserved verbatim.
         let script = format!(
-            "import threading, time\n\
-             buf = bytearray(64 * 1024 * 1024)\n\
-             for i in range(0, len(buf), 4096):\n\
-                 buf[i] = 1\n\
-             def f():\n\
-                 while True: time.sleep(1)\n\
-             for _ in range({N_THREADS}):\n\
-                 threading.Thread(target=f, daemon=True).start()\n\
-             time.sleep(30)\n"
+            r#"import threading, time
+buf = bytearray(64 * 1024 * 1024)
+for i in range(0, len(buf), 4096):
+    buf[i] = 1
+def f():
+    while True:
+        time.sleep(1)
+for _ in range({N_THREADS}):
+    threading.Thread(target=f, daemon=True).start()
+time.sleep(30)
+"#
         );
 
         let temp_dir = tempfile::tempdir().unwrap();
