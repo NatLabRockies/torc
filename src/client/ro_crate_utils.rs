@@ -692,10 +692,12 @@ pub fn create_create_action_entity(
 /// Append `{ "@id": id }` to the entity's `result` array if not already present.
 ///
 /// Normalizes a missing or non-array `result` value into an array so the dataset
-/// reference can be added without clobbering existing tracked results.
-fn append_result_ref(metadata: &mut serde_json::Value, id: &str) {
+/// reference can be added without clobbering existing tracked results. Returns
+/// `false` when `metadata` is not a JSON object, so the caller can treat the
+/// link as failed rather than reporting a spurious success.
+fn append_result_ref(metadata: &mut serde_json::Value, id: &str) -> bool {
     let Some(obj) = metadata.as_object_mut() else {
-        return;
+        return false;
     };
     let entry = obj
         .entry("result".to_string())
@@ -713,6 +715,7 @@ fn append_result_ref(metadata: &mut serde_json::Value, id: &str) {
     if !already {
         arr.push(id_ref(id));
     }
+    true
 }
 
 /// Create or update a job's CreateAction entity to record that it produced a
@@ -738,7 +741,17 @@ pub fn link_dataset_to_job_create_action(
     output_file_paths: &[String],
     dataset_entity_id: &str,
 ) -> Option<String> {
-    let action_id = format!("#job-{}-attempt-{}", job.id.unwrap_or(0), attempt_id);
+    let job_id = match job.id {
+        Some(id) => id,
+        None => {
+            warn!(
+                "Job '{}' has no id, cannot wire CreateAction provenance",
+                job.name
+            );
+            return None;
+        }
+    };
+    let action_id = format!("#job-{}-attempt-{}", job_id, attempt_id);
 
     if let Some(existing) = find_entity_by_entity_id(config, workflow_id, &action_id) {
         let entity_db_id = match existing.id {
@@ -758,7 +771,13 @@ pub fn link_dataset_to_job_create_action(
                 return None;
             }
         };
-        append_result_ref(&mut metadata, dataset_entity_id);
+        if !append_result_ref(&mut metadata, dataset_entity_id) {
+            warn!(
+                "CreateAction metadata for '{}' is not a JSON object; cannot record dataset result",
+                action_id
+            );
+            return None;
+        }
         let updated = RoCrateEntityModel {
             id: Some(entity_db_id),
             metadata: metadata.to_string(),
@@ -794,7 +813,13 @@ pub fn link_dataset_to_job_create_action(
             return None;
         }
     };
-    append_result_ref(&mut metadata, dataset_entity_id);
+    if !append_result_ref(&mut metadata, dataset_entity_id) {
+        warn!(
+            "Built CreateAction metadata for '{}' is not a JSON object; cannot record dataset result",
+            action_id
+        );
+        return None;
+    }
     entity.metadata = metadata.to_string();
 
     match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
