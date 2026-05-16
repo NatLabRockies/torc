@@ -10,6 +10,7 @@ use crate::client::commands::{
     print_error, select_workflow_interactively, table_format::display_table_with_count,
 };
 use crate::models;
+use log::{error, info, warn};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -718,21 +719,6 @@ fn merge_dataset_metadata(
     Ok(base)
 }
 
-/// Resolve file ids to paths, logging (but not failing) on lookup errors.
-fn resolve_file_paths(config: &Configuration, file_ids: &[i64]) -> Vec<String> {
-    let mut paths = Vec::with_capacity(file_ids.len());
-    for &file_id in file_ids {
-        match apis::files_api::get_file(config, file_id) {
-            Ok(file) => paths.push(file.path),
-            Err(e) => eprintln!(
-                "Warning: could not resolve file id {} for provenance: {}",
-                file_id, e
-            ),
-        }
-    }
-    paths
-}
-
 /// Create or update CreateAction provenance entities for the jobs that produced
 /// a dataset, returning the CreateAction entity ids to wire into the dataset's
 /// `prov:wasGeneratedBy`.
@@ -740,6 +726,14 @@ fn resolve_file_paths(config: &Configuration, file_ids: &[i64]) -> Vec<String> {
 /// Also ensures the workflow plan/run and software entities exist so the
 /// CreateActions resolve to a complete PROV graph even when `add-dataset` is
 /// run after the fact.
+///
+/// The built CreateAction intentionally records no `object`/`prov:used` or
+/// `result` other than the dataset itself: a job invoked via `add-dataset`
+/// produces a directory torc doesn't track, so the runtime never auto-creates
+/// a CreateAction (the runtime trigger requires non-empty tracked outputs).
+/// Populating tracked-file refs here would point at File entities that may not
+/// exist in the RO-Crate when `enable_ro_crate` is off. Users wanting richer
+/// `object`/`prov:used` can supply them via `--metadata`.
 fn wire_dataset_job_provenance(
     config: &Configuration,
     workflow_id: i64,
@@ -781,17 +775,13 @@ fn wire_dataset_job_provenance(
             }
         };
         if job.workflow_id != workflow_id {
-            eprintln!(
-                "Error: job {} belongs to workflow {}, not target workflow {}",
+            error!(
+                "job_id={} belongs to workflow_id={}, not target workflow_id={}",
                 job_id, job.workflow_id, workflow_id
             );
             std::process::exit(1);
         }
         let attempt_id = job.attempt_id.unwrap_or(1);
-        let input_file_paths =
-            resolve_file_paths(config, job.input_file_ids.as_deref().unwrap_or(&[]));
-        let output_file_paths =
-            resolve_file_paths(config, job.output_file_ids.as_deref().unwrap_or(&[]));
 
         match crate::client::ro_crate_utils::link_dataset_to_job_create_action(
             config,
@@ -799,19 +789,17 @@ fn wire_dataset_job_provenance(
             run_id,
             &job,
             attempt_id,
-            &input_file_paths,
-            &output_file_paths,
             dataset_entity_id,
         ) {
             Some(action_id) => {
-                println!(
-                    "  Linked CreateAction '{}' (job '{}') to dataset",
-                    action_id, job.name
+                info!(
+                    "Linked CreateAction entity_id={} job_id={} job_name={} to dataset entity_id={}",
+                    action_id, job_id, job.name, dataset_entity_id
                 );
                 action_ids.push(action_id);
             }
-            None => eprintln!(
-                "Warning: failed to record CreateAction provenance for job {}",
+            None => warn!(
+                "Failed to record CreateAction provenance for job_id={}",
                 job_id
             ),
         }

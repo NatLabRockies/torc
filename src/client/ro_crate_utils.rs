@@ -724,28 +724,29 @@ fn append_result_ref(metadata: &mut serde_json::Value, id: &str) -> bool {
 /// If a CreateAction already exists for the job/attempt (e.g. created during a
 /// prior run with tracked file I/O), the dataset is appended to its existing
 /// `result` array so runtime-tracked outputs are preserved. Otherwise a new
-/// CreateAction is built from the job's input/output files (with the full
-/// plan/software/run provenance links) and the dataset is added to its result.
+/// minimal CreateAction is built (plan/software/run refs only, no tracked
+/// `object`/`result`) and the dataset is added as its sole result. The
+/// minimal shape is intentional: the runtime only auto-creates a CreateAction
+/// for jobs with tracked outputs, so a dataset-producing job (which torc
+/// doesn't track) reaches this branch precisely when there are no tracked
+/// File entities to reference.
 ///
 /// Returns `Some("#job-{id}-attempt-{attempt}")` on success so the caller can
 /// wire the dataset's `prov:wasGeneratedBy`. This is a non-blocking operation:
 /// warnings are logged and `None` is returned on failure.
-#[allow(clippy::too_many_arguments)]
 pub fn link_dataset_to_job_create_action(
     config: &Configuration,
     workflow_id: i64,
     run_id: i64,
     job: &JobModel,
     attempt_id: i64,
-    input_file_paths: &[String],
-    output_file_paths: &[String],
     dataset_entity_id: &str,
 ) -> Option<String> {
     let job_id = match job.id {
         Some(id) => id,
         None => {
             warn!(
-                "Job '{}' has no id, cannot wire CreateAction provenance",
+                "job_name={} has no job_id, cannot wire CreateAction provenance",
                 job.name
             );
             return None;
@@ -757,37 +758,29 @@ pub fn link_dataset_to_job_create_action(
         let entity_db_id = match existing.id {
             Some(id) => id,
             None => {
-                warn!("Existing CreateAction entity has no ID, cannot update");
-                return None;
-            }
-        };
-        let mut metadata = match serde_json::from_str::<serde_json::Value>(&existing.metadata) {
-            Ok(value) => value,
-            Err(e) => {
                 warn!(
-                    "Failed to parse CreateAction metadata for '{}': {}",
-                    action_id, e
+                    "Existing CreateAction entity has no entity_db_id, cannot update action_id={}",
+                    action_id
                 );
                 return None;
             }
         };
-        if !append_result_ref(&mut metadata, dataset_entity_id) {
-            warn!(
-                "CreateAction metadata for '{}' is not a JSON object; cannot record dataset result",
-                action_id
-            );
-            return None;
-        }
+        let metadata_str = append_dataset_result(
+            &existing.metadata,
+            &action_id,
+            dataset_entity_id,
+            "existing",
+        )?;
         let updated = RoCrateEntityModel {
             id: Some(entity_db_id),
-            metadata: metadata.to_string(),
+            metadata: metadata_str,
             ..existing
         };
         if let Err(e) =
             apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_db_id, updated)
         {
             warn!(
-                "Failed to update CreateAction entity '{}': {}",
+                "Failed to update CreateAction entity action_id={}: {}",
                 action_id, e
             );
             return None;
@@ -795,43 +788,52 @@ pub fn link_dataset_to_job_create_action(
         return Some(action_id);
     }
 
-    let mut entity = build_create_action_entity(
-        workflow_id,
-        run_id,
-        job,
-        attempt_id,
-        input_file_paths,
-        output_file_paths,
-    );
-    let mut metadata = match serde_json::from_str::<serde_json::Value>(&entity.metadata) {
+    let mut entity = build_create_action_entity(workflow_id, run_id, job, attempt_id, &[], &[]);
+    entity.metadata =
+        append_dataset_result(&entity.metadata, &action_id, dataset_entity_id, "built")?;
+
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
+        Ok(_) => Some(action_id),
+        Err(e) => {
+            warn!(
+                "Failed to create CreateAction entity action_id={}: {}",
+                action_id, e
+            );
+            None
+        }
+    }
+}
+
+/// Parse a CreateAction's JSON metadata, append a dataset reference to its
+/// `result` array, and return the re-serialized metadata. Returns `None` on
+/// parse failure or non-object metadata so callers can short-circuit.
+///
+/// `source` distinguishes whether the metadata came from a stored entity
+/// ("existing") or a freshly built one ("built"), purely for diagnostics.
+fn append_dataset_result(
+    metadata_json: &str,
+    action_id: &str,
+    dataset_entity_id: &str,
+    source: &str,
+) -> Option<String> {
+    let mut metadata = match serde_json::from_str::<serde_json::Value>(metadata_json) {
         Ok(value) => value,
         Err(e) => {
             warn!(
-                "Failed to parse built CreateAction metadata for '{}': {}",
-                action_id, e
+                "Failed to parse {} CreateAction metadata for action_id={}: {}",
+                source, action_id, e
             );
             return None;
         }
     };
     if !append_result_ref(&mut metadata, dataset_entity_id) {
         warn!(
-            "Built CreateAction metadata for '{}' is not a JSON object; cannot record dataset result",
-            action_id
+            "{} CreateAction metadata for action_id={} is not a JSON object; cannot record dataset result",
+            source, action_id
         );
         return None;
     }
-    entity.metadata = metadata.to_string();
-
-    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
-        Ok(_) => Some(action_id),
-        Err(e) => {
-            warn!(
-                "Failed to create CreateAction entity '{}': {}",
-                action_id, e
-            );
-            None
-        }
-    }
+    Some(metadata.to_string())
 }
 
 /// Create RO-Crate entities for input files of a workflow.
