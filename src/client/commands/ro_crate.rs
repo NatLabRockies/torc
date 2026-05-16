@@ -106,10 +106,18 @@ pub enum RoCrateCommands {
     /// such as a hive-partitioned Parquet dataset. Computes file count, total
     /// size, and optionally a manifest or content hash.
     ///
-    /// Use `--metadata` to add JSON-LD fields to the entity, such as
-    /// `prov:wasGeneratedBy` to link the dataset to the job that created it.
-    /// The merge is shallow at the top level: user-supplied keys replace
-    /// auto-computed ones entirely (no deep object merge).
+    /// Use `--job-id` (repeatable, `-j`) to record provenance for the job(s)
+    /// that produced the dataset. For each job, a `CreateAction` entity is
+    /// created (or, if one already exists from a prior run, updated) with the
+    /// dataset added to its `result`, and the dataset's `prov:wasGeneratedBy`
+    /// is set to reference those CreateActions. This wires the full PROV graph
+    /// automatically without hand-writing internal
+    /// `#job-{id}-attempt-{attempt}` ids.
+    ///
+    /// Use `--metadata` to add or override JSON-LD fields on the Dataset
+    /// entity. The merge is shallow at the top level: user-supplied keys
+    /// replace auto-computed ones (including `prov:wasGeneratedBy`) entirely
+    /// (no deep object merge).
     #[command(name = "add-dataset")]
     AddDataset {
         /// Workflow ID (optional - will prompt if not provided)
@@ -133,6 +141,12 @@ pub enum RoCrateCommands {
         /// Number of threads for parallel processing (default: number of CPUs)
         #[arg(long, short = 't')]
         threads: Option<usize>,
+        /// Job ID that produced this dataset. Repeat the flag for multiple
+        /// jobs (e.g. `-j 42 -j 67`). For each job, a CreateAction provenance
+        /// entity is created or updated and the dataset's
+        /// `prov:wasGeneratedBy` is wired to reference it.
+        #[arg(long = "job-id", short = 'j', value_name = "JOB_ID")]
+        job_ids: Vec<i64>,
         /// Extra JSON-LD metadata applied as a top-level merge over the
         /// entity (or "-" to read from stdin). Must be a JSON object. The
         /// merge is shallow: each user-supplied top-level field replaces the
@@ -357,6 +371,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             description,
             encoding_format,
             threads,
+            job_ids,
             metadata,
         } => {
             let user_name = get_env_user_name();
@@ -374,6 +389,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 description.as_deref(),
                 encoding_format.as_deref(),
                 *threads,
+                job_ids,
                 extra_metadata.as_deref(),
                 format,
             );
@@ -702,6 +718,96 @@ fn merge_dataset_metadata(
     Ok(base)
 }
 
+/// Resolve file ids to paths, logging (but not failing) on lookup errors.
+fn resolve_file_paths(config: &Configuration, file_ids: &[i64]) -> Vec<String> {
+    let mut paths = Vec::with_capacity(file_ids.len());
+    for &file_id in file_ids {
+        match apis::files_api::get_file(config, file_id) {
+            Ok(file) => paths.push(file.path),
+            Err(e) => eprintln!(
+                "Warning: could not resolve file id {} for provenance: {}",
+                file_id, e
+            ),
+        }
+    }
+    paths
+}
+
+/// Create or update CreateAction provenance entities for the jobs that produced
+/// a dataset, returning the CreateAction entity ids to wire into the dataset's
+/// `prov:wasGeneratedBy`.
+///
+/// Also ensures the workflow plan/run and software entities exist so the
+/// CreateActions resolve to a complete PROV graph even when `add-dataset` is
+/// run after the fact.
+fn wire_dataset_job_provenance(
+    config: &Configuration,
+    workflow_id: i64,
+    job_ids: &[i64],
+    dataset_entity_id: &str,
+) -> Vec<String> {
+    let (workflow_name, run_id) = match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(workflow) => (workflow.name, workflow.run_id.unwrap_or(0)),
+        Err(e) => {
+            print_error("getting workflow for dataset provenance", &e);
+            std::process::exit(1);
+        }
+    };
+
+    // Idempotent: ensures plan/run/software entities referenced by the
+    // CreateActions exist (they normally are created during init/run).
+    crate::client::ro_crate_utils::create_workflow_provenance_entities(
+        config,
+        workflow_id,
+        run_id,
+        &workflow_name,
+    );
+    crate::client::ro_crate_utils::create_software_entities(config, workflow_id, run_id);
+
+    let mut action_ids = Vec::new();
+    for &job_id in job_ids {
+        let job = match apis::jobs_api::get_job(config, job_id) {
+            Ok(job) => job,
+            Err(e) => {
+                print_error(
+                    &format!("getting job {} for dataset provenance", job_id),
+                    &e,
+                );
+                std::process::exit(1);
+            }
+        };
+        let attempt_id = job.attempt_id.unwrap_or(1);
+        let input_file_paths =
+            resolve_file_paths(config, job.input_file_ids.as_deref().unwrap_or(&[]));
+        let output_file_paths =
+            resolve_file_paths(config, job.output_file_ids.as_deref().unwrap_or(&[]));
+
+        match crate::client::ro_crate_utils::link_dataset_to_job_create_action(
+            config,
+            workflow_id,
+            run_id,
+            &job,
+            attempt_id,
+            &input_file_paths,
+            &output_file_paths,
+            dataset_entity_id,
+        ) {
+            Some(action_id) => {
+                println!(
+                    "  Linked CreateAction '{}' (job '{}') to dataset",
+                    action_id, job.name
+                );
+                action_ids.push(action_id);
+            }
+            None => eprintln!(
+                "Warning: failed to record CreateAction provenance for job {}",
+                job_id
+            ),
+        }
+    }
+    action_ids
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle_add_dataset(
     config: &Configuration,
@@ -712,6 +818,7 @@ fn handle_add_dataset(
     description: Option<&str>,
     encoding_format: Option<&str>,
     threads: Option<usize>,
+    job_ids: &[i64],
     extra_metadata: Option<&str>,
     format: &str,
 ) {
@@ -792,6 +899,28 @@ fn handle_add_dataset(
 
     if let Some(enc) = encoding_format {
         metadata["encodingFormat"] = serde_json::json!(enc);
+    }
+
+    // Record provenance for the job(s) that produced this dataset. For each
+    // job we create or update its CreateAction entity (adding this dataset to
+    // its `result`) and collect the CreateAction ids to wire the dataset's
+    // `prov:wasGeneratedBy`. Done before the user `--metadata` merge so an
+    // explicit `prov:wasGeneratedBy` can still override it.
+    if !job_ids.is_empty() {
+        let action_ids = wire_dataset_job_provenance(config, workflow_id, job_ids, &entity_id);
+        match action_ids.as_slice() {
+            [] => {}
+            [single] => {
+                metadata["prov:wasGeneratedBy"] = serde_json::json!({ "@id": single });
+            }
+            many => {
+                metadata["prov:wasGeneratedBy"] = serde_json::Value::Array(
+                    many.iter()
+                        .map(|id| serde_json::json!({ "@id": id }))
+                        .collect(),
+                );
+            }
+        }
     }
 
     // Apply user-supplied metadata last as a shallow top-level merge, so

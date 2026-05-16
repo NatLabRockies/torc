@@ -689,6 +689,126 @@ pub fn create_create_action_entity(
     }
 }
 
+/// Append `{ "@id": id }` to the entity's `result` array if not already present.
+///
+/// Normalizes a missing or non-array `result` value into an array so the dataset
+/// reference can be added without clobbering existing tracked results.
+fn append_result_ref(metadata: &mut serde_json::Value, id: &str) {
+    let Some(obj) = metadata.as_object_mut() else {
+        return;
+    };
+    let entry = obj
+        .entry("result".to_string())
+        .or_insert_with(|| serde_json::json!([]));
+    if !entry.is_array() {
+        let prev = entry.clone();
+        *entry = serde_json::json!([prev]);
+    }
+    let arr = entry
+        .as_array_mut()
+        .expect("result was normalized to an array");
+    let already = arr
+        .iter()
+        .any(|v| v.get("@id").and_then(|x| x.as_str()) == Some(id));
+    if !already {
+        arr.push(id_ref(id));
+    }
+}
+
+/// Create or update a job's CreateAction entity to record that it produced a
+/// dataset, then return the CreateAction's entity id.
+///
+/// If a CreateAction already exists for the job/attempt (e.g. created during a
+/// prior run with tracked file I/O), the dataset is appended to its existing
+/// `result` array so runtime-tracked outputs are preserved. Otherwise a new
+/// CreateAction is built from the job's input/output files (with the full
+/// plan/software/run provenance links) and the dataset is added to its result.
+///
+/// Returns `Some("#job-{id}-attempt-{attempt}")` on success so the caller can
+/// wire the dataset's `prov:wasGeneratedBy`. This is a non-blocking operation:
+/// warnings are logged and `None` is returned on failure.
+#[allow(clippy::too_many_arguments)]
+pub fn link_dataset_to_job_create_action(
+    config: &Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    job: &JobModel,
+    attempt_id: i64,
+    input_file_paths: &[String],
+    output_file_paths: &[String],
+    dataset_entity_id: &str,
+) -> Option<String> {
+    let action_id = format!("#job-{}-attempt-{}", job.id.unwrap_or(0), attempt_id);
+
+    if let Some(existing) = find_entity_by_entity_id(config, workflow_id, &action_id) {
+        let entity_db_id = match existing.id {
+            Some(id) => id,
+            None => {
+                warn!("Existing CreateAction entity has no ID, cannot update");
+                return None;
+            }
+        };
+        let mut metadata = match serde_json::from_str::<serde_json::Value>(&existing.metadata) {
+            Ok(value) => value,
+            Err(e) => {
+                warn!(
+                    "Failed to parse CreateAction metadata for '{}': {}",
+                    action_id, e
+                );
+                return None;
+            }
+        };
+        append_result_ref(&mut metadata, dataset_entity_id);
+        let updated = RoCrateEntityModel {
+            id: Some(entity_db_id),
+            metadata: metadata.to_string(),
+            ..existing
+        };
+        if let Err(e) =
+            apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_db_id, updated)
+        {
+            warn!(
+                "Failed to update CreateAction entity '{}': {}",
+                action_id, e
+            );
+            return None;
+        }
+        return Some(action_id);
+    }
+
+    let mut entity = build_create_action_entity(
+        workflow_id,
+        run_id,
+        job,
+        attempt_id,
+        input_file_paths,
+        output_file_paths,
+    );
+    let mut metadata = match serde_json::from_str::<serde_json::Value>(&entity.metadata) {
+        Ok(value) => value,
+        Err(e) => {
+            warn!(
+                "Failed to parse built CreateAction metadata for '{}': {}",
+                action_id, e
+            );
+            return None;
+        }
+    };
+    append_result_ref(&mut metadata, dataset_entity_id);
+    entity.metadata = metadata.to_string();
+
+    match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {
+        Ok(_) => Some(action_id),
+        Err(e) => {
+            warn!(
+                "Failed to create CreateAction entity '{}': {}",
+                action_id, e
+            );
+            None
+        }
+    }
+}
+
 /// Create RO-Crate entities for input files of a workflow.
 ///
 /// Called during workflow initialization when `enable_ro_crate` is true.
@@ -890,6 +1010,31 @@ mod tests {
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["prov:wasGeneratedBy"]["@id"], "#job-42-attempt-1");
         assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-id-1");
+    }
+
+    #[test]
+    fn test_append_result_ref() {
+        // Appends into an existing array, deduplicating.
+        let mut meta = serde_json::json!({ "result": [{ "@id": "out/a" }] });
+        append_result_ref(&mut meta, "data/ds/");
+        append_result_ref(&mut meta, "data/ds/"); // duplicate is a no-op
+        let arr = meta["result"].as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["@id"], "out/a");
+        assert_eq!(arr[1]["@id"], "data/ds/");
+
+        // Missing `result` is created as an array.
+        let mut meta = serde_json::json!({ "name": "x" });
+        append_result_ref(&mut meta, "data/ds/");
+        assert_eq!(meta["result"][0]["@id"], "data/ds/");
+
+        // A non-array `result` is normalized into an array first.
+        let mut meta = serde_json::json!({ "result": { "@id": "out/a" } });
+        append_result_ref(&mut meta, "data/ds/");
+        let arr = meta["result"].as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["@id"], "out/a");
+        assert_eq!(arr[1]["@id"], "data/ds/");
     }
 
     #[test]
