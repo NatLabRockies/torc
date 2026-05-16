@@ -765,7 +765,11 @@ fn wire_dataset_job_provenance(
     crate::client::ro_crate_utils::create_software_entities(config, workflow_id, run_id);
 
     let mut action_ids = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for &job_id in job_ids {
+        if !seen.insert(job_id) {
+            continue;
+        }
         let job = match apis::jobs_api::get_job(config, job_id) {
             Ok(job) => job,
             Err(e) => {
@@ -776,6 +780,13 @@ fn wire_dataset_job_provenance(
                 std::process::exit(1);
             }
         };
+        if job.workflow_id != workflow_id {
+            eprintln!(
+                "Error: job {} belongs to workflow {}, not target workflow {}",
+                job_id, job.workflow_id, workflow_id
+            );
+            std::process::exit(1);
+        }
         let attempt_id = job.attempt_id.unwrap_or(1);
         let input_file_paths =
             resolve_file_paths(config, job.input_file_ids.as_deref().unwrap_or(&[]));
