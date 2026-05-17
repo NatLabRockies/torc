@@ -31,7 +31,7 @@ config = { version = "0.15", features = ["toml"] }
 dirs = "6"
 toml = "1.1"
 serde_repr = "0.1"
-serde_with = { version = "3.19", default-features = false, features = ["base64", "std", "macros"] }
+serde_with = { version = "3.20", default-features = false, features = ["base64", "std", "macros"] }
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4.28"
 env_logger = "0.11"
@@ -82,7 +82,7 @@ anyhow = "1"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 dotenvy = "0.15.7"
 iso8601 = "0.6"
-jsonwebtoken = "10.3.0"
+jsonwebtoken = "10.4.0"
 sha2 = "0.11"
 hex = "0.4"
 base64 = "0.22"
@@ -114,7 +114,7 @@ hyper-openssl = "0.10.2"
 openssl = "0.10"
 
 # MCP server
-rmcp = { version = "1.6", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
+rmcp = { version = "1.7", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
 schemars = "1.0"
 
 # Dashboard-specific
