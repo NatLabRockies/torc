@@ -12,6 +12,9 @@ use rstest::rstest;
 use std::fs;
 use std::path::Path;
 use torc::client::apis;
+use torc::client::workflow_manager::WorkflowManager;
+use torc::client::workflow_spec::WorkflowSpec;
+use torc::config::TorcConfig;
 use torc::models;
 
 fn is_job_create_action(entity: &models::RoCrateEntityModel) -> bool {
@@ -264,6 +267,170 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
     assert!(
         metadata["dateModified"].as_str().is_some(),
         "Should have dateModified"
+    );
+}
+
+/// End-to-end round-trip for user-supplied RO-Crate identifiers on input
+/// files (PR #322). The feature crosses three layers and any one breaking
+/// silently drops the identifier, so the unit tests in `workflow_spec.rs`
+/// (which only cover spec-load validation) are not enough:
+///
+/// 1. `WorkflowSpec::create_workflow_from_spec` -> `create_files` pre-creates
+///    an entity row with `entity_id = identifier` and `metadata["@id"] = identifier`.
+/// 2. Server-side `create_entities_for_input_files` (run during the
+///    `initialize_jobs` HTTP call) upserts metadata for the existing row.
+///    The upsert MUST leave the `entity_id` column alone -- it does rewrite
+///    `metadata["@id"]` back to the file path, but only temporarily.
+/// 3. Client-side `WorkflowManager::create_ro_crate_entities_for_input_files`
+///    then runs the rebuild path, which reads `entity_id` back as an
+///    identifier override and restores `metadata["@id"]` to the user
+///    identifier while preserving the local filesystem path as `sameAs`.
+#[rstest]
+fn test_auto_ro_crate_user_supplied_identifier_round_trip(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path();
+
+    // The input file must exist BEFORE workflow creation so that `create_files`
+    // stats it and records st_mtime -- that's what classifies it as an input
+    // both on the server side (init upsert) and on the client side (rebuild).
+    let input_path = work_dir.join("genome.fa");
+    fs::write(&input_path, ">seq1\nACGT\n").expect("Failed to write input file");
+    let input_path_str = input_path.to_string_lossy().to_string();
+
+    // A real-world stable identifier (DOI URL). Using a URL rather than a bare
+    // string ensures we'd also catch any code path that confuses identifiers
+    // with paths.
+    let identifier = "https://doi.org/10.5524/100001";
+
+    let yaml = format!(
+        "name: identifier_round_trip_test\n\
+         user: test_user\n\
+         enable_ro_crate: true\n\
+         files:\n  \
+           - name: reference_genome\n    \
+             path: {path}\n    \
+             identifier: {identifier}\n\
+         jobs:\n  \
+           - name: align\n    \
+             command: \"true\"\n    \
+             input_files: [reference_genome]\n",
+        path = input_path_str,
+        identifier = identifier,
+    );
+
+    let spec_path = work_dir.join("workflow.yaml");
+    fs::write(&spec_path, &yaml).expect("Failed to write workflow file");
+
+    let workflow_id =
+        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false)
+            .expect("Failed to create workflow from spec");
+
+    let files = apis::files_api::list_files(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some("reference_genome"),
+        None,
+        None,
+    )
+    .expect("Failed to list files");
+    assert_eq!(files.items.len(), 1, "expected the reference_genome file");
+    let file_id = files.items[0].id.expect("file missing id");
+
+    // --- Phase 1: post-create, pre-init ---
+    // `create_files` pre-created the entity carrying the user identifier.
+    let entities_pre = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list RO-Crate entities before init");
+    let pre_entity = entities_pre
+        .items
+        .iter()
+        .find(|e| e.file_id == Some(file_id))
+        .expect("Pre-created entity should exist after create_files");
+    assert_eq!(
+        pre_entity.entity_id, identifier,
+        "entity_id should be the user-supplied identifier (not the file path)"
+    );
+    let pre_meta: serde_json::Value =
+        serde_json::from_str(&pre_entity.metadata).expect("Failed to parse pre-init metadata");
+    assert_eq!(
+        pre_meta["@id"], identifier,
+        "pre-init @id should be the identifier"
+    );
+    assert_eq!(
+        pre_meta["sameAs"]["@id"], input_path_str,
+        "pre-init sameAs should preserve the local path"
+    );
+
+    // --- Phase 2: full initialization through WorkflowManager ---
+    // Use WorkflowManager so the client-side rebuild runs after the server's
+    // init-time upsert. Calling `apis::workflows_api::initialize_jobs` alone
+    // exercises only the server upsert (which resets @id back to the path)
+    // and leaves the round-trip half-complete.
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+    manager
+        .initialize(false)
+        .expect("Failed to initialize workflow");
+
+    // --- Phase 3: verify post-init state ---
+    let entities_post = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list RO-Crate entities after init");
+    let post_for_file: Vec<_> = entities_post
+        .items
+        .iter()
+        .filter(|e| e.file_id == Some(file_id))
+        .collect();
+    assert_eq!(
+        post_for_file.len(),
+        1,
+        "init must not create a duplicate entity for the same file_id (count={})",
+        post_for_file.len(),
+    );
+    let post_entity = post_for_file[0];
+    assert_eq!(
+        post_entity.entity_id, identifier,
+        "server's init-time upsert clobbered entity_id; round-trip broken"
+    );
+    let post_meta: serde_json::Value =
+        serde_json::from_str(&post_entity.metadata).expect("Failed to parse post-init metadata");
+    assert_eq!(
+        post_meta["@id"], identifier,
+        "client-side rebuild should restore @id to the user identifier"
+    );
+    assert_eq!(
+        post_meta["sameAs"]["@id"], input_path_str,
+        "sameAs should preserve the local filesystem path after init"
+    );
+    // SHA256 is computed during the client-side rebuild (not the pre-create),
+    // so its presence proves the rebuild ran -- not just the server upsert.
+    assert!(
+        post_meta["sha256"].as_str().is_some(),
+        "post-init metadata should include sha256 (computed by client-side rebuild)"
     );
 }
 
