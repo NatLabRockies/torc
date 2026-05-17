@@ -194,7 +194,9 @@ Spec-load validation rejects the following at parse time:
   (synthetic export roots).
 - `identifier` on output files, including files referenced as both input AND output (the output
   completion path always rewrites `entity_id` back to the file path).
-- `identifier` on files that are not referenced by any job as an input.
+- `identifier` on files that are not referenced by any job as an input AND have no explicit
+  `st_mtime` (a file with `st_mtime` set in the spec counts as a pre-existing input even without a
+  job reference).
 
 ## UserDataSpec
 

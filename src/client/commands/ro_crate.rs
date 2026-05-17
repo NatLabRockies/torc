@@ -36,13 +36,19 @@ pub enum RoCrateCommands {
         /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// JSON-LD @id for this entity (e.g., "data/output.parquet")
+        /// JSON-LD @id for this entity (e.g., "data/output.parquet"). This is
+        /// the authoritative `@id` -- the export step always sets the exported
+        /// entity's `@id` from this value, overwriting any `@id` field present
+        /// in `--metadata`.
         #[arg(long)]
         entity_id: String,
         /// Schema.org @type (e.g., "File", "Dataset", "SoftwareApplication")
         #[arg(long, name = "type")]
         entity_type: String,
-        /// JSON-LD metadata as a JSON string, or "-" to read from stdin
+        /// JSON-LD metadata as a JSON string, or "-" to read from stdin. Any
+        /// `@id` field inside the metadata is ignored at export time and
+        /// replaced with `--entity-id`; to change an entity's exported `@id`,
+        /// update `--entity-id`, not the metadata.
         #[arg(long)]
         metadata: String,
         /// Optional file ID to link this entity to
@@ -73,13 +79,18 @@ pub enum RoCrateCommands {
         /// ID of the RO-Crate entity to update
         #[arg()]
         id: i64,
-        /// New JSON-LD @id
+        /// New JSON-LD @id. This is the authoritative `@id` -- export always
+        /// sets the exported entity's `@id` from this value, overwriting any
+        /// `@id` field present in `--metadata`.
         #[arg(long)]
         entity_id: Option<String>,
         /// New Schema.org @type
         #[arg(long, name = "type")]
         entity_type: Option<String>,
-        /// New JSON-LD metadata as a JSON string, or "-" to read from stdin
+        /// New JSON-LD metadata as a JSON string, or "-" to read from stdin.
+        /// Any `@id` field inside the metadata is ignored at export time and
+        /// replaced with `--entity-id` (or the stored `entity_id` if you
+        /// don't pass `--entity-id`).
         #[arg(long)]
         metadata: Option<String>,
         /// New file ID to link (use 0 to unlink)
@@ -151,8 +162,12 @@ pub enum RoCrateCommands {
         /// Extra JSON-LD metadata applied as a top-level merge over the
         /// entity (or "-" to read from stdin). Must be a JSON object. The
         /// merge is shallow: each user-supplied top-level field replaces the
-        /// auto-computed one with the same key (`@id`, `@type`, `name`,
+        /// auto-computed one with the same key (`@type`, `name`,
         /// `contentSize`, ...) entirely; nested objects are not deep-merged.
+        ///
+        /// `@id` is NOT user-overridable here: it's set from the dataset
+        /// directory path and re-applied at export time, so any `@id` field
+        /// inside `--metadata` is silently replaced.
         ///
         /// To record which job(s) produced this dataset, use the `-j` flag
         /// rather than setting `prov:wasGeneratedBy` here directly.
@@ -417,21 +432,26 @@ fn read_metadata_input(metadata: &str) -> String {
 /// file's stable identifier instead of a no-longer-keyed local path.
 ///
 /// Skips:
-/// - the top-level `@id` of `value` (already set authoritatively from
-///   `entity_id` by the caller, and the file's own `@id` should not be
-///   rewritten away from its identifier).
-/// - the `sameAs` field, which is supposed to carry the original path.
-fn translate_path_refs(value: &mut serde_json::Value, path_to_entity_id: &HashMap<String, String>) {
+/// - the top-level `@id` of `value`: already set authoritatively from
+///   `entity_id` by the caller, and a File entity's own `@id` should not be
+///   rewritten away from its identifier.
+/// - the top-level `sameAs` of File entities only (`entity_type == "File"`):
+///   that field carries the deliberately-untranslated local path on file
+///   rows. Other entity types' `sameAs` (and any nested `sameAs`) is walked
+///   normally so refs stay consistent if a future Dataset/etc. uses one to
+///   alias a path.
+fn translate_path_refs(
+    value: &mut serde_json::Value,
+    path_to_entity_id: &HashMap<String, String>,
+    entity_type: &str,
+) {
     if path_to_entity_id.is_empty() {
         return;
     }
     fn walk(value: &mut serde_json::Value, map: &HashMap<String, String>) {
         match value {
             serde_json::Value::Object(obj) => {
-                for (key, child) in obj.iter_mut() {
-                    if key == "sameAs" {
-                        continue;
-                    }
+                for (_key, child) in obj.iter_mut() {
                     walk(child, map);
                 }
                 // After recursing, rewrite a child `@id` whose value is a
@@ -452,11 +472,10 @@ fn translate_path_refs(value: &mut serde_json::Value, path_to_entity_id: &HashMa
             _ => {}
         }
     }
-    // Top-level `@id` of `value` is the entity's own ID; preserve it by
-    // walking only the inner children.
+    let skip_top_level_same_as = entity_type == "File";
     if let serde_json::Value::Object(obj) = value {
         for (key, child) in obj.iter_mut() {
-            if key == "@id" || key == "sameAs" {
+            if key == "@id" || (skip_top_level_same_as && key == "sameAs") {
                 continue;
             }
             walk(child, path_to_entity_id);
@@ -548,7 +567,7 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
                 obj.entry("@type".to_string())
                     .or_insert_with(|| serde_json::json!(entity.entity_type));
             }
-            translate_path_refs(&mut parsed, &path_to_entity_id);
+            translate_path_refs(&mut parsed, &path_to_entity_id, &entity.entity_type);
             graph_entities.push(parsed);
         } else {
             graph_entities.push(serde_json::json!({
@@ -1132,7 +1151,7 @@ mod tests {
             "prov:used": [{ "@id": "data/input.csv" }],
             "result": [{ "@id": "data/output.csv" }],
         });
-        translate_path_refs(&mut create_action, &map);
+        translate_path_refs(&mut create_action, &map, "CreateAction");
         assert_eq!(create_action["@id"], "#job-42-attempt-1");
         assert_eq!(
             create_action["object"]["@id"],
@@ -1145,16 +1164,36 @@ mod tests {
         // Output paths without an identifier mapping pass through unchanged.
         assert_eq!(create_action["result"][0]["@id"], "data/output.csv");
 
-        // The file entity itself: outer @id (its identifier) and inner
+        // The file entity itself: outer @id (its identifier) and outer
         // sameAs (its local path) must both be preserved.
         let mut file_entity = json!({
             "@id": "https://doi.org/10.1234/abc",
             "@type": ["File", "prov:Entity"],
             "sameAs": { "@id": "data/input.csv" },
         });
-        translate_path_refs(&mut file_entity, &map);
+        translate_path_refs(&mut file_entity, &map, "File");
         assert_eq!(file_entity["@id"], "https://doi.org/10.1234/abc");
         assert_eq!(file_entity["sameAs"]["@id"], "data/input.csv");
+    }
+
+    #[test]
+    fn translate_path_refs_non_file_top_level_same_as_is_translated() {
+        // The top-level `sameAs` preservation is scoped to File entities. For
+        // any other entity type, `sameAs` is treated like any other ref and
+        // gets translated when its `@id` matches a known path.
+        let mut map = HashMap::new();
+        map.insert(
+            "data/input.csv".to_string(),
+            "https://doi.org/10.1234/abc".to_string(),
+        );
+
+        let mut dataset = json!({
+            "@id": "#some-dataset",
+            "@type": "Dataset",
+            "sameAs": { "@id": "data/input.csv" },
+        });
+        translate_path_refs(&mut dataset, &map, "Dataset");
+        assert_eq!(dataset["sameAs"]["@id"], "https://doi.org/10.1234/abc");
     }
 
     #[test]
@@ -1162,7 +1201,7 @@ mod tests {
         let map: HashMap<String, String> = HashMap::new();
         let mut v = json!({ "object": { "@id": "data/x.csv" } });
         let before = v.clone();
-        translate_path_refs(&mut v, &map);
+        translate_path_refs(&mut v, &map, "CreateAction");
         assert_eq!(v, before);
     }
 }

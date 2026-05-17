@@ -156,7 +156,8 @@ Spec-load validation rejects:
   `ro-crate-metadata.json`, `./`),
 - `identifier` on output files (including files used as both input and output, because the output
   completion path resets `entity_id` back to the file path),
-- `identifier` on files that are not referenced as a job input.
+- `identifier` on files that are not referenced as a job input AND have no explicit `st_mtime` (a
+  file with `st_mtime` set in the spec counts as a pre-existing input even without a job reference).
 
 For parameterized files, the identifier template must include the same placeholders as `name` and
 `path`. See

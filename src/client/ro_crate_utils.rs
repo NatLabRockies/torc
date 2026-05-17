@@ -15,6 +15,25 @@ use std::fs::File;
 use std::io::{BufReader, Read as IoRead};
 use std::path::Path;
 
+/// `@id` prefixes Torc itself synthesizes for provenance entities. User-supplied
+/// `FileSpec::identifier` values starting with one of these would collide in the
+/// `(workflow_id, entity_id)` uniqueness index or shadow synthetic entities
+/// emitted at export time. Validator and exporter share this list so adding a
+/// new synthetic prefix in one place doesn't drift from the other.
+pub const RESERVED_ENTITY_ID_PREFIXES: &[&str] = &["#torc-", "#software-", "#job-"];
+
+/// Exact `@id` values reserved for Torc's synthetic export-root entities. Same
+/// rationale as [`RESERVED_ENTITY_ID_PREFIXES`].
+pub const RESERVED_ENTITY_IDS: &[&str] = &["ro-crate-metadata.json", "./"];
+
+/// True when `id` matches a reserved exact value or starts with a reserved prefix.
+pub fn is_reserved_entity_id(id: &str) -> bool {
+    RESERVED_ENTITY_IDS.contains(&id)
+        || RESERVED_ENTITY_ID_PREFIXES
+            .iter()
+            .any(|p| id.starts_with(p))
+}
+
 fn id_ref(id: impl AsRef<str>) -> serde_json::Value {
     serde_json::json!({ "@id": id.as_ref() })
 }
@@ -1070,6 +1089,53 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Drift guard: every synthetic `@id` Torc actually emits must be
+    /// classified as reserved by [`is_reserved_entity_id`]. If a builder gains
+    /// a new prefix and the constants aren't updated, this test fails and
+    /// keeps the validator from silently letting users collide with it.
+    #[test]
+    fn reserved_id_constants_cover_synthetic_builders() {
+        let plan = build_workflow_plan_entity(1, "wf");
+        assert!(
+            is_reserved_entity_id(&plan.entity_id),
+            "workflow plan id {} not reserved",
+            plan.entity_id
+        );
+
+        let run = build_workflow_run_entity_base(1, 7, "wf");
+        assert!(
+            is_reserved_entity_id(&run.entity_id),
+            "workflow run id {} not reserved",
+            run.entity_id
+        );
+
+        let job = JobModel::new(1, "j".to_string(), "echo".to_string());
+        let mut job_with_id = job;
+        job_with_id.id = Some(42);
+        let action = build_create_action_entity(1, 7, &job_with_id, 1, &[], &[]);
+        assert!(
+            is_reserved_entity_id(&action.entity_id),
+            "create action id {} not reserved",
+            action.entity_id
+        );
+
+        let software = build_software_entity(1, 7, "torc", "/usr/bin/torc");
+        assert!(
+            is_reserved_entity_id(&software.entity_id),
+            "software id {} not reserved",
+            software.entity_id
+        );
+
+        // Synthetic export-root ids that the exporter writes directly.
+        assert!(is_reserved_entity_id("ro-crate-metadata.json"));
+        assert!(is_reserved_entity_id("./"));
+
+        // Negative cases: typical user identifiers must NOT be classified as reserved.
+        assert!(!is_reserved_entity_id("data/input.csv"));
+        assert!(!is_reserved_entity_id("https://doi.org/10.1234/abc"));
+        assert!(!is_reserved_entity_id("urn:dataset:abc"));
+    }
 
     #[test]
     fn test_build_file_entity_basic() {

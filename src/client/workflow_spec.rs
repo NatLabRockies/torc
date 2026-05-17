@@ -1943,13 +1943,25 @@ impl WorkflowSpec {
             };
             let name = file.name.as_str();
 
-            // Check 3: reserved IDs.
-            if identifier.starts_with("#torc-")
-                || identifier.starts_with("#software-")
-                || identifier.starts_with("#job-")
-                || identifier == "ro-crate-metadata.json"
-                || identifier == "./"
-            {
+            // Check 0: identifier must be a non-empty, non-whitespace string.
+            // An empty or blank identifier would round-trip as `entity_id = ""`
+            // and `@id = ""` in the exported graph, which is meaningless and
+            // bypasses every other check below.
+            if identifier.trim().is_empty() {
+                return Err(format!(
+                    "File '{}' has an empty or whitespace-only `identifier`. \
+                     Identifiers must be non-blank strings; remove the field \
+                     or set it to a stable @id value (DOI, PURL, URN, …).",
+                    file.name
+                )
+                .into());
+            }
+
+            // Check 3: reserved IDs. The validator and the exporter share one
+            // list (see `ro_crate_utils::RESERVED_ENTITY_ID_PREFIXES` /
+            // `RESERVED_ENTITY_IDS`) so a new synthetic prefix added to the
+            // exporter doesn't drift past this check.
+            if crate::client::ro_crate_utils::is_reserved_entity_id(identifier) {
                 return Err(format!(
                     "File '{}' uses identifier '{}', which matches a reserved \
                      value or prefix (`#torc-`, `#software-`, `#job-`, \
@@ -2009,6 +2021,23 @@ impl WorkflowSpec {
         }
 
         Ok(())
+    }
+
+    /// Run [`Self::validate_file_identifiers`] against a substituted copy of
+    /// `self` so the caller's spec stays in its unsubstituted form.
+    ///
+    /// Identifier classification needs `input_files` / `output_files` populated
+    /// from `${files.*.NAME}` tokens (which only happens after
+    /// `substitute_variables`), but the *return* value of some validators is
+    /// the unsubstituted spec — callers will substitute again later. Cloning
+    /// here keeps that contract.
+    ///
+    /// Call sites where the spec has already been substituted in place should
+    /// call [`Self::validate_file_identifiers`] directly instead.
+    fn validate_file_identifiers_on_clone(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut clone = self.clone();
+        clone.substitute_variables()?;
+        clone.validate_file_identifiers()
     }
 
     /// Validate workflow actions
@@ -2416,15 +2445,17 @@ impl WorkflowSpec {
 
     /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
     ///
-    /// Runs parameter expansion, scheduler node requirement checks, and scheduler
-    /// resource checks (memory, runtime, GPUs). Returns the parsed spec on success
-    /// so callers can pass it to [`create_from_validated_spec`] without re-reading
-    /// the file.
+    /// Runs parameter expansion, duplicate-name/identifier checks, env-map checks,
+    /// file-identifier checks (which internally substitute variables on a clone),
+    /// scheduler node requirement checks, and scheduler resource checks. Returns
+    /// the parsed spec **unsubstituted** on success so callers can pass it to
+    /// [`create_from_validated_spec`] without re-reading the file.
     ///
-    /// **Note:** This is a partial validation step. Action validation and variable
-    /// substitution are performed later by [`create_from_validated_spec`]. A spec
-    /// that passes this function can still fail during creation if it has invalid
-    /// actions or unresolvable variable references.
+    /// **Note:** Action validation is still performed later by
+    /// [`create_from_validated_spec`], so a spec that passes here can still fail
+    /// during creation if it has invalid actions. Variable substitution errors,
+    /// in contrast, surface here because the file-identifier check substitutes on
+    /// a clone — the returned spec stays in its unsubstituted form.
     pub fn validate_for_creation<P: AsRef<Path>>(
         path: P,
     ) -> Result<WorkflowSpec, Box<dyn std::error::Error>> {
@@ -2432,14 +2463,10 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
-        // Substitute variables on a clone so the returned spec stays in its
-        // unsubstituted form (the caller's `create_from_validated_spec` will
-        // substitute again); but identifier validation needs the substituted
-        // `input_files` / `output_files` populated from `${files.*.NAME}`
-        // tokens to correctly classify input vs output files.
-        let mut for_identifier_check = spec.clone();
-        for_identifier_check.substitute_variables()?;
-        for_identifier_check.validate_file_identifiers()?;
+        // The returned spec must stay unsubstituted -- `create_from_validated_spec`
+        // substitutes again -- so this helper does the substitute-then-validate
+        // dance on a clone.
+        spec.validate_file_identifiers_on_clone()?;
 
         spec.validate_scheduler_node_requirements()?;
 
@@ -2480,14 +2507,9 @@ impl WorkflowSpec {
             std::process::exit(1);
         }
         // Identifier classification needs input/output_files populated from
-        // ${files.*.NAME} tokens; substitute on a clone so this remains
-        // pre-validation only.
-        let mut for_identifier_check = spec.clone();
-        if let Err(e) = for_identifier_check.substitute_variables() {
-            eprintln!("Variable substitution failed: {}", e);
-            std::process::exit(1);
-        }
-        if let Err(e) = for_identifier_check.validate_file_identifiers() {
+        // ${files.*.NAME} tokens; this helper substitutes on a clone so this
+        // remains pre-validation only.
+        if let Err(e) = spec.validate_file_identifiers_on_clone() {
             eprintln!("Validation error: {}", e);
             std::process::exit(1);
         }
@@ -7034,6 +7056,27 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
         let msg = err.to_string();
         assert!(msg.contains("'orphan'"), "{}", msg);
         assert!(msg.contains("input"), "{}", msg);
+    }
+
+    #[test]
+    fn test_validate_file_identifiers_rejects_blank_identifier() {
+        // Empty/whitespace identifiers would round-trip as `entity_id = ""`
+        // and `@id = ""` in the exported graph -- nonsense values that
+        // bypass every other identifier check. Reject early.
+        for blank in ["", "   ", "\t\n"] {
+            let mut f = FileSpec::new("a".to_string(), "/data/a.csv".to_string());
+            f.identifier = Some(blank.to_string());
+            let mut spec = WorkflowSpec::new("wf".to_string(), "tester".to_string(), None, vec![]);
+            spec.enable_ro_crate = Some(true);
+            spec.files = Some(vec![f]);
+
+            let err = spec
+                .validate_file_identifiers()
+                .expect_err(&format!("expected rejection of blank id {:?}", blank));
+            let msg = err.to_string();
+            assert!(msg.contains("empty"), "for {:?}: {}", blank, msg);
+            assert!(msg.contains("'a'"), "for {:?}: {}", blank, msg);
+        }
     }
 
     #[test]
