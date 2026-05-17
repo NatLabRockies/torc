@@ -1,99 +1,139 @@
-# Torc workflow management system
+# Torc
 
-**Distributed workflow orchestration for complex computational pipelines**
+**Turn one YAML file into hundreds of orchestrated jobs — on your laptop or across an HPC cluster.**
 
-Torc is a workflow management system designed for running large-scale computational workflows with
-complex dependencies on local machines and HPC clusters. It uses a client-server architecture with a
-centralized SQLite database for state management and coordination.
+Torc runs the messy, real workflows: parameter sweeps, hyperparameter searches, simulation
+campaigns. Write the spec once, get automatic dependency resolution, resource-aware scheduling,
+OOM/timeout retries, and a live TUI or Dashboard — local or Slurm, no code changes.
 
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
-[![Slack](https://img.shields.io/badge/Slack-Join%20us-4A154B?logo=slack)](https://join.slack.com/t/torccrew/shared_invite/zt-3s8yfuxbk-nWe5GjJ~4DrLPQRULYlB_w)
 
-## Project Status
+## See it in action
 
-We recently re-developed this software package in Rust with SQLite as the backend database,
-increasing portability and stability. We also added many new features. The code is tested and ready
-for user adoption. Interfaces are somewhat stable. Over the next 1-2 months we would like to receive
-user feedback and will consider changes. Our goal is to have a 1.0 release by March 2026.
+A typical Torc workflow: one pre-process job, a parameterized simulation that fans out into many
+runs, and a post-process job that aggregates the results.
 
-Please post comments or new ideas for Torc in the
-[discussions](https://github.com/NatLabRockies/torc/discussions).
+```yaml
+# simulation_sweep.yaml
+jobs:
+  - name: prepare_inputs
+    command: python prepare.py --out=/data/config.xyz
+    resource_requirements: small
+    output_files: [config]
+
+  - name: simulate_T{temp}_P{pressure:03d}
+    command: ./run_sim --config=/data/config.xyz --T={temp} --P={pressure}
+    resource_requirements: simulation
+    depends_on: [prepare_inputs]
+    input_files: [config]
+    output_files: [result_T{temp}_P{pressure:03d}]
+    parameters:
+      temp: "250:400:50"      # 4 temperatures
+      pressure: "1:101:25"    # 5 pressures → 20 simulations
+
+  - name: summarize
+    command: python summarize.py --out=/results/phase_diagram.png
+    resource_requirements: small
+    input_file_regexes: ["^result_T\\d+_P\\d+$"]
+```
+
+```bash
+torc run simulation_sweep.yaml      # run locally
+torc submit simulation_sweep.yaml   # submit to Slurm
+torc tui                            # watch it live
+```
+
+One file, 22 jobs (1 setup + 20 sims + 1 summary), dependencies resolved, resources tracked,
+failures retried. Widen a parameter range to scale to thousands.
+
+## Why Torc?
+
+We evaluated [Nextflow](https://www.nextflow.io/), [Snakemake](https://snakemake.github.io/), and
+[Pegasus](https://pegasus.isi.edu/) — excellent tools, but none combined all of:
+
+- **Zero-setup local execution.** A single precompiled binary. `torc run workflow.yaml` and go.
+- **Node packing on HPC.** A single Slurm allocation hosts a deep queue of jobs until its wall clock
+  runs out — no per-job submission overhead, no Bash gymnastics. Distribute hundreds of jobs across
+  nodes without being a Slurm expert.
+- **Resource-aware retries.** OOM and timeout failures are detected and automatically retried with
+  larger resources. Stop babysitting overnight runs.
+- **Debug and rerun.** Failed jobs come with collected logs, resource metrics, and structured error
+  reports (text, table, or JSON). Fix the bug, rerun just the failures — no need to restart the
+  whole workflow.
+- **Live observability.** Interactive TUI, web dashboard, and resource plots — not just log files.
+- **Traceability.** Every workflow and result is durably stored and queryable by user, project, and
+  custom metadata long after the run finishes.
+- **OpenAPI-first.** Generated Python and Julia clients ship in-tree; write your own in any
+  language.
+- **AI-native.** Build, debug, and manage workflows through Claude Code, GitHub Copilot, or the
+  bundled MCP server.
 
 ## Features
 
-- **Declarative Workflow Specifications** - Define workflows in YAML, JSON5, JSON, or KDL
-- **Automatic Dependency Resolution** - Dependencies inferred from file and data relationships
-- **Job Parameterization** - Create parameter sweeps and grid searches with simple syntax
-- **Distributed Execution** - Run jobs across multiple compute nodes with resource tracking
-- **Slurm Integration** - Native support for HPC cluster job submission
-- **Automatic Failure Recovery** - Detect OOM/timeout failures and retry with adjusted resources
-- **Workflow Resumption** - Restart workflows after failures without losing progress
-- **Change Detection** - Automatically detect input changes and re-run affected jobs
-- **Resource Management** - Track CPU, memory, and GPU usage across all jobs
-- **AI-Assisted Management** - Use Claude Code or GitHub Copilot to create, debug, and manage
-  workflows through natural language
-- **RESTful API** - Complete OpenAPI-specified REST API for integration
+- **Declarative specs** in YAML, JSON5, JSON, or KDL
+- **Automatic dependency resolution** from file and data relationships
+- **Parameter sweeps & grid search** via inline `{param}` templates
+- **Distributed execution** with CPU/memory/GPU accounting
+- **Slurm integration** with node packing
+- **Automatic failure recovery** with OOM/timeout detection and bump-on-retry
+- **Workflow resumption** — restart from where execution stopped
+- **Change detection** — re-run only the jobs whose inputs moved
+- **AI-assisted management** via Claude Code, GitHub Copilot, and an MCP server
+- **REST API** with OpenAPI-generated clients
 
-## Quick Start
+## Project Status
 
-### Installation
+Recently rebuilt in Rust with SQLite — more portable, more stable, plus a lot of new features.
+Tested and ready for adoption; interfaces are mostly stable. We're collecting user feedback over the
+next 1–2 months and targeting a **1.0 release by July 2026**.
 
-Download precompiled binaries from the
-[releases page](https://github.com/NatLabRockies/torc/releases), install from crates.io, or build
-from source:
+Ideas and bug reports are very welcome on
+[GitHub Discussions](https://github.com/NatLabRockies/torc/discussions).
+
+## Installation
 
 ```bash
-# Install from crates.io (CLI only)
+# CLI only
 cargo install torc
 
-# Install all binaries (CLI, server, dashboard, MCP server, Slurm runner)
+# Everything (server, dashboard, MCP server, Slurm runner)
 cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
 
 # Or build from source
 cargo build --all-features --release
 ```
 
-**macOS users**: The precompiled binaries are not signed with an Apple Developer certificate. macOS
-Gatekeeper will block them by default. To allow the binaries to run, remove the quarantine attribute
-after downloading:
+Or download a precompiled binary from the
+[releases page](https://github.com/NatLabRockies/torc/releases).
+
+> **macOS:** binaries aren't signed with an Apple Developer certificate. After downloading, clear
+> the quarantine attribute with `xattr -cr /path/to/torc*`, or right-click each binary and select
+> "Open" to add a security exception.
+
+## Basic Usage
 
 ```bash
-xattr -cr /path/to/torc*
-```
-
-Alternatively, you can right-click each binary and select "Open" to add a security exception.
-
-The unified `torc` CLI provides all workflow management, execution, and monitoring capabilities.
-
-### Basic Usage
-
-```bash
-# 1. Start the Torc server
+# 1. Start the server
 torc-server run
-# Or with options:
-torc-server run --url localhost --port 8080 --threads 8 --database path/to/db.sqlite
+# (options: --url localhost --port 8080 --threads 8 --database path/to/db.sqlite)
 
-# 2. Use the unified CLI for all client operations
-# Create a workflow from a specification file
+# 2. Create + run in one step
+torc run examples/yaml/hyperparameter_sweep.yaml
+
+# Or, explicitly:
 torc create my_workflow.yaml
-
-# Run jobs locally
 torc run <workflow_id>
 
-# Monitor workflows with the interactive TUI
+# Watch it
 torc tui
 
-# List workflows
+# Inspect
 torc workflows list
-
-# View job status
 torc jobs list <workflow_id>
-
-# Generate resource usage plots
 torc plot-resources output/resource_metrics.db
 ```
 
-For detailed documentation, see the [docs](docs/) directory.
+For full documentation, see the [docs](docs/) directory.
 
 ## Architecture
 
@@ -142,45 +182,6 @@ Torc provides a unified CLI with the following commands:
 Additional binaries are available via feature flags (see installation docs):
 
 - `torc-server` - REST API server (run separately from the unified CLI)
-
-## Why develop another workflow management tool?
-
-Since there are so many open source workflow management tools available, some may ask, "why develop
-another?" We evaluated many of them, including [Nextflow](https://www.nextflow.io/),
-[Snakemake](https://snakemake.github.io/), and [Pegasus](https://pegasus.isi.edu/). Those are
-excellent tools and we took inspiration from them. However, they did not fully meet our needs and it
-wasn't difficult to create exactly what we wanted.
-
-Here are the features of Torc that we think differentiate it from other tools:
-
-- Simple execution on local computers. Many tools require advanced setup and management. Torc
-  provides precompiled binaries for each supported platform.
-
-- Node packing on HPC compute nodes
-
-  A Torc worker can maintain a maximum queue depth of jobs on a compute node until the allocation
-  runs out of time. Users can start workers on any number single-node or multi-node allocations.
-
-  Users that are not savvy with Bash, Slurm, or workflows can easily distribute many jobs across
-  nodes.
-
-- Torc API Server
-
-  Torc provides a server that implements an API conforming to an
-  [OpenAPI specification](https://swagger.io/specification/), providing automatic client library
-  generation. We use both Python and Julia clients to build and manage workflows. Users can monitor
-  workflows through Torc-provided CLI and TUI applications or develop their own scripts.
-
-- Debugging errors
-
-  We run large numbers of simulations on untested input data. Many of them fail. Torc provides
-  automatic resource monitoring, log collection, and detailed error reporting through raw text,
-  tables, and formatted JSON. Torc makes it easy for users to rerun failed jobs after applying
-  fixes.
-
-- Traceability
-
-  All workflows and results are stored in a database, tracked by user and other metadata.
 
 ## License
 
