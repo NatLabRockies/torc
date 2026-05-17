@@ -125,13 +125,55 @@ exports these variables before running the job's `invocation_script`, if any.
 
 Defines input/output file artifacts that establish implicit job dependencies.
 
-| Name             | Type                  | Default     | Description                                                   |
-| ---------------- | --------------------- | ----------- | ------------------------------------------------------------- |
-| `name`           | string                | _required_  | Name of the file (used for referencing in jobs)               |
-| `path`           | string                | _required_  | File system path                                              |
-| `parameters`     | map\<string, string\> | none        | Parameters for generating multiple files                      |
-| `parameter_mode` | string                | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"` |
-| `use_parameters` | [string]              | none        | Workflow parameter names to use for this file                 |
+| Name             | Type                  | Default     | Description                                                                                                                    |
+| ---------------- | --------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `name`           | string                | _required_  | Name of the file (used for referencing in jobs)                                                                                |
+| `path`           | string                | _required_  | File system path                                                                                                               |
+| `identifier`     | string                | none        | Stable RO-Crate `@id` for an input file (DOI, PURL, URN, …). See [RO-Crate identifiers](#ro-crate-identifiers-for-input-files) |
+| `parameters`     | map\<string, string\> | none        | Parameters for generating multiple files                                                                                       |
+| `parameter_mode` | string                | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`                                                                  |
+| `use_parameters` | [string]              | none        | Workflow parameter names to use for this file                                                                                  |
+
+### RO-Crate identifiers for input files
+
+By default, the RO-Crate `@id` of an input file's File entity is its filesystem `path`. When that's
+the wrong identifier — e.g. the file is a published dataset with a DOI, or you want to reference a
+long-lived URN rather than a transient local path — set `identifier` on the FileSpec:
+
+```yaml
+files:
+  - name: reference_genome
+    path: data/grch38.fa
+    identifier: https://doi.org/10.5524/100001
+```
+
+The exported entity uses the supplied identifier as `@id`; the local path is preserved as `sameAs`
+so consumers can still locate the bytes on disk:
+
+```json
+{
+  "@id": "https://doi.org/10.5524/100001",
+  "@type": ["File", "prov:Entity"],
+  "name": "grch38.fa",
+  "sameAs": { "@id": "data/grch38.fa" }
+}
+```
+
+Identifiers must be unique within a workflow. For parameterized files, include the same placeholders
+in `identifier` that you use in `name` and `path`:
+
+```yaml
+files:
+  - name: input_{i}
+    path: data/input_{i}.csv
+    identifier: "urn:dataset:run-2026:{i}"
+    parameters:
+      i: "1:10"
+```
+
+`identifier` is honoured for files Torc classifies as **inputs** (files referenced as a job input,
+or with `st_mtime` set). Output files — those produced by jobs — still use the path as `@id`;
+setting `identifier` on an output file has no effect.
 
 ## UserDataSpec
 

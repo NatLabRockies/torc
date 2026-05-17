@@ -109,7 +109,16 @@ flowchart TD
 
 - Input files are detected by `st_mtime IS NOT NULL`
 - During initialization, both the server and the client currently upsert the same input file entity
-- The entity is keyed by workflow and `file_id`, with `entity_id = file.path`
+- The entity is keyed by workflow and `file_id`, with `entity_id = file.path` by default
+- When a `FileSpec` carries a user-supplied `identifier`, `create_files` pre-creates the entity row
+  at workflow-creation time with `entity_id = identifier` and `metadata["@id"] = identifier`. The
+  server's init-time upsert preserves the `entity_id` column but rewrites `metadata["@id"]` to
+  `file.path`; the client-side `create_ro_crate_entity_for_file` then reads `entity_id` back and
+  uses it as an override when rebuilding metadata, restoring `@id`. This three-step round-trip is
+  what lets users carry a stable identifier (DOI, URN, …) into the exported crate without changing
+  the server
+- The local path is preserved as `sameAs` on entities whose `@id` was overridden, so consumers can
+  still resolve to the bytes
 - Input file entities are expected to exist before jobs run, but the code does not rely on them
   being create-only; it is intentionally upsert-based
 

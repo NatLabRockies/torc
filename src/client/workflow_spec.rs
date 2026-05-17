@@ -106,6 +106,14 @@ pub struct FileSpec {
     pub name: String,
     /// Path to the file
     pub path: String,
+    /// Optional stable RO-Crate identifier for this file (e.g. a DOI, PURL, or URN).
+    /// When provided, this string is used as the `@id` of the file's RO-Crate entity
+    /// instead of the file path. The path is still recorded as `sameAs` so the
+    /// local location is preserved. Identifiers must be unique within the workflow
+    /// after parameter expansion. Parameter tokens (`{name}` / `{name:fmt}`) are
+    /// substituted into the identifier just like `name` and `path`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
     /// File modification time as Unix timestamp (seconds since epoch).
     /// If not specified, torc automatically checks if the file exists on disk
     /// during workflow creation and uses its actual modification time.
@@ -134,6 +142,7 @@ impl FileSpec {
         FileSpec {
             name,
             path,
+            identifier: None,
             st_mtime: None,
             parameters: None,
             parameter_mode: None,
@@ -170,9 +179,13 @@ impl FileSpec {
             new_spec.parameters = None; // Remove parameters from expanded specs
             new_spec.parameter_mode = None; // Remove parameter_mode from expanded specs
 
-            // Substitute parameters in name and path
+            // Substitute parameters in name, path, and (when set) identifier.
             new_spec.name = substitute_parameters(&self.name, &combo);
             new_spec.path = substitute_parameters(&self.path, &combo);
+            new_spec.identifier = self
+                .identifier
+                .as_deref()
+                .map(|template| substitute_parameters(template, &combo));
 
             expanded.push(new_spec);
         }
@@ -1779,6 +1792,7 @@ impl WorkflowSpec {
 
         if let Some(files) = &self.files {
             let mut seen_files: HashSet<&str> = HashSet::with_capacity(files.len());
+            let mut seen_identifiers: HashMap<&str, &str> = HashMap::with_capacity(files.len());
             for file in files {
                 if !seen_files.insert(file.name.as_str()) {
                     return Err(format!(
@@ -1786,6 +1800,20 @@ impl WorkflowSpec {
                          parameterized file's name template must include a placeholder \
                          for every parameter in `parameters` / `use_parameters`.",
                         file.name
+                    )
+                    .into());
+                }
+                if let Some(identifier) = file.identifier.as_deref()
+                    && let Some(prior_name) =
+                        seen_identifiers.insert(identifier, file.name.as_str())
+                {
+                    return Err(format!(
+                        "Duplicate file identifier '{}' after parameter expansion \
+                         (used by files '{}' and '{}'). Identifiers must be unique \
+                         within a workflow; for parameterized files, the identifier \
+                         template must include a placeholder for every parameter in \
+                         `parameters` / `use_parameters`.",
+                        identifier, prior_name, file.name
                     )
                     .into());
                 }
@@ -3283,6 +3311,34 @@ impl WorkflowSpec {
             .into());
         }
 
+        // Pre-create RO-Crate entities for input files that carry a user-supplied
+        // identifier. We only do this for files we resolved as inputs above
+        // (st_mtime is Some); outputs are produced by jobs and follow a separate
+        // entity-creation path. Persisting the identifier into the `entity_id`
+        // column here is what makes it survive the server's init-time upsert -- see
+        // `create_input_file_entity_with_identifier` for the round-trip details.
+        for (file_spec, file_model) in files.iter().zip(file_models.iter()) {
+            let Some(identifier) = file_spec.identifier.as_deref() else {
+                continue;
+            };
+            if file_model.st_mtime.is_none() {
+                continue;
+            }
+            let file_id = *file_name_to_id
+                .get(&file_spec.name)
+                .ok_or_else(|| format!("missing file id for '{}'", file_spec.name))?;
+            let file_with_id = models::FileModel {
+                id: Some(file_id),
+                ..file_model.clone()
+            };
+            crate::client::ro_crate_utils::create_input_file_entity_with_identifier(
+                config,
+                workflow_id,
+                &file_with_id,
+                identifier,
+            )?;
+        }
+
         Ok(file_name_to_id)
     }
 
@@ -4303,6 +4359,14 @@ impl WorkflowSpec {
             );
         }
 
+        // identifier can also be specified as a property on the same line.
+        if let Some(identifier) = node.get("identifier").and_then(|e| e.as_string()) {
+            obj.insert(
+                "identifier".to_string(),
+                serde_json::Value::String(identifier.to_string()),
+            );
+        }
+
         // Check for child nodes
         if let Some(children) = node.children() {
             for child in children.nodes() {
@@ -4312,6 +4376,15 @@ impl WorkflowSpec {
                         {
                             obj.insert(
                                 "path".to_string(),
+                                serde_json::Value::String(v.to_string()),
+                            );
+                        }
+                    }
+                    "identifier" => {
+                        if let Some(v) = child.entries().first().and_then(|e| e.value().as_string())
+                        {
+                            obj.insert(
+                                "identifier".to_string(),
                                 serde_json::Value::String(v.to_string()),
                             );
                         }
@@ -5544,7 +5617,9 @@ impl WorkflowSpec {
         let has_mode = file.parameter_mode.is_some();
         let has_use_params = file.use_parameters.is_some();
 
-        if !has_params && !has_mode && !has_use_params {
+        let has_identifier = file.identifier.is_some();
+
+        if !has_params && !has_mode && !has_use_params && !has_identifier {
             // Simple form: file "name" path="value"
             lines.push(format!(
                 "file {} path={}",
@@ -5554,6 +5629,9 @@ impl WorkflowSpec {
         } else {
             lines.push(format!("file {} {{", escape(&file.name)));
             lines.push(format!("    path {}", escape(&file.path)));
+            if let Some(ref identifier) = file.identifier {
+                lines.push(format!("    identifier {}", escape(identifier)));
+            }
             if let Some(ref params) = file.parameters
                 && !params.is_empty()
             {
@@ -6465,6 +6543,54 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
         assert_eq!(expanded[0].path, "/data/output_1.txt");
         assert_eq!(expanded[2].name, "output_3");
         assert_eq!(expanded[2].path, "/data/output_3.txt");
+    }
+
+    #[test]
+    fn test_file_identifier_parameter_substitution() {
+        // Parameterized identifiers must expand the same way `name` and `path` do.
+        // Otherwise an unparameterized identifier template silently collapses every
+        // expanded file onto the same `@id` and the duplicate-identifier validation
+        // below would always fire -- which is misleading when the real bug is a
+        // missing placeholder.
+        let mut file = FileSpec::new("input_{i}".to_string(), "/data/input_{i}.csv".to_string());
+        file.identifier = Some("urn:dataset:{i}".to_string());
+
+        let mut params = HashMap::new();
+        params.insert("i".to_string(), "1:3".to_string());
+        file.parameters = Some(params);
+
+        let expanded = file.expand().expect("Failed to expand file");
+
+        assert_eq!(expanded.len(), 3);
+        assert_eq!(expanded[0].identifier.as_deref(), Some("urn:dataset:1"));
+        assert_eq!(expanded[2].identifier.as_deref(), Some("urn:dataset:3"));
+    }
+
+    #[test]
+    fn test_validate_unique_names_rejects_duplicate_file_identifiers() {
+        // Two distinct files trying to claim the same RO-Crate `@id` must be
+        // rejected up-front; otherwise the pre-create step in `create_files`
+        // would fail mid-creation with a server-side uniqueness error and roll
+        // back the entire workflow, which is much harder to debug than a clear
+        // spec-load error.
+        let mut a = FileSpec::new("a".to_string(), "/data/a.csv".to_string());
+        a.identifier = Some("urn:dataset:shared".to_string());
+        let mut b = FileSpec::new("b".to_string(), "/data/b.csv".to_string());
+        b.identifier = Some("urn:dataset:shared".to_string());
+
+        let mut spec = WorkflowSpec::new("wf".to_string(), "tester".to_string(), None, vec![]);
+        spec.files = Some(vec![a, b]);
+
+        let err = spec
+            .validate_unique_names_after_expansion()
+            .expect_err("expected duplicate-identifier rejection");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Duplicate file identifier 'urn:dataset:shared'"),
+            "unexpected error message: {}",
+            msg
+        );
+        assert!(msg.contains("'a'") && msg.contains("'b'"), "{}", msg);
     }
 
     #[test]

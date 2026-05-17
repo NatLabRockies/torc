@@ -126,6 +126,26 @@ After running this workflow:
 - A CreateAction entity will describe the `process` job execution
 - `#torc-workflow` and `#torc-run-id-{run_id}` will describe the workflow plan and run activity
 
+### Stable identifiers for input files
+
+By default, an input file's `@id` is its filesystem path — a local, often transient string. When the
+file is a published dataset (DOI), a stable URN, or any other long-lived identifier, set
+`identifier` on the FileSpec and Torc uses it as the entity's `@id` instead:
+
+```yaml
+files:
+  - name: reference_genome
+    path: data/grch38.fa
+    identifier: https://doi.org/10.5524/100001
+```
+
+The local path is still recorded as `sameAs` so the bytes remain locatable. Identifiers must be
+unique within a workflow; parameterized files must include parameter placeholders in `identifier`
+the same way they do in `name` and `path`. Output files (produced by jobs) keep using the path as
+`@id`. See
+[FileSpec → RO-Crate identifiers](../reference/workflow-spec.md#ro-crate-identifiers-for-input-files)
+for the full reference.
+
 ## Dataset Entities for Directories
 
 Many workflows produce directory-based outputs rather than single files—for example,
