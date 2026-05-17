@@ -1,6 +1,7 @@
 # Torc
 
-**Turn one YAML file into hundreds of orchestrated jobs — on your laptop or across an HPC cluster.**
+**Turn one YAML file into thousands of orchestrated jobs — on your laptop or across an HPC
+cluster.**
 
 Torc runs the messy, real workflows: parameter sweeps, hyperparameter searches, simulation
 campaigns. Write the spec once, get automatic dependency resolution, resource-aware scheduling,
@@ -168,13 +169,12 @@ For full documentation, see the [docs](docs/) directory.
 
 Torc provides a unified CLI with the following commands:
 
-- **Workflow Management**: `torc workflows <subcommand>`
-- **Job Management**: `torc jobs <subcommand>`
-- **File Management**: `torc files <subcommand>`
 - **Local Execution**: `torc run <workflow_spec_or_id>`
 - **Interactive TUI**: `torc tui`
+- **Workflow Management**: `torc workflows <subcommand>`
+- **Job Management**: `torc jobs <subcommand>`
+- **Results Management**: `torc results <subcommand>`
 - **Resource Visualization**: `torc plot-resources <db_path>`
-- **Reports**: `torc reports <subcommand>`
 
 **Global Options**:
 
