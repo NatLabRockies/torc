@@ -3,20 +3,29 @@
 # "Simulation demo" workflow progresses through three stages (mid-flight ->
 # failures appear -> finished).
 #
-# Requirements: torc CLI on PATH, torc-server running, vhs, sqlite3.
+# Requirements: torc + torc-server, vhs, sqlite3, zsh, python3.
+#
+# Environment overrides:
+#   TORC_API_URL    Server URL (default: http://localhost:8080/torc-service/v1).
+#                   Exported so the torc CLI and TUI hit the same server probed.
+#   TORC_DEMO_DB    Path to the SQLite DB the server is writing to
+#                   (default: $REPO_ROOT/db/sqlite/dev.db).
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DB_PATH="$REPO_ROOT/db/sqlite/dev.db"
+DB_PATH="${TORC_DEMO_DB:-$REPO_ROOT/db/sqlite/dev.db}"
 SERVER_URL="${TORC_API_URL:-http://localhost:8080/torc-service/v1}"
+export TORC_API_URL="$SERVER_URL"
 WF_NAME="Simulation demo"
 GIF_OUT="$REPO_ROOT/docs/assets/tui-demo.gif"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-for cmd in torc vhs sqlite3 curl python3; do
+# The VHS tape forces `Set Shell "zsh"` and uses zsh-only syntax (setopt
+# nomonitor, &!), so zsh must exist even though the script itself is bash.
+for cmd in torc vhs sqlite3 curl python3 zsh; do
   command -v "$cmd" >/dev/null || {
     echo "Missing dependency: $cmd" >&2
     exit 1
@@ -30,12 +39,16 @@ fi
 
 [ -f "$DB_PATH" ] || {
   echo "SQLite DB not found at $DB_PATH" >&2
+  echo "Override with TORC_DEMO_DB=/path/to/dev.db if the server uses a different file." >&2
   exit 1
 }
 
 # ---------- workflow spec ----------
+# Heredoc is single-quoted (no shell expansion) so YAML regex backslashes and
+# {param} braces pass through unmodified. WF_NAME is sed-substituted afterwards
+# so the name lives in exactly one place.
 cat >"$TMP/spec.yaml" <<'YAML'
-name: Simulation demo
+name: __WF_NAME__
 description: Parameter sweep across temperature and pressure
 project: demo
 
@@ -90,6 +103,7 @@ resource_requirements:
     memory: 30g
     runtime: PT4H
 YAML
+sed -i.bak "s|__WF_NAME__|$WF_NAME|g" "$TMP/spec.yaml" && rm "$TMP/spec.yaml.bak"
 
 # ---------- wipe any existing "Simulation demo" workflows ----------
 old_ids=$(torc -f json workflows list 2>/dev/null | WF_NAME="$WF_NAME" python3 -c '
@@ -105,11 +119,15 @@ for w in items:
 ' || true)
 if [ -n "$old_ids" ]; then
   # shellcheck disable=SC2086
-  torc delete --force $old_ids >/dev/null
+  torc -f json delete --force $old_ids >/dev/null
 fi
 
 # ---------- create & initialize ----------
-WF_ID=$(torc create "$TMP/spec.yaml" | awk '/^Created workflow/ {print $NF}')
+# torc -f json create emits {"workflow_id": N, "status": "success", ...}.
+WF_ID=$(torc -f json create "$TMP/spec.yaml" | python3 -c '
+import json, sys
+print(json.load(sys.stdin)["workflow_id"])
+')
 [ -n "$WF_ID" ] || {
   echo "Could not parse workflow id from torc create" >&2
   exit 1
@@ -268,10 +286,15 @@ sqlite3 "$DB_PATH" <"$TMP/stage1.sql"
 # Left->Enter->Right to force the Jobs view to reload (the `r` key only
 # refreshes the workflow list). Results tab is the last stop so its first load
 # happens *after* Stage 3 has inserted all 22 result rows (the tab caches data).
-
+#
 # VHS's Output directive only accepts bare relative paths (absolute paths fail
 # parsing with "Expected file path after output"). We cd into REPO_ROOT before
 # running vhs, render as a bare filename there, then move into place.
+#
+# Paths interpolated into Type "..." commands are single-quoted inside the
+# string so a checkout / temp dir with whitespace still produces a valid
+# shell command when VHS types it into zsh.
+
 mkdir -p "$(dirname "$GIF_OUT")"
 RENDER_NAME="tui-demo.gif"
 RENDER_PATH="$REPO_ROOT/$RENDER_NAME"
@@ -292,13 +315,13 @@ Set TypingSpeed 10ms
 Type "setopt nomonitor"
 Enter
 Sleep 50ms
-Type "sqlite3 $DB_PATH < $TMP/stage1.sql >/dev/null 2>&1"
+Type "sqlite3 '$DB_PATH' < '$TMP/stage1.sql' >/dev/null 2>&1"
 Enter
 Sleep 200ms
-Type "( sleep 5 && sqlite3 $DB_PATH < $TMP/stage2.sql ) >/dev/null 2>&1 &!"
+Type "( sleep 5 && sqlite3 '$DB_PATH' < '$TMP/stage2.sql' ) >/dev/null 2>&1 &!"
 Enter
 Sleep 100ms
-Type "( sleep 11 && sqlite3 $DB_PATH < $TMP/stage3.sql ) >/dev/null 2>&1 &!"
+Type "( sleep 11 && sqlite3 '$DB_PATH' < '$TMP/stage3.sql' ) >/dev/null 2>&1 &!"
 Enter
 Sleep 100ms
 Type "clear"
@@ -348,6 +371,27 @@ TAPE
 echo "Recording (this takes ~25s)..."
 cd "$REPO_ROOT"
 vhs "$TMP/tape" >/dev/null
+
+# Verify the backgrounded stage transitions actually landed before publishing.
+# Their stdout/stderr is suppressed inside the VHS shell, so check the DB
+# directly — a stale state means a stale GIF.
+expected_results=22
+expected_completed=20
+expected_failed=2
+actual_results=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM result WHERE workflow_id = $WF_ID;")
+actual_completed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM job WHERE workflow_id = $WF_ID AND status = 5;")
+actual_failed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM job WHERE workflow_id = $WF_ID AND status = 6;")
+if [ "$actual_results" -ne "$expected_results" ] ||
+   [ "$actual_completed" -ne "$expected_completed" ] ||
+   [ "$actual_failed" -ne "$expected_failed" ]; then
+  echo "ERROR: post-recording DB state is wrong — not publishing GIF." >&2
+  echo "  results:   got $actual_results,   expected $expected_results" >&2
+  echo "  completed: got $actual_completed, expected $expected_completed" >&2
+  echo "  failed:    got $actual_failed,    expected $expected_failed" >&2
+  echo "  Background stage SQL may have failed silently. The rendered GIF is at" >&2
+  echo "  $RENDER_PATH (not moved into docs/assets/)." >&2
+  exit 1
+fi
 
 mv "$RENDER_PATH" "$GIF_OUT"
 echo "Saved: $GIF_OUT"

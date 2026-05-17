@@ -181,13 +181,24 @@ The animated TUI screencast in `README.md` is regenerated from a script:
 ./docs/assets/record_tui_demo.sh
 ```
 
-Requires a running `torc-server` (defaults to `http://localhost:8080`; override with `TORC_API_URL`)
-and the `vhs`, `sqlite3`, and `python3` binaries on PATH. Install VHS with `brew install vhs`.
+Requires a running `torc-server` and `vhs`, `sqlite3`, `zsh`, and `python3` on PATH. Install VHS
+with `brew install vhs`.
+
+Environment overrides:
+
+- `TORC_API_URL` — full server URL **including the `/torc-service/v1` prefix** (default:
+  `http://localhost:8080/torc-service/v1`). Exported so the torc CLI and TUI hit the same server the
+  script probes.
+- `TORC_DEMO_DB` — path to the SQLite DB the server is writing to. Defaults to `db/sqlite/dev.db`
+  relative to the repo root; override if `torc-server` was started with `--database` pointing
+  elsewhere.
 
 The script creates a `Simulation demo` workflow, seeds three stages of progressively-completed job
 status (mid-flight → failures appear → finished) directly into the SQLite database, drives the TUI
-with VHS, and writes the result to `docs/assets/tui-demo.gif`. Re-running the script wipes any prior
-`Simulation demo` workflow, so it is safe to invoke repeatedly.
+with VHS, and writes the result to `docs/assets/tui-demo.gif`. It also verifies the final DB state
+after recording — if the backgrounded stage transitions didn't land, the rendered GIF is left in
+`$REPO_ROOT/tui-demo.gif` and not promoted. Re-running the script wipes any prior `Simulation demo`
+workflow, so it is safe to invoke repeatedly.
 
 To tweak the recording (timings, terminal size, theme), edit the VHS tape heredoc near the bottom of
 the script.
