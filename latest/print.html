@@ -2666,6 +2666,38 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 <li>A CreateAction entity will describe the <code>process</code> job execution</li>
 <li><code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> will describe the workflow plan and run activity</li>
 </ul>
+<h3 id="stable-identifiers-for-input-files"><a class="header" href="#stable-identifiers-for-input-files">Stable identifiers for input files</a></h3>
+<p>By default, an input file's <code>@id</code> is its filesystem path — a local, often transient string. When the
+file is a published dataset (DOI), a stable URN, or any other long-lived identifier, set
+<code>identifier</code> on the FileSpec (and <code>enable_ro_crate: true</code> at the workflow level) and Torc uses it as
+the entity's <code>@id</code> instead:</p>
+<pre><code class="language-yaml">name: my_workflow
+enable_ro_crate: true
+
+files:
+  - name: reference_genome
+    path: data/grch38.fa
+    identifier: https://doi.org/10.5524/100001
+</code></pre>
+<p>The local path is recorded as <code>sameAs</code> so the bytes remain locatable, and CreateAction provenance
+refs that would otherwise point at the path are rewritten to the identifier at export time so the
+exported <code>@graph</code> stays self-consistent.</p>
+<p>Spec-load validation rejects:</p>
+<ul>
+<li><code>identifier</code> on any file when <code>enable_ro_crate</code> is not <code>true</code>,</li>
+<li>duplicate identifiers within the workflow,</li>
+<li>identifiers equal to another file's path (would collide in the same uniqueness index),</li>
+<li>identifiers matching Torc's reserved IDs (<code>#torc-…</code>, <code>#software-…</code>, <code>#job-…</code>,
+<code>ro-crate-metadata.json</code>, <code>./</code>),</li>
+<li><code>identifier</code> on output files (including files used as both input and output, because the output
+completion path resets <code>entity_id</code> back to the file path),</li>
+<li><code>identifier</code> on files that are not referenced as a job input AND have no explicit <code>st_mtime</code> (a
+file with <code>st_mtime</code> set in the spec counts as a pre-existing input even without a job reference).</li>
+</ul>
+<p>For parameterized files, the identifier template must include the same placeholders as <code>name</code> and
+<code>path</code>. See
+<a href="core/concepts/../reference/workflow-spec.html#ro-crate-identifiers-for-input-files">FileSpec → RO-Crate identifiers</a>
+for the full reference.</p>
 <h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
 <p>Many workflows produce directory-based outputs rather than single files—for example,
 hive-partitioned Parquet datasets with thousands of files. For these, use <strong>Dataset entities</strong>
@@ -4944,9 +4976,11 @@ environment variables set, so the entity can be wired up automatically:</p>
   }"
 </code></pre>
 <p>The argument must be a JSON object. Its top-level fields are applied as a shallow merge over the
-auto-computed metadata: user-supplied keys replace the auto-generated ones (<code>@id</code>, <code>@type</code>, <code>name</code>,
+auto-computed metadata: user-supplied keys replace the auto-generated ones (<code>@type</code>, <code>name</code>,
 <code>contentSize</code>, ...) entirely on conflict, and nested objects are not deep-merged. Pass <code>-</code> to read
 the JSON from stdin for larger blobs:</p>
+<p><code>@id</code> is not user-overridable via <code>--metadata</code>: it's derived from the dataset directory path and
+re-applied at export time, so any <code>@id</code> field inside the JSON is silently replaced.</p>
 <pre><code class="language-bash">torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
   --name simulation_results \
   --path output/results.parquet/ \
@@ -5035,8 +5069,9 @@ torc ro-crate export 123
   ]
 }
 </code></pre>
-<p>Torc preserves any explicit <code>@id</code> and <code>@type</code> already present in the stored metadata. If either
-field is missing, the exporter fills it in from the entity record.</p>
+<p>The exporter always sets each entity's <code>@id</code> from its stored <code>entity_id</code>, overwriting any <code>@id</code>
+field present in the stored metadata. <code>@type</code> is preserved when present and filled in from the
+entity record only when missing.</p>
 <h2 id="workflow-exportimport"><a class="header" href="#workflow-exportimport">Workflow Export/Import</a></h2>
 <p>RO-Crate entities are included in workflow exports (<code>torc workflows export</code>) and restored during
 imports (<code>torc workflows import</code>). File ID links are remapped automatically.</p>
@@ -10326,11 +10361,65 @@ exports these variables before running the job's <code>invocation_script</code>,
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the file (used for referencing in jobs)</td></tr>
 <tr><td><code>path</code></td><td>string</td><td><em>required</em></td><td>File system path</td></tr>
+<tr><td><code>identifier</code></td><td>string</td><td>none</td><td>Stable RO-Crate <code>@id</code> for an input file (DOI, PURL, URN, …). See <a href="core/reference/workflow-spec.html#ro-crate-identifiers-for-input-files">RO-Crate identifiers</a></td></tr>
 <tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Parameters for generating multiple files</td></tr>
 <tr><td><code>parameter_mode</code></td><td>string</td><td><code>"product"</code></td><td>How to combine parameters: <code>"product"</code> (Cartesian) or <code>"zip"</code></td></tr>
 <tr><td><code>use_parameters</code></td><td>[string]</td><td>none</td><td>Workflow parameter names to use for this file</td></tr>
 </tbody></table>
 </div>
+<h3 id="ro-crate-identifiers-for-input-files"><a class="header" href="#ro-crate-identifiers-for-input-files">RO-Crate identifiers for input files</a></h3>
+<p>By default, the RO-Crate <code>@id</code> of an input file's File entity is its filesystem <code>path</code>. When that's
+the wrong identifier — e.g. the file is a published dataset with a DOI, or you want to reference a
+long-lived URN rather than a transient local path — set <code>identifier</code> on the FileSpec. The workflow
+must also set <code>enable_ro_crate: true</code> at the top level; identifiers are rejected on workflows that
+opt out of automatic RO-Crate provenance.</p>
+<pre><code class="language-yaml">name: my_workflow
+enable_ro_crate: true
+
+files:
+  - name: reference_genome
+    path: data/grch38.fa
+    identifier: https://doi.org/10.5524/100001
+</code></pre>
+<p>The exported entity uses the supplied identifier as <code>@id</code>; the local path is preserved as <code>sameAs</code>
+so consumers can still locate the bytes on disk:</p>
+<pre><code class="language-json">{
+  "@id": "https://doi.org/10.5524/100001",
+  "@type": ["File", "prov:Entity"],
+  "name": "grch38.fa",
+  "sameAs": { "@id": "data/grch38.fa" }
+}
+</code></pre>
+<p>CreateAction provenance references (<code>prov:used</code> / <code>object</code>) that would otherwise serialize as the
+file path are rewritten to the identifier at export time, so the exported <code>@graph</code> stays
+self-consistent.</p>
+<p>For parameterized files, include the same placeholders in <code>identifier</code> that you use in <code>name</code> and
+<code>path</code>:</p>
+<pre><code class="language-yaml">name: parameterized_workflow
+enable_ro_crate: true
+
+files:
+  - name: input_{i}
+    path: data/input_{i}.csv
+    identifier: "urn:dataset:run-2026:{i}"
+    parameters:
+      i: "1:10"
+</code></pre>
+<p>Spec-load validation rejects the following at parse time:</p>
+<ul>
+<li><code>identifier</code> on any file when the workflow does not set <code>enable_ro_crate: true</code>.</li>
+<li>Duplicate identifiers (after parameter expansion).</li>
+<li>An identifier equal to another file's <code>path</code> (would collide in the same workflow-scoped uniqueness
+index).</li>
+<li>Identifiers matching Torc's reserved IDs / prefixes: <code>#torc-…</code> (workflow/run provenance),
+<code>#software-…</code> (software agents), <code>#job-…</code> (CreateActions), <code>ro-crate-metadata.json</code>, and <code>./</code>
+(synthetic export roots).</li>
+<li><code>identifier</code> on output files, including files referenced as both input AND output (the output
+completion path always rewrites <code>entity_id</code> back to the file path).</li>
+<li><code>identifier</code> on files that are not referenced by any job as an input AND have no explicit
+<code>st_mtime</code> (a file with <code>st_mtime</code> set in the spec counts as a pre-existing input even without a
+job reference).</li>
+</ul>
 <h2 id="userdataspec"><a class="header" href="#userdataspec">UserDataSpec</a></h2>
 <p>Arbitrary JSON data that can establish dependencies between jobs.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
@@ -24632,7 +24721,20 @@ software agents</li>
 <ul>
 <li>Input files are detected by <code>st_mtime IS NOT NULL</code></li>
 <li>During initialization, both the server and the client currently upsert the same input file entity</li>
-<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code></li>
+<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code> by default</li>
+<li>When a <code>FileSpec</code> carries a user-supplied <code>identifier</code>, <code>create_files</code> pre-creates the entity row
+at workflow-creation time with <code>entity_id = identifier</code> and <code>metadata["@id"] = identifier</code>. The
+server's init-time upsert preserves the <code>entity_id</code> column even though it rewrites
+<code>metadata["@id"]</code> back to <code>file.path</code>. Export then uses <code>entity_id</code> as the authoritative <code>@id</code>
+(overwriting whatever ends up in <code>metadata["@id"]</code>), so the user identifier survives regardless of
+whether the client-side <code>create_ro_crate_entity_for_file</code> ran afterward — important because the
+async-init path returns before the client-side rebuild can re-write <code>metadata["@id"]</code>.</li>
+<li>Export also builds a path → entity_id map from File entities' <code>sameAs</code> and rewrites nested
+<code>{ "@id": "&lt;path&gt;" }</code> references throughout the graph, so CreateAction <code>prov:used</code> / <code>object</code> and
+output <code>prov:wasDerivedFrom</code> link to the identifier rather than the path. The entity's own <code>@id</code>
+and any <code>sameAs</code> field are deliberately not rewritten.</li>
+<li>The local path is preserved as <code>sameAs</code> on entities whose <code>@id</code> was overridden, so consumers can
+still resolve to the bytes</li>
 <li>Input file entities are expected to exist before jobs run, but the code does not rely on them
 being create-only; it is intentionally upsert-based</li>
 </ul>

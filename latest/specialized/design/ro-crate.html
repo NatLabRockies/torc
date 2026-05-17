@@ -286,7 +286,20 @@ software agents</li>
 <ul>
 <li>Input files are detected by <code>st_mtime IS NOT NULL</code></li>
 <li>During initialization, both the server and the client currently upsert the same input file entity</li>
-<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code></li>
+<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code> by default</li>
+<li>When a <code>FileSpec</code> carries a user-supplied <code>identifier</code>, <code>create_files</code> pre-creates the entity row
+at workflow-creation time with <code>entity_id = identifier</code> and <code>metadata["@id"] = identifier</code>. The
+server's init-time upsert preserves the <code>entity_id</code> column even though it rewrites
+<code>metadata["@id"]</code> back to <code>file.path</code>. Export then uses <code>entity_id</code> as the authoritative <code>@id</code>
+(overwriting whatever ends up in <code>metadata["@id"]</code>), so the user identifier survives regardless of
+whether the client-side <code>create_ro_crate_entity_for_file</code> ran afterward — important because the
+async-init path returns before the client-side rebuild can re-write <code>metadata["@id"]</code>.</li>
+<li>Export also builds a path → entity_id map from File entities' <code>sameAs</code> and rewrites nested
+<code>{ "@id": "&lt;path&gt;" }</code> references throughout the graph, so CreateAction <code>prov:used</code> / <code>object</code> and
+output <code>prov:wasDerivedFrom</code> link to the identifier rather than the path. The entity's own <code>@id</code>
+and any <code>sameAs</code> field are deliberately not rewritten.</li>
+<li>The local path is preserved as <code>sameAs</code> on entities whose <code>@id</code> was overridden, so consumers can
+still resolve to the bytes</li>
 <li>Input file entities are expected to exist before jobs run, but the code does not rely on them
 being create-only; it is intentionally upsert-based</li>
 </ul>

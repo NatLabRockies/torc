@@ -296,11 +296,65 @@ exports these variables before running the job's <code>invocation_script</code>,
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the file (used for referencing in jobs)</td></tr>
 <tr><td><code>path</code></td><td>string</td><td><em>required</em></td><td>File system path</td></tr>
+<tr><td><code>identifier</code></td><td>string</td><td>none</td><td>Stable RO-Crate <code>@id</code> for an input file (DOI, PURL, URN, …). See <a href="#ro-crate-identifiers-for-input-files">RO-Crate identifiers</a></td></tr>
 <tr><td><code>parameters</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Parameters for generating multiple files</td></tr>
 <tr><td><code>parameter_mode</code></td><td>string</td><td><code>"product"</code></td><td>How to combine parameters: <code>"product"</code> (Cartesian) or <code>"zip"</code></td></tr>
 <tr><td><code>use_parameters</code></td><td>[string]</td><td>none</td><td>Workflow parameter names to use for this file</td></tr>
 </tbody></table>
 </div>
+<h3 id="ro-crate-identifiers-for-input-files"><a class="header" href="#ro-crate-identifiers-for-input-files">RO-Crate identifiers for input files</a></h3>
+<p>By default, the RO-Crate <code>@id</code> of an input file's File entity is its filesystem <code>path</code>. When that's
+the wrong identifier — e.g. the file is a published dataset with a DOI, or you want to reference a
+long-lived URN rather than a transient local path — set <code>identifier</code> on the FileSpec. The workflow
+must also set <code>enable_ro_crate: true</code> at the top level; identifiers are rejected on workflows that
+opt out of automatic RO-Crate provenance.</p>
+<pre><code class="language-yaml">name: my_workflow
+enable_ro_crate: true
+
+files:
+  - name: reference_genome
+    path: data/grch38.fa
+    identifier: https://doi.org/10.5524/100001
+</code></pre>
+<p>The exported entity uses the supplied identifier as <code>@id</code>; the local path is preserved as <code>sameAs</code>
+so consumers can still locate the bytes on disk:</p>
+<pre><code class="language-json">{
+  "@id": "https://doi.org/10.5524/100001",
+  "@type": ["File", "prov:Entity"],
+  "name": "grch38.fa",
+  "sameAs": { "@id": "data/grch38.fa" }
+}
+</code></pre>
+<p>CreateAction provenance references (<code>prov:used</code> / <code>object</code>) that would otherwise serialize as the
+file path are rewritten to the identifier at export time, so the exported <code>@graph</code> stays
+self-consistent.</p>
+<p>For parameterized files, include the same placeholders in <code>identifier</code> that you use in <code>name</code> and
+<code>path</code>:</p>
+<pre><code class="language-yaml">name: parameterized_workflow
+enable_ro_crate: true
+
+files:
+  - name: input_{i}
+    path: data/input_{i}.csv
+    identifier: "urn:dataset:run-2026:{i}"
+    parameters:
+      i: "1:10"
+</code></pre>
+<p>Spec-load validation rejects the following at parse time:</p>
+<ul>
+<li><code>identifier</code> on any file when the workflow does not set <code>enable_ro_crate: true</code>.</li>
+<li>Duplicate identifiers (after parameter expansion).</li>
+<li>An identifier equal to another file's <code>path</code> (would collide in the same workflow-scoped uniqueness
+index).</li>
+<li>Identifiers matching Torc's reserved IDs / prefixes: <code>#torc-…</code> (workflow/run provenance),
+<code>#software-…</code> (software agents), <code>#job-…</code> (CreateActions), <code>ro-crate-metadata.json</code>, and <code>./</code>
+(synthetic export roots).</li>
+<li><code>identifier</code> on output files, including files referenced as both input AND output (the output
+completion path always rewrites <code>entity_id</code> back to the file path).</li>
+<li><code>identifier</code> on files that are not referenced by any job as an input AND have no explicit
+<code>st_mtime</code> (a file with <code>st_mtime</code> set in the spec counts as a pre-existing input even without a
+job reference).</li>
+</ul>
 <h2 id="userdataspec"><a class="header" href="#userdataspec">UserDataSpec</a></h2>
 <p>Arbitrary JSON data that can establish dependencies between jobs.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>

@@ -288,6 +288,38 @@ workflow is created. Files that exist are marked as inputs; files that don't exi
 <li>A CreateAction entity will describe the <code>process</code> job execution</li>
 <li><code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> will describe the workflow plan and run activity</li>
 </ul>
+<h3 id="stable-identifiers-for-input-files"><a class="header" href="#stable-identifiers-for-input-files">Stable identifiers for input files</a></h3>
+<p>By default, an input file's <code>@id</code> is its filesystem path — a local, often transient string. When the
+file is a published dataset (DOI), a stable URN, or any other long-lived identifier, set
+<code>identifier</code> on the FileSpec (and <code>enable_ro_crate: true</code> at the workflow level) and Torc uses it as
+the entity's <code>@id</code> instead:</p>
+<pre><code class="language-yaml">name: my_workflow
+enable_ro_crate: true
+
+files:
+  - name: reference_genome
+    path: data/grch38.fa
+    identifier: https://doi.org/10.5524/100001
+</code></pre>
+<p>The local path is recorded as <code>sameAs</code> so the bytes remain locatable, and CreateAction provenance
+refs that would otherwise point at the path are rewritten to the identifier at export time so the
+exported <code>@graph</code> stays self-consistent.</p>
+<p>Spec-load validation rejects:</p>
+<ul>
+<li><code>identifier</code> on any file when <code>enable_ro_crate</code> is not <code>true</code>,</li>
+<li>duplicate identifiers within the workflow,</li>
+<li>identifiers equal to another file's path (would collide in the same uniqueness index),</li>
+<li>identifiers matching Torc's reserved IDs (<code>#torc-…</code>, <code>#software-…</code>, <code>#job-…</code>,
+<code>ro-crate-metadata.json</code>, <code>./</code>),</li>
+<li><code>identifier</code> on output files (including files used as both input and output, because the output
+completion path resets <code>entity_id</code> back to the file path),</li>
+<li><code>identifier</code> on files that are not referenced as a job input AND have no explicit <code>st_mtime</code> (a
+file with <code>st_mtime</code> set in the spec counts as a pre-existing input even without a job reference).</li>
+</ul>
+<p>For parameterized files, the identifier template must include the same placeholders as <code>name</code> and
+<code>path</code>. See
+<a href="../reference/workflow-spec.html#ro-crate-identifiers-for-input-files">FileSpec → RO-Crate identifiers</a>
+for the full reference.</p>
 <h2 id="dataset-entities-for-directories"><a class="header" href="#dataset-entities-for-directories">Dataset Entities for Directories</a></h2>
 <p>Many workflows produce directory-based outputs rather than single files—for example,
 hive-partitioned Parquet datasets with thousands of files. For these, use <strong>Dataset entities</strong>
