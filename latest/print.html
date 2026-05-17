@@ -25471,6 +25471,29 @@ real Slurm scheduler.</p>
 <p>The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
 writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</code>. All tests must pass before a
 release is tagged.</p>
+<h2 id="rebuilding-the-readme-tui-demo-gif"><a class="header" href="#rebuilding-the-readme-tui-demo-gif">Rebuilding the README TUI Demo GIF</a></h2>
+<p>The animated TUI screencast in <code>README.md</code> is regenerated from a script:</p>
+<pre><code class="language-bash">./docs/assets/record_tui_demo.sh
+</code></pre>
+<p>Requires a running <code>torc-server</code> and <code>vhs</code>, <code>sqlite3</code>, and <code>python3</code> on PATH. Install VHS with
+<code>brew install vhs</code>.</p>
+<p>Environment overrides:</p>
+<ul>
+<li><code>TORC_API_URL</code> — full server URL <strong>including the <code>/torc-service/v1</code> prefix</strong> (default:
+<code>http://localhost:8080/torc-service/v1</code>). Exported so the torc CLI and TUI hit the same server the
+script probes.</li>
+<li><code>TORC_DEMO_DB</code> — path to the SQLite DB the server is writing to. Defaults to <code>db/sqlite/dev.db</code>
+relative to the repo root; override if <code>torc-server</code> was started with <code>--database</code> pointing
+elsewhere.</li>
+</ul>
+<p>The script creates a <code>Simulation demo</code> workflow, seeds three stages of progressively-completed job
+status (mid-flight → failures appear → finished) directly into the SQLite database, drives the TUI
+with VHS, and writes the result to <code>docs/assets/tui-demo.gif</code>. It also verifies the final DB state
+after recording — if the backgrounded stage transitions didn't land, the rendered GIF is left in
+<code>$REPO_ROOT/tui-demo.gif</code> and not promoted. Re-running the script wipes any prior <code>Simulation demo</code>
+workflow, so it is safe to invoke repeatedly.</p>
+<p>To tweak the recording (timings, terminal size, theme), edit the VHS tape heredoc near the bottom of
+the script.</p>
 <h2 id="pull-request-guidelines"><a class="header" href="#pull-request-guidelines">Pull Request Guidelines</a></h2>
 <ul>
 <li><strong>Keep PRs focused</strong> - One feature or fix per PR</li>
