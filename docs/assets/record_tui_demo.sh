@@ -3,13 +3,13 @@
 # "Simulation demo" workflow progresses through three stages (mid-flight ->
 # failures appear -> finished).
 #
-# Requirements: torc + torc-server, vhs, sqlite3, zsh, python3.
-#
 # Environment overrides:
 #   TORC_API_URL    Server URL (default: http://localhost:8080/torc-service/v1).
 #                   Exported so the torc CLI and TUI hit the same server probed.
 #   TORC_DEMO_DB    Path to the SQLite DB the server is writing to
 #                   (default: $REPO_ROOT/db/sqlite/dev.db).
+#
+# Requirements: torc + torc-server, vhs, sqlite3, python3.
 
 set -euo pipefail
 
@@ -23,9 +23,7 @@ GIF_OUT="$REPO_ROOT/docs/assets/tui-demo.gif"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# The VHS tape forces `Set Shell "zsh"` and uses zsh-only syntax (setopt
-# nomonitor, &!), so zsh must exist even though the script itself is bash.
-for cmd in torc vhs sqlite3 curl python3 zsh; do
+for cmd in torc vhs sqlite3 curl python3; do
   command -v "$cmd" >/dev/null || {
     echo "Missing dependency: $cmd" >&2
     exit 1
@@ -281,8 +279,9 @@ SQL
 sqlite3 "$DB_PATH" <"$TMP/stage1.sql"
 
 # ---------- VHS tape ----------
-# Hide block resets to Stage 1 and schedules Stages 2 and 3 in the background
-# (via zsh's &! so no job-control output bleeds into the TUI). The tape uses
+# Hide block resets to Stage 1 and schedules Stages 2 and 3 in the background.
+# `set +m` disables bash's job-monitor mode so backgrounded subshells don't
+# print "[1] 12345" / "[1]+ Done" notices onto the TUI. The tape uses
 # Left->Enter->Right to force the Jobs view to reload (the `r` key only
 # refreshes the workflow list). Results tab is the last stop so its first load
 # happens *after* Stage 3 has inserted all 22 result rows (the tab caches data).
@@ -302,7 +301,7 @@ RENDER_PATH="$REPO_ROOT/$RENDER_NAME"
 cat >"$TMP/tape" <<TAPE
 Output $RENDER_NAME
 
-Set Shell "zsh"
+Set Shell "bash"
 Set FontSize 14
 Set Width 1400
 Set Height 800
@@ -312,16 +311,16 @@ Set PlaybackSpeed 1.0
 
 Hide
 Set TypingSpeed 10ms
-Type "setopt nomonitor"
+Type "set +m"
 Enter
 Sleep 50ms
 Type "sqlite3 '$DB_PATH' < '$TMP/stage1.sql' >/dev/null 2>&1"
 Enter
 Sleep 200ms
-Type "( sleep 5 && sqlite3 '$DB_PATH' < '$TMP/stage2.sql' ) >/dev/null 2>&1 &!"
+Type "( sleep 5 && sqlite3 '$DB_PATH' < '$TMP/stage2.sql' ) >/dev/null 2>&1 &"
 Enter
 Sleep 100ms
-Type "( sleep 11 && sqlite3 '$DB_PATH' < '$TMP/stage3.sql' ) >/dev/null 2>&1 &!"
+Type "( sleep 11 && sqlite3 '$DB_PATH' < '$TMP/stage3.sql' ) >/dev/null 2>&1 &"
 Enter
 Sleep 100ms
 Type "clear"

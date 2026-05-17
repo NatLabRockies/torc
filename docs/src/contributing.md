@@ -181,8 +181,8 @@ The animated TUI screencast in `README.md` is regenerated from a script:
 ./docs/assets/record_tui_demo.sh
 ```
 
-Requires a running `torc-server` and `vhs`, `sqlite3`, `zsh`, and `python3` on PATH. Install VHS
-with `brew install vhs`.
+Requires a running `torc-server` and `vhs`, `sqlite3`, and `python3` on PATH. Install VHS with
+`brew install vhs`.
 
 Environment overrides:
 
