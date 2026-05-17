@@ -15,6 +15,25 @@ use std::fs::File;
 use std::io::{BufReader, Read as IoRead};
 use std::path::Path;
 
+/// `@id` prefixes Torc itself synthesizes for provenance entities. User-supplied
+/// `FileSpec::identifier` values starting with one of these would collide in the
+/// `(workflow_id, entity_id)` uniqueness index or shadow synthetic entities
+/// emitted at export time. Validator and exporter share this list so adding a
+/// new synthetic prefix in one place doesn't drift from the other.
+pub const RESERVED_ENTITY_ID_PREFIXES: &[&str] = &["#torc-", "#software-", "#job-"];
+
+/// Exact `@id` values reserved for Torc's synthetic export-root entities. Same
+/// rationale as [`RESERVED_ENTITY_ID_PREFIXES`].
+pub const RESERVED_ENTITY_IDS: &[&str] = &["ro-crate-metadata.json", "./"];
+
+/// True when `id` matches a reserved exact value or starts with a reserved prefix.
+pub fn is_reserved_entity_id(id: &str) -> bool {
+    RESERVED_ENTITY_IDS.contains(&id)
+        || RESERVED_ENTITY_ID_PREFIXES
+            .iter()
+            .any(|p| id.starts_with(p))
+}
+
 fn id_ref(id: impl AsRef<str>) -> serde_json::Value {
     serde_json::json!({ "@id": id.as_ref() })
 }
@@ -63,19 +82,25 @@ pub fn compute_file_sha256(path: &str) -> Option<String> {
 /// Build an RO-Crate File entity for a workflow file.
 ///
 /// Creates a JSON-LD entity with:
-/// - `@id`: file path
+/// - `@id`: `identifier_override` when set, otherwise the file path
 /// - `@type`: "File"
 /// - `name`: basename from path
 /// - `encodingFormat`: MIME type via `mime_guess`
 /// - `contentSize`: file size (when available)
 /// - `sha256`: SHA256 hash (when available)
 /// - `dateModified`: ISO8601 from st_mtime
+/// - `sameAs`: the file path, when `identifier_override` differs from it
 /// - `@type` is emitted as `["File", "prov:Entity"]`
+///
+/// `identifier_override` carries a user-supplied stable identifier (DOI, PURL, URN,
+/// ...) for input files; see [`FileSpec::identifier`]. When None, the @id falls back
+/// to the file path to preserve the original behaviour.
 pub fn build_file_entity(
     workflow_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
     sha256: Option<String>,
+    identifier_override: Option<&str>,
 ) -> RoCrateEntityModel {
     let file_path = &file.path;
     let basename = Path::new(file_path)
@@ -89,13 +114,23 @@ pub fn build_file_entity(
         .map(|m| m.to_string())
         .unwrap_or_else(|| "application/octet-stream".to_string());
 
+    let entity_id = identifier_override
+        .unwrap_or(file_path.as_str())
+        .to_string();
+
     // Build metadata JSON object
     let mut metadata = serde_json::json!({
-        "@id": file_path,
+        "@id": entity_id,
         "@type": typed_entity("File", "prov:Entity"),
         "name": basename,
         "encodingFormat": mime_type
     });
+
+    // Preserve the local path under sameAs whenever a stable identifier was supplied,
+    // so consumers can still locate the bytes on disk.
+    if identifier_override.is_some_and(|id| id != file_path.as_str()) {
+        metadata["sameAs"] = serde_json::json!({ "@id": file_path });
+    }
 
     // Add content size if available
     if let Some(size) = content_size {
@@ -117,7 +152,7 @@ pub fn build_file_entity(
         id: None,
         workflow_id,
         file_id: file.id,
-        entity_id: file_path.clone(),
+        entity_id,
         entity_type: "File".to_string(),
         metadata: metadata.to_string(),
     }
@@ -503,11 +538,24 @@ pub fn create_ro_crate_entity_for_file(
     // Compute SHA256 hash
     let sha256 = compute_file_sha256(&file.path);
 
+    // An entity may already exist for this file: the workflow-creation step
+    // pre-populates one whenever the user supplied a stable `identifier` in
+    // FileSpec, and the server's `create_entities_for_input_files` upserts a
+    // path-keyed row at init time. When a pre-existing entity_id differs from
+    // the file path, treat it as the user's stable identifier and preserve it
+    // here -- otherwise the rebuilt metadata would silently revert @id back to
+    // the path.
+    let existing = find_entity_for_file(config, workflow_id, file_id);
+    let identifier_override = existing
+        .as_ref()
+        .map(|e| e.entity_id.as_str())
+        .filter(|id| *id != file.path.as_str());
+
     // Build the entity
-    let entity = build_file_entity(workflow_id, file, content_size, sha256);
+    let entity = build_file_entity(workflow_id, file, content_size, sha256, identifier_override);
 
     // Check if entity already exists - if so, update it
-    if let Some(existing) = find_entity_for_file(config, workflow_id, file_id) {
+    if let Some(existing) = existing {
         let entity_id = match existing.id {
             Some(id) => id,
             None => {
@@ -836,6 +884,53 @@ fn append_dataset_result(
     Some(metadata.to_string())
 }
 
+/// Pre-create an RO-Crate File entity that carries a user-supplied stable identifier.
+///
+/// Called from `create_files` at workflow-creation time for every input file that
+/// has a `FileSpec::identifier` set. The entity is created with `entity_id` (and
+/// `metadata["@id"]`) equal to the user-supplied identifier; the file path is
+/// preserved as `sameAs`.
+///
+/// Persistence matters: the server's `create_entities_for_input_files` (run at
+/// init time) upserts metadata for the same `file_id` and forcefully resets
+/// `metadata["@id"]` to the file path. It does NOT touch the `entity_id` column,
+/// so the user identifier survives in `entity_id`. The client-side
+/// `create_ro_crate_entity_for_file` then reads `entity_id` back and uses it as
+/// the override when rebuilding metadata, restoring `@id`. Pre-creating here is
+/// what makes that round-trip possible without a server change.
+///
+/// Returns an error if the entity cannot be created -- callers should roll back
+/// the workflow on failure, the same way they do for other creation steps.
+pub fn create_input_file_entity_with_identifier(
+    config: &Configuration,
+    workflow_id: i64,
+    file: &FileModel,
+    identifier: &str,
+) -> Result<(), String> {
+    let file_id = file
+        .id
+        .ok_or_else(|| "Cannot pre-create RO-Crate entity: file has no ID".to_string())?;
+
+    // Content size is best-effort; SHA256 is intentionally skipped here because
+    // hashing happens again at init time and we don't want to pay the cost twice.
+    let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
+    let entity = build_file_entity(workflow_id, file, content_size, None, Some(identifier));
+
+    apis::ro_crate_entities_api::create_ro_crate_entity(config, entity).map_err(|e| {
+        format!(
+            "Failed to create RO-Crate entity with identifier '{}' for file '{}' \
+             (file_id={}): {}",
+            identifier, file.path, file_id, e
+        )
+    })?;
+
+    debug!(
+        "Pre-created RO-Crate entity for input file '{}' (file_id={}) with identifier '{}'",
+        file.path, file_id, identifier
+    );
+    Ok(())
+}
+
 /// Create RO-Crate entities for input files of a workflow.
 ///
 /// Called during workflow initialization when `enable_ro_crate` is true.
@@ -995,6 +1090,53 @@ pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id
 mod tests {
     use super::*;
 
+    /// Drift guard: every synthetic `@id` Torc actually emits must be
+    /// classified as reserved by [`is_reserved_entity_id`]. If a builder gains
+    /// a new prefix and the constants aren't updated, this test fails and
+    /// keeps the validator from silently letting users collide with it.
+    #[test]
+    fn reserved_id_constants_cover_synthetic_builders() {
+        let plan = build_workflow_plan_entity(1, "wf");
+        assert!(
+            is_reserved_entity_id(&plan.entity_id),
+            "workflow plan id {} not reserved",
+            plan.entity_id
+        );
+
+        let run = build_workflow_run_entity_base(1, 7, "wf");
+        assert!(
+            is_reserved_entity_id(&run.entity_id),
+            "workflow run id {} not reserved",
+            run.entity_id
+        );
+
+        let job = JobModel::new(1, "j".to_string(), "echo".to_string());
+        let mut job_with_id = job;
+        job_with_id.id = Some(42);
+        let action = build_create_action_entity(1, 7, &job_with_id, 1, &[], &[]);
+        assert!(
+            is_reserved_entity_id(&action.entity_id),
+            "create action id {} not reserved",
+            action.entity_id
+        );
+
+        let software = build_software_entity(1, 7, "torc", "/usr/bin/torc");
+        assert!(
+            is_reserved_entity_id(&software.entity_id),
+            "software id {} not reserved",
+            software.entity_id
+        );
+
+        // Synthetic export-root ids that the exporter writes directly.
+        assert!(is_reserved_entity_id("ro-crate-metadata.json"));
+        assert!(is_reserved_entity_id("./"));
+
+        // Negative cases: typical user identifiers must NOT be classified as reserved.
+        assert!(!is_reserved_entity_id("data/input.csv"));
+        assert!(!is_reserved_entity_id("https://doi.org/10.1234/abc"));
+        assert!(!is_reserved_entity_id("urn:dataset:abc"));
+    }
+
     #[test]
     fn test_build_file_entity_basic() {
         let file = FileModel {
@@ -1005,7 +1147,7 @@ mod tests {
             st_mtime: Some(1704067200.0), // 2024-01-01T00:00:00Z
         };
 
-        let entity = build_file_entity(100, &file, Some(1024), None);
+        let entity = build_file_entity(100, &file, Some(1024), None, None);
 
         assert_eq!(entity.workflow_id, 100);
         assert_eq!(entity.file_id, Some(1));
@@ -1112,7 +1254,7 @@ mod tests {
                 st_mtime: None,
             };
 
-            let entity = build_file_entity(1, &file, None, None);
+            let entity = build_file_entity(1, &file, None, None, None);
             let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
@@ -1136,7 +1278,7 @@ mod tests {
                 st_mtime: None,
             };
 
-            let entity = build_file_entity(1, &file, None, None);
+            let entity = build_file_entity(1, &file, None, None, None);
             let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
@@ -1213,6 +1355,56 @@ mod tests {
     }
 
     #[test]
+    fn test_build_file_entity_with_identifier_override() {
+        // When the user supplies a stable identifier (DOI/PURL/URN), both the @id
+        // and the entity_id column must use it. The local path is preserved under
+        // sameAs so consumers can still locate the bytes.
+        let file = FileModel {
+            id: Some(7),
+            workflow_id: 100,
+            name: "reference.csv".to_string(),
+            path: "data/reference.csv".to_string(),
+            st_mtime: Some(1704067200.0),
+        };
+
+        let entity = build_file_entity(
+            100,
+            &file,
+            Some(2048),
+            None,
+            Some("https://doi.org/10.1234/abc"),
+        );
+
+        assert_eq!(entity.entity_id, "https://doi.org/10.1234/abc");
+        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        assert_eq!(metadata["@id"], "https://doi.org/10.1234/abc");
+        assert_eq!(metadata["sameAs"]["@id"], "data/reference.csv");
+        // Basename and other derived fields stay tied to the local path.
+        assert_eq!(metadata["name"], "reference.csv");
+        assert_eq!(metadata["encodingFormat"], "text/csv");
+        assert_eq!(metadata["contentSize"], 2048);
+    }
+
+    #[test]
+    fn test_build_file_entity_override_equal_to_path_omits_same_as() {
+        // If the caller's "override" happens to equal the file path (e.g. legacy
+        // entities), there's no extra information in sameAs -- it would be a
+        // self-reference. Keep it out to avoid confusing consumers.
+        let file = FileModel {
+            id: Some(8),
+            workflow_id: 100,
+            name: "noop.txt".to_string(),
+            path: "data/noop.txt".to_string(),
+            st_mtime: None,
+        };
+
+        let entity = build_file_entity(100, &file, None, None, Some("data/noop.txt"));
+        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        assert_eq!(metadata["@id"], "data/noop.txt");
+        assert!(metadata.get("sameAs").is_none());
+    }
+
+    #[test]
     fn test_build_file_entity_with_sha256() {
         let file = FileModel {
             id: Some(1),
@@ -1223,7 +1415,7 @@ mod tests {
         };
 
         let sha256 = Some("abc123def456".to_string());
-        let entity = build_file_entity(100, &file, Some(1024), sha256);
+        let entity = build_file_entity(100, &file, Some(1024), sha256, None);
 
         let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "abc123def456");

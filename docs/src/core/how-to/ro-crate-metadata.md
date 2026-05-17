@@ -259,9 +259,12 @@ torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
 ```
 
 The argument must be a JSON object. Its top-level fields are applied as a shallow merge over the
-auto-computed metadata: user-supplied keys replace the auto-generated ones (`@id`, `@type`, `name`,
+auto-computed metadata: user-supplied keys replace the auto-generated ones (`@type`, `name`,
 `contentSize`, ...) entirely on conflict, and nested objects are not deep-merged. Pass `-` to read
 the JSON from stdin for larger blobs:
+
+`@id` is not user-overridable via `--metadata`: it's derived from the dataset directory path and
+re-applied at export time, so any `@id` field inside the JSON is silently replaced.
 
 ```bash
 torc ro-crate add-dataset "${TORC_WORKFLOW_ID}" \
@@ -372,8 +375,9 @@ The exported document has this structure:
 }
 ```
 
-Torc preserves any explicit `@id` and `@type` already present in the stored metadata. If either
-field is missing, the exporter fills it in from the entity record.
+The exporter always sets each entity's `@id` from its stored `entity_id`, overwriting any `@id`
+field present in the stored metadata. `@type` is preserved when present and filled in from the
+entity record only when missing.
 
 ## Workflow Export/Import
 

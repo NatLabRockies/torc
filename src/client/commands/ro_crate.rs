@@ -13,7 +13,7 @@ use crate::models;
 use log::{error, info};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tabled::Tabled;
 
 #[derive(Tabled)]
@@ -36,13 +36,19 @@ pub enum RoCrateCommands {
         /// Workflow ID (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// JSON-LD @id for this entity (e.g., "data/output.parquet")
+        /// JSON-LD @id for this entity (e.g., "data/output.parquet"). This is
+        /// the authoritative `@id` -- the export step always sets the exported
+        /// entity's `@id` from this value, overwriting any `@id` field present
+        /// in `--metadata`.
         #[arg(long)]
         entity_id: String,
         /// Schema.org @type (e.g., "File", "Dataset", "SoftwareApplication")
         #[arg(long, name = "type")]
         entity_type: String,
-        /// JSON-LD metadata as a JSON string, or "-" to read from stdin
+        /// JSON-LD metadata as a JSON string, or "-" to read from stdin. Any
+        /// `@id` field inside the metadata is ignored at export time and
+        /// replaced with `--entity-id`; to change an entity's exported `@id`,
+        /// update `--entity-id`, not the metadata.
         #[arg(long)]
         metadata: String,
         /// Optional file ID to link this entity to
@@ -73,13 +79,18 @@ pub enum RoCrateCommands {
         /// ID of the RO-Crate entity to update
         #[arg()]
         id: i64,
-        /// New JSON-LD @id
+        /// New JSON-LD @id. This is the authoritative `@id` -- export always
+        /// sets the exported entity's `@id` from this value, overwriting any
+        /// `@id` field present in `--metadata`.
         #[arg(long)]
         entity_id: Option<String>,
         /// New Schema.org @type
         #[arg(long, name = "type")]
         entity_type: Option<String>,
-        /// New JSON-LD metadata as a JSON string, or "-" to read from stdin
+        /// New JSON-LD metadata as a JSON string, or "-" to read from stdin.
+        /// Any `@id` field inside the metadata is ignored at export time and
+        /// replaced with `--entity-id` (or the stored `entity_id` if you
+        /// don't pass `--entity-id`).
         #[arg(long)]
         metadata: Option<String>,
         /// New file ID to link (use 0 to unlink)
@@ -116,9 +127,9 @@ pub enum RoCrateCommands {
     /// `#job-{id}-attempt-{attempt}` ids.
     ///
     /// Use `--metadata` to add or override JSON-LD fields on the Dataset
-    /// entity. The merge is shallow at the top level: user-supplied keys
-    /// replace auto-computed ones (including `prov:wasGeneratedBy`) entirely
-    /// (no deep object merge).
+    /// entity (e.g. `license`, `creator`, `description`). The merge is
+    /// shallow at the top level: user-supplied keys replace auto-computed
+    /// ones entirely (no deep object merge).
     #[command(name = "add-dataset")]
     AddDataset {
         /// Workflow ID (optional - will prompt if not provided)
@@ -151,10 +162,15 @@ pub enum RoCrateCommands {
         /// Extra JSON-LD metadata applied as a top-level merge over the
         /// entity (or "-" to read from stdin). Must be a JSON object. The
         /// merge is shallow: each user-supplied top-level field replaces the
-        /// auto-computed one with the same key (`@id`, `@type`, `name`,
+        /// auto-computed one with the same key (`@type`, `name`,
         /// `contentSize`, ...) entirely; nested objects are not deep-merged.
         ///
-        /// Example: `--metadata '{"prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}'`
+        /// `@id` is NOT user-overridable here: it's set from the dataset
+        /// directory path and re-applied at export time, so any `@id` field
+        /// inside `--metadata` is silently replaced.
+        ///
+        /// To record which job(s) produced this dataset, use the `-j` flag
+        /// rather than setting `prov:wasGeneratedBy` here directly.
         #[arg(long)]
         metadata: Option<String>,
     },
@@ -411,6 +427,62 @@ fn read_metadata_input(metadata: &str) -> String {
     }
 }
 
+/// Rewrite every nested `{"@id": "<path>"}` reference inside `value` whose
+/// `<path>` is in `path_to_entity_id`, so provenance refs point at the
+/// file's stable identifier instead of a no-longer-keyed local path.
+///
+/// Skips:
+/// - the top-level `@id` of `value`: already set authoritatively from
+///   `entity_id` by the caller, and a File entity's own `@id` should not be
+///   rewritten away from its identifier.
+/// - the top-level `sameAs` of File entities only (`entity_type == "File"`):
+///   that field carries the deliberately-untranslated local path on file
+///   rows. Other entity types' `sameAs` (and any nested `sameAs`) is walked
+///   normally so refs stay consistent if a future Dataset/etc. uses one to
+///   alias a path.
+fn translate_path_refs(
+    value: &mut serde_json::Value,
+    path_to_entity_id: &HashMap<String, String>,
+    entity_type: &str,
+) {
+    if path_to_entity_id.is_empty() {
+        return;
+    }
+    fn walk(value: &mut serde_json::Value, map: &HashMap<String, String>) {
+        match value {
+            serde_json::Value::Object(obj) => {
+                for (_key, child) in obj.iter_mut() {
+                    walk(child, map);
+                }
+                // After recursing, rewrite a child `@id` whose value is a
+                // path we know an identifier for. Doing this after the
+                // recursion is fine because `@id` values are strings, not
+                // objects, so there's nothing to recurse into.
+                if let Some(serde_json::Value::String(id)) = obj.get_mut("@id")
+                    && let Some(replacement) = map.get(id.as_str())
+                {
+                    *id = replacement.clone();
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    walk(item, map);
+                }
+            }
+            _ => {}
+        }
+    }
+    let skip_top_level_same_as = entity_type == "File";
+    if let serde_json::Value::Object(obj) = value {
+        for (key, child) in obj.iter_mut() {
+            if key == "@id" || (skip_top_level_same_as && key == "sameAs") {
+                continue;
+            }
+            walk(child, path_to_entity_id);
+        }
+    }
+}
+
 fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&str>) {
     // Fetch the workflow name and current run for the root dataset.
     let (workflow_name, run_id) = match apis::workflows_api::get_workflow(config, workflow_id) {
@@ -459,16 +531,43 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
         synthetic_entities.push(run_entity);
     }
 
+    // Build a path → entity_id translation map from input File entities. When
+    // the user gave a file a stable identifier, `build_file_entity` records
+    // the local path under `sameAs` and uses the identifier as `entity_id`.
+    // CreateAction `prov:used` / `object` and output `prov:wasDerivedFrom`
+    // still serialize input references as paths, so translate them through
+    // this map at export time. This is also what restores user identifiers
+    // after the server's init-time upsert rewrites `metadata["@id"]` back to
+    // the path (which happens in the async-init path where no client-side
+    // rebuild runs afterward).
+    let path_to_entity_id: HashMap<String, String> = entities
+        .iter()
+        .filter(|e| e.file_id.is_some() && !e.entity_id.is_empty())
+        .filter_map(|e| {
+            let parsed: serde_json::Value = serde_json::from_str(&e.metadata).ok()?;
+            let path = parsed.get("sameAs")?.get("@id")?.as_str()?.to_string();
+            if path == e.entity_id {
+                return None;
+            }
+            Some((path, e.entity_id.clone()))
+        })
+        .collect();
+
     // Build user and synthetic entities first so hasPart can include the final set.
     let mut graph_entities: Vec<serde_json::Value> = synthetic_entities;
     for entity in &entities {
         if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&entity.metadata) {
             if let Some(obj) = parsed.as_object_mut() {
-                obj.entry("@id".to_string())
-                    .or_insert_with(|| serde_json::json!(entity.entity_id));
+                // `entity_id` is the source of truth for an entity's `@id`.
+                // Always emit it (overwriting any stale `metadata["@id"]` that
+                // the server's init-time upsert might have written back to the
+                // file path), so user-supplied identifiers persist regardless
+                // of which initialization code path ran.
+                obj.insert("@id".to_string(), serde_json::json!(entity.entity_id));
                 obj.entry("@type".to_string())
                     .or_insert_with(|| serde_json::json!(entity.entity_type));
             }
+            translate_path_refs(&mut parsed, &path_to_entity_id, &entity.entity_type);
             graph_entities.push(parsed);
         } else {
             graph_entities.push(serde_json::json!({
@@ -694,29 +793,37 @@ fn compute_content_hash_parallel(
     Ok(hex::encode(final_hasher.finalize()))
 }
 
-/// Merge user-supplied JSON-LD metadata into auto-generated dataset metadata.
+/// Parse and validate user-supplied `--metadata` as a JSON object.
 ///
-/// The merge is **shallow**: each top-level key in `extra` replaces the
-/// matching key in `base` entirely (nested objects are not recursed into).
-/// Keys present only in one side are preserved. The base value must already
-/// be a JSON object; if `extra` does not parse as a JSON object an `Err` is
-/// returned with a user-facing message.
-fn merge_dataset_metadata(
-    mut base: serde_json::Value,
-    extra: &str,
-) -> Result<serde_json::Value, String> {
+/// Returns a user-facing error string if the input is not valid JSON or is
+/// not a JSON object. Separated from the merge so the parse can happen up
+/// front in `handle_add_dataset`, before any provenance side effects.
+fn parse_extra_metadata(extra: &str) -> Result<serde_json::Map<String, serde_json::Value>, String> {
     let parsed: serde_json::Value =
         serde_json::from_str(extra).map_err(|e| format!("--metadata is not valid JSON: {}", e))?;
-    let extra_obj = parsed
-        .as_object()
-        .ok_or_else(|| "--metadata must be a JSON object".to_string())?;
+    match parsed {
+        serde_json::Value::Object(map) => Ok(map),
+        _ => Err("--metadata must be a JSON object".to_string()),
+    }
+}
+
+/// Shallow top-level merge of an already-parsed user metadata object into
+/// auto-generated dataset metadata.
+///
+/// Each key in `extra` replaces the matching key in `base` entirely (nested
+/// objects are not recursed into). Keys present only in one side are
+/// preserved. Infallible: callers validate `extra` via `parse_extra_metadata`.
+fn merge_dataset_metadata(
+    mut base: serde_json::Value,
+    extra: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
     let base_obj = base
         .as_object_mut()
         .expect("dataset metadata is constructed as a JSON object");
-    for (key, value) in extra_obj {
+    for (key, value) in extra {
         base_obj.insert(key.clone(), value.clone());
     }
-    Ok(base)
+    base
 }
 
 /// Create or update CreateAction provenance entities for the jobs that produced
@@ -850,6 +957,21 @@ fn handle_add_dataset(
         std::process::exit(1);
     }
 
+    // Parse --metadata up front so a malformed value fails before any
+    // provenance side effects (CreateAction creates/updates). Without this,
+    // a bad --metadata would leave CreateActions whose `result` references a
+    // Dataset entity that never got created.
+    let parsed_extra_metadata = match extra_metadata {
+        Some(extra) => match parse_extra_metadata(extra) {
+            Ok(map) => Some(map),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
+
     // Determine number of threads (default to number of CPUs)
     let num_threads = threads.unwrap_or_else(|| {
         std::thread::available_parallelism()
@@ -932,14 +1054,8 @@ fn handle_add_dataset(
     // Apply user-supplied metadata last as a shallow top-level merge, so
     // explicit fields like prov:wasGeneratedBy land in the final entity and
     // any colliding top-level keys are replaced by the user-supplied value.
-    if let Some(extra) = extra_metadata {
-        metadata = match merge_dataset_metadata(metadata, extra) {
-            Ok(merged) => merged,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        };
+    if let Some(extra) = parsed_extra_metadata.as_ref() {
+        metadata = merge_dataset_metadata(metadata, extra);
     }
 
     // Create the RO-Crate entity
@@ -985,42 +1101,107 @@ mod tests {
     }
 
     #[test]
-    fn merge_dataset_metadata_adds_provenance_fields() {
-        let extra = r##"{"prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
-        let merged = merge_dataset_metadata(base_dataset_metadata(), extra).unwrap();
-        assert_eq!(
-            merged["prov:wasGeneratedBy"],
-            json!({"@id": "#job-42-attempt-1"})
-        );
-        // Auto-computed fields are preserved when the user doesn't touch them.
-        assert_eq!(merged["fileCount"], json!(4));
-        assert_eq!(merged["@type"], json!("Dataset"));
-    }
-
-    #[test]
     fn merge_dataset_metadata_user_fields_override_defaults() {
-        let extra = r#"{"name": "custom_name", "@type": ["Dataset", "prov:Entity"]}"#;
-        let merged = merge_dataset_metadata(base_dataset_metadata(), extra).unwrap();
+        let extra =
+            parse_extra_metadata(r#"{"name": "custom_name", "@type": ["Dataset", "prov:Entity"]}"#)
+                .unwrap();
+        let merged = merge_dataset_metadata(base_dataset_metadata(), &extra);
         assert_eq!(merged["name"], json!("custom_name"));
         assert_eq!(merged["@type"], json!(["Dataset", "prov:Entity"]));
-    }
-
-    #[test]
-    fn merge_dataset_metadata_rejects_invalid_json() {
-        let err = merge_dataset_metadata(base_dataset_metadata(), "{not json").unwrap_err();
-        assert!(err.contains("not valid JSON"), "got: {}", err);
-    }
-
-    #[test]
-    fn merge_dataset_metadata_rejects_non_object() {
-        let err = merge_dataset_metadata(base_dataset_metadata(), "[1, 2, 3]").unwrap_err();
-        assert!(err.contains("must be a JSON object"), "got: {}", err);
+        // Auto-computed fields are preserved when the user doesn't touch them.
+        assert_eq!(merged["fileCount"], json!(4));
     }
 
     #[test]
     fn merge_dataset_metadata_empty_object_is_noop() {
+        let extra = parse_extra_metadata("{}").unwrap();
         let original = base_dataset_metadata();
-        let merged = merge_dataset_metadata(original.clone(), "{}").unwrap();
+        let merged = merge_dataset_metadata(original.clone(), &extra);
         assert_eq!(merged, original);
+    }
+
+    #[test]
+    fn parse_extra_metadata_rejects_invalid_json() {
+        let err = parse_extra_metadata("{not json").unwrap_err();
+        assert!(err.contains("not valid JSON"), "got: {}", err);
+    }
+
+    #[test]
+    fn parse_extra_metadata_rejects_non_object() {
+        let err = parse_extra_metadata("[1, 2, 3]").unwrap_err();
+        assert!(err.contains("must be a JSON object"), "got: {}", err);
+    }
+
+    #[test]
+    fn translate_path_refs_rewrites_nested_id_refs() {
+        // CreateAction-style metadata that references inputs by their path.
+        // After translation, those refs must point at the input's identifier
+        // -- but the entity's own @id and the file-entity's sameAs must be
+        // left alone.
+        let mut map = HashMap::new();
+        map.insert(
+            "data/input.csv".to_string(),
+            "https://doi.org/10.1234/abc".to_string(),
+        );
+
+        let mut create_action = json!({
+            "@id": "#job-42-attempt-1",
+            "@type": ["CreateAction", "prov:Activity"],
+            "object": { "@id": "data/input.csv" },
+            "prov:used": [{ "@id": "data/input.csv" }],
+            "result": [{ "@id": "data/output.csv" }],
+        });
+        translate_path_refs(&mut create_action, &map, "CreateAction");
+        assert_eq!(create_action["@id"], "#job-42-attempt-1");
+        assert_eq!(
+            create_action["object"]["@id"],
+            "https://doi.org/10.1234/abc"
+        );
+        assert_eq!(
+            create_action["prov:used"][0]["@id"],
+            "https://doi.org/10.1234/abc"
+        );
+        // Output paths without an identifier mapping pass through unchanged.
+        assert_eq!(create_action["result"][0]["@id"], "data/output.csv");
+
+        // The file entity itself: outer @id (its identifier) and outer
+        // sameAs (its local path) must both be preserved.
+        let mut file_entity = json!({
+            "@id": "https://doi.org/10.1234/abc",
+            "@type": ["File", "prov:Entity"],
+            "sameAs": { "@id": "data/input.csv" },
+        });
+        translate_path_refs(&mut file_entity, &map, "File");
+        assert_eq!(file_entity["@id"], "https://doi.org/10.1234/abc");
+        assert_eq!(file_entity["sameAs"]["@id"], "data/input.csv");
+    }
+
+    #[test]
+    fn translate_path_refs_non_file_top_level_same_as_is_translated() {
+        // The top-level `sameAs` preservation is scoped to File entities. For
+        // any other entity type, `sameAs` is treated like any other ref and
+        // gets translated when its `@id` matches a known path.
+        let mut map = HashMap::new();
+        map.insert(
+            "data/input.csv".to_string(),
+            "https://doi.org/10.1234/abc".to_string(),
+        );
+
+        let mut dataset = json!({
+            "@id": "#some-dataset",
+            "@type": "Dataset",
+            "sameAs": { "@id": "data/input.csv" },
+        });
+        translate_path_refs(&mut dataset, &map, "Dataset");
+        assert_eq!(dataset["sameAs"]["@id"], "https://doi.org/10.1234/abc");
+    }
+
+    #[test]
+    fn translate_path_refs_empty_map_is_noop() {
+        let map: HashMap<String, String> = HashMap::new();
+        let mut v = json!({ "object": { "@id": "data/x.csv" } });
+        let before = v.clone();
+        translate_path_refs(&mut v, &map, "CreateAction");
+        assert_eq!(v, before);
     }
 }
