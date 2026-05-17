@@ -1842,6 +1842,95 @@ impl WorkflowSpec {
         Ok(())
     }
 
+    /// Validate user-supplied RO-Crate identifiers on files.
+    ///
+    /// Three checks, all run together because they share the file/job traversal:
+    ///
+    /// 1. `identifier` only has effect when `enable_ro_crate: true`. Setting it
+    ///    on a workflow that opted out of RO-Crate would silently create a single
+    ///    partial entity row with no other provenance — confusing rather than
+    ///    helpful, so reject.
+    /// 2. `identifier` only applies to **input** files. Outputs are produced by
+    ///    jobs and follow a separate entity-creation path that does not consult
+    ///    the identifier. Rather than silently dropping the value, reject any
+    ///    file that's referenced only as a job output.
+    /// 3. Identifiers must not collide with Torc's reserved prefixes
+    ///    (`#torc-` and `#software-`); those entity IDs are used by workflow,
+    ///    run, and software provenance entities that share the same uniqueness
+    ///    constraint, so a user identifier with those prefixes would be silently
+    ///    overwritten at init time.
+    fn validate_file_identifiers(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(files) = &self.files else {
+            return Ok(());
+        };
+        if !files.iter().any(|f| f.identifier.is_some()) {
+            return Ok(());
+        }
+
+        if self.enable_ro_crate != Some(true) {
+            // Pick the first offender so the error names a concrete file.
+            let offender = files
+                .iter()
+                .find(|f| f.identifier.is_some())
+                .expect("at least one file has identifier");
+            return Err(format!(
+                "File '{}' sets `identifier` but the workflow does not have \
+                 `enable_ro_crate: true`. Stable RO-Crate identifiers only have \
+                 effect when automatic RO-Crate provenance is enabled; set \
+                 `enable_ro_crate: true` at the workflow level or remove the \
+                 identifier.",
+                offender.name
+            )
+            .into());
+        }
+
+        // Classify each file as input/output by how jobs reference it. A file
+        // appearing in some `output_files` and never in `input_files` (and with
+        // no user-supplied `st_mtime` marking it as pre-existing) is treated as
+        // output-only.
+        let mut input_names: HashSet<&str> = HashSet::new();
+        let mut output_names: HashSet<&str> = HashSet::new();
+        for job in &self.jobs {
+            if let Some(inputs) = &job.input_files {
+                input_names.extend(inputs.iter().map(String::as_str));
+            }
+            if let Some(outputs) = &job.output_files {
+                output_names.extend(outputs.iter().map(String::as_str));
+            }
+        }
+
+        for file in files {
+            let Some(identifier) = file.identifier.as_deref() else {
+                continue;
+            };
+            let name = file.name.as_str();
+            let is_input = file.st_mtime.is_some() || input_names.contains(name);
+            if !is_input && output_names.contains(name) {
+                return Err(format!(
+                    "File '{}' sets `identifier` but is referenced only as an output \
+                     of some job. RO-Crate identifiers are only honored for input \
+                     files; output files keep using their path as `@id`. Remove the \
+                     identifier or reference the file as an input.",
+                    file.name
+                )
+                .into());
+            }
+
+            if identifier.starts_with("#torc-") || identifier.starts_with("#software-") {
+                return Err(format!(
+                    "File '{}' uses identifier '{}', which begins with a reserved \
+                     prefix (`#torc-` or `#software-`). Those prefixes are used by \
+                     Torc's own workflow, run, and software provenance entities and \
+                     would collide with them at export time.",
+                    file.name, identifier
+                )
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
     /// Validate workflow actions
     pub fn validate_actions(&self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref actions) = self.actions {
@@ -2263,6 +2352,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_file_identifiers()?;
 
         spec.validate_scheduler_node_requirements()?;
 
@@ -2299,6 +2389,10 @@ impl WorkflowSpec {
             std::process::exit(1);
         }
         if let Err(e) = spec.validate_env_maps() {
+            eprintln!("Validation error: {}", e);
+            std::process::exit(1);
+        }
+        if let Err(e) = spec.validate_file_identifiers() {
             eprintln!("Validation error: {}", e);
             std::process::exit(1);
         }
@@ -2421,6 +2515,10 @@ impl WorkflowSpec {
 
         if let Err(e) = spec.validate_env_maps() {
             errors.push(format!("Environment validation failed: {}", e));
+        }
+
+        if let Err(e) = spec.validate_file_identifiers() {
+            errors.push(format!("File identifier validation failed: {}", e));
         }
 
         // Step 4: Validate scheduler node requirements
@@ -2854,6 +2952,7 @@ impl WorkflowSpec {
             });
         }
         spec.validate_env_maps()?;
+        spec.validate_file_identifiers()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
         Self::create_from_prepared_spec(config, spec)
@@ -2883,6 +2982,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_file_identifiers()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
         Ok(())
@@ -3312,16 +3412,25 @@ impl WorkflowSpec {
         }
 
         // Pre-create RO-Crate entities for input files that carry a user-supplied
-        // identifier. We only do this for files we resolved as inputs above
-        // (st_mtime is Some); outputs are produced by jobs and follow a separate
-        // entity-creation path. Persisting the identifier into the `entity_id`
-        // column here is what makes it survive the server's init-time upsert -- see
+        // identifier. Persisting the identifier into the `entity_id` column here
+        // is what makes it survive the server's init-time upsert -- see
         // `create_input_file_entity_with_identifier` for the round-trip details.
+        //
+        // Gate on "declared as a job input OR has st_mtime" rather than just
+        // `st_mtime.is_some()`. An input file that doesn't yet exist on disk has
+        // st_mtime=None here; if we skipped it, the identifier would be silently
+        // dropped because `initialize_files` later refreshes st_mtime but the
+        // FileSpec (and its identifier) is no longer in scope at that point. The
+        // server-side filter on st_mtime still applies for *whether* init touches
+        // the entity at all -- but the pre-created row carries the identifier
+        // regardless of disk state.
         for (file_spec, file_model) in files.iter().zip(file_models.iter()) {
             let Some(identifier) = file_spec.identifier.as_deref() else {
                 continue;
             };
-            if file_model.st_mtime.is_none() {
+            let is_input =
+                file_model.st_mtime.is_some() || input_file_names.contains(file_spec.name.as_str());
+            if !is_input {
                 continue;
             }
             let file_id = *file_name_to_id
@@ -6591,6 +6700,104 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             msg
         );
         assert!(msg.contains("'a'") && msg.contains("'b'"), "{}", msg);
+    }
+
+    #[test]
+    fn test_validate_file_identifiers_requires_enable_ro_crate() {
+        // Setting `identifier` without enabling RO-Crate would silently create one
+        // dangling entity row with no other provenance -- friendlier to reject than
+        // to half-honor.
+        let mut f = FileSpec::new("a".to_string(), "/data/a.csv".to_string());
+        f.identifier = Some("urn:dataset:abc".to_string());
+        let mut spec = WorkflowSpec::new("wf".to_string(), "tester".to_string(), None, vec![]);
+        spec.files = Some(vec![f]);
+        // enable_ro_crate is None by default
+
+        let err = spec
+            .validate_file_identifiers()
+            .expect_err("expected enable_ro_crate requirement");
+        let msg = err.to_string();
+        assert!(msg.contains("enable_ro_crate"), "{}", msg);
+        assert!(msg.contains("'a'"), "{}", msg);
+
+        // Enabling it makes the same spec validate cleanly.
+        spec.enable_ro_crate = Some(true);
+        spec.validate_file_identifiers()
+            .expect("identifier+enable_ro_crate should be allowed");
+    }
+
+    #[test]
+    fn test_validate_file_identifiers_rejects_output_only_file() {
+        // A file referenced only as a job output cannot carry an identifier
+        // because the output-file entity-creation path doesn't consult it.
+        // Silently dropping the value would be confusing, so reject.
+        let mut producer = JobSpec::new("producer".to_string(), "echo".to_string());
+        producer.output_files = Some(vec!["out".to_string()]);
+
+        let mut out = FileSpec::new("out".to_string(), "/data/out.csv".to_string());
+        out.identifier = Some("urn:dataset:out".to_string());
+
+        let mut spec =
+            WorkflowSpec::new("wf".to_string(), "tester".to_string(), None, vec![producer]);
+        spec.enable_ro_crate = Some(true);
+        spec.files = Some(vec![out]);
+
+        let err = spec
+            .validate_file_identifiers()
+            .expect_err("expected output-only rejection");
+        let msg = err.to_string();
+        assert!(msg.contains("output"), "{}", msg);
+        assert!(msg.contains("'out'"), "{}", msg);
+    }
+
+    #[test]
+    fn test_validate_file_identifiers_allows_file_used_as_both_input_and_output() {
+        // A file referenced as both input and output (e.g. an in-place transform)
+        // is still an input from RO-Crate's perspective; identifier should be allowed.
+        let mut producer = JobSpec::new("producer".to_string(), "make".to_string());
+        producer.output_files = Some(vec!["shared".to_string()]);
+        let mut consumer = JobSpec::new("consumer".to_string(), "transform".to_string());
+        consumer.input_files = Some(vec!["shared".to_string()]);
+
+        let mut shared = FileSpec::new("shared".to_string(), "/data/shared.csv".to_string());
+        shared.identifier = Some("urn:dataset:shared".to_string());
+
+        let mut spec = WorkflowSpec::new(
+            "wf".to_string(),
+            "tester".to_string(),
+            None,
+            vec![producer, consumer],
+        );
+        spec.enable_ro_crate = Some(true);
+        spec.files = Some(vec![shared]);
+
+        spec.validate_file_identifiers()
+            .expect("identifier on a file used as both input and output should be allowed");
+    }
+
+    #[test]
+    fn test_validate_file_identifiers_rejects_reserved_prefixes() {
+        // Identifiers starting with reserved prefixes would collide with Torc's own
+        // provenance entities, which share the (workflow_id, entity_id) uniqueness
+        // index. Reject at spec load to surface a clear error.
+        for reserved in [
+            "#torc-workflow",
+            "#torc-run-id-1",
+            "#software-torc-run-id-1",
+        ] {
+            let mut f = FileSpec::new("a".to_string(), "/data/a.csv".to_string());
+            f.identifier = Some(reserved.to_string());
+            let mut spec = WorkflowSpec::new("wf".to_string(), "tester".to_string(), None, vec![]);
+            spec.enable_ro_crate = Some(true);
+            spec.files = Some(vec![f]);
+
+            let err = spec
+                .validate_file_identifiers()
+                .expect_err(&format!("expected rejection of reserved id '{}'", reserved));
+            let msg = err.to_string();
+            assert!(msg.contains("reserved"), "for '{}': {}", reserved, msg);
+            assert!(msg.contains(reserved), "for '{}': {}", reserved, msg);
+        }
     }
 
     #[test]
