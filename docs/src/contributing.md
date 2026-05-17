@@ -31,7 +31,13 @@ cargo install cargo-nextest
 cargo install sqlx-cli --no-default-features --features sqlite
 ```
 
-5. **Set up the database:**
+5. **Install cargo-release** (only needed when cutting a release):
+
+```bash
+cargo install cargo-release
+```
+
+6. **Set up the database:**
 
 ```bash
 # Create .env file
@@ -41,7 +47,7 @@ echo "DATABASE_URL=sqlite:torc.db" > .env
 sqlx migrate run --source torc-server/migrations
 ```
 
-6. **Build and test:**
+7. **Build and test:**
 
 ```bash
 cargo build
@@ -172,6 +178,45 @@ Common options:
 The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
 writes results to `slurm-tests/output/run_<timestamp>/results.json`. All tests must pass before a
 release is tagged.
+
+## Cutting a Release
+
+Releases are driven by [`cargo-release`](https://github.com/crate-ci/cargo-release) with the
+configuration in [`release.toml`](https://github.com/NREL/torc/blob/main/release.toml). The tool
+bumps the version in every place it needs to be kept in sync (`Cargo.toml`, `Cargo.lock`,
+`Dockerfile`, `python_client/pyproject.toml`, and the install snippets in
+`docs/src/getting-started/installation.md`) and creates a single "chore: Release" commit.
+
+Prerequisite: `cargo install cargo-release` (see step 5 of [Development Setup](#development-setup)).
+
+From a clean `main` checkout:
+
+```bash
+# Dry run -- shows exactly what will change without touching anything.
+# (cargo-release defaults to dry-run; --execute is what actually applies the bump.)
+cargo release patch
+cargo release minor
+cargo release major
+
+# Apply the bump. The flags below match how releases are cut today:
+# tags and pushes are handled separately so the bump commit can be reviewed first.
+cargo release patch --no-publish --no-push --no-tag --execute   # 0.30.2 -> 0.30.3
+cargo release minor --no-publish --no-push --no-tag --execute   # 0.30.2 -> 0.31.0
+cargo release major --no-publish --no-push --no-tag --execute   # 0.30.2 -> 1.0.0
+```
+
+After the bump commit lands on `main`, tag it and push the tag to trigger the
+[release workflow](https://github.com/NREL/torc/blob/main/.github/workflows/release.yml), which
+builds binaries for all supported platforms and creates a draft GitHub release:
+
+```bash
+git push origin main
+git tag v0.30.3
+git push origin v0.30.3
+```
+
+See [`.github/RELEASE.md`](https://github.com/NREL/torc/blob/main/.github/RELEASE.md) for details on
+which binaries are produced, supported platforms, and how to publish the draft release.
 
 ## Rebuilding the README TUI Demo GIF
 
