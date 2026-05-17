@@ -10,7 +10,7 @@ use crate::client::commands::{
     print_error, select_workflow_interactively, table_format::display_table_with_count,
 };
 use crate::models;
-use log::{error, info, warn};
+use log::{error, info};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -798,10 +798,17 @@ fn wire_dataset_job_provenance(
                 );
                 action_ids.push(action_id);
             }
-            None => warn!(
-                "Failed to record CreateAction provenance for job_id={}",
-                job_id
-            ),
+            None => {
+                // The user explicitly requested provenance for this job via
+                // `-j`; bail rather than silently emit a dataset whose
+                // `prov:wasGeneratedBy` is missing or partial. The inner
+                // call has already logged the failure cause.
+                error!(
+                    "Failed to record CreateAction provenance for job_id={}, aborting before dataset creation",
+                    job_id
+                );
+                std::process::exit(1);
+            }
         }
     }
     action_ids
