@@ -210,6 +210,11 @@ cd torc
 <pre><code class="language-bash">cargo install sqlx-cli --no-default-features --features sqlite
 </code></pre>
 <ol start="5">
+<li><strong>Install cargo-release</strong> (only needed when cutting a release):</li>
+</ol>
+<pre><code class="language-bash">cargo install cargo-release
+</code></pre>
+<ol start="6">
 <li><strong>Set up the database:</strong></li>
 </ol>
 <pre><code class="language-bash"># Create .env file
@@ -218,7 +223,7 @@ echo "DATABASE_URL=sqlite:torc.db" &gt; .env
 # Run migrations
 sqlx migrate run --source torc-server/migrations
 </code></pre>
-<ol start="6">
+<ol start="7">
 <li><strong>Build and test:</strong></li>
 </ol>
 <pre><code class="language-bash">cargo build
@@ -321,6 +326,35 @@ real Slurm scheduler.</p>
 <p>The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
 writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</code>. All tests must pass before a
 release is tagged.</p>
+<h2 id="cutting-a-release"><a class="header" href="#cutting-a-release">Cutting a Release</a></h2>
+<p>Releases are driven by <a href="https://github.com/crate-ci/cargo-release"><code>cargo-release</code></a> with the
+configuration in <a href="https://github.com/NREL/torc/blob/main/release.toml"><code>release.toml</code></a>. The tool
+bumps the version in every place it needs to be kept in sync (<code>Cargo.toml</code>, <code>Cargo.lock</code>,
+<code>Dockerfile</code>, <code>python_client/pyproject.toml</code>, and the install snippets in
+<code>docs/src/getting-started/installation.md</code>) and creates a single "chore: Release" commit.</p>
+<p>Prerequisite: <code>cargo install cargo-release</code> (see step 5 of <a href="#development-setup">Development Setup</a>).</p>
+<p>From a clean <code>main</code> checkout:</p>
+<pre><code class="language-bash"># Dry run -- shows exactly what will change without touching anything.
+# (cargo-release defaults to dry-run; --execute is what actually applies the bump.)
+cargo release patch
+cargo release minor
+cargo release major
+
+# Apply the bump. The flags below match how releases are cut today:
+# tags and pushes are handled separately so the bump commit can be reviewed first.
+cargo release patch --no-publish --no-push --no-tag --execute   # 0.30.2 -&gt; 0.30.3
+cargo release minor --no-publish --no-push --no-tag --execute   # 0.30.2 -&gt; 0.31.0
+cargo release major --no-publish --no-push --no-tag --execute   # 0.30.2 -&gt; 1.0.0
+</code></pre>
+<p>After the bump commit lands on <code>main</code>, tag it and push the tag to trigger the
+<a href="https://github.com/NREL/torc/blob/main/.github/workflows/release.yml">release workflow</a>, which
+builds binaries for all supported platforms and creates a draft GitHub release:</p>
+<pre><code class="language-bash">git push origin main
+git tag v0.30.3
+git push origin v0.30.3
+</code></pre>
+<p>See <a href="https://github.com/NREL/torc/blob/main/.github/RELEASE.md"><code>.github/RELEASE.md</code></a> for details on
+which binaries are produced, supported platforms, and how to publish the draft release.</p>
 <h2 id="rebuilding-the-readme-tui-demo-gif"><a class="header" href="#rebuilding-the-readme-tui-demo-gif">Rebuilding the README TUI Demo GIF</a></h2>
 <p>The animated TUI screencast in <code>README.md</code> is regenerated from a script:</p>
 <pre><code class="language-bash">./docs/assets/record_tui_demo.sh
