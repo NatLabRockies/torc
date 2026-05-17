@@ -8,6 +8,8 @@ OOM/timeout retries, and a live TUI or Dashboard — local or Slurm, no code cha
 
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
 
+![Torc TUI watching a parameterized simulation sweep](docs/assets/tui-demo.gif)
+
 ## See it in action
 
 A typical Torc workflow: one pre-process job, a parameterized simulation that fans out into many

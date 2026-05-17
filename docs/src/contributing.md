@@ -173,6 +173,25 @@ The runner starts a temporary Torc server, executes each test as a child workflo
 writes results to `slurm-tests/output/run_<timestamp>/results.json`. All tests must pass before a
 release is tagged.
 
+## Rebuilding the README TUI Demo GIF
+
+The animated TUI screencast in `README.md` is regenerated from a script:
+
+```bash
+./docs/assets/record_tui_demo.sh
+```
+
+Requires a running `torc-server` (defaults to `http://localhost:8080`; override with `TORC_API_URL`)
+and the `vhs`, `sqlite3`, and `python3` binaries on PATH. Install VHS with `brew install vhs`.
+
+The script creates a `Simulation demo` workflow, seeds three stages of progressively-completed job
+status (mid-flight → failures appear → finished) directly into the SQLite database, drives the TUI
+with VHS, and writes the result to `docs/assets/tui-demo.gif`. Re-running the script wipes any prior
+`Simulation demo` workflow, so it is safe to invoke repeatedly.
+
+To tweak the recording (timings, terminal size, theme), edit the VHS tape heredoc near the bottom of
+the script.
+
 ## Pull Request Guidelines
 
 - **Keep PRs focused** - One feature or fix per PR
