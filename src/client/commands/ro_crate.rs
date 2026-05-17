@@ -116,9 +116,9 @@ pub enum RoCrateCommands {
     /// `#job-{id}-attempt-{attempt}` ids.
     ///
     /// Use `--metadata` to add or override JSON-LD fields on the Dataset
-    /// entity. The merge is shallow at the top level: user-supplied keys
-    /// replace auto-computed ones (including `prov:wasGeneratedBy`) entirely
-    /// (no deep object merge).
+    /// entity (e.g. `license`, `creator`, `description`). The merge is
+    /// shallow at the top level: user-supplied keys replace auto-computed
+    /// ones entirely (no deep object merge).
     #[command(name = "add-dataset")]
     AddDataset {
         /// Workflow ID (optional - will prompt if not provided)
@@ -154,7 +154,8 @@ pub enum RoCrateCommands {
         /// auto-computed one with the same key (`@id`, `@type`, `name`,
         /// `contentSize`, ...) entirely; nested objects are not deep-merged.
         ///
-        /// Example: `--metadata '{"prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}'`
+        /// To record which job(s) produced this dataset, use the `-j` flag
+        /// rather than setting `prov:wasGeneratedBy` here directly.
         #[arg(long)]
         metadata: Option<String>,
     },
@@ -694,29 +695,37 @@ fn compute_content_hash_parallel(
     Ok(hex::encode(final_hasher.finalize()))
 }
 
-/// Merge user-supplied JSON-LD metadata into auto-generated dataset metadata.
+/// Parse and validate user-supplied `--metadata` as a JSON object.
 ///
-/// The merge is **shallow**: each top-level key in `extra` replaces the
-/// matching key in `base` entirely (nested objects are not recursed into).
-/// Keys present only in one side are preserved. The base value must already
-/// be a JSON object; if `extra` does not parse as a JSON object an `Err` is
-/// returned with a user-facing message.
-fn merge_dataset_metadata(
-    mut base: serde_json::Value,
-    extra: &str,
-) -> Result<serde_json::Value, String> {
+/// Returns a user-facing error string if the input is not valid JSON or is
+/// not a JSON object. Separated from the merge so the parse can happen up
+/// front in `handle_add_dataset`, before any provenance side effects.
+fn parse_extra_metadata(extra: &str) -> Result<serde_json::Map<String, serde_json::Value>, String> {
     let parsed: serde_json::Value =
         serde_json::from_str(extra).map_err(|e| format!("--metadata is not valid JSON: {}", e))?;
-    let extra_obj = parsed
-        .as_object()
-        .ok_or_else(|| "--metadata must be a JSON object".to_string())?;
+    match parsed {
+        serde_json::Value::Object(map) => Ok(map),
+        _ => Err("--metadata must be a JSON object".to_string()),
+    }
+}
+
+/// Shallow top-level merge of an already-parsed user metadata object into
+/// auto-generated dataset metadata.
+///
+/// Each key in `extra` replaces the matching key in `base` entirely (nested
+/// objects are not recursed into). Keys present only in one side are
+/// preserved. Infallible: callers validate `extra` via `parse_extra_metadata`.
+fn merge_dataset_metadata(
+    mut base: serde_json::Value,
+    extra: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Value {
     let base_obj = base
         .as_object_mut()
         .expect("dataset metadata is constructed as a JSON object");
-    for (key, value) in extra_obj {
+    for (key, value) in extra {
         base_obj.insert(key.clone(), value.clone());
     }
-    Ok(base)
+    base
 }
 
 /// Create or update CreateAction provenance entities for the jobs that produced
@@ -850,6 +859,21 @@ fn handle_add_dataset(
         std::process::exit(1);
     }
 
+    // Parse --metadata up front so a malformed value fails before any
+    // provenance side effects (CreateAction creates/updates). Without this,
+    // a bad --metadata would leave CreateActions whose `result` references a
+    // Dataset entity that never got created.
+    let parsed_extra_metadata = match extra_metadata {
+        Some(extra) => match parse_extra_metadata(extra) {
+            Ok(map) => Some(map),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
+
     // Determine number of threads (default to number of CPUs)
     let num_threads = threads.unwrap_or_else(|| {
         std::thread::available_parallelism()
@@ -932,14 +956,8 @@ fn handle_add_dataset(
     // Apply user-supplied metadata last as a shallow top-level merge, so
     // explicit fields like prov:wasGeneratedBy land in the final entity and
     // any colliding top-level keys are replaced by the user-supplied value.
-    if let Some(extra) = extra_metadata {
-        metadata = match merge_dataset_metadata(metadata, extra) {
-            Ok(merged) => merged,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        };
+    if let Some(extra) = parsed_extra_metadata.as_ref() {
+        metadata = merge_dataset_metadata(metadata, extra);
     }
 
     // Create the RO-Crate entity
@@ -985,42 +1003,34 @@ mod tests {
     }
 
     #[test]
-    fn merge_dataset_metadata_adds_provenance_fields() {
-        let extra = r##"{"prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
-        let merged = merge_dataset_metadata(base_dataset_metadata(), extra).unwrap();
-        assert_eq!(
-            merged["prov:wasGeneratedBy"],
-            json!({"@id": "#job-42-attempt-1"})
-        );
-        // Auto-computed fields are preserved when the user doesn't touch them.
-        assert_eq!(merged["fileCount"], json!(4));
-        assert_eq!(merged["@type"], json!("Dataset"));
-    }
-
-    #[test]
     fn merge_dataset_metadata_user_fields_override_defaults() {
-        let extra = r#"{"name": "custom_name", "@type": ["Dataset", "prov:Entity"]}"#;
-        let merged = merge_dataset_metadata(base_dataset_metadata(), extra).unwrap();
+        let extra =
+            parse_extra_metadata(r#"{"name": "custom_name", "@type": ["Dataset", "prov:Entity"]}"#)
+                .unwrap();
+        let merged = merge_dataset_metadata(base_dataset_metadata(), &extra);
         assert_eq!(merged["name"], json!("custom_name"));
         assert_eq!(merged["@type"], json!(["Dataset", "prov:Entity"]));
-    }
-
-    #[test]
-    fn merge_dataset_metadata_rejects_invalid_json() {
-        let err = merge_dataset_metadata(base_dataset_metadata(), "{not json").unwrap_err();
-        assert!(err.contains("not valid JSON"), "got: {}", err);
-    }
-
-    #[test]
-    fn merge_dataset_metadata_rejects_non_object() {
-        let err = merge_dataset_metadata(base_dataset_metadata(), "[1, 2, 3]").unwrap_err();
-        assert!(err.contains("must be a JSON object"), "got: {}", err);
+        // Auto-computed fields are preserved when the user doesn't touch them.
+        assert_eq!(merged["fileCount"], json!(4));
     }
 
     #[test]
     fn merge_dataset_metadata_empty_object_is_noop() {
+        let extra = parse_extra_metadata("{}").unwrap();
         let original = base_dataset_metadata();
-        let merged = merge_dataset_metadata(original.clone(), "{}").unwrap();
+        let merged = merge_dataset_metadata(original.clone(), &extra);
         assert_eq!(merged, original);
+    }
+
+    #[test]
+    fn parse_extra_metadata_rejects_invalid_json() {
+        let err = parse_extra_metadata("{not json").unwrap_err();
+        assert!(err.contains("not valid JSON"), "got: {}", err);
+    }
+
+    #[test]
+    fn parse_extra_metadata_rejects_non_object() {
+        let err = parse_extra_metadata("[1, 2, 3]").unwrap_err();
+        assert!(err.contains("must be a JSON object"), "got: {}", err);
     }
 }
