@@ -283,3 +283,75 @@ fn test_add_dataset_updates_existing_create_action(start_server: &ServerProcess)
         result_ids
     );
 }
+
+/// Invalid `--metadata` JSON must be rejected BEFORE any provenance side
+/// effects. Otherwise a malformed value would leave a CreateAction whose
+/// `result` references a Dataset entity that never got created. This
+/// guards the parse-up-front contract in `handle_add_dataset`.
+#[rstest]
+fn test_add_dataset_invalid_metadata_leaves_no_create_action(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+
+    let (workflow_id, job_id) =
+        create_workflow_with_job(config, "invalid_metadata_no_side_effects");
+    let dataset_path = make_dataset_dir(temp_dir.path());
+
+    // Sanity-check: no CreateAction exists for this job before the bad invocation.
+    let pre = list_entities(config, workflow_id);
+    let expected_action_id = format!("#job-{}-attempt-1", job_id);
+    assert!(
+        !pre.iter().any(|e| e.entity_id == expected_action_id),
+        "test setup: no CreateAction should exist yet"
+    );
+
+    let workflow_id_str = workflow_id.to_string();
+    let job_id_str = job_id.to_string();
+    let result = run_cli_command(
+        &[
+            "ro-crate",
+            "add-dataset",
+            &workflow_id_str,
+            "--name",
+            "training_output",
+            "--path",
+            &dataset_path,
+            "-j",
+            &job_id_str,
+            "--metadata",
+            "{not json",
+        ],
+        start_server,
+        None,
+    );
+
+    assert!(
+        result.is_err(),
+        "add-dataset with invalid --metadata should fail; got Ok({:?})",
+        result
+    );
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("--metadata"),
+        "error should mention --metadata; got: {}",
+        err_msg
+    );
+
+    // The critical assertion: no CreateAction must have been created. If
+    // metadata parsing ran after `wire_dataset_job_provenance`, we'd see a
+    // CreateAction here with a `result` pointing at a Dataset that doesn't
+    // exist -- a broken provenance graph.
+    let post = list_entities(config, workflow_id);
+    assert!(
+        !post.iter().any(|e| e.entity_id == expected_action_id),
+        "no CreateAction should exist after invalid --metadata; entities={:?}",
+        post.iter().map(|e| &e.entity_id).collect::<Vec<_>>()
+    );
+    // And no Dataset entity either.
+    let dataset_entity_id = format!("{}/", dataset_path);
+    assert!(
+        !post.iter().any(|e| e.entity_id == dataset_entity_id),
+        "no Dataset should exist after invalid --metadata; entities={:?}",
+        post.iter().map(|e| &e.entity_id).collect::<Vec<_>>()
+    );
+}

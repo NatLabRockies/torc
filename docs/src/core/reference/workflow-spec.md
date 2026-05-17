@@ -138,9 +138,14 @@ Defines input/output file artifacts that establish implicit job dependencies.
 
 By default, the RO-Crate `@id` of an input file's File entity is its filesystem `path`. When that's
 the wrong identifier — e.g. the file is a published dataset with a DOI, or you want to reference a
-long-lived URN rather than a transient local path — set `identifier` on the FileSpec:
+long-lived URN rather than a transient local path — set `identifier` on the FileSpec. The workflow
+must also set `enable_ro_crate: true` at the top level; identifiers are rejected on workflows that
+opt out of automatic RO-Crate provenance.
 
 ```yaml
+name: my_workflow
+enable_ro_crate: true
+
 files:
   - name: reference_genome
     path: data/grch38.fa
@@ -159,10 +164,17 @@ so consumers can still locate the bytes on disk:
 }
 ```
 
-Identifiers must be unique within a workflow. For parameterized files, include the same placeholders
-in `identifier` that you use in `name` and `path`:
+CreateAction provenance references (`prov:used` / `object`) that would otherwise serialize as the
+file path are rewritten to the identifier at export time, so the exported `@graph` stays
+self-consistent.
+
+For parameterized files, include the same placeholders in `identifier` that you use in `name` and
+`path`:
 
 ```yaml
+name: parameterized_workflow
+enable_ro_crate: true
+
 files:
   - name: input_{i}
     path: data/input_{i}.csv
@@ -171,9 +183,18 @@ files:
       i: "1:10"
 ```
 
-`identifier` is honoured for files Torc classifies as **inputs** (files referenced as a job input,
-or with `st_mtime` set). Output files — those produced by jobs — still use the path as `@id`;
-setting `identifier` on an output file has no effect.
+Spec-load validation rejects the following at parse time:
+
+- `identifier` on any file when the workflow does not set `enable_ro_crate: true`.
+- Duplicate identifiers (after parameter expansion).
+- An identifier equal to another file's `path` (would collide in the same workflow-scoped uniqueness
+  index).
+- Identifiers matching Torc's reserved IDs / prefixes: `#torc-…` (workflow/run provenance),
+  `#software-…` (software agents), `#job-…` (CreateActions), `ro-crate-metadata.json`, and `./`
+  (synthetic export roots).
+- `identifier` on output files, including files referenced as both input AND output (the output
+  completion path always rewrites `entity_id` back to the file path).
+- `identifier` on files that are not referenced by any job as an input.
 
 ## UserDataSpec
 

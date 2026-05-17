@@ -130,19 +130,36 @@ After running this workflow:
 
 By default, an input file's `@id` is its filesystem path — a local, often transient string. When the
 file is a published dataset (DOI), a stable URN, or any other long-lived identifier, set
-`identifier` on the FileSpec and Torc uses it as the entity's `@id` instead:
+`identifier` on the FileSpec (and `enable_ro_crate: true` at the workflow level) and Torc uses it as
+the entity's `@id` instead:
 
 ```yaml
+name: my_workflow
+enable_ro_crate: true
+
 files:
   - name: reference_genome
     path: data/grch38.fa
     identifier: https://doi.org/10.5524/100001
 ```
 
-The local path is still recorded as `sameAs` so the bytes remain locatable. Identifiers must be
-unique within a workflow; parameterized files must include parameter placeholders in `identifier`
-the same way they do in `name` and `path`. Output files (produced by jobs) keep using the path as
-`@id`. See
+The local path is recorded as `sameAs` so the bytes remain locatable, and CreateAction provenance
+refs that would otherwise point at the path are rewritten to the identifier at export time so the
+exported `@graph` stays self-consistent.
+
+Spec-load validation rejects:
+
+- `identifier` on any file when `enable_ro_crate` is not `true`,
+- duplicate identifiers within the workflow,
+- identifiers equal to another file's path (would collide in the same uniqueness index),
+- identifiers matching Torc's reserved IDs (`#torc-…`, `#software-…`, `#job-…`,
+  `ro-crate-metadata.json`, `./`),
+- `identifier` on output files (including files used as both input and output, because the output
+  completion path resets `entity_id` back to the file path),
+- `identifier` on files that are not referenced as a job input.
+
+For parameterized files, the identifier template must include the same placeholders as `name` and
+`path`. See
 [FileSpec → RO-Crate identifiers](../reference/workflow-spec.md#ro-crate-identifiers-for-input-files)
 for the full reference.
 

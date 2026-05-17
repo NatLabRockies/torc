@@ -13,7 +13,7 @@ use crate::models;
 use log::{error, info};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tabled::Tabled;
 
 #[derive(Tabled)]
@@ -412,6 +412,58 @@ fn read_metadata_input(metadata: &str) -> String {
     }
 }
 
+/// Rewrite every nested `{"@id": "<path>"}` reference inside `value` whose
+/// `<path>` is in `path_to_entity_id`, so provenance refs point at the
+/// file's stable identifier instead of a no-longer-keyed local path.
+///
+/// Skips:
+/// - the top-level `@id` of `value` (already set authoritatively from
+///   `entity_id` by the caller, and the file's own `@id` should not be
+///   rewritten away from its identifier).
+/// - the `sameAs` field, which is supposed to carry the original path.
+fn translate_path_refs(value: &mut serde_json::Value, path_to_entity_id: &HashMap<String, String>) {
+    if path_to_entity_id.is_empty() {
+        return;
+    }
+    fn walk(value: &mut serde_json::Value, map: &HashMap<String, String>) {
+        match value {
+            serde_json::Value::Object(obj) => {
+                for (key, child) in obj.iter_mut() {
+                    if key == "sameAs" {
+                        continue;
+                    }
+                    walk(child, map);
+                }
+                // After recursing, rewrite a child `@id` whose value is a
+                // path we know an identifier for. Doing this after the
+                // recursion is fine because `@id` values are strings, not
+                // objects, so there's nothing to recurse into.
+                if let Some(serde_json::Value::String(id)) = obj.get_mut("@id")
+                    && let Some(replacement) = map.get(id.as_str())
+                {
+                    *id = replacement.clone();
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    walk(item, map);
+                }
+            }
+            _ => {}
+        }
+    }
+    // Top-level `@id` of `value` is the entity's own ID; preserve it by
+    // walking only the inner children.
+    if let serde_json::Value::Object(obj) = value {
+        for (key, child) in obj.iter_mut() {
+            if key == "@id" || key == "sameAs" {
+                continue;
+            }
+            walk(child, path_to_entity_id);
+        }
+    }
+}
+
 fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&str>) {
     // Fetch the workflow name and current run for the root dataset.
     let (workflow_name, run_id) = match apis::workflows_api::get_workflow(config, workflow_id) {
@@ -460,16 +512,43 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
         synthetic_entities.push(run_entity);
     }
 
+    // Build a path → entity_id translation map from input File entities. When
+    // the user gave a file a stable identifier, `build_file_entity` records
+    // the local path under `sameAs` and uses the identifier as `entity_id`.
+    // CreateAction `prov:used` / `object` and output `prov:wasDerivedFrom`
+    // still serialize input references as paths, so translate them through
+    // this map at export time. This is also what restores user identifiers
+    // after the server's init-time upsert rewrites `metadata["@id"]` back to
+    // the path (which happens in the async-init path where no client-side
+    // rebuild runs afterward).
+    let path_to_entity_id: HashMap<String, String> = entities
+        .iter()
+        .filter(|e| e.file_id.is_some() && !e.entity_id.is_empty())
+        .filter_map(|e| {
+            let parsed: serde_json::Value = serde_json::from_str(&e.metadata).ok()?;
+            let path = parsed.get("sameAs")?.get("@id")?.as_str()?.to_string();
+            if path == e.entity_id {
+                return None;
+            }
+            Some((path, e.entity_id.clone()))
+        })
+        .collect();
+
     // Build user and synthetic entities first so hasPart can include the final set.
     let mut graph_entities: Vec<serde_json::Value> = synthetic_entities;
     for entity in &entities {
         if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&entity.metadata) {
             if let Some(obj) = parsed.as_object_mut() {
-                obj.entry("@id".to_string())
-                    .or_insert_with(|| serde_json::json!(entity.entity_id));
+                // `entity_id` is the source of truth for an entity's `@id`.
+                // Always emit it (overwriting any stale `metadata["@id"]` that
+                // the server's init-time upsert might have written back to the
+                // file path), so user-supplied identifiers persist regardless
+                // of which initialization code path ran.
+                obj.insert("@id".to_string(), serde_json::json!(entity.entity_id));
                 obj.entry("@type".to_string())
                     .or_insert_with(|| serde_json::json!(entity.entity_type));
             }
+            translate_path_refs(&mut parsed, &path_to_entity_id);
             graph_entities.push(parsed);
         } else {
             graph_entities.push(serde_json::json!({
@@ -1032,5 +1111,58 @@ mod tests {
     fn parse_extra_metadata_rejects_non_object() {
         let err = parse_extra_metadata("[1, 2, 3]").unwrap_err();
         assert!(err.contains("must be a JSON object"), "got: {}", err);
+    }
+
+    #[test]
+    fn translate_path_refs_rewrites_nested_id_refs() {
+        // CreateAction-style metadata that references inputs by their path.
+        // After translation, those refs must point at the input's identifier
+        // -- but the entity's own @id and the file-entity's sameAs must be
+        // left alone.
+        let mut map = HashMap::new();
+        map.insert(
+            "data/input.csv".to_string(),
+            "https://doi.org/10.1234/abc".to_string(),
+        );
+
+        let mut create_action = json!({
+            "@id": "#job-42-attempt-1",
+            "@type": ["CreateAction", "prov:Activity"],
+            "object": { "@id": "data/input.csv" },
+            "prov:used": [{ "@id": "data/input.csv" }],
+            "result": [{ "@id": "data/output.csv" }],
+        });
+        translate_path_refs(&mut create_action, &map);
+        assert_eq!(create_action["@id"], "#job-42-attempt-1");
+        assert_eq!(
+            create_action["object"]["@id"],
+            "https://doi.org/10.1234/abc"
+        );
+        assert_eq!(
+            create_action["prov:used"][0]["@id"],
+            "https://doi.org/10.1234/abc"
+        );
+        // Output paths without an identifier mapping pass through unchanged.
+        assert_eq!(create_action["result"][0]["@id"], "data/output.csv");
+
+        // The file entity itself: outer @id (its identifier) and inner
+        // sameAs (its local path) must both be preserved.
+        let mut file_entity = json!({
+            "@id": "https://doi.org/10.1234/abc",
+            "@type": ["File", "prov:Entity"],
+            "sameAs": { "@id": "data/input.csv" },
+        });
+        translate_path_refs(&mut file_entity, &map);
+        assert_eq!(file_entity["@id"], "https://doi.org/10.1234/abc");
+        assert_eq!(file_entity["sameAs"]["@id"], "data/input.csv");
+    }
+
+    #[test]
+    fn translate_path_refs_empty_map_is_noop() {
+        let map: HashMap<String, String> = HashMap::new();
+        let mut v = json!({ "object": { "@id": "data/x.csv" } });
+        let before = v.clone();
+        translate_path_refs(&mut v, &map);
+        assert_eq!(v, before);
     }
 }

@@ -112,11 +112,15 @@ flowchart TD
 - The entity is keyed by workflow and `file_id`, with `entity_id = file.path` by default
 - When a `FileSpec` carries a user-supplied `identifier`, `create_files` pre-creates the entity row
   at workflow-creation time with `entity_id = identifier` and `metadata["@id"] = identifier`. The
-  server's init-time upsert preserves the `entity_id` column but rewrites `metadata["@id"]` to
-  `file.path`; the client-side `create_ro_crate_entity_for_file` then reads `entity_id` back and
-  uses it as an override when rebuilding metadata, restoring `@id`. This three-step round-trip is
-  what lets users carry a stable identifier (DOI, URN, …) into the exported crate without changing
-  the server
+  server's init-time upsert preserves the `entity_id` column even though it rewrites
+  `metadata["@id"]` back to `file.path`. Export then uses `entity_id` as the authoritative `@id`
+  (overwriting whatever ends up in `metadata["@id"]`), so the user identifier survives regardless of
+  whether the client-side `create_ro_crate_entity_for_file` ran afterward — important because the
+  async-init path returns before the client-side rebuild can re-write `metadata["@id"]`.
+- Export also builds a path → entity_id map from File entities' `sameAs` and rewrites nested
+  `{ "@id": "<path>" }` references throughout the graph, so CreateAction `prov:used` / `object` and
+  output `prov:wasDerivedFrom` link to the identifier rather than the path. The entity's own `@id`
+  and any `sameAs` field are deliberately not rewritten.
 - The local path is preserved as `sameAs` on entities whose `@id` was overridden, so consumers can
   still resolve to the bytes
 - Input file entities are expected to exist before jobs run, but the code does not rely on them
