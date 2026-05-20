@@ -1011,6 +1011,17 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<BatchCompleteJobsResponse, ApiError>;
 
+    /// Add a batch of new jobs to an initialized workflow, all blocked on the
+    /// calling job. The calling job is not completed by this call — the
+    /// orchestrator script exits normally and the runner completes it. Per-
+    /// lineage state and counter are persisted in the same transaction.
+    async fn spawn_jobs(
+        &self,
+        id: i64,
+        body: models::SpawnJobsRequest,
+        context: &C,
+    ) -> Result<SpawnJobsResponse, ApiError>;
+
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
     async fn retry_job(
         &self,

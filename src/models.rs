@@ -363,6 +363,61 @@ pub struct BatchCompleteJobsResponse {
     pub errors: Vec<JobCompletionError>,
 }
 
+/// One job to add atomically as part of `spawn_jobs`.
+///
+/// `depends_on` entries may reference jobs that already exist in the workflow
+/// or sibling jobs created in the same request (resolved by name within the
+/// transaction). A job with no dependencies is created `ready`; one with
+/// dependencies is created `blocked` and promoted by the normal background
+/// unblock path once its dependencies are terminal.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpawnJobModel {
+    pub name: String,
+    pub command: String,
+    /// Name of an existing resource_requirements record in the workflow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_requirements: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cancel_on_blocking_job_failure: Option<bool>,
+    /// Job names this job depends on (existing jobs or siblings in this batch).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<Vec<String>>,
+}
+
+/// Add a batch of new jobs to an initialized workflow, all blocked on the
+/// calling job. The calling job is **not** completed by this call — the
+/// orchestrator script exits normally and the runner completes it, at which
+/// point the unblock cascade promotes the spawned jobs.
+///
+/// The per-lineage spawn-iteration counter is advanced and an opaque state
+/// payload is persisted, all in the same transaction as the inserts.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpawnJobsRequest {
+    /// Orchestrator lineage identifier. Defaults to the calling job's name.
+    /// The per-lineage spawn counter and state records are keyed on this.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<String>,
+    /// Jobs to add. May be empty (record final state without spawning).
+    pub jobs: Vec<SpawnJobModel>,
+    /// Opaque JSON state attached to this generation (or as the converged
+    /// final state when `jobs` is empty).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<Value>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpawnJobsResponse {
+    /// IDs of the jobs that were added (empty on a replay or final-state call).
+    pub spawned_job_ids: Vec<i64>,
+    /// This lineage's spawn-iteration counter after the call.
+    pub iteration: i64,
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduledComputeNodesModel {
@@ -509,6 +564,11 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
     pub is_archived: Option<bool>,
+    /// Cap on `spawn_jobs` calls per orchestrator lineage
+    /// (the `dynamic_jobs.max_iterations` workflow-spec setting). `None`
+    /// applies the server default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_spawn_iterations_per_lineage: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1528,6 +1588,7 @@ impl WorkflowModel {
             run_id: None,
             is_canceled: None,
             is_archived: None,
+            max_spawn_iterations_per_lineage: None,
         }
     }
 }
@@ -1948,6 +2009,7 @@ mod tests {
             run_id: Some(1),
             is_canceled: Some(false),
             is_archived: Some(false),
+            max_spawn_iterations_per_lineage: None,
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");

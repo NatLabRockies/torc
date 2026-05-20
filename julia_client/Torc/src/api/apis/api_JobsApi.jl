@@ -313,6 +313,38 @@ function retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::I
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_spawn_jobs_JobsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => SpawnJobsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_spawn_jobs(_api::JobsApi, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_spawn_jobs_JobsApi, "/jobs/{id}/spawn_jobs", [], spawn_jobs_request)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+- spawn_jobs_request::SpawnJobsRequest (required)
+
+Return: SpawnJobsResponse, OpenAPI.Clients.ApiResponse
+"""
+function spawn_jobs(_api::JobsApi, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing)
+    _ctx = _oacinternal_spawn_jobs(_api, id, spawn_jobs_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function spawn_jobs(_api::JobsApi, response_stream::Channel, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing)
+    _ctx = _oacinternal_spawn_jobs(_api, id, spawn_jobs_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_start_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -387,5 +419,6 @@ export get_job
 export list_jobs
 export manage_status_change
 export retry_job
+export spawn_jobs
 export start_job
 export update_job

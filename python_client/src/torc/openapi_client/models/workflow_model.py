@@ -38,6 +38,7 @@ class WorkflowModel(BaseModel):
     id: Optional[StrictInt] = None
     is_archived: Optional[StrictBool] = Field(default=None, description="True when the workflow has been archived. Read-only on the API: set via `POST /workflows/{id}/archive`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
     is_canceled: Optional[StrictBool] = Field(default=None, description="True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via `POST /workflows/{id}/cancel`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
+    max_spawn_iterations_per_lineage: Optional[StrictInt] = Field(default=None, description="Cap on `spawn_jobs` calls per orchestrator lineage (the `dynamic_jobs.max_iterations` workflow-spec setting). `None` applies the server default.")
     metadata: Optional[StrictStr] = None
     name: StrictStr
     project: Optional[StrictStr] = None
@@ -48,7 +49,7 @@ class WorkflowModel(BaseModel):
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "max_spawn_iterations_per_lineage", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -150,6 +151,11 @@ class WorkflowModel(BaseModel):
         if self.is_canceled is None and "is_canceled" in self.model_fields_set:
             _dict['is_canceled'] = None
 
+        # set to None if max_spawn_iterations_per_lineage (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_spawn_iterations_per_lineage is None and "max_spawn_iterations_per_lineage" in self.model_fields_set:
+            _dict['max_spawn_iterations_per_lineage'] = None
+
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
         if self.metadata is None and "metadata" in self.model_fields_set:
@@ -214,6 +220,7 @@ class WorkflowModel(BaseModel):
             "id": obj.get("id"),
             "is_archived": obj.get("is_archived"),
             "is_canceled": obj.get("is_canceled"),
+            "max_spawn_iterations_per_lineage": obj.get("max_spawn_iterations_per_lineage"),
             "metadata": obj.get("metadata"),
             "name": obj.get("name"),
             "project": obj.get("project"),

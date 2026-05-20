@@ -352,6 +352,7 @@ pub fn app_router(state: LiveRouterState) -> Router {
             "/torc-service/v1/workflows/{id}/batch_complete_jobs",
             post(batch_complete_jobs),
         )
+        .route("/torc-service/v1/jobs/{id}/spawn_jobs", post(spawn_jobs))
         .route(
             "/torc-service/v1/workflows/{id}/job_dependencies",
             get(list_job_dependencies),
@@ -2412,6 +2413,33 @@ pub async fn batch_complete_jobs(
 ) -> Response<Body> {
     match state.server.batch_complete_jobs(id, body, &context).await {
         Ok(response) => batch_complete_jobs_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "jobs",
+    path = "/jobs/{id}/spawn_jobs",
+    operation_id = "spawn_jobs",
+    params(("id" = i64, Path, description = "Calling (orchestrator) job ID")),
+    request_body = models::SpawnJobsRequest,
+    responses(
+        (status = 200, description = "Jobs added blocked on the caller", body = models::SpawnJobsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Job or workflow not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable (missing resource_requirements, dependency cycle, or per-lineage iteration cap exceeded)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn spawn_jobs(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::SpawnJobsRequest>,
+) -> Response<Body> {
+    match state.server.spawn_jobs(id, body, &context).await {
+        Ok(response) => spawn_jobs_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

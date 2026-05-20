@@ -13,6 +13,7 @@ Method | HTTP request | Description
 [**list_jobs**](JobsApi.md#list_jobs) | **GET** /jobs | 
 [**manage_status_change**](JobsApi.md#manage_status_change) | **PUT** /jobs/{id}/manage_status_change/{status}/{run_id} | 
 [**retry_job**](JobsApi.md#retry_job) | **POST** /jobs/{id}/retry/{run_id} | 
+[**spawn_jobs**](JobsApi.md#spawn_jobs) | **POST** /jobs/{id}/spawn_jobs | 
 [**start_job**](JobsApi.md#start_job) | **PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id} | 
 [**update_job**](JobsApi.md#update_job) | **PUT** /jobs/{id} | 
 
@@ -286,6 +287,35 @@ No authorization required
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **spawn_jobs**
+> spawn_jobs(_api::JobsApi, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing) -> SpawnJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> spawn_jobs(_api::JobsApi, response_stream::Channel, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing) -> Channel{ SpawnJobsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **JobsApi** | API context | 
+**id** | **Int64** | Calling (orchestrator) job ID |
+**spawn_jobs_request** | [**SpawnJobsRequest**](SpawnJobsRequest.md) |  |
+
+### Return type
+
+[**SpawnJobsResponse**](SpawnJobsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

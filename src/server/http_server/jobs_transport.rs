@@ -13,6 +13,39 @@ const RESOURCE_CLAIM_ORDER_BY: &str = "\
         rr.num_cpus DESC, \
         job.id ASC";
 
+/// Detect a cycle in a directed graph given as adjacency lists (node -> deps).
+/// Used to reject self-referential `spawn_jobs` batches.
+fn has_cycle(adjacency: &std::collections::HashMap<&str, Vec<&str>>) -> bool {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Mark {
+        Visiting,
+        Done,
+    }
+    fn dfs<'a>(
+        node: &'a str,
+        adjacency: &std::collections::HashMap<&'a str, Vec<&'a str>>,
+        marks: &mut std::collections::HashMap<&'a str, Mark>,
+    ) -> bool {
+        match marks.get(node) {
+            Some(Mark::Visiting) => return true,
+            Some(Mark::Done) => return false,
+            None => {}
+        }
+        marks.insert(node, Mark::Visiting);
+        for next in adjacency.get(node).map(|v| v.as_slice()).unwrap_or(&[]) {
+            if dfs(next, adjacency, marks) {
+                return true;
+            }
+        }
+        marks.insert(node, Mark::Done);
+        false
+    }
+    let mut marks: std::collections::HashMap<&str, Mark> = std::collections::HashMap::new();
+    adjacency
+        .keys()
+        .any(|node| dfs(node, adjacency, &mut marks))
+}
+
 #[derive(Clone, Copy)]
 struct ClaimRemainingResources {
     cpus: i64,
@@ -1664,6 +1697,370 @@ where
 
         Ok(BatchCompleteJobsResponse::SuccessfulResponse(
             models::BatchCompleteJobsResponse { completed, errors },
+        ))
+    }
+
+    /// Add a batch of new jobs to an initialized workflow, all blocked on the
+    /// calling job. The calling job is **not** completed here — the runner
+    /// completes it when its subprocess exits, and the normal unblock cascade
+    /// promotes the spawned jobs. Per-lineage state and counter are persisted
+    /// in the same transaction. See `docs/plans/dynamic-jobs-design.md`.
+    pub(super) async fn transport_spawn_jobs(
+        &self,
+        id: i64,
+        body: models::SpawnJobsRequest,
+        context: &C,
+    ) -> Result<SpawnJobsResponse, ApiError> {
+        log_call!(
+            debug,
+            context,
+            "spawn_jobs(job_id={}, jobs_count={})",
+            id,
+            body.jobs.len(),
+        );
+
+        authorize_job!(self, id, context, SpawnJobsResponse);
+
+        /// Per-lineage cap applied when the workflow leaves it unset.
+        const DEFAULT_MAX_SPAWN_ITERATIONS: i64 = 1000;
+
+        let models::SpawnJobsRequest {
+            lineage,
+            jobs,
+            state,
+        } = body;
+
+        let mut tx = begin_immediate(&self.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin spawn_jobs transaction"))?;
+
+        // --- Resolve the calling job and its workflow --------------------
+        let job_row = match sqlx::query("SELECT workflow_id, name FROM job WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+        {
+            Ok(Some(row)) => row,
+            Ok(None) => {
+                let _ = tx.rollback().await;
+                return Ok(SpawnJobsResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Job", id),
+                ));
+            }
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(database_lock_aware_error(e, "Failed to fetch calling job"));
+            }
+        };
+        let workflow_id: i64 = job_row.get("workflow_id");
+        let caller_name: String = job_row.get("name");
+        let lineage = lineage.unwrap_or(caller_name);
+
+        let wf_row =
+            match sqlx::query("SELECT max_spawn_iterations_per_lineage FROM workflow WHERE id = ?")
+                .bind(workflow_id)
+                .fetch_optional(&mut *tx)
+                .await
+            {
+                Ok(Some(row)) => row,
+                Ok(None) => {
+                    let _ = tx.rollback().await;
+                    return Ok(SpawnJobsResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Workflow", workflow_id),
+                    ));
+                }
+                Err(e) => {
+                    let _ = tx.rollback().await;
+                    return Err(database_lock_aware_error(e, "Failed to fetch workflow"));
+                }
+            };
+        let max_iterations: i64 = wf_row
+            .get::<Option<i64>, _>("max_spawn_iterations_per_lineage")
+            .unwrap_or(DEFAULT_MAX_SPAWN_ITERATIONS);
+
+        // --- Existing jobs in the workflow (name -> id) ------------------
+        let existing_rows = sqlx::query("SELECT id, name FROM job WHERE workflow_id = ?")
+            .bind(workflow_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to list workflow jobs"))?;
+        let mut name_to_id: std::collections::HashMap<String, i64> = existing_rows
+            .iter()
+            .map(|r| (r.get::<String, _>("name"), r.get::<i64, _>("id")))
+            .collect();
+
+        // --- Idempotency: detect a replayed spawn -----------------------
+        let already_present = jobs
+            .iter()
+            .filter(|j| name_to_id.contains_key(&j.name))
+            .count();
+        let is_replay = !jobs.is_empty() && already_present == jobs.len();
+        if !jobs.is_empty() && already_present != 0 && !is_replay {
+            let _ = tx.rollback().await;
+            return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Inconsistent replay: some but not all jobs already exist".to_string(),
+                ),
+            ));
+        }
+
+        // --- Derive this lineage's spawn counter from its append-only
+        //     per-generation state records -------------------------------
+        // Each spawn generation N is an immutable user_data record named
+        // `__torc_lineage__<lineage>__g<NNNNNN>`. spawn_count == the highest
+        // generation present. The converged final state (no-spawn call that
+        // carries state) is a single `__torc_lineage__<lineage>__final` record.
+        let gen_prefix = format!("__torc_lineage__{}__g", lineage);
+        let lineage_names = sqlx::query("SELECT name FROM user_data WHERE workflow_id = ?")
+            .bind(workflow_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to read lineage state"))?;
+        let mut spawn_count: i64 = lineage_names
+            .iter()
+            .filter_map(|r| {
+                let name: String = r.get("name");
+                name.strip_prefix(&gen_prefix)
+                    .and_then(|s| s.parse::<i64>().ok())
+            })
+            .max()
+            .unwrap_or(0);
+
+        // --- Validate the batch ------------------------------------------
+        let will_spawn = !jobs.is_empty() && !is_replay;
+        if will_spawn && spawn_count + 1 > max_iterations {
+            let _ = tx.rollback().await;
+            return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "Per-lineage iteration cap reached for lineage '{}': {} (max_spawn_iterations_per_lineage={})",
+                    lineage, spawn_count, max_iterations
+                )),
+            ));
+        }
+
+        // Resolve resource_requirements names -> ids.
+        let mut rr_ids: Vec<Option<i64>> = Vec::with_capacity(jobs.len());
+        if will_spawn {
+            for job in &jobs {
+                match &job.resource_requirements {
+                    None => rr_ids.push(None),
+                    Some(rr_name) => {
+                        let rr_id: Option<i64> = sqlx::query_scalar(
+                            "SELECT id FROM resource_requirements WHERE workflow_id = ? AND name = ?",
+                        )
+                        .bind(workflow_id)
+                        .bind(rr_name)
+                        .fetch_optional(&mut *tx)
+                        .await
+                        .map_err(|e| {
+                            database_lock_aware_error(e, "Failed to resolve resource_requirements")
+                        })?;
+                        match rr_id {
+                            Some(rid) => rr_ids.push(Some(rid)),
+                            None => {
+                                let _ = tx.rollback().await;
+                                return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                                    message_error_response(format!(
+                                        "Unknown resource_requirements '{}' for spawn job '{}'",
+                                        rr_name, job.name
+                                    )),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Validate the intra-batch dependency DAG (cycle detection over
+            // sibling names; edges to pre-existing jobs cannot close a cycle).
+            let batch_names: std::collections::HashSet<&str> =
+                jobs.iter().map(|j| j.name.as_str()).collect();
+            let adjacency: std::collections::HashMap<&str, Vec<&str>> = jobs
+                .iter()
+                .map(|j| {
+                    let edges = j
+                        .depends_on
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .filter(|d| batch_names.contains(d.as_str()))
+                        .map(|d| d.as_str())
+                        .collect();
+                    (j.name.as_str(), edges)
+                })
+                .collect();
+            if has_cycle(&adjacency) {
+                let _ = tx.rollback().await;
+                return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "spawn jobs dependency graph contains a cycle".to_string(),
+                    ),
+                ));
+            }
+
+            // Every dependency name must resolve to an existing job or a sibling.
+            for job in &jobs {
+                for dep in job.depends_on.as_deref().unwrap_or(&[]) {
+                    if !name_to_id.contains_key(dep) && !batch_names.contains(dep.as_str()) {
+                        let _ = tx.rollback().await;
+                        return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                            message_error_response(format!(
+                                "spawn job '{}' depends on unknown job '{}'",
+                                job.name, dep
+                            )),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // --- Insert the new jobs, then their dependency edges -----------
+        // Every spawned job is created `blocked`, with an auto-injected edge
+        // to the calling job. When the runner completes the caller on script
+        // exit, the normal unblock cascade promotes the spawned jobs.
+        let mut spawned_job_ids: Vec<i64> = Vec::with_capacity(jobs.len());
+        if is_replay {
+            spawned_job_ids = jobs
+                .iter()
+                .filter_map(|j| name_to_id.get(&j.name).copied())
+                .collect();
+        } else if will_spawn {
+            let blocked_int = i64::from(models::JobStatus::Blocked.to_int());
+            let lineage_env =
+                serde_json::json!({ "TORC_ORCHESTRATOR_LINEAGE_ID": &lineage }).to_string();
+            for (job, rr_id) in jobs.iter().zip(rr_ids.iter()) {
+                let new_id: i64 = sqlx::query(
+                    r#"
+                    INSERT INTO job
+                    (workflow_id, name, command, cancel_on_blocking_job_failure,
+                     supports_termination, resource_requirements_id, status, priority, env)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    RETURNING id
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(&job.name)
+                .bind(&job.command)
+                .bind(job.cancel_on_blocking_job_failure.unwrap_or(true))
+                .bind(false)
+                .bind(*rr_id)
+                .bind(blocked_int)
+                .bind(job.priority.unwrap_or(0))
+                .bind(&lineage_env)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to insert spawned job"))?
+                .get("id");
+                name_to_id.insert(job.name.clone(), new_id);
+                spawned_job_ids.push(new_id);
+            }
+
+            for job in &jobs {
+                let job_id = name_to_id[&job.name];
+                // Collect explicit deps + the implicit edge on the caller.
+                let mut dep_ids: std::collections::BTreeSet<i64> = job
+                    .depends_on
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(|n| name_to_id[n])
+                    .collect();
+                dep_ids.insert(id);
+                for dep_id in dep_ids {
+                    sqlx::query(
+                        "INSERT INTO job_depends_on (job_id, depends_on_job_id, workflow_id) VALUES (?, ?, ?)",
+                    )
+                    .bind(job_id)
+                    .bind(dep_id)
+                    .bind(workflow_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        database_lock_aware_error(e, "Failed to insert spawned dependency")
+                    })?;
+                }
+            }
+        }
+
+        // --- Persist lineage state (append-only) ------------------------
+        // A spawning generation appends a NEW immutable record
+        // `__torc_lineage__<lineage>__g<NNNNNN>`. A non-spawning call that
+        // carries state (convergence) upserts the single `__final` record.
+        // Replays append nothing because they're detected upstream.
+        if will_spawn {
+            spawn_count += 1;
+            let gen_name = format!("__torc_lineage__{}__g{:06}", lineage, spawn_count);
+            let payload = serde_json::json!({
+                "generation": spawn_count,
+                "spawn_count": spawn_count,
+                "state": state.unwrap_or(serde_json::Value::Null),
+            });
+            let payload_str = serde_json::to_string(&payload)
+                .map_err(|e| ApiError(format!("Failed to serialize lineage state: {}", e)))?;
+            sqlx::query(
+                "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) VALUES (?, ?, 1, ?)",
+            )
+            .bind(workflow_id)
+            .bind(&gen_name)
+            .bind(&payload_str)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to append lineage generation"))?;
+        } else if !is_replay && state.is_some() {
+            let final_name = format!("__torc_lineage__{}__final", lineage);
+            let payload = serde_json::json!({
+                "generation": spawn_count,
+                "spawn_count": spawn_count,
+                "final": true,
+                "state": state.unwrap_or(serde_json::Value::Null),
+            });
+            let payload_str = serde_json::to_string(&payload)
+                .map_err(|e| ApiError(format!("Failed to serialize lineage state: {}", e)))?;
+            let existing: Option<i64> =
+                sqlx::query_scalar("SELECT id FROM user_data WHERE workflow_id = ? AND name = ?")
+                    .bind(workflow_id)
+                    .bind(&final_name)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        database_lock_aware_error(e, "Failed to read final lineage state")
+                    })?;
+            match existing {
+                Some(ud_id) => {
+                    sqlx::query("UPDATE user_data SET data = ? WHERE id = ?")
+                        .bind(&payload_str)
+                        .bind(ud_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| {
+                            database_lock_aware_error(e, "Failed to update final lineage state")
+                        })?;
+                }
+                None => {
+                    sqlx::query(
+                        "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) VALUES (?, ?, 1, ?)",
+                    )
+                    .bind(workflow_id)
+                    .bind(&final_name)
+                    .bind(&payload_str)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        database_lock_aware_error(e, "Failed to insert final lineage state")
+                    })?;
+                }
+            }
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to commit spawn_jobs transaction"))?;
+
+        Ok(SpawnJobsResponse::SuccessfulResponse(
+            models::SpawnJobsResponse {
+                spawned_job_ids,
+                iteration: spawn_count,
+            },
         ))
     }
 

@@ -1756,6 +1756,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /jobs/{id}/spawn_jobs:
+    post:
+      tags:
+      - jobs
+      operationId: spawn_jobs
+      parameters:
+      - name: id
+        in: path
+        description: Calling (orchestrator) job ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpawnJobsRequest'
+        required: true
+      responses:
+        '200':
+          description: Jobs added blocked on the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpawnJobsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job or workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable (missing resource_requirements, dependency cycle, or per-lineage iteration cap exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /jobs/{id}/start_job/{run_id}/{compute_node_id}:
     put:
       tags:
@@ -6849,6 +6899,90 @@ components:
         workflow_id:
           type: integer
           format: int64
+    SpawnJobModel:
+      type: object
+      description: |-
+        One job to add atomically as part of `spawn_jobs`.
+
+        `depends_on` entries may reference jobs that already exist in the workflow
+        or sibling jobs created in the same request (resolved by name within the
+        transaction). A job with no dependencies is created `ready`; one with
+        dependencies is created `blocked` and promoted by the normal background
+        unblock path once its dependencies are terminal.
+      required:
+      - name
+      - command
+      properties:
+        cancel_on_blocking_job_failure:
+          type:
+          - boolean
+          - 'null'
+        command:
+          type: string
+        depends_on:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: Job names this job depends on (existing jobs or siblings in this batch).
+        name:
+          type: string
+        priority:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        resource_requirements:
+          type:
+          - string
+          - 'null'
+          description: Name of an existing resource_requirements record in the workflow.
+    SpawnJobsRequest:
+      type: object
+      description: |-
+        Add a batch of new jobs to an initialized workflow, all blocked on the
+        calling job. The calling job is **not** completed by this call — the
+        orchestrator script exits normally and the runner completes it, at which
+        point the unblock cascade promotes the spawned jobs.
+
+        The per-lineage spawn-iteration counter is advanced and an opaque state
+        payload is persisted, all in the same transaction as the inserts.
+      required:
+      - jobs
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpawnJobModel'
+          description: Jobs to add. May be empty (record final state without spawning).
+        lineage:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Orchestrator lineage identifier. Defaults to the calling job's name.
+            The per-lineage spawn counter and state records are keyed on this.
+        state:
+          description: |-
+            Opaque JSON state attached to this generation (or as the converged
+            final state when `jobs` is empty).
+    SpawnJobsResponse:
+      type: object
+      required:
+      - spawned_job_ids
+      - iteration
+      properties:
+        iteration:
+          type: integer
+          format: int64
+          description: This lineage's spawn-iteration counter after the call.
+        spawned_job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: IDs of the jobs that were added (empty on a replay or final-state call).
     TaskModel:
       type: object
       required:
@@ -7105,6 +7239,15 @@ components:
             cleared via `POST /workflows/{id}/reset_status`. Values supplied to
             create/update workflow endpoints are ignored.
           readOnly: true
+        max_spawn_iterations_per_lineage:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Cap on `spawn_jobs` calls per orchestrator lineage
+            (the `dynamic_jobs.max_iterations` workflow-spec setting). `None`
+            applies the server default.
         metadata:
           type:
           - string

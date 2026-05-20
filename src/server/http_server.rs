@@ -2378,6 +2378,18 @@ where
             .await
     }
 
+    /// Spawn jobs blocked on the calling job and persist per-lineage
+    /// continuation state in a single transaction.
+    #[instrument(level = "debug", skip(self, body, context), fields(job_id = id, spawn_count = body.jobs.len()))]
+    async fn spawn_jobs(
+        &self,
+        id: i64,
+        body: models::SpawnJobsRequest,
+        context: &C,
+    ) -> Result<SpawnJobsResponse, ApiError> {
+        self.transport_spawn_jobs(id, body, context).await
+    }
+
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
     async fn retry_job(
         &self,

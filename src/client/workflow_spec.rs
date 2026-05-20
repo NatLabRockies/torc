@@ -1468,6 +1468,18 @@ fn substitute_workflow_variables_in_string(
     result
 }
 
+/// Dynamic job spawning (orchestrator continuation) configuration.
+///
+/// User-authored, runtime-immutable. See `docs/plans/dynamic-jobs-design.md`.
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicJobsSpec {
+    /// Cap on `spawn_jobs` calls per orchestrator lineage.
+    /// Omitted: the server applies a generous default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<i64>,
+}
+
 /// Specification for a complete workflow
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1532,6 +1544,9 @@ pub struct WorkflowSpec {
     /// Actions to execute based on workflow/job state transitions
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actions: Option<Vec<WorkflowActionSpec>>,
+    /// Dynamic job spawning (orchestrator continuation) configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dynamic_jobs: Option<DynamicJobsSpec>,
     /// Use PendingFailed status for failed jobs (enables AI-assisted recovery)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
@@ -1581,6 +1596,7 @@ impl WorkflowSpec {
             slurm_defaults: None,
             resource_monitor: None,
             actions: None,
+            dynamic_jobs: None,
             use_pending_failed: None,
             enable_ro_crate: None,
             project: None,
@@ -3278,6 +3294,11 @@ impl WorkflowSpec {
             let config_json = serde_json::to_string(slurm_defaults)
                 .map_err(|e| format!("Failed to serialize slurm_defaults config: {}", e))?;
             workflow_model.slurm_defaults = Some(config_json);
+        }
+
+        // Map dynamic_jobs.max_iterations -> per-lineage spawn cap
+        if let Some(ref dynamic_jobs) = spec.dynamic_jobs {
+            workflow_model.max_spawn_iterations_per_lineage = dynamic_jobs.max_iterations;
         }
 
         // Set use_pending_failed if present
@@ -7397,6 +7418,7 @@ user_data:
             resource_monitor: None,
             actions: None,
             failure_handlers: None,
+            dynamic_jobs: None,
             use_pending_failed: None,
             enable_ro_crate: None,
             project: None,

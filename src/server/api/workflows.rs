@@ -415,6 +415,9 @@ impl WorkflowsApiImpl {
                 run_id: Some(record.get("run_id")),
                 is_canceled: Some(record.get::<i64, _>("is_canceled") != 0),
                 is_archived: Some(record.get::<i64, _>("is_archived") != 0),
+                max_spawn_iterations_per_lineage: record
+                    .try_get::<Option<i64>, _>("max_spawn_iterations_per_lineage")
+                    .unwrap_or(None),
             });
         }
 
@@ -544,11 +547,12 @@ where
                 metadata,
                 slurm_config,
                 execution_config,
+                max_spawn_iterations_per_lineage,
                 run_id,
                 is_archived,
                 is_canceled
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0, 0, 0)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 0, 0, 0)
             RETURNING rowid
             "#,
             body.name,
@@ -569,6 +573,7 @@ where
             body.metadata,
             body.slurm_config,
             body.execution_config,
+            body.max_spawn_iterations_per_lineage,
         )
         .fetch_one(self.context.pool.as_ref())
         .await
@@ -868,6 +873,9 @@ where
                     run_id: Some(row.get("run_id")),
                     is_canceled: Some(row.get::<i64, _>("is_canceled") != 0),
                     is_archived: Some(row.get::<i64, _>("is_archived") != 0),
+                    max_spawn_iterations_per_lineage: row
+                        .try_get::<Option<i64>, _>("max_spawn_iterations_per_lineage")
+                        .unwrap_or(None),
                 },
             )),
             Ok(None) => Ok(GetWorkflowResponse::NotFoundErrorResponse(

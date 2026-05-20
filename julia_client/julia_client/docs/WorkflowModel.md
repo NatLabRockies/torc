@@ -16,6 +16,7 @@ Name | Type | Description | Notes
 **id** | **Int64** |  | [optional] [default to nothing]
 **is_archived** | **Bool** | True when the workflow has been archived. Read-only on the API: set via &#x60;POST /workflows/{id}/archive&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored. | [optional] [readonly] [default to nothing]
 **is_canceled** | **Bool** | True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via &#x60;POST /workflows/{id}/cancel&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored. | [optional] [readonly] [default to nothing]
+**max_spawn_iterations_per_lineage** | **Int64** | Cap on &#x60;spawn_jobs&#x60; calls per orchestrator lineage (the &#x60;dynamic_jobs.max_iterations&#x60; workflow-spec setting). &#x60;None&#x60; applies the server default. | [optional] [default to nothing]
 **metadata** | **String** |  | [optional] [default to nothing]
 **name** | **String** |  | [default to nothing]
 **project** | **String** |  | [optional] [default to nothing]

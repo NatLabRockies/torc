@@ -115,6 +115,9 @@ __all__ = [
     "ScheduledComputeNodesModel",
     "SlurmSchedulerModel",
     "SlurmStatsModel",
+    "SpawnJobModel",
+    "SpawnJobsRequest",
+    "SpawnJobsResponse",
     "TaskModel",
     "TaskStatus",
     "UserDataListModel",
@@ -228,6 +231,9 @@ from torc.openapi_client.models.ro_crate_entity_model import RoCrateEntityModel 
 from torc.openapi_client.models.scheduled_compute_nodes_model import ScheduledComputeNodesModel as ScheduledComputeNodesModel
 from torc.openapi_client.models.slurm_scheduler_model import SlurmSchedulerModel as SlurmSchedulerModel
 from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel as SlurmStatsModel
+from torc.openapi_client.models.spawn_job_model import SpawnJobModel as SpawnJobModel
+from torc.openapi_client.models.spawn_jobs_request import SpawnJobsRequest as SpawnJobsRequest
+from torc.openapi_client.models.spawn_jobs_response import SpawnJobsResponse as SpawnJobsResponse
 from torc.openapi_client.models.task_model import TaskModel as TaskModel
 from torc.openapi_client.models.task_status import TaskStatus as TaskStatus
 from torc.openapi_client.models.user_data_list_model import UserDataListModel as UserDataListModel

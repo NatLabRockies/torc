@@ -1515,6 +1515,22 @@ pub enum BatchCompleteJobsResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum SpawnJobsResponse {
+    /// Successful response
+    SuccessfulResponse(models::SpawnJobsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (missing resource_requirements, dependency cycle,
+    /// or per-lineage iteration cap exceeded)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum CreateAccessGroupResponse {
     /// Successful response
     SuccessfulResponse(models::AccessGroupModel),
