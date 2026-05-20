@@ -5882,6 +5882,17 @@ components:
           - 'null'
         name:
           type: string
+        origin:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Provenance marker: NULL for jobs declared at workflow creation,
+            `"retry"` for jobs resurrected by failure-handler retries,
+            `"spawn"` for jobs added at runtime by `spawn_jobs`. `torc watch
+            --auto-schedule` uses this to detect jobs that need unplanned Slurm
+            allocations (deferred `schedule_nodes` actions only account for the
+            originally-declared workload).
         output_file_ids:
           type:
           - array

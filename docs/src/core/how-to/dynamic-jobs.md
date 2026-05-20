@@ -104,8 +104,12 @@ torc watch --auto-schedule <workflow_id>
 ```
 
 alongside the workflow. `torc watch` periodically calls `regenerate_and_submit`, which mints a Slurm
-scheduler sized for the currently-pending RR shapes and submits a new allocation. No
-dynamic-jobs-specific operator step is required.
+scheduler sized for the currently-pending RR shapes and submits a new allocation.
+
+The detector keys on `job.origin`: spawned jobs are marked `'spawn'`, failure-handler retries are
+marked `'retry'`, and declared jobs have `origin = NULL` and are handled by the workflow's own
+`on_jobs_ready` / `schedule_nodes` deferred actions. The same `torc watch` command therefore serves
+both retries and spawned jobs.
 
 ## Notes and limits
 

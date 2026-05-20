@@ -268,6 +268,14 @@ pub struct JobModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi-codegen", schema(minimum = 0, default = 0))]
     pub priority: Option<i64>,
+    /// Provenance marker: NULL for jobs declared at workflow creation,
+    /// `"retry"` for jobs resurrected by failure-handler retries,
+    /// `"spawn"` for jobs added at runtime by `spawn_jobs`. `torc watch
+    /// --auto-schedule` uses this to detect jobs that need unplanned Slurm
+    /// allocations (deferred `schedule_nodes` actions only account for the
+    /// originally-declared workload).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1248,6 +1256,7 @@ impl JobModel {
             failure_handler_id: None,
             attempt_id: Some(1),
             priority: None,
+            origin: None,
         }
     }
 }
@@ -2078,6 +2087,7 @@ mod tests {
             failure_handler_id: None,
             attempt_id: Some(1),
             priority: Some(0),
+            origin: None,
         };
         let result = ResultModel {
             id: Some(1),

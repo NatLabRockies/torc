@@ -242,26 +242,40 @@ In-transaction validation:
 Any failure aborts the whole transaction so nothing is persisted — the runner observes a recoverable
 failed call without side effects.
 
-Log lines use the parsing-friendly `workflow_id=<> job_id=<> spawned job_id=<>` format. We do not
-add a separate `origin` column on `job` to mark dynamic provenance — spawned jobs are already
-distinguishable by name patterns and by the `__torc_lineage__*` user_data records they appear in,
-and the auto-scheduling mechanism (Section 11) doesn't need it.
+Log lines use the parsing-friendly `workflow_id=<> job_id=<> spawned job_id=<>` format.
+
+Spawned rows carry `origin = 'spawn'` on the `job` table. This is **not** for TUI/reports provenance
+display — it's the marker that the Slurm auto-scheduling path (Section 11) uses to recognize jobs
+that need unplanned allocations. Statically-declared jobs (the originally-planned workload,
+anticipated by `on_jobs_ready` / `schedule_nodes` deferred actions) have `origin = NULL`;
+failure-handler retries are tagged `origin = 'retry'` by the existing `retry_job` path. The watch
+detector keys on `origin IS NOT NULL`.
 
 ## 11. Scheduling on Slurm — shared with failure-handler retries
 
 A spawned job sits `ready` until a compute node with matching resources claims it. If the workflow
 was submitted with allocations sized only for the seed orchestrators, a spawned `reeds`/`pras` job
-may have no fitting node — the same situation as a failure-handler retry that needs a larger node.
+may have no fitting node — the same situation as a failure-handler retry that needs a larger node
+than the original plan provided for.
 
-The solution is the same: `torc watch --auto-schedule <workflow_id>`. The watch loop
-(`src/client/commands/watch.rs`) detects pending-but-unschedulable jobs and calls
-`regenerate_and_submit`, which mints a Slurm scheduler sized for the current pending RR shapes and
-submits a new allocation. We deliberately reuse this path rather than building a parallel one for
-spawned jobs.
+The solution is the same operator command for both cases: `torc watch --auto-schedule
+<workflow_id>`.
+The watch loop (`src/client/commands/watch.rs`) counts ready jobs that need unplanned allocations
+and calls `regenerate_and_submit`, which mints a Slurm scheduler sized for the current pending RR
+shapes and submits a new allocation.
 
-(A follow-up extension to the watch detector — currently keyed on `attempt_id > 1` — to also count
-ready jobs that no active compute node satisfies would let spawned jobs at attempt_id=1 trigger the
-same auto-allocate behavior. Not part of this change.)
+The detector keys on **`job.origin IS NOT NULL`**:
+
+| `origin` value | Meaning                                    | Anticipated by deferred actions?                          |
+| -------------- | ------------------------------------------ | --------------------------------------------------------- |
+| `NULL`         | declared at workflow creation              | yes — `on_jobs_ready` / `schedule_nodes` actions cover it |
+| `'retry'`      | resurrected by failure-handler `retry_job` | no — auto-schedule must provision                         |
+| `'spawn'`      | added at runtime by `spawn_jobs`           | no — auto-schedule must provision                         |
+
+This is more correct than a fit-based detector (e.g. "ready jobs that no active compute node
+satisfies"): a fit-based check would race the legitimate deferred actions that are about to fire for
+declared jobs, causing over-provisioning. Provenance is the right marker because it directly
+expresses "the original workflow plan does not account for this row."
 
 ## 12. Impact on the ReEDS workflow
 

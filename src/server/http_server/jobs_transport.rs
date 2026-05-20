@@ -318,6 +318,7 @@ fn claim_candidate_row(
         failure_handler_id: row.get("failure_handler_id"),
         attempt_id: row.get("attempt_id"),
         priority: Some(row.get("priority")),
+        origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
     });
 
     Ok(true)
@@ -355,6 +356,7 @@ async fn claim_backfill_jobs(
             job.failure_handler_id,
             job.attempt_id,
             job.priority,
+            job.origin,
             rr.id AS resource_requirements_id,
             rr.memory_bytes,
             rr.num_cpus,
@@ -1516,6 +1518,7 @@ where
             failure_handler_id: None,
             attempt_id: None,
             priority: None,
+            origin: None,
         };
 
         Ok(CompletedJobRecord {
@@ -2035,8 +2038,9 @@ where
                     r#"
                     INSERT INTO job
                     (workflow_id, name, command, cancel_on_blocking_job_failure,
-                     supports_termination, resource_requirements_id, status, priority, env)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     supports_termination, resource_requirements_id, status, priority, env,
+                     origin)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'spawn')
                     RETURNING id
                     "#,
                 )

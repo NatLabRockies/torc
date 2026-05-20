@@ -40,6 +40,7 @@ class JobModel(BaseModel):
     input_user_data_ids: Optional[List[StrictInt]] = None
     invocation_script: Optional[StrictStr] = None
     name: StrictStr
+    origin: Optional[StrictStr] = Field(default=None, description="Provenance marker: NULL for jobs declared at workflow creation, `\"retry\"` for jobs resurrected by failure-handler retries, `\"spawn\"` for jobs added at runtime by `spawn_jobs`. `torc watch --auto-schedule` uses this to detect jobs that need unplanned Slurm allocations (deferred `schedule_nodes` actions only account for the originally-declared workload).")
     output_file_ids: Optional[List[StrictInt]] = None
     output_user_data_ids: Optional[List[StrictInt]] = None
     priority: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=0, description="Scheduling priority; higher values are submitted first. Minimum 0, default 0.")
@@ -49,7 +50,7 @@ class JobModel(BaseModel):
     status: Optional[JobStatus] = None
     supports_termination: Optional[StrictBool] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "depends_on_job_ids", "env", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "status", "supports_termination", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "depends_on_job_ids", "env", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "origin", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "status", "supports_termination", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -133,6 +134,11 @@ class JobModel(BaseModel):
         if self.invocation_script is None and "invocation_script" in self.model_fields_set:
             _dict['invocation_script'] = None
 
+        # set to None if origin (nullable) is None
+        # and model_fields_set contains the field
+        if self.origin is None and "origin" in self.model_fields_set:
+            _dict['origin'] = None
+
         # set to None if output_file_ids (nullable) is None
         # and model_fields_set contains the field
         if self.output_file_ids is None and "output_file_ids" in self.model_fields_set:
@@ -196,6 +202,7 @@ class JobModel(BaseModel):
             "input_user_data_ids": obj.get("input_user_data_ids"),
             "invocation_script": obj.get("invocation_script"),
             "name": obj.get("name"),
+            "origin": obj.get("origin"),
             "output_file_ids": obj.get("output_file_ids"),
             "output_user_data_ids": obj.get("output_user_data_ids"),
             "priority": obj.get("priority") if obj.get("priority") is not None else 0,

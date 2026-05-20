@@ -401,7 +401,7 @@ impl JobsApiImpl {
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id, priority
+                       failure_handler_id, attempt_id, priority, origin
                 FROM job
                 WHERE id = ?
             "#,
@@ -569,6 +569,7 @@ impl JobsApiImpl {
             failure_handler_id: record.try_get("failure_handler_id").ok(),
             attempt_id: record.try_get("attempt_id").ok(),
             priority: record.try_get("priority").ok(),
+            origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
         })
     }
 
@@ -1868,7 +1869,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1995,6 +1996,7 @@ where
                     failure_handler_id: record.try_get("failure_handler_id").ok(),
                     attempt_id: record.try_get("attempt_id").ok(),
                     priority: record.try_get("priority").ok(),
+                    origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
                 });
             }
         }
@@ -2497,6 +2499,7 @@ where
                 failure_handler_id: row.get("failure_handler_id"),
                 attempt_id: row.get("attempt_id"),
                 priority: row.try_get("priority").ok(),
+                origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
             };
 
             selected_jobs.push(job);
@@ -3014,12 +3017,15 @@ where
         // Get current attempt_id and increment
         let new_attempt = attempt_id + 1;
 
-        // Update job status to Ready and increment attempt_id
+        // Update job status to Ready, increment attempt_id, and tag origin
+        // as 'retry' so `torc watch --auto-schedule` recognizes this row as
+        // needing an unplanned allocation (deferred `schedule_nodes` actions
+        // only account for the originally-declared workload).
         let ready_status = JobStatus::Ready.to_int();
         if let Err(e) = sqlx::query(
             r#"
             UPDATE job
-            SET status = ?, attempt_id = ?
+            SET status = ?, attempt_id = ?, origin = 'retry'
             WHERE id = ?
             "#,
         )
@@ -3103,6 +3109,9 @@ where
             failure_handler_id,
             attempt_id: Some(new_attempt),
             priority,
+            // The UPDATE above set origin='retry'; reflect that in the
+            // returned model so the caller doesn't see stale provenance.
+            origin: Some("retry".to_string()),
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

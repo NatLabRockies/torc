@@ -97,11 +97,11 @@ pub struct WatchArgs {
     pub log_level: String,
     /// Automatically schedule new compute nodes when needed
     pub auto_schedule: bool,
-    /// Minimum number of retry jobs before auto-scheduling (when schedulers exist)
+    /// Minimum number of unplanned jobs before auto-scheduling (when schedulers exist)
     pub auto_schedule_threshold: u32,
     /// Cooldown between auto-schedule attempts (in seconds)
     pub auto_schedule_cooldown: u64,
-    /// Maximum time to wait before scheduling stranded retry jobs (in seconds)
+    /// Maximum time to wait before scheduling stranded unplanned jobs (in seconds)
     pub auto_schedule_stranded_timeout: u64,
     /// [EXPERIMENTAL] Enable AI-assisted recovery for pending_failed jobs
     pub ai_recovery: bool,
@@ -132,9 +132,19 @@ fn get_job_counts(
     Ok(counts)
 }
 
-/// Count ready jobs that are retries (attempt_id > 1).
-/// These are jobs created by failure handlers that need scheduling.
-fn count_ready_retry_jobs(config: &Configuration, workflow_id: i64) -> Result<(i64, i64), String> {
+/// Count ready jobs that need an unplanned Slurm allocation.
+///
+/// "Unplanned" means the job was not in the original workflow plan, so any
+/// `on_jobs_ready` / `schedule_nodes` deferred actions don't account for it.
+/// `job.origin` is the marker: `'retry'` for failure-handler retries and
+/// `'spawn'` for jobs added at runtime by `spawn_jobs`. Originally-declared
+/// jobs have `origin = NULL` and are handled by the deferred actions.
+///
+/// Returns `(total_ready, unplanned_ready)`.
+fn count_ready_unplanned_jobs(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(i64, i64), String> {
     use crate::models::JobStatus;
 
     let ready_jobs = paginate_jobs(
@@ -145,12 +155,9 @@ fn count_ready_retry_jobs(config: &Configuration, workflow_id: i64) -> Result<(i
     .map_err(|e| format!("Failed to list ready jobs: {}", e))?;
 
     let total_ready = ready_jobs.len() as i64;
-    let retry_count = ready_jobs
-        .iter()
-        .filter(|job| job.attempt_id.unwrap_or(1) > 1)
-        .count() as i64;
+    let unplanned_count = ready_jobs.iter().filter(|job| job.origin.is_some()).count() as i64;
 
-    Ok((total_ready, retry_count))
+    Ok((total_ready, unplanned_count))
 }
 
 // Note: fail_orphaned_slurm_jobs and cleanup_dead_pending_slurm_jobs
@@ -415,23 +422,23 @@ fn poll_until_complete(
         // to just 1-2 calls when jobs are queued or running normally.
         if has_valid_slurm_allocation(config, workflow_id) {
             consecutive_no_allocation = 0;
-            // Check if we should auto-schedule for retry jobs even though schedulers exist
+            // Check if we should auto-schedule for unplanned jobs even though schedulers exist
             if auto_schedule.enabled {
                 let cooldown_passed = last_auto_schedule.elapsed() >= auto_schedule.cooldown;
 
                 if cooldown_passed {
-                    match count_ready_retry_jobs(config, workflow_id) {
-                        Ok((total_ready, retry_ready)) => {
+                    match count_ready_unplanned_jobs(config, workflow_id) {
+                        Ok((total_ready, unplanned_ready)) => {
                             // Check if we should schedule: either threshold met or stranded timeout
-                            let threshold_met = retry_ready >= auto_schedule.threshold as i64;
-                            let stranded = retry_ready > 0
+                            let threshold_met = unplanned_ready >= auto_schedule.threshold as i64;
+                            let stranded = unplanned_ready > 0
                                 && auto_schedule.stranded_timeout.as_secs() > 0
                                 && last_auto_schedule.elapsed() >= auto_schedule.stranded_timeout;
 
                             if threshold_met {
                                 info!(
-                                    "Auto-schedule: {} retry jobs waiting (threshold: {}), scheduling more nodes...",
-                                    retry_ready, auto_schedule.threshold
+                                    "Auto-schedule: {} unplanned jobs waiting (threshold: {}), scheduling more nodes...",
+                                    unplanned_ready, auto_schedule.threshold
                                 );
                                 match regenerate_and_submit(
                                     workflow_id,
@@ -451,8 +458,8 @@ fn poll_until_complete(
                                 }
                             } else if stranded {
                                 info!(
-                                    "Auto-schedule: {} retry jobs stranded for {}s (timeout: {}s), scheduling...",
-                                    retry_ready,
+                                    "Auto-schedule: {} unplanned jobs stranded for {}s (timeout: {}s), scheduling...",
+                                    unplanned_ready,
                                     last_auto_schedule.elapsed().as_secs(),
                                     auto_schedule.stranded_timeout.as_secs()
                                 );
@@ -472,24 +479,24 @@ fn poll_until_complete(
                                         warn!("Auto-schedule failed: {}", e);
                                     }
                                 }
-                            } else if retry_ready > 0 {
+                            } else if unplanned_ready > 0 {
                                 debug!(
-                                    "Auto-schedule: {} retry jobs waiting, below threshold of {} (stranded after {}s)",
-                                    retry_ready,
+                                    "Auto-schedule: {} unplanned jobs waiting, below threshold of {} (stranded after {}s)",
+                                    unplanned_ready,
                                     auto_schedule.threshold,
                                     auto_schedule.stranded_timeout.as_secs()
                                 );
                             }
                             // Log total ready for visibility
-                            if total_ready > 0 && total_ready != retry_ready {
+                            if total_ready > 0 && total_ready != unplanned_ready {
                                 debug!(
                                     "Auto-schedule: {} total ready jobs ({} are retries)",
-                                    total_ready, retry_ready
+                                    total_ready, unplanned_ready
                                 );
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to count retry jobs: {}", e);
+                            warn!("Failed to count unplanned jobs: {}", e);
                         }
                     }
                 }
@@ -541,13 +548,13 @@ fn poll_until_complete(
         // If not, nothing can make progress unless we auto-schedule
         if !has_any_scheduled_compute_nodes(config, workflow_id) {
             // Check if there are ready jobs that need scheduling
-            match count_ready_retry_jobs(config, workflow_id) {
-                Ok((total_ready, retry_ready)) => {
+            match count_ready_unplanned_jobs(config, workflow_id) {
+                Ok((total_ready, unplanned_ready)) => {
                     if total_ready > 0 {
                         if auto_schedule.enabled {
                             info!(
                                 "Auto-schedule: No schedulers available but {} ready jobs found ({} retries)",
-                                total_ready, retry_ready
+                                total_ready, unplanned_ready
                             );
                             info!("Auto-schedule: Regenerating schedulers...");
                             match regenerate_and_submit(
@@ -715,7 +722,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
 
     if args.auto_schedule {
         info!(
-            "Auto-schedule enabled (threshold: {} retry jobs, cooldown: {}s, stranded timeout: {}s)",
+            "Auto-schedule enabled (threshold: {} unplanned jobs, cooldown: {}s, stranded timeout: {}s)",
             args.auto_schedule_threshold,
             args.auto_schedule_cooldown,
             args.auto_schedule_stranded_timeout

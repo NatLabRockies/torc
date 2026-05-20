@@ -396,6 +396,93 @@ fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
     );
 }
 
+/// Spawned jobs carry `origin = "spawn"`; statically-declared jobs do not.
+/// `torc watch --auto-schedule` keys on this to recognize jobs that need
+/// unplanned Slurm allocations.
+#[rstest]
+fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_origin_spawn", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("O".to_string()),
+            jobs: vec![spawn_job("spawned_worker", &[], 1)],
+            state: None,
+        },
+    )
+    .unwrap();
+
+    // The orchestrator (declared at workflow creation) has no origin.
+    let seed = apis::jobs_api::get_job(config, orch).unwrap();
+    assert_eq!(seed.origin, None, "declared job must have origin=None");
+
+    // The spawned job is marked `spawn`.
+    let spawned = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "spawned_worker")
+    .unwrap();
+    assert_eq!(
+        spawned.origin.as_deref(),
+        Some("spawn"),
+        "spawned job must have origin='spawn'"
+    );
+}
+
+/// `retry_job` tags the resurrected row with `origin = "retry"`, so the same
+/// watch detector that picks up spawned jobs also picks up retries.
+#[rstest]
+fn test_retried_jobs_have_origin_retry(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_origin_retry", Some(5));
+    let job = seed_and_init(config, workflow_id, "flaky_job");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Fail the job, then retry it via the retry_job API (the same path the
+    // failure-handler retry mechanism uses).
+    claim_and_mark_running(config, workflow_id, run_id, job);
+    let fail = models::ResultModel::new(
+        job,
+        workflow_id,
+        run_id,
+        1,
+        cn,
+        1,
+        0.1,
+        now(),
+        JobStatus::Failed,
+    );
+    apis::jobs_api::complete_job(config, job, JobStatus::Failed, run_id, fail).unwrap();
+    apis::jobs_api::retry_job(config, job, run_id, 3).unwrap();
+
+    let retried = apis::jobs_api::get_job(config, job).unwrap();
+    assert_eq!(
+        retried.origin.as_deref(),
+        Some("retry"),
+        "retried job must have origin='retry'"
+    );
+    assert_eq!(retried.status, Some(JobStatus::Ready));
+}
+
 /// End-to-end runner flow: orchestrator runs, spawns children blocked on
 /// itself, exits; the runner completes it; the unblock cascade promotes the
 /// children; the iteration's worker finishes; the next orchestrator runs and
