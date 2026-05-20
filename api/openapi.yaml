@@ -1371,6 +1371,20 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: origin_is_set
+        in: query
+        description: |-
+          When set, filters by job provenance: `true` returns only jobs with
+          `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
+          children); `false` returns only originally-declared jobs.
+          Used by `torc watch --auto-schedule` to count jobs needing unplanned
+          Slurm allocations with `limit=1` (the response's `total_count`
+          suffices — no rows downloaded).
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response

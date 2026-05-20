@@ -488,6 +488,7 @@ pub fn list_jobs(
     reverse_sort: Option<bool>,
     include_relationships: Option<bool>,
     active_compute_node_id: Option<i64>,
+    origin_is_set: Option<bool>,
 ) -> Result<models::ListJobsResponse, Error<ListJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
@@ -500,6 +501,7 @@ pub fn list_jobs(
     let p_query_reverse_sort = reverse_sort;
     let p_query_include_relationships = include_relationships;
     let p_query_active_compute_node_id = active_compute_node_id;
+    let p_query_origin_is_set = origin_is_set;
 
     let uri_str = format!("{}/jobs", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -531,6 +533,9 @@ pub fn list_jobs(
     }
     if let Some(ref param_value) = p_query_active_compute_node_id {
         req_builder = req_builder.query(&[("active_compute_node_id", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_origin_is_set {
+        req_builder = req_builder.query(&[("origin_is_set", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

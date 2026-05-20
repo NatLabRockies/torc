@@ -138,6 +138,7 @@ pub trait JobsApi<C> {
     async fn list_job_ids(&self, id: i64, context: &C) -> Result<ListJobIdsResponse, ApiError>;
 
     /// Retrieve all jobs for one workflow.
+    #[allow(clippy::too_many_arguments)]
     async fn list_jobs(
         &self,
         workflow_id: i64,
@@ -150,6 +151,7 @@ pub trait JobsApi<C> {
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -1838,6 +1840,7 @@ where
     }
 
     /// Retrieve all jobs for one workflow.
+    #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, context), fields(workflow_id, offset, limit))]
     async fn list_jobs(
         &self,
@@ -1851,10 +1854,11 @@ where
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -1865,6 +1869,7 @@ where
             reverse_sort,
             include_relationships,
             active_compute_node_id,
+            origin_is_set,
             context.get().0.clone()
         );
 
@@ -1899,6 +1904,16 @@ where
                 "id IN (SELECT job_id FROM job_internal WHERE active_compute_node_id = ?)"
                     .to_string(),
             );
+        }
+
+        // Filter by provenance: `true` matches `'retry'`/`'spawn'`; `false`
+        // matches statically-declared jobs (origin IS NULL). `torc watch
+        // --auto-schedule` uses `origin_is_set=true` with `limit=1` to count
+        // jobs needing an unplanned allocation without downloading rows.
+        if let Some(true) = origin_is_set {
+            where_conditions.push("origin IS NOT NULL".to_string());
+        } else if let Some(false) = origin_is_set {
+            where_conditions.push("origin IS NULL".to_string());
         }
 
         let where_clause = where_conditions.join(" AND ");

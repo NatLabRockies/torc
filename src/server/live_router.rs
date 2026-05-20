@@ -2182,6 +2182,14 @@ pub struct JobsListQuery {
     pub include_relationships: Option<bool>,
     #[param(nullable = true)]
     pub active_compute_node_id: Option<i64>,
+    /// When set, filters by job provenance: `true` returns only jobs with
+    /// `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
+    /// children); `false` returns only originally-declared jobs.
+    /// Used by `torc watch --auto-schedule` to count jobs needing unplanned
+    /// Slurm allocations with `limit=1` (the response's `total_count`
+    /// suffices — no rows downloaded).
+    #[param(nullable = true)]
+    pub origin_is_set: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2225,6 +2233,7 @@ pub async fn list_jobs(
             query.reverse_sort,
             query.include_relationships,
             query.active_compute_node_id,
+            query.origin_is_set,
             &context,
         )
         .await

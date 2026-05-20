@@ -140,6 +140,10 @@ fn get_job_counts(
 /// `'spawn'` for jobs added at runtime by `spawn_jobs`. Originally-declared
 /// jobs have `origin = NULL` and are handled by the deferred actions.
 ///
+/// Uses `limit=1` and reads `total_count` from the paginated response, so
+/// the watch loop pays the cost of two tiny HTTP responses instead of
+/// downloading every ready job on every poll.
+///
 /// Returns `(total_ready, unplanned_ready)`.
 fn count_ready_unplanned_jobs(
     config: &Configuration,
@@ -147,15 +151,39 @@ fn count_ready_unplanned_jobs(
 ) -> Result<(i64, i64), String> {
     use crate::models::JobStatus;
 
-    let ready_jobs = paginate_jobs(
+    let total_ready = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        JobListParams::new().with_status(JobStatus::Ready),
+        Some(JobStatus::Ready),
+        None,
+        None,
+        Some(0),
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        None,
     )
-    .map_err(|e| format!("Failed to list ready jobs: {}", e))?;
+    .map_err(|e| format!("Failed to count ready jobs: {}", e))?
+    .total_count;
 
-    let total_ready = ready_jobs.len() as i64;
-    let unplanned_count = ready_jobs.iter().filter(|job| job.origin.is_some()).count() as i64;
+    let unplanned_count = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        Some(JobStatus::Ready),
+        None,
+        None,
+        Some(0),
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        Some(true),
+    )
+    .map_err(|e| format!("Failed to count unplanned ready jobs: {}", e))?
+    .total_count;
 
     Ok((total_ready, unplanned_count))
 }
@@ -490,7 +518,7 @@ fn poll_until_complete(
                             // Log total ready for visibility
                             if total_ready > 0 && total_ready != unplanned_ready {
                                 debug!(
-                                    "Auto-schedule: {} total ready jobs ({} are retries)",
+                                    "Auto-schedule: {} total ready jobs ({} need an unplanned allocation: retries + spawn_jobs)",
                                     total_ready, unplanned_ready
                                 );
                             }
@@ -553,7 +581,7 @@ fn poll_until_complete(
                     if total_ready > 0 {
                         if auto_schedule.enabled {
                             info!(
-                                "Auto-schedule: No schedulers available but {} ready jobs found ({} retries)",
+                                "Auto-schedule: No schedulers available but {} ready jobs found ({} need an unplanned allocation)",
                                 total_ready, unplanned_ready
                             );
                             info!("Auto-schedule: Regenerating schedulers...");

@@ -489,6 +489,7 @@ pub trait TransportApiCore<C: Send + Sync> {
     ) -> Result<ListFilesResponse, ApiError>;
 
     /// Retrieve all jobs for one workflow.
+    #[allow(clippy::too_many_arguments)]
     async fn list_jobs(
         &self,
         workflow_id: i64,
@@ -501,6 +502,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 

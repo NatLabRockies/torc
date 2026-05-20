@@ -1571,6 +1571,7 @@ where
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1584,6 +1585,7 @@ where
             reverse_sort,
             include_relationships,
             active_compute_node_id,
+            origin_is_set,
             context,
         )
         .await

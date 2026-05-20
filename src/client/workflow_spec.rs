@@ -1781,6 +1781,25 @@ impl WorkflowSpec {
         Ok(())
     }
 
+    /// Verify that `dynamic_jobs.max_iterations`, if set, is a positive
+    /// integer. `0` would silently disable spawning for the entire workflow
+    /// — the first `spawn_jobs` call would be rejected with a confusing
+    /// "cap reached" 422; a negative value would always fail. Either is a
+    /// spec-author footgun, so we reject up front with a clear message.
+    fn validate_dynamic_jobs(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(spec) = &self.dynamic_jobs
+            && let Some(n) = spec.max_iterations
+            && n < 1
+        {
+            return Err(format!(
+                "dynamic_jobs.max_iterations must be >= 1 (got {}); omit the field to use the server default",
+                n
+            )
+            .into());
+        }
+        Ok(())
+    }
+
     /// Verify that every job and every file in `self.jobs` / `self.files` has a unique
     /// name. Run this *after* [`Self::expand_parameters`] so it catches the most common
     /// authoring mistake: declaring a parameterized job or file with no `{…}` placeholder
@@ -2479,6 +2498,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_dynamic_jobs()?;
         // The returned spec must stay unsubstituted -- `create_from_validated_spec`
         // substitutes again -- so this helper does the substitute-then-validate
         // dance on a clone.
@@ -2519,6 +2539,10 @@ impl WorkflowSpec {
             std::process::exit(1);
         }
         if let Err(e) = spec.validate_env_maps() {
+            eprintln!("Validation error: {}", e);
+            std::process::exit(1);
+        }
+        if let Err(e) = spec.validate_dynamic_jobs() {
             eprintln!("Validation error: {}", e);
             std::process::exit(1);
         }
@@ -2648,6 +2672,10 @@ impl WorkflowSpec {
 
         if let Err(e) = spec.validate_env_maps() {
             errors.push(format!("Environment validation failed: {}", e));
+        }
+
+        if let Err(e) = spec.validate_dynamic_jobs() {
+            errors.push(format!("Validation error: {}", e));
         }
 
         // Check duplicates of names and identifiers after expansion. This was
@@ -7565,6 +7593,40 @@ user_data:
             .validate_env_maps()
             .expect_err("expected validation error");
         assert!(err.to_string().contains("BAD-NAME"));
+    }
+
+    #[test]
+    fn test_validate_dynamic_jobs_rejects_non_positive_max_iterations() {
+        let job = JobSpec::new("job".to_string(), "echo hi".to_string());
+        let mut spec = WorkflowSpec::new("wf".to_string(), "user".to_string(), None, vec![job]);
+
+        spec.dynamic_jobs = Some(DynamicJobsSpec {
+            max_iterations: Some(0),
+        });
+        let err = spec
+            .validate_dynamic_jobs()
+            .expect_err("expected validation error for max_iterations=0");
+        assert!(
+            err.to_string().contains("max_iterations must be >= 1"),
+            "unexpected error message: {}",
+            err
+        );
+
+        spec.dynamic_jobs = Some(DynamicJobsSpec {
+            max_iterations: Some(-1),
+        });
+        let err = spec
+            .validate_dynamic_jobs()
+            .expect_err("expected validation error for max_iterations=-1");
+        assert!(err.to_string().contains("max_iterations must be >= 1"));
+
+        // Positive values and an absent field are both fine.
+        spec.dynamic_jobs = Some(DynamicJobsSpec {
+            max_iterations: Some(1),
+        });
+        spec.validate_dynamic_jobs().expect("max_iterations=1 ok");
+        spec.dynamic_jobs = None;
+        spec.validate_dynamic_jobs().expect("no dynamic_jobs ok");
     }
 
     #[test]

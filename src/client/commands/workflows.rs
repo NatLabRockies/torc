@@ -2254,6 +2254,7 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             None,    // reverse_sort
             None,    // include_relationships
             None,    // active_compute_node_id
+            None,    // origin_is_set
         ) {
             Ok(response) => response.total_count,
             Err(e) => {

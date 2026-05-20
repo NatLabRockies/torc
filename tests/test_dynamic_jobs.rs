@@ -377,6 +377,7 @@ fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // origin_is_set
     )
     .unwrap()
     .items
@@ -435,6 +436,7 @@ fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // origin_is_set
     )
     .unwrap()
     .items
@@ -525,6 +527,7 @@ fn test_runner_flow_continuation_and_convergence(start_server: &ServerProcess) {
             None,
             None,
             None,
+            None, // origin_is_set
         )
         .expect("list_jobs")
         .items
@@ -678,6 +681,7 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // origin_is_set
     )
     .unwrap()
     .items
@@ -696,6 +700,7 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // origin_is_set
     )
     .unwrap()
     .items
@@ -767,6 +772,7 @@ fn test_idempotent_replay(start_server: &ServerProcess) {
             None,
             None,
             None,
+            None, // origin_is_set
         )
         .unwrap()
         .items
@@ -787,6 +793,31 @@ fn test_idempotent_replay(start_server: &ServerProcess) {
         gen_record_names(config, workflow_id, "R").len(),
         1,
         "replay must not append a duplicate generation record"
+    );
+
+    // The OpenAPI contract promises spawned_job_ids are returned in the
+    // order they appear in the request — assert that explicitly. This
+    // guards against the replay branch quietly drifting to a HashMap-
+    // iteration ordering if someone reworks the lookup later.
+    let reordered_jobs = vec![
+        spawn_job("orch_R_g1", &[], 0),
+        spawn_job("work_R_i01", &[], 1),
+    ];
+    let reordered_replay = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("R".to_string()),
+            jobs: reordered_jobs,
+            state: Some(serde_json::json!({ "gen": 1 })),
+        },
+    )
+    .expect("reordered replay should succeed");
+    // Swapping the request order swaps the returned ID order.
+    assert_eq!(
+        reordered_replay.spawned_job_ids,
+        vec![first.spawned_job_ids[1], first.spawned_job_ids[0]],
+        "replay must preserve request-order in spawned_job_ids"
     );
 }
 
@@ -830,6 +861,7 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // origin_is_set
     )
     .unwrap()
     .items
@@ -848,6 +880,7 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // origin_is_set
     )
     .unwrap()
     .items
@@ -884,5 +917,95 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
             .unwrap()
             .status,
         Some(JobStatus::Running),
+    );
+}
+
+/// When a spawn job omits `resource_requirements`, the server falls back to
+/// the workflow's auto-created RR named "default" (mirroring
+/// `transport_create_job`). Without this, the spawned row would have
+/// `resource_requirements_id=NULL` and the claim path's inner-join would
+/// never pick it up — the job would stay Ready forever.
+#[rstest]
+fn test_resource_requirements_default_fallback(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    // setup() creates the workflow, which causes the server to auto-create
+    // an RR named "default" (reserved name, only the server creates it).
+    let (workflow_id, _cn) = setup(config, "dyn_rr_default", Some(5));
+
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    // No resource_requirements -> should resolve to the workflow's "default" RR.
+    let mut bare = spawn_job("bare_worker", &[], 1);
+    bare.resource_requirements = None;
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("D".to_string()),
+            jobs: vec![bare],
+            state: None,
+        },
+    )
+    .expect("spawn must succeed via default RR fallback");
+    assert_eq!(resp.spawned_job_ids.len(), 1);
+
+    let inserted = apis::jobs_api::get_job(config, resp.spawned_job_ids[0]).unwrap();
+    assert!(
+        inserted.resource_requirements_id.is_some(),
+        "spawned job must get a real resource_requirements_id from the default fallback"
+    );
+}
+
+/// A lineage containing `%` must not match other lineages' generation
+/// records — the LIKE pattern escapes both `_` and `%`. Without the `%`
+/// escape, lineage "X%" would also match "X_g00000Y" rows from other
+/// lineages and the derived spawn_count would be wrong.
+#[rstest]
+fn test_lineage_with_percent_escapes_like_pattern(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_pct_escape", Some(5));
+    let orch_a = seed_and_init(config, workflow_id, "orch_a");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Lineage A: plain alpha id, advances to generation 1.
+    claim_and_mark_running(config, workflow_id, run_id, orch_a);
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch_a,
+        models::SpawnJobsRequest {
+            lineage: Some("alpha".to_string()),
+            jobs: vec![spawn_job("alpha_w1", &[], 1)],
+            state: None,
+        },
+    )
+    .unwrap();
+    runner_completes(config, workflow_id, run_id, _cn, orch_a);
+
+    // Seed a second orchestrator that uses a lineage containing `%`. If the
+    // server did not escape `%`, its derive-spawn-count LIKE pattern would
+    // match alpha's `__torc_lineage__alpha__g000001` row too and report
+    // iteration=2 on the first call.
+    let job_b = models::JobModel::new(workflow_id, "orch_b".to_string(), "echo b".to_string());
+    let orch_b = apis::jobs_api::create_job(config, job_b)
+        .unwrap()
+        .id
+        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None).expect("reinit");
+    claim_and_mark_running(config, workflow_id, run_id, orch_b);
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch_b,
+        models::SpawnJobsRequest {
+            lineage: Some("a%".to_string()),
+            jobs: vec![spawn_job("pct_w1", &[], 1)],
+            state: None,
+        },
+    )
+    .expect("spawn with %-containing lineage must succeed");
+    assert_eq!(
+        resp.iteration, 1,
+        "lineage `a%` must start at iteration 1, not inherit alpha's count"
     );
 }
