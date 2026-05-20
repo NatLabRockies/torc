@@ -1735,7 +1735,7 @@ where
             .map_err(|e| database_lock_aware_error(e, "Failed to begin spawn_jobs transaction"))?;
 
         // --- Resolve the calling job and its workflow --------------------
-        let job_row = match sqlx::query("SELECT workflow_id, name FROM job WHERE id = ?")
+        let job_row = match sqlx::query("SELECT workflow_id, name, status FROM job WHERE id = ?")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await
@@ -1754,7 +1754,57 @@ where
         };
         let workflow_id: i64 = job_row.get("workflow_id");
         let caller_name: String = job_row.get("name");
+        let caller_status_int: i64 = job_row.get("status");
+        let caller_status = parse_job_status(i32::try_from(caller_status_int).unwrap_or(0), id)
+            .map_err(|e| ApiError(format!("Failed to parse caller status: {}", e.0)))?;
+        // The orchestrator must be Running. If the caller is already terminal
+        // its unblock has already been processed, so spawned children would
+        // sit Blocked forever (the cascade fires on completions, not inserts).
+        if caller_status != models::JobStatus::Running {
+            let _ = tx.rollback().await;
+            return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "spawn_jobs requires the calling job to be Running (job_id={} is {:?}); \
+                     spawned children blocked on an already-processed caller would never unblock",
+                    id, caller_status
+                )),
+            ));
+        }
         let lineage = lineage.unwrap_or(caller_name);
+
+        // --- Reject duplicate names in the batch up front ---------------
+        // If two entries share a name the second INSERT overwrites the first
+        // in `name_to_id`, corrupting the dependency-edge wiring below.
+        {
+            let mut seen: std::collections::HashSet<&str> =
+                std::collections::HashSet::with_capacity(jobs.len());
+            for job in &jobs {
+                if !seen.insert(job.name.as_str()) {
+                    let _ = tx.rollback().await;
+                    return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "duplicate name '{}' in spawn batch",
+                            job.name
+                        )),
+                    ));
+                }
+            }
+        }
+
+        // --- Validate priorities (mirror create_job's >= 0 rule) --------
+        for job in &jobs {
+            if let Some(p) = job.priority
+                && p < 0
+            {
+                let _ = tx.rollback().await;
+                return Ok(SpawnJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "spawn job '{}' has invalid priority {}: must be >= 0",
+                        job.name, p
+                    )),
+                ));
+            }
+        }
 
         let wf_row =
             match sqlx::query("SELECT max_spawn_iterations_per_lineage FROM workflow WHERE id = ?")
@@ -1779,15 +1829,43 @@ where
             .unwrap_or(DEFAULT_MAX_SPAWN_ITERATIONS);
 
         // --- Existing jobs in the workflow (name -> id) ------------------
-        let existing_rows = sqlx::query("SELECT id, name FROM job WHERE workflow_id = ?")
-            .bind(workflow_id)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(|e| database_lock_aware_error(e, "Failed to list workflow jobs"))?;
-        let mut name_to_id: std::collections::HashMap<String, i64> = existing_rows
-            .iter()
-            .map(|r| (r.get::<String, _>("name"), r.get::<i64, _>("id")))
-            .collect();
+        // Only fetch the names that the batch actually references: the spawn
+        // job names themselves (for the idempotency / overlap check) plus
+        // each spawn job's depends_on entries. Loading the entire workflow's
+        // job table would inflate the BEGIN IMMEDIATE transaction on large
+        // workflows.
+        let mut needed_names: std::collections::HashSet<&str> =
+            jobs.iter().map(|j| j.name.as_str()).collect();
+        for job in &jobs {
+            for dep in job.depends_on.as_deref().unwrap_or(&[]) {
+                needed_names.insert(dep.as_str());
+            }
+        }
+        let mut name_to_id: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::with_capacity(needed_names.len());
+        if !needed_names.is_empty() {
+            // Build an IN-clause-friendly query. sqlx::QueryBuilder is the
+            // idiomatic way; here we hand-roll because the binds are simple.
+            let placeholders = needed_names
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(", ");
+            let sql = format!(
+                "SELECT id, name FROM job WHERE workflow_id = ? AND name IN ({})",
+                placeholders
+            );
+            let mut q = sqlx::query(&sql).bind(workflow_id);
+            for name in &needed_names {
+                q = q.bind(*name);
+            }
+            let rows = q.fetch_all(&mut *tx).await.map_err(|e| {
+                database_lock_aware_error(e, "Failed to look up referenced workflow jobs")
+            })?;
+            for r in rows {
+                name_to_id.insert(r.get::<String, _>("name"), r.get::<i64, _>("id"));
+            }
+        }
 
         // --- Idempotency: detect a replayed spawn -----------------------
         let already_present = jobs
@@ -1810,12 +1888,20 @@ where
         // `__torc_lineage__<lineage>__g<NNNNNN>`. spawn_count == the highest
         // generation present. The converged final state (no-spawn call that
         // carries state) is a single `__torc_lineage__<lineage>__final` record.
+        //
+        // Scope the query to this lineage's prefix so we don't drag every
+        // user_data row through the BEGIN IMMEDIATE transaction. The prefix
+        // contains `_`, which is a LIKE wildcard, so we escape with `\`.
         let gen_prefix = format!("__torc_lineage__{}__g", lineage);
-        let lineage_names = sqlx::query("SELECT name FROM user_data WHERE workflow_id = ?")
-            .bind(workflow_id)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(|e| database_lock_aware_error(e, "Failed to read lineage state"))?;
+        let escaped_like = gen_prefix.replace('\\', "\\\\").replace('_', "\\_") + "%";
+        let lineage_names = sqlx::query(
+            "SELECT name FROM user_data WHERE workflow_id = ? AND name LIKE ? ESCAPE '\\'",
+        )
+        .bind(workflow_id)
+        .bind(&escaped_like)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| database_lock_aware_error(e, "Failed to read lineage state"))?;
         let mut spawn_count: i64 = lineage_names
             .iter()
             .filter_map(|r| {
@@ -1926,8 +2012,24 @@ where
                 .collect();
         } else if will_spawn {
             let blocked_int = i64::from(models::JobStatus::Blocked.to_int());
-            let lineage_env =
-                serde_json::json!({ "TORC_ORCHESTRATOR_LINEAGE_ID": &lineage }).to_string();
+            // Mirror the workflow-env merge that normal job creation does
+            // (JobsApiImpl::fetch_workflow_env + merge_env): start from the
+            // workflow-level env, then layer the lineage var on top so it
+            // wins in any unlikely collision.
+            let workflow_env_json: Option<String> =
+                sqlx::query_scalar("SELECT env FROM workflow WHERE id = ?")
+                    .bind(workflow_id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(|e| database_lock_aware_error(e, "Failed to fetch workflow env"))?
+                    .flatten();
+            let mut effective_env: std::collections::HashMap<String, String> = workflow_env_json
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+            effective_env.insert("TORC_ORCHESTRATOR_LINEAGE_ID".to_string(), lineage.clone());
+            let lineage_env = serde_json::to_string(&effective_env)
+                .map_err(|e| ApiError(format!("Failed to serialize spawned job env: {}", e)))?;
             for (job, rr_id) in jobs.iter().zip(rr_ids.iter()) {
                 let new_id: i64 = sqlx::query(
                     r#"

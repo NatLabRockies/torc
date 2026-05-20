@@ -10,7 +10,7 @@
     )
 
     - iteration::Int64 : This lineage&#39;s spawn-iteration counter after the call.
-    - spawned_job_ids::Vector{Int64} : IDs of the jobs that were added (empty on a replay or final-state call).
+    - spawned_job_ids::Vector{Int64} : IDs of the spawned jobs. On a fresh call this is the IDs of the newly inserted jobs; on an idempotent replay (same names already exist) it is the IDs of those pre-existing jobs in the order they appear in the request. Empty only when the request&#39;s &#x60;jobs&#x60; array is empty (e.g. a final-state convergence call).
 """
 Base.@kwdef mutable struct SpawnJobsResponse <: OpenAPI.APIModel
     iteration::Union{Nothing, Int64} = nothing

@@ -27,7 +27,7 @@ class SpawnJobsResponse(BaseModel):
     SpawnJobsResponse
     """ # noqa: E501
     iteration: StrictInt = Field(description="This lineage's spawn-iteration counter after the call.")
-    spawned_job_ids: List[StrictInt] = Field(description="IDs of the jobs that were added (empty on a replay or final-state call).")
+    spawned_job_ids: List[StrictInt] = Field(description="IDs of the spawned jobs. On a fresh call this is the IDs of the newly inserted jobs; on an idempotent replay (same names already exist) it is the IDs of those pre-existing jobs in the order they appear in the request. Empty only when the request's `jobs` array is empty (e.g. a final-state convergence call).")
     __properties: ClassVar[List[str]] = ["iteration", "spawned_job_ids"]
 
     model_config = ConfigDict(

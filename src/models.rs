@@ -367,9 +367,10 @@ pub struct BatchCompleteJobsResponse {
 ///
 /// `depends_on` entries may reference jobs that already exist in the workflow
 /// or sibling jobs created in the same request (resolved by name within the
-/// transaction). A job with no dependencies is created `ready`; one with
-/// dependencies is created `blocked` and promoted by the normal background
-/// unblock path once its dependencies are terminal.
+/// transaction). Every spawned job is created `blocked` — the server auto-
+/// injects a dependency edge to the calling job in addition to any explicit
+/// `depends_on`, so spawned jobs are promoted by the normal background
+/// unblock path once the caller (and any explicit deps) become terminal.
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpawnJobModel {
@@ -412,7 +413,11 @@ pub struct SpawnJobsRequest {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpawnJobsResponse {
-    /// IDs of the jobs that were added (empty on a replay or final-state call).
+    /// IDs of the spawned jobs. On a fresh call this is the IDs of the newly
+    /// inserted jobs; on an idempotent replay (same names already exist) it
+    /// is the IDs of those pre-existing jobs in the order they appear in the
+    /// request. Empty only when the request's `jobs` array is empty (e.g. a
+    /// final-state convergence call).
     pub spawned_job_ids: Vec<i64>,
     /// This lineage's spawn-iteration counter after the call.
     pub iteration: i64,

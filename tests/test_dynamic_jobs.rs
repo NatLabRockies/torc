@@ -234,6 +234,168 @@ fn final_state(
         .and_then(|u| u.data)
 }
 
+/// Reject spawn_jobs when the caller is not Running. If the caller were
+/// already terminal its unblock would already have been processed and
+/// freshly-inserted children blocked on it would sit forever.
+#[rstest]
+fn test_rejects_non_running_caller(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_caller_state", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    // Caller is Ready (not Running) — claim has not happened.
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("X".to_string()),
+            jobs: vec![spawn_job("would_block_forever", &[], 1)],
+            state: None,
+        },
+    )
+    .expect_err("must reject non-Running caller");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("running"),
+        "expected 422 caller-not-running rejection, got: {}",
+        msg
+    );
+}
+
+/// Duplicate names in the batch must be rejected — otherwise the second
+/// INSERT overwrites name_to_id and dependency edges get attached to the
+/// wrong row.
+#[rstest]
+fn test_rejects_duplicate_names_in_batch(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_dup_names", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("D".to_string()),
+            jobs: vec![spawn_job("twin", &[], 1), spawn_job("twin", &[], 1)],
+            state: None,
+        },
+    )
+    .expect_err("must reject duplicate names");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("duplicate"),
+        "expected 422 duplicate-name rejection, got: {}",
+        msg
+    );
+}
+
+/// Negative priority is rejected (matches the rule create_job enforces).
+#[rstest]
+fn test_rejects_negative_priority(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_neg_priority", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let mut bad = spawn_job("worker", &[], 1);
+    bad.priority = Some(-1);
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("P".to_string()),
+            jobs: vec![bad],
+            state: None,
+        },
+    )
+    .expect_err("must reject negative priority");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("priority"),
+        "expected 422 priority rejection, got: {}",
+        msg
+    );
+}
+
+/// Workflow-level env vars are merged into spawned-job env, alongside the
+/// auto-injected TORC_ORCHESTRATOR_LINEAGE_ID.
+#[rstest]
+fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let mut wf = models::WorkflowModel::new("dyn_env_merge".to_string(), "test_user".to_string());
+    wf.env = Some(
+        [("TORC_DEMO_ENV".to_string(), "from_workflow".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    wf.max_spawn_iterations_per_lineage = Some(5);
+    let created = apis::workflows_api::create_workflow(config, wf).unwrap();
+    let workflow_id = created.id.unwrap();
+
+    let cn = models::ComputeNodeModel::new(
+        workflow_id,
+        "test-host".to_string(),
+        std::process::id() as i64,
+        now(),
+        64,
+        256.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    apis::compute_nodes_api::create_compute_node(config, cn).unwrap();
+    apis::resource_requirements_api::create_resource_requirements(
+        config,
+        models::ResourceRequirementsModel::new(workflow_id, "rr".to_string()),
+    )
+    .unwrap();
+
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("E".to_string()),
+            jobs: vec![spawn_job("worker", &[], 1)],
+            state: None,
+        },
+    )
+    .unwrap();
+
+    let worker = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "worker")
+    .unwrap();
+    let env = worker.env.expect("spawned job should have env set");
+    assert_eq!(
+        env.get("TORC_DEMO_ENV").map(|s| s.as_str()),
+        Some("from_workflow"),
+        "workflow env must be merged into spawned job env"
+    );
+    assert_eq!(
+        env.get("TORC_ORCHESTRATOR_LINEAGE_ID").map(|s| s.as_str()),
+        Some("E"),
+        "lineage var must be present alongside workflow env"
+    );
+}
+
 /// End-to-end runner flow: orchestrator runs, spawns children blocked on
 /// itself, exits; the runner completes it; the unblock cascade promotes the
 /// children; the iteration's worker finishes; the next orchestrator runs and

@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class SpawnJobModel(BaseModel):
     """
-    One job to add atomically as part of `spawn_jobs`.  `depends_on` entries may reference jobs that already exist in the workflow or sibling jobs created in the same request (resolved by name within the transaction). A job with no dependencies is created `ready`; one with dependencies is created `blocked` and promoted by the normal background unblock path once its dependencies are terminal.
+    One job to add atomically as part of `spawn_jobs`.  `depends_on` entries may reference jobs that already exist in the workflow or sibling jobs created in the same request (resolved by name within the transaction). Every spawned job is created `blocked` — the server auto- injects a dependency edge to the calling job in addition to any explicit `depends_on`, so spawned jobs are promoted by the normal background unblock path once the caller (and any explicit deps) become terminal.
     """ # noqa: E501
     cancel_on_blocking_job_failure: Optional[StrictBool] = None
     command: StrictStr

@@ -3,7 +3,7 @@
 
 
 @doc raw"""SpawnJobModel
-One job to add atomically as part of &#x60;spawn_jobs&#x60;.  &#x60;depends_on&#x60; entries may reference jobs that already exist in the workflow or sibling jobs created in the same request (resolved by name within the transaction). A job with no dependencies is created &#x60;ready&#x60;; one with dependencies is created &#x60;blocked&#x60; and promoted by the normal background unblock path once its dependencies are terminal.
+One job to add atomically as part of &#x60;spawn_jobs&#x60;.  &#x60;depends_on&#x60; entries may reference jobs that already exist in the workflow or sibling jobs created in the same request (resolved by name within the transaction). Every spawned job is created &#x60;blocked&#x60; — the server auto- injects a dependency edge to the calling job in addition to any explicit &#x60;depends_on&#x60;, so spawned jobs are promoted by the normal background unblock path once the caller (and any explicit deps) become terminal.
 
     SpawnJobModel(;
         cancel_on_blocking_job_failure=nothing,
