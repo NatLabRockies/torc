@@ -505,6 +505,21 @@ where
                 message_error_response(err.0),
             ));
         }
+        // Reject non-positive `max_spawn_iterations_per_lineage` here too,
+        // not just in the workflow-spec validator. Direct API callers bypass
+        // the spec tooling, and 0 / negative values would silently disable
+        // spawning and surface a confusing "cap reached" 422 on the first
+        // `spawn_jobs` call.
+        if let Some(n) = body.max_spawn_iterations_per_lineage
+            && n < 1
+        {
+            return Ok(CreateWorkflowResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "max_spawn_iterations_per_lineage must be >= 1 (got {}); omit the field to use the server default",
+                    n
+                )),
+            ));
+        }
         body.env = normalize_env_map(body.env.take());
         let workflow_env = serialize_env_map(body.env.clone(), "workflow env")?;
         let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
@@ -814,6 +829,7 @@ where
                     metadata,
                     slurm_config,
                     execution_config,
+                    max_spawn_iterations_per_lineage,
                     run_id,
                     is_canceled,
                     is_archived
@@ -1099,6 +1115,21 @@ where
             return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
                 message_error_response(
                     "Cannot modify env - this field is immutable after workflow creation",
+                ),
+            ));
+        }
+        // `max_spawn_iterations_per_lineage` mirrors the spec-side
+        // `dynamic_jobs.max_iterations`, which is documented as
+        // runtime-immutable. The UPDATE below silently omits this column, so
+        // a caller passing a new value would otherwise see "200 OK" while
+        // the database is untouched. Reject the change explicitly instead.
+        if body.max_spawn_iterations_per_lineage.is_some()
+            && body.max_spawn_iterations_per_lineage
+                != current_workflow.max_spawn_iterations_per_lineage
+        {
+            return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify max_spawn_iterations_per_lineage - this field is immutable after workflow creation",
                 ),
             ));
         }

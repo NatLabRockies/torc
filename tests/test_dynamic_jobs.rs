@@ -485,6 +485,119 @@ fn test_retried_jobs_have_origin_retry(start_server: &ServerProcess) {
     assert_eq!(retried.status, Some(JobStatus::Ready));
 }
 
+/// A spawned job that fails and is then retried must keep `origin='spawn'`,
+/// not be clobbered to `origin='retry'`. Provenance answers "why does this
+/// row exist" — it was added by `spawn_jobs`; the retry just bumped its
+/// attempt counter. The auto-schedule detector treats both equally
+/// (`origin IS NOT NULL`), but downstream observability and reports need
+/// the original provenance.
+#[rstest]
+fn test_retry_preserves_spawn_origin(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_retry_spawn", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Spawn a worker, then complete the orchestrator so the worker unblocks.
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("S".to_string()),
+            jobs: vec![spawn_job("flaky_spawn", &[], 1)],
+            state: None,
+        },
+    )
+    .expect("spawn worker");
+    let worker_id = resp.spawned_job_ids[0];
+    runner_completes(config, workflow_id, run_id, cn, orch);
+    wait_for_status(config, worker_id, JobStatus::Ready);
+
+    // Fail the spawned worker, then retry it.
+    claim_and_mark_running(config, workflow_id, run_id, worker_id);
+    let fail = models::ResultModel::new(
+        worker_id,
+        workflow_id,
+        run_id,
+        1,
+        cn,
+        1,
+        0.1,
+        now(),
+        JobStatus::Failed,
+    );
+    apis::jobs_api::complete_job(config, worker_id, JobStatus::Failed, run_id, fail).unwrap();
+    apis::jobs_api::retry_job(config, worker_id, run_id, 3).unwrap();
+
+    let retried = apis::jobs_api::get_job(config, worker_id).unwrap();
+    assert_eq!(
+        retried.origin.as_deref(),
+        Some("spawn"),
+        "retried spawned job must keep origin='spawn', not be clobbered to 'retry'"
+    );
+    assert_eq!(retried.attempt_id, Some(2));
+    assert_eq!(retried.status, Some(JobStatus::Ready));
+}
+
+/// Server-side validation of `max_spawn_iterations_per_lineage` on
+/// workflow creation. The spec validator already rejects non-positive
+/// values for spec-file callers; this test confirms direct API callers
+/// get the same 422 instead of a confusing "cap reached" on first spawn.
+#[rstest]
+fn test_create_workflow_rejects_non_positive_max_iterations(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let mut wf =
+        models::WorkflowModel::new("dyn_bad_max_iter".to_string(), "test_user".to_string());
+    wf.max_spawn_iterations_per_lineage = Some(0);
+    let err = apis::workflows_api::create_workflow(config, wf)
+        .expect_err("create_workflow must reject max_spawn_iterations_per_lineage=0");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("must be >= 1"),
+        "expected 422 rejection, got: {}",
+        msg
+    );
+
+    let mut wf2 =
+        models::WorkflowModel::new("dyn_bad_max_iter2".to_string(), "test_user".to_string());
+    wf2.max_spawn_iterations_per_lineage = Some(-1);
+    let err = apis::workflows_api::create_workflow(config, wf2)
+        .expect_err("create_workflow must reject negative max_spawn_iterations_per_lineage");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("must be >= 1"),
+        "expected 422 rejection, got: {}",
+        msg
+    );
+}
+
+/// `max_spawn_iterations_per_lineage` is runtime-immutable: an attempt to
+/// change it via `update_workflow` must 422 rather than silently no-op
+/// (which the previous COALESCE-based UPDATE would have done).
+#[rstest]
+fn test_update_workflow_rejects_max_iterations_change(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_immutable_max_iter", Some(5));
+    let mut wf = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
+    wf.max_spawn_iterations_per_lineage = Some(10);
+    let err = apis::workflows_api::update_workflow(config, workflow_id, wf)
+        .expect_err("update_workflow must reject max_spawn_iterations_per_lineage change");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("immutable"),
+        "expected 422 immutability rejection, got: {}",
+        msg
+    );
+
+    // Passing the same value (no actual change) should NOT 422 — we only
+    // reject real modifications.
+    let mut wf2 = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
+    wf2.max_spawn_iterations_per_lineage = Some(5); // same as setup() created
+    apis::workflows_api::update_workflow(config, workflow_id, wf2)
+        .expect("no-op update with same value must succeed");
+}
+
 /// End-to-end runner flow: orchestrator runs, spawns children blocked on
 /// itself, exits; the runner completes it; the unblock cascade promotes the
 /// children; the iteration's worker finishes; the next orchestrator runs and

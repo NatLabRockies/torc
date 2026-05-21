@@ -2940,7 +2940,7 @@ where
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
-                   j.resource_requirements_id, j.scheduler_id, j.priority,
+                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin,
                    w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
@@ -2981,6 +2981,7 @@ where
         let resource_requirements_id: Option<i64> = job_record.get("resource_requirements_id");
         let scheduler_id: Option<i64> = job_record.get("scheduler_id");
         let workflow_run_id: i64 = job_record.get("workflow_run_id");
+        let existing_origin: Option<String> = job_record.try_get("origin").ok().flatten();
 
         // Verify run_id matches
         if workflow_run_id != run_id {
@@ -3033,14 +3034,19 @@ where
         let new_attempt = attempt_id + 1;
 
         // Update job status to Ready, increment attempt_id, and tag origin
-        // as 'retry' so `torc watch --auto-schedule` recognizes this row as
-        // needing an unplanned allocation (deferred `schedule_nodes` actions
-        // only account for the originally-declared workload).
+        // as 'retry' *only if it's not already set* so `torc watch
+        // --auto-schedule` recognizes this row as needing an unplanned
+        // allocation. COALESCE preserves the original provenance: a job
+        // created by `spawn_jobs` (origin='spawn') that later gets retried
+        // keeps `origin='spawn'`, because "why does this job exist" is still
+        // "spawn_jobs added it at runtime" — it just happens to be on its
+        // 2nd attempt. The watch detector keys on `origin IS NOT NULL` and
+        // doesn't care which non-null value it sees.
         let ready_status = JobStatus::Ready.to_int();
         if let Err(e) = sqlx::query(
             r#"
             UPDATE job
-            SET status = ?, attempt_id = ?, origin = 'retry'
+            SET status = ?, attempt_id = ?, origin = COALESCE(origin, 'retry')
             WHERE id = ?
             "#,
         )
@@ -3124,9 +3130,10 @@ where
             failure_handler_id,
             attempt_id: Some(new_attempt),
             priority,
-            // The UPDATE above set origin='retry'; reflect that in the
-            // returned model so the caller doesn't see stale provenance.
-            origin: Some("retry".to_string()),
+            // Mirror the UPDATE above: COALESCE(existing, 'retry'). A
+            // previously-spawned row keeps origin='spawn'; a fresh retry of
+            // a statically-declared job becomes 'retry'.
+            origin: Some(existing_origin.unwrap_or_else(|| "retry".to_string())),
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

@@ -17,3 +17,13 @@
 ALTER TABLE workflow ADD COLUMN max_spawn_iterations_per_lineage INTEGER NULL;
 
 ALTER TABLE job ADD COLUMN origin TEXT NULL DEFAULT NULL;
+
+-- Backfill `origin='retry'` for rows that were already retries when this
+-- column was added. Before this migration, retries were detected with the
+-- heuristic `attempt_id > 1`; `torc watch --auto-schedule` now keys on
+-- `origin IS NOT NULL`, so without this backfill operators upgrading from
+-- a pre-spawn_jobs version would silently lose detection of already-
+-- enqueued retries. Safe at migration time because `spawn_jobs` did not
+-- exist before this column, so every existing `attempt_id > 1` row is a
+-- failure-handler retry, not a spawned job.
+UPDATE job SET origin = 'retry' WHERE attempt_id > 1 AND origin IS NULL;
