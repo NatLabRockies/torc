@@ -1471,7 +1471,7 @@ fn substitute_workflow_variables_in_string(
 /// Dynamic job spawning (orchestrator continuation) configuration.
 ///
 /// The spec and the persisted `WorkflowModel.dynamic_jobs` share one type
-/// — they're identical by design. See `docs/plans/dynamic-jobs-design.md`.
+/// — they're identical by design.
 pub use crate::models::DynamicJobsConfig as DynamicJobsSpec;
 
 /// Specification for a complete workflow

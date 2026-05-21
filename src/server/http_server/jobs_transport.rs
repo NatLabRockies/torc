@@ -2161,7 +2161,7 @@ where
     /// calling job. The calling job is **not** completed here — the runner
     /// completes it when its subprocess exits, and the normal unblock cascade
     /// promotes the spawned jobs. Per-lineage state and counter are persisted
-    /// in the same transaction. See `docs/plans/dynamic-jobs-design.md`.
+    /// in the same transaction.
     ///
     /// The body of the function is the orchestration layer; the real work is
     /// in the spawn_jobs helpers above. The closure pattern lets every
@@ -2407,8 +2407,8 @@ where
             (Vec::new(), committed)
         };
 
-        // Success-path log line in the parsing-friendly format
-        // documented in `docs/plans/dynamic-jobs-design.md`.
+        // Success-path log line in the parsing-friendly
+        // `workflow_id=<> job_id=<>` format used elsewhere in the codebase.
         info!(
             "spawn_jobs workflow_id={} job_id={} lineage={} iteration={} spawned_count={} replay={} spawned_job_ids={:?}",
             workflow_id,

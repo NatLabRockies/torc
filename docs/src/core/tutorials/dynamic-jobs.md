@@ -360,6 +360,3 @@ when needed.
 - The energy-modeling example at `examples/yaml/dynamic_orchestrator_slurm.yaml` plus
   `examples/scripts/dynamic_orchestrator.py` is the same pattern applied to a ReEDS↔PRAS feedback
   loop with realistic resource shapes (ReEDS at 8 CPU / 10 GB, PRAS at 1 CPU / 120 GB).
-- For the design rationale — including the alternatives that were rejected (pre-allocate-and-cancel,
-  long-lived orchestrator polling) and how restart/recovery works — see
-  `docs/plans/dynamic-jobs-design.md`.

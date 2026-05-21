@@ -5,8 +5,6 @@
 //! promotes the spawned jobs. These tests model that runner flow by leaving the
 //! caller `Running` across the `spawn_jobs` call and then calling `complete_job`
 //! on it to stand in for the runner's post-exit completion.
-//!
-//! See `docs/plans/dynamic-jobs-design.md`.
 
 mod common;
 
