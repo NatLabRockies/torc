@@ -577,11 +577,24 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
     pub is_archived: Option<bool>,
-    /// Cap on `spawn_jobs` calls per orchestrator lineage
-    /// (the `dynamic_jobs.max_iterations` workflow-spec setting). `None`
-    /// applies the server default.
+    /// Dynamic job spawning configuration. Mirrors the workflow-spec
+    /// `dynamic_jobs` section identically. Runtime-immutable after
+    /// workflow creation.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_spawn_iterations_per_lineage: Option<i64>,
+    pub dynamic_jobs: Option<DynamicJobsConfig>,
+}
+
+/// Dynamic job spawning configuration. Used both as the user-authored
+/// `WorkflowSpec.dynamic_jobs` and as the persisted `WorkflowModel.dynamic_jobs`
+/// (stored as JSON in the `workflow.dynamic_jobs` column). Runtime-immutable.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicJobsConfig {
+    /// Cap on `spawn_jobs` calls per orchestrator lineage. `None` applies
+    /// the server default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1602,7 +1615,7 @@ impl WorkflowModel {
             run_id: None,
             is_canceled: None,
             is_archived: None,
-            max_spawn_iterations_per_lineage: None,
+            dynamic_jobs: None,
         }
     }
 }
@@ -2023,7 +2036,7 @@ mod tests {
             run_id: Some(1),
             is_canceled: Some(false),
             is_archived: Some(false),
-            max_spawn_iterations_per_lineage: None,
+            dynamic_jobs: None,
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");

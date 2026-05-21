@@ -5610,6 +5610,22 @@ components:
           format: int64
         message:
           type: string
+    DynamicJobsConfig:
+      type: object
+      description: |-
+        Dynamic job spawning configuration. Used both as the user-authored
+        `WorkflowSpec.dynamic_jobs` and as the persisted `WorkflowModel.dynamic_jobs`
+        (stored as JSON in the `workflow.dynamic_jobs` column). Runtime-immutable.
+      properties:
+        max_iterations:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Cap on `spawn_jobs` calls per orchestrator lineage. `None` applies
+            the server default.
+      additionalProperties: false
     ErrorResponse:
       type: object
       required:
@@ -7228,6 +7244,14 @@ components:
           type:
           - string
           - 'null'
+        dynamic_jobs:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DynamicJobsConfig'
+            description: |-
+              Dynamic job spawning configuration. Mirrors the workflow-spec
+              `dynamic_jobs` section identically. Runtime-immutable after
+              workflow creation.
         enable_ro_crate:
           type:
           - boolean
@@ -7270,15 +7294,6 @@ components:
             cleared via `POST /workflows/{id}/reset_status`. Values supplied to
             create/update workflow endpoints are ignored.
           readOnly: true
-        max_spawn_iterations_per_lineage:
-          type:
-          - integer
-          - 'null'
-          format: int64
-          description: |-
-            Cap on `spawn_jobs` calls per orchestrator lineage
-            (the `dynamic_jobs.max_iterations` workflow-spec setting). `None`
-            applies the server default.
         metadata:
           type:
           - string

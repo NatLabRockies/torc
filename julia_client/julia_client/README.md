@@ -170,6 +170,7 @@ Class | Method
  - [CreateUserDataListResponse](docs/CreateUserDataListResponse.md)
  - [DeleteCountResponse](docs/DeleteCountResponse.md)
  - [DeleteRoCrateEntitiesResponse](docs/DeleteRoCrateEntitiesResponse.md)
+ - [DynamicJobsConfig](docs/DynamicJobsConfig.md)
  - [ErrorResponse](docs/ErrorResponse.md)
  - [EventModel](docs/EventModel.md)
  - [FailureHandlerModel](docs/FailureHandlerModel.md)

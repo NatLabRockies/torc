@@ -1,8 +1,12 @@
 -- Dynamic job spawning support.
 --
--- `workflow.max_spawn_iterations_per_lineage` caps the number of `spawn_jobs`
--- calls per orchestrator lineage (a runaway guard that maps to "max
--- iterations per run"). NULL means use the server default.
+-- `workflow.dynamic_jobs` is a JSON blob mirroring the workflow-spec
+-- `dynamic_jobs` section. Currently holds `{"max_iterations": N}` (per-
+-- orchestrator-lineage spawn cap, a runaway guard); NULL means use the
+-- server default. Stored as JSON for forward compatibility — additional
+-- `dynamic_jobs` fields can be added without further migrations. Matches
+-- the JSON-blob pattern used by `workflow.slurm_defaults`,
+-- `workflow.resource_monitor_config`, and `workflow.execution_config`.
 --
 -- `job.origin` records why a job exists — NULL for jobs declared at workflow
 -- creation (anticipated by `on_jobs_ready` / `schedule_nodes` deferred
@@ -14,7 +18,7 @@
 -- Plain ALTER TABLE ADD COLUMN: no rename-recreate of the FK-cascade parent
 -- `workflow` table (see CLAUDE.md migration warning).
 
-ALTER TABLE workflow ADD COLUMN max_spawn_iterations_per_lineage INTEGER NULL;
+ALTER TABLE workflow ADD COLUMN dynamic_jobs TEXT NULL;
 
 ALTER TABLE job ADD COLUMN origin TEXT NULL DEFAULT NULL;
 

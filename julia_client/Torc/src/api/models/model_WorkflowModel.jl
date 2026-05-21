@@ -11,13 +11,13 @@
         compute_node_wait_for_healthy_database_minutes=nothing,
         compute_node_wait_for_new_jobs_seconds=nothing,
         description=nothing,
+        dynamic_jobs=nothing,
         enable_ro_crate=nothing,
         env=nothing,
         execution_config=nothing,
         id=nothing,
         is_archived=nothing,
         is_canceled=nothing,
-        max_spawn_iterations_per_lineage=nothing,
         metadata=nothing,
         name=nothing,
         project=nothing,
@@ -36,13 +36,13 @@
     - compute_node_wait_for_healthy_database_minutes::Int64
     - compute_node_wait_for_new_jobs_seconds::Int64
     - description::String
+    - dynamic_jobs::DynamicJobsConfig : Dynamic job spawning configuration. Mirrors the workflow-spec &#x60;dynamic_jobs&#x60; section identically. Runtime-immutable after workflow creation.
     - enable_ro_crate::Bool
     - env::Dict{String, String}
     - execution_config::String
     - id::Int64
     - is_archived::Bool : True when the workflow has been archived. Read-only on the API: set via &#x60;POST /workflows/{id}/archive&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
     - is_canceled::Bool : True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via &#x60;POST /workflows/{id}/cancel&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
-    - max_spawn_iterations_per_lineage::Int64 : Cap on &#x60;spawn_jobs&#x60; calls per orchestrator lineage (the &#x60;dynamic_jobs.max_iterations&#x60; workflow-spec setting). &#x60;None&#x60; applies the server default.
     - metadata::String
     - name::String
     - project::String
@@ -61,13 +61,13 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     compute_node_wait_for_healthy_database_minutes::Union{Nothing, Int64} = nothing
     compute_node_wait_for_new_jobs_seconds::Union{Nothing, Int64} = nothing
     description::Union{Nothing, String} = nothing
+    dynamic_jobs = nothing # spec type: Union{ Nothing, DynamicJobsConfig }
     enable_ro_crate::Union{Nothing, Bool} = nothing
     env::Union{Nothing, Dict{String, String}} = nothing
     execution_config::Union{Nothing, String} = nothing
     id::Union{Nothing, Int64} = nothing
     is_archived::Union{Nothing, Bool} = nothing
     is_canceled::Union{Nothing, Bool} = nothing
-    max_spawn_iterations_per_lineage::Union{Nothing, Int64} = nothing
     metadata::Union{Nothing, String} = nothing
     name::Union{Nothing, String} = nothing
     project::Union{Nothing, String} = nothing
@@ -79,14 +79,14 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     use_pending_failed::Union{Nothing, Bool} = nothing
     user::Union{Nothing, String} = nothing
 
-    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, max_spawn_iterations_per_lineage, metadata, name, project, resource_monitor_config, run_id, slurm_config, slurm_defaults, timestamp, use_pending_failed, user, )
-        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, max_spawn_iterations_per_lineage, metadata, name, project, resource_monitor_config, run_id, slurm_config, slurm_defaults, timestamp, use_pending_failed, user, )
+    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_config, slurm_defaults, timestamp, use_pending_failed, user, )
+        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_config, slurm_defaults, timestamp, use_pending_failed, user, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowModel
 
-const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"String", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("max_spawn_iterations_per_lineage")=>"Int64", Symbol("metadata")=>"String", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"String", Symbol("run_id")=>"Int64", Symbol("slurm_config")=>"String", Symbol("slurm_defaults")=>"String", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
+const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("dynamic_jobs")=>"DynamicJobsConfig", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"String", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("metadata")=>"String", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"String", Symbol("run_id")=>"Int64", Symbol("slurm_config")=>"String", Symbol("slurm_defaults")=>"String", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
 OpenAPI.property_type(::Type{ WorkflowModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowModel)
@@ -102,13 +102,13 @@ function OpenAPI.validate_properties(o::WorkflowModel)
     OpenAPI.validate_property(WorkflowModel, Symbol("compute_node_wait_for_healthy_database_minutes"), o.compute_node_wait_for_healthy_database_minutes)
     OpenAPI.validate_property(WorkflowModel, Symbol("compute_node_wait_for_new_jobs_seconds"), o.compute_node_wait_for_new_jobs_seconds)
     OpenAPI.validate_property(WorkflowModel, Symbol("description"), o.description)
+    OpenAPI.validate_property(WorkflowModel, Symbol("dynamic_jobs"), o.dynamic_jobs)
     OpenAPI.validate_property(WorkflowModel, Symbol("enable_ro_crate"), o.enable_ro_crate)
     OpenAPI.validate_property(WorkflowModel, Symbol("env"), o.env)
     OpenAPI.validate_property(WorkflowModel, Symbol("execution_config"), o.execution_config)
     OpenAPI.validate_property(WorkflowModel, Symbol("id"), o.id)
     OpenAPI.validate_property(WorkflowModel, Symbol("is_archived"), o.is_archived)
     OpenAPI.validate_property(WorkflowModel, Symbol("is_canceled"), o.is_canceled)
-    OpenAPI.validate_property(WorkflowModel, Symbol("max_spawn_iterations_per_lineage"), o.max_spawn_iterations_per_lineage)
     OpenAPI.validate_property(WorkflowModel, Symbol("metadata"), o.metadata)
     OpenAPI.validate_property(WorkflowModel, Symbol("name"), o.name)
     OpenAPI.validate_property(WorkflowModel, Symbol("project"), o.project)
@@ -144,15 +144,12 @@ function OpenAPI.validate_property(::Type{ WorkflowModel }, name::Symbol, val)
 
 
 
+
     if name === Symbol("id")
         OpenAPI.validate_param(name, "WorkflowModel", :format, val, "int64")
     end
 
 
-
-    if name === Symbol("max_spawn_iterations_per_lineage")
-        OpenAPI.validate_param(name, "WorkflowModel", :format, val, "int64")
-    end
 
 
 

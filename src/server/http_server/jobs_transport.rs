@@ -80,8 +80,8 @@ const SPAWN_IN_CHUNK: usize = 256;
 /// 800 rows = 2400 binds per statement, well below the limit.
 const SPAWN_DEP_INSERT_CHUNK: usize = 800;
 
-/// Per-lineage cap applied when the workflow leaves
-/// `max_spawn_iterations_per_lineage` unset.
+/// Per-lineage cap applied when the workflow's `dynamic_jobs` config is
+/// absent or doesn't set `max_iterations`.
 const DEFAULT_MAX_SPAWN_ITERATIONS: i64 = 1000;
 
 fn reject(msg: impl Into<String>) -> SpawnReject {
@@ -2250,15 +2250,21 @@ where
         let lineage = lineage.unwrap_or(caller_name);
 
         // --- Workflow-level cap (defaulted) -----------------------------
-        let wf_row =
-            sqlx::query("SELECT max_spawn_iterations_per_lineage FROM workflow WHERE id = ?")
-                .bind(workflow_id)
-                .fetch_optional(&mut **tx)
-                .await
-                .map_err(|e| db_error(e, "Failed to fetch workflow"))?
-                .ok_or_else(|| reject_not_found("Workflow", workflow_id))?;
-        let max_iterations: i64 = wf_row
-            .get::<Option<i64>, _>("max_spawn_iterations_per_lineage")
+        // `workflow.dynamic_jobs` is a JSON blob mirroring the spec's
+        // `dynamic_jobs` section. Malformed JSON falls back to the server
+        // default (mirrors `parse_dynamic_jobs` in api/workflows.rs); the
+        // workflow row itself must exist.
+        let wf_row = sqlx::query("SELECT dynamic_jobs FROM workflow WHERE id = ?")
+            .bind(workflow_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to fetch workflow"))?
+            .ok_or_else(|| reject_not_found("Workflow", workflow_id))?;
+        let dynamic_jobs_json: Option<String> = wf_row.try_get("dynamic_jobs").ok().flatten();
+        let max_iterations: i64 = dynamic_jobs_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<models::DynamicJobsConfig>(s).ok())
+            .and_then(|d| d.max_iterations)
             .unwrap_or(DEFAULT_MAX_SPAWN_ITERATIONS);
 
         // --- Look up existing jobs referenced by the batch --------------
@@ -2293,7 +2299,7 @@ where
         let will_spawn = !jobs.is_empty() && !is_replay;
         if will_spawn && spawn_count + 1 > max_iterations {
             return Err(reject(format!(
-                "Per-lineage iteration cap reached for lineage '{}': {} (max_spawn_iterations_per_lineage={})",
+                "Per-lineage iteration cap reached for lineage '{}': {} (dynamic_jobs.max_iterations={})",
                 lineage, spawn_count, max_iterations
             )));
         }

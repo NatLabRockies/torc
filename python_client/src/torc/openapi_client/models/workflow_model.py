@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from torc.openapi_client.models.dynamic_jobs_config import DynamicJobsConfig
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -32,13 +33,13 @@ class WorkflowModel(BaseModel):
     compute_node_wait_for_healthy_database_minutes: Optional[StrictInt] = None
     compute_node_wait_for_new_jobs_seconds: Optional[StrictInt] = None
     description: Optional[StrictStr] = None
+    dynamic_jobs: Optional[DynamicJobsConfig] = Field(default=None, description="Dynamic job spawning configuration. Mirrors the workflow-spec `dynamic_jobs` section identically. Runtime-immutable after workflow creation.")
     enable_ro_crate: Optional[StrictBool] = None
     env: Optional[Dict[str, StrictStr]] = None
     execution_config: Optional[StrictStr] = None
     id: Optional[StrictInt] = None
     is_archived: Optional[StrictBool] = Field(default=None, description="True when the workflow has been archived. Read-only on the API: set via `POST /workflows/{id}/archive`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
     is_canceled: Optional[StrictBool] = Field(default=None, description="True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via `POST /workflows/{id}/cancel`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
-    max_spawn_iterations_per_lineage: Optional[StrictInt] = Field(default=None, description="Cap on `spawn_jobs` calls per orchestrator lineage (the `dynamic_jobs.max_iterations` workflow-spec setting). `None` applies the server default.")
     metadata: Optional[StrictStr] = None
     name: StrictStr
     project: Optional[StrictStr] = None
@@ -49,7 +50,7 @@ class WorkflowModel(BaseModel):
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "max_spawn_iterations_per_lineage", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -96,6 +97,9 @@ class WorkflowModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of dynamic_jobs
+        if self.dynamic_jobs:
+            _dict['dynamic_jobs'] = self.dynamic_jobs.to_dict()
         # set to None if compute_node_expiration_buffer_seconds (nullable) is None
         # and model_fields_set contains the field
         if self.compute_node_expiration_buffer_seconds is None and "compute_node_expiration_buffer_seconds" in self.model_fields_set:
@@ -126,6 +130,11 @@ class WorkflowModel(BaseModel):
         if self.description is None and "description" in self.model_fields_set:
             _dict['description'] = None
 
+        # set to None if dynamic_jobs (nullable) is None
+        # and model_fields_set contains the field
+        if self.dynamic_jobs is None and "dynamic_jobs" in self.model_fields_set:
+            _dict['dynamic_jobs'] = None
+
         # set to None if enable_ro_crate (nullable) is None
         # and model_fields_set contains the field
         if self.enable_ro_crate is None and "enable_ro_crate" in self.model_fields_set:
@@ -150,11 +159,6 @@ class WorkflowModel(BaseModel):
         # and model_fields_set contains the field
         if self.is_canceled is None and "is_canceled" in self.model_fields_set:
             _dict['is_canceled'] = None
-
-        # set to None if max_spawn_iterations_per_lineage (nullable) is None
-        # and model_fields_set contains the field
-        if self.max_spawn_iterations_per_lineage is None and "max_spawn_iterations_per_lineage" in self.model_fields_set:
-            _dict['max_spawn_iterations_per_lineage'] = None
 
         # set to None if metadata (nullable) is None
         # and model_fields_set contains the field
@@ -214,13 +218,13 @@ class WorkflowModel(BaseModel):
             "compute_node_wait_for_healthy_database_minutes": obj.get("compute_node_wait_for_healthy_database_minutes"),
             "compute_node_wait_for_new_jobs_seconds": obj.get("compute_node_wait_for_new_jobs_seconds"),
             "description": obj.get("description"),
+            "dynamic_jobs": DynamicJobsConfig.from_dict(obj["dynamic_jobs"]) if obj.get("dynamic_jobs") is not None else None,
             "enable_ro_crate": obj.get("enable_ro_crate"),
             "env": obj.get("env"),
             "execution_config": obj.get("execution_config"),
             "id": obj.get("id"),
             "is_archived": obj.get("is_archived"),
             "is_canceled": obj.get("is_canceled"),
-            "max_spawn_iterations_per_lineage": obj.get("max_spawn_iterations_per_lineage"),
             "metadata": obj.get("metadata"),
             "name": obj.get("name"),
             "project": obj.get("project"),

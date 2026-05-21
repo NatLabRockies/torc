@@ -1470,15 +1470,9 @@ fn substitute_workflow_variables_in_string(
 
 /// Dynamic job spawning (orchestrator continuation) configuration.
 ///
-/// User-authored, runtime-immutable. See `docs/plans/dynamic-jobs-design.md`.
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DynamicJobsSpec {
-    /// Cap on `spawn_jobs` calls per orchestrator lineage.
-    /// Omitted: the server applies a generous default.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_iterations: Option<i64>,
-}
+/// The spec and the persisted `WorkflowModel.dynamic_jobs` share one type
+/// — they're identical by design. See `docs/plans/dynamic-jobs-design.md`.
+pub use crate::models::DynamicJobsConfig as DynamicJobsSpec;
 
 /// Specification for a complete workflow
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
@@ -3324,10 +3318,8 @@ impl WorkflowSpec {
             workflow_model.slurm_defaults = Some(config_json);
         }
 
-        // Map dynamic_jobs.max_iterations -> per-lineage spawn cap
-        if let Some(ref dynamic_jobs) = spec.dynamic_jobs {
-            workflow_model.max_spawn_iterations_per_lineage = dynamic_jobs.max_iterations;
-        }
+        // dynamic_jobs is the same struct on both sides — copy through.
+        workflow_model.dynamic_jobs = spec.dynamic_jobs.clone();
 
         // Set use_pending_failed if present
         if let Some(value) = spec.use_pending_failed {

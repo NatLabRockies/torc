@@ -25,7 +25,9 @@ fn now() -> String {
 
 fn setup(config: &torc::client::Configuration, name: &str, max_iters: Option<i64>) -> (i64, i64) {
     let mut wf = models::WorkflowModel::new(name.to_string(), "test_user".to_string());
-    wf.max_spawn_iterations_per_lineage = max_iters;
+    wf.dynamic_jobs = max_iters.map(|n| models::DynamicJobsConfig {
+        max_iterations: Some(n),
+    });
     let created = apis::workflows_api::create_workflow(config, wf).expect("create_workflow failed");
     let workflow_id = created.id.unwrap();
 
@@ -328,7 +330,9 @@ fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
             .into_iter()
             .collect(),
     );
-    wf.max_spawn_iterations_per_lineage = Some(5);
+    wf.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(5),
+    });
     let created = apis::workflows_api::create_workflow(config, wf).unwrap();
     let workflow_id = created.id.unwrap();
 
@@ -540,18 +544,20 @@ fn test_retry_preserves_spawn_origin(start_server: &ServerProcess) {
     assert_eq!(retried.status, Some(JobStatus::Ready));
 }
 
-/// Server-side validation of `max_spawn_iterations_per_lineage` on
-/// workflow creation. The spec validator already rejects non-positive
-/// values for spec-file callers; this test confirms direct API callers
-/// get the same 422 instead of a confusing "cap reached" on first spawn.
+/// Server-side validation of `dynamic_jobs.max_iterations` on workflow
+/// creation. The spec validator already rejects non-positive values for
+/// spec-file callers; this test confirms direct API callers get the same
+/// 422 instead of a confusing "cap reached" on first spawn.
 #[rstest]
 fn test_create_workflow_rejects_non_positive_max_iterations(start_server: &ServerProcess) {
     let config = &start_server.config;
     let mut wf =
         models::WorkflowModel::new("dyn_bad_max_iter".to_string(), "test_user".to_string());
-    wf.max_spawn_iterations_per_lineage = Some(0);
+    wf.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(0),
+    });
     let err = apis::workflows_api::create_workflow(config, wf)
-        .expect_err("create_workflow must reject max_spawn_iterations_per_lineage=0");
+        .expect_err("create_workflow must reject dynamic_jobs.max_iterations=0");
     let msg = format!("{:?}", err);
     assert!(
         msg.contains("422") || msg.to_lowercase().contains("must be >= 1"),
@@ -561,9 +567,11 @@ fn test_create_workflow_rejects_non_positive_max_iterations(start_server: &Serve
 
     let mut wf2 =
         models::WorkflowModel::new("dyn_bad_max_iter2".to_string(), "test_user".to_string());
-    wf2.max_spawn_iterations_per_lineage = Some(-1);
+    wf2.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(-1),
+    });
     let err = apis::workflows_api::create_workflow(config, wf2)
-        .expect_err("create_workflow must reject negative max_spawn_iterations_per_lineage");
+        .expect_err("create_workflow must reject negative dynamic_jobs.max_iterations");
     let msg = format!("{:?}", err);
     assert!(
         msg.contains("422") || msg.to_lowercase().contains("must be >= 1"),
@@ -572,17 +580,19 @@ fn test_create_workflow_rejects_non_positive_max_iterations(start_server: &Serve
     );
 }
 
-/// `max_spawn_iterations_per_lineage` is runtime-immutable: an attempt to
-/// change it via `update_workflow` must 422 rather than silently no-op
-/// (which the previous COALESCE-based UPDATE would have done).
+/// `dynamic_jobs` is runtime-immutable: an attempt to change it via
+/// `update_workflow` must 422 rather than silently no-op (which the
+/// COALESCE-based UPDATE would have done).
 #[rstest]
-fn test_update_workflow_rejects_max_iterations_change(start_server: &ServerProcess) {
+fn test_update_workflow_rejects_dynamic_jobs_change(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let (workflow_id, _cn) = setup(config, "dyn_immutable_max_iter", Some(5));
+    let (workflow_id, _cn) = setup(config, "dyn_immutable_dynamic_jobs", Some(5));
     let mut wf = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
-    wf.max_spawn_iterations_per_lineage = Some(10);
+    wf.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(10),
+    });
     let err = apis::workflows_api::update_workflow(config, workflow_id, wf)
-        .expect_err("update_workflow must reject max_spawn_iterations_per_lineage change");
+        .expect_err("update_workflow must reject dynamic_jobs change");
     let msg = format!("{:?}", err);
     assert!(
         msg.contains("422") || msg.to_lowercase().contains("immutable"),
@@ -593,7 +603,9 @@ fn test_update_workflow_rejects_max_iterations_change(start_server: &ServerProce
     // Passing the same value (no actual change) should NOT 422 — we only
     // reject real modifications.
     let mut wf2 = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
-    wf2.max_spawn_iterations_per_lineage = Some(5); // same as setup() created
+    wf2.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(5),
+    }); // same as setup() created
     apis::workflows_api::update_workflow(config, workflow_id, wf2)
         .expect("no-op update with same value must succeed");
 }

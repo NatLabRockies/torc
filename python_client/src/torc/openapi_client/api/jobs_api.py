@@ -1748,6 +1748,7 @@ class JobsApi:
         reverse_sort: Optional[StrictBool] = None,
         include_relationships: Optional[StrictBool] = None,
         active_compute_node_id: Optional[StrictInt] = None,
+        origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1784,6 +1785,8 @@ class JobsApi:
         :type include_relationships: bool
         :param active_compute_node_id:
         :type active_compute_node_id: int
+        :param origin_is_set: When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).
+        :type origin_is_set: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1817,6 +1820,7 @@ class JobsApi:
             reverse_sort=reverse_sort,
             include_relationships=include_relationships,
             active_compute_node_id=active_compute_node_id,
+            origin_is_set=origin_is_set,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1853,6 +1857,7 @@ class JobsApi:
         reverse_sort: Optional[StrictBool] = None,
         include_relationships: Optional[StrictBool] = None,
         active_compute_node_id: Optional[StrictInt] = None,
+        origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1889,6 +1894,8 @@ class JobsApi:
         :type include_relationships: bool
         :param active_compute_node_id:
         :type active_compute_node_id: int
+        :param origin_is_set: When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).
+        :type origin_is_set: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1922,6 +1929,7 @@ class JobsApi:
             reverse_sort=reverse_sort,
             include_relationships=include_relationships,
             active_compute_node_id=active_compute_node_id,
+            origin_is_set=origin_is_set,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1958,6 +1966,7 @@ class JobsApi:
         reverse_sort: Optional[StrictBool] = None,
         include_relationships: Optional[StrictBool] = None,
         active_compute_node_id: Optional[StrictInt] = None,
+        origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1994,6 +2003,8 @@ class JobsApi:
         :type include_relationships: bool
         :param active_compute_node_id:
         :type active_compute_node_id: int
+        :param origin_is_set: When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).
+        :type origin_is_set: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2027,6 +2038,7 @@ class JobsApi:
             reverse_sort=reverse_sort,
             include_relationships=include_relationships,
             active_compute_node_id=active_compute_node_id,
+            origin_is_set=origin_is_set,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2058,6 +2070,7 @@ class JobsApi:
         reverse_sort,
         include_relationships,
         active_compute_node_id,
+        origin_is_set,
         _request_auth,
         _content_type,
         _headers,
@@ -2119,6 +2132,10 @@ class JobsApi:
         if active_compute_node_id is not None:
             
             _query_params.append(('active_compute_node_id', active_compute_node_id))
+            
+        if origin_is_set is not None:
+            
+            _query_params.append(('origin_is_set', origin_is_set))
             
         # process the header parameters
         # process the form parameters
