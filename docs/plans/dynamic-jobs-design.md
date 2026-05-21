@@ -1,8 +1,8 @@
 # Design: Orchestrator Continuation via `spawn_jobs`
 
 - **Status:** Implemented.
-- **Related artifacts:** user docs at `docs/src/core/how-to/dynamic-jobs.md`; example workflow at
-  `examples/yaml/dynamic_orchestrator_slurm.yaml` and orchestrator at
+- **Related artifacts:** user tutorial at `docs/src/core/tutorials/dynamic-jobs.md`; example
+  workflow at `examples/yaml/dynamic_orchestrator_slurm.yaml` and orchestrator at
   `examples/scripts/dynamic_orchestrator.py`; integration tests in `tests/test_dynamic_jobs.rs`.
 
 ## 1. Problem
