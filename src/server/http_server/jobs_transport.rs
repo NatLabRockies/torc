@@ -240,6 +240,12 @@ async fn lookup_existing_rrs(
 /// stays unambiguous; without escaping `%`, a lineage like `foo%` would
 /// match other lineages' generation records and the derived spawn_count
 /// would be wrong.
+///
+/// MAX is pushed into SQL so we don't pull every matching row name through
+/// the open `BEGIN IMMEDIATE` transaction. `substr(name, N)` skips the
+/// literal prefix, `CAST(... AS INTEGER)` parses the trailing digits, and
+/// MAX aggregates server-side. `query_scalar` returns `None` when no rows
+/// match (MAX over an empty set is NULL); we default that to 0.
 async fn derive_lineage_spawn_count(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     workflow_id: i64,
@@ -251,22 +257,20 @@ async fn derive_lineage_spawn_count(
         .replace('_', "\\_")
         .replace('%', "\\%")
         + "%";
-    let rows =
-        sqlx::query("SELECT name FROM user_data WHERE workflow_id = ? AND name LIKE ? ESCAPE '\\'")
-            .bind(workflow_id)
-            .bind(&escaped_like)
-            .fetch_all(&mut **tx)
-            .await
-            .map_err(|e| db_error(e, "Failed to read lineage state"))?;
-    Ok(rows
-        .iter()
-        .filter_map(|r| {
-            let name: String = r.get("name");
-            name.strip_prefix(&gen_prefix)
-                .and_then(|s| s.parse::<i64>().ok())
-        })
-        .max()
-        .unwrap_or(0))
+    // `substr(name, N)` extracts from 1-indexed position N. We want the
+    // bytes *after* the literal prefix, so N = prefix.len() + 1.
+    let suffix_start = i64::try_from(gen_prefix.len() + 1).unwrap_or(i64::MAX);
+    let max_gen: Option<i64> = sqlx::query_scalar(
+        "SELECT MAX(CAST(substr(name, ?) AS INTEGER)) \
+         FROM user_data WHERE workflow_id = ? AND name LIKE ? ESCAPE '\\'",
+    )
+    .bind(suffix_start)
+    .bind(workflow_id)
+    .bind(&escaped_like)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| db_error(e, "Failed to read lineage state"))?;
+    Ok(max_gen.unwrap_or(0))
 }
 
 /// Read the workflow's `env` column and parse it into a map. Missing column
