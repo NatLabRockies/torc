@@ -273,23 +273,24 @@ async fn derive_lineage_spawn_count(
     Ok(max_gen.unwrap_or(0))
 }
 
-/// Read the workflow's `env` column and parse it into a map. Missing column
-/// or invalid JSON returns an empty map (a workflow with no env is the
-/// common case; this mirrors `JobsApiImpl::fetch_workflow_env`).
+/// Read the workflow's `env` column and parse it into a map. Reuses the
+/// same `deserialize_env_map` helper that `JobsApiImpl::fetch_workflow_env`
+/// uses on the create_job path, so spawned and statically-declared jobs
+/// see identical workflow-env semantics — including the same 500 if the
+/// row's JSON is malformed. (Silently treating malformed JSON as an empty
+/// map would let a spawned job lose required workflow-level env vars
+/// without telling the caller.)
 async fn fetch_workflow_env(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     workflow_id: i64,
 ) -> Result<std::collections::HashMap<String, String>, SpawnReject> {
-    let raw: Option<String> = sqlx::query_scalar("SELECT env FROM workflow WHERE id = ?")
+    let env_json: Option<String> = sqlx::query_scalar("SELECT env FROM workflow WHERE id = ?")
         .bind(workflow_id)
         .fetch_optional(&mut **tx)
         .await
         .map_err(|e| db_error(e, "Failed to fetch workflow env"))?
         .flatten();
-    Ok(raw
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default())
+    Ok(crate::server::api::deserialize_env_map(env_json, "workflow env")?.unwrap_or_default())
 }
 
 /// Insert all spawned job rows. `rr_id_per_job[i]` is the pre-resolved
@@ -2303,8 +2304,12 @@ where
         let will_spawn = !jobs.is_empty() && !is_replay;
         if will_spawn && spawn_count + 1 > max_iterations {
             return Err(reject(format!(
-                "Per-lineage iteration cap reached for lineage '{}': {} (dynamic_jobs.max_iterations={})",
-                lineage, spawn_count, max_iterations
+                "Per-lineage iteration cap reached for lineage '{}': attempted iteration {} \
+                 exceeds dynamic_jobs.max_iterations={} (current spawn_count={})",
+                lineage,
+                spawn_count + 1,
+                max_iterations,
+                spawn_count
             )));
         }
 

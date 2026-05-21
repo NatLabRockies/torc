@@ -1809,7 +1809,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable (missing resource_requirements, dependency cycle, or per-lineage iteration cap exceeded)
+          description: 'Validation error: caller job not Running, duplicate names in the batch, negative priority, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded'
           content:
             application/json:
               schema:
