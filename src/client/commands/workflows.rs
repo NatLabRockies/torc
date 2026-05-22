@@ -2394,10 +2394,13 @@ fn handle_update(
                 workflow.project = updates.project.clone();
             }
             if let Some(metadata_str) = &updates.metadata {
-                workflow.metadata = Some(
-                    serde_json::from_str::<HashMap<String, serde_json::Value>>(metadata_str)
-                        .unwrap_or_default(),
-                );
+                match serde_json::from_str::<HashMap<String, serde_json::Value>>(metadata_str) {
+                    Ok(map) => workflow.metadata = Some(map),
+                    Err(e) => {
+                        eprintln!("Error parsing metadata JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                }
             }
 
             match apis::workflows_api::update_workflow(config, selected_id, workflow) {

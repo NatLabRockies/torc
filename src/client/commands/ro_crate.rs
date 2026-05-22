@@ -192,7 +192,13 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
             };
             let metadata_str = read_metadata_input(metadata);
             let metadata_map: HashMap<String, serde_json::Value> =
-                serde_json::from_str(&metadata_str).unwrap_or_default();
+                match serde_json::from_str(&metadata_str) {
+                    Ok(map) => map,
+                    Err(e) => {
+                        eprintln!("Error parsing metadata JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                };
             let mut entity = models::RoCrateEntityModel::new(
                 selected_workflow_id,
                 entity_id.clone(),
@@ -324,14 +330,19 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 }
             };
 
-            let updated_metadata = metadata
-                .as_ref()
-                .map(|m| {
+            let updated_metadata = match metadata.as_ref() {
+                Some(m) => {
                     let s = read_metadata_input(m);
-                    serde_json::from_str::<HashMap<String, serde_json::Value>>(&s)
-                        .unwrap_or_default()
-                })
-                .unwrap_or(existing.metadata);
+                    match serde_json::from_str::<HashMap<String, serde_json::Value>>(&s) {
+                        Ok(map) => map,
+                        Err(e) => {
+                            eprintln!("Error parsing metadata JSON: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => existing.metadata,
+            };
 
             let updated = models::RoCrateEntityModel {
                 id: existing.id,
