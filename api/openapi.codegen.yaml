@@ -6980,6 +6980,7 @@ components:
           - string
           - 'null'
           description: Name of an existing resource_requirements record in the workflow.
+      additionalProperties: false
     SpawnJobsRequest:
       type: object
       description: |-
@@ -7009,6 +7010,7 @@ components:
           description: |-
             Opaque JSON state attached to this generation (or as the converged
             final state when `jobs` is empty).
+      additionalProperties: false
     SpawnJobsResponse:
       type: object
       required:

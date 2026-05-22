@@ -381,6 +381,7 @@ pub struct BatchCompleteJobsResponse {
 /// unblock path once the caller (and any explicit deps) become terminal.
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SpawnJobModel {
     pub name: String,
     pub command: String,
@@ -405,6 +406,7 @@ pub struct SpawnJobModel {
 /// payload is persisted, all in the same transaction as the inserts.
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SpawnJobsRequest {
     /// Orchestrator lineage identifier. Defaults to the calling job's name.
     /// The per-lineage spawn counter and state records are keyed on this.

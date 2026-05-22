@@ -32,6 +32,7 @@ class SpawnJobModel(BaseModel):
     name: StrictStr
     priority: Optional[StrictInt] = None
     resource_requirements: Optional[StrictStr] = Field(default=None, description="Name of an existing resource_requirements record in the workflow.")
+    additional_properties: Dict[str, Any] = {}
     __properties: ClassVar[List[str]] = ["cancel_on_blocking_job_failure", "command", "depends_on", "name", "priority", "resource_requirements"]
 
     model_config = ConfigDict(
@@ -64,8 +65,10 @@ class SpawnJobModel(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -73,25 +76,10 @@ class SpawnJobModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if cancel_on_blocking_job_failure (nullable) is None
-        # and model_fields_set contains the field
-        if self.cancel_on_blocking_job_failure is None and "cancel_on_blocking_job_failure" in self.model_fields_set:
-            _dict['cancel_on_blocking_job_failure'] = None
-
-        # set to None if depends_on (nullable) is None
-        # and model_fields_set contains the field
-        if self.depends_on is None and "depends_on" in self.model_fields_set:
-            _dict['depends_on'] = None
-
-        # set to None if priority (nullable) is None
-        # and model_fields_set contains the field
-        if self.priority is None and "priority" in self.model_fields_set:
-            _dict['priority'] = None
-
-        # set to None if resource_requirements (nullable) is None
-        # and model_fields_set contains the field
-        if self.resource_requirements is None and "resource_requirements" in self.model_fields_set:
-            _dict['resource_requirements'] = None
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
 
         return _dict
 
@@ -112,6 +100,11 @@ class SpawnJobModel(BaseModel):
             "priority": obj.get("priority"),
             "resource_requirements": obj.get("resource_requirements")
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 

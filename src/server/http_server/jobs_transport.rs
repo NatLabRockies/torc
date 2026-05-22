@@ -466,34 +466,25 @@ async fn upsert_final_state(
             e
         )))
     })?;
-    let existing: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM user_data WHERE workflow_id = ? AND name = ?")
-            .bind(workflow_id)
-            .bind(&name)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(|e| db_error(e, "Failed to read final lineage state"))?;
-    match existing {
-        Some(ud_id) => {
-            sqlx::query("UPDATE user_data SET data = ? WHERE id = ?")
-                .bind(&payload_str)
-                .bind(ud_id)
-                .execute(&mut **tx)
-                .await
-                .map_err(|e| db_error(e, "Failed to update final lineage state"))?;
-        }
-        None => {
-            sqlx::query(
-                "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) VALUES (?, ?, 1, ?)",
-            )
-            .bind(workflow_id)
-            .bind(&name)
-            .bind(&payload_str)
-            .execute(&mut **tx)
-            .await
-            .map_err(|e| db_error(e, "Failed to insert final lineage state"))?;
-        }
-    }
+    // Single-statement upsert against the partial unique index
+    // `idx_user_data_lineage_unique` on `(workflow_id, name) WHERE name
+    // LIKE '__torc_lineage__%'`. The matching `WHERE` clause after the
+    // conflict target is required by SQLite to bind this upsert to the
+    // partial index. Race-safe by construction — no read-then-write
+    // window, and the index guarantees at most one row per
+    // `(workflow_id, lineage)`.
+    sqlx::query(
+        "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) \
+         VALUES (?, ?, 1, ?) \
+         ON CONFLICT(workflow_id, name) WHERE name LIKE '__torc_lineage__%' \
+         DO UPDATE SET data = excluded.data",
+    )
+    .bind(workflow_id)
+    .bind(&name)
+    .bind(&payload_str)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| db_error(e, "Failed to upsert final lineage state"))?;
     Ok(())
 }
 

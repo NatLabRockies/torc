@@ -29,7 +29,8 @@ class SpawnJobsRequest(BaseModel):
     """ # noqa: E501
     jobs: List[SpawnJobModel] = Field(description="Jobs to add. May be empty (record final state without spawning).")
     lineage: Optional[StrictStr] = Field(default=None, description="Orchestrator lineage identifier. Defaults to the calling job's name. The per-lineage spawn counter and state records are keyed on this.")
-    state: Optional[Any] = None
+    state: Optional[Any] = Field(default=None, description="Opaque JSON state attached to this generation (or as the converged final state when `jobs` is empty).")
+    additional_properties: Dict[str, Any] = {}
     __properties: ClassVar[List[str]] = ["jobs", "lineage", "state"]
 
     model_config = ConfigDict(
@@ -62,8 +63,10 @@ class SpawnJobsRequest(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -78,10 +81,10 @@ class SpawnJobsRequest(BaseModel):
                 if _item_jobs:
                     _items.append(_item_jobs.to_dict())
             _dict['jobs'] = _items
-        # set to None if lineage (nullable) is None
-        # and model_fields_set contains the field
-        if self.lineage is None and "lineage" in self.model_fields_set:
-            _dict['lineage'] = None
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
 
         # set to None if state (nullable) is None
         # and model_fields_set contains the field
@@ -104,6 +107,11 @@ class SpawnJobsRequest(BaseModel):
             "lineage": obj.get("lineage"),
             "state": obj.get("state")
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 

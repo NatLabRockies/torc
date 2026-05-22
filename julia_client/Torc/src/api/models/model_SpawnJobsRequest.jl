@@ -13,7 +13,7 @@ Add a batch of new jobs to an initialized workflow, all blocked on the calling j
 
     - jobs::Vector{SpawnJobModel} : Jobs to add. May be empty (record final state without spawning).
     - lineage::String : Orchestrator lineage identifier. Defaults to the calling job&#39;s name. The per-lineage spawn counter and state records are keyed on this.
-    - state::Any
+    - state::Any : Opaque JSON state attached to this generation (or as the converged final state when &#x60;jobs&#x60; is empty).
 """
 Base.@kwdef mutable struct SpawnJobsRequest <: OpenAPI.APIModel
     jobs::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{SpawnJobModel} }
