@@ -13,6 +13,7 @@ Method | HTTP request | Description
 [**list_jobs**](JobsApi.md#list_jobs) | **GET** /jobs | 
 [**manage_status_change**](JobsApi.md#manage_status_change) | **PUT** /jobs/{id}/manage_status_change/{status}/{run_id} | 
 [**retry_job**](JobsApi.md#retry_job) | **POST** /jobs/{id}/retry/{run_id} | 
+[**spawn_jobs**](JobsApi.md#spawn_jobs) | **POST** /jobs/{id}/spawn_jobs | 
 [**start_job**](JobsApi.md#start_job) | **PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id} | 
 [**update_job**](JobsApi.md#update_job) | **PUT** /jobs/{id} | 
 
@@ -189,8 +190,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_jobs**
-> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
+> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -214,6 +215,7 @@ Name | Type | Description  | Notes
  **reverse_sort** | **Bool** |  | [default to nothing]
  **include_relationships** | **Bool** |  | [default to nothing]
  **active_compute_node_id** | **Int64** |  | [default to nothing]
+ **origin_is_set** | **Bool** | When set, filters by job provenance: &#x60;true&#x60; returns only jobs with &#x60;origin IS NOT NULL&#x60; (failure-handler retries and &#x60;spawn_jobs&#x60; children); &#x60;false&#x60; returns only originally-declared jobs. Used by &#x60;torc watch --auto-schedule&#x60; to count jobs needing unplanned Slurm allocations with &#x60;limit&#x3D;1&#x60; (the response&#39;s &#x60;total_count&#x60; suffices — no rows downloaded). | [default to nothing]
 
 ### Return type
 
@@ -286,6 +288,35 @@ No authorization required
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **spawn_jobs**
+> spawn_jobs(_api::JobsApi, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing) -> SpawnJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> spawn_jobs(_api::JobsApi, response_stream::Channel, id::Int64, spawn_jobs_request::SpawnJobsRequest; _mediaType=nothing) -> Channel{ SpawnJobsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **JobsApi** | API context | 
+**id** | **Int64** | Calling (orchestrator) job ID |
+**spawn_jobs_request** | [**SpawnJobsRequest**](SpawnJobsRequest.md) |  |
+
+### Return type
+
+[**SpawnJobsResponse**](SpawnJobsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

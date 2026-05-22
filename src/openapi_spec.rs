@@ -11,8 +11,8 @@ use crate::models::{
     BatchCompleteJobsResponse, ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources,
     ClaimNextJobsResponse, ComputeNodeModel, ComputeNodesResources, CreateFilesResponse,
     CreateJobsResponse, CreateUserDataListResponse, DeleteCountResponse,
-    DeleteRoCrateEntitiesResponse, EventModel, FailureHandlerModel, FileModel, FilesModel,
-    GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
+    DeleteRoCrateEntitiesResponse, DynamicJobsConfig, EventModel, FailureHandlerModel, FileModel,
+    FilesModel, GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
     JobCompletionEntry, JobCompletionError, JobDependencyModel, JobFileRelationshipModel, JobModel,
     JobStatus, JobUserDataRelationshipModel, JobsModel, ListAccessGroupsResponse,
     ListComputeNodesResponse, ListEventsResponse, ListFailureHandlersResponse, ListFilesResponse,
@@ -25,8 +25,8 @@ use crate::models::{
     LocalSchedulerModel, MessageResponse, ProcessChangedJobInputsResponse, ReloadAuthResponse,
     RemoteWorkerModel, ResetJobStatusResponse, ResourceRequirementsModel, ResultModel,
     RoCrateEntityModel, ScheduledComputeNodesModel, SlurmSchedulerModel, SlurmStatsModel,
-    UserDataListModel, UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel,
-    WorkflowActionModel, WorkflowModel,
+    SpawnJobModel, SpawnJobsRequest, SpawnJobsResponse, UserDataListModel, UserDataModel,
+    UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel, WorkflowModel,
 };
 
 #[allow(unused_imports)]
@@ -34,8 +34,9 @@ mod openapi_job_paths {
     pub use crate::server::live_router::{
         __path_complete_job, __path_create_job, __path_delete_job, __path_delete_jobs,
         __path_get_job, __path_list_jobs, __path_manage_status_change, __path_retry_job,
-        __path_start_job, __path_update_job, complete_job, create_job, delete_job, delete_jobs,
-        get_job, list_jobs, manage_status_change, retry_job, start_job, update_job,
+        __path_spawn_jobs, __path_start_job, __path_update_job, complete_job, create_job,
+        delete_job, delete_jobs, get_job, list_jobs, manage_status_change, retry_job, spawn_jobs,
+        start_job, update_job,
     };
 }
 
@@ -469,6 +470,7 @@ fn resolve_schema_properties<'a>(
         openapi_job_paths::get_job,
         openapi_job_paths::update_job,
         openapi_job_paths::complete_job,
+        openapi_job_paths::spawn_jobs,
         openapi_job_paths::manage_status_change,
         openapi_job_paths::start_job,
         openapi_job_paths::retry_job,
@@ -610,6 +612,10 @@ fn resolve_schema_properties<'a>(
         ClaimNextJobsResponse,
         BatchCompleteJobsRequest,
         BatchCompleteJobsResponse,
+        SpawnJobsRequest,
+        SpawnJobsResponse,
+        SpawnJobModel,
+        DynamicJobsConfig,
         JobCompletionEntry,
         JobCompletionError,
         JobDependencyModel,

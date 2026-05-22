@@ -66,6 +66,7 @@ Class | Method
 *JobsApi* | [**list_jobs**](docs/JobsApi.md#list_jobs)<br/>**GET** /jobs<br/>
 *JobsApi* | [**manage_status_change**](docs/JobsApi.md#manage_status_change)<br/>**PUT** /jobs/{id}/manage_status_change/{status}/{run_id}<br/>
 *JobsApi* | [**retry_job**](docs/JobsApi.md#retry_job)<br/>**POST** /jobs/{id}/retry/{run_id}<br/>
+*JobsApi* | [**spawn_jobs**](docs/JobsApi.md#spawn_jobs)<br/>**POST** /jobs/{id}/spawn_jobs<br/>
 *JobsApi* | [**start_job**](docs/JobsApi.md#start_job)<br/>**PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id}<br/>
 *JobsApi* | [**update_job**](docs/JobsApi.md#update_job)<br/>**PUT** /jobs/{id}<br/>
 *LocalSchedulersApi* | [**create_local_scheduler**](docs/LocalSchedulersApi.md#create_local_scheduler)<br/>**POST** /local_schedulers<br/>
@@ -169,6 +170,7 @@ Class | Method
  - [CreateUserDataListResponse](docs/CreateUserDataListResponse.md)
  - [DeleteCountResponse](docs/DeleteCountResponse.md)
  - [DeleteRoCrateEntitiesResponse](docs/DeleteRoCrateEntitiesResponse.md)
+ - [DynamicJobsConfig](docs/DynamicJobsConfig.md)
  - [ErrorResponse](docs/ErrorResponse.md)
  - [EventModel](docs/EventModel.md)
  - [FailureHandlerModel](docs/FailureHandlerModel.md)
@@ -220,6 +222,9 @@ Class | Method
  - [ScheduledComputeNodesModel](docs/ScheduledComputeNodesModel.md)
  - [SlurmSchedulerModel](docs/SlurmSchedulerModel.md)
  - [SlurmStatsModel](docs/SlurmStatsModel.md)
+ - [SpawnJobModel](docs/SpawnJobModel.md)
+ - [SpawnJobsRequest](docs/SpawnJobsRequest.md)
+ - [SpawnJobsResponse](docs/SpawnJobsResponse.md)
  - [TaskModel](docs/TaskModel.md)
  - [TaskStatus](docs/TaskStatus.md)
  - [UserDataListModel](docs/UserDataListModel.md)

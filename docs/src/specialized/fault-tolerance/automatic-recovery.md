@@ -288,21 +288,23 @@ When a recovery hook is provided:
 3. If the hook fails (non-zero exit), auto-recovery stops with an error
 4. After the hook succeeds, failed jobs are reset and retried
 
-## Auto-Scheduling for Failure Handlers
+## Auto-Scheduling for Unplanned Jobs
 
-When using [failure handlers](./failure-handlers.md) that create retry jobs, the originally planned
-compute capacity may not be sufficient. The `--auto-schedule` option enables automatic scheduling of
-additional Slurm nodes when:
+Failure-handler retries and `spawn_jobs` children are **unplanned** — the originally-deferred
+`schedule_nodes` actions only allocate capacity for the workload declared at workflow creation, so
+either mechanism can leave new jobs sitting `Ready` with no compute behind them. The
+`--auto-schedule` option enables automatic scheduling of additional Slurm nodes when:
 
 1. **No schedulers available**: If there are ready jobs but no active or pending Slurm allocations,
    new schedulers are immediately regenerated and submitted.
 
-2. **Retry jobs accumulating**: If there are active schedulers but retry jobs (jobs with
-   `attempt_id > 1`) are accumulating beyond the threshold, additional schedulers are submitted
-   after the cooldown period.
+2. **Unplanned jobs accumulating**: If there are active schedulers but jobs with
+   `origin IS NOT NULL` (retries marked `'retry'`, plus `spawn_jobs` children marked `'spawn'`) are
+   accumulating beyond the threshold, additional schedulers are submitted after the cooldown period.
 
-This is particularly useful for workflows with failure handlers that retry failed jobs, ensuring
-those retries get scheduled without manual intervention.
+This is particularly useful for workflows that either retry failed jobs via failure handlers or add
+jobs at runtime via [`spawn_jobs`](../../core/tutorials/dynamic-jobs.md), ensuring those jobs get
+scheduled without manual intervention.
 
 ### Example: Failure Handler with Auto-Scheduling
 

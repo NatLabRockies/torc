@@ -1571,6 +1571,7 @@ where
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1584,6 +1585,7 @@ where
             reverse_sort,
             include_relationships,
             active_compute_node_id,
+            origin_is_set,
             context,
         )
         .await
@@ -2376,6 +2378,18 @@ where
     ) -> Result<BatchCompleteJobsResponse, ApiError> {
         self.transport_batch_complete_jobs(workflow_id, body, context)
             .await
+    }
+
+    /// Spawn jobs blocked on the calling job and persist per-lineage
+    /// continuation state in a single transaction.
+    #[instrument(level = "debug", skip(self, body, context), fields(job_id = id, spawn_count = body.jobs.len()))]
+    async fn spawn_jobs(
+        &self,
+        id: i64,
+        body: models::SpawnJobsRequest,
+        context: &C,
+    ) -> Result<SpawnJobsResponse, ApiError> {
+        self.transport_spawn_jobs(id, body, context).await
     }
 
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.

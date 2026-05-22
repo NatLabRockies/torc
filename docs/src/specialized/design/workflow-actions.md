@@ -351,7 +351,9 @@ in their completed state.
 3. **No Action Retries**: Failed actions are not automatically retried
 4. **Single Action Type**: Each action has one action_type (cannot combine run_commands and
    schedule_nodes)
-5. **No Dynamic Job Selection**: Job names/patterns are fixed at action creation time
+5. **Job Selectors Are Spec-Time Only**: An action's job names/patterns are fixed when the workflow
+   is created and don't update if new jobs are added later (e.g. by
+   [`spawn_jobs`](../../core/tutorials/dynamic-jobs.md))
 
 For complex workflows requiring these features, consider:
 

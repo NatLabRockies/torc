@@ -43,7 +43,7 @@ pub mod jobs {
         InitializeJobsResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
         ListJobIdsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
         ManageStatusChangeResponse, ProcessChangedJobInputsResponse, ResetJobStatusResponse,
-        RetryJobResponse, StartJobResponse, UpdateJobResponse,
+        RetryJobResponse, SpawnJobsResponse, StartJobResponse, UpdateJobResponse,
     };
 }
 

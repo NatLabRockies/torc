@@ -50,6 +50,7 @@
   - [Advanced Parameterization](./core/tutorials/advanced-params.md)
   - [Multi-Stage Workflows with Barriers](./core/tutorials/multi-stage-barrier.md)
   - [User Data Dependencies](./core/tutorials/user-data.md)
+  - [Dynamic Jobs (Orchestrator Continuation)](./core/tutorials/dynamic-jobs.md)
 - [Monitoring & Debugging](./core/monitoring/index.md)
   - [Web Dashboard](./core/monitoring/dashboard.md)
   - [Terminal UI (TUI)](./core/monitoring/tui.md)

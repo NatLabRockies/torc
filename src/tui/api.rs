@@ -127,6 +127,7 @@ impl TorcClient {
             None, // reverse_sort
             None, // include_relationships
             None, // active_compute_node_id
+            None, // origin_is_set
         )
         .context("Failed to list jobs")?;
 

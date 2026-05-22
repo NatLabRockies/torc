@@ -64,6 +64,7 @@ __all__ = [
     "CreateUserDataListResponse",
     "DeleteCountResponse",
     "DeleteRoCrateEntitiesResponse",
+    "DynamicJobsConfig",
     "ErrorResponse",
     "EventModel",
     "FailureHandlerModel",
@@ -115,6 +116,9 @@ __all__ = [
     "ScheduledComputeNodesModel",
     "SlurmSchedulerModel",
     "SlurmStatsModel",
+    "SpawnJobModel",
+    "SpawnJobsRequest",
+    "SpawnJobsResponse",
     "TaskModel",
     "TaskStatus",
     "UserDataListModel",
@@ -177,6 +181,7 @@ from torc.openapi_client.models.create_jobs_response import CreateJobsResponse a
 from torc.openapi_client.models.create_user_data_list_response import CreateUserDataListResponse as CreateUserDataListResponse
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse as DeleteCountResponse
 from torc.openapi_client.models.delete_ro_crate_entities_response import DeleteRoCrateEntitiesResponse as DeleteRoCrateEntitiesResponse
+from torc.openapi_client.models.dynamic_jobs_config import DynamicJobsConfig as DynamicJobsConfig
 from torc.openapi_client.models.error_response import ErrorResponse as ErrorResponse
 from torc.openapi_client.models.event_model import EventModel as EventModel
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel as FailureHandlerModel
@@ -228,6 +233,9 @@ from torc.openapi_client.models.ro_crate_entity_model import RoCrateEntityModel 
 from torc.openapi_client.models.scheduled_compute_nodes_model import ScheduledComputeNodesModel as ScheduledComputeNodesModel
 from torc.openapi_client.models.slurm_scheduler_model import SlurmSchedulerModel as SlurmSchedulerModel
 from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel as SlurmStatsModel
+from torc.openapi_client.models.spawn_job_model import SpawnJobModel as SpawnJobModel
+from torc.openapi_client.models.spawn_jobs_request import SpawnJobsRequest as SpawnJobsRequest
+from torc.openapi_client.models.spawn_jobs_response import SpawnJobsResponse as SpawnJobsResponse
 from torc.openapi_client.models.task_model import TaskModel as TaskModel
 from torc.openapi_client.models.task_status import TaskStatus as TaskStatus
 from torc.openapi_client.models.user_data_list_model import UserDataListModel as UserDataListModel

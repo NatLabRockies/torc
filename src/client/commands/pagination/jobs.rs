@@ -32,6 +32,10 @@ pub struct JobListParams {
     pub include_relationships: Option<bool>,
     /// Filter by active compute node ID
     pub active_compute_node_id: Option<i64>,
+    /// Filter by job provenance. `Some(true)` returns only jobs with
+    /// `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
+    /// children); `Some(false)` returns only originally-declared jobs.
+    pub origin_is_set: Option<bool>,
 }
 
 impl JobListParams {
@@ -83,6 +87,11 @@ impl JobListParams {
         self.active_compute_node_id = Some(id);
         self
     }
+
+    pub fn with_origin_is_set(mut self, origin_is_set: bool) -> Self {
+        self.origin_is_set = Some(origin_is_set);
+        self
+    }
 }
 
 impl PaginationParams for JobListParams {
@@ -128,6 +137,7 @@ impl Paginatable for JobModel {
             params.reverse_sort,
             params.include_relationships,
             params.active_compute_node_id,
+            params.origin_is_set,
         )?;
 
         Ok(PaginatedResponse {

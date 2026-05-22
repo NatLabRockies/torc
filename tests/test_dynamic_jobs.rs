@@ -1,0 +1,1134 @@
+//! Integration tests for the orchestrator-continuation feature (`spawn_jobs`).
+//!
+//! The orchestrator adds child jobs blocked on itself and exits normally; the
+//! runner completes the orchestrator on exit, and the unblock cascade then
+//! promotes the spawned jobs. These tests model that runner flow by leaving the
+//! caller `Running` across the `spawn_jobs` call and then calling `complete_job`
+//! on it to stand in for the runner's post-exit completion.
+
+mod common;
+
+use common::{ServerProcess, start_server};
+use rstest::rstest;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+use torc::client::apis;
+use torc::client::workflow_manager::WorkflowManager;
+use torc::config::TorcConfig;
+use torc::models::{self, JobStatus};
+
+fn now() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
+fn setup(config: &torc::client::Configuration, name: &str, max_iters: Option<i64>) -> (i64, i64) {
+    let mut wf = models::WorkflowModel::new(name.to_string(), "test_user".to_string());
+    wf.dynamic_jobs = max_iters.map(|n| models::DynamicJobsConfig {
+        max_iterations: Some(n),
+    });
+    let created = apis::workflows_api::create_workflow(config, wf).expect("create_workflow failed");
+    let workflow_id = created.id.unwrap();
+
+    let cn = models::ComputeNodeModel::new(
+        workflow_id,
+        "test-host".to_string(),
+        std::process::id() as i64,
+        now(),
+        64,
+        256.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    let compute_node_id = apis::compute_nodes_api::create_compute_node(config, cn)
+        .expect("create_compute_node failed")
+        .id
+        .unwrap();
+
+    let rr = models::ResourceRequirementsModel::new(workflow_id, "rr".to_string());
+    apis::resource_requirements_api::create_resource_requirements(config, rr)
+        .expect("create_resource_requirements failed");
+
+    (workflow_id, compute_node_id)
+}
+
+fn seed_and_init(config: &torc::client::Configuration, workflow_id: i64, seed_name: &str) -> i64 {
+    let job = models::JobModel::new(
+        workflow_id,
+        seed_name.to_string(),
+        format!("echo {}", seed_name),
+    );
+    let job_id = apis::jobs_api::create_job(config, job)
+        .expect("create_job failed")
+        .id
+        .unwrap();
+
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+    manager.initialize(false).expect("initialize failed");
+    job_id
+}
+
+fn run_id_of(config: &torc::client::Configuration, workflow_id: i64) -> i64 {
+    apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("get_workflow")
+        .run_id
+        .unwrap_or(1)
+}
+
+fn wait_for_status(config: &torc::client::Configuration, job_id: i64, expected: JobStatus) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let job = apis::jobs_api::get_job(config, job_id).expect("get_job");
+        if job.status == Some(expected) {
+            return;
+        }
+        if Instant::now() > deadline {
+            panic!(
+                "job {} did not reach {:?} (last: {:?})",
+                job_id, expected, job.status
+            );
+        }
+        sleep(Duration::from_millis(100));
+    }
+}
+
+/// Stand in for the runner: claim, mark Running, run "as the orchestrator",
+/// then close the loop. Splits the lifecycle so the test can call `spawn_jobs`
+/// in between.
+fn claim_and_mark_running(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    job_id: i64,
+) {
+    let resources = models::ComputeNodesResources::new(64, 100.0, 0, 1);
+    apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 10, resources, None)
+        .expect("claim failed");
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("set running failed");
+}
+
+/// What the real runner does after the subprocess exits 0.
+fn runner_completes(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    compute_node_id: i64,
+    job_id: i64,
+) {
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        0.1,
+        now(),
+        JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(config, job_id, JobStatus::Completed, run_id, result)
+        .expect("complete_job failed");
+}
+
+/// Run a worker job (no spawn): claim, mark Running, then complete it.
+fn finish_job(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    compute_node_id: i64,
+    job_id: i64,
+) {
+    claim_and_mark_running(config, workflow_id, run_id, job_id);
+    runner_completes(config, workflow_id, run_id, compute_node_id, job_id);
+}
+
+fn spawn_job(name: &str, deps: &[&str], priority: i64) -> models::SpawnJobModel {
+    models::SpawnJobModel {
+        name: name.to_string(),
+        command: format!("echo {}", name),
+        resource_requirements: Some("rr".to_string()),
+        priority: Some(priority),
+        cancel_on_blocking_job_failure: Some(false),
+        depends_on: if deps.is_empty() {
+            None
+        } else {
+            Some(deps.iter().map(|s| s.to_string()).collect())
+        },
+    }
+}
+
+fn all_user_data(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+) -> Vec<models::UserDataModel> {
+    apis::user_data_api::list_user_data(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("list_user_data failed")
+    .items
+}
+
+fn gen_record_names(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    lineage: &str,
+) -> Vec<String> {
+    let prefix = format!("__torc_lineage__{}__g", lineage);
+    let mut names: Vec<String> = all_user_data(config, workflow_id)
+        .into_iter()
+        .map(|u| u.name)
+        .filter(|n| n.starts_with(&prefix))
+        .collect();
+    names.sort();
+    names
+}
+
+fn latest_gen_state(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    lineage: &str,
+) -> Option<serde_json::Value> {
+    let names = gen_record_names(config, workflow_id, lineage);
+    let last = names.last()?.clone();
+    all_user_data(config, workflow_id)
+        .into_iter()
+        .find(|u| u.name == last)
+        .and_then(|u| u.data)
+}
+
+fn gen_state(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    lineage: &str,
+    generation: i64,
+) -> Option<serde_json::Value> {
+    let name = format!("__torc_lineage__{}__g{:06}", lineage, generation);
+    all_user_data(config, workflow_id)
+        .into_iter()
+        .find(|u| u.name == name)
+        .and_then(|u| u.data)
+}
+
+fn final_state(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    lineage: &str,
+) -> Option<serde_json::Value> {
+    let name = format!("__torc_lineage__{}__final", lineage);
+    all_user_data(config, workflow_id)
+        .into_iter()
+        .find(|u| u.name == name)
+        .and_then(|u| u.data)
+}
+
+/// Reject spawn_jobs when the caller is not Running. If the caller were
+/// already terminal its unblock would already have been processed and
+/// freshly-inserted children blocked on it would sit forever.
+#[rstest]
+fn test_rejects_non_running_caller(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_caller_state", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    // Caller is Ready (not Running) — claim has not happened.
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("X".to_string()),
+            jobs: vec![spawn_job("would_block_forever", &[], 1)],
+            state: None,
+        },
+    )
+    .expect_err("must reject non-Running caller");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("running"),
+        "expected 422 caller-not-running rejection, got: {}",
+        msg
+    );
+}
+
+/// Duplicate names in the batch must be rejected — otherwise the second
+/// INSERT overwrites name_to_id and dependency edges get attached to the
+/// wrong row.
+#[rstest]
+fn test_rejects_duplicate_names_in_batch(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_dup_names", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("D".to_string()),
+            jobs: vec![spawn_job("twin", &[], 1), spawn_job("twin", &[], 1)],
+            state: None,
+        },
+    )
+    .expect_err("must reject duplicate names");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("duplicate"),
+        "expected 422 duplicate-name rejection, got: {}",
+        msg
+    );
+}
+
+/// Negative priority is rejected (matches the rule create_job enforces).
+#[rstest]
+fn test_rejects_negative_priority(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_neg_priority", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let mut bad = spawn_job("worker", &[], 1);
+    bad.priority = Some(-1);
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("P".to_string()),
+            jobs: vec![bad],
+            state: None,
+        },
+    )
+    .expect_err("must reject negative priority");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("priority"),
+        "expected 422 priority rejection, got: {}",
+        msg
+    );
+}
+
+/// Workflow-level env vars are merged into spawned-job env, alongside the
+/// auto-injected TORC_ORCHESTRATOR_LINEAGE_ID.
+#[rstest]
+fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let mut wf = models::WorkflowModel::new("dyn_env_merge".to_string(), "test_user".to_string());
+    wf.env = Some(
+        [("TORC_DEMO_ENV".to_string(), "from_workflow".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    wf.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(5),
+    });
+    let created = apis::workflows_api::create_workflow(config, wf).unwrap();
+    let workflow_id = created.id.unwrap();
+
+    let cn = models::ComputeNodeModel::new(
+        workflow_id,
+        "test-host".to_string(),
+        std::process::id() as i64,
+        now(),
+        64,
+        256.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    apis::compute_nodes_api::create_compute_node(config, cn).unwrap();
+    apis::resource_requirements_api::create_resource_requirements(
+        config,
+        models::ResourceRequirementsModel::new(workflow_id, "rr".to_string()),
+    )
+    .unwrap();
+
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("E".to_string()),
+            jobs: vec![spawn_job("worker", &[], 1)],
+            state: None,
+        },
+    )
+    .unwrap();
+
+    let worker = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // origin_is_set
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "worker")
+    .unwrap();
+    let env = worker.env.expect("spawned job should have env set");
+    assert_eq!(
+        env.get("TORC_DEMO_ENV").map(|s| s.as_str()),
+        Some("from_workflow"),
+        "workflow env must be merged into spawned job env"
+    );
+    assert_eq!(
+        env.get("TORC_ORCHESTRATOR_LINEAGE_ID").map(|s| s.as_str()),
+        Some("E"),
+        "lineage var must be present alongside workflow env"
+    );
+}
+
+/// Spawned jobs carry `origin = "spawn"`; statically-declared jobs do not.
+/// `torc watch --auto-schedule` keys on this to recognize jobs that need
+/// unplanned Slurm allocations.
+#[rstest]
+fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_origin_spawn", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("O".to_string()),
+            jobs: vec![spawn_job("spawned_worker", &[], 1)],
+            state: None,
+        },
+    )
+    .unwrap();
+
+    // The orchestrator (declared at workflow creation) has no origin.
+    let seed = apis::jobs_api::get_job(config, orch).unwrap();
+    assert_eq!(seed.origin, None, "declared job must have origin=None");
+
+    // The spawned job is marked `spawn`.
+    let spawned = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // origin_is_set
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "spawned_worker")
+    .unwrap();
+    assert_eq!(
+        spawned.origin.as_deref(),
+        Some("spawn"),
+        "spawned job must have origin='spawn'"
+    );
+}
+
+/// `retry_job` tags the resurrected row with `origin = "retry"`, so the same
+/// watch detector that picks up spawned jobs also picks up retries.
+#[rstest]
+fn test_retried_jobs_have_origin_retry(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_origin_retry", Some(5));
+    let job = seed_and_init(config, workflow_id, "flaky_job");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Fail the job, then retry it via the retry_job API (the same path the
+    // failure-handler retry mechanism uses).
+    claim_and_mark_running(config, workflow_id, run_id, job);
+    let fail = models::ResultModel::new(
+        job,
+        workflow_id,
+        run_id,
+        1,
+        cn,
+        1,
+        0.1,
+        now(),
+        JobStatus::Failed,
+    );
+    apis::jobs_api::complete_job(config, job, JobStatus::Failed, run_id, fail).unwrap();
+    apis::jobs_api::retry_job(config, job, run_id, 3).unwrap();
+
+    let retried = apis::jobs_api::get_job(config, job).unwrap();
+    assert_eq!(
+        retried.origin.as_deref(),
+        Some("retry"),
+        "retried job must have origin='retry'"
+    );
+    assert_eq!(retried.status, Some(JobStatus::Ready));
+}
+
+/// A spawned job that fails and is then retried must keep `origin='spawn'`,
+/// not be clobbered to `origin='retry'`. Provenance answers "why does this
+/// row exist" — it was added by `spawn_jobs`; the retry just bumped its
+/// attempt counter. The auto-schedule detector treats both equally
+/// (`origin IS NOT NULL`), but downstream observability and reports need
+/// the original provenance.
+#[rstest]
+fn test_retry_preserves_spawn_origin(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_retry_spawn", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Spawn a worker, then complete the orchestrator so the worker unblocks.
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("S".to_string()),
+            jobs: vec![spawn_job("flaky_spawn", &[], 1)],
+            state: None,
+        },
+    )
+    .expect("spawn worker");
+    let worker_id = resp.spawned_job_ids[0];
+    runner_completes(config, workflow_id, run_id, cn, orch);
+    wait_for_status(config, worker_id, JobStatus::Ready);
+
+    // Fail the spawned worker, then retry it.
+    claim_and_mark_running(config, workflow_id, run_id, worker_id);
+    let fail = models::ResultModel::new(
+        worker_id,
+        workflow_id,
+        run_id,
+        1,
+        cn,
+        1,
+        0.1,
+        now(),
+        JobStatus::Failed,
+    );
+    apis::jobs_api::complete_job(config, worker_id, JobStatus::Failed, run_id, fail).unwrap();
+    apis::jobs_api::retry_job(config, worker_id, run_id, 3).unwrap();
+
+    let retried = apis::jobs_api::get_job(config, worker_id).unwrap();
+    assert_eq!(
+        retried.origin.as_deref(),
+        Some("spawn"),
+        "retried spawned job must keep origin='spawn', not be clobbered to 'retry'"
+    );
+    assert_eq!(retried.attempt_id, Some(2));
+    assert_eq!(retried.status, Some(JobStatus::Ready));
+}
+
+/// Server-side validation of `dynamic_jobs.max_iterations` on workflow
+/// creation. The spec validator already rejects non-positive values for
+/// spec-file callers; this test confirms direct API callers get the same
+/// 422 instead of a confusing "cap reached" on first spawn.
+#[rstest]
+fn test_create_workflow_rejects_non_positive_max_iterations(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let mut wf =
+        models::WorkflowModel::new("dyn_bad_max_iter".to_string(), "test_user".to_string());
+    wf.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(0),
+    });
+    let err = apis::workflows_api::create_workflow(config, wf)
+        .expect_err("create_workflow must reject dynamic_jobs.max_iterations=0");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("must be >= 1"),
+        "expected 422 rejection, got: {}",
+        msg
+    );
+
+    let mut wf2 =
+        models::WorkflowModel::new("dyn_bad_max_iter2".to_string(), "test_user".to_string());
+    wf2.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(-1),
+    });
+    let err = apis::workflows_api::create_workflow(config, wf2)
+        .expect_err("create_workflow must reject negative dynamic_jobs.max_iterations");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("must be >= 1"),
+        "expected 422 rejection, got: {}",
+        msg
+    );
+}
+
+/// `dynamic_jobs` is runtime-immutable: an attempt to change it via
+/// `update_workflow` must 422 rather than silently no-op (which the
+/// COALESCE-based UPDATE would have done).
+#[rstest]
+fn test_update_workflow_rejects_dynamic_jobs_change(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_immutable_dynamic_jobs", Some(5));
+    let mut wf = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
+    wf.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(10),
+    });
+    let err = apis::workflows_api::update_workflow(config, workflow_id, wf)
+        .expect_err("update_workflow must reject dynamic_jobs change");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("immutable"),
+        "expected 422 immutability rejection, got: {}",
+        msg
+    );
+
+    // Passing the same value (no actual change) should NOT 422 — we only
+    // reject real modifications.
+    let mut wf2 = apis::workflows_api::get_workflow(config, workflow_id).expect("get_workflow");
+    wf2.dynamic_jobs = Some(models::DynamicJobsConfig {
+        max_iterations: Some(5),
+    }); // same as setup() created
+    apis::workflows_api::update_workflow(config, workflow_id, wf2)
+        .expect("no-op update with same value must succeed");
+}
+
+/// End-to-end runner flow: orchestrator runs, spawns children blocked on
+/// itself, exits; the runner completes it; the unblock cascade promotes the
+/// children; the iteration's worker finishes; the next orchestrator runs and
+/// converges by calling spawn_jobs with no jobs.
+#[rstest]
+fn test_runner_flow_continuation_and_convergence(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_runner_flow", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_g0");
+    let run_id = run_id_of(config, workflow_id);
+
+    // --- Generation 0: orchestrator runs and spawns one worker + continuation
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("A".to_string()),
+            jobs: vec![
+                spawn_job("work_A_i01", &[], 1),
+                spawn_job("orch_g1", &["work_A_i01"], 0),
+            ],
+            state: Some(serde_json::json!({ "gen": 1 })),
+        },
+    )
+    .expect("spawn_jobs failed");
+    assert_eq!(resp.iteration, 1);
+    assert_eq!(resp.spawned_job_ids.len(), 2);
+
+    let by_name = |n: &str| {
+        apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None, // origin_is_set
+        )
+        .expect("list_jobs")
+        .items
+        .into_iter()
+        .find(|j| j.name == n)
+        .unwrap_or_else(|| panic!("job {} not found", n))
+    };
+
+    // Both spawned jobs must be Blocked — they all carry an implicit edge to
+    // the still-Running orchestrator.
+    let work = by_name("work_A_i01");
+    let cont = by_name("orch_g1");
+    assert_eq!(
+        work.status,
+        Some(JobStatus::Blocked),
+        "work must be Blocked on orchestrator"
+    );
+    assert_eq!(
+        cont.status,
+        Some(JobStatus::Blocked),
+        "continuation Blocked on orchestrator + work"
+    );
+    // Orchestrator is still Running after spawn_jobs — no double completion.
+    assert_eq!(
+        apis::jobs_api::get_job(config, orch).unwrap().status,
+        Some(JobStatus::Running)
+    );
+
+    // --- Runner completes the orchestrator (script exited 0) ---------------
+    runner_completes(config, workflow_id, run_id, cn, orch);
+    // The worker job (no other deps) unblocks first.
+    wait_for_status(config, work.id.unwrap(), JobStatus::Ready);
+
+    // --- Worker runs and completes -> continuation unblocks --------------
+    finish_job(config, workflow_id, run_id, cn, work.id.unwrap());
+    wait_for_status(config, cont.id.unwrap(), JobStatus::Ready);
+
+    // --- Generation 1: orchestrator converges (spawns nothing) ----------
+    claim_and_mark_running(config, workflow_id, run_id, cont.id.unwrap());
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        cont.id.unwrap(),
+        models::SpawnJobsRequest {
+            lineage: Some("A".to_string()),
+            jobs: vec![],
+            state: Some(serde_json::json!({ "converged": true })),
+        },
+    )
+    .expect("convergence call failed");
+    assert!(resp.spawned_job_ids.is_empty());
+    assert_eq!(resp.iteration, 1, "counter unchanged on convergence");
+    let fin = final_state(config, workflow_id, "A").expect("final state");
+    assert_eq!(fin["final"], serde_json::json!(true));
+    assert_eq!(fin["state"]["converged"], serde_json::json!(true));
+
+    // Runner completes the converging orchestrator -> workflow finishes.
+    runner_completes(config, workflow_id, run_id, cn, cont.id.unwrap());
+}
+
+/// Two concurrent lineages in the same workflow each maintain their own
+/// counter and state record.
+#[rstest]
+fn test_multi_lineage_independence(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_multi_lineage", Some(5));
+    let a = seed_and_init(config, workflow_id, "orch_a_g0");
+    let run_id = run_id_of(config, workflow_id);
+    // Seed lineage B alongside A.
+    let b = {
+        let job = models::JobModel::new(workflow_id, "orch_b_g0".to_string(), "echo b".to_string());
+        let id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+        apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+            .expect("reinit failed");
+        id
+    };
+
+    claim_and_mark_running(config, workflow_id, run_id, a);
+    let ra = apis::jobs_api::spawn_jobs(
+        config,
+        a,
+        models::SpawnJobsRequest {
+            lineage: Some("A".to_string()),
+            jobs: vec![spawn_job("work_A_i01", &[], 1)],
+            state: Some(serde_json::json!({ "gen": 1 })),
+        },
+    )
+    .unwrap();
+    assert_eq!(ra.iteration, 1);
+
+    claim_and_mark_running(config, workflow_id, run_id, b);
+    let rb = apis::jobs_api::spawn_jobs(
+        config,
+        b,
+        models::SpawnJobsRequest {
+            lineage: Some("B".to_string()),
+            jobs: vec![spawn_job("work_B_i01", &[], 1)],
+            state: Some(serde_json::json!({ "gen": 1 })),
+        },
+    )
+    .unwrap();
+    assert_eq!(rb.iteration, 1, "B counts independently of A");
+
+    // Each lineage has its own state record; A's is untouched by B.
+    assert!(latest_gen_state(config, workflow_id, "A").is_some());
+    assert!(latest_gen_state(config, workflow_id, "B").is_some());
+    assert_eq!(
+        latest_gen_state(config, workflow_id, "A").unwrap()["spawn_count"],
+        serde_json::json!(1)
+    );
+
+    // Tidy: complete the orchestrators so we don't leak Running jobs.
+    runner_completes(config, workflow_id, run_id, cn, a);
+    runner_completes(config, workflow_id, run_id, cn, b);
+}
+
+/// Append-only history: two real generations leave two immutable records with
+/// their own distinct state, neither overwriting the other.
+#[rstest]
+fn test_append_only_history(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_history", Some(10));
+    let orch = seed_and_init(config, workflow_id, "h_g0");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Generation 1.
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("H".to_string()),
+            jobs: vec![
+                spawn_job("h_work_i01", &[], 1),
+                spawn_job("h_g1", &["h_work_i01"], 0),
+            ],
+            state: Some(serde_json::json!({ "gen": 1, "metric": 0.9 })),
+        },
+    )
+    .unwrap();
+    runner_completes(config, workflow_id, run_id, cn, orch);
+
+    let work1 = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // origin_is_set
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "h_work_i01")
+    .unwrap();
+    let cont1 = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // origin_is_set
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "h_g1")
+    .unwrap();
+    wait_for_status(config, work1.id.unwrap(), JobStatus::Ready);
+    finish_job(config, workflow_id, run_id, cn, work1.id.unwrap());
+    wait_for_status(config, cont1.id.unwrap(), JobStatus::Ready);
+
+    // Generation 2.
+    claim_and_mark_running(config, workflow_id, run_id, cont1.id.unwrap());
+    let r2 = apis::jobs_api::spawn_jobs(
+        config,
+        cont1.id.unwrap(),
+        models::SpawnJobsRequest {
+            lineage: Some("H".to_string()),
+            jobs: vec![spawn_job("h_work_i02", &[], 1)],
+            state: Some(serde_json::json!({ "gen": 2, "metric": 0.2 })),
+        },
+    )
+    .unwrap();
+    assert_eq!(r2.iteration, 2);
+    runner_completes(config, workflow_id, run_id, cn, cont1.id.unwrap());
+
+    // Both generations retained with distinct state.
+    let names = gen_record_names(config, workflow_id, "H");
+    assert_eq!(names.len(), 2, "two generations retained: {:?}", names);
+    let s1 = gen_state(config, workflow_id, "H", 1).unwrap();
+    let s2 = gen_state(config, workflow_id, "H", 2).unwrap();
+    assert_eq!(s1["state"]["metric"], serde_json::json!(0.9));
+    assert_eq!(s2["state"]["metric"], serde_json::json!(0.2));
+}
+
+/// A replayed spawn (same caller still Running, identical request) is an
+/// idempotent no-op: no duplicate jobs, no double-counted iteration.
+#[rstest]
+fn test_idempotent_replay(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_replay", Some(10));
+    let orch = seed_and_init(config, workflow_id, "orch_g0");
+    let run_id = run_id_of(config, workflow_id);
+
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    let make_req = || models::SpawnJobsRequest {
+        lineage: Some("R".to_string()),
+        jobs: vec![
+            spawn_job("work_R_i01", &[], 1),
+            spawn_job("orch_R_g1", &["work_R_i01"], 0),
+        ],
+        state: Some(serde_json::json!({ "gen": 1 })),
+    };
+
+    let first = apis::jobs_api::spawn_jobs(config, orch, make_req()).unwrap();
+    assert_eq!(first.spawned_job_ids.len(), 2);
+    assert_eq!(first.iteration, 1);
+
+    let count_jobs = || {
+        apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None, // origin_is_set
+        )
+        .unwrap()
+        .items
+        .len()
+    };
+    let after_first = count_jobs();
+
+    let replay = apis::jobs_api::spawn_jobs(config, orch, make_req())
+        .expect("replay should succeed idempotently");
+    assert_eq!(
+        count_jobs(),
+        after_first,
+        "replay must not create duplicate jobs"
+    );
+    assert_eq!(replay.spawned_job_ids, first.spawned_job_ids);
+    assert_eq!(replay.iteration, 1, "counter not advanced on replay");
+    assert_eq!(
+        gen_record_names(config, workflow_id, "R").len(),
+        1,
+        "replay must not append a duplicate generation record"
+    );
+
+    // The OpenAPI contract promises spawned_job_ids are returned in the
+    // order they appear in the request — assert that explicitly. This
+    // guards against the replay branch quietly drifting to a HashMap-
+    // iteration ordering if someone reworks the lookup later.
+    let reordered_jobs = vec![
+        spawn_job("orch_R_g1", &[], 0),
+        spawn_job("work_R_i01", &[], 1),
+    ];
+    let reordered_replay = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("R".to_string()),
+            jobs: reordered_jobs,
+            state: Some(serde_json::json!({ "gen": 1 })),
+        },
+    )
+    .expect("reordered replay should succeed");
+    // Swapping the request order swaps the returned ID order.
+    assert_eq!(
+        reordered_replay.spawned_job_ids,
+        vec![first.spawned_job_ids[1], first.spawned_job_ids[0]],
+        "replay must preserve request-order in spawned_job_ids"
+    );
+}
+
+/// Per-lineage cap rejects a spawn that would exceed it; the caller stays
+/// Running (nothing was persisted).
+#[rstest]
+fn test_max_iterations_cap(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, cn) = setup(config, "dyn_cap", Some(1));
+    let orch = seed_and_init(config, workflow_id, "orch_cap_g0");
+    let run_id = run_id_of(config, workflow_id);
+
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+    // First spawn allowed (counter 0 -> 1; cap is 1).
+    let r0 = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("C".to_string()),
+            jobs: vec![
+                spawn_job("c_work_i01", &[], 1),
+                spawn_job("orch_cap_g1", &["c_work_i01"], 0),
+            ],
+            state: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(r0.iteration, 1);
+
+    runner_completes(config, workflow_id, run_id, cn, orch);
+
+    let cont = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // origin_is_set
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "orch_cap_g1")
+    .unwrap();
+    let work_id = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // origin_is_set
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|j| j.name == "c_work_i01")
+    .unwrap()
+    .id
+    .unwrap();
+    wait_for_status(config, work_id, JobStatus::Ready);
+    finish_job(config, workflow_id, run_id, cn, work_id);
+    wait_for_status(config, cont.id.unwrap(), JobStatus::Ready);
+    claim_and_mark_running(config, workflow_id, run_id, cont.id.unwrap());
+
+    let err = apis::jobs_api::spawn_jobs(
+        config,
+        cont.id.unwrap(),
+        models::SpawnJobsRequest {
+            lineage: Some("C".to_string()),
+            jobs: vec![spawn_job("c_work_i02", &[], 1)],
+            state: None,
+        },
+    )
+    .expect_err("cap must reject the second spawn");
+    let msg = format!("{:?}", err);
+    assert!(
+        msg.contains("422") || msg.to_lowercase().contains("cap"),
+        "expected a 422 cap rejection, got: {}",
+        msg
+    );
+
+    // Caller untouched by the rejected call.
+    assert_eq!(
+        apis::jobs_api::get_job(config, cont.id.unwrap())
+            .unwrap()
+            .status,
+        Some(JobStatus::Running),
+    );
+}
+
+/// When a spawn job omits `resource_requirements`, the server falls back to
+/// the workflow's auto-created RR named "default" (mirroring
+/// `transport_create_job`). Without this, the spawned row would have
+/// `resource_requirements_id=NULL` and the claim path's inner-join would
+/// never pick it up — the job would stay Ready forever.
+#[rstest]
+fn test_resource_requirements_default_fallback(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    // setup() creates the workflow, which causes the server to auto-create
+    // an RR named "default" (reserved name, only the server creates it).
+    let (workflow_id, _cn) = setup(config, "dyn_rr_default", Some(5));
+
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    // No resource_requirements -> should resolve to the workflow's "default" RR.
+    let mut bare = spawn_job("bare_worker", &[], 1);
+    bare.resource_requirements = None;
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("D".to_string()),
+            jobs: vec![bare],
+            state: None,
+        },
+    )
+    .expect("spawn must succeed via default RR fallback");
+    assert_eq!(resp.spawned_job_ids.len(), 1);
+
+    let inserted = apis::jobs_api::get_job(config, resp.spawned_job_ids[0]).unwrap();
+    assert!(
+        inserted.resource_requirements_id.is_some(),
+        "spawned job must get a real resource_requirements_id from the default fallback"
+    );
+}
+
+/// A lineage containing `%` must not match other lineages' generation
+/// records — the LIKE pattern escapes both `_` and `%`. Without the `%`
+/// escape, lineage "X%" would also match "X_g00000Y" rows from other
+/// lineages and the derived spawn_count would be wrong.
+#[rstest]
+fn test_lineage_with_percent_escapes_like_pattern(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_pct_escape", Some(5));
+    let orch_a = seed_and_init(config, workflow_id, "orch_a");
+    let run_id = run_id_of(config, workflow_id);
+
+    // Lineage A: plain alpha id, advances to generation 1.
+    claim_and_mark_running(config, workflow_id, run_id, orch_a);
+    apis::jobs_api::spawn_jobs(
+        config,
+        orch_a,
+        models::SpawnJobsRequest {
+            lineage: Some("alpha".to_string()),
+            jobs: vec![spawn_job("alpha_w1", &[], 1)],
+            state: None,
+        },
+    )
+    .unwrap();
+    runner_completes(config, workflow_id, run_id, _cn, orch_a);
+
+    // Seed a second orchestrator that uses a lineage containing `%`. If the
+    // server did not escape `%`, its derive-spawn-count LIKE pattern would
+    // match alpha's `__torc_lineage__alpha__g000001` row too and report
+    // iteration=2 on the first call.
+    let job_b = models::JobModel::new(workflow_id, "orch_b".to_string(), "echo b".to_string());
+    let orch_b = apis::jobs_api::create_job(config, job_b)
+        .unwrap()
+        .id
+        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None).expect("reinit");
+    claim_and_mark_running(config, workflow_id, run_id, orch_b);
+    let resp = apis::jobs_api::spawn_jobs(
+        config,
+        orch_b,
+        models::SpawnJobsRequest {
+            lineage: Some("a%".to_string()),
+            jobs: vec![spawn_job("pct_w1", &[], 1)],
+            state: None,
+        },
+    )
+    .expect("spawn with %-containing lineage must succeed");
+    assert_eq!(
+        resp.iteration, 1,
+        "lineage `a%` must start at iteration 1, not inherit alpha's count"
+    );
+}

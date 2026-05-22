@@ -1,0 +1,88 @@
+# Dynamic-jobs orchestrator on Slurm.
+#
+# Demonstrates the `spawn_jobs` feature for data-dependent iteration (e.g. a
+# ReEDS/PRAS feedback loop). Each ReEDS "case" is an independent lineage; the
+# workflow seeds two concurrent lineages here, each of which iteratively
+# spawns its own reeds -> pras -> next-orchestrator chain until the
+# orchestrator's convergence test trips.
+#
+# Flow per generation:
+#   1. The torc runner runs the orchestrator job (`dynamic_orchestrator.py`).
+#   2. The orchestrator inspects the prior PRAS output and calls `spawn_jobs`
+#      to add reeds + pras + next-generation orchestrator. Each spawned job is
+#      automatically blocked on the calling orchestrator — no `depends_on`
+#      entry for the orchestrator itself is required.
+#   3. The orchestrator exits 0. The runner completes it (normal path), and
+#      the unblock cascade promotes the spawned reeds to ready.
+#   4. On convergence, the orchestrator calls `spawn_jobs` with `jobs=[]` and
+#      a final `state` payload (recorded as `__torc_lineage__<lineage>__final`)
+#      and exits. The runner completes it; with no further jobs spawned the
+#      workflow finishes for that lineage.
+#
+# The orchestrator script is `examples/scripts/dynamic_orchestrator.py`. It
+# uses the torc Python client (`pip install torc_client`, published on PyPI).
+#
+# Run on a Slurm cluster:
+#   1. Set the account/partition below.
+#   2. cd <repo root>     # so the example script paths resolve
+#   3. torc submit examples/yaml/dynamic_orchestrator_slurm.yaml
+#
+# This file is sized for an HPC node (pras_rr asks for 32 CPUs / 120 GB).
+# Running it locally with `torc run` will leave the pras jobs stuck `Ready`
+# because no local compute node can satisfy those resources. For a
+# laptop-friendly run, use `dynamic_orchestrator_local.yaml` instead — same
+# orchestrator script, smaller resource requests.
+#
+# The mock reeds/pras scripts produce a metric that decays geometrically; the
+# convergence test (metric < 0.01) trips after ~4 generations, so each lineage
+# runs 4 generations and stops. Set TORC_DEMO_WORK_SECS to make the mock jobs
+# longer if you want to observe scheduling behavior.
+
+name: dynamic_orchestrator_slurm
+description: Dynamic spawn_jobs orchestrator with two concurrent lineages
+
+# Per-lineage cap (acts independently for each case). The geometric decay
+# above converges by ~iter 4; this 10 is a safety ceiling.
+dynamic_jobs:
+  max_iterations: 10
+
+slurm_schedulers:
+  - name: hpc
+    account: "REPLACE_WITH_HPC_ACCOUNT"   # required
+    walltime: "12:00:00"
+    nodes: 1
+
+resource_requirements:
+  # The orchestrator is light: 1 CPU, tiny memory, brief runtime. It only
+  # inspects files and issues one API call before exiting.
+  - name: orch_rr
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M
+
+  # ReEDS-shaped: many CPUs, modest memory, long runtime.
+  - name: reeds_rr
+    num_cpus: 8
+    memory: 10g
+    runtime: PT24H
+
+  # PRAS-shaped: memory-bound. Higher priority on spawn so it unblocks the
+  # next reeds quickly. (Priority is set per-spawn in the orchestrator script.)
+  - name: pras_rr
+    num_cpus: 32
+    memory: 120g
+    runtime: PT30M
+
+jobs:
+  # Seed: one orchestrator job per concurrent case. Each one passes its
+  # lineage as the first argument; spawned continuations inherit it via
+  # TORC_ORCHESTRATOR_LINEAGE_ID (set by torc on every spawned job's env).
+  - name: orch_caseA_g00
+    command: python3 examples/scripts/dynamic_orchestrator.py caseA
+    resource_requirements: orch_rr
+    priority: 5
+
+  - name: orch_caseB_g00
+    command: python3 examples/scripts/dynamic_orchestrator.py caseB
+    resource_requirements: orch_rr
+    priority: 5

@@ -138,6 +138,7 @@ pub trait JobsApi<C> {
     async fn list_job_ids(&self, id: i64, context: &C) -> Result<ListJobIdsResponse, ApiError>;
 
     /// Retrieve all jobs for one workflow.
+    #[allow(clippy::too_many_arguments)]
     async fn list_jobs(
         &self,
         workflow_id: i64,
@@ -150,6 +151,7 @@ pub trait JobsApi<C> {
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -401,7 +403,7 @@ impl JobsApiImpl {
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id, priority
+                       failure_handler_id, attempt_id, priority, origin
                 FROM job
                 WHERE id = ?
             "#,
@@ -569,6 +571,7 @@ impl JobsApiImpl {
             failure_handler_id: record.try_get("failure_handler_id").ok(),
             attempt_id: record.try_get("attempt_id").ok(),
             priority: record.try_get("priority").ok(),
+            origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
         })
     }
 
@@ -1837,6 +1840,7 @@ where
     }
 
     /// Retrieve all jobs for one workflow.
+    #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, context), fields(workflow_id, offset, limit))]
     async fn list_jobs(
         &self,
@@ -1850,10 +1854,11 @@ where
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -1864,11 +1869,12 @@ where
             reverse_sort,
             include_relationships,
             active_compute_node_id,
+            origin_is_set,
             context.get().0.clone()
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1898,6 +1904,16 @@ where
                 "id IN (SELECT job_id FROM job_internal WHERE active_compute_node_id = ?)"
                     .to_string(),
             );
+        }
+
+        // Filter by provenance: `true` matches `'retry'`/`'spawn'`; `false`
+        // matches statically-declared jobs (origin IS NULL). `torc watch
+        // --auto-schedule` uses `origin_is_set=true` with `limit=1` to count
+        // jobs needing an unplanned allocation without downloading rows.
+        if let Some(true) = origin_is_set {
+            where_conditions.push("origin IS NOT NULL".to_string());
+        } else if let Some(false) = origin_is_set {
+            where_conditions.push("origin IS NULL".to_string());
         }
 
         let where_clause = where_conditions.join(" AND ");
@@ -1995,6 +2011,7 @@ where
                     failure_handler_id: record.try_get("failure_handler_id").ok(),
                     attempt_id: record.try_get("attempt_id").ok(),
                     priority: record.try_get("priority").ok(),
+                    origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
                 });
             }
         }
@@ -2497,6 +2514,7 @@ where
                 failure_handler_id: row.get("failure_handler_id"),
                 attempt_id: row.get("attempt_id"),
                 priority: row.try_get("priority").ok(),
+                origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
             };
 
             selected_jobs.push(job);
@@ -2922,7 +2940,7 @@ where
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
-                   j.resource_requirements_id, j.scheduler_id, j.priority,
+                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin,
                    w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
@@ -2963,6 +2981,7 @@ where
         let resource_requirements_id: Option<i64> = job_record.get("resource_requirements_id");
         let scheduler_id: Option<i64> = job_record.get("scheduler_id");
         let workflow_run_id: i64 = job_record.get("workflow_run_id");
+        let existing_origin: Option<String> = job_record.try_get("origin").ok().flatten();
 
         // Verify run_id matches
         if workflow_run_id != run_id {
@@ -3014,12 +3033,20 @@ where
         // Get current attempt_id and increment
         let new_attempt = attempt_id + 1;
 
-        // Update job status to Ready and increment attempt_id
+        // Update job status to Ready, increment attempt_id, and tag origin
+        // as 'retry' *only if it's not already set* so `torc watch
+        // --auto-schedule` recognizes this row as needing an unplanned
+        // allocation. COALESCE preserves the original provenance: a job
+        // created by `spawn_jobs` (origin='spawn') that later gets retried
+        // keeps `origin='spawn'`, because "why does this job exist" is still
+        // "spawn_jobs added it at runtime" — it just happens to be on its
+        // 2nd attempt. The watch detector keys on `origin IS NOT NULL` and
+        // doesn't care which non-null value it sees.
         let ready_status = JobStatus::Ready.to_int();
         if let Err(e) = sqlx::query(
             r#"
             UPDATE job
-            SET status = ?, attempt_id = ?
+            SET status = ?, attempt_id = ?, origin = COALESCE(origin, 'retry')
             WHERE id = ?
             "#,
         )
@@ -3103,6 +3130,10 @@ where
             failure_handler_id,
             attempt_id: Some(new_attempt),
             priority,
+            // Mirror the UPDATE above: COALESCE(existing, 'retry'). A
+            // previously-spawned row keeps origin='spawn'; a fresh retry of
+            // a statically-declared job becomes 'retry'.
+            origin: Some(existing_origin.unwrap_or_else(|| "retry".to_string())),
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

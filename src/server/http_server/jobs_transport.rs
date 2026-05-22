@@ -13,6 +13,488 @@ const RESOURCE_CLAIM_ORDER_BY: &str = "\
         rr.num_cpus DESC, \
         job.id ASC";
 
+/// Detect a cycle in a directed graph given as adjacency lists (node -> deps).
+/// Used to reject self-referential `spawn_jobs` batches.
+fn has_cycle(adjacency: &std::collections::HashMap<&str, Vec<&str>>) -> bool {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Mark {
+        Visiting,
+        Done,
+    }
+    fn dfs<'a>(
+        node: &'a str,
+        adjacency: &std::collections::HashMap<&'a str, Vec<&'a str>>,
+        marks: &mut std::collections::HashMap<&'a str, Mark>,
+    ) -> bool {
+        match marks.get(node) {
+            Some(Mark::Visiting) => return true,
+            Some(Mark::Done) => return false,
+            None => {}
+        }
+        marks.insert(node, Mark::Visiting);
+        for next in adjacency.get(node).map(|v| v.as_slice()).unwrap_or(&[]) {
+            if dfs(next, adjacency, marks) {
+                return true;
+            }
+        }
+        marks.insert(node, Mark::Done);
+        false
+    }
+    let mut marks: std::collections::HashMap<&str, Mark> = std::collections::HashMap::new();
+    adjacency
+        .keys()
+        .any(|node| dfs(node, adjacency, &mut marks))
+}
+
+// ---------------------------------------------------------------------------
+// spawn_jobs helpers
+// ---------------------------------------------------------------------------
+//
+// `transport_spawn_jobs` is split into focused helpers so the orchestration
+// function reads top-to-bottom as plain English. Helpers either return a
+// `Result<T, SpawnReject>` (where `SpawnReject` carries either a ready-made
+// HTTP response — 404/422 — or a true infra `ApiError` — 500) or are pure
+// validators that return `Result<(), String>` with the 422 message body.
+
+/// Either an HTTP-level response to surface to the client (`Response`) or a
+/// genuine internal failure to propagate (`Internal`). Constructed inside the
+/// helpers; unwrapped at the boundary of `transport_spawn_jobs`, which rolls
+/// the transaction back in both cases.
+enum SpawnReject {
+    Response(SpawnJobsResponse),
+    Internal(ApiError),
+}
+
+impl From<ApiError> for SpawnReject {
+    fn from(e: ApiError) -> Self {
+        SpawnReject::Internal(e)
+    }
+}
+
+/// SQLite parameter cap — well below the modern 32766 limit so older builds
+/// stay safe. Used to chunk the `name IN (?,?,…)` lookups and the
+/// `job_depends_on` batched INSERTs against `SQLITE_MAX_VARIABLE_NUMBER`.
+const SPAWN_IN_CHUNK: usize = 256;
+
+/// Same idea, but for 3-column-row INSERTs into `job_depends_on`. 3 cols ×
+/// 800 rows = 2400 binds per statement, well below the limit.
+const SPAWN_DEP_INSERT_CHUNK: usize = 800;
+
+/// Per-lineage cap applied when the workflow's `dynamic_jobs` config is
+/// absent or doesn't set `max_iterations`.
+const DEFAULT_MAX_SPAWN_ITERATIONS: i64 = 1000;
+
+fn reject(msg: impl Into<String>) -> SpawnReject {
+    SpawnReject::Response(SpawnJobsResponse::UnprocessableContentErrorResponse(
+        message_error_response(msg.into()),
+    ))
+}
+
+fn reject_not_found(resource: &str, id: i64) -> SpawnReject {
+    SpawnReject::Response(SpawnJobsResponse::NotFoundErrorResponse(
+        resource_not_found_response(resource, id),
+    ))
+}
+
+fn db_error(e: sqlx::Error, msg: &str) -> SpawnReject {
+    SpawnReject::Internal(database_lock_aware_error(e, msg))
+}
+
+/// Pure: reject duplicate names and negative priorities. These are the
+/// shape-level rules every spawn batch must pass before any DB I/O.
+fn validate_spawn_request_shape(jobs: &[models::SpawnJobModel]) -> Result<(), SpawnReject> {
+    let mut seen: std::collections::HashSet<&str> =
+        std::collections::HashSet::with_capacity(jobs.len());
+    for job in jobs {
+        if !seen.insert(job.name.as_str()) {
+            // Two entries with the same name would let the second INSERT
+            // overwrite the first in `name_to_id` and silently misdirect
+            // dependency edges.
+            return Err(reject(format!(
+                "duplicate name '{}' in spawn batch",
+                job.name
+            )));
+        }
+        if let Some(p) = job.priority
+            && p < 0
+        {
+            return Err(reject(format!(
+                "spawn job '{}' has invalid priority {}: must be >= 0",
+                job.name, p
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Pure: every batch dependency must resolve to an existing job or to a
+/// sibling in the batch, and the sibling subgraph must be acyclic. Edges
+/// out to pre-existing jobs cannot close a cycle, so the graph passed to
+/// `has_cycle` only spans the batch.
+fn validate_batch_dag(
+    jobs: &[models::SpawnJobModel],
+    name_to_id: &std::collections::HashMap<String, i64>,
+) -> Result<(), SpawnReject> {
+    let batch_names: std::collections::HashSet<&str> =
+        jobs.iter().map(|j| j.name.as_str()).collect();
+    let adjacency: std::collections::HashMap<&str, Vec<&str>> = jobs
+        .iter()
+        .map(|j| {
+            let edges = j
+                .depends_on
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .filter(|d| batch_names.contains(d.as_str()))
+                .map(|d| d.as_str())
+                .collect();
+            (j.name.as_str(), edges)
+        })
+        .collect();
+    if has_cycle(&adjacency) {
+        return Err(reject("spawn jobs dependency graph contains a cycle"));
+    }
+    for job in jobs {
+        for dep in job.depends_on.as_deref().unwrap_or(&[]) {
+            if !name_to_id.contains_key(dep) && !batch_names.contains(dep.as_str()) {
+                return Err(reject(format!(
+                    "spawn job '{}' depends on unknown job '{}'",
+                    job.name, dep
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Look up jobs in `workflow_id` whose name appears in `names`, returning a
+/// `name -> id` map. The IN clause is chunked under `SPAWN_IN_CHUNK` so we
+/// stay below `SQLITE_MAX_VARIABLE_NUMBER` even on very large batches.
+async fn lookup_existing_job_names(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    names: &[&str],
+) -> Result<std::collections::HashMap<String, i64>, SpawnReject> {
+    let mut out = std::collections::HashMap::with_capacity(names.len());
+    for chunk in names.chunks(SPAWN_IN_CHUNK) {
+        let placeholders = vec!["?"; chunk.len()].join(", ");
+        let sql = format!(
+            "SELECT id, name FROM job WHERE workflow_id = ? AND name IN ({})",
+            placeholders
+        );
+        let mut q = sqlx::query(&sql).bind(workflow_id);
+        for n in chunk {
+            q = q.bind(*n);
+        }
+        let rows = q
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to look up referenced workflow jobs"))?;
+        for r in rows {
+            out.insert(r.get::<String, _>("name"), r.get::<i64, _>("id"));
+        }
+    }
+    Ok(out)
+}
+
+/// Look up `resource_requirements` records in `workflow_id` whose name
+/// appears in `names`, returning a `name -> id` map. Chunked like
+/// `lookup_existing_job_names`.
+async fn lookup_existing_rrs(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    names: &[&str],
+) -> Result<std::collections::HashMap<String, i64>, SpawnReject> {
+    let mut out = std::collections::HashMap::with_capacity(names.len());
+    if names.is_empty() {
+        return Ok(out);
+    }
+    for chunk in names.chunks(SPAWN_IN_CHUNK) {
+        let placeholders = vec!["?"; chunk.len()].join(", ");
+        let sql = format!(
+            "SELECT id, name FROM resource_requirements WHERE workflow_id = ? AND name IN ({})",
+            placeholders
+        );
+        let mut q = sqlx::query(&sql).bind(workflow_id);
+        for n in chunk {
+            q = q.bind(*n);
+        }
+        let rows = q
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to resolve resource_requirements"))?;
+        for r in rows {
+            out.insert(r.get::<String, _>("name"), r.get::<i64, _>("id"));
+        }
+    }
+    Ok(out)
+}
+
+/// Derive a lineage's current spawn-iteration counter from its append-only
+/// per-generation `user_data` records. Each spawning generation N is an
+/// immutable row named `__torc_lineage__<lineage>__g<NNNNNN>`; the counter
+/// is the highest N present (0 if none). The literal prefix
+/// `__torc_lineage__` contains `_` (LIKE wildcard), and a caller-supplied
+/// lineage can contain `_` or `%`, so we escape both with `\` and set
+/// `ESCAPE '\'`. The `\` itself is escaped first so each later substitution
+/// stays unambiguous; without escaping `%`, a lineage like `foo%` would
+/// match other lineages' generation records and the derived spawn_count
+/// would be wrong.
+///
+/// MAX is pushed into SQL so we don't pull every matching row name through
+/// the open `BEGIN IMMEDIATE` transaction. `substr(name, N)` skips the
+/// literal prefix, `CAST(... AS INTEGER)` parses the trailing digits, and
+/// MAX aggregates server-side. `query_scalar` returns `None` when no rows
+/// match (MAX over an empty set is NULL); we default that to 0.
+async fn derive_lineage_spawn_count(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    lineage: &str,
+) -> Result<i64, SpawnReject> {
+    let gen_prefix = format!("__torc_lineage__{}__g", lineage);
+    let escaped_like = gen_prefix
+        .replace('\\', "\\\\")
+        .replace('_', "\\_")
+        .replace('%', "\\%")
+        + "%";
+    // `substr(name, N)` extracts from 1-indexed position N. We want the
+    // bytes *after* the literal prefix, so N = prefix.len() + 1.
+    let suffix_start = i64::try_from(gen_prefix.len() + 1).unwrap_or(i64::MAX);
+    let max_gen: Option<i64> = sqlx::query_scalar(
+        "SELECT MAX(CAST(substr(name, ?) AS INTEGER)) \
+         FROM user_data WHERE workflow_id = ? AND name LIKE ? ESCAPE '\\'",
+    )
+    .bind(suffix_start)
+    .bind(workflow_id)
+    .bind(&escaped_like)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| db_error(e, "Failed to read lineage state"))?;
+    Ok(max_gen.unwrap_or(0))
+}
+
+/// Read the workflow's `env` column and parse it into a map. Reuses the
+/// same `deserialize_env_map` helper that `JobsApiImpl::fetch_workflow_env`
+/// uses on the create_job path, so spawned and statically-declared jobs
+/// see identical workflow-env semantics — including the same 500 if the
+/// row's JSON is malformed. (Silently treating malformed JSON as an empty
+/// map would let a spawned job lose required workflow-level env vars
+/// without telling the caller.)
+async fn fetch_workflow_env(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+) -> Result<std::collections::HashMap<String, String>, SpawnReject> {
+    let env_json: Option<String> = sqlx::query_scalar("SELECT env FROM workflow WHERE id = ?")
+        .bind(workflow_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|e| db_error(e, "Failed to fetch workflow env"))?
+        .flatten();
+    Ok(crate::server::api::deserialize_env_map(env_json, "workflow env")?.unwrap_or_default())
+}
+
+/// Insert all spawned job rows. `rr_id_per_job[i]` is the pre-resolved
+/// `resource_requirements_id` for `jobs[i]` (caller has already mapped
+/// explicit names and applied the `"default"` fallback). Returns the new
+/// IDs in request order plus an extended `name_to_id` map that includes
+/// the freshly-inserted siblings, so the caller can resolve dependency
+/// edges below.
+async fn insert_spawned_job_rows(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    jobs: &[models::SpawnJobModel],
+    rr_id_per_job: &[i64],
+    lineage: &str,
+    mut name_to_id: std::collections::HashMap<String, i64>,
+) -> Result<(Vec<i64>, std::collections::HashMap<String, i64>), SpawnReject> {
+    debug_assert_eq!(jobs.len(), rr_id_per_job.len());
+    let blocked_int = i64::from(models::JobStatus::Blocked.to_int());
+
+    // Workflow env merged with the lineage var; the lineage var wins on
+    // collision so the orchestrator can always identify its lineage.
+    let mut effective_env = fetch_workflow_env(tx, workflow_id).await?;
+    effective_env.insert(
+        "TORC_ORCHESTRATOR_LINEAGE_ID".to_string(),
+        lineage.to_string(),
+    );
+    let lineage_env = serde_json::to_string(&effective_env).map_err(|e| {
+        SpawnReject::Internal(ApiError(format!(
+            "Failed to serialize spawned job env: {}",
+            e
+        )))
+    })?;
+
+    let mut spawned_ids = Vec::with_capacity(jobs.len());
+    for (job, rr_id) in jobs.iter().zip(rr_id_per_job.iter()) {
+        let new_id: i64 = sqlx::query(
+            r#"
+            INSERT INTO job
+            (workflow_id, name, command, cancel_on_blocking_job_failure,
+             supports_termination, resource_requirements_id, status, priority, env,
+             origin)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'spawn')
+            RETURNING id
+            "#,
+        )
+        .bind(workflow_id)
+        .bind(&job.name)
+        .bind(&job.command)
+        .bind(job.cancel_on_blocking_job_failure.unwrap_or(true))
+        .bind(false)
+        .bind(*rr_id)
+        .bind(blocked_int)
+        .bind(job.priority.unwrap_or(0))
+        .bind(&lineage_env)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| db_error(e, "Failed to insert spawned job"))?
+        .get("id");
+        name_to_id.insert(job.name.clone(), new_id);
+        spawned_ids.push(new_id);
+    }
+    Ok((spawned_ids, name_to_id))
+}
+
+/// Insert `job_depends_on` rows for every spawned job: each declared
+/// `depends_on` plus the implicit edge on the calling orchestrator. Rows are
+/// deduplicated and inserted in chunked multi-VALUES statements so a large
+/// batch stays within `SQLITE_MAX_VARIABLE_NUMBER`.
+async fn insert_dependency_edges(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    caller_id: i64,
+    jobs: &[models::SpawnJobModel],
+    name_to_id: &std::collections::HashMap<String, i64>,
+) -> Result<(), SpawnReject> {
+    // (job_id, depends_on_job_id, workflow_id)
+    let mut rows: Vec<(i64, i64, i64)> = Vec::new();
+    for job in jobs {
+        let job_id = name_to_id[&job.name];
+        let mut dep_ids: std::collections::BTreeSet<i64> = job
+            .depends_on
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .map(|n| name_to_id[n])
+            .collect();
+        // Auto-injected edge on the caller. Spawned children stay Blocked
+        // until the runner completes the orchestrator and the unblock
+        // cascade runs.
+        dep_ids.insert(caller_id);
+        for dep_id in dep_ids {
+            rows.push((job_id, dep_id, workflow_id));
+        }
+    }
+    if rows.is_empty() {
+        return Ok(());
+    }
+    for chunk in rows.chunks(SPAWN_DEP_INSERT_CHUNK) {
+        let mut sql = String::from(
+            "INSERT INTO job_depends_on (job_id, depends_on_job_id, workflow_id) VALUES ",
+        );
+        for i in 0..chunk.len() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+            sql.push_str("(?, ?, ?)");
+        }
+        let mut q = sqlx::query(&sql);
+        for (job_id, dep_id, wf_id) in chunk {
+            q = q.bind(*job_id).bind(*dep_id).bind(*wf_id);
+        }
+        q.execute(&mut **tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to insert spawned dependency"))?;
+    }
+    Ok(())
+}
+
+/// Append an immutable per-generation state record
+/// `__torc_lineage__<lineage>__g<NNNNNN>` for a spawning call. History is
+/// retained deliberately — convergence often depends on the trend across
+/// iterations.
+async fn append_generation_state(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    lineage: &str,
+    generation: i64,
+    state: serde_json::Value,
+) -> Result<(), SpawnReject> {
+    let name = format!("__torc_lineage__{}__g{:06}", lineage, generation);
+    let payload = serde_json::json!({
+        "generation": generation,
+        "spawn_count": generation,
+        "state": state,
+    });
+    let payload_str = serde_json::to_string(&payload).map_err(|e| {
+        SpawnReject::Internal(ApiError(format!(
+            "Failed to serialize lineage state: {}",
+            e
+        )))
+    })?;
+    sqlx::query(
+        "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) VALUES (?, ?, 1, ?)",
+    )
+    .bind(workflow_id)
+    .bind(&name)
+    .bind(&payload_str)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| db_error(e, "Failed to append lineage generation"))?;
+    Ok(())
+}
+
+/// Upsert the single `__torc_lineage__<lineage>__final` record for a
+/// convergence call that carries state but spawns nothing.
+async fn upsert_final_state(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    lineage: &str,
+    generation: i64,
+    state: serde_json::Value,
+) -> Result<(), SpawnReject> {
+    let name = format!("__torc_lineage__{}__final", lineage);
+    let payload = serde_json::json!({
+        "generation": generation,
+        "spawn_count": generation,
+        "final": true,
+        "state": state,
+    });
+    let payload_str = serde_json::to_string(&payload).map_err(|e| {
+        SpawnReject::Internal(ApiError(format!(
+            "Failed to serialize lineage state: {}",
+            e
+        )))
+    })?;
+    // Single-statement upsert against the partial unique index
+    // `idx_user_data_lineage_unique` on `(workflow_id, name) WHERE name
+    // GLOB '__torc_lineage__*'`. The matching `WHERE` clause after the
+    // conflict target is required by SQLite to bind this upsert to the
+    // partial index and must stay identical to the index predicate.
+    // GLOB (not LIKE) is required because in SQL `LIKE` the underscore
+    // is a single-char wildcard, which would let the constraint match
+    // unrelated names.
+    //
+    // Race-safe by construction — no read-then-write window. The index
+    // enforces uniqueness per `(workflow_id, name)`; since
+    // `__torc_lineage__<lineage>__final` is a single deterministic name
+    // per lineage, the practical guarantee is one final-state row per
+    // lineage, which is what this upsert relies on.
+    sqlx::query(
+        "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) \
+         VALUES (?, ?, 1, ?) \
+         ON CONFLICT(workflow_id, name) WHERE name GLOB '__torc_lineage__*' \
+         DO UPDATE SET data = excluded.data",
+    )
+    .bind(workflow_id)
+    .bind(&name)
+    .bind(&payload_str)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| db_error(e, "Failed to upsert final lineage state"))?;
+    Ok(())
+}
+
 #[derive(Clone, Copy)]
 struct ClaimRemainingResources {
     cpus: i64,
@@ -285,6 +767,7 @@ fn claim_candidate_row(
         failure_handler_id: row.get("failure_handler_id"),
         attempt_id: row.get("attempt_id"),
         priority: Some(row.get("priority")),
+        origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
     });
 
     Ok(true)
@@ -322,6 +805,7 @@ async fn claim_backfill_jobs(
             job.failure_handler_id,
             job.attempt_id,
             job.priority,
+            job.origin,
             rr.id AS resource_requirements_id,
             rr.memory_bytes,
             rr.num_cpus,
@@ -568,6 +1052,7 @@ where
         self.jobs_api.delete_jobs(workflow_id, context).await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn transport_list_jobs(
         &self,
         workflow_id: i64,
@@ -580,6 +1065,7 @@ where
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -602,6 +1088,7 @@ where
                 reverse_sort,
                 include_relationships,
                 active_compute_node_id,
+                origin_is_set,
                 context,
             )
             .await
@@ -1483,6 +1970,7 @@ where
             failure_handler_id: None,
             attempt_id: None,
             priority: None,
+            origin: None,
         };
 
         Ok(CompletedJobRecord {
@@ -1664,6 +2152,278 @@ where
 
         Ok(BatchCompleteJobsResponse::SuccessfulResponse(
             models::BatchCompleteJobsResponse { completed, errors },
+        ))
+    }
+
+    /// Add a batch of new jobs to an initialized workflow, all blocked on the
+    /// calling job. The calling job is **not** completed here — the runner
+    /// completes it when its subprocess exits, and the normal unblock cascade
+    /// promotes the spawned jobs. Per-lineage state and counter are persisted
+    /// in the same transaction.
+    ///
+    /// The body of the function is the orchestration layer; the real work is
+    /// in the spawn_jobs helpers above. The closure pattern lets every
+    /// helper use `?` and have the boundary handle rollback uniformly.
+    pub(super) async fn transport_spawn_jobs(
+        &self,
+        id: i64,
+        body: models::SpawnJobsRequest,
+        context: &C,
+    ) -> Result<SpawnJobsResponse, ApiError> {
+        log_call!(
+            debug,
+            context,
+            "spawn_jobs(job_id={}, jobs_count={})",
+            id,
+            body.jobs.len(),
+        );
+
+        authorize_job!(self, id, context, SpawnJobsResponse);
+
+        let mut tx = begin_immediate(&self.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin spawn_jobs transaction"))?;
+
+        let outcome = self.run_spawn_jobs_tx(&mut tx, id, body).await;
+        match outcome {
+            Ok((response, true)) => {
+                tx.commit().await.map_err(|e| {
+                    database_lock_aware_error(e, "Failed to commit spawn_jobs transaction")
+                })?;
+                Ok(response)
+            }
+            Ok((response, false)) => {
+                let _ = tx.rollback().await;
+                Ok(response)
+            }
+            Err(SpawnReject::Response(resp)) => {
+                let _ = tx.rollback().await;
+                Ok(resp)
+            }
+            Err(SpawnReject::Internal(e)) => {
+                let _ = tx.rollback().await;
+                Err(e)
+            }
+        }
+    }
+
+    /// Inner spawn_jobs body that runs inside the open transaction. Returns
+    /// `(response, committed)` on success — `committed=true` means the caller
+    /// must NOT roll back; `committed=false` is a clean no-op path (e.g. an
+    /// empty no-spawn call with no state) and the caller rolls back for tidiness.
+    async fn run_spawn_jobs_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        id: i64,
+        body: models::SpawnJobsRequest,
+    ) -> Result<(SpawnJobsResponse, bool), SpawnReject> {
+        let models::SpawnJobsRequest {
+            lineage,
+            jobs,
+            state,
+        } = body;
+
+        // --- Up-front shape validation (pure) ---------------------------
+        validate_spawn_request_shape(&jobs)?;
+
+        // --- Resolve the calling job and its workflow -------------------
+        let job_row = sqlx::query("SELECT workflow_id, name, status FROM job WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to fetch calling job"))?
+            .ok_or_else(|| reject_not_found("Job", id))?;
+        let workflow_id: i64 = job_row.get("workflow_id");
+        let caller_name: String = job_row.get("name");
+        let caller_status_int: i64 = job_row.get("status");
+        let caller_status = parse_job_status(i32::try_from(caller_status_int).unwrap_or(0), id)
+            .map_err(|e| {
+                SpawnReject::Internal(ApiError(format!("Failed to parse caller status: {}", e.0)))
+            })?;
+        // The orchestrator must be Running. If the caller is already terminal
+        // its unblock has already been processed, so spawned children would
+        // sit Blocked forever (the cascade fires on completions, not inserts).
+        if caller_status != models::JobStatus::Running {
+            return Err(reject(format!(
+                "spawn_jobs requires the calling job to be Running (job_id={} is {:?}); \
+                 spawned children blocked on an already-processed caller would never unblock",
+                id, caller_status
+            )));
+        }
+        let lineage = lineage.unwrap_or(caller_name);
+
+        // --- Workflow-level cap (defaulted) -----------------------------
+        // `workflow.dynamic_jobs` is a JSON blob mirroring the spec's
+        // `dynamic_jobs` section. Malformed JSON falls back to the server
+        // default (mirrors `parse_dynamic_jobs` in api/workflows.rs); the
+        // workflow row itself must exist.
+        let wf_row = sqlx::query("SELECT dynamic_jobs FROM workflow WHERE id = ?")
+            .bind(workflow_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to fetch workflow"))?
+            .ok_or_else(|| reject_not_found("Workflow", workflow_id))?;
+        let dynamic_jobs_json: Option<String> = wf_row.try_get("dynamic_jobs").ok().flatten();
+        let max_iterations: i64 = dynamic_jobs_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<models::DynamicJobsConfig>(s).ok())
+            .and_then(|d| d.max_iterations)
+            .unwrap_or(DEFAULT_MAX_SPAWN_ITERATIONS);
+
+        // --- Look up existing jobs referenced by the batch --------------
+        // Only the names the batch actually mentions: own names (for
+        // idempotency / overlap detection) plus each `depends_on` entry.
+        let mut needed_set: std::collections::HashSet<&str> =
+            jobs.iter().map(|j| j.name.as_str()).collect();
+        for job in &jobs {
+            for dep in job.depends_on.as_deref().unwrap_or(&[]) {
+                needed_set.insert(dep.as_str());
+            }
+        }
+        let needed_names: Vec<&str> = needed_set.iter().copied().collect();
+        let mut name_to_id = lookup_existing_job_names(tx, workflow_id, &needed_names).await?;
+
+        // --- Idempotency: replay detection ------------------------------
+        let already_present = jobs
+            .iter()
+            .filter(|j| name_to_id.contains_key(&j.name))
+            .count();
+        let is_replay = !jobs.is_empty() && already_present == jobs.len();
+        if !jobs.is_empty() && already_present != 0 && !is_replay {
+            return Err(reject(
+                "Inconsistent replay: some but not all jobs already exist",
+            ));
+        }
+
+        // --- Derive this lineage's current iteration counter ------------
+        let mut spawn_count = derive_lineage_spawn_count(tx, workflow_id, &lineage).await?;
+
+        // --- Cap check (only for fresh spawning calls) ------------------
+        let will_spawn = !jobs.is_empty() && !is_replay;
+        if will_spawn && spawn_count + 1 > max_iterations {
+            return Err(reject(format!(
+                "Per-lineage iteration cap reached for lineage '{}': attempted iteration {} \
+                 exceeds dynamic_jobs.max_iterations={} (current spawn_count={})",
+                lineage,
+                spawn_count + 1,
+                max_iterations,
+                spawn_count
+            )));
+        }
+
+        // --- Resolve resource_requirements names in one query -----------
+        // Mirror `transport_create_job`: when a spawn job omits
+        // `resource_requirements`, fall back to the workflow's RR named
+        // "default". Otherwise spawned jobs would be inserted with
+        // `resource_requirements_id = NULL` and the resource-claim path,
+        // which inner-joins `resource_requirements`, would never pick them
+        // up — leaving them stuck Blocked/Ready forever.
+        let rr_id_per_job: Vec<i64> = if will_spawn {
+            let needs_default = jobs.iter().any(|j| j.resource_requirements.is_none());
+            let mut rr_names: Vec<&str> = jobs
+                .iter()
+                .filter_map(|j| j.resource_requirements.as_deref())
+                .collect();
+            if needs_default {
+                rr_names.push("default");
+            }
+            let resolved = lookup_existing_rrs(tx, workflow_id, &rr_names).await?;
+            let default_id = if needs_default {
+                resolved.get("default").copied().ok_or_else(|| {
+                    reject(
+                        "spawn_jobs requires every job to set `resource_requirements`, or the \
+                         workflow must define an RR named 'default' to fall back on",
+                    )
+                })?
+            } else {
+                0 // unused
+            };
+            let mut out = Vec::with_capacity(jobs.len());
+            for job in &jobs {
+                match job.resource_requirements.as_deref() {
+                    Some(rr_name) => match resolved.get(rr_name) {
+                        Some(id) => out.push(*id),
+                        None => {
+                            return Err(reject(format!(
+                                "Unknown resource_requirements '{}' for spawn job '{}'",
+                                rr_name, job.name
+                            )));
+                        }
+                    },
+                    None => out.push(default_id),
+                }
+            }
+            out
+        } else {
+            Vec::new()
+        };
+
+        // --- DAG / unknown-dep validation (pure) ------------------------
+        if will_spawn {
+            validate_batch_dag(&jobs, &name_to_id)?;
+        }
+
+        // --- Persist: jobs, edges, lineage state ------------------------
+        let (spawned_job_ids, committed) = if is_replay {
+            // Replay: return the existing IDs in request order. Preserves the
+            // documented "spawned_job_ids in request order" contract.
+            let ids = jobs
+                .iter()
+                .filter_map(|j| name_to_id.get(&j.name).copied())
+                .collect::<Vec<_>>();
+            (ids, false)
+        } else if will_spawn {
+            let (ids, extended_map) = insert_spawned_job_rows(
+                tx,
+                workflow_id,
+                &jobs,
+                &rr_id_per_job,
+                &lineage,
+                name_to_id,
+            )
+            .await?;
+            name_to_id = extended_map;
+            insert_dependency_edges(tx, workflow_id, id, &jobs, &name_to_id).await?;
+            spawn_count += 1;
+            append_generation_state(
+                tx,
+                workflow_id,
+                &lineage,
+                spawn_count,
+                state.unwrap_or(serde_json::Value::Null),
+            )
+            .await?;
+            (ids, true)
+        } else {
+            // No-spawn call. Record a final state if the caller supplied one.
+            let committed = if let Some(state_value) = state {
+                upsert_final_state(tx, workflow_id, &lineage, spawn_count, state_value).await?;
+                true
+            } else {
+                false
+            };
+            (Vec::new(), committed)
+        };
+
+        // Success-path log line in the parsing-friendly
+        // `workflow_id=<> job_id=<>` format used elsewhere in the codebase.
+        info!(
+            "spawn_jobs workflow_id={} job_id={} lineage={} iteration={} spawned_count={} replay={} spawned_job_ids={:?}",
+            workflow_id,
+            id,
+            lineage,
+            spawn_count,
+            spawned_job_ids.len(),
+            is_replay,
+            spawned_job_ids
+        );
+
+        Ok((
+            SpawnJobsResponse::SuccessfulResponse(models::SpawnJobsResponse {
+                spawned_job_ids,
+                iteration: spawn_count,
+            }),
+            committed,
         ))
     }
 

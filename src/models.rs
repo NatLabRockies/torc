@@ -268,6 +268,14 @@ pub struct JobModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi-codegen", schema(minimum = 0, default = 0))]
     pub priority: Option<i64>,
+    /// Provenance marker: NULL for jobs declared at workflow creation,
+    /// `"retry"` for jobs resurrected by failure-handler retries,
+    /// `"spawn"` for jobs added at runtime by `spawn_jobs`. `torc watch
+    /// --auto-schedule` uses this to detect jobs that need unplanned Slurm
+    /// allocations (deferred `schedule_nodes` actions only account for the
+    /// originally-declared workload).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -361,6 +369,68 @@ pub struct JobCompletionError {
 pub struct BatchCompleteJobsResponse {
     pub completed: Vec<i64>,
     pub errors: Vec<JobCompletionError>,
+}
+
+/// One job to add atomically as part of `spawn_jobs`.
+///
+/// `depends_on` entries may reference jobs that already exist in the workflow
+/// or sibling jobs created in the same request (resolved by name within the
+/// transaction). Every spawned job is created `blocked` — the server auto-
+/// injects a dependency edge to the calling job in addition to any explicit
+/// `depends_on`, so spawned jobs are promoted by the normal background
+/// unblock path once the caller (and any explicit deps) become terminal.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpawnJobModel {
+    pub name: String,
+    pub command: String,
+    /// Name of an existing resource_requirements record in the workflow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_requirements: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cancel_on_blocking_job_failure: Option<bool>,
+    /// Job names this job depends on (existing jobs or siblings in this batch).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<Vec<String>>,
+}
+
+/// Add a batch of new jobs to an initialized workflow, all blocked on the
+/// calling job. The calling job is **not** completed by this call — the
+/// orchestrator script exits normally and the runner completes it, at which
+/// point the unblock cascade promotes the spawned jobs.
+///
+/// The per-lineage spawn-iteration counter is advanced and an opaque state
+/// payload is persisted, all in the same transaction as the inserts.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpawnJobsRequest {
+    /// Orchestrator lineage identifier. Defaults to the calling job's name.
+    /// The per-lineage spawn counter and state records are keyed on this.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<String>,
+    /// Jobs to add. May be empty (record final state without spawning).
+    pub jobs: Vec<SpawnJobModel>,
+    /// Opaque JSON state attached to this generation (or as the converged
+    /// final state when `jobs` is empty).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<Value>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpawnJobsResponse {
+    /// IDs of the spawned jobs. On a fresh call this is the IDs of the newly
+    /// inserted jobs; on an idempotent replay (same names already exist) it
+    /// is the IDs of those pre-existing jobs in the order they appear in the
+    /// request. Empty only when the request's `jobs` array is empty (e.g. a
+    /// final-state convergence call).
+    pub spawned_job_ids: Vec<i64>,
+    /// This lineage's spawn-iteration counter after the call.
+    pub iteration: i64,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -509,6 +579,24 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi-codegen", schema(read_only))]
     pub is_archived: Option<bool>,
+    /// Dynamic job spawning configuration. Mirrors the workflow-spec
+    /// `dynamic_jobs` section identically. Runtime-immutable after
+    /// workflow creation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dynamic_jobs: Option<DynamicJobsConfig>,
+}
+
+/// Dynamic job spawning configuration. Used both as the user-authored
+/// `WorkflowSpec.dynamic_jobs` and as the persisted `WorkflowModel.dynamic_jobs`
+/// (stored as JSON in the `workflow.dynamic_jobs` column). Runtime-immutable.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DynamicJobsConfig {
+    /// Cap on `spawn_jobs` calls per orchestrator lineage. `None` applies
+    /// the server default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1183,6 +1271,7 @@ impl JobModel {
             failure_handler_id: None,
             attempt_id: Some(1),
             priority: None,
+            origin: None,
         }
     }
 }
@@ -1528,6 +1617,7 @@ impl WorkflowModel {
             run_id: None,
             is_canceled: None,
             is_archived: None,
+            dynamic_jobs: None,
         }
     }
 }
@@ -1948,6 +2038,7 @@ mod tests {
             run_id: Some(1),
             is_canceled: Some(false),
             is_archived: Some(false),
+            dynamic_jobs: None,
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");
@@ -2011,6 +2102,7 @@ mod tests {
             failure_handler_id: None,
             attempt_id: Some(1),
             priority: Some(0),
+            origin: None,
         };
         let result = ResultModel {
             id: Some(1),

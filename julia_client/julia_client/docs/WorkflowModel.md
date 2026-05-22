@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **compute_node_wait_for_healthy_database_minutes** | **Int64** |  | [optional] [default to nothing]
 **compute_node_wait_for_new_jobs_seconds** | **Int64** |  | [optional] [default to nothing]
 **description** | **String** |  | [optional] [default to nothing]
+**dynamic_jobs** | [***DynamicJobsConfig**](DynamicJobsConfig.md) | Dynamic job spawning configuration. Mirrors the workflow-spec &#x60;dynamic_jobs&#x60; section identically. Runtime-immutable after workflow creation. | [optional] [default to nothing]
 **enable_ro_crate** | **Bool** |  | [optional] [default to nothing]
 **env** | **Dict{String, String}** |  | [optional] [default to nothing]
 **execution_config** | **String** |  | [optional] [default to nothing]

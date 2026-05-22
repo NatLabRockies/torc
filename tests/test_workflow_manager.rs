@@ -376,6 +376,7 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
         None,
         None, // include_relationships
         None, // active_compute_node_id
+        None, // origin_is_set
     )
     .expect("Failed to list jobs");
     let job_items = &jobs.items;
@@ -1245,6 +1246,7 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None,
         None, // include_relationships
         None, // active_compute_node_id
+        None, // origin_is_set
     )
     .expect("Failed to list jobs");
     let job_items = &jobs.items;

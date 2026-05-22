@@ -74,6 +74,39 @@ torc jobs list <workflow_id> --status failed
 torc results list --include-logs <workflow_id> --job-id <failed_job_id>
 ```
 
+### Power-User One-Liner
+
+Open every failed job's stderr file in your editor in one go:
+
+```bash
+nvim $(torc -f json results list --include-logs <workflow_id> \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr')
+```
+
+Swap `nvim` for any tool that takes a list of paths (`less`, `grep -l "OutOfMemory"`, `code -d`,
+etc.). Drop `select(.return_code != 0)` to open every result's stderr, not just the failures. If
+your workflow uses combined `stdio` mode (single `.log` file), replace `.job_stderr` with
+`.job_stdout`.
+
+### Slurm-Side Triage
+
+When you're SSH'd into a login node post-mortem-ing dozens of failures, opening every stderr in an
+editor is slow. Print the last N lines of each instead — usually enough to spot the error block:
+
+```bash
+torc -f json results list --include-logs <workflow_id> \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | xargs -I{} sh -c 'echo "=== {} ==="; tail -n 50 {}'
+```
+
+To find which failures share a root cause, grep across all of them at once:
+
+```bash
+torc -f json results list --include-logs <workflow_id> \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | xargs grep -l "OutOfMemoryError"
+```
+
 ## View Logs in TUI or Dashboard
 
 You can also view job logs interactively:

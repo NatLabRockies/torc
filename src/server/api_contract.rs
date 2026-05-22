@@ -489,6 +489,7 @@ pub trait TransportApiCore<C: Send + Sync> {
     ) -> Result<ListFilesResponse, ApiError>;
 
     /// Retrieve all jobs for one workflow.
+    #[allow(clippy::too_many_arguments)]
     async fn list_jobs(
         &self,
         workflow_id: i64,
@@ -501,6 +502,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         reverse_sort: Option<bool>,
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
+        origin_is_set: Option<bool>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -1010,6 +1012,17 @@ pub trait TransportApiCore<C: Send + Sync> {
         body: models::BatchCompleteJobsRequest,
         context: &C,
     ) -> Result<BatchCompleteJobsResponse, ApiError>;
+
+    /// Add a batch of new jobs to an initialized workflow, all blocked on the
+    /// calling job. The calling job is not completed by this call — the
+    /// orchestrator script exits normally and the runner completes it. Per-
+    /// lineage state and counter are persisted in the same transaction.
+    async fn spawn_jobs(
+        &self,
+        id: i64,
+        body: models::SpawnJobsRequest,
+        context: &C,
+    ) -> Result<SpawnJobsResponse, ApiError>;
 
     /// Retry a failed job by resetting it to ready status and incrementing attempt_id.
     async fn retry_job(

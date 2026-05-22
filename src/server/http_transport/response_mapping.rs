@@ -452,6 +452,12 @@ map_response!(
     SuccessfulResponse
 );
 map_response!(
+    spawn_jobs_response,
+    SpawnJobsResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
     manage_status_change_response,
     ManageStatusChangeResponse,
     SuccessfulResponse,

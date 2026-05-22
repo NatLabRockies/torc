@@ -24,6 +24,28 @@ use super::{
     resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
+/// Serialize the model's `dynamic_jobs` for the JSON-blob column. `None`
+/// stays NULL in the DB; the `Some` path round-trips through the same
+/// `DynamicJobsConfig` shape on read.
+fn serialize_dynamic_jobs(
+    d: Option<&models::DynamicJobsConfig>,
+) -> Result<Option<String>, ApiError> {
+    match d {
+        None => Ok(None),
+        Some(cfg) => serde_json::to_string(cfg)
+            .map(Some)
+            .map_err(|e| ApiError(format!("Failed to serialize dynamic_jobs: {}", e))),
+    }
+}
+
+/// Decode the `workflow.dynamic_jobs` JSON-blob column. Malformed JSON
+/// becomes None — the column is operator-managed and the spawn path
+/// applies a server default when this is absent, so a bad row degrades
+/// to "use defaults" rather than aborting reads.
+fn parse_dynamic_jobs(raw: Option<String>) -> Option<models::DynamicJobsConfig> {
+    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
+}
+
 /// Trait defining workflow-related API operations
 #[async_trait]
 pub trait WorkflowsApi<C> {
@@ -415,6 +437,11 @@ impl WorkflowsApiImpl {
                 run_id: Some(record.get("run_id")),
                 is_canceled: Some(record.get::<i64, _>("is_canceled") != 0),
                 is_archived: Some(record.get::<i64, _>("is_archived") != 0),
+                dynamic_jobs: parse_dynamic_jobs(
+                    record
+                        .try_get::<Option<String>, _>("dynamic_jobs")
+                        .unwrap_or(None),
+                ),
             });
         }
 
@@ -502,6 +529,22 @@ where
                 message_error_response(err.0),
             ));
         }
+        // Reject non-positive `dynamic_jobs.max_iterations` here too, not
+        // just in the workflow-spec validator. Direct API callers bypass
+        // the spec tooling, and 0 / negative values would silently disable
+        // spawning and surface a confusing "cap reached" 422 on the first
+        // `spawn_jobs` call.
+        if let Some(n) = body.dynamic_jobs.as_ref().and_then(|d| d.max_iterations)
+            && n < 1
+        {
+            return Ok(CreateWorkflowResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "dynamic_jobs.max_iterations must be >= 1 (got {}); omit the field to use the server default",
+                    n
+                )),
+            ));
+        }
+        let dynamic_jobs_json = serialize_dynamic_jobs(body.dynamic_jobs.as_ref())?;
         body.env = normalize_env_map(body.env.take());
         let workflow_env = serialize_env_map(body.env.clone(), "workflow env")?;
         let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
@@ -544,11 +587,12 @@ where
                 metadata,
                 slurm_config,
                 execution_config,
+                dynamic_jobs,
                 run_id,
                 is_archived,
                 is_canceled
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0, 0, 0)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 0, 0, 0)
             RETURNING rowid
             "#,
             body.name,
@@ -569,6 +613,7 @@ where
             body.metadata,
             body.slurm_config,
             body.execution_config,
+            dynamic_jobs_json,
         )
         .fetch_one(self.context.pool.as_ref())
         .await
@@ -809,6 +854,7 @@ where
                     metadata,
                     slurm_config,
                     execution_config,
+                    dynamic_jobs,
                     run_id,
                     is_canceled,
                     is_archived
@@ -868,6 +914,10 @@ where
                     run_id: Some(row.get("run_id")),
                     is_canceled: Some(row.get::<i64, _>("is_canceled") != 0),
                     is_archived: Some(row.get::<i64, _>("is_archived") != 0),
+                    dynamic_jobs: parse_dynamic_jobs(
+                        row.try_get::<Option<String>, _>("dynamic_jobs")
+                            .unwrap_or(None),
+                    ),
                 },
             )),
             Ok(None) => Ok(GetWorkflowResponse::NotFoundErrorResponse(
@@ -1091,6 +1141,18 @@ where
             return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
                 message_error_response(
                     "Cannot modify env - this field is immutable after workflow creation",
+                ),
+            ));
+        }
+        // `dynamic_jobs` is documented as runtime-immutable. The UPDATE
+        // below silently omits this column, so a caller passing a new value
+        // would otherwise see "200 OK" while the database is untouched.
+        // Reject the change explicitly instead. (Same-value updates pass
+        // through as no-ops.)
+        if body.dynamic_jobs.is_some() && body.dynamic_jobs != current_workflow.dynamic_jobs {
+            return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify dynamic_jobs - this field is immutable after workflow creation",
                 ),
             ));
         }

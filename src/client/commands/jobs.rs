@@ -791,6 +791,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None,    // reverse_sort
                 None,    // include_relationships
                 None,    // active_compute_node_id
+                None,    // origin_is_set
             ) {
                 Ok(response) => {
                     let job_count = response.total_count;
@@ -1241,6 +1242,7 @@ pub fn get_current_job_count(
         None,    // reverse_sort
         None,    // include_relationships
         None,    // active_compute_node_id
+        None,    // origin_is_set
     )
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
@@ -1269,6 +1271,7 @@ pub fn get_existing_job_names(
             None, // reverse_sort
             None, // include_relationships
             None, // active_compute_node_id
+            None, // origin_is_set
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 
