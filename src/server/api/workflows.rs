@@ -46,6 +46,26 @@ fn parse_dynamic_jobs(raw: Option<String>) -> Option<models::DynamicJobsConfig> 
     raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
 
+/// Serialize an optional typed value as JSON for the corresponding TEXT column.
+/// `None` -> NULL; serialization errors bubble up as 500.
+fn serialize_optional_json<T: serde::Serialize>(
+    value: Option<&T>,
+    field: &str,
+) -> Result<Option<String>, ApiError> {
+    match value {
+        None => Ok(None),
+        Some(v) => serde_json::to_string(v)
+            .map(Some)
+            .map_err(|e| ApiError(format!("Failed to serialize {}: {}", field, e))),
+    }
+}
+
+/// Decode an optional typed value from a JSON-blob column. Malformed JSON
+/// degrades to `None` so a bad row doesn't break list endpoints.
+fn parse_optional_json<T: serde::de::DeserializeOwned>(raw: Option<String>) -> Option<T> {
+    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
+}
+
 /// Trait defining workflow-related API operations
 #[async_trait]
 pub trait WorkflowsApi<C> {
@@ -278,11 +298,11 @@ impl WorkflowsApiImpl {
                 ,enable_ro_crate
                 ,project
                 ,metadata
-                ,slurm_config
                 ,execution_config
                 ,run_id
                 ,is_archived
                 ,is_canceled
+                ,dynamic_jobs
             FROM workflow
             "
         .to_string();
@@ -412,8 +432,16 @@ impl WorkflowsApiImpl {
                 compute_node_min_time_for_new_jobs_seconds: Some(
                     record.get("compute_node_min_time_for_new_jobs_seconds"),
                 ),
-                resource_monitor_config: record.get("resource_monitor_config"),
-                slurm_defaults: record.get("slurm_defaults"),
+                resource_monitor_config: parse_optional_json(
+                    record
+                        .try_get::<Option<String>, _>("resource_monitor_config")
+                        .unwrap_or(None),
+                ),
+                slurm_defaults: parse_optional_json(
+                    record
+                        .try_get::<Option<String>, _>("slurm_defaults")
+                        .unwrap_or(None),
+                ),
                 use_pending_failed: record
                     .try_get::<Option<i64>, _>("use_pending_failed")
                     .ok()
@@ -425,15 +453,16 @@ impl WorkflowsApiImpl {
                     .flatten()
                     .map(|v| v != 0),
                 project: record.get("project"),
-                metadata: record.get("metadata"),
-                slurm_config: record
-                    .try_get::<Option<String>, _>("slurm_config")
-                    .ok()
-                    .flatten(),
-                execution_config: record
-                    .try_get::<Option<String>, _>("execution_config")
-                    .ok()
-                    .flatten(),
+                metadata: parse_optional_json(
+                    record
+                        .try_get::<Option<String>, _>("metadata")
+                        .unwrap_or(None),
+                ),
+                execution_config: parse_optional_json(
+                    record
+                        .try_get::<Option<String>, _>("execution_config")
+                        .unwrap_or(None),
+                ),
                 run_id: Some(record.get("run_id")),
                 is_canceled: Some(record.get::<i64, _>("is_canceled") != 0),
                 is_archived: Some(record.get::<i64, _>("is_archived") != 0),
@@ -545,6 +574,15 @@ where
             ));
         }
         let dynamic_jobs_json = serialize_dynamic_jobs(body.dynamic_jobs.as_ref())?;
+        let resource_monitor_config_json = serialize_optional_json(
+            body.resource_monitor_config.as_ref(),
+            "resource_monitor_config",
+        )?;
+        let slurm_defaults_json =
+            serialize_optional_json(body.slurm_defaults.as_ref(), "slurm_defaults")?;
+        let metadata_json = serialize_optional_json(body.metadata.as_ref(), "metadata")?;
+        let execution_config_json =
+            serialize_optional_json(body.execution_config.as_ref(), "execution_config")?;
         body.env = normalize_env_map(body.env.take());
         let workflow_env = serialize_env_map(body.env.clone(), "workflow env")?;
         let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
@@ -585,14 +623,13 @@ where
                 enable_ro_crate,
                 project,
                 metadata,
-                slurm_config,
                 execution_config,
                 dynamic_jobs,
                 run_id,
                 is_archived,
                 is_canceled
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 0, 0, 0)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0, 0, 0)
             RETURNING rowid
             "#,
             body.name,
@@ -605,14 +642,13 @@ where
             compute_node_ignore_workflow_completion,
             compute_node_wait_for_healthy_database_minutes,
             compute_node_min_time_for_new_jobs_seconds,
-            body.resource_monitor_config,
-            body.slurm_defaults,
+            resource_monitor_config_json,
+            slurm_defaults_json,
             use_pending_failed_int,
             enable_ro_crate_int,
             body.project,
-            body.metadata,
-            body.slurm_config,
-            body.execution_config,
+            metadata_json,
+            execution_config_json,
             dynamic_jobs_json,
         )
         .fetch_one(self.context.pool.as_ref())
@@ -852,7 +888,6 @@ where
                     enable_ro_crate,
                     project,
                     metadata,
-                    slurm_config,
                     execution_config,
                     dynamic_jobs,
                     run_id,
@@ -889,8 +924,14 @@ where
                     compute_node_min_time_for_new_jobs_seconds: Some(
                         row.get("compute_node_min_time_for_new_jobs_seconds"),
                     ),
-                    resource_monitor_config: row.get("resource_monitor_config"),
-                    slurm_defaults: row.get("slurm_defaults"),
+                    resource_monitor_config: parse_optional_json(
+                        row.try_get::<Option<String>, _>("resource_monitor_config")
+                            .unwrap_or(None),
+                    ),
+                    slurm_defaults: parse_optional_json(
+                        row.try_get::<Option<String>, _>("slurm_defaults")
+                            .unwrap_or(None),
+                    ),
                     use_pending_failed: row
                         .try_get::<Option<i64>, _>("use_pending_failed")
                         .ok()
@@ -902,15 +943,13 @@ where
                         .flatten()
                         .map(|v| v != 0),
                     project: row.get("project"),
-                    metadata: row.get("metadata"),
-                    slurm_config: row
-                        .try_get::<Option<String>, _>("slurm_config")
-                        .ok()
-                        .flatten(),
-                    execution_config: row
-                        .try_get::<Option<String>, _>("execution_config")
-                        .ok()
-                        .flatten(),
+                    metadata: parse_optional_json(
+                        row.try_get::<Option<String>, _>("metadata").unwrap_or(None),
+                    ),
+                    execution_config: parse_optional_json(
+                        row.try_get::<Option<String>, _>("execution_config")
+                            .unwrap_or(None),
+                    ),
                     run_id: Some(row.get("run_id")),
                     is_canceled: Some(row.get::<i64, _>("is_canceled") != 0),
                     is_archived: Some(row.get::<i64, _>("is_archived") != 0),
@@ -1157,6 +1196,10 @@ where
             ));
         }
 
+        let metadata_json = serialize_optional_json(body.metadata.as_ref(), "metadata")?;
+        let execution_config_json =
+            serialize_optional_json(body.execution_config.as_ref(), "execution_config")?;
+
         // Update the workflow record using COALESCE to only update non-null fields
         let result = match sqlx::query!(
             r#"
@@ -1173,9 +1216,8 @@ where
                 enable_ro_crate = COALESCE($9, enable_ro_crate),
                 project = COALESCE($10, project),
                 metadata = COALESCE($11, metadata),
-                slurm_config = COALESCE($12, slurm_config),
-                execution_config = COALESCE($13, execution_config)
-            WHERE id = $14
+                execution_config = COALESCE($12, execution_config)
+            WHERE id = $13
             "#,
             body.name,
             body.description,
@@ -1187,9 +1229,8 @@ where
             use_pending_failed_int,
             enable_ro_crate_int,
             body.project,
-            body.metadata,
-            body.slurm_config,
-            body.execution_config,
+            metadata_json,
+            execution_config_json,
             id
         )
         .execute(self.context.pool.as_ref())

@@ -1307,9 +1307,7 @@ paths:
         in: query
         required: false
         schema:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/JobStatus'
       - name: needs_file_id
         in: query
         required: false
@@ -2516,9 +2514,7 @@ paths:
         in: query
         required: false
         schema:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/JobStatus'
       - name: compute_node_id
         in: query
         required: false
@@ -5345,9 +5341,7 @@ components:
         active task for this workflow, or null if none is in-flight.
       properties:
         task:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/TaskModel'
+          $ref: '#/components/schemas/TaskModel'
     ArchiveWorkflowRequest:
       type: object
       description: |-
@@ -5509,6 +5503,23 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ComputeNodeMonitorConfig:
+      type: object
+      description: Configuration for compute-node resource monitoring.
+      properties:
+        cpu:
+          type: boolean
+          default: true
+        enabled:
+          type: boolean
+          default: false
+        granularity:
+          oneOf:
+          - $ref: '#/components/schemas/MonitorGranularity'
+          default: summary
+        memory:
+          type: boolean
+          default: true
     ComputeNodeSchedule:
       type: object
       required:
@@ -5665,6 +5676,110 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ExecutionConfig:
+      type: object
+      description: |-
+        Unified execution configuration that controls how jobs are run.
+
+        Used both as the user-authored `WorkflowSpec.execution_config` and as the
+        persisted `WorkflowModel.execution_config` (stored as JSON in the
+        `workflow.execution_config` column).
+      properties:
+        enable_cpu_bind:
+          type:
+          - boolean
+          - 'null'
+          description: When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
+        job_stdio_overrides:
+          type:
+          - object
+          - 'null'
+          description: |-
+            Per-job stdio overrides keyed by job name.
+            Populated during workflow creation from per-job `stdio` fields in the spec.
+          additionalProperties:
+            $ref: '#/components/schemas/StdioConfig'
+          propertyNames:
+            type: string
+        limit_resources:
+          type:
+          - boolean
+          - 'null'
+          description: |-
+            When true (default), monitor memory/CPU usage and kill jobs that exceed
+            their resource requirements (OOM enforcement). Only applies in direct mode.
+        mode:
+          $ref: '#/components/schemas/ExecutionMode'
+          description: 'Execution mode: direct (default), slurm, or auto.'
+        oom_exit_code:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: |-
+            Exit code to use when a job is OOM-killed (direct mode only).
+            Default: 137 (128 + SIGKILL = 128 + 9).
+        sigkill_headroom_seconds:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Seconds before end_time to send SIGKILL (direct mode) or set srun --time (slurm mode).
+            Default: 60.
+        sigterm_lead_seconds:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Seconds before SIGKILL to send the termination signal (direct mode only).
+            Default: 30.
+        srun_mpi:
+          type:
+          - string
+          - 'null'
+          description: MPI launcher mode for the outer `srun` used to launch one job runner per allocated node.
+        srun_termination_signal:
+          type:
+          - string
+          - 'null'
+          description: Signal specification for srun steps, passed as `srun --signal=<value>` (slurm mode only).
+        staggered_start:
+          type:
+          - boolean
+          - 'null'
+          description: Enable staggered startup for job runners to mitigate thundering herd.
+        stdio:
+          $ref: '#/components/schemas/StdioConfig'
+          description: Workflow-level default for stdout/stderr capture.
+        termination_signal:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Signal to send before SIGKILL for graceful termination (direct mode only).
+            Default: "SIGTERM".
+        timeout_exit_code:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: |-
+            Exit code to use when a job times out.
+            Default: 152 (matches Slurm's TIMEOUT exit code).
+      additionalProperties: false
+    ExecutionMode:
+      type: string
+      description: |-
+        Execution mode for job processes.
+
+        Controls how torc manages job processes during execution, particularly
+        around termination and resource enforcement.
+      enum:
+      - direct
+      - slurm
+      - auto
     FailureHandlerModel:
       type: object
       required:
@@ -5951,18 +6066,14 @@ components:
           - 'null'
           format: int64
         schedule_compute_nodes:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/ComputeNodeSchedule'
+          $ref: '#/components/schemas/ComputeNodeSchedule'
         scheduler_id:
           type:
           - integer
           - 'null'
           format: int64
         status:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/JobStatus'
+          $ref: '#/components/schemas/JobStatus'
         supports_termination:
           type:
           - boolean
@@ -5970,6 +6081,17 @@ components:
         workflow_id:
           type: integer
           format: int64
+    JobMonitorConfig:
+      type: object
+      description: Configuration for per-job resource monitoring.
+      properties:
+        enabled:
+          type: boolean
+          default: false
+        granularity:
+          oneOf:
+          - $ref: '#/components/schemas/MonitorGranularity'
+          default: summary
     JobStatus:
       type: string
       enum:
@@ -6617,6 +6739,12 @@ components:
       properties:
         message:
           type: string
+    MonitorGranularity:
+      type: string
+      description: Granularity for resource monitoring sampling.
+      enum:
+      - summary
+      - time_series
     PingResponse:
       type: object
       required:
@@ -6674,6 +6802,42 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ResourceMonitorConfig:
+      type: object
+      description: |-
+        Configuration for resource monitoring.
+
+        Used both as the user-authored `WorkflowSpec.resource_monitor` and as the
+        persisted `WorkflowModel.resource_monitor_config` (stored as JSON in the
+        `workflow.resource_monitor_config` column).
+      properties:
+        compute_node:
+          default: null
+          $ref: '#/components/schemas/ComputeNodeMonitorConfig'
+        enabled:
+          type: boolean
+          description: Deprecated compatibility field. Use `jobs.enabled` for new workflow specs.
+          default: false
+        flush_interval_seconds:
+          type: integer
+          format: int32
+          description: How often buffered time-series samples are flushed to SQLite, in seconds.
+          default: 300
+        generate_plots:
+          type: boolean
+          default: false
+        granularity:
+          oneOf:
+          - $ref: '#/components/schemas/MonitorGranularity'
+            description: Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
+          default: summary
+        jobs:
+          default: null
+          $ref: '#/components/schemas/JobMonitorConfig'
+        sample_interval_seconds:
+          type: integer
+          format: int32
+          default: 10
     ResourceRequirementsModel:
       type: object
       required:
@@ -6795,7 +6959,10 @@ components:
           - 'null'
           format: int64
         metadata:
-          type: string
+          type: object
+          additionalProperties: {}
+          propertyNames:
+            type: string
         workflow_id:
           type: integer
           format: int64
@@ -7032,6 +7199,28 @@ components:
             is the IDs of those pre-existing jobs in the order they appear in the
             request. Empty only when the request's `jobs` array is empty (e.g. a
             final-state convergence call).
+    StdioConfig:
+      type: object
+      description: Configuration for job stdout/stderr capture.
+      properties:
+        delete_on_success:
+          type:
+          - boolean
+          - 'null'
+          description: Delete stdout/stderr files if the job completes successfully.
+        mode:
+          $ref: '#/components/schemas/StdioMode'
+          description: 'How to capture stdout/stderr. Default: separate files.'
+      additionalProperties: false
+    StdioMode:
+      type: string
+      description: How to capture stdout and stderr for job processes.
+      enum:
+      - separate
+      - combined
+      - no_stdout
+      - no_stderr
+      - none
     TaskModel:
       type: object
       required:
@@ -7247,13 +7436,11 @@ components:
           - string
           - 'null'
         dynamic_jobs:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/DynamicJobsConfig'
-            description: |-
-              Dynamic job spawning configuration. Mirrors the workflow-spec
-              `dynamic_jobs` section identically. Runtime-immutable after
-              workflow creation.
+          $ref: '#/components/schemas/DynamicJobsConfig'
+          description: |-
+            Dynamic job spawning configuration. Mirrors the workflow-spec
+            `dynamic_jobs` section identically. Runtime-immutable after
+            workflow creation.
         enable_ro_crate:
           type:
           - boolean
@@ -7268,9 +7455,7 @@ components:
             type: string
             pattern: ^[A-Za-z_][A-Za-z0-9_]*$
         execution_config:
-          type:
-          - string
-          - 'null'
+          $ref: '#/components/schemas/ExecutionConfig'
         id:
           type:
           - integer
@@ -7298,8 +7483,11 @@ components:
           readOnly: true
         metadata:
           type:
-          - string
+          - object
           - 'null'
+          additionalProperties: {}
+          propertyNames:
+            type: string
         name:
           type: string
         project:
@@ -7307,9 +7495,7 @@ components:
           - string
           - 'null'
         resource_monitor_config:
-          type:
-          - string
-          - 'null'
+          $ref: '#/components/schemas/ResourceMonitorConfig'
         run_id:
           type:
           - integer
@@ -7321,14 +7507,13 @@ components:
             `POST /workflows/{id}/reset_status`. Values supplied to
             create/update workflow endpoints are ignored.
           readOnly: true
-        slurm_config:
-          type:
-          - string
-          - 'null'
         slurm_defaults:
           type:
-          - string
+          - object
           - 'null'
+          additionalProperties: {}
+          propertyNames:
+            type: string
         timestamp:
           type:
           - string

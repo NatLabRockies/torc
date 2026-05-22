@@ -191,11 +191,19 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
             let metadata_str = read_metadata_input(metadata);
+            let metadata_map: HashMap<String, serde_json::Value> =
+                match serde_json::from_str(&metadata_str) {
+                    Ok(map) => map,
+                    Err(e) => {
+                        eprintln!("Error parsing metadata JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                };
             let mut entity = models::RoCrateEntityModel::new(
                 selected_workflow_id,
                 entity_id.clone(),
                 entity_type.clone(),
-                metadata_str,
+                metadata_map,
             );
             entity.file_id = *file_id;
 
@@ -291,18 +299,12 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                         }
                         println!("  Metadata:");
                         // Pretty-print the metadata JSON
-                        if let Ok(parsed) =
-                            serde_json::from_str::<serde_json::Value>(&entity.metadata)
-                        {
-                            if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
-                                for line in pretty.lines() {
-                                    println!("    {}", line);
-                                }
-                            } else {
-                                println!("    {}", entity.metadata);
+                        if let Ok(pretty) = serde_json::to_string_pretty(&entity.metadata) {
+                            for line in pretty.lines() {
+                                println!("    {}", line);
                             }
                         } else {
-                            println!("    {}", entity.metadata);
+                            println!("    {:?}", entity.metadata);
                         }
                     }
                 }
@@ -328,10 +330,19 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 }
             };
 
-            let updated_metadata = metadata
-                .as_ref()
-                .map(|m| read_metadata_input(m))
-                .unwrap_or(existing.metadata);
+            let updated_metadata = match metadata.as_ref() {
+                Some(m) => {
+                    let s = read_metadata_input(m);
+                    match serde_json::from_str::<HashMap<String, serde_json::Value>>(&s) {
+                        Ok(map) => map,
+                        Err(e) => {
+                            eprintln!("Error parsing metadata JSON: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => existing.metadata,
+            };
 
             let updated = models::RoCrateEntityModel {
                 id: existing.id,
@@ -544,8 +555,7 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
         .iter()
         .filter(|e| e.file_id.is_some() && !e.entity_id.is_empty())
         .filter_map(|e| {
-            let parsed: serde_json::Value = serde_json::from_str(&e.metadata).ok()?;
-            let path = parsed.get("sameAs")?.get("@id")?.as_str()?.to_string();
+            let path = e.metadata.get("sameAs")?.get("@id")?.as_str()?.to_string();
             if path == e.entity_id {
                 return None;
             }
@@ -556,25 +566,19 @@ fn handle_export(config: &Configuration, workflow_id: i64, output_path: Option<&
     // Build user and synthetic entities first so hasPart can include the final set.
     let mut graph_entities: Vec<serde_json::Value> = synthetic_entities;
     for entity in &entities {
-        if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&entity.metadata) {
-            if let Some(obj) = parsed.as_object_mut() {
-                // `entity_id` is the source of truth for an entity's `@id`.
-                // Always emit it (overwriting any stale `metadata["@id"]` that
-                // the server's init-time upsert might have written back to the
-                // file path), so user-supplied identifiers persist regardless
-                // of which initialization code path ran.
-                obj.insert("@id".to_string(), serde_json::json!(entity.entity_id));
-                obj.entry("@type".to_string())
-                    .or_insert_with(|| serde_json::json!(entity.entity_type));
-            }
-            translate_path_refs(&mut parsed, &path_to_entity_id, &entity.entity_type);
-            graph_entities.push(parsed);
-        } else {
-            graph_entities.push(serde_json::json!({
-                "@id": entity.entity_id,
-                "@type": entity.entity_type
-            }));
+        let mut parsed = serde_json::Value::Object(entity.metadata.clone().into_iter().collect());
+        if let Some(obj) = parsed.as_object_mut() {
+            // `entity_id` is the source of truth for an entity's `@id`.
+            // Always emit it (overwriting any stale `metadata["@id"]` that
+            // the server's init-time upsert might have written back to the
+            // file path), so user-supplied identifiers persist regardless
+            // of which initialization code path ran.
+            obj.insert("@id".to_string(), serde_json::json!(entity.entity_id));
+            obj.entry("@type".to_string())
+                .or_insert_with(|| serde_json::json!(entity.entity_type));
         }
+        translate_path_refs(&mut parsed, &path_to_entity_id, &entity.entity_type);
+        graph_entities.push(parsed);
     }
 
     let has_part: Vec<serde_json::Value> = graph_entities
@@ -1063,7 +1067,12 @@ fn handle_add_dataset(
         workflow_id,
         entity_id.clone(),
         "Dataset".to_string(),
-        metadata.to_string(),
+        metadata
+            .as_object()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .collect(),
     );
 
     match apis::ro_crate_entities_api::create_ro_crate_entity(config, entity) {

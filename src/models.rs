@@ -543,9 +543,9 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compute_node_min_time_for_new_jobs_seconds: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub resource_monitor_config: Option<String>,
+    pub resource_monitor_config: Option<ResourceMonitorConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub slurm_defaults: Option<String>,
+    pub slurm_defaults: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_pending_failed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -553,11 +553,9 @@ pub struct WorkflowModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<String>,
+    pub metadata: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub slurm_config: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub execution_config: Option<String>,
+    pub execution_config: Option<ExecutionConfig>,
     /// Current run number; incremented on each restart/recovery.
     /// Read-only on the API: incremented as a side effect of
     /// `POST /workflows/{id}/reset_status`. Values supplied to
@@ -597,6 +595,337 @@ pub struct DynamicJobsConfig {
     /// the server default.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_iterations: Option<i64>,
+}
+
+/// How to capture stdout and stderr for job processes.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StdioMode {
+    /// Separate stdout and stderr files (.o and .e) — the default.
+    #[default]
+    Separate,
+    /// Combine stdout and stderr into a single file (.log) per job.
+    Combined,
+    /// Don't capture stdout (send to /dev/null); capture stderr only.
+    NoStdout,
+    /// Don't capture stderr (send to /dev/null); capture stdout only.
+    NoStderr,
+    /// Don't capture either stdout or stderr.
+    None,
+}
+
+/// Configuration for job stdout/stderr capture.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct StdioConfig {
+    /// How to capture stdout/stderr. Default: separate files.
+    #[serde(default)]
+    pub mode: StdioMode,
+    /// Delete stdout/stderr files if the job completes successfully.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delete_on_success: Option<bool>,
+}
+
+/// Execution mode for job processes.
+///
+/// Controls how torc manages job processes during execution, particularly
+/// around termination and resource enforcement.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ExecutionMode {
+    /// Direct shell execution - torc manages termination via SIGTERM/SIGKILL.
+    /// This is the default mode. Works everywhere: local machines, cloud VMs,
+    /// containers, and inside Slurm allocations.
+    #[default]
+    Direct,
+    /// Slurm srun execution - Slurm manages resource limits and termination.
+    /// Jobs are wrapped with `srun` inside Slurm allocations.
+    Slurm,
+    /// Auto-detect based on environment - uses `slurm` if SLURM_JOB_ID is set,
+    /// otherwise `direct`.
+    Auto,
+}
+
+/// Unified execution configuration that controls how jobs are run.
+///
+/// Used both as the user-authored `WorkflowSpec.execution_config` and as the
+/// persisted `WorkflowModel.execution_config` (stored as JSON in the
+/// `workflow.execution_config` column).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionConfig {
+    /// Execution mode: direct (default), slurm, or auto.
+    #[serde(default)]
+    pub mode: ExecutionMode,
+
+    /// Seconds before end_time to send SIGKILL (direct mode) or set srun --time (slurm mode).
+    /// Default: 60.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sigkill_headroom_seconds: Option<i64>,
+
+    /// Exit code to use when a job times out.
+    /// Default: 152 (matches Slurm's TIMEOUT exit code).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_exit_code: Option<i32>,
+
+    /// Enable staggered startup for job runners to mitigate thundering herd.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staggered_start: Option<bool>,
+
+    /// When true (default), monitor memory/CPU usage and kill jobs that exceed
+    /// their resource requirements (OOM enforcement). Only applies in direct mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resources: Option<bool>,
+
+    /// Signal to send before SIGKILL for graceful termination (direct mode only).
+    /// Default: "SIGTERM".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub termination_signal: Option<String>,
+
+    /// Seconds before SIGKILL to send the termination signal (direct mode only).
+    /// Default: 30.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sigterm_lead_seconds: Option<i64>,
+
+    /// Exit code to use when a job is OOM-killed (direct mode only).
+    /// Default: 137 (128 + SIGKILL = 128 + 9).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oom_exit_code: Option<i32>,
+
+    /// Signal specification for srun steps, passed as `srun --signal=<value>` (slurm mode only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_termination_signal: Option<String>,
+
+    /// MPI launcher mode for the outer `srun` used to launch one job runner per allocated node.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub srun_mpi: Option<String>,
+
+    /// When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_cpu_bind: Option<bool>,
+
+    /// Workflow-level default for stdout/stderr capture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdio: Option<StdioConfig>,
+
+    /// Per-job stdio overrides keyed by job name.
+    /// Populated during workflow creation from per-job `stdio` fields in the spec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_stdio_overrides: Option<HashMap<String, StdioConfig>>,
+}
+
+impl ExecutionConfig {
+    /// Default value for sigterm_lead_seconds (30 seconds)
+    pub const DEFAULT_SIGTERM_LEAD_SECONDS: i64 = 30;
+    /// Default value for sigkill_headroom_seconds (60 seconds)
+    pub const DEFAULT_SIGKILL_HEADROOM_SECONDS: i64 = 60;
+    /// Default exit code for timeout (matches Slurm's TIMEOUT)
+    pub const DEFAULT_TIMEOUT_EXIT_CODE: i32 = 152;
+    /// Default exit code for OOM kill (128 + SIGKILL)
+    pub const DEFAULT_OOM_EXIT_CODE: i32 = 137;
+
+    /// Resolve the effective execution mode based on the configured mode and environment.
+    pub fn effective_mode(&self) -> ExecutionMode {
+        match self.mode {
+            ExecutionMode::Direct => ExecutionMode::Direct,
+            ExecutionMode::Slurm => ExecutionMode::Slurm,
+            ExecutionMode::Auto => {
+                if std::env::var("SLURM_JOB_ID").is_ok() {
+                    ExecutionMode::Slurm
+                } else {
+                    ExecutionMode::Direct
+                }
+            }
+        }
+    }
+
+    /// Whether to use srun wrapping (true for effective Slurm mode).
+    pub fn use_srun(&self) -> bool {
+        matches!(self.effective_mode(), ExecutionMode::Slurm)
+    }
+
+    /// Whether to enforce resource limits.
+    pub fn limit_resources(&self) -> bool {
+        self.limit_resources.unwrap_or(true)
+    }
+
+    /// Whether to enable CPU binding in Slurm mode.
+    pub fn enable_cpu_bind(&self) -> bool {
+        self.enable_cpu_bind.unwrap_or(false)
+    }
+
+    /// Get the termination signal name for direct mode.
+    pub fn termination_signal(&self) -> &str {
+        self.termination_signal.as_deref().unwrap_or("SIGTERM")
+    }
+
+    /// Get the sigterm lead time in seconds.
+    pub fn sigterm_lead_seconds(&self) -> i64 {
+        self.sigterm_lead_seconds
+            .unwrap_or(Self::DEFAULT_SIGTERM_LEAD_SECONDS)
+    }
+
+    /// Get the sigkill headroom time in seconds.
+    pub fn sigkill_headroom_seconds(&self) -> i64 {
+        self.sigkill_headroom_seconds
+            .unwrap_or(Self::DEFAULT_SIGKILL_HEADROOM_SECONDS)
+    }
+
+    /// Get the timeout exit code.
+    pub fn timeout_exit_code(&self) -> i32 {
+        self.timeout_exit_code
+            .unwrap_or(Self::DEFAULT_TIMEOUT_EXIT_CODE)
+    }
+
+    /// Get the OOM exit code.
+    pub fn oom_exit_code(&self) -> i32 {
+        self.oom_exit_code.unwrap_or(Self::DEFAULT_OOM_EXIT_CODE)
+    }
+
+    /// Whether staggered startup is enabled for Slurm job runners.
+    pub fn staggered_start(&self) -> bool {
+        self.staggered_start.unwrap_or(true)
+    }
+
+    /// Resolve the effective `StdioConfig` for a job, checking per-job overrides first.
+    pub fn stdio_for_job(&self, job_name: &str) -> StdioConfig {
+        if let Some(ref overrides) = self.job_stdio_overrides
+            && let Some(cfg) = overrides.get(job_name)
+        {
+            return cfg.clone();
+        }
+        self.stdio.clone().unwrap_or_default()
+    }
+
+    /// Whether to delete stdio files on successful completion for a job.
+    pub fn delete_stdio_on_success(&self, job_name: &str) -> bool {
+        self.stdio_for_job(job_name)
+            .delete_on_success
+            .unwrap_or(false)
+    }
+
+    /// Build from a WorkflowModel's execution_config field.
+    pub fn from_workflow_model(workflow: &WorkflowModel) -> ExecutionConfig {
+        workflow.execution_config.clone().unwrap_or_default()
+    }
+}
+
+/// Granularity for resource monitoring sampling.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MonitorGranularity {
+    #[default]
+    Summary,
+    TimeSeries,
+}
+
+/// Configuration for per-job resource monitoring.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JobMonitorConfig {
+    pub enabled: bool,
+    pub granularity: MonitorGranularity,
+}
+
+impl Default for JobMonitorConfig {
+    fn default() -> Self {
+        JobMonitorConfig {
+            enabled: false,
+            granularity: MonitorGranularity::Summary,
+        }
+    }
+}
+
+/// Configuration for compute-node resource monitoring.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ComputeNodeMonitorConfig {
+    pub enabled: bool,
+    pub granularity: MonitorGranularity,
+    pub cpu: bool,
+    pub memory: bool,
+}
+
+impl Default for ComputeNodeMonitorConfig {
+    fn default() -> Self {
+        ComputeNodeMonitorConfig {
+            enabled: false,
+            granularity: MonitorGranularity::Summary,
+            cpu: true,
+            memory: true,
+        }
+    }
+}
+
+/// Configuration for resource monitoring.
+///
+/// Used both as the user-authored `WorkflowSpec.resource_monitor` and as the
+/// persisted `WorkflowModel.resource_monitor_config` (stored as JSON in the
+/// `workflow.resource_monitor_config` column).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ResourceMonitorConfig {
+    /// Deprecated compatibility field. Use `jobs.enabled` for new workflow specs.
+    pub enabled: bool,
+    /// Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
+    pub granularity: MonitorGranularity,
+    pub sample_interval_seconds: i32,
+    /// How often buffered time-series samples are flushed to SQLite, in seconds.
+    pub flush_interval_seconds: i32,
+    pub generate_plots: bool,
+    pub jobs: Option<JobMonitorConfig>,
+    pub compute_node: Option<ComputeNodeMonitorConfig>,
+}
+
+impl Default for ResourceMonitorConfig {
+    fn default() -> Self {
+        ResourceMonitorConfig {
+            enabled: false,
+            granularity: MonitorGranularity::Summary,
+            sample_interval_seconds: 10,
+            flush_interval_seconds: 300,
+            generate_plots: false,
+            jobs: None,
+            compute_node: None,
+        }
+    }
+}
+
+impl ResourceMonitorConfig {
+    pub fn jobs_config(&self) -> JobMonitorConfig {
+        self.jobs.clone().unwrap_or(JobMonitorConfig {
+            enabled: self.enabled,
+            granularity: self.granularity.clone(),
+        })
+    }
+
+    pub fn compute_node_config(&self) -> Option<ComputeNodeMonitorConfig> {
+        self.compute_node.clone().filter(|config| config.enabled)
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.jobs_config().enabled || self.compute_node_config().is_some()
+    }
+
+    /// Returns true if any enabled scope uses time-series granularity.
+    pub fn has_timeseries_db(&self) -> bool {
+        let jobs_ts = {
+            let jobs = self.jobs_config();
+            jobs.enabled && matches!(jobs.granularity, MonitorGranularity::TimeSeries)
+        };
+        let node_ts = self
+            .compute_node_config()
+            .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
+        jobs_ts || node_ts
+    }
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1187,7 +1516,7 @@ impl RoCrateEntityModel {
         workflow_id: i64,
         entity_id: String,
         entity_type: String,
-        metadata: String,
+        metadata: HashMap<String, Value>,
     ) -> RoCrateEntityModel {
         RoCrateEntityModel {
             id: None,
@@ -1612,7 +1941,6 @@ impl WorkflowModel {
             enable_ro_crate: None,
             project: None,
             metadata: None,
-            slurm_config: None,
             execution_config: None,
             run_id: None,
             is_canceled: None,
@@ -1946,7 +2274,7 @@ pub struct RoCrateEntityModel {
     pub file_id: Option<i64>,
     pub entity_id: String,
     pub entity_type: String,
-    pub metadata: String,
+    pub metadata: HashMap<String, Value>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -2032,8 +2360,11 @@ mod tests {
             use_pending_failed: Some(false),
             enable_ro_crate: Some(true),
             project: Some("proj".to_string()),
-            metadata: Some(json!({"k": "v"}).to_string()),
-            slurm_config: None,
+            metadata: Some(
+                [("k".to_string(), json!("v"))]
+                    .into_iter()
+                    .collect::<std::collections::HashMap<_, _>>(),
+            ),
             execution_config: None,
             run_id: Some(1),
             is_canceled: Some(false),

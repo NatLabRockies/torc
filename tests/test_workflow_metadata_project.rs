@@ -28,8 +28,7 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
         use_pending_failed: Some(false),
         enable_ro_crate: None,
         project: Some("test-project".to_string()),
-        metadata: Some(r#"{"key":"value","num":42}"#.to_string()),
-        slurm_config: None,
+        metadata: Some(serde_json::from_str(r#"{"key":"value","num":42}"#).unwrap()),
         execution_config: None,
         run_id: None,
         is_canceled: None,
@@ -46,7 +45,7 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
     assert_eq!(created.project, Some("test-project".to_string()));
     assert_eq!(
         created.metadata,
-        Some(r#"{"key":"value","num":42}"#.to_string())
+        Some(serde_json::from_str(r#"{"key":"value","num":42}"#).unwrap())
     );
 }
 
@@ -73,7 +72,6 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
         enable_ro_crate: None,
         project: None,
         metadata: None,
-        slurm_config: None,
         execution_config: None,
         run_id: None,
         is_canceled: None,
@@ -92,14 +90,17 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
     // Update with new values
     let mut update = created.clone();
     update.project = Some("updated-project".to_string());
-    update.metadata = Some(r#"{"updated":true}"#.to_string());
+    update.metadata = Some(serde_json::from_str(r#"{"updated":true}"#).unwrap());
 
     let updated = apis::workflows_api::update_workflow(config, workflow_id, update)
         .expect("Failed to update workflow");
 
     // Verify fields are updated
     assert_eq!(updated.project, Some("updated-project".to_string()));
-    assert_eq!(updated.metadata, Some(r#"{"updated":true}"#.to_string()));
+    assert_eq!(
+        updated.metadata,
+        Some(serde_json::from_str(r#"{"updated":true}"#).unwrap())
+    );
 }
 
 #[rstest]
@@ -124,8 +125,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
         use_pending_failed: Some(false),
         enable_ro_crate: None,
         project: Some("initial-project".to_string()),
-        metadata: Some(r#"{"version":"1.0"}"#.to_string()),
-        slurm_config: None,
+        metadata: Some(serde_json::from_str(r#"{"version":"1.0"}"#).unwrap()),
         execution_config: None,
         run_id: None,
         is_canceled: None,
@@ -139,12 +139,15 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
 
     // Verify initial values
     assert_eq!(created.project, Some("initial-project".to_string()));
-    assert_eq!(created.metadata, Some(r#"{"version":"1.0"}"#.to_string()));
+    assert_eq!(
+        created.metadata,
+        Some(serde_json::from_str(r#"{"version":"1.0"}"#).unwrap())
+    );
 
     // Update with new values
     let mut update = created.clone();
     update.project = Some("changed-project".to_string());
-    update.metadata = Some(r#"{"version":"2.0","updated":true}"#.to_string());
+    update.metadata = Some(serde_json::from_str(r#"{"version":"2.0","updated":true}"#).unwrap());
 
     let updated = apis::workflows_api::update_workflow(config, workflow_id, update)
         .expect("Failed to update workflow");
@@ -153,7 +156,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
     assert_eq!(updated.project, Some("changed-project".to_string()));
     assert_eq!(
         updated.metadata,
-        Some(r#"{"version":"2.0","updated":true}"#.to_string())
+        Some(serde_json::from_str(r#"{"version":"2.0","updated":true}"#).unwrap())
     );
 }
 
@@ -179,8 +182,7 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
         use_pending_failed: Some(false),
         enable_ro_crate: None,
         project: Some("my-project".to_string()),
-        metadata: Some(r#"{"key":"value"}"#.to_string()),
-        slurm_config: None,
+        metadata: Some(serde_json::from_str(r#"{"key":"value"}"#).unwrap()),
         execution_config: None,
         run_id: None,
         is_canceled: None,
@@ -202,7 +204,10 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
 
     // Verify project changed but metadata preserved
     assert_eq!(updated.project, Some("new-project".to_string()));
-    assert_eq!(updated.metadata, Some(r#"{"key":"value"}"#.to_string()));
+    assert_eq!(
+        updated.metadata,
+        Some(serde_json::from_str(r#"{"key":"value"}"#).unwrap())
+    );
 }
 
 #[rstest]

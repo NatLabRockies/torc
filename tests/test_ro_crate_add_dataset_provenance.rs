@@ -106,7 +106,7 @@ fn test_add_dataset_creates_create_action_for_job(start_server: &ServerProcess) 
     assert_eq!(action.entity_type, "CreateAction");
 
     let action_meta: serde_json::Value =
-        serde_json::from_str(&action.metadata).expect("CreateAction metadata is not valid JSON");
+        serde_json::to_value(&action.metadata).expect("CreateAction metadata is not valid JSON");
     assert_eq!(action_meta["@type"][0], "CreateAction");
     // The dataset must appear in the CreateAction's result array.
     let result = action_meta["result"]
@@ -127,7 +127,7 @@ fn test_add_dataset_creates_create_action_for_job(start_server: &ServerProcess) 
         .expect("Dataset entity should exist");
     assert_eq!(dataset.entity_type, "Dataset");
     let dataset_meta: serde_json::Value =
-        serde_json::from_str(&dataset.metadata).expect("Dataset metadata is not valid JSON");
+        serde_json::to_value(&dataset.metadata).expect("Dataset metadata is not valid JSON");
     assert_eq!(
         dataset_meta["prov:wasGeneratedBy"]["@id"],
         serde_json::json!(expected_action_id),
@@ -193,7 +193,7 @@ fn test_add_dataset_multiple_jobs_creates_actions(start_server: &ServerProcess) 
         .find(|e| e.entity_id == dataset_entity_id)
         .expect("Dataset entity should exist");
     let dataset_meta: serde_json::Value =
-        serde_json::from_str(&dataset.metadata).expect("Dataset metadata is not valid JSON");
+        serde_json::to_value(&dataset.metadata).expect("Dataset metadata is not valid JSON");
     let generated_by = dataset_meta["prov:wasGeneratedBy"]
         .as_array()
         .expect("prov:wasGeneratedBy should be an array for multiple jobs");
@@ -226,7 +226,7 @@ fn test_add_dataset_updates_existing_create_action(start_server: &ServerProcess)
         workflow_id,
         action_id.clone(),
         "CreateAction".to_string(),
-        existing_meta.to_string(),
+        serde_json::from_value(existing_meta).unwrap(),
     );
     apis::ro_crate_entities_api::create_ro_crate_entity(config, existing)
         .expect("Failed to pre-create CreateAction");
@@ -265,7 +265,7 @@ fn test_add_dataset_updates_existing_create_action(start_server: &ServerProcess)
     );
 
     let action_meta: serde_json::Value =
-        serde_json::from_str(&actions[0].metadata).expect("CreateAction metadata invalid");
+        serde_json::to_value(&actions[0].metadata).expect("CreateAction metadata invalid");
     let result = action_meta["result"]
         .as_array()
         .expect("result should be an array");

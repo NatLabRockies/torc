@@ -29,6 +29,20 @@ const RO_CRATE_ENTITY_COLUMNS: &[&str] = &[
     "metadata",
 ];
 
+/// Parse a JSON-encoded metadata column into a typed `HashMap`.
+/// Malformed/non-object payloads degrade to an empty map so a single bad row
+/// doesn't break list endpoints.
+fn parse_metadata(raw: &str) -> std::collections::HashMap<String, serde_json::Value> {
+    serde_json::from_str(raw).unwrap_or_default()
+}
+
+/// Serialize the typed metadata into the JSON-blob column.
+fn serialize_metadata(
+    m: &std::collections::HashMap<String, serde_json::Value>,
+) -> Result<String, ApiError> {
+    serde_json::to_string(m).map_err(|e| ApiError(format!("Failed to serialize metadata: {}", e)))
+}
+
 /// The current version of this binary, set at compile time.
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -396,6 +410,7 @@ where
             context.get().0.clone()
         );
 
+        let metadata_str = serialize_metadata(&body.metadata)?;
         let result = match sqlx::query!(
             r#"
             INSERT INTO ro_crate_entity (workflow_id, file_id, entity_id, entity_type, metadata)
@@ -406,7 +421,7 @@ where
             body.file_id,
             body.entity_id,
             body.entity_type,
-            body.metadata,
+            metadata_str,
         )
         .fetch_one(self.context.pool.as_ref())
         .await
@@ -486,7 +501,7 @@ where
             file_id: record.file_id,
             entity_id: record.entity_id,
             entity_type: record.entity_type,
-            metadata: record.metadata,
+            metadata: parse_metadata(&record.metadata),
         };
 
         Ok(GetRoCrateEntityResponse::SuccessfulResponse(model))
@@ -561,13 +576,16 @@ where
 
         let items: Vec<models::RoCrateEntityModel> = records
             .into_iter()
-            .map(|record| models::RoCrateEntityModel {
-                id: Some(record.get("id")),
-                workflow_id: record.get("workflow_id"),
-                file_id: record.get("file_id"),
-                entity_id: record.get("entity_id"),
-                entity_type: record.get("entity_type"),
-                metadata: record.get("metadata"),
+            .map(|record| {
+                let metadata_str: String = record.get("metadata");
+                models::RoCrateEntityModel {
+                    id: Some(record.get("id")),
+                    workflow_id: record.get("workflow_id"),
+                    file_id: record.get("file_id"),
+                    entity_id: record.get("entity_id"),
+                    entity_type: record.get("entity_type"),
+                    metadata: parse_metadata(&metadata_str),
+                }
             })
             .collect();
 
@@ -620,6 +638,7 @@ where
             context.get().0.clone()
         );
 
+        let metadata_str = serialize_metadata(&body.metadata)?;
         let result = match sqlx::query!(
             r#"
             UPDATE ro_crate_entity
@@ -629,7 +648,7 @@ where
             body.file_id,
             body.entity_id,
             body.entity_type,
-            body.metadata,
+            metadata_str,
             id,
         )
         .execute(self.context.pool.as_ref())

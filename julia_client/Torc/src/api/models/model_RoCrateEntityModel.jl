@@ -17,7 +17,7 @@
     - entity_type::String
     - file_id::Int64
     - id::Int64
-    - metadata::String
+    - metadata::Dict{String, Any}
     - workflow_id::Int64
 """
 Base.@kwdef mutable struct RoCrateEntityModel <: OpenAPI.APIModel
@@ -25,7 +25,7 @@ Base.@kwdef mutable struct RoCrateEntityModel <: OpenAPI.APIModel
     entity_type::Union{Nothing, String} = nothing
     file_id::Union{Nothing, Int64} = nothing
     id::Union{Nothing, Int64} = nothing
-    metadata::Union{Nothing, String} = nothing
+    metadata::Union{Nothing, Dict{String, Any}} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
     function RoCrateEntityModel(entity_id, entity_type, file_id, id, metadata, workflow_id, )
@@ -35,7 +35,7 @@ Base.@kwdef mutable struct RoCrateEntityModel <: OpenAPI.APIModel
     end
 end # type RoCrateEntityModel
 
-const _property_types_RoCrateEntityModel = Dict{Symbol,String}(Symbol("entity_id")=>"String", Symbol("entity_type")=>"String", Symbol("file_id")=>"Int64", Symbol("id")=>"Int64", Symbol("metadata")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_RoCrateEntityModel = Dict{Symbol,String}(Symbol("entity_id")=>"String", Symbol("entity_type")=>"String", Symbol("file_id")=>"Int64", Symbol("id")=>"Int64", Symbol("metadata")=>"Dict{String, Any}", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ RoCrateEntityModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_RoCrateEntityModel[name]))}
 
 function OpenAPI.check_required(o::RoCrateEntityModel)

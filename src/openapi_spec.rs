@@ -30,6 +30,12 @@ use crate::models::{
 };
 
 #[allow(unused_imports)]
+use crate::models::{
+    ComputeNodeMonitorConfig, ExecutionConfig, ExecutionMode, JobMonitorConfig, MonitorGranularity,
+    ResourceMonitorConfig, StdioConfig, StdioMode,
+};
+
+#[allow(unused_imports)]
 mod openapi_job_paths {
     pub use crate::server::live_router::{
         __path_complete_job, __path_create_job, __path_delete_job, __path_delete_jobs,
@@ -605,6 +611,14 @@ fn resolve_schema_properties<'a>(
         DeleteRoCrateEntitiesResponse,
         ReloadAuthResponse,
         WorkflowModel,
+        ExecutionConfig,
+        ExecutionMode,
+        StdioConfig,
+        StdioMode,
+        ResourceMonitorConfig,
+        JobMonitorConfig,
+        ComputeNodeMonitorConfig,
+        MonitorGranularity,
         ArchiveWorkflowRequest,
         ListWorkflowsResponse,
         ComputeNodesResources,
@@ -717,15 +731,121 @@ fn apply_env_property_name_pattern_yaml(value: &mut serde_yaml::Value) {
     }
 }
 
+/// Rewrite every `oneOf: [{type: "null"}, {$ref: ...}]` (in either order)
+/// into a single `$ref`. utoipa emits this pattern for `Option<NestedStruct>`
+/// fields per OpenAPI 3.1, but the openapi-generator Rust client fails on
+/// the inline schemas it synthesizes from these. The field's optionality is
+/// still expressed by it not appearing in the schema's `required` list, so
+/// dropping the null branch is wire-safe.
+fn flatten_nullable_refs_json(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            if let Some(Value::Array(arr)) = map.get("oneOf")
+                && arr.len() == 2
+            {
+                let null_first = arr[0]
+                    .as_object()
+                    .and_then(|o| o.get("type"))
+                    .and_then(|t| t.as_str())
+                    == Some("null");
+                let null_second = arr[1]
+                    .as_object()
+                    .and_then(|o| o.get("type"))
+                    .and_then(|t| t.as_str())
+                    == Some("null");
+                let ref_branch_idx = if null_first {
+                    Some(1)
+                } else if null_second {
+                    Some(0)
+                } else {
+                    None
+                };
+                if let Some(idx) = ref_branch_idx
+                    && arr[idx].as_object().is_some_and(|o| o.contains_key("$ref"))
+                {
+                    let ref_branch = arr[idx].clone();
+                    map.remove("oneOf");
+                    if let Some(ref_obj) = ref_branch.as_object() {
+                        for (k, v) in ref_obj {
+                            map.entry(k.clone()).or_insert_with(|| v.clone());
+                        }
+                    }
+                }
+            }
+            for v in map.values_mut() {
+                flatten_nullable_refs_json(v);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr {
+                flatten_nullable_refs_json(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn flatten_nullable_refs_yaml(value: &mut serde_yaml::Value) {
+    match value {
+        serde_yaml::Value::Mapping(map) => {
+            let oneof_key = serde_yaml::Value::String("oneOf".to_string());
+            let type_key = serde_yaml::Value::String("type".to_string());
+            let ref_key = serde_yaml::Value::String("$ref".to_string());
+            let null_str = serde_yaml::Value::String("null".to_string());
+
+            if let Some(serde_yaml::Value::Sequence(arr)) = map.get(&oneof_key)
+                && arr.len() == 2
+            {
+                let is_null = |v: &serde_yaml::Value| {
+                    v.as_mapping()
+                        .and_then(|m| m.get(&type_key))
+                        .is_some_and(|t| t == &null_str)
+                };
+                let ref_branch_idx = if is_null(&arr[0]) {
+                    Some(1)
+                } else if is_null(&arr[1]) {
+                    Some(0)
+                } else {
+                    None
+                };
+                if let Some(idx) = ref_branch_idx
+                    && arr[idx]
+                        .as_mapping()
+                        .is_some_and(|m| m.contains_key(&ref_key))
+                {
+                    let ref_branch = arr[idx].clone();
+                    map.remove(&oneof_key);
+                    if let serde_yaml::Value::Mapping(ref_map) = ref_branch {
+                        for (k, v) in ref_map {
+                            map.entry(k).or_insert(v);
+                        }
+                    }
+                }
+            }
+            for (_, v) in map.iter_mut() {
+                flatten_nullable_refs_yaml(v);
+            }
+        }
+        serde_yaml::Value::Sequence(arr) => {
+            for v in arr {
+                flatten_nullable_refs_yaml(v);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn openapi_value() -> Value {
     let mut value = serde_json::to_value(openapi_doc()).expect("OpenAPI document should serialize");
     apply_env_property_name_pattern_json(&mut value);
+    flatten_nullable_refs_json(&mut value);
     value
 }
 
 pub fn render_openapi_yaml() -> Result<String, serde_yaml::Error> {
     let mut value = serde_yaml::to_value(openapi_doc())?;
     apply_env_property_name_pattern_yaml(&mut value);
+    flatten_nullable_refs_yaml(&mut value);
     serde_yaml::to_string(&value)
 }
 
@@ -2106,7 +2226,6 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "slurm_defaults",
             "use_pending_failed",
             "enable_ro_crate",
-            "slurm_config",
             "execution_config",
             "run_id",
             "is_canceled",

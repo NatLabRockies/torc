@@ -431,7 +431,7 @@ execution_config:
 
     assert!(workflow.execution_config.is_some());
     let exec_config: torc::client::workflow_spec::ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+        workflow.execution_config.clone().unwrap();
 
     assert_eq!(exec_config.termination_signal, Some("SIGTERM".to_string()));
     assert_eq!(exec_config.sigterm_lead_seconds, Some(30));
@@ -686,7 +686,7 @@ execution_config:
 
     assert!(workflow.execution_config.is_some());
     let exec_config: torc::client::workflow_spec::ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+        workflow.execution_config.clone().unwrap();
 
     assert_eq!(exec_config.oom_exit_code(), 137);
     assert_eq!(exec_config.timeout_exit_code(), 152);
@@ -774,7 +774,7 @@ execution_config:
         .expect("Failed to get workflow");
 
     let monitor_config: serde_json::Value =
-        serde_json::from_str(workflow.resource_monitor_config.as_ref().unwrap()).unwrap();
+        serde_json::to_value(workflow.resource_monitor_config.as_ref().unwrap()).unwrap();
     assert_eq!(monitor_config["granularity"], "time_series");
     assert_eq!(monitor_config["sample_interval_seconds"], 1);
 
@@ -1665,7 +1665,7 @@ execution_config:
 
     assert!(workflow.execution_config.is_some());
     let exec_config: torc::client::workflow_spec::ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+        workflow.execution_config.clone().unwrap();
 
     assert_eq!(exec_config.termination_signal(), "SIGTERM");
     assert_eq!(exec_config.sigterm_lead_seconds(), 30);
@@ -1739,7 +1739,7 @@ execution_config:
         .expect("Failed to get workflow");
 
     let exec_config: torc::client::workflow_spec::ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+        workflow.execution_config.clone().unwrap();
 
     assert_eq!(exec_config.termination_signal(), "SIGINT");
     assert_eq!(exec_config.sigterm_lead_seconds(), 45);
@@ -1874,7 +1874,7 @@ execution_config:
         .expect("Failed to get workflow");
 
     let exec_config: torc::client::workflow_spec::ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+        workflow.execution_config.clone().unwrap();
 
     // Verify aggressive settings
     assert_eq!(exec_config.sigterm_lead_seconds(), 10);
@@ -1932,7 +1932,7 @@ execution_config:
         .expect("Failed to get workflow");
 
     let exec_config: torc::client::workflow_spec::ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+        workflow.execution_config.clone().unwrap();
 
     // Verify conservative settings
     assert_eq!(exec_config.sigterm_lead_seconds(), 120);

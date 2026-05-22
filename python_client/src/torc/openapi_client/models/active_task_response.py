@@ -72,11 +72,6 @@ class ActiveTaskResponse(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of task
         if self.task:
             _dict['task'] = self.task.to_dict()
-        # set to None if task (nullable) is None
-        # and model_fields_set contains the field
-        if self.task is None and "task" in self.model_fields_set:
-            _dict['task'] = None
-
         return _dict
 
     @classmethod

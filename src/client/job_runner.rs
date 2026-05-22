@@ -39,9 +39,7 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::async_cli_command::AsyncCliCommand;
 use crate::client::resource_correction::format_duration_iso8601;
-use crate::client::resource_monitor::{
-    ResourceMonitor, ResourceMonitorConfig, SystemMetricsSummary,
-};
+use crate::client::resource_monitor::{ResourceMonitor, SystemMetricsSummary};
 use crate::client::utils;
 use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
@@ -580,27 +578,21 @@ impl JobRunner {
         };
 
         // Initialize resource monitoring if configured
-        let resource_monitor = if let Some(ref monitor_config_json) =
-            workflow.resource_monitor_config
-        {
-            match serde_json::from_str::<ResourceMonitorConfig>(monitor_config_json) {
-                Ok(monitor_config) if monitor_config.is_enabled() => {
-                    match ResourceMonitor::new(monitor_config, output_dir.clone(), unique_label) {
-                        Ok(monitor) => {
-                            info!("Resource monitoring enabled");
-                            Some(monitor)
-                        }
-                        Err(e) => {
-                            error!("Failed to initialize resource monitor: {}", e);
-                            None
-                        }
+        let resource_monitor = if let Some(ref monitor_config) = workflow.resource_monitor_config {
+            if monitor_config.is_enabled() {
+                match ResourceMonitor::new(monitor_config.clone(), output_dir.clone(), unique_label)
+                {
+                    Ok(monitor) => {
+                        info!("Resource monitoring enabled");
+                        Some(monitor)
+                    }
+                    Err(e) => {
+                        error!("Failed to initialize resource monitor: {}", e);
+                        None
                     }
                 }
-                Ok(_) => None,
-                Err(e) => {
-                    error!("Failed to parse resource monitor config: {}", e);
-                    None
-                }
+            } else {
+                None
             }
         } else {
             None
@@ -3909,13 +3901,10 @@ mod tests {
         let resources = ComputeNodesResources::new(64, 256.0, 8, 2);
         let mut workflow = WorkflowModel::new("test".to_string(), "user".to_string());
         workflow.id = Some(1);
-        workflow.execution_config = Some(
-            serde_json::to_string(&ExecutionConfig {
-                mode: ExecutionMode::Slurm,
-                ..Default::default()
-            })
-            .expect("execution config should serialize"),
-        );
+        workflow.execution_config = Some(ExecutionConfig {
+            mode: ExecutionMode::Slurm,
+            ..Default::default()
+        });
 
         let mut runner = JobRunner::new(
             Configuration::default(),

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read, Write};
 
@@ -2392,8 +2393,14 @@ fn handle_update(
             if updates.project.is_some() {
                 workflow.project = updates.project.clone();
             }
-            if updates.metadata.is_some() {
-                workflow.metadata = updates.metadata.clone();
+            if let Some(metadata_str) = &updates.metadata {
+                match serde_json::from_str::<HashMap<String, serde_json::Value>>(metadata_str) {
+                    Ok(map) => workflow.metadata = Some(map),
+                    Err(e) => {
+                        eprintln!("Error parsing metadata JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                }
             }
 
             match apis::workflows_api::update_workflow(config, selected_id, workflow) {
@@ -2463,12 +2470,9 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                 if let Some(timestamp) = &workflow.timestamp {
                     println!("  Timestamp: {}", timestamp);
                 }
-                if let Some(defaults_str) = &workflow.slurm_defaults
-                    && let Ok(defaults) = serde_json::from_str::<serde_json::Value>(defaults_str)
-                    && let Some(obj) = defaults.as_object()
-                {
+                if let Some(defaults_map) = &workflow.slurm_defaults {
                     println!("  Slurm Defaults:");
-                    for (key, value) in obj {
+                    for (key, value) in defaults_map {
                         let value_str = match value {
                             serde_json::Value::String(s) => s.clone(),
                             _ => value.to_string(),
@@ -2476,12 +2480,11 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                         println!("    {}: {}", key, value_str);
                     }
                 }
-                if let Some(config_str) = &workflow.resource_monitor_config
-                    && let Ok(config) = serde_json::from_str::<serde_json::Value>(config_str)
-                    && let Some(obj) = config.as_object()
+                if let Some(config) = &workflow.resource_monitor_config
+                    && let Ok(serde_json::Value::Object(obj)) = serde_json::to_value(config)
                 {
                     println!("  Resource Monitor:");
-                    for (key, value) in obj {
+                    for (key, value) in &obj {
                         let value_str = match value {
                             serde_json::Value::String(s) => s.clone(),
                             serde_json::Value::Bool(b) => b.to_string(),
@@ -2568,7 +2571,11 @@ fn handle_list(
                         name: workflow.name.clone(),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
                         project: workflow.project.as_deref().unwrap_or("").to_string(),
-                        metadata: workflow.metadata.as_deref().unwrap_or("").to_string(),
+                        metadata: workflow
+                            .metadata
+                            .as_ref()
+                            .map(|m| serde_json::to_string(m).unwrap_or_default())
+                            .unwrap_or_default(),
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
@@ -2582,7 +2589,11 @@ fn handle_list(
                         name: workflow.name.clone(),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
                         project: workflow.project.as_deref().unwrap_or("").to_string(),
-                        metadata: workflow.metadata.as_deref().unwrap_or("").to_string(),
+                        metadata: workflow
+                            .metadata
+                            .as_ref()
+                            .map(|m| serde_json::to_string(m).unwrap_or_default())
+                            .unwrap_or_default(),
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();

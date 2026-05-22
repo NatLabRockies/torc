@@ -802,295 +802,10 @@ impl JobSpec {
     }
 }
 
-/// How to capture stdout and stderr for job processes.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum StdioMode {
-    /// Separate stdout and stderr files (.o and .e) — the default.
-    #[default]
-    Separate,
-    /// Combine stdout and stderr into a single file (.log) per job.
-    Combined,
-    /// Don't capture stdout (send to /dev/null); capture stderr only.
-    NoStdout,
-    /// Don't capture stderr (send to /dev/null); capture stdout only.
-    NoStderr,
-    /// Don't capture either stdout or stderr.
-    None,
-    // Future: CombinedPerNode — all jobs on a node share one chronological file,
-    // each line tagged with the job ID.
-}
-
-/// Configuration for job stdout/stderr capture.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct StdioConfig {
-    /// How to capture stdout/stderr. Default: separate files.
-    #[serde(default)]
-    pub mode: StdioMode,
-    /// Delete stdout/stderr files if the job completes successfully.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub delete_on_success: Option<bool>,
-}
-
-/// Execution mode for job processes.
-///
-/// Controls how torc manages job processes during execution, particularly
-/// around termination and resource enforcement.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ExecutionMode {
-    /// Direct shell execution - torc manages termination via SIGTERM/SIGKILL.
-    /// This is the default mode. Works everywhere: local machines, cloud VMs,
-    /// containers, and inside Slurm allocations.
-    #[default]
-    Direct,
-    /// Slurm srun execution - Slurm manages resource limits and termination.
-    /// Jobs are wrapped with `srun` inside Slurm allocations.
-    Slurm,
-    /// Auto-detect based on environment - uses `slurm` if SLURM_JOB_ID is set,
-    /// otherwise `direct`.
-    Auto,
-}
-
-/// Unified execution configuration that controls how jobs are run.
-///
-/// This replaces the old `SlurmConfig` with a mode-based approach that clearly
-/// distinguishes between direct execution (torc manages everything) and Slurm
-/// execution (srun manages resources and termination).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct ExecutionConfig {
-    /// Execution mode: direct (default), slurm, or auto.
-    #[serde(default)]
-    pub mode: ExecutionMode,
-
-    // ========== Shared settings (both modes) ==========
-    /// Seconds before end_time to send SIGKILL (direct mode) or set srun --time (slurm mode).
-    /// Default: 60.
-    /// - Direct mode: After this time, any remaining jobs are force-killed with SIGKILL.
-    /// - Slurm mode: srun --time is set to (remaining_time - sigkill_headroom_seconds) so
-    ///   Slurm kills the step before the allocation expires, giving the job runner time
-    ///   to detect the timeout and report results.
-    ///
-    /// If `srun_termination_signal` is set (e.g., "TERM@120"), ensure its time value
-    /// (120 seconds) is less than `sigkill_headroom_seconds` so the signal is sent
-    /// before Slurm kills the step.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sigkill_headroom_seconds: Option<i64>,
-
-    /// Exit code to use when a job times out.
-    /// Default: 152 (matches Slurm's TIMEOUT exit code).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timeout_exit_code: Option<i32>,
-
-    /// Enable staggered startup for job runners to mitigate thundering herd.
-    /// When true (default), each runner sleeps a deterministic jitter before
-    /// contacting the server, spreading load when many nodes start at once.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub staggered_start: Option<bool>,
-
-    // ========== Direct mode only ==========
-    /// When true (default), monitor memory/CPU usage and kill jobs that exceed
-    /// their resource requirements (OOM enforcement). Only applies in direct mode.
-    /// Setting this to false with slurm mode is an error — use direct mode instead.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit_resources: Option<bool>,
-
-    /// Signal to send before SIGKILL for graceful termination (direct mode only).
-    /// Default: "SIGTERM". Other common values: "SIGINT", "SIGUSR1".
-    /// In slurm mode, use `srun_termination_signal` instead.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub termination_signal: Option<String>,
-
-    /// Seconds before SIGKILL to send the termination signal (direct mode only).
-    /// Default: 30. This gives jobs time to handle the signal gracefully.
-    /// In slurm mode, termination timing is controlled by `srun_termination_signal`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sigterm_lead_seconds: Option<i64>,
-
-    /// Exit code to use when a job is OOM-killed (direct mode only).
-    /// Default: 137 (128 + SIGKILL = 128 + 9).
-    /// In slurm mode, Slurm manages OOM detection.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub oom_exit_code: Option<i32>,
-
-    // ========== Slurm mode only ==========
-    /// Signal specification for srun steps, passed as `srun --signal=<value>` (slurm mode only).
-    /// Format: `<signal>@<seconds>` (e.g., `TERM@120` sends SIGTERM 120 seconds
-    /// before the step time limit).
-    /// In direct mode, use `termination_signal` instead.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub srun_termination_signal: Option<String>,
-
-    /// MPI launcher mode for the outer `srun` used to launch one job runner per allocated node.
-    /// This is only used with `schedule_nodes.start_one_worker_per_node = true`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub srun_mpi: Option<String>,
-
-    /// When true, allow Slurm to bind tasks to specific CPU cores (slurm mode only).
-    /// By default (false), srun passes `--cpu-bind=none` to disable binding.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_cpu_bind: Option<bool>,
-
-    // ========== Stdio settings ==========
-    /// Workflow-level default for stdout/stderr capture.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stdio: Option<StdioConfig>,
-
-    /// Per-job stdio overrides keyed by job name.
-    /// Populated during workflow creation from per-job `stdio` fields in the spec.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub job_stdio_overrides: Option<HashMap<String, StdioConfig>>,
-}
-
-impl ExecutionConfig {
-    /// Default value for sigterm_lead_seconds (30 seconds)
-    pub const DEFAULT_SIGTERM_LEAD_SECONDS: i64 = 30;
-    /// Default value for sigkill_headroom_seconds (60 seconds)
-    pub const DEFAULT_SIGKILL_HEADROOM_SECONDS: i64 = 60;
-    /// Default exit code for timeout (matches Slurm's TIMEOUT)
-    pub const DEFAULT_TIMEOUT_EXIT_CODE: i32 = 152;
-    /// Default exit code for OOM kill (128 + SIGKILL)
-    pub const DEFAULT_OOM_EXIT_CODE: i32 = 137;
-
-    /// Resolve the effective execution mode based on the configured mode and environment.
-    /// - Direct -> Direct
-    /// - Slurm -> Slurm
-    /// - Auto -> Slurm if SLURM_JOB_ID is set, else Direct
-    pub fn effective_mode(&self) -> ExecutionMode {
-        match self.mode {
-            ExecutionMode::Direct => ExecutionMode::Direct,
-            ExecutionMode::Slurm => ExecutionMode::Slurm,
-            ExecutionMode::Auto => {
-                if std::env::var("SLURM_JOB_ID").is_ok() {
-                    ExecutionMode::Slurm
-                } else {
-                    ExecutionMode::Direct
-                }
-            }
-        }
-    }
-
-    /// Whether to use srun wrapping (true for effective Slurm mode).
-    pub fn use_srun(&self) -> bool {
-        matches!(self.effective_mode(), ExecutionMode::Slurm)
-    }
-
-    /// Whether to enforce resource limits.
-    pub fn limit_resources(&self) -> bool {
-        self.limit_resources.unwrap_or(true)
-    }
-
-    /// Whether to enable CPU binding in Slurm mode.
-    pub fn enable_cpu_bind(&self) -> bool {
-        self.enable_cpu_bind.unwrap_or(false)
-    }
-
-    /// Get the termination signal name for direct mode.
-    pub fn termination_signal(&self) -> &str {
-        self.termination_signal.as_deref().unwrap_or("SIGTERM")
-    }
-
-    /// Get the sigterm lead time in seconds.
-    pub fn sigterm_lead_seconds(&self) -> i64 {
-        self.sigterm_lead_seconds
-            .unwrap_or(Self::DEFAULT_SIGTERM_LEAD_SECONDS)
-    }
-
-    /// Get the sigkill headroom time in seconds.
-    pub fn sigkill_headroom_seconds(&self) -> i64 {
-        self.sigkill_headroom_seconds
-            .unwrap_or(Self::DEFAULT_SIGKILL_HEADROOM_SECONDS)
-    }
-
-    /// Get the timeout exit code.
-    pub fn timeout_exit_code(&self) -> i32 {
-        self.timeout_exit_code
-            .unwrap_or(Self::DEFAULT_TIMEOUT_EXIT_CODE)
-    }
-
-    /// Get the OOM exit code.
-    pub fn oom_exit_code(&self) -> i32 {
-        self.oom_exit_code.unwrap_or(Self::DEFAULT_OOM_EXIT_CODE)
-    }
-
-    /// Whether staggered startup is enabled for Slurm job runners.
-    pub fn staggered_start(&self) -> bool {
-        self.staggered_start.unwrap_or(true)
-    }
-
-    /// Resolve the effective `StdioConfig` for a job, checking per-job overrides first.
-    pub fn stdio_for_job(&self, job_name: &str) -> StdioConfig {
-        if let Some(ref overrides) = self.job_stdio_overrides
-            && let Some(cfg) = overrides.get(job_name)
-        {
-            return cfg.clone();
-        }
-        self.stdio.clone().unwrap_or_default()
-    }
-
-    /// Whether to delete stdio files on successful completion for a job.
-    pub fn delete_stdio_on_success(&self, job_name: &str) -> bool {
-        self.stdio_for_job(job_name)
-            .delete_on_success
-            .unwrap_or(false)
-    }
-
-    /// Validate the configuration, returning any warnings.
-    /// Build from a WorkflowModel's execution_config or legacy slurm_config JSON blob.
-    ///
-    /// Checks execution_config first; falls back to slurm_config for old workflows.
-    pub fn from_workflow_model(workflow: &models::WorkflowModel) -> ExecutionConfig {
-        if let Some(ref json_str) = workflow.execution_config {
-            serde_json::from_str(json_str).unwrap_or_default()
-        } else if let Some(ref json_str) = workflow.slurm_config {
-            // Fall back to legacy slurm_config for old workflows
-            Self::from_legacy_slurm_config_json(json_str)
-        } else {
-            ExecutionConfig::default()
-        }
-    }
-
-    /// Convert a legacy slurm_config JSON blob to ExecutionConfig for backward compatibility.
-    ///
-    /// This handles workflows created before ExecutionConfig was introduced.
-    fn from_legacy_slurm_config_json(json_str: &str) -> ExecutionConfig {
-        // Legacy slurm_config format:
-        // { "limit_resources": bool, "use_srun": bool, "srun_termination_signal": str, "enable_cpu_bind": bool }
-        #[derive(Deserialize, Default)]
-        struct LegacySlurmConfig {
-            limit_resources: Option<bool>,
-            use_srun: Option<bool>,
-            srun_termination_signal: Option<String>,
-            enable_cpu_bind: Option<bool>,
-        }
-
-        let legacy: LegacySlurmConfig = serde_json::from_str(json_str).unwrap_or_default();
-        ExecutionConfig {
-            // use_srun=true means Slurm mode, use_srun=false means Direct mode
-            // If not set, default to Auto for backward compatibility
-            mode: match legacy.use_srun {
-                Some(true) => ExecutionMode::Slurm,
-                Some(false) => ExecutionMode::Direct,
-                None => ExecutionMode::Auto,
-            },
-            limit_resources: legacy.limit_resources,
-            srun_termination_signal: legacy.srun_termination_signal,
-            srun_mpi: None,
-            enable_cpu_bind: legacy.enable_cpu_bind,
-            // Direct mode settings use defaults when converting from legacy
-            termination_signal: None,
-            sigterm_lead_seconds: None,
-            sigkill_headroom_seconds: None,
-            timeout_exit_code: None,
-            oom_exit_code: None,
-            staggered_start: None,
-            stdio: None,
-            job_stdio_overrides: None,
-        }
-    }
-}
+// Stdio + Execution config types now live in `crate::models` so the OpenAPI
+// surface can expose them as typed nested objects. The aliases below preserve
+// the existing import paths for the rest of the crate.
+pub use crate::models::{ExecutionConfig, ExecutionMode, StdioConfig, StdioMode};
 
 /// Apply workflow-level `variables` substitution to every string in the spec value.
 ///
@@ -1551,9 +1266,9 @@ pub struct WorkflowSpec {
     /// Project name or identifier for grouping workflows
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
-    /// Arbitrary metadata as JSON string
+    /// Arbitrary metadata as a JSON object
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<String>,
+    pub metadata: Option<HashMap<String, serde_json::Value>>,
     /// Unified execution configuration controlling how jobs are run.
     /// Controls execution mode (direct, slurm, or auto) and related settings like
     /// resource limits, termination signals, and timeouts.
@@ -3304,18 +3019,14 @@ impl WorkflowSpec {
         }
         // Serialize resource_monitor config if present
         if let Some(ref resource_monitor) = spec.resource_monitor {
-            let config_json = serde_json::to_string(resource_monitor)
-                .map_err(|e| format!("Failed to serialize resource monitor config: {}", e))?;
-            workflow_model.resource_monitor_config = Some(config_json);
+            workflow_model.resource_monitor_config = Some(resource_monitor.clone());
         }
 
         // Validate and serialize slurm_defaults if present
         if let Some(ref slurm_defaults) = spec.slurm_defaults {
             // Validate that no excluded parameters are present
             slurm_defaults.validate()?;
-            let config_json = serde_json::to_string(slurm_defaults)
-                .map_err(|e| format!("Failed to serialize slurm_defaults config: {}", e))?;
-            workflow_model.slurm_defaults = Some(config_json);
+            workflow_model.slurm_defaults = Some(slurm_defaults.0.clone());
         }
 
         // dynamic_jobs is the same struct on both sides — copy through.
@@ -3326,13 +3037,11 @@ impl WorkflowSpec {
             workflow_model.use_pending_failed = Some(value);
         }
 
-        // Store execution_config as JSON if any non-default settings are configured
+        // Store execution_config if any non-default settings are configured
         if let Some(ref execution_config) = spec.execution_config
             && *execution_config != ExecutionConfig::default()
         {
-            let execution_config_json = serde_json::to_string(execution_config)
-                .map_err(|e| format!("Failed to serialize execution_config: {}", e))?;
-            workflow_model.execution_config = Some(execution_config_json);
+            workflow_model.execution_config = Some(execution_config.clone());
         }
 
         // Validate that execution_config fields match the effective mode.

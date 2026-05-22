@@ -20,6 +20,8 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from torc.openapi_client.models.dynamic_jobs_config import DynamicJobsConfig
+from torc.openapi_client.models.execution_config import ExecutionConfig
+from torc.openapi_client.models.resource_monitor_config import ResourceMonitorConfig
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -36,21 +38,20 @@ class WorkflowModel(BaseModel):
     dynamic_jobs: Optional[DynamicJobsConfig] = Field(default=None, description="Dynamic job spawning configuration. Mirrors the workflow-spec `dynamic_jobs` section identically. Runtime-immutable after workflow creation.")
     enable_ro_crate: Optional[StrictBool] = None
     env: Optional[Dict[str, StrictStr]] = None
-    execution_config: Optional[StrictStr] = None
+    execution_config: Optional[ExecutionConfig] = None
     id: Optional[StrictInt] = None
     is_archived: Optional[StrictBool] = Field(default=None, description="True when the workflow has been archived. Read-only on the API: set via `POST /workflows/{id}/archive`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
     is_canceled: Optional[StrictBool] = Field(default=None, description="True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via `POST /workflows/{id}/cancel`, cleared via `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
-    metadata: Optional[StrictStr] = None
+    metadata: Optional[Dict[str, Any]] = None
     name: StrictStr
     project: Optional[StrictStr] = None
-    resource_monitor_config: Optional[StrictStr] = None
+    resource_monitor_config: Optional[ResourceMonitorConfig] = None
     run_id: Optional[StrictInt] = Field(default=None, description="Current run number; incremented on each restart/recovery. Read-only on the API: incremented as a side effect of `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
-    slurm_config: Optional[StrictStr] = None
-    slurm_defaults: Optional[StrictStr] = None
+    slurm_defaults: Optional[Dict[str, Any]] = None
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_config", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -100,6 +101,12 @@ class WorkflowModel(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of dynamic_jobs
         if self.dynamic_jobs:
             _dict['dynamic_jobs'] = self.dynamic_jobs.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of execution_config
+        if self.execution_config:
+            _dict['execution_config'] = self.execution_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of resource_monitor_config
+        if self.resource_monitor_config:
+            _dict['resource_monitor_config'] = self.resource_monitor_config.to_dict()
         # set to None if compute_node_expiration_buffer_seconds (nullable) is None
         # and model_fields_set contains the field
         if self.compute_node_expiration_buffer_seconds is None and "compute_node_expiration_buffer_seconds" in self.model_fields_set:
@@ -130,20 +137,10 @@ class WorkflowModel(BaseModel):
         if self.description is None and "description" in self.model_fields_set:
             _dict['description'] = None
 
-        # set to None if dynamic_jobs (nullable) is None
-        # and model_fields_set contains the field
-        if self.dynamic_jobs is None and "dynamic_jobs" in self.model_fields_set:
-            _dict['dynamic_jobs'] = None
-
         # set to None if enable_ro_crate (nullable) is None
         # and model_fields_set contains the field
         if self.enable_ro_crate is None and "enable_ro_crate" in self.model_fields_set:
             _dict['enable_ro_crate'] = None
-
-        # set to None if execution_config (nullable) is None
-        # and model_fields_set contains the field
-        if self.execution_config is None and "execution_config" in self.model_fields_set:
-            _dict['execution_config'] = None
 
         # set to None if id (nullable) is None
         # and model_fields_set contains the field
@@ -160,35 +157,15 @@ class WorkflowModel(BaseModel):
         if self.is_canceled is None and "is_canceled" in self.model_fields_set:
             _dict['is_canceled'] = None
 
-        # set to None if metadata (nullable) is None
-        # and model_fields_set contains the field
-        if self.metadata is None and "metadata" in self.model_fields_set:
-            _dict['metadata'] = None
-
         # set to None if project (nullable) is None
         # and model_fields_set contains the field
         if self.project is None and "project" in self.model_fields_set:
             _dict['project'] = None
 
-        # set to None if resource_monitor_config (nullable) is None
-        # and model_fields_set contains the field
-        if self.resource_monitor_config is None and "resource_monitor_config" in self.model_fields_set:
-            _dict['resource_monitor_config'] = None
-
         # set to None if run_id (nullable) is None
         # and model_fields_set contains the field
         if self.run_id is None and "run_id" in self.model_fields_set:
             _dict['run_id'] = None
-
-        # set to None if slurm_config (nullable) is None
-        # and model_fields_set contains the field
-        if self.slurm_config is None and "slurm_config" in self.model_fields_set:
-            _dict['slurm_config'] = None
-
-        # set to None if slurm_defaults (nullable) is None
-        # and model_fields_set contains the field
-        if self.slurm_defaults is None and "slurm_defaults" in self.model_fields_set:
-            _dict['slurm_defaults'] = None
 
         # set to None if timestamp (nullable) is None
         # and model_fields_set contains the field
@@ -221,16 +198,15 @@ class WorkflowModel(BaseModel):
             "dynamic_jobs": DynamicJobsConfig.from_dict(obj["dynamic_jobs"]) if obj.get("dynamic_jobs") is not None else None,
             "enable_ro_crate": obj.get("enable_ro_crate"),
             "env": obj.get("env"),
-            "execution_config": obj.get("execution_config"),
+            "execution_config": ExecutionConfig.from_dict(obj["execution_config"]) if obj.get("execution_config") is not None else None,
             "id": obj.get("id"),
             "is_archived": obj.get("is_archived"),
             "is_canceled": obj.get("is_canceled"),
             "metadata": obj.get("metadata"),
             "name": obj.get("name"),
             "project": obj.get("project"),
-            "resource_monitor_config": obj.get("resource_monitor_config"),
+            "resource_monitor_config": ResourceMonitorConfig.from_dict(obj["resource_monitor_config"]) if obj.get("resource_monitor_config") is not None else None,
             "run_id": obj.get("run_id"),
-            "slurm_config": obj.get("slurm_config"),
             "slurm_defaults": obj.get("slurm_defaults"),
             "timestamp": obj.get("timestamp"),
             "use_pending_failed": obj.get("use_pending_failed"),

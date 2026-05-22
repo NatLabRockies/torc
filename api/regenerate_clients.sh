@@ -70,6 +70,7 @@ docker_run run \
   -v "${TMP_PYTHON_CLIENT}":/python_client \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}@${OPENAPI_CLI_DIGEST}" \
   generate -g python --input-spec="/spec/${SPEC_FILE}" -o /python_client -c /data/config.json \
+  --openapi-normalizer=SIMPLIFY_ONEOF_ANYOF=true \
   --additional-properties=packageVersion="${API_VERSION}"
 
 docker_run run \
@@ -78,6 +79,7 @@ docker_run run \
   -v "${TMP_JULIA_CLIENT}":/julia_client \
   "docker.io/openapitools/openapi-generator-cli:${OPENAPI_CLI_VERSION}@${OPENAPI_CLI_DIGEST}" \
   generate -g julia-client --input-spec="/spec/${SPEC_FILE}" -o /julia_client \
+  --openapi-normalizer=SIMPLIFY_ONEOF_ANYOF=true \
   --additional-properties=packageVersion="${API_VERSION}"
 
 rm -rf "${REPO_ROOT}/python_client/src/torc/openapi_client"/*
