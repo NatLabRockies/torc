@@ -329,8 +329,10 @@ complete. Use <code>--max-retries</code> to limit recovery attempts.</p>
 <p><strong>With auto-scheduling</strong> (<code>--auto-schedule</code>):</p>
 <pre><code class="language-bash">torc watch 123 --auto-schedule
 </code></pre>
-<p>Automatically submits new Slurm allocations when retry jobs are waiting. Essential for workflows
-using failure handlers that create retry jobs.</p>
+<p>Automatically submits new Slurm allocations when <strong>unplanned</strong> jobs are waiting — failure-handler
+retries and <code>spawn_jobs</code> children (anything with <code>origin IS NOT NULL</code>). Essential for workflows
+that rely on either mechanism, since deferred <code>schedule_nodes</code> actions only account for the
+originally-declared workload.</p>
 </li>
 </ol>
 <h3 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h3>
@@ -360,8 +362,8 @@ is passed as the final argument; the hook also receives <code>TORC_WORKFLOW_ID</
 <p><strong>Auto-scheduling:</strong></p>
 <ul>
 <li><code>--auto-schedule</code> — Automatically schedule new compute nodes when needed</li>
-<li><code>--auto-schedule-threshold &lt;N&gt;</code> — Minimum retry jobs before auto-scheduling when schedulers exist.
-Default: <code>5</code></li>
+<li><code>--auto-schedule-threshold &lt;N&gt;</code> — Minimum unplanned jobs (retries + <code>spawn_jobs</code> children) before
+auto-scheduling when schedulers exist. Default: <code>5</code></li>
 <li><code>--auto-schedule-cooldown &lt;SECONDS&gt;</code> — Cooldown between auto-schedule attempts. Default: <code>1800</code>
 (30 min)</li>
 <li><code>--auto-schedule-stranded-timeout &lt;SECONDS&gt;</code> — Schedule stranded jobs after this timeout even if
@@ -379,9 +381,10 @@ dynamically.</li>
 <p>When <code>--auto-schedule</code> is enabled:</p>
 <ol>
 <li><strong>No schedulers available</strong>: Immediately submits new allocations if ready jobs exist.</li>
-<li><strong>Threshold exceeded</strong>: If retry jobs (attempt_id &gt; 1) exceed <code>--auto-schedule-threshold</code> while
-schedulers are running, submits additional allocations after cooldown.</li>
-<li><strong>Stranded jobs</strong>: If retry jobs are below threshold but waiting longer than
+<li><strong>Threshold exceeded</strong>: If <strong>unplanned jobs</strong> (<code>origin IS NOT NULL</code> — failure-handler retries and
+<code>spawn_jobs</code> children) exceed <code>--auto-schedule-threshold</code> while schedulers are running, submits
+additional allocations after cooldown.</li>
+<li><strong>Stranded jobs</strong>: If unplanned jobs are below threshold but waiting longer than
 <code>--auto-schedule-stranded-timeout</code>, schedules anyway to prevent indefinite waiting.</li>
 </ol>
 <h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
@@ -397,7 +400,7 @@ torc watch 123 --recover --memory-multiplier 2.0 --runtime-multiplier 2.0
 # Recovery including unknown failures (transient errors)
 torc watch 123 --recover --retry-unknown
 
-# Auto-schedule: ensure retry jobs get scheduled
+# Auto-schedule: ensure unplanned jobs (retries + spawn_jobs children) get scheduled
 torc watch 123 --auto-schedule
 
 # Full production setup: recovery + auto-scheduling
@@ -1524,6 +1527,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-generate"><a class="header" href="#torc-slurm-generate"><code>torc slurm generate</code></a></h2>
 <p>Generate Slurm schedulers for a workflow based on job resource requirements</p>
 <p><strong>Usage:</strong> <code>torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;</code></p>
+<blockquote>
+<p><strong>Note:</strong> Analyzes the <strong>static</strong> workflow spec only. Workflows that add jobs at runtime via
+<a href="../tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a> should pair this with <code>torc watch --auto-schedule</code>,
+which detects spawned jobs and submits the extra Slurm allocations they need.</p>
+</blockquote>
 <h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL)</li>

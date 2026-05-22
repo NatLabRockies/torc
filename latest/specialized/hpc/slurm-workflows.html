@@ -601,6 +601,16 @@ when:</p>
 <li><strong>Create suboptimal scheduler groupings</strong>: Not sharing allocations when beneficial</li>
 <li><strong>Miss optimization opportunities</strong>: Not recognizing patterns that could share resources</li>
 </ol>
+<h3 id="dynamic-jobs-spawn_jobs"><a class="header" href="#dynamic-jobs-spawn_jobs">Dynamic Jobs (<code>spawn_jobs</code>)</a></h3>
+<p><code>torc slurm generate</code> analyzes the <strong>static</strong> workflow specification — the jobs declared at workflow
+creation. Jobs added at runtime by <a href="../../core/tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a> (the
+dynamic-jobs orchestrator pattern) are by definition not visible to it, so the generated schedulers
+allocate compute capacity only for the originally-declared workload.</p>
+<p>For iterative workflows that grow at runtime, pair <code>torc slurm generate</code> with
+<a href="../fault-tolerance/automatic-recovery.html#auto-scheduling-for-unplanned-jobs"><code>torc watch --auto-schedule</code></a>.
+The watch loop detects spawned jobs (rows with <code>origin = 'spawn'</code>) and submits additional Slurm
+allocations to cover them — without it, spawned children sit <code>Ready</code> until the originally-planned
+allocations happen to have spare capacity.</p>
 <p><strong>Best Practice</strong>: For production workflows, always run <code>torc slurm generate</code> first, review the
 output, and submit the reviewed configuration with <code>torc submit</code>.</p>
 <h2 id="advanced-manual-scheduler-configuration"><a class="header" href="#advanced-manual-scheduler-configuration">Advanced: Manual Scheduler Configuration</a></h2>

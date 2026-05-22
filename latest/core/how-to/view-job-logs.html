@@ -240,6 +240,27 @@ torc jobs list &lt;workflow_id&gt; --status failed
 # Then view each job's logs
 torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
 </code></pre>
+<h3 id="power-user-one-liner"><a class="header" href="#power-user-one-liner">Power-User One-Liner</a></h3>
+<p>Open every failed job's stderr file in your editor in one go:</p>
+<pre><code class="language-bash">nvim $(torc -f json results list --include-logs &lt;workflow_id&gt; \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr')
+</code></pre>
+<p>Swap <code>nvim</code> for any tool that takes a list of paths (<code>less</code>, <code>grep -l "OutOfMemory"</code>, <code>code -d</code>,
+etc.). Drop <code>select(.return_code != 0)</code> to open every result's stderr, not just the failures. If
+your workflow uses combined <code>stdio</code> mode (single <code>.log</code> file), replace <code>.job_stderr</code> with
+<code>.job_stdout</code>.</p>
+<h3 id="slurm-side-triage"><a class="header" href="#slurm-side-triage">Slurm-Side Triage</a></h3>
+<p>When you're SSH'd into a login node post-mortem-ing dozens of failures, opening every stderr in an
+editor is slow. Print the last N lines of each instead — usually enough to spot the error block:</p>
+<pre><code class="language-bash">torc -f json results list --include-logs &lt;workflow_id&gt; \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | xargs -I{} sh -c 'echo "=== {} ==="; tail -n 50 {}'
+</code></pre>
+<p>To find which failures share a root cause, grep across all of them at once:</p>
+<pre><code class="language-bash">torc -f json results list --include-logs &lt;workflow_id&gt; \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | xargs grep -l "OutOfMemoryError"
+</code></pre>
 <h2 id="view-logs-in-tui-or-dashboard"><a class="header" href="#view-logs-in-tui-or-dashboard">View Logs in TUI or Dashboard</a></h2>
 <p>You can also view job logs interactively:</p>
 <ul>

@@ -4168,6 +4168,27 @@ torc jobs list &lt;workflow_id&gt; --status failed
 # Then view each job's logs
 torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&gt;
 </code></pre>
+<h3 id="power-user-one-liner"><a class="header" href="#power-user-one-liner">Power-User One-Liner</a></h3>
+<p>Open every failed job's stderr file in your editor in one go:</p>
+<pre><code class="language-bash">nvim $(torc -f json results list --include-logs &lt;workflow_id&gt; \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr')
+</code></pre>
+<p>Swap <code>nvim</code> for any tool that takes a list of paths (<code>less</code>, <code>grep -l "OutOfMemory"</code>, <code>code -d</code>,
+etc.). Drop <code>select(.return_code != 0)</code> to open every result's stderr, not just the failures. If
+your workflow uses combined <code>stdio</code> mode (single <code>.log</code> file), replace <code>.job_stderr</code> with
+<code>.job_stdout</code>.</p>
+<h3 id="slurm-side-triage"><a class="header" href="#slurm-side-triage">Slurm-Side Triage</a></h3>
+<p>When you're SSH'd into a login node post-mortem-ing dozens of failures, opening every stderr in an
+editor is slow. Print the last N lines of each instead — usually enough to spot the error block:</p>
+<pre><code class="language-bash">torc -f json results list --include-logs &lt;workflow_id&gt; \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | xargs -I{} sh -c 'echo "=== {} ==="; tail -n 50 {}'
+</code></pre>
+<p>To find which failures share a root cause, grep across all of them at once:</p>
+<pre><code class="language-bash">torc -f json results list --include-logs &lt;workflow_id&gt; \
+  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | xargs grep -l "OutOfMemoryError"
+</code></pre>
 <h2 id="view-logs-in-tui-or-dashboard"><a class="header" href="#view-logs-in-tui-or-dashboard">View Logs in TUI or Dashboard</a></h2>
 <p>You can also view job logs interactively:</p>
 <ul>
@@ -6769,6 +6790,309 @@ torc user-data update $USER_DATA_ID --data "$(cat results.json)"
 <li><a href="core/tutorials/./simple-params.html">Tutorial 4: Simple Parameterization</a> - Create parameter sweeps</li>
 <li><a href="core/tutorials/./advanced-params.html">Tutorial 5: Advanced Parameterization</a> - Multi-dimensional grid searches</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="dynamic-jobs-iterative-workflows-with-spawn_jobs"><a class="header" href="#dynamic-jobs-iterative-workflows-with-spawn_jobs">Dynamic Jobs: Iterative Workflows with <code>spawn_jobs</code></a></h1>
+<p>This tutorial teaches you how to build a torc workflow whose <strong>iteration count is decided at
+runtime</strong> — for example a numerical refinement that keeps going until it converges. The shape can't
+be expressed as a static DAG, so torc gives you one primitive to extend the workflow as it runs:
+<strong><code>spawn_jobs</code></strong>.</p>
+<h2 id="learning-objectives-6"><a class="header" href="#learning-objectives-6">Learning Objectives</a></h2>
+<p>By the end of this tutorial, you will:</p>
+<ul>
+<li>Recognize when a static DAG can't express your workflow</li>
+<li>Write a lightweight orchestrator job that adds the next iteration at runtime</li>
+<li>Build a converging loop and watch it stop on its own</li>
+<li>Run multiple independent iterations concurrently in one workflow</li>
+<li>Know how to cap a runaway loop</li>
+</ul>
+<h2 id="prerequisites-13"><a class="header" href="#prerequisites-13">Prerequisites</a></h2>
+<ul>
+<li>Completed <a href="core/tutorials/./diamond.html">Tutorial 2: Diamond Workflow</a></li>
+<li>Torc server running (see <a href="core/tutorials/../../getting-started/quick-start-local.html">Quick Start (Local)</a>)</li>
+<li>The Python client installed: <code>pip install torc_client</code></li>
+<li><code>jq</code> and <code>awk</code> available on <code>PATH</code> (used by the demo worker)</li>
+<li>Roughly 15 minutes</li>
+</ul>
+<h2 id="the-problem-a-static-dag-cant-express"><a class="header" href="#the-problem-a-static-dag-cant-express">The Problem a Static DAG Can't Express</a></h2>
+<p>Most torc workflows are a fixed DAG declared up front: "run these N jobs in this order." That works
+when the work is known.</p>
+<p>Suppose you have a simulation that:</p>
+<ul>
+<li>Refines its estimate each iteration</li>
+<li>Converges when the change between iterations drops below a tolerance</li>
+<li>Might take 3 iterations or 30 — it depends on the data</li>
+</ul>
+<p>Three iterations of (worker → check → worker) you could write by hand. Thirty you can't, because you
+don't know it's thirty until you've already started.</p>
+<h3 id="a-naive-workaround-that-doesnt-work"><a class="header" href="#a-naive-workaround-that-doesnt-work">A Naive Workaround That Doesn't Work</a></h3>
+<p><strong>Pre-allocate the maximum and cancel the rest.</strong> Declare 30 worker jobs in a chain and have the
+converging iteration cancel the remaining 27.</p>
+<p>This is wasteful (the unused jobs still occupy slots in the dependency graph), fragile (cancellation
+has to live in your scripts), and pushes discovery into user code. For 10 concurrent runs of this
+pattern you'd be staring at 300 jobs that mostly won't run, and a debugging story that gets worse
+with every retry.</p>
+<p>There's a better primitive.</p>
+<h2 id="the-spawn-pattern"><a class="header" href="#the-spawn-pattern">The Spawn Pattern</a></h2>
+<p>A lightweight <strong>orchestrator</strong> job does three things:</p>
+<ol>
+<li>Inspects the previous iteration's output (cheap — just reads a file or a small <code>user_data</code>
+record)</li>
+<li>Calls <code>spawn_jobs</code> to add the next worker plus a <strong>continuation of itself</strong>, both blocked on this
+orchestrator</li>
+<li>Exits 0</li>
+</ol>
+<p>The torc runner completes the orchestrator on exit (the normal path). The spawned jobs were inserted
+<code>blocked</code> with an implicit dependency edge on the calling orchestrator, so the unblock cascade
+promotes them as soon as the orchestrator becomes terminal. The next orchestrator generation then
+does the same thing. <strong>Convergence is "spawn nothing."</strong> When the orchestrator decides it's done, it
+calls <code>spawn_jobs</code> with <code>jobs=[]</code> (optionally with a final state payload) and exits. With no further
+jobs in the queue, the workflow finishes naturally.</p>
+<h3 id="what-spawn_jobs-does-in-one-call"><a class="header" href="#what-spawn_jobs-does-in-one-call">What <code>spawn_jobs</code> Does in One Call</a></h3>
+<p>In one database transaction, the server:</p>
+<ol>
+<li>Inserts each requested job as <code>Blocked</code></li>
+<li>Adds an implicit <code>job_depends_on</code> edge to the calling orchestrator (you don't list it yourself)</li>
+<li>Resolves explicit <code>depends_on</code> against existing jobs and against siblings in the same batch</li>
+<li>Persists an opaque JSON <code>state</code> payload as an immutable per-generation record</li>
+</ol>
+<p>If anything in the batch is invalid — unknown <code>resource_requirements</code>, a dependency cycle, the cap
+exceeded — the whole transaction aborts and nothing is persisted.</p>
+<h2 id="step-1-write-the-worker"><a class="header" href="#step-1-write-the-worker">Step 1: Write the Worker</a></h2>
+<p>The "real work" of each iteration. For this tutorial we'll simulate convergence: each iteration's
+metric is half the previous one, so it crosses our tolerance after 7 generations.</p>
+<p>Save as <code>worker.sh</code>:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+set -euo pipefail
+lineage="$1"
+gen="$2"
+work_dir="./work/$lineage"
+mkdir -p "$work_dir"
+
+prev_file="$work_dir/worker_i$(printf '%02d' $((10#$gen - 1))).json"
+prior_metric=$(jq -r '.metric' "$prev_file" 2&gt;/dev/null || echo "1.0")
+new_metric=$(awk "BEGIN { print $prior_metric / 2 }")
+out_file="$work_dir/worker_i$(printf '%02d' "$gen").json"
+printf '{"metric": %s}\n' "$new_metric" &gt; "$out_file"
+echo "iter $gen: $prior_metric -&gt; $new_metric" &gt;&amp;2
+</code></pre>
+<h2 id="step-2-write-the-orchestrator"><a class="header" href="#step-2-write-the-orchestrator">Step 2: Write the Orchestrator</a></h2>
+<p>The orchestrator reads the prior worker's output, decides whether to continue, and either spawns the
+next iteration or stops.</p>
+<p>Save as <code>orchestrator.py</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+from torc import Orchestrator, SpawnJobModel
+
+CONVERGENCE_TOLERANCE = 0.01
+
+# `Orchestrator.from_env()` reads TORC_API_URL / TORC_WORKFLOW_ID / TORC_JOB_ID
+# from the env and resolves the lineage from TORC_ORCHESTRATOR_LINEAGE_ID
+# (set by torc on every spawned continuation), falling back to `sys.argv[1]`
+# on the seed invocation.
+orch = Orchestrator.from_env(lineage_fallback=sys.argv[1] if len(sys.argv) &gt; 1 else None)
+
+current_gen = orch.generation   # 0 on the seed, derived from torc's lineage records
+next_gen = current_gen + 1
+
+# Read prior worker's metric (None on the seed generation).
+prior_file = Path(f"./work/{orch.lineage}/worker_i{current_gen:02d}.json")
+prior_metric = json.loads(prior_file.read_text())["metric"] if prior_file.exists() else None
+print(f"[orch {orch.lineage}] current_gen={current_gen} prior_metric={prior_metric}", file=sys.stderr)
+
+# Convergence: spawn nothing, write a final state record, exit.
+if prior_metric is not None and prior_metric &lt; CONVERGENCE_TOLERANCE:
+    orch.converge(state={
+        "converged": True, "final_metric": prior_metric, "iterations": current_gen,
+    })
+    print(f"[orch {orch.lineage}] converged at gen={current_gen}", file=sys.stderr)
+    sys.exit(0)
+
+# Otherwise spawn the next worker + the next orchestrator continuation.
+worker = f"worker_{orch.lineage}_i{next_gen:02d}"
+cont = f"orch_{orch.lineage}_g{next_gen:02d}"
+orch.spawn(
+    jobs=[
+        SpawnJobModel(
+            name=worker,
+            command=f"bash {os.path.abspath('worker.sh')} {orch.lineage} {next_gen}",
+            resource_requirements="worker_rr",
+        ),
+        SpawnJobModel(
+            name=cont,
+            command=f"python3 {os.path.abspath('orchestrator.py')}",
+            resource_requirements="orch_rr",
+            depends_on=[worker],
+            cancel_on_blocking_job_failure=False,
+        ),
+    ],
+    state={"generation": next_gen, "prior_metric": prior_metric},
+)
+print(f"[orch {orch.lineage}] spawned gen={next_gen}: {worker} -&gt; {cont}", file=sys.stderr)
+</code></pre>
+<p>Notice what the orchestrator does <strong>not</strong> do:</p>
+<ul>
+<li>It does <strong>not</strong> list itself in any spawned job's <code>depends_on</code>. The server adds that edge.</li>
+<li>It does <strong>not</strong> need to know how torc encodes per-lineage iteration state.
+<code>Orchestrator.generation</code> walks the <code>__torc_lineage__&lt;lineage&gt;__g######</code> <code>user_data</code> records on
+its behalf.</li>
+</ul>
+<h2 id="step-3-write-the-workflow-spec"><a class="header" href="#step-3-write-the-workflow-spec">Step 3: Write the Workflow Spec</a></h2>
+<p>Save as <code>iterative.yaml</code>:</p>
+<pre><code class="language-yaml">name: iterative_refinement
+description: Iterative loop that converges via spawn_jobs
+
+dynamic_jobs:
+  max_iterations: 20   # safety cap; 7 are expected
+
+resource_requirements:
+  - name: worker_rr
+    num_cpus: 1
+    memory: 256m
+  - name: orch_rr
+    num_cpus: 1
+    memory: 128m
+
+jobs:
+  - name: orch_caseA_g00
+    command: python3 orchestrator.py caseA
+    resource_requirements: orch_rr
+</code></pre>
+<p>The workflow declares <strong>one</strong> job — the seed orchestrator. Every worker and every continuation is
+added at runtime by <code>spawn_jobs</code>.</p>
+<h2 id="step-4-run-it"><a class="header" href="#step-4-run-it">Step 4: Run It</a></h2>
+<pre><code class="language-bash">torc run iterative.yaml
+</code></pre>
+<p>The seed orchestrator runs, sees no prior worker, and spawns <code>worker_caseA_i01</code> plus
+<code>orch_caseA_g01</code>. The runner completes the seed; the unblock cascade promotes the worker; the worker
+writes its metric; the next orchestrator unblocks, reads the metric, and spawns the next pair. This
+repeats until the metric drops below <code>0.01</code> (around generation 7).</p>
+<h2 id="step-5-watch-it-happen"><a class="header" href="#step-5-watch-it-happen">Step 5: Watch It Happen</a></h2>
+<p>While the workflow runs, list jobs at any time to watch new ones appear. Initially the table shows
+only the seed (<code>orch_caseA_g00</code>); after a few seconds <code>worker_caseA_i01</code> and <code>orch_caseA_g01</code> join
+it; and so on until convergence at generation 7.</p>
+<pre><code class="language-bash">torc jobs list &lt;workflow_id&gt;
+</code></pre>
+<p>The default table prints <code>ID | Name | Status | Priority | Command</code> — useful for tracking progress
+but not for telling spec-declared jobs apart from spawned ones. For that, dump JSON and inspect each
+job's <code>origin</code> field (<code>"spawn"</code> for jobs added by <code>spawn_jobs</code>, absent for jobs declared in the
+workflow spec):</p>
+<pre><code class="language-bash">torc -f json jobs list &lt;workflow_id&gt; \
+  | jq -r '.jobs[] | [.name, .status, (.origin // "(declared)")] | @tsv'
+</code></pre>
+<pre><code>orch_caseA_g00      completed   (declared)
+worker_caseA_i01    completed   spawn
+orch_caseA_g01      completed   spawn
+worker_caseA_i02    completed   spawn
+orch_caseA_g02      completed   spawn
+...
+worker_caseA_i07    completed   spawn
+orch_caseA_g07      completed   spawn
+</code></pre>
+<p>Things to notice:</p>
+<ul>
+<li>The seed orchestrator has no <code>origin</code> set (declared at workflow creation, so the field is omitted
+from the JSON). Every other job has <code>origin = "spawn"</code>.</li>
+<li>The orchestrators in the middle never produced output of their own — they just inspected the prior
+metric and re-spawned.</li>
+<li>The last orchestrator generation called <code>spawn_jobs</code> with <code>jobs=[]</code> and the workflow finished
+naturally with no leftover Ready or Blocked jobs.</li>
+</ul>
+<p>To inspect the final state record:</p>
+<pre><code class="language-bash">torc user-data list &lt;workflow_id&gt; | grep __torc_lineage__caseA__final
+</code></pre>
+<p>It holds <code>{"converged": true, "final_metric": ..., "iterations": 7}</code> — the payload your orchestrator
+sent on the converging call.</p>
+<h2 id="step-6-run-multiple-concurrent-lineages"><a class="header" href="#step-6-run-multiple-concurrent-lineages">Step 6: Run Multiple Concurrent Lineages</a></h2>
+<p>What if you want 10 independent runs of this same loop? Add 10 seed orchestrators:</p>
+<pre><code class="language-yaml">jobs:
+  - name: orch_caseA_g00
+    command: python3 orchestrator.py caseA
+    resource_requirements: orch_rr
+  - name: orch_caseB_g00
+    command: python3 orchestrator.py caseB
+    resource_requirements: orch_rr
+  # ... add caseC ... caseJ ...
+</code></pre>
+<p>Each runs its own independent lineage. Their per-lineage state records (<code>__torc_lineage__caseA__*</code>,
+<code>__torc_lineage__caseB__*</code>, …) and iteration counters do not interact. Torc's resource packer
+interleaves all of their workers across compute nodes; the orchestrators are cheap and don't crowd
+anything.</p>
+<p>The <code>max_iterations: 20</code> cap is <strong>per lineage</strong>, not per workflow. Case A iterating 20 times has no
+effect on Case B's allowance.</p>
+<h2 id="safety-the-iteration-cap"><a class="header" href="#safety-the-iteration-cap">Safety: the Iteration Cap</a></h2>
+<p><code>dynamic_jobs.max_iterations</code> is a runaway guard. The first attempted iteration that would push a
+lineage past the cap is rejected with HTTP 422:</p>
+<pre><code>Per-lineage iteration cap reached for lineage 'caseA':
+attempted iteration 21 exceeds dynamic_jobs.max_iterations=20 (current spawn_count=20)
+</code></pre>
+<p>When the cap rejects a call, nothing is persisted, the orchestrator stays <code>Running</code>, and you can
+investigate or raise the cap on the next run. Omit the field to use the server default (1000).</p>
+<p>The server also validates the cap at workflow-creation time: <code>max_iterations: 0</code> or negative values
+are rejected up front with 422 — they would silently disable spawning otherwise.</p>
+<h2 id="what-about-slurm"><a class="header" href="#what-about-slurm">What About Slurm?</a></h2>
+<p>A spawned job is a normal job from Slurm's perspective: it sits <code>Ready</code> until a compute node with
+matching resources claims it. If the workflow was submitted with an allocation sized only for the
+seed orchestrators, a spawned worker may have no fitting node.</p>
+<p>The fix is the same as for failure-handler retries — run <code>torc watch</code> alongside the workflow with
+<code>--auto-schedule</code>:</p>
+<pre><code class="language-bash">torc watch --auto-schedule &lt;workflow_id&gt;
+</code></pre>
+<p>The watch loop counts ready jobs with <code>origin IS NOT NULL</code> (spawned + retried) and asks
+<code>regenerate_and_submit</code> to mint a Slurm allocation sized for the currently-pending resource shapes
+when needed.</p>
+<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
+<h3 id="request-body"><a class="header" href="#request-body">Request Body</a></h3>
+<pre><code class="language-jsonc">{
+  "lineage": "caseA",
+  "jobs": [
+    {
+      "name": "worker_caseA_i01",
+      "command": "bash worker.sh caseA 1",
+      "resource_requirements": "worker_rr"
+    },
+    {
+      "name": "orch_caseA_g01",
+      "command": "python3 orchestrator.py",
+      "resource_requirements": "orch_rr",
+      "depends_on": ["worker_caseA_i01"],
+      "cancel_on_blocking_job_failure": false
+    }
+  ],
+  "state": { "generation": 1 }
+}
+</code></pre>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Rule</th><th>Why</th></tr></thead><tbody>
+<tr><td>Every spawned job is auto-blocked on the calling orchestrator</td><td>Without this, children would race the runner's completion of the caller; you'd have to coordinate it yourself</td></tr>
+<tr><td><code>depends_on</code> may reference existing jobs or siblings in the same batch</td><td>Lets one spawn call describe a small DAG (worker → next-orchestrator)</td></tr>
+<tr><td>The sibling subgraph must be acyclic</td><td>Rejected 422; the same dependency rule as static jobs</td></tr>
+<tr><td><code>resource_requirements</code> must name a record declared at workflow creation</td><td>Falls back to the workflow's <code>default</code> RR if omitted, same as <code>create_job</code></td></tr>
+<tr><td>Replays (same names already exist) are idempotent no-ops</td><td>Lets you safely re-run an orchestrator that crashed after committing its spawn — no duplicate jobs, no double-counted iteration</td></tr>
+<tr><td>Convergence is <code>jobs=[]</code>, optionally with a final <code>state</code> payload</td><td>No separate "stop" endpoint; the workflow finishes naturally once nothing else is pending</td></tr>
+<tr><td><code>job.origin</code> is <code>'spawn'</code> for spawned jobs, <code>'retry'</code> for retries, <code>NULL</code> for declared</td><td>Lets <code>torc watch --auto-schedule</code> recognize jobs that need an unplanned Slurm allocation; lets reports separate static plan from dynamic add</td></tr>
+</tbody></table>
+</div>
+<h3 id="what-stays-the-same-as-static-jobs"><a class="header" href="#what-stays-the-same-as-static-jobs">What Stays the Same as Static Jobs</a></h3>
+<ul>
+<li>Status lifecycle (<code>Blocked → Ready → Running → Completed/Failed</code>)</li>
+<li>Resource claiming and packing</li>
+<li>Restart and reset semantics (a row created by <code>spawn_jobs</code> resets the same way a declared job
+does)</li>
+<li>File and <code>user_data</code> dependencies</li>
+<li>Failure handlers and <code>cancel_on_blocking_job_failure</code></li>
+</ul>
+<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
+<ul>
+<li>The energy-modeling example under <code>examples/</code> is the same pattern applied to a ReEDS↔PRAS feedback
+loop. The orchestrator script is <code>examples/scripts/dynamic_orchestrator.py</code>; two yaml variants
+share it:
+<ul>
+<li><code>examples/yaml/dynamic_orchestrator_local.yaml</code> — laptop-scale resources, runs under <code>torc run</code>.</li>
+<li><code>examples/yaml/dynamic_orchestrator_slurm.yaml</code> — realistic HPC resource shapes (ReEDS at 8 CPU
+/ 10 GB, PRAS at 32 CPU / 120 GB), submitted with <code>torc submit</code>.</li>
+</ul>
+</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="monitoring--debugging"><a class="header" href="#monitoring--debugging">Monitoring &amp; Debugging</a></h1>
 <p>Tools and techniques for monitoring workflows and debugging issues.</p>
 <ul>
@@ -6802,7 +7126,7 @@ cargo build --release -p torc-dash
 # Binary location
 ./target/release/torc-dash
 </code></pre>
-<h3 id="prerequisites-13"><a class="header" href="#prerequisites-13">Prerequisites</a></h3>
+<h3 id="prerequisites-14"><a class="header" href="#prerequisites-14">Prerequisites</a></h3>
 <ul>
 <li>A running <code>torc-server</code> (or use <code>--standalone</code> mode to auto-start one)</li>
 <li>The <code>torc</code> CLI binary in your PATH (for workflow execution features)</li>
@@ -7174,7 +7498,7 @@ Connect via <code>ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node</code>.<
 <li><strong>Plotly.js</strong> for resource charts</li>
 <li><strong>Custom components</strong> for tables and forms</li>
 </ul>
-<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
+<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
 <ul>
 <li><a href="core/monitoring/../../specialized/tools/dashboard-deployment.html">Dashboard Deployment Tutorial</a> - Detailed
 deployment scenarios</li>
@@ -7578,7 +7902,7 @@ risk of failure in future runs.</p>
 <li><code>torc workflows check-resources &lt;id&gt;</code> - Check for resource violations</li>
 <li><code>torc results list --include-logs &lt;id&gt;</code> - Generate detailed results with log file paths</li>
 </ul>
-<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
+<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
 <ul>
 <li><a href="core/monitoring/./resource-monitoring.html">Resource Monitoring</a> - Track CPU and memory usage</li>
 <li><a href="core/monitoring/./debugging.html">Debugging Workflows</a> - Troubleshoot failed jobs</li>
@@ -7716,7 +8040,7 @@ SELECT * FROM job_metadata;
 <ul>
 <li>Decrease <code>sample_interval_seconds</code> to catch short-lived processes</li>
 </ul>
-<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
+<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
 <ul>
 <li><a href="core/monitoring/../reference/resource-monitoring.html">Resource Monitoring Reference</a> - Configuration options and
 database schema</li>
@@ -8390,7 +8714,7 @@ torc logs analyze wf&lt;id&gt;/
 <li><a href="core/monitoring/debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
 <li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="reference"><a class="header" href="#reference">Reference</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reference-1"><a class="header" href="#reference-1">Reference</a></h1>
 <p>Comprehensive reference documentation.</p>
 <blockquote>
 <p><strong>Quick Reference:</strong> The <a href="core/reference/./cli-cheatsheet.html">CLI Cheat Sheet</a> provides a one-page overview of
@@ -8650,8 +8974,10 @@ complete. Use <code>--max-retries</code> to limit recovery attempts.</p>
 <p><strong>With auto-scheduling</strong> (<code>--auto-schedule</code>):</p>
 <pre><code class="language-bash">torc watch 123 --auto-schedule
 </code></pre>
-<p>Automatically submits new Slurm allocations when retry jobs are waiting. Essential for workflows
-using failure handlers that create retry jobs.</p>
+<p>Automatically submits new Slurm allocations when <strong>unplanned</strong> jobs are waiting — failure-handler
+retries and <code>spawn_jobs</code> children (anything with <code>origin IS NOT NULL</code>). Essential for workflows
+that rely on either mechanism, since deferred <code>schedule_nodes</code> actions only account for the
+originally-declared workload.</p>
 </li>
 </ol>
 <h3 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h3>
@@ -8681,8 +9007,8 @@ is passed as the final argument; the hook also receives <code>TORC_WORKFLOW_ID</
 <p><strong>Auto-scheduling:</strong></p>
 <ul>
 <li><code>--auto-schedule</code> — Automatically schedule new compute nodes when needed</li>
-<li><code>--auto-schedule-threshold &lt;N&gt;</code> — Minimum retry jobs before auto-scheduling when schedulers exist.
-Default: <code>5</code></li>
+<li><code>--auto-schedule-threshold &lt;N&gt;</code> — Minimum unplanned jobs (retries + <code>spawn_jobs</code> children) before
+auto-scheduling when schedulers exist. Default: <code>5</code></li>
 <li><code>--auto-schedule-cooldown &lt;SECONDS&gt;</code> — Cooldown between auto-schedule attempts. Default: <code>1800</code>
 (30 min)</li>
 <li><code>--auto-schedule-stranded-timeout &lt;SECONDS&gt;</code> — Schedule stranded jobs after this timeout even if
@@ -8700,9 +9026,10 @@ dynamically.</li>
 <p>When <code>--auto-schedule</code> is enabled:</p>
 <ol>
 <li><strong>No schedulers available</strong>: Immediately submits new allocations if ready jobs exist.</li>
-<li><strong>Threshold exceeded</strong>: If retry jobs (attempt_id &gt; 1) exceed <code>--auto-schedule-threshold</code> while
-schedulers are running, submits additional allocations after cooldown.</li>
-<li><strong>Stranded jobs</strong>: If retry jobs are below threshold but waiting longer than
+<li><strong>Threshold exceeded</strong>: If <strong>unplanned jobs</strong> (<code>origin IS NOT NULL</code> — failure-handler retries and
+<code>spawn_jobs</code> children) exceed <code>--auto-schedule-threshold</code> while schedulers are running, submits
+additional allocations after cooldown.</li>
+<li><strong>Stranded jobs</strong>: If unplanned jobs are below threshold but waiting longer than
 <code>--auto-schedule-stranded-timeout</code>, schedules anyway to prevent indefinite waiting.</li>
 </ol>
 <h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
@@ -8718,7 +9045,7 @@ torc watch 123 --recover --memory-multiplier 2.0 --runtime-multiplier 2.0
 # Recovery including unknown failures (transient errors)
 torc watch 123 --recover --retry-unknown
 
-# Auto-schedule: ensure retry jobs get scheduled
+# Auto-schedule: ensure unplanned jobs (retries + spawn_jobs children) get scheduled
 torc watch 123 --auto-schedule
 
 # Full production setup: recovery + auto-scheduling
@@ -9845,6 +10172,11 @@ done, ready, scheduled, running, pending, disabled)</li>
 <h2 id="torc-slurm-generate"><a class="header" href="#torc-slurm-generate"><code>torc slurm generate</code></a></h2>
 <p>Generate Slurm schedulers for a workflow based on job resource requirements</p>
 <p><strong>Usage:</strong> <code>torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;</code></p>
+<blockquote>
+<p><strong>Note:</strong> Analyzes the <strong>static</strong> workflow spec only. Workflows that add jobs at runtime via
+<a href="core/reference/../tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a> should pair this with <code>torc watch --auto-schedule</code>,
+which detects spawned jobs and submits the extra Slurm allocations they need.</p>
+</blockquote>
 <h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
 <ul>
 <li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL)</li>
@@ -12794,6 +13126,16 @@ when:</p>
 <li><strong>Create suboptimal scheduler groupings</strong>: Not sharing allocations when beneficial</li>
 <li><strong>Miss optimization opportunities</strong>: Not recognizing patterns that could share resources</li>
 </ol>
+<h3 id="dynamic-jobs-spawn_jobs"><a class="header" href="#dynamic-jobs-spawn_jobs">Dynamic Jobs (<code>spawn_jobs</code>)</a></h3>
+<p><code>torc slurm generate</code> analyzes the <strong>static</strong> workflow specification — the jobs declared at workflow
+creation. Jobs added at runtime by <a href="specialized/hpc/../../core/tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a> (the
+dynamic-jobs orchestrator pattern) are by definition not visible to it, so the generated schedulers
+allocate compute capacity only for the originally-declared workload.</p>
+<p>For iterative workflows that grow at runtime, pair <code>torc slurm generate</code> with
+<a href="specialized/hpc/../fault-tolerance/automatic-recovery.html#auto-scheduling-for-unplanned-jobs"><code>torc watch --auto-schedule</code></a>.
+The watch loop detects spawned jobs (rows with <code>origin = 'spawn'</code>) and submits additional Slurm
+allocations to cover them — without it, spawned children sit <code>Ready</code> until the originally-planned
+allocations happen to have spare capacity.</p>
 <p><strong>Best Practice</strong>: For production workflows, always run <code>torc slurm generate</code> first, review the
 output, and submit the reviewed configuration with <code>torc submit</code>.</p>
 <h2 id="advanced-manual-scheduler-configuration"><a class="header" href="#advanced-manual-scheduler-configuration">Advanced: Manual Scheduler Configuration</a></h2>
@@ -15693,23 +16035,25 @@ done
 <li>If the hook fails (non-zero exit), auto-recovery stops with an error</li>
 <li>After the hook succeeds, failed jobs are reset and retried</li>
 </ol>
-<h2 id="auto-scheduling-for-failure-handlers"><a class="header" href="#auto-scheduling-for-failure-handlers">Auto-Scheduling for Failure Handlers</a></h2>
-<p>When using <a href="specialized/fault-tolerance/./failure-handlers.html">failure handlers</a> that create retry jobs, the originally planned
-compute capacity may not be sufficient. The <code>--auto-schedule</code> option enables automatic scheduling of
-additional Slurm nodes when:</p>
+<h2 id="auto-scheduling-for-unplanned-jobs"><a class="header" href="#auto-scheduling-for-unplanned-jobs">Auto-Scheduling for Unplanned Jobs</a></h2>
+<p>Failure-handler retries and <code>spawn_jobs</code> children are <strong>unplanned</strong> — the originally-deferred
+<code>schedule_nodes</code> actions only allocate capacity for the workload declared at workflow creation, so
+either mechanism can leave new jobs sitting <code>Ready</code> with no compute behind them. The
+<code>--auto-schedule</code> option enables automatic scheduling of additional Slurm nodes when:</p>
 <ol>
 <li>
 <p><strong>No schedulers available</strong>: If there are ready jobs but no active or pending Slurm allocations,
 new schedulers are immediately regenerated and submitted.</p>
 </li>
 <li>
-<p><strong>Retry jobs accumulating</strong>: If there are active schedulers but retry jobs (jobs with
-<code>attempt_id &gt; 1</code>) are accumulating beyond the threshold, additional schedulers are submitted
-after the cooldown period.</p>
+<p><strong>Unplanned jobs accumulating</strong>: If there are active schedulers but jobs with
+<code>origin IS NOT NULL</code> (retries marked <code>'retry'</code>, plus <code>spawn_jobs</code> children marked <code>'spawn'</code>) are
+accumulating beyond the threshold, additional schedulers are submitted after the cooldown period.</p>
 </li>
 </ol>
-<p>This is particularly useful for workflows with failure handlers that retry failed jobs, ensuring
-those retries get scheduled without manual intervention.</p>
+<p>This is particularly useful for workflows that either retry failed jobs via failure handlers or add
+jobs at runtime via <a href="specialized/fault-tolerance/../../core/tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a>, ensuring those jobs get
+scheduled without manual intervention.</p>
 <h3 id="example-failure-handler-with-auto-scheduling"><a class="header" href="#example-failure-handler-with-auto-scheduling">Example: Failure Handler with Auto-Scheduling</a></h3>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
 torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
@@ -15995,7 +16339,7 @@ tracking</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial-configurable-failure-handlers"><a class="header" href="#tutorial-configurable-failure-handlers">Tutorial: Configurable Failure Handlers</a></h1>
 <p>This tutorial shows how to configure automatic job retry based on specific exit codes, with optional
 recovery scripts.</p>
-<h2 id="learning-objectives-6"><a class="header" href="#learning-objectives-6">Learning Objectives</a></h2>
+<h2 id="learning-objectives-7"><a class="header" href="#learning-objectives-7">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand failure handlers and rules</li>
@@ -16003,7 +16347,7 @@ recovery scripts.</p>
 <li>Write recovery scripts</li>
 <li>Monitor retry attempts</li>
 </ul>
-<h2 id="prerequisites-14"><a class="header" href="#prerequisites-14">Prerequisites</a></h2>
+<h2 id="prerequisites-15"><a class="header" href="#prerequisites-15">Prerequisites</a></h2>
 <ul>
 <li>Torc installed with the client feature</li>
 <li>A running Torc server</li>
@@ -16497,7 +16841,7 @@ based on user feedback.</p>
 <p>This tutorial shows how to use AI agents (Claude Code, GitHub Copilot, or custom MCP clients) to
 intelligently classify and recover from workflow failures that can't be handled by rule-based
 mechanisms.</p>
-<h2 id="learning-objectives-7"><a class="header" href="#learning-objectives-7">Learning Objectives</a></h2>
+<h2 id="learning-objectives-8"><a class="header" href="#learning-objectives-8">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand the <code>pending_failed</code> job status</li>
@@ -16505,7 +16849,7 @@ mechanisms.</p>
 <li>Use the torc MCP server with AI agents</li>
 <li>Classify transient vs permanent errors</li>
 </ul>
-<h2 id="prerequisites-15"><a class="header" href="#prerequisites-15">Prerequisites</a></h2>
+<h2 id="prerequisites-16"><a class="header" href="#prerequisites-16">Prerequisites</a></h2>
 <ul>
 <li>Torc installed with the client feature</li>
 <li>A running Torc server</li>
@@ -16825,7 +17169,7 @@ Agent: [Uses classify_and_resolve_failures with dry_run=false]
 <p>This tutorial teaches you how to configure Torc workflows so that long-running jobs receive an early
 warning signal before Slurm kills them, giving them time to save progress and automatically resume
 from the last checkpoint.</p>
-<h2 id="learning-objectives-8"><a class="header" href="#learning-objectives-8">Learning Objectives</a></h2>
+<h2 id="learning-objectives-9"><a class="header" href="#learning-objectives-9">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand how <code>srun_termination_signal</code> delivers early SIGTERM to running jobs</li>
@@ -16834,7 +17178,7 @@ from the last checkpoint.</p>
 <li>Use a non-zero exit code with a failure handler so Torc automatically retries the job</li>
 <li>Configure a complete Torc workflow with early termination support</li>
 </ul>
-<h2 id="prerequisites-16"><a class="header" href="#prerequisites-16">Prerequisites</a></h2>
+<h2 id="prerequisites-17"><a class="header" href="#prerequisites-17">Prerequisites</a></h2>
 <ul>
 <li>Torc server running</li>
 <li>Access to a Slurm cluster</li>
@@ -17102,7 +17446,7 @@ expires.</p>
 <li>How to write atomic checkpoints that survive unexpected kills</li>
 <li>How to use a dedicated exit code with a failure handler for automatic checkpoint-and-retry</li>
 </ul>
-<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
+<h2 id="next-steps-15"><a class="header" href="#next-steps-15">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./automatic-recovery.html">Automatic Failure Recovery</a> — Configure Torc to automatically retry or
 recover failed jobs</li>
@@ -18380,7 +18724,7 @@ check that the proxy is configured and the URL is correct.</p>
 <li>Confirm the CA certificate path is on a shared filesystem visible to compute nodes</li>
 <li>Check that your config file or CLI flags are set before submitting the workflow</li>
 </ol>
-<h2 id="reference-1"><a class="header" href="#reference-1">Reference</a></h2>
+<h2 id="reference-2"><a class="header" href="#reference-2">Reference</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>CLI Flag</th><th>Environment Variable</th><th>Config Key</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--tls-ca-cert &lt;PATH&gt;</code></td><td><code>TORC_TLS_CA_CERT</code></td><td><code>client.tls.ca_cert</code></td><td>PEM-encoded CA certificate path</td></tr>
 <tr><td><code>--tls-insecure</code></td><td><code>TORC_TLS_INSECURE</code></td><td><code>client.tls.insecure</code></td><td>Skip certificate verification</td></tr>
@@ -18599,7 +18943,7 @@ users. The admin group is a system group that cannot be deleted or modified via 
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial-team-based-access-control-with-access-groups"><a class="header" href="#tutorial-team-based-access-control-with-access-groups">Tutorial: Team-Based Access Control with Access Groups</a></h1>
 <p>This tutorial walks you through setting up team-based access control so that workflows can be shared
 within teams while remaining private from other users.</p>
-<h2 id="learning-objectives-9"><a class="header" href="#learning-objectives-9">Learning Objectives</a></h2>
+<h2 id="learning-objectives-10"><a class="header" href="#learning-objectives-10">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand how Torc's access control system works</li>
@@ -18608,7 +18952,7 @@ within teams while remaining private from other users.</p>
 <li>Share workflows with specific teams</li>
 <li>Enable access control enforcement on the server</li>
 </ul>
-<h2 id="prerequisites-17"><a class="header" href="#prerequisites-17">Prerequisites</a></h2>
+<h2 id="prerequisites-18"><a class="header" href="#prerequisites-18">Prerequisites</a></h2>
 <ul>
 <li>Torc server and CLI installed</li>
 <li>Basic familiarity with the command line</li>
@@ -18932,7 +19276,7 @@ user to an appropriate group.</p>
 <li>How to share workflows with teams</li>
 <li>How access control decisions are made</li>
 </ul>
-<h2 id="next-steps-15"><a class="header" href="#next-steps-15">Next Steps</a></h2>
+<h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="specialized/admin/./configuration.html">Configuration Files</a> to set up persistent configuration</li>
 <li>Explore <a href="specialized/admin/./server-deployment.html">Server Deployment</a> for production setups</li>
@@ -19444,7 +19788,7 @@ integration</li>
 <p>This tutorial walks you through creating a workflow using the interactive wizard in the Torc
 dashboard. The wizard provides a guided, step-by-step interface for building workflows without
 writing YAML or JSON files.</p>
-<h2 id="learning-objectives-10"><a class="header" href="#learning-objectives-10">Learning Objectives</a></h2>
+<h2 id="learning-objectives-11"><a class="header" href="#learning-objectives-11">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Create a multi-job workflow using the dashboard wizard</li>
@@ -19453,7 +19797,7 @@ writing YAML or JSON files.</p>
 <li>Set up workflow actions to automatically schedule nodes</li>
 <li>Understand how the wizard generates workflow specifications</li>
 </ul>
-<h2 id="prerequisites-18"><a class="header" href="#prerequisites-18">Prerequisites</a></h2>
+<h2 id="prerequisites-19"><a class="header" href="#prerequisites-19">Prerequisites</a></h2>
 <ul>
 <li>Torc dashboard running (see <a href="specialized/tools/./dashboard-deployment.html">Dashboard Deployment</a>)</li>
 <li>Basic understanding of Torc workflows</li>
@@ -19749,7 +20093,7 @@ postprocess
 <li>How to set up actions for automatic node scheduling</li>
 <li>How the wizard generates workflow specifications</li>
 </ul>
-<h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
+<h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/tools/./diamond.html">Diamond Workflow</a> - Learn about file-based implicit dependencies</li>
 <li><a href="specialized/tools/./simple-params.html">Simple Parameterization</a> - Create parameter sweeps programmatically</li>
@@ -19765,7 +20109,7 @@ without specifying options on every command.</p>
 <li>Using environment variables for configuration</li>
 <li>Common configuration patterns</li>
 </ul>
-<h2 id="prerequisites-19"><a class="header" href="#prerequisites-19">Prerequisites</a></h2>
+<h2 id="prerequisites-20"><a class="header" href="#prerequisites-20">Prerequisites</a></h2>
 <ul>
 <li>Torc CLI installed</li>
 <li>Basic familiarity with TOML format</li>
@@ -19986,7 +20330,7 @@ TORC_CLIENT_API_URL=http://...
 <p>See the merged result of all configuration sources:</p>
 <pre><code class="language-bash">torc config show
 </code></pre>
-<h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
+<h2 id="next-steps-18"><a class="header" href="#next-steps-18">Next Steps</a></h2>
 <ul>
 <li>See the <a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a> for all available options</li>
 <li>Learn about <a href="specialized/tools/../admin/server-deployment.html">Server Deployment</a> for production setups</li>
@@ -20007,7 +20351,7 @@ workflow and job management capabilities without requiring a web browser or SSH 
 <tr><td>3. Shared Server</td><td>HPC login node + dedicated server</td><td>Large-scale multi-user HPC workflows</td></tr>
 </tbody></table>
 </div>
-<h2 id="prerequisites-20"><a class="header" href="#prerequisites-20">Prerequisites</a></h2>
+<h2 id="prerequisites-21"><a class="header" href="#prerequisites-21">Prerequisites</a></h2>
 <p>Before starting, ensure you have:</p>
 <ol>
 <li>
@@ -20360,7 +20704,7 @@ use <code>--host</code>:</p>
 <li>Check network connectivity to server</li>
 <li>Ensure server is running and accessible</li>
 </ul>
-<h2 id="next-steps-18"><a class="header" href="#next-steps-18">Next Steps</a></h2>
+<h2 id="next-steps-19"><a class="header" href="#next-steps-19">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/tools/../../core/concepts/network-connectivity.html">Network Connectivity</a> - Server bind addresses and
 deployment scenarios</li>
@@ -20473,7 +20817,7 @@ development).</p>
 </code></pre>
 <hr />
 <h2 id="vs-code--github-copilot-configuration"><a class="header" href="#vs-code--github-copilot-configuration">VS Code + GitHub Copilot Configuration</a></h2>
-<h3 id="prerequisites-21"><a class="header" href="#prerequisites-21">Prerequisites</a></h3>
+<h3 id="prerequisites-22"><a class="header" href="#prerequisites-22">Prerequisites</a></h3>
 <ul>
 <li>VS Code 1.99 or later</li>
 <li>GitHub Copilot extension installed</li>
@@ -20616,7 +20960,7 @@ remains in Torc's database.</p>
 <li>Create and manage workflows through conversation</li>
 <li>Debug failures by asking questions</li>
 </ul>
-<h2 id="prerequisites-22"><a class="header" href="#prerequisites-22">Prerequisites</a></h2>
+<h2 id="prerequisites-23"><a class="header" href="#prerequisites-23">Prerequisites</a></h2>
 <ul>
 <li>Torc installed and server running</li>
 <li><a href="https://claude.ai/code">Claude Code</a> or VS Code with GitHub Copilot</li>
@@ -21021,7 +21365,7 @@ allocations have been submitted and will execute these jobs automatically.</p>
 <li>How to create workflows through conversation</li>
 <li>How to debug and fix failures using natural language</li>
 </ul>
-<h2 id="next-steps-19"><a class="header" href="#next-steps-19">Next Steps</a></h2>
+<h2 id="next-steps-20"><a class="header" href="#next-steps-20">Next Steps</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistants.html">Configuring AI Assistants</a> — Full configuration options, all tools,
 troubleshooting</li>
@@ -21435,7 +21779,7 @@ discussed elsewhere in this documentation.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tutorial-11-filtering-cli-output-with-nushell"><a class="header" href="#tutorial-11-filtering-cli-output-with-nushell">Tutorial 11: Filtering CLI Output with Nushell</a></h1>
 <p>This tutorial teaches you how to filter and analyze Torc CLI output using
 <a href="https://www.nushell.sh/">Nushell</a>, a modern shell with powerful structured data capabilities.</p>
-<h2 id="learning-objectives-11"><a class="header" href="#learning-objectives-11">Learning Objectives</a></h2>
+<h2 id="learning-objectives-12"><a class="header" href="#learning-objectives-12">Learning Objectives</a></h2>
 <p>By the end of this tutorial, you will:</p>
 <ul>
 <li>Understand why Nushell is useful for filtering Torc output</li>
@@ -21443,7 +21787,7 @@ discussed elsewhere in this documentation.</p>
 <li>Be able to analyze results and find failures quickly</li>
 <li>Create complex queries combining multiple conditions</li>
 </ul>
-<h2 id="prerequisites-23"><a class="header" href="#prerequisites-23">Prerequisites</a></h2>
+<h2 id="prerequisites-24"><a class="header" href="#prerequisites-24">Prerequisites</a></h2>
 <ul>
 <li>Torc CLI installed and configured</li>
 <li>A workflow with jobs (ideally one with various statuses)</li>
@@ -21610,7 +21954,7 @@ torc results list $wf -f json | from json | get results | where job_id in $faile
 <li>How to work with user data</li>
 <li>Practical examples for debugging workflows</li>
 </ul>
-<h2 id="next-steps-20"><a class="header" href="#next-steps-20">Next Steps</a></h2>
+<h2 id="next-steps-21"><a class="header" href="#next-steps-21">Next Steps</a></h2>
 <ul>
 <li><a href="https://www.nushell.sh/book/">Nushell Documentation</a> - Learn more about Nushell's capabilities</li>
 <li><a href="specialized/tools/../../core/reference/cli.html">Torc CLI Reference</a> - Full list of CLI commands and their JSON
@@ -22647,7 +22991,9 @@ different job selections instead)</li>
 <li><strong>No Action Retries</strong>: Failed actions are not automatically retried</li>
 <li><strong>Single Action Type</strong>: Each action has one action_type (cannot combine run_commands and
 schedule_nodes)</li>
-<li><strong>No Dynamic Job Selection</strong>: Job names/patterns are fixed at action creation time</li>
+<li><strong>Job Selectors Are Spec-Time Only</strong>: An action's job names/patterns are fixed when the workflow
+is created and don't update if new jobs are added later (e.g. by
+<a href="specialized/design/../../core/tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a>)</li>
 </ol>
 <p>For complex workflows requiring these features, consider:</p>
 <ul>
@@ -25449,7 +25795,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 <p>Before tagging a release, run the Slurm integration test suite on an HPC cluster to verify that job
 submission, multi-node execution, failure recovery, and resource monitoring work correctly under a
 real Slurm scheduler.</p>
-<h3 id="prerequisites-24"><a class="header" href="#prerequisites-24">Prerequisites</a></h3>
+<h3 id="prerequisites-25"><a class="header" href="#prerequisites-25">Prerequisites</a></h3>
 <ul>
 <li>Access to an HPC cluster with Slurm</li>
 <li><code>torc</code>, <code>torc-server</code>, and <code>torc-htpasswd</code> binaries built

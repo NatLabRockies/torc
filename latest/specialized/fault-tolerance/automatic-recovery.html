@@ -433,23 +433,25 @@ done
 <li>If the hook fails (non-zero exit), auto-recovery stops with an error</li>
 <li>After the hook succeeds, failed jobs are reset and retried</li>
 </ol>
-<h2 id="auto-scheduling-for-failure-handlers"><a class="header" href="#auto-scheduling-for-failure-handlers">Auto-Scheduling for Failure Handlers</a></h2>
-<p>When using <a href="./failure-handlers.html">failure handlers</a> that create retry jobs, the originally planned
-compute capacity may not be sufficient. The <code>--auto-schedule</code> option enables automatic scheduling of
-additional Slurm nodes when:</p>
+<h2 id="auto-scheduling-for-unplanned-jobs"><a class="header" href="#auto-scheduling-for-unplanned-jobs">Auto-Scheduling for Unplanned Jobs</a></h2>
+<p>Failure-handler retries and <code>spawn_jobs</code> children are <strong>unplanned</strong> — the originally-deferred
+<code>schedule_nodes</code> actions only allocate capacity for the workload declared at workflow creation, so
+either mechanism can leave new jobs sitting <code>Ready</code> with no compute behind them. The
+<code>--auto-schedule</code> option enables automatic scheduling of additional Slurm nodes when:</p>
 <ol>
 <li>
 <p><strong>No schedulers available</strong>: If there are ready jobs but no active or pending Slurm allocations,
 new schedulers are immediately regenerated and submitted.</p>
 </li>
 <li>
-<p><strong>Retry jobs accumulating</strong>: If there are active schedulers but retry jobs (jobs with
-<code>attempt_id &gt; 1</code>) are accumulating beyond the threshold, additional schedulers are submitted
-after the cooldown period.</p>
+<p><strong>Unplanned jobs accumulating</strong>: If there are active schedulers but jobs with
+<code>origin IS NOT NULL</code> (retries marked <code>'retry'</code>, plus <code>spawn_jobs</code> children marked <code>'spawn'</code>) are
+accumulating beyond the threshold, additional schedulers are submitted after the cooldown period.</p>
 </li>
 </ol>
-<p>This is particularly useful for workflows with failure handlers that retry failed jobs, ensuring
-those retries get scheduled without manual intervention.</p>
+<p>This is particularly useful for workflows that either retry failed jobs via failure handlers or add
+jobs at runtime via <a href="../../core/tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a>, ensuring those jobs get
+scheduled without manual intervention.</p>
 <h3 id="example-failure-handler-with-auto-scheduling"><a class="header" href="#example-failure-handler-with-auto-scheduling">Example: Failure Handler with Auto-Scheduling</a></h3>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
 torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
