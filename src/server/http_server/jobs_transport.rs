@@ -468,15 +468,22 @@ async fn upsert_final_state(
     })?;
     // Single-statement upsert against the partial unique index
     // `idx_user_data_lineage_unique` on `(workflow_id, name) WHERE name
-    // LIKE '__torc_lineage__%'`. The matching `WHERE` clause after the
+    // GLOB '__torc_lineage__*'`. The matching `WHERE` clause after the
     // conflict target is required by SQLite to bind this upsert to the
-    // partial index. Race-safe by construction — no read-then-write
-    // window, and the index guarantees at most one row per
-    // `(workflow_id, lineage)`.
+    // partial index and must stay identical to the index predicate.
+    // GLOB (not LIKE) is required because in SQL `LIKE` the underscore
+    // is a single-char wildcard, which would let the constraint match
+    // unrelated names.
+    //
+    // Race-safe by construction — no read-then-write window. The index
+    // enforces uniqueness per `(workflow_id, name)`; since
+    // `__torc_lineage__<lineage>__final` is a single deterministic name
+    // per lineage, the practical guarantee is one final-state row per
+    // lineage, which is what this upsert relies on.
     sqlx::query(
         "INSERT INTO user_data (workflow_id, name, is_ephemeral, data) \
          VALUES (?, ?, 1, ?) \
-         ON CONFLICT(workflow_id, name) WHERE name LIKE '__torc_lineage__%' \
+         ON CONFLICT(workflow_id, name) WHERE name GLOB '__torc_lineage__*' \
          DO UPDATE SET data = excluded.data",
     )
     .bind(workflow_id)
