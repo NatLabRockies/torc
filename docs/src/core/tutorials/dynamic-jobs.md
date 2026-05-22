@@ -163,7 +163,6 @@ print(f"[orch {orch.lineage}] spawned gen={next_gen}: {worker} -> {cont}", file=
 
 Notice what the orchestrator does **not** do:
 
-- It does **not** call `complete_job` on itself. The runner does that when the script exits.
 - It does **not** list itself in any spawned job's `depends_on`. The server adds that edge.
 - It does **not** need to know how torc encodes per-lineage iteration state.
   `Orchestrator.generation` walks the `__torc_lineage__<lineage>__g######` `user_data` records on
@@ -210,28 +209,39 @@ repeats until the metric drops below `0.01` (around generation 7).
 
 ## Step 5: Watch It Happen
 
-While the workflow runs, you can list jobs and see new ones appear:
+While the workflow runs, list jobs at any time to watch new ones appear. Initially the table shows
+only the seed (`orch_caseA_g00`); after a few seconds `worker_caseA_i01` and `orch_caseA_g01` join
+it; and so on until convergence at generation 7.
 
 ```bash
 torc jobs list <workflow_id>
 ```
 
+The default table prints `ID | Name | Status | Priority | Command` — useful for tracking progress
+but not for telling spec-declared jobs apart from spawned ones. For that, dump JSON and inspect each
+job's `origin` field (`"spawn"` for jobs added by `spawn_jobs`, absent for jobs declared in the
+workflow spec):
+
+```bash
+torc -f json jobs list <workflow_id> \
+  | jq -r '.jobs[] | [.name, .status, (.origin // "(declared)")] | @tsv'
 ```
-NAME                STATUS      ORIGIN
-orch_caseA_g00      completed   (NULL)        # declared at workflow creation
-worker_caseA_i01    completed   spawn         # added at runtime
+
+```
+orch_caseA_g00      completed   (declared)
+worker_caseA_i01    completed   spawn
 orch_caseA_g01      completed   spawn
 worker_caseA_i02    completed   spawn
 orch_caseA_g02      completed   spawn
 ...
-worker_caseA_i07    completed   spawn         # metric < 0.01 here
-orch_caseA_g07      completed   spawn         # this generation spawned nothing
+worker_caseA_i07    completed   spawn
+orch_caseA_g07      completed   spawn
 ```
 
 Things to notice:
 
-- The seed orchestrator has `origin = NULL` (declared at workflow creation). Every other job has
-  `origin = 'spawn'`.
+- The seed orchestrator has no `origin` set (declared at workflow creation, so the field is omitted
+  from the JSON). Every other job has `origin = "spawn"`.
 - The orchestrators in the middle never produced output of their own — they just inspected the prior
   metric and re-spawned.
 - The last orchestrator generation called `spawn_jobs` with `jobs=[]` and the workflow finished
@@ -350,6 +360,9 @@ when needed.
 
 ## Next Steps
 
-- The energy-modeling example at `examples/yaml/dynamic_orchestrator_slurm.yaml` plus
-  `examples/scripts/dynamic_orchestrator.py` is the same pattern applied to a ReEDS↔PRAS feedback
-  loop with realistic resource shapes (ReEDS at 8 CPU / 10 GB, PRAS at 1 CPU / 120 GB).
+- The energy-modeling example under `examples/` is the same pattern applied to a ReEDS↔PRAS feedback
+  loop. The orchestrator script is `examples/scripts/dynamic_orchestrator.py`; two yaml variants
+  share it:
+  - `examples/yaml/dynamic_orchestrator_local.yaml` — laptop-scale resources, runs under `torc run`.
+  - `examples/yaml/dynamic_orchestrator_slurm.yaml` — realistic HPC resource shapes (ReEDS at 8 CPU
+    / 10 GB, PRAS at 32 CPU / 120 GB), submitted with `torc submit`.

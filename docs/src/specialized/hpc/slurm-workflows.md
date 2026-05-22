@@ -499,6 +499,19 @@ Without previewing, auto-generation might:
 3. **Create suboptimal scheduler groupings**: Not sharing allocations when beneficial
 4. **Miss optimization opportunities**: Not recognizing patterns that could share resources
 
+### Dynamic Jobs (`spawn_jobs`)
+
+`torc slurm generate` analyzes the **static** workflow specification — the jobs declared at workflow
+creation. Jobs added at runtime by [`spawn_jobs`](../../core/tutorials/dynamic-jobs.md) (the
+dynamic-jobs orchestrator pattern) are by definition not visible to it, so the generated schedulers
+allocate compute capacity only for the originally-declared workload.
+
+For iterative workflows that grow at runtime, pair `torc slurm generate` with
+[`torc watch --auto-schedule`](../fault-tolerance/automatic-recovery.md#auto-scheduling-for-unplanned-jobs).
+The watch loop detects spawned jobs (rows with `origin = 'spawn'`) and submits additional Slurm
+allocations to cover them — without it, spawned children sit `Ready` until the originally-planned
+allocations happen to have spare capacity.
+
 **Best Practice**: For production workflows, always run `torc slurm generate` first, review the
 output, and submit the reviewed configuration with `torc submit`.
 

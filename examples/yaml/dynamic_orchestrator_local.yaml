@@ -1,0 +1,62 @@
+# Dynamic-jobs orchestrator — local-execution variant.
+#
+# Mirrors `dynamic_orchestrator_slurm.yaml` but with resource requirements
+# scaled to fit a laptop. The Slurm variant declares HPC-shaped resources
+# (`reeds_rr`: 8 CPU/10 GB, `pras_rr`: 32 CPU/120 GB) that no local compute
+# node can satisfy, so running it with `torc run` would leave the pras jobs
+# `Ready` forever and stall the workflow.
+#
+# Same orchestrator script (`examples/scripts/dynamic_orchestrator.py`) and
+# the same iteration shape (reeds → pras → next-orchestrator, converges by
+# ~iter 4 against the mock pras's geometric decay), just with toy
+# resource sizes so every job fits on the local machine.
+#
+# Run locally:
+#   cd <repo root>     # so the example script paths resolve
+#   torc run examples/yaml/dynamic_orchestrator_local.yaml
+#
+# See `dynamic_orchestrator_slurm.yaml` for the production/HPC variant and
+# `docs/src/core/tutorials/dynamic-jobs.md` for the full walkthrough.
+
+name: dynamic_orchestrator_local
+description: Dynamic spawn_jobs orchestrator (local-execution variant)
+
+# Per-lineage cap (acts independently for each case). The geometric decay
+# in the mock pras converges by ~iter 4; this 10 is a safety ceiling.
+dynamic_jobs:
+  max_iterations: 10
+
+resource_requirements:
+  # The orchestrator is light: 1 CPU, tiny memory, brief runtime.
+  - name: orch_rr
+    num_cpus: 1
+    memory: 128m
+    runtime: PT5M
+
+  # ReEDS-shaped on Slurm; here just "a worker that fits anywhere".
+  - name: reeds_rr
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M
+
+  # PRAS-shaped on Slurm; here just another small worker. Higher priority
+  # on spawn so it unblocks the next orchestrator generation sooner. (The
+  # priority is set per-spawn in the orchestrator script.)
+  - name: pras_rr
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M
+
+jobs:
+  # Seed: one orchestrator job per concurrent case. Each one passes its
+  # lineage as the first argument; spawned continuations inherit it via
+  # TORC_ORCHESTRATOR_LINEAGE_ID (set by torc on every spawned job's env).
+  - name: orch_caseA_g00
+    command: python3 examples/scripts/dynamic_orchestrator.py caseA
+    resource_requirements: orch_rr
+    priority: 5
+
+  - name: orch_caseB_g00
+    command: python3 examples/scripts/dynamic_orchestrator.py caseB
+    resource_requirements: orch_rr
+    priority: 5

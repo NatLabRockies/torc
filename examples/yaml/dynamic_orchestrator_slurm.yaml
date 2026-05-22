@@ -27,6 +27,12 @@
 #   2. cd <repo root>     # so the example script paths resolve
 #   3. torc submit examples/yaml/dynamic_orchestrator_slurm.yaml
 #
+# This file is sized for an HPC node (pras_rr asks for 32 CPUs / 120 GB).
+# Running it locally with `torc run` will leave the pras jobs stuck `Ready`
+# because no local compute node can satisfy those resources. For a
+# laptop-friendly run, use `dynamic_orchestrator_local.yaml` instead — same
+# orchestrator script, smaller resource requests.
+#
 # The mock reeds/pras scripts produce a metric that decays geometrically; the
 # convergence test (metric < 0.01) trips after ~4 generations, so each lineage
 # runs 4 generations and stops. Set TORC_DEMO_WORK_SECS to make the mock jobs

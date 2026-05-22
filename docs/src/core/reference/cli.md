@@ -179,8 +179,10 @@ resource requirements, and resubmits jobs.
    torc watch 123 --auto-schedule
    ```
 
-   Automatically submits new Slurm allocations when retry jobs are waiting. Essential for workflows
-   using failure handlers that create retry jobs.
+   Automatically submits new Slurm allocations when **unplanned** jobs are waiting — failure-handler
+   retries and `spawn_jobs` children (anything with `origin IS NOT NULL`). Essential for workflows
+   that rely on either mechanism, since deferred `schedule_nodes` actions only account for the
+   originally-declared workload.
 
 ### Arguments
 
@@ -210,8 +212,8 @@ resource requirements, and resubmits jobs.
 **Auto-scheduling:**
 
 - `--auto-schedule` — Automatically schedule new compute nodes when needed
-- `--auto-schedule-threshold <N>` — Minimum retry jobs before auto-scheduling when schedulers exist.
-  Default: `5`
+- `--auto-schedule-threshold <N>` — Minimum unplanned jobs (retries + `spawn_jobs` children) before
+  auto-scheduling when schedulers exist. Default: `5`
 - `--auto-schedule-cooldown <SECONDS>` — Cooldown between auto-schedule attempts. Default: `1800`
   (30 min)
 - `--auto-schedule-stranded-timeout <SECONDS>` — Schedule stranded jobs after this timeout even if
@@ -230,9 +232,10 @@ resource requirements, and resubmits jobs.
 When `--auto-schedule` is enabled:
 
 1. **No schedulers available**: Immediately submits new allocations if ready jobs exist.
-2. **Threshold exceeded**: If retry jobs (attempt_id > 1) exceed `--auto-schedule-threshold` while
-   schedulers are running, submits additional allocations after cooldown.
-3. **Stranded jobs**: If retry jobs are below threshold but waiting longer than
+2. **Threshold exceeded**: If **unplanned jobs** (`origin IS NOT NULL` — failure-handler retries and
+   `spawn_jobs` children) exceed `--auto-schedule-threshold` while schedulers are running, submits
+   additional allocations after cooldown.
+3. **Stranded jobs**: If unplanned jobs are below threshold but waiting longer than
    `--auto-schedule-stranded-timeout`, schedules anyway to prevent indefinite waiting.
 
 ### Examples
@@ -250,7 +253,7 @@ torc watch 123 --recover --memory-multiplier 2.0 --runtime-multiplier 2.0
 # Recovery including unknown failures (transient errors)
 torc watch 123 --recover --retry-unknown
 
-# Auto-schedule: ensure retry jobs get scheduled
+# Auto-schedule: ensure unplanned jobs (retries + spawn_jobs children) get scheduled
 torc watch 123 --auto-schedule
 
 # Full production setup: recovery + auto-scheduling
@@ -1653,6 +1656,10 @@ Show per-job Slurm accounting stats stored in the database
 Generate Slurm schedulers for a workflow based on job resource requirements
 
 **Usage:** `torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>`
+
+> **Note:** Analyzes the **static** workflow spec only. Workflows that add jobs at runtime via
+> [`spawn_jobs`](../tutorials/dynamic-jobs.md) should pair this with `torc watch --auto-schedule`,
+> which detects spawned jobs and submits the extra Slurm allocations they need.
 
 ###### **Arguments:**
 
