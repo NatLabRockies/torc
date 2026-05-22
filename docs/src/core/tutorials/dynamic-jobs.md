@@ -112,50 +112,40 @@ Save as `orchestrator.py`:
 #!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
-from torc import make_api
-from torc.openapi_client import SpawnJobModel, SpawnJobsRequest
+from torc import Orchestrator, SpawnJobModel
 
 CONVERGENCE_TOLERANCE = 0.01
 
-# Lineage: from env on a spawned continuation, from argv on the seed.
-lineage = os.environ.get("TORC_ORCHESTRATOR_LINEAGE_ID") or sys.argv[1]
+# `Orchestrator.from_env()` reads TORC_API_URL / TORC_WORKFLOW_ID / TORC_JOB_ID
+# from the env and resolves the lineage from TORC_ORCHESTRATOR_LINEAGE_ID
+# (set by torc on every spawned continuation), falling back to `sys.argv[1]`
+# on the seed invocation.
+orch = Orchestrator.from_env(lineage_fallback=sys.argv[1] if len(sys.argv) > 1 else None)
 
-api = make_api(os.environ["TORC_API_URL"])
-workflow_id = int(os.environ["TORC_WORKFLOW_ID"])
-job_id = int(os.environ["TORC_JOB_ID"])
-
-# Discover current generation from torc's append-only lineage records.
-ud = api.list_user_data(workflow_id, limit=10000)
-prefix = f"__torc_lineage__{lineage}__g"
-current_gen = max(
-    (int(u.name[len(prefix):]) for u in (ud.items or []) if u.name.startswith(prefix)),
-    default=0,
-)
+current_gen = orch.generation   # 0 on the seed, derived from torc's lineage records
 next_gen = current_gen + 1
 
 # Read prior worker's metric (None on the seed generation).
-prior_file = Path(f"./work/{lineage}/worker_i{current_gen:02d}.json")
+prior_file = Path(f"./work/{orch.lineage}/worker_i{current_gen:02d}.json")
 prior_metric = json.loads(prior_file.read_text())["metric"] if prior_file.exists() else None
-print(f"[orch {lineage}] current_gen={current_gen} prior_metric={prior_metric}", file=sys.stderr)
+print(f"[orch {orch.lineage}] current_gen={current_gen} prior_metric={prior_metric}", file=sys.stderr)
 
 # Convergence: spawn nothing, write a final state record, exit.
 if prior_metric is not None and prior_metric < CONVERGENCE_TOLERANCE:
-    api.spawn_jobs(job_id, SpawnJobsRequest(
-        lineage=lineage, jobs=[],
-        state={"converged": True, "final_metric": prior_metric, "iterations": current_gen},
-    ))
-    print(f"[orch {lineage}] converged at gen={current_gen}", file=sys.stderr)
+    orch.converge(state={
+        "converged": True, "final_metric": prior_metric, "iterations": current_gen,
+    })
+    print(f"[orch {orch.lineage}] converged at gen={current_gen}", file=sys.stderr)
     sys.exit(0)
 
 # Otherwise spawn the next worker + the next orchestrator continuation.
-worker = f"worker_{lineage}_i{next_gen:02d}"
-cont = f"orch_{lineage}_g{next_gen:02d}"
-api.spawn_jobs(job_id, SpawnJobsRequest(
-    lineage=lineage,
+worker = f"worker_{orch.lineage}_i{next_gen:02d}"
+cont = f"orch_{orch.lineage}_g{next_gen:02d}"
+orch.spawn(
     jobs=[
         SpawnJobModel(
             name=worker,
-            command=f"bash {os.path.abspath('worker.sh')} {lineage} {next_gen}",
+            command=f"bash {os.path.abspath('worker.sh')} {orch.lineage} {next_gen}",
             resource_requirements="worker_rr",
         ),
         SpawnJobModel(
@@ -167,14 +157,17 @@ api.spawn_jobs(job_id, SpawnJobsRequest(
         ),
     ],
     state={"generation": next_gen, "prior_metric": prior_metric},
-))
-print(f"[orch {lineage}] spawned gen={next_gen}: {worker} -> {cont}", file=sys.stderr)
+)
+print(f"[orch {orch.lineage}] spawned gen={next_gen}: {worker} -> {cont}", file=sys.stderr)
 ```
 
 Notice what the orchestrator does **not** do:
 
 - It does **not** call `complete_job` on itself. The runner does that when the script exits.
 - It does **not** list itself in any spawned job's `depends_on`. The server adds that edge.
+- It does **not** need to know how torc encodes per-lineage iteration state.
+  `Orchestrator.generation` walks the `__torc_lineage__<lineage>__g######` `user_data` records on
+  its behalf.
 
 ## Step 3: Write the Workflow Spec
 

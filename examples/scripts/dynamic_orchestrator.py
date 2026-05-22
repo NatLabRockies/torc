@@ -27,66 +27,38 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
-from typing import Optional
 
-from torc import make_api
-from torc.openapi_client import SpawnJobModel, SpawnJobsRequest
+from torc import Orchestrator, SpawnJobModel
 
 CONVERGENCE_THRESHOLD = 0.01      # convergence rule — edit me
-MAX_LIST_LIMIT = 10000
-
-
-def env(name: str) -> str:
-    v = os.environ.get(name)
-    if not v:
-        sys.exit(f"orchestrator: missing required env var {name}")
-    return v
 
 
 def main() -> None:
-    # Lineage: from the env on a spawned continuation, or argv on the seed.
-    lineage = os.environ.get("TORC_ORCHESTRATOR_LINEAGE_ID")
-    if not lineage:
-        if len(sys.argv) < 2:
-            sys.exit("orchestrator: lineage required on first invocation "
-                     "(pass as argv[1] on the seed job)")
-        lineage = sys.argv[1]
-
-    api_url = env("TORC_API_URL")
-    workflow_id = int(env("TORC_WORKFLOW_ID"))
-    job_id = int(env("TORC_JOB_ID"))
+    # `Orchestrator.from_env()` reads TORC_API_URL / TORC_WORKFLOW_ID /
+    # TORC_JOB_ID from the env, plus TORC_ORCHESTRATOR_LINEAGE_ID on
+    # spawned continuations. On the seed invocation we supply the lineage
+    # from argv as the fallback.
+    seed_lineage = sys.argv[1] if len(sys.argv) > 1 else None
+    orch = Orchestrator.from_env(lineage_fallback=seed_lineage)
 
     demo_root = Path(os.environ.get(
         "TORC_DEMO_DIR",
         os.environ.get("TORC_OUTPUT_DIR", str(Path.cwd() / "out")),
     ))
-    work_dir = demo_root / "dynamic_demo" / lineage
+    work_dir = demo_root / "dynamic_demo" / orch.lineage
     work_dir.mkdir(parents=True, exist_ok=True)
 
     def log(msg: str) -> None:
-        print(f"[orchestrator {lineage}] {msg}", file=sys.stderr, flush=True)
+        print(f"[orchestrator {orch.lineage}] {msg}", file=sys.stderr, flush=True)
 
-    api = make_api(api_url)
-
-    # Discover current generation from torc's append-only lineage records:
-    # each spawn generation N is a `__torc_lineage__<lineage>__g<NNNNNN>`
-    # user_data record. spawn_count == max generation present (0 on the seed).
-    prefix = f"__torc_lineage__{lineage}__g"
-    gen_re = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-    user_data = api.list_user_data(workflow_id, limit=MAX_LIST_LIMIT)
-    current_gen = max(
-        (int(m.group(1)) for ud in (user_data.items or [])
-         if (m := gen_re.match(ud.name)) is not None),
-        default=0,
-    )
+    current_gen = orch.generation
     next_gen = current_gen + 1
     log(f"current_gen={current_gen} next_gen={next_gen}")
 
     # Read prior PRAS metric (convergence input).
-    prior_metric: Optional[float] = None
+    prior_metric: float | None = None
     if current_gen >= 1:
         prior_file = work_dir / f"pras_i{current_gen:02d}.json"
         if prior_file.exists():
@@ -101,20 +73,11 @@ def main() -> None:
     # =====================================================================
     if prior_metric is not None and prior_metric < CONVERGENCE_THRESHOLD:
         log(f"converged at gen={current_gen} (metric={prior_metric}) -> no spawn")
-        # Record the final state. No jobs spawned: the workflow will finish
-        # for this lineage as soon as the runner completes this orchestrator.
-        api.spawn_jobs(
-            job_id,
-            SpawnJobsRequest(
-                lineage=lineage,
-                jobs=[],
-                state={
-                    "converged": True,
-                    "final_metric": prior_metric,
-                    "generation": current_gen,
-                },
-            ),
-        )
+        orch.converge(state={
+            "converged": True,
+            "final_metric": prior_metric,
+            "generation": current_gen,
+        })
         return
 
     # =====================================================================
@@ -129,47 +92,43 @@ def main() -> None:
     reeds = script_dir / "dynamic_reeds.sh"
     pras = script_dir / "dynamic_pras.sh"
 
-    reeds_name = f"reeds_{lineage}_i{next_gen:02d}"
-    pras_name = f"pras_{lineage}_i{next_gen:02d}"
-    cont_name = f"orch_{lineage}_g{next_gen:02d}"
+    reeds_name = f"reeds_{orch.lineage}_i{next_gen:02d}"
+    pras_name = f"pras_{orch.lineage}_i{next_gen:02d}"
+    cont_name = f"orch_{orch.lineage}_g{next_gen:02d}"
 
-    resp = api.spawn_jobs(
-        job_id,
-        SpawnJobsRequest(
-            lineage=lineage,
-            jobs=[
-                # ReEDS: 8 CPU / 10 GB. Blocked only on this orchestrator
-                # (auto-injected), so it starts as soon as we exit and the
-                # runner completes us.
-                SpawnJobModel(
-                    name=reeds_name,
-                    command=f"bash {reeds} {lineage} {next_gen}",
-                    resource_requirements="reeds_rr",
-                    priority=1,
-                ),
-                # PRAS: 1 CPU / 120 GB. Higher priority so it unblocks the
-                # next orchestrator generation sooner under contention.
-                SpawnJobModel(
-                    name=pras_name,
-                    command=f"bash {pras} {lineage} {next_gen}",
-                    resource_requirements="pras_rr",
-                    priority=10,
-                    depends_on=[reeds_name],
-                ),
-                # Continuation: fan-in on the iteration's outputs. Set
-                # cancel_on_blocking_job_failure=False so a failed reeds/pras
-                # still lets us run and decide what to do.
-                SpawnJobModel(
-                    name=cont_name,
-                    command=f"python3 {me}",
-                    resource_requirements="orch_rr",
-                    priority=0,
-                    depends_on=[reeds_name, pras_name],
-                    cancel_on_blocking_job_failure=False,
-                ),
-            ],
-            state={"generation": next_gen, "prior_metric": prior_metric},
-        ),
+    resp = orch.spawn(
+        jobs=[
+            # ReEDS: 8 CPU / 10 GB. Blocked only on this orchestrator
+            # (auto-injected), so it starts as soon as we exit and the
+            # runner completes us.
+            SpawnJobModel(
+                name=reeds_name,
+                command=f"bash {reeds} {orch.lineage} {next_gen}",
+                resource_requirements="reeds_rr",
+                priority=1,
+            ),
+            # PRAS: 1 CPU / 120 GB. Higher priority so it unblocks the
+            # next orchestrator generation sooner under contention.
+            SpawnJobModel(
+                name=pras_name,
+                command=f"bash {pras} {orch.lineage} {next_gen}",
+                resource_requirements="pras_rr",
+                priority=10,
+                depends_on=[reeds_name],
+            ),
+            # Continuation: fan-in on the iteration's outputs. Set
+            # cancel_on_blocking_job_failure=False so a failed reeds/pras
+            # still lets us run and decide what to do.
+            SpawnJobModel(
+                name=cont_name,
+                command=f"python3 {me}",
+                resource_requirements="orch_rr",
+                priority=0,
+                depends_on=[reeds_name, pras_name],
+                cancel_on_blocking_job_failure=False,
+            ),
+        ],
+        state={"generation": next_gen, "prior_metric": prior_metric},
     )
     log(f"spawned gen={next_gen}: {reeds_name} -> {pras_name} -> {cont_name} "
         f"(iteration={resp.iteration}) — exiting; runner will complete us")
