@@ -26,7 +26,7 @@ fn test_ro_crate_crud(start_server: &ServerProcess) {
         file_id: None,
         entity_id: "data/output.parquet".to_string(),
         entity_type: "File".to_string(),
-        metadata: serde_json::to_string(&metadata).unwrap(),
+        metadata: serde_json::from_value(metadata).unwrap(),
     };
 
     let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
@@ -111,7 +111,7 @@ fn test_ro_crate_with_file_id(start_server: &ServerProcess) {
         file_id: Some(file_id),
         entity_id: "output.csv".to_string(),
         entity_type: "File".to_string(),
-        metadata: json!({"name": "Output CSV"}).to_string(),
+        metadata: serde_json::from_value(json!({"name": "Output CSV"})).unwrap(),
     };
 
     let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
@@ -141,7 +141,7 @@ fn test_ro_crate_list_filters(start_server: &ServerProcess) {
         file_id: Some(file_id),
         entity_id: "filtered.csv".to_string(),
         entity_type: "File".to_string(),
-        metadata: json!({"name": "Filtered CSV"}).to_string(),
+        metadata: serde_json::from_value(json!({"name": "Filtered CSV"})).unwrap(),
     };
     apis::ro_crate_api::create_ro_crate_entity(config, file_entity)
         .expect("Failed to create file entity");
@@ -152,7 +152,7 @@ fn test_ro_crate_list_filters(start_server: &ServerProcess) {
         file_id: None,
         entity_id: "#software-test-run-id-1".to_string(),
         entity_type: "SoftwareApplication".to_string(),
-        metadata: json!({"name": "Test Software"}).to_string(),
+        metadata: serde_json::from_value(json!({"name": "Test Software"})).unwrap(),
     };
     apis::ro_crate_api::create_ro_crate_entity(config, software_entity)
         .expect("Failed to create software entity");
@@ -309,7 +309,7 @@ fn test_ro_crate_rejects_duplicate_workflow_file_link(start_server: &ServerProce
         file_id: Some(file_id),
         entity_id: "duplicate.csv".to_string(),
         entity_type: "File".to_string(),
-        metadata: json!({"name": "First"}).to_string(),
+        metadata: serde_json::from_value(json!({"name": "First"})).unwrap(),
     };
     apis::ro_crate_api::create_ro_crate_entity(config, first)
         .expect("Failed to create first entity");
@@ -320,7 +320,7 @@ fn test_ro_crate_rejects_duplicate_workflow_file_link(start_server: &ServerProce
         file_id: Some(file_id),
         entity_id: "duplicate-second.csv".to_string(),
         entity_type: "File".to_string(),
-        metadata: json!({"name": "Second"}).to_string(),
+        metadata: serde_json::from_value(json!({"name": "Second"})).unwrap(),
     };
     let result = apis::ro_crate_api::create_ro_crate_entity(config, duplicate);
     match result {
@@ -352,12 +352,12 @@ fn test_ro_crate_external_entity(start_server: &ServerProcess) {
         file_id: None,
         entity_id: "https://example.com/software/v1.0".to_string(),
         entity_type: "SoftwareApplication".to_string(),
-        metadata: json!({
+        metadata: serde_json::from_value(json!({
             "name": "My Simulation Software",
             "version": "1.0.0",
             "url": "https://example.com/software"
-        })
-        .to_string(),
+        }))
+        .unwrap(),
     };
 
     let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)
@@ -380,7 +380,7 @@ fn test_ro_crate_bulk_delete(start_server: &ServerProcess) {
             workflow_id,
             format!("data/file_{}.csv", i),
             "File".to_string(),
-            json!({"name": format!("File {}", i)}).to_string(),
+            serde_json::from_value(json!({"name": format!("File {}", i)})).unwrap(),
         );
         apis::ro_crate_api::create_ro_crate_entity(config, entity)
             .expect("Failed to create entity");
@@ -432,7 +432,7 @@ fn test_ro_crate_cascade_delete(start_server: &ServerProcess) {
         workflow_id,
         "data/result.json".to_string(),
         "File".to_string(),
-        json!({"name": "Result"}).to_string(),
+        serde_json::from_value(json!({"name": "Result"})).unwrap(),
     );
     apis::ro_crate_api::create_ro_crate_entity(config, entity).expect("Failed to create entity");
 
@@ -488,12 +488,12 @@ fn test_ro_crate_directory_entity(start_server: &ServerProcess) {
         workflow_id,
         "data/partitioned_table/".to_string(),
         "Dataset".to_string(),
-        json!({
+        serde_json::from_value(json!({
             "name": "Partitioned Table",
             "description": "Hive-partitioned Parquet dataset",
             "encodingFormat": "application/x-parquet"
-        })
-        .to_string(),
+        }))
+        .unwrap(),
     );
 
     let created = apis::ro_crate_api::create_ro_crate_entity(config, entity)

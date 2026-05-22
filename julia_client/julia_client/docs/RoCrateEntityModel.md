@@ -8,7 +8,7 @@ Name | Type | Description | Notes
 **entity_type** | **String** |  | [default to nothing]
 **file_id** | **Int64** |  | [optional] [default to nothing]
 **id** | **Int64** |  | [optional] [default to nothing]
-**metadata** | **String** |  | [default to nothing]
+**metadata** | **Dict{String, Any}** |  | [default to nothing]
 **workflow_id** | **Int64** |  | [default to nothing]
 
 

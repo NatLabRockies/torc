@@ -67,6 +67,7 @@ docker_run run \
   --input-spec="/spec/${SPEC_FILE}" \
   -o /rust_client \
   -t /templates \
+  --openapi-normalizer=SIMPLIFY_ONEOF_ANYOF=true \
   --additional-properties=supportAsync=false
 
 find "${REPO_ROOT}/src/client/apis" \

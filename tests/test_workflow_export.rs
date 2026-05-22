@@ -715,7 +715,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         file_id: None,
         entity_id: create_action_entity_id.clone(),
         entity_type: "CreateAction".to_string(),
-        metadata: create_action_metadata.to_string(),
+        metadata: serde_json::from_value(create_action_metadata).unwrap(),
     };
     apis::ro_crate_api::create_ro_crate_entity(config, create_action)
         .expect("Failed to create CreateAction entity");
@@ -734,7 +734,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         file_id: Some(file_id),
         entity_id: "data/output.csv".to_string(),
         entity_type: "File".to_string(),
-        metadata: file_metadata.to_string(),
+        metadata: serde_json::from_value(file_metadata).unwrap(),
     };
     apis::ro_crate_api::create_ro_crate_entity(config, file_entity)
         .expect("Failed to create File entity");
@@ -824,7 +824,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
     );
 
     // Verify the CreateAction metadata also has the new job ID
-    let ca_metadata: Value = serde_json::from_str(&create_action_entity.metadata)
+    let ca_metadata: Value = serde_json::to_value(&create_action_entity.metadata)
         .expect("Failed to parse CreateAction metadata");
     assert_eq!(
         ca_metadata["@id"], expected_new_entity_id,
@@ -838,7 +838,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         .expect("File entity should exist");
 
     let file_metadata: Value =
-        serde_json::from_str(&file_entity.metadata).expect("Failed to parse File metadata");
+        serde_json::to_value(&file_entity.metadata).expect("Failed to parse File metadata");
     assert_eq!(
         file_metadata["prov:wasGeneratedBy"]["@id"], expected_new_entity_id,
         "File prov:wasGeneratedBy should reference the new job ID"

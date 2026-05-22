@@ -17,22 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool
 from typing import Any, ClassVar, Dict, List, Optional
+from torc.openapi_client.models.monitor_granularity import MonitorGranularity
 from typing import Optional, Set
 from typing_extensions import Self
 
-class RoCrateEntityModel(BaseModel):
+class JobMonitorConfig(BaseModel):
     """
-    RoCrateEntityModel
+    Configuration for per-job resource monitoring.
     """ # noqa: E501
-    entity_id: StrictStr
-    entity_type: StrictStr
-    file_id: Optional[StrictInt] = None
-    id: Optional[StrictInt] = None
-    metadata: Dict[str, Any]
-    workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["entity_id", "entity_type", "file_id", "id", "metadata", "workflow_id"]
+    enabled: Optional[StrictBool] = False
+    granularity: Optional[MonitorGranularity] = None
+    __properties: ClassVar[List[str]] = ["enabled", "granularity"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -52,7 +49,7 @@ class RoCrateEntityModel(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of RoCrateEntityModel from a JSON string"""
+        """Create an instance of JobMonitorConfig from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,21 +70,11 @@ class RoCrateEntityModel(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if file_id (nullable) is None
-        # and model_fields_set contains the field
-        if self.file_id is None and "file_id" in self.model_fields_set:
-            _dict['file_id'] = None
-
-        # set to None if id (nullable) is None
-        # and model_fields_set contains the field
-        if self.id is None and "id" in self.model_fields_set:
-            _dict['id'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of RoCrateEntityModel from a dict"""
+        """Create an instance of JobMonitorConfig from a dict"""
         if obj is None:
             return None
 
@@ -95,12 +82,8 @@ class RoCrateEntityModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "entity_id": obj.get("entity_id"),
-            "entity_type": obj.get("entity_type"),
-            "file_id": obj.get("file_id"),
-            "id": obj.get("id"),
-            "metadata": obj.get("metadata"),
-            "workflow_id": obj.get("workflow_id")
+            "enabled": obj.get("enabled") if obj.get("enabled") is not None else False,
+            "granularity": obj.get("granularity")
         })
         return _obj
 

@@ -28,70 +28,12 @@ pub struct OomViolation {
     pub limit_bytes: u64,
 }
 
-/// Configuration for resource monitoring
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(default)]
-pub struct ResourceMonitorConfig {
-    /// Deprecated compatibility field. Use `jobs.enabled` for new workflow specs.
-    pub enabled: bool,
-    /// Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
-    pub granularity: MonitorGranularity,
-    pub sample_interval_seconds: i32,
-    /// How often buffered time-series samples are flushed to SQLite, in seconds.
-    /// Samples are accumulated in memory between flushes so that we make one
-    /// transaction per flush instead of one per sample interval. Larger values
-    /// are friendlier to shared filesystems (Lustre/GPFS/NFS) at the cost of
-    /// losing up to `flush_interval_seconds` of time-series data on an
-    /// uncontrolled crash. Aggregated peak/avg metrics are unaffected.
-    pub flush_interval_seconds: i32,
-    pub generate_plots: bool,
-    pub jobs: Option<JobMonitorConfig>,
-    pub compute_node: Option<ComputeNodeMonitorConfig>,
-}
-
-impl Default for ResourceMonitorConfig {
-    fn default() -> Self {
-        ResourceMonitorConfig {
-            enabled: false,
-            granularity: MonitorGranularity::Summary,
-            sample_interval_seconds: 10,
-            flush_interval_seconds: 300,
-            generate_plots: false,
-            jobs: None,
-            compute_node: None,
-        }
-    }
-}
-
-impl ResourceMonitorConfig {
-    pub fn jobs_config(&self) -> JobMonitorConfig {
-        self.jobs.clone().unwrap_or(JobMonitorConfig {
-            enabled: self.enabled,
-            granularity: self.granularity.clone(),
-        })
-    }
-
-    pub fn compute_node_config(&self) -> Option<ComputeNodeMonitorConfig> {
-        self.compute_node.clone().filter(|config| config.enabled)
-    }
-
-    pub fn is_enabled(&self) -> bool {
-        self.jobs_config().enabled || self.compute_node_config().is_some()
-    }
-
-    /// Returns true if any enabled scope uses time-series granularity, which is when the
-    /// time-series SQLite database is created and populated.
-    pub fn has_timeseries_db(&self) -> bool {
-        let jobs_ts = {
-            let jobs = self.jobs_config();
-            jobs.enabled && matches!(jobs.granularity, MonitorGranularity::TimeSeries)
-        };
-        let node_ts = self
-            .compute_node_config()
-            .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
-        jobs_ts || node_ts
-    }
-}
+// `ResourceMonitorConfig` (struct + impl) and its sub-types now live in
+// `crate::models` so the OpenAPI surface can expose them as typed nested
+// objects. The aliases below preserve the existing import paths.
+pub use crate::models::{
+    ComputeNodeMonitorConfig, JobMonitorConfig, MonitorGranularity, ResourceMonitorConfig,
+};
 
 /// Returns the path of the time-series metrics database that would be produced for the
 /// given `output_dir` / `unique_label`. This mirrors the layout created by
@@ -100,54 +42,6 @@ pub fn timeseries_db_path(output_dir: &Path, unique_label: &str) -> PathBuf {
     output_dir
         .join("resource_utilization")
         .join(format!("{}_{}.db", DB_FILENAME_PREFIX, unique_label))
-}
-
-/// Configuration for per-job resource monitoring.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(default)]
-pub struct JobMonitorConfig {
-    pub enabled: bool,
-    pub granularity: MonitorGranularity,
-}
-
-impl Default for JobMonitorConfig {
-    fn default() -> Self {
-        JobMonitorConfig {
-            enabled: false,
-            granularity: MonitorGranularity::Summary,
-        }
-    }
-}
-
-/// Configuration for compute-node resource monitoring.
-///
-/// Compute-node monitoring is intentionally configured separately from per-job monitoring so
-/// future node-level GPU sampling can be added without changing job metrics semantics.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(default)]
-pub struct ComputeNodeMonitorConfig {
-    pub enabled: bool,
-    pub granularity: MonitorGranularity,
-    pub cpu: bool,
-    pub memory: bool,
-}
-
-impl Default for ComputeNodeMonitorConfig {
-    fn default() -> Self {
-        ComputeNodeMonitorConfig {
-            enabled: false,
-            granularity: MonitorGranularity::Summary,
-            cpu: true,
-            memory: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MonitorGranularity {
-    Summary,
-    TimeSeries,
 }
 
 /// Metrics collected for a single job

@@ -257,7 +257,7 @@ fn test_auto_ro_crate_input_files_on_initialize(start_server: &ServerProcess) {
 
     // Parse and verify metadata
     let metadata: serde_json::Value =
-        serde_json::from_str(&entity.metadata).expect("Failed to parse entity metadata");
+        serde_json::to_value(&entity.metadata).expect("Failed to parse entity metadata");
     assert!(metadata["@type"].is_array(), "Should have array @type");
     assert_eq!(metadata["@type"][0], "File");
     assert!(
@@ -365,7 +365,7 @@ fn test_auto_ro_crate_user_supplied_identifier_round_trip(start_server: &ServerP
         "entity_id should be the user-supplied identifier (not the file path)"
     );
     let pre_meta: serde_json::Value =
-        serde_json::from_str(&pre_entity.metadata).expect("Failed to parse pre-init metadata");
+        serde_json::to_value(&pre_entity.metadata).expect("Failed to parse pre-init metadata");
     assert_eq!(
         pre_meta["@id"], identifier,
         "pre-init @id should be the identifier"
@@ -417,7 +417,7 @@ fn test_auto_ro_crate_user_supplied_identifier_round_trip(start_server: &ServerP
         "server's init-time upsert clobbered entity_id; round-trip broken"
     );
     let post_meta: serde_json::Value =
-        serde_json::from_str(&post_entity.metadata).expect("Failed to parse post-init metadata");
+        serde_json::to_value(&post_entity.metadata).expect("Failed to parse post-init metadata");
     assert_eq!(
         post_meta["@id"], identifier,
         "client-side rebuild should restore @id to the user identifier"
@@ -513,7 +513,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
 
     // Parse and verify metadata includes provenance
     let metadata: serde_json::Value =
-        serde_json::from_str(&entity.metadata).expect("Failed to parse entity metadata");
+        serde_json::to_value(&entity.metadata).expect("Failed to parse entity metadata");
     assert!(metadata["@type"].is_array(), "Should have array @type");
     assert_eq!(metadata["@type"][0], "File");
     assert!(
@@ -538,7 +538,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
         "Should have a synthetic workflow run entity"
     );
     let workflow_run_metadata: serde_json::Value =
-        serde_json::from_str(&workflow_run.unwrap().metadata)
+        serde_json::to_value(&workflow_run.unwrap().metadata)
             .expect("Failed to parse workflow run metadata");
     assert_eq!(workflow_run_metadata["@type"][0], "CreateAction");
     assert_eq!(
@@ -559,7 +559,7 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
 
     let action = create_action.unwrap();
     let action_metadata: serde_json::Value =
-        serde_json::from_str(&action.metadata).expect("Failed to parse CreateAction metadata");
+        serde_json::to_value(&action.metadata).expect("Failed to parse CreateAction metadata");
     assert!(
         action_metadata["@type"].is_array(),
         "CreateAction should have array @type"
@@ -786,7 +786,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
         "Should have a synthetic workflow run entity"
     );
     let workflow_run_metadata: serde_json::Value =
-        serde_json::from_str(&workflow_run.unwrap().metadata)
+        serde_json::to_value(&workflow_run.unwrap().metadata)
             .expect("Failed to parse workflow run metadata");
     assert_eq!(workflow_run_metadata["@type"][0], "CreateAction");
     assert_eq!(
@@ -801,7 +801,7 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
     // Verify CreateAction metadata
     for action in create_actions {
         let metadata: serde_json::Value =
-            serde_json::from_str(&action.metadata).expect("Failed to parse CreateAction metadata");
+            serde_json::to_value(&action.metadata).expect("Failed to parse CreateAction metadata");
         assert!(
             metadata["@type"].is_array(),
             "CreateAction should have array @type"
@@ -895,7 +895,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         .iter()
         .find(|e| e.file_id == Some(input_file_id))
         .expect("Should have input file entity");
-    let meta_run1: serde_json::Value = serde_json::from_str(&input_entity_run1.metadata).unwrap();
+    let meta_run1: serde_json::Value = serde_json::to_value(&input_entity_run1.metadata).unwrap();
 
     // Get the SHA256 of the input file from the first run
     let input_sha_run1 = meta_run1["sha256"].as_str().map(|s| s.to_string());
@@ -977,7 +977,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         .iter()
         .find(|e| e.file_id == Some(input_file_id))
         .expect("Should still have input file entity");
-    let meta_run2: serde_json::Value = serde_json::from_str(&input_entity_run2.metadata).unwrap();
+    let meta_run2: serde_json::Value = serde_json::to_value(&input_entity_run2.metadata).unwrap();
 
     // Verify the SHA256 changed (input file was modified)
     let input_sha_run2 = meta_run2["sha256"].as_str().map(|s| s.to_string());
@@ -994,7 +994,7 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
         .find(|e| e.file_id == Some(output_file_id))
         .expect("Should still have output file entity");
     let output_meta_run2: serde_json::Value =
-        serde_json::from_str(&output_entity_run2.metadata).unwrap();
+        serde_json::to_value(&output_entity_run2.metadata).unwrap();
     assert!(
         output_meta_run2["prov:wasGeneratedBy"].is_object(),
         "Output file entity should still have prov:wasGeneratedBy provenance"

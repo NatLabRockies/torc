@@ -11,9 +11,21 @@ use crate::ro_crate_json_ld::typed_entity;
 use chrono::{DateTime, Utc};
 use log::{debug, warn};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read as IoRead};
 use std::path::Path;
+
+/// Convert a `serde_json::Value` (expected to be an object) into the
+/// `HashMap<String, Value>` representation used by `RoCrateEntityModel::metadata`.
+fn metadata_value_to_map(value: &serde_json::Value) -> HashMap<String, serde_json::Value> {
+    value
+        .as_object()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
 
 /// `@id` prefixes Torc itself synthesizes for provenance entities. User-supplied
 /// `FileSpec::identifier` values starting with one of these would collide in the
@@ -154,7 +166,7 @@ pub fn build_file_entity(
         file_id: file.id,
         entity_id,
         entity_type: "File".to_string(),
-        metadata: metadata.to_string(),
+        metadata: metadata_value_to_map(&metadata),
     }
 }
 
@@ -223,7 +235,7 @@ pub fn build_file_entity_with_provenance(
         file_id: file.id,
         entity_id: file_path.clone(),
         entity_type: "File".to_string(),
-        metadata: metadata.to_string(),
+        metadata: metadata_value_to_map(&metadata),
     }
 }
 
@@ -277,7 +289,7 @@ pub fn build_create_action_entity(
         file_id: None,
         entity_id: action_id,
         entity_type: "CreateAction".to_string(),
-        metadata: metadata.to_string(),
+        metadata: metadata_value_to_map(&metadata),
     }
 }
 
@@ -294,7 +306,7 @@ fn build_workflow_plan_entity(workflow_id: i64, workflow_name: &str) -> RoCrateE
         file_id: None,
         entity_id: "#torc-workflow".to_string(),
         entity_type: "SoftwareApplication".to_string(),
-        metadata: metadata.to_string(),
+        metadata: metadata_value_to_map(&metadata),
     }
 }
 
@@ -321,7 +333,7 @@ fn build_workflow_run_entity_base(
         file_id: None,
         entity_id: format!("#torc-run-id-{}", run_id),
         entity_type: "CreateAction".to_string(),
-        metadata: metadata.to_string(),
+        metadata: metadata_value_to_map(&metadata),
     }
 }
 
@@ -330,45 +342,24 @@ fn apply_workflow_run_entity_times(
     start_time: DateTime<Utc>,
     end_time: Option<DateTime<Utc>>,
 ) -> bool {
-    let mut metadata = match serde_json::from_str::<serde_json::Value>(&entity.metadata) {
-        Ok(value) => value,
-        Err(e) => {
-            warn!(
-                "Failed to parse RO-Crate run entity metadata for '{}': {}",
-                entity.entity_id, e
-            );
-            return false;
-        }
-    };
-
-    let Some(obj) = metadata.as_object_mut() else {
-        warn!(
-            "RO-Crate run entity metadata for '{}' is not a JSON object",
-            entity.entity_id
-        );
-        return false;
-    };
-
-    obj.insert(
+    entity.metadata.insert(
         "startTime".to_string(),
         serde_json::json!(start_time.to_rfc3339()),
     );
     if let Some(end_time) = end_time {
-        obj.insert(
+        entity.metadata.insert(
             "endTime".to_string(),
             serde_json::json!(end_time.to_rfc3339()),
         );
     } else {
-        obj.remove("endTime");
+        entity.metadata.remove("endTime");
     }
 
-    entity.metadata = metadata.to_string();
     true
 }
 
 fn parse_entity_datetime(entity: &RoCrateEntityModel, field: &str) -> Option<DateTime<Utc>> {
-    let metadata = serde_json::from_str::<serde_json::Value>(&entity.metadata).ok()?;
-    let value = metadata.get(field)?.as_str()?;
+    let value = entity.metadata.get(field)?.as_str()?;
     chrono::DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|dt| dt.with_timezone(&Utc))
@@ -813,7 +804,7 @@ pub fn link_dataset_to_job_create_action(
                 return None;
             }
         };
-        let metadata_str = append_dataset_result(
+        let updated_metadata = append_dataset_result(
             &existing.metadata,
             &action_id,
             dataset_entity_id,
@@ -821,7 +812,7 @@ pub fn link_dataset_to_job_create_action(
         )?;
         let updated = RoCrateEntityModel {
             id: Some(entity_db_id),
-            metadata: metadata_str,
+            metadata: updated_metadata,
             ..existing
         };
         if let Err(e) =
@@ -852,28 +843,18 @@ pub fn link_dataset_to_job_create_action(
     }
 }
 
-/// Parse a CreateAction's JSON metadata, append a dataset reference to its
-/// `result` array, and return the re-serialized metadata. Returns `None` on
-/// parse failure or non-object metadata so callers can short-circuit.
+/// Append a dataset reference to a CreateAction's `result` array.
+/// Returns `None` on non-object metadata so callers can short-circuit.
 ///
 /// `source` distinguishes whether the metadata came from a stored entity
 /// ("existing") or a freshly built one ("built"), purely for diagnostics.
 fn append_dataset_result(
-    metadata_json: &str,
+    metadata_map: &HashMap<String, serde_json::Value>,
     action_id: &str,
     dataset_entity_id: &str,
     source: &str,
-) -> Option<String> {
-    let mut metadata = match serde_json::from_str::<serde_json::Value>(metadata_json) {
-        Ok(value) => value,
-        Err(e) => {
-            warn!(
-                "Failed to parse {} CreateAction metadata for action_id={}: {}",
-                source, action_id, e
-            );
-            return None;
-        }
-    };
+) -> Option<HashMap<String, serde_json::Value>> {
+    let mut metadata = serde_json::Value::Object(metadata_map.clone().into_iter().collect());
     if !append_result_ref(&mut metadata, dataset_entity_id) {
         warn!(
             "{} CreateAction metadata for action_id={} is not a JSON object; cannot record dataset result",
@@ -881,7 +862,7 @@ fn append_dataset_result(
         );
         return None;
     }
-    Some(metadata.to_string())
+    Some(metadata_value_to_map(&metadata))
 }
 
 /// Pre-create an RO-Crate File entity that carries a user-supplied stable identifier.
@@ -1005,7 +986,7 @@ fn build_software_entity(
         file_id: None,
         entity_id,
         entity_type: "SoftwareApplication".to_string(),
-        metadata: metadata.to_string(),
+        metadata: metadata_value_to_map(&metadata),
     }
 }
 
@@ -1154,7 +1135,7 @@ mod tests {
         assert_eq!(entity.entity_id, "data/output.csv");
         assert_eq!(entity.entity_type, "File");
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["@id"], "data/output.csv");
         assert_eq!(metadata["@type"][0], "File");
         assert_eq!(metadata["@type"][1], "prov:Entity");
@@ -1176,7 +1157,7 @@ mod tests {
 
         let entity = build_file_entity_with_provenance(100, 1, &file, None, None, 42, 1, &[]);
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["prov:wasGeneratedBy"]["@id"], "#job-42-attempt-1");
         assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-id-1");
     }
@@ -1228,7 +1209,7 @@ mod tests {
         assert_eq!(entity.entity_id, "#job-42-attempt-1");
         assert_eq!(entity.entity_type, "CreateAction");
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["@type"][0], "CreateAction");
         assert_eq!(metadata["@type"][1], "prov:Activity");
         assert_eq!(metadata["name"], "process_data");
@@ -1255,7 +1236,7 @@ mod tests {
             };
 
             let entity = build_file_entity(1, &file, None, None, None);
-            let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+            let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
             // Known file types should not fall back to the default
@@ -1279,7 +1260,7 @@ mod tests {
             };
 
             let entity = build_file_entity(1, &file, None, None, None);
-            let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+            let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
             let mime = metadata["encodingFormat"].as_str().unwrap();
 
             assert_eq!(
@@ -1293,8 +1274,7 @@ mod tests {
     #[test]
     fn test_serde_json_deserialize_ro_crate() {
         // Test that standard serde_json deserialization works
-        let json =
-            r#"{"workflow_id":1,"entity_id":"test.txt","entity_type":"File","metadata":"{}"}"#;
+        let json = r#"{"workflow_id":1,"entity_id":"test.txt","entity_type":"File","metadata":{}}"#;
         let model: crate::models::RoCrateEntityModel = serde_json::from_str(json).unwrap();
         assert_eq!(model.workflow_id, 1);
         assert_eq!(model.entity_id, "test.txt");
@@ -1310,7 +1290,7 @@ mod tests {
             file_id: None,
             entity_id: "data/output.parquet".to_string(),
             entity_type: "File".to_string(),
-            metadata: r#"{"name":"Test"}"#.to_string(),
+            metadata: serde_json::from_str(r#"{"name":"Test"}"#).unwrap(),
         };
 
         // Serialize to JSON
@@ -1376,7 +1356,7 @@ mod tests {
         );
 
         assert_eq!(entity.entity_id, "https://doi.org/10.1234/abc");
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["@id"], "https://doi.org/10.1234/abc");
         assert_eq!(metadata["sameAs"]["@id"], "data/reference.csv");
         // Basename and other derived fields stay tied to the local path.
@@ -1399,7 +1379,7 @@ mod tests {
         };
 
         let entity = build_file_entity(100, &file, None, None, Some("data/noop.txt"));
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["@id"], "data/noop.txt");
         assert!(metadata.get("sameAs").is_none());
     }
@@ -1417,7 +1397,7 @@ mod tests {
         let sha256 = Some("abc123def456".to_string());
         let entity = build_file_entity(100, &file, Some(1024), sha256, None);
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "abc123def456");
     }
 
@@ -1434,7 +1414,7 @@ mod tests {
         let sha256 = Some("deadbeef".to_string());
         let entity = build_file_entity_with_provenance(100, 1, &file, None, sha256, 42, 1, &[]);
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["sha256"], "deadbeef");
         assert_eq!(metadata["prov:wasGeneratedBy"]["@id"], "#job-42-attempt-1");
     }
@@ -1448,7 +1428,7 @@ mod tests {
         assert_eq!(entity.entity_id, "#software-torc-run-id-3");
         assert_eq!(entity.entity_type, "SoftwareApplication");
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["@id"], "#software-torc-run-id-3");
         assert_eq!(metadata["@type"][0], "SoftwareApplication");
         assert_eq!(metadata["@type"][1], "prov:SoftwareAgent");
@@ -1466,7 +1446,7 @@ mod tests {
         assert_eq!(entity.entity_id, "#software-torc-server-run-id-1");
         assert_eq!(entity.entity_type, "SoftwareApplication");
 
-        let metadata: serde_json::Value = serde_json::from_str(&entity.metadata).unwrap();
+        let metadata: serde_json::Value = serde_json::to_value(&entity.metadata).unwrap();
         assert_eq!(metadata["name"], "torc-server");
         assert_eq!(metadata["url"], "/opt/torc/torc-server");
         assert_eq!(metadata["@type"][0], "SoftwareApplication");
@@ -1483,10 +1463,10 @@ mod tests {
             file_id: None,
             entity_id: "#torc-run-id-7".to_string(),
             entity_type: "CreateAction".to_string(),
-            metadata: serde_json::json!({
+            metadata: serde_json::from_value(serde_json::json!({
                 "startTime": "2024-01-01T00:00:00Z"
-            })
-            .to_string(),
+            }))
+            .unwrap(),
         };
 
         let parsed = parse_entity_datetime(&entity, "startTime").unwrap();

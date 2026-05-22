@@ -9,7 +9,9 @@
 name: hyperparameter_sweep
 description: Grid search over learning rate, batch size, and optimizer
 project: ml-research
-metadata: '{"team": "applied-ml", "experiment": "resnet50-tuning"}'
+metadata:
+  team: applied-ml
+  experiment: resnet50-tuning
 
 # Prepare datasets (one-time setup jobs)
 jobs:

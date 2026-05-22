@@ -1659,22 +1659,16 @@ pub fn schedule_slurm_nodes(
     let mut config_map = HashMap::new();
 
     // Apply workflow-level slurm_defaults first (scheduler-specific values will override)
-    if let Some(ref defaults_json) = workflow.slurm_defaults {
-        match serde_json::from_str::<SlurmDefaultsSpec>(defaults_json) {
-            Ok(defaults) => {
-                // Validate that no excluded parameters are present
-                if let Err(e) = defaults.validate() {
-                    return Err(e.into());
-                }
-                debug!("Applying slurm_defaults from workflow");
-                // Apply all default parameters to config_map
-                for (key, value) in defaults.to_string_map() {
-                    config_map.insert(key, value);
-                }
-            }
-            Err(e) => {
-                warn!("Failed to parse slurm_defaults: {}", e);
-            }
+    if let Some(ref defaults_map) = workflow.slurm_defaults {
+        let defaults = SlurmDefaultsSpec(defaults_map.clone());
+        // Validate that no excluded parameters are present
+        if let Err(e) = defaults.validate() {
+            return Err(e.into());
+        }
+        debug!("Applying slurm_defaults from workflow");
+        // Apply all default parameters to config_map
+        for (key, value) in defaults.to_string_map() {
+            config_map.insert(key, value);
         }
     }
 

@@ -159,20 +159,10 @@ class JobModel(BaseModel):
         if self.resource_requirements_id is None and "resource_requirements_id" in self.model_fields_set:
             _dict['resource_requirements_id'] = None
 
-        # set to None if schedule_compute_nodes (nullable) is None
-        # and model_fields_set contains the field
-        if self.schedule_compute_nodes is None and "schedule_compute_nodes" in self.model_fields_set:
-            _dict['schedule_compute_nodes'] = None
-
         # set to None if scheduler_id (nullable) is None
         # and model_fields_set contains the field
         if self.scheduler_id is None and "scheduler_id" in self.model_fields_set:
             _dict['scheduler_id'] = None
-
-        # set to None if status (nullable) is None
-        # and model_fields_set contains the field
-        if self.status is None and "status" in self.model_fields_set:
-            _dict['status'] = None
 
         # set to None if supports_termination (nullable) is None
         # and model_fields_set contains the field

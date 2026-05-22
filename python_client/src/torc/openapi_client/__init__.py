@@ -57,6 +57,7 @@ __all__ = [
     "ClaimJobsBasedOnResources",
     "ClaimNextJobsResponse",
     "ComputeNodeModel",
+    "ComputeNodeMonitorConfig",
     "ComputeNodeSchedule",
     "ComputeNodesResources",
     "CreateFilesResponse",
@@ -67,6 +68,8 @@ __all__ = [
     "DynamicJobsConfig",
     "ErrorResponse",
     "EventModel",
+    "ExecutionConfig",
+    "ExecutionMode",
     "FailureHandlerModel",
     "FileModel",
     "FilesModel",
@@ -78,6 +81,7 @@ __all__ = [
     "JobDependencyModel",
     "JobFileRelationshipModel",
     "JobModel",
+    "JobMonitorConfig",
     "JobStatus",
     "JobUserDataRelationshipModel",
     "JobsModel",
@@ -105,11 +109,13 @@ __all__ = [
     "ListWorkflowsResponse",
     "LocalSchedulerModel",
     "MessageResponse",
+    "MonitorGranularity",
     "PingResponse",
     "ProcessChangedJobInputsResponse",
     "ReloadAuthResponse",
     "RemoteWorkerModel",
     "ResetJobStatusResponse",
+    "ResourceMonitorConfig",
     "ResourceRequirementsModel",
     "ResultModel",
     "RoCrateEntityModel",
@@ -119,6 +125,8 @@ __all__ = [
     "SpawnJobModel",
     "SpawnJobsRequest",
     "SpawnJobsResponse",
+    "StdioConfig",
+    "StdioMode",
     "TaskModel",
     "TaskStatus",
     "UserDataListModel",
@@ -174,6 +182,7 @@ from torc.openapi_client.models.claim_action_response import ClaimActionResponse
 from torc.openapi_client.models.claim_jobs_based_on_resources import ClaimJobsBasedOnResources as ClaimJobsBasedOnResources
 from torc.openapi_client.models.claim_next_jobs_response import ClaimNextJobsResponse as ClaimNextJobsResponse
 from torc.openapi_client.models.compute_node_model import ComputeNodeModel as ComputeNodeModel
+from torc.openapi_client.models.compute_node_monitor_config import ComputeNodeMonitorConfig as ComputeNodeMonitorConfig
 from torc.openapi_client.models.compute_node_schedule import ComputeNodeSchedule as ComputeNodeSchedule
 from torc.openapi_client.models.compute_nodes_resources import ComputeNodesResources as ComputeNodesResources
 from torc.openapi_client.models.create_files_response import CreateFilesResponse as CreateFilesResponse
@@ -184,6 +193,8 @@ from torc.openapi_client.models.delete_ro_crate_entities_response import DeleteR
 from torc.openapi_client.models.dynamic_jobs_config import DynamicJobsConfig as DynamicJobsConfig
 from torc.openapi_client.models.error_response import ErrorResponse as ErrorResponse
 from torc.openapi_client.models.event_model import EventModel as EventModel
+from torc.openapi_client.models.execution_config import ExecutionConfig as ExecutionConfig
+from torc.openapi_client.models.execution_mode import ExecutionMode as ExecutionMode
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel as FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel as FileModel
 from torc.openapi_client.models.files_model import FilesModel as FilesModel
@@ -195,6 +206,7 @@ from torc.openapi_client.models.job_completion_error import JobCompletionError a
 from torc.openapi_client.models.job_dependency_model import JobDependencyModel as JobDependencyModel
 from torc.openapi_client.models.job_file_relationship_model import JobFileRelationshipModel as JobFileRelationshipModel
 from torc.openapi_client.models.job_model import JobModel as JobModel
+from torc.openapi_client.models.job_monitor_config import JobMonitorConfig as JobMonitorConfig
 from torc.openapi_client.models.job_status import JobStatus as JobStatus
 from torc.openapi_client.models.job_user_data_relationship_model import JobUserDataRelationshipModel as JobUserDataRelationshipModel
 from torc.openapi_client.models.jobs_model import JobsModel as JobsModel
@@ -222,11 +234,13 @@ from torc.openapi_client.models.list_user_group_memberships_response import List
 from torc.openapi_client.models.list_workflows_response import ListWorkflowsResponse as ListWorkflowsResponse
 from torc.openapi_client.models.local_scheduler_model import LocalSchedulerModel as LocalSchedulerModel
 from torc.openapi_client.models.message_response import MessageResponse as MessageResponse
+from torc.openapi_client.models.monitor_granularity import MonitorGranularity as MonitorGranularity
 from torc.openapi_client.models.ping_response import PingResponse as PingResponse
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse as ProcessChangedJobInputsResponse
 from torc.openapi_client.models.reload_auth_response import ReloadAuthResponse as ReloadAuthResponse
 from torc.openapi_client.models.remote_worker_model import RemoteWorkerModel as RemoteWorkerModel
 from torc.openapi_client.models.reset_job_status_response import ResetJobStatusResponse as ResetJobStatusResponse
+from torc.openapi_client.models.resource_monitor_config import ResourceMonitorConfig as ResourceMonitorConfig
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel as ResourceRequirementsModel
 from torc.openapi_client.models.result_model import ResultModel as ResultModel
 from torc.openapi_client.models.ro_crate_entity_model import RoCrateEntityModel as RoCrateEntityModel
@@ -236,6 +250,8 @@ from torc.openapi_client.models.slurm_stats_model import SlurmStatsModel as Slur
 from torc.openapi_client.models.spawn_job_model import SpawnJobModel as SpawnJobModel
 from torc.openapi_client.models.spawn_jobs_request import SpawnJobsRequest as SpawnJobsRequest
 from torc.openapi_client.models.spawn_jobs_response import SpawnJobsResponse as SpawnJobsResponse
+from torc.openapi_client.models.stdio_config import StdioConfig as StdioConfig
+from torc.openapi_client.models.stdio_mode import StdioMode as StdioMode
 from torc.openapi_client.models.task_model import TaskModel as TaskModel
 from torc.openapi_client.models.task_status import TaskStatus as TaskStatus
 from torc.openapi_client.models.user_data_list_model import UserDataListModel as UserDataListModel

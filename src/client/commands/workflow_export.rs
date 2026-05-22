@@ -232,7 +232,11 @@ impl IdMappings {
     /// - metadata JSON containing `prov:wasGeneratedBy: {"@id": "#job-{old_id}-attempt-{n}"}`
     ///
     /// Returns the updated (entity_id, metadata) tuple.
-    pub fn remap_ro_crate_job_ids(&self, entity_id: &str, metadata: &str) -> (String, String) {
+    pub fn remap_ro_crate_job_ids(
+        &self,
+        entity_id: &str,
+        metadata: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> (String, std::collections::HashMap<String, serde_json::Value>) {
         // Pattern: #job-{job_id}-attempt-{attempt_id}
         let job_id_pattern = regex::Regex::new(r"#job-(\d+)-attempt-(\d+)").unwrap();
 
@@ -250,9 +254,10 @@ impl IdMappings {
             })
             .to_string();
 
-        // Remap job IDs in metadata JSON
-        let new_metadata = job_id_pattern
-            .replace_all(metadata, |caps: &regex::Captures| {
+        // Remap job IDs in metadata JSON by round-tripping through a string
+        let metadata_str = serde_json::to_string(metadata).unwrap_or_default();
+        let new_metadata_str = job_id_pattern
+            .replace_all(&metadata_str, |caps: &regex::Captures| {
                 let old_job_id: i64 = caps[1].parse().unwrap_or(0);
                 let attempt_id = &caps[2];
                 if let Some(new_job_id) = self.remap_job_id(old_job_id) {
@@ -262,6 +267,7 @@ impl IdMappings {
                 }
             })
             .to_string();
+        let new_metadata = serde_json::from_str(&new_metadata_str).unwrap_or_default();
 
         (new_entity_id, new_metadata)
     }
@@ -277,12 +283,15 @@ mod tests {
         mappings.jobs.insert(42, 99);
         mappings.jobs.insert(43, 100);
 
+        let empty_meta: std::collections::HashMap<String, serde_json::Value> =
+            serde_json::from_str("{}").unwrap();
+
         // Test CreateAction entity_id remapping
-        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-42-attempt-1", "{}");
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-42-attempt-1", &empty_meta);
         assert_eq!(new_entity_id, "#job-99-attempt-1");
 
         // Test with different attempt number
-        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-43-attempt-3", "{}");
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-43-attempt-3", &empty_meta);
         assert_eq!(new_entity_id, "#job-100-attempt-3");
     }
 
@@ -292,19 +301,25 @@ mod tests {
         mappings.jobs.insert(42, 99);
 
         // Test prov:wasGeneratedBy in metadata
-        let metadata =
-            r##"{"@id": "output.csv", "prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##;
-        let (_, new_metadata) = mappings.remap_ro_crate_job_ids("output.csv", metadata);
-        assert!(new_metadata.contains("#job-99-attempt-1"));
-        assert!(!new_metadata.contains("#job-42-attempt-1"));
+        let metadata: std::collections::HashMap<String, serde_json::Value> = serde_json::from_str(
+            r##"{"@id": "output.csv", "prov:wasGeneratedBy": {"@id": "#job-42-attempt-1"}}"##,
+        )
+        .unwrap();
+        let (_, new_metadata) = mappings.remap_ro_crate_job_ids("output.csv", &metadata);
+        let new_metadata_str = serde_json::to_string(&new_metadata).unwrap();
+        assert!(new_metadata_str.contains("#job-99-attempt-1"));
+        assert!(!new_metadata_str.contains("#job-42-attempt-1"));
     }
 
     #[test]
     fn test_remap_ro_crate_job_ids_no_mapping() {
         let mappings = IdMappings::new(); // Empty mappings
 
+        let empty_meta: std::collections::HashMap<String, serde_json::Value> =
+            serde_json::from_str("{}").unwrap();
+
         // Should preserve original when no mapping exists
-        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-42-attempt-1", "{}");
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("#job-42-attempt-1", &empty_meta);
         assert_eq!(new_entity_id, "#job-42-attempt-1");
     }
 
@@ -313,9 +328,11 @@ mod tests {
         let mut mappings = IdMappings::new();
         mappings.jobs.insert(42, 99);
 
+        let metadata: std::collections::HashMap<String, serde_json::Value> =
+            serde_json::from_str(r#"{"@id": "data/output.csv"}"#).unwrap();
+
         // File entities should pass through unchanged
-        let (new_entity_id, _) =
-            mappings.remap_ro_crate_job_ids("data/output.csv", r#"{"@id": "data/output.csv"}"#);
+        let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("data/output.csv", &metadata);
         assert_eq!(new_entity_id, "data/output.csv");
     }
 }

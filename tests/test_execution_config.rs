@@ -764,8 +764,7 @@ fn test_create_workflow_with_execution_config(start_server: &ServerProcess) {
     assert_eq!(workflow.name, "execution_config_test");
 
     assert!(workflow.execution_config.is_some());
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config: ExecutionConfig = workflow.execution_config.clone().unwrap();
     assert_eq!(exec_config.mode, ExecutionMode::Direct);
     assert_eq!(exec_config.sigterm_lead_seconds, Some(45));
     assert_eq!(exec_config.sigkill_headroom_seconds, Some(90));
@@ -802,8 +801,7 @@ fn test_create_workflow_with_slurm_execution_config(start_server: &ServerProcess
         .expect("Failed to get workflow");
 
     assert!(workflow.execution_config.is_some());
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config: ExecutionConfig = workflow.execution_config.clone().unwrap();
     assert_eq!(exec_config.mode, ExecutionMode::Slurm);
     assert_eq!(
         exec_config.srun_termination_signal,
@@ -869,8 +867,7 @@ fn test_create_workflow_with_auto_mode(start_server: &ServerProcess) {
         .expect("Failed to get workflow");
 
     assert!(workflow.execution_config.is_some());
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config: ExecutionConfig = workflow.execution_config.clone().unwrap();
     assert_eq!(exec_config.mode, ExecutionMode::Auto);
     assert_eq!(exec_config.sigkill_headroom_seconds, Some(120));
 }
@@ -1062,11 +1059,7 @@ fn test_direct_mode_simple_job_execution(start_server: &ServerProcess) {
     let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    let exec_config = workflow
-        .execution_config
-        .as_deref()
-        .map(|json| serde_json::from_str::<ExecutionConfig>(json).unwrap())
-        .unwrap_or_default();
+    let exec_config = workflow.execution_config.clone().unwrap_or_default();
     assert_eq!(exec_config.mode, ExecutionMode::Direct);
 }
 
@@ -1104,8 +1097,7 @@ fn test_direct_mode_with_resource_limits(start_server: &ServerProcess) {
     let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config: ExecutionConfig = workflow.execution_config.clone().unwrap();
 
     assert_eq!(exec_config.mode, ExecutionMode::Direct);
     assert_eq!(exec_config.limit_resources, Some(true));
@@ -1139,8 +1131,7 @@ fn test_direct_mode_disabled_resource_limits(start_server: &ServerProcess) {
     let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config: ExecutionConfig = workflow.execution_config.clone().unwrap();
 
     assert!(!exec_config.limit_resources());
 }
@@ -1637,8 +1628,7 @@ fn test_direct_mode_custom_exit_codes(start_server: &ServerProcess) {
     let workflow = apis::workflows_api::get_workflow(&start_server.config, workflow_id)
         .expect("Failed to get workflow");
 
-    let exec_config: ExecutionConfig =
-        serde_json::from_str(workflow.execution_config.as_ref().unwrap()).unwrap();
+    let exec_config: ExecutionConfig = workflow.execution_config.clone().unwrap();
 
     assert_eq!(exec_config.timeout_exit_code(), 200);
     assert_eq!(exec_config.oom_exit_code(), 201);
