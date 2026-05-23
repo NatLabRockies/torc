@@ -190,7 +190,7 @@ impl Default for ApiStatsRing {
 pub struct CountingBody<B> {
     inner: B,
     counter: Arc<AtomicU64>,
-    on_end: Option<Box<dyn FnOnce(u64) + Send + Sync>>,
+    on_end: Option<Box<dyn FnOnce(u64) + Send>>,
 }
 
 impl<B> CountingBody<B> {
@@ -213,7 +213,7 @@ impl<B> CountingBody<B> {
     /// whose size isn't known up front.
     pub fn with_on_end<F>(inner: B, counter: Arc<AtomicU64>, on_end: F) -> Self
     where
-        F: FnOnce(u64) + Send + Sync + 'static,
+        F: FnOnce(u64) + Send + 'static,
     {
         Self {
             inner,

@@ -4872,7 +4872,10 @@ mod live_router_tests {
         let body_len = body_bytes.len() as u64;
         assert!(body_len > 0, "ping should return a non-empty body");
 
-        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 60, 60);
+        // 120s window so a record landing in the previous minute is
+        // still covered if `now` has just rolled into a new minute
+        // (snapshot buckets align to `floor(now / interval)`).
+        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 120, 60);
         let total_bytes_out: u64 = snap.buckets.iter().map(|b| b.bytes_out).sum();
         assert_eq!(
             total_bytes_out, body_len,
@@ -4902,7 +4905,9 @@ mod live_router_tests {
         // we snapshot.
         drop(response);
 
-        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 60, 60);
+        // 120s window so a record landing in the previous minute is
+        // still covered if `now` has just rolled into a new minute.
+        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 120, 60);
         let total: u64 = snap.buckets.iter().map(|b| b.request_count).sum();
         let total_4xx: u64 = snap.buckets.iter().map(|b| b.status_4xx).sum();
         assert_eq!(total, 1, "the 401 should still be recorded");
