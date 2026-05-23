@@ -9,6 +9,7 @@ use crate::server::api_stats::{
     ApiStatsRing, ApiStatsSnapshot, DEFAULT_INTERVAL_SECONDS, DEFAULT_WINDOW_SECONDS,
 };
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
+use crate::server::authorization::AccessCheckResult;
 use crate::server::credential_cache::CredentialCache;
 use crate::server::dashboard::serve_dashboard;
 use crate::server::htpasswd::HtpasswdFile;
@@ -584,8 +585,12 @@ pub struct ApiEventStreamQuery {
 )]
 pub async fn admin_api_events_stream(
     State(state): State<LiveRouterState>,
+    Extension(context): Extension<EmptyContext>,
     Query(params): Query<ApiEventStreamQuery>,
 ) -> Response<Body> {
+    if let Some(denial) = require_admin(&state, &context).await {
+        return denial;
+    }
     let bus = state.server.api_event_broadcaster.clone();
     let mut receiver = bus.subscribe();
     let include_bodies = params.include_bodies.unwrap_or(false);
@@ -655,13 +660,38 @@ pub struct ApiStatsQuery {
 )]
 pub async fn admin_api_stats(
     State(state): State<LiveRouterState>,
+    Extension(context): Extension<EmptyContext>,
     Query(params): Query<ApiStatsQuery>,
 ) -> Response<Body> {
+    if let Some(denial) = require_admin(&state, &context).await {
+        return denial;
+    }
     let window = params.window_seconds.unwrap_or(DEFAULT_WINDOW_SECONDS);
     let interval = params.interval_seconds.unwrap_or(DEFAULT_INTERVAL_SECONDS);
     let now_ms = chrono::Utc::now().timestamp_millis();
     let snapshot: ApiStatsSnapshot = state.server.api_stats.snapshot(now_ms, window, interval);
     json_response_ok(&snapshot)
+}
+
+/// Shared admin gate for handlers under `/admin/*` that are wired directly into
+/// the router rather than going through the `Server` transport layer (which uses
+/// the `authorize_admin!` macro). Returns `None` when the caller is authorized,
+/// or `Some(response)` carrying the appropriate 403/404/500 to short-circuit on.
+async fn require_admin(state: &LiveRouterState, context: &EmptyContext) -> Option<Response<Body>> {
+    let auth: Option<Authorization> = Has::<Option<Authorization>>::get(context).clone();
+    match state
+        .server
+        .authorization_service
+        .check_admin_access(&auth)
+        .await
+    {
+        AccessCheckResult::Allowed => None,
+        AccessCheckResult::Denied(reason) => Some(error_response(StatusCode::FORBIDDEN, reason)),
+        AccessCheckResult::NotFound(reason) => Some(error_response(StatusCode::NOT_FOUND, reason)),
+        AccessCheckResult::InternalError(reason) => {
+            Some(error_response(StatusCode::INTERNAL_SERVER_ERROR, reason))
+        }
+    }
 }
 
 fn json_response_ok<T: serde::Serialize>(value: &T) -> Response<Body> {
