@@ -549,6 +549,9 @@ impl App {
             popup: None,
             status_message: None,
             workflow_path_input: String::new(),
+            // Off by default to minimize server load: each refresh tick fans
+            // out into several list calls per connected TUI against the
+            // single-writer SQLite backend. Users opt in with `A`.
             auto_refresh: false,
             last_refresh: std::time::Instant::now(),
             server_process: None,
@@ -1009,6 +1012,70 @@ impl App {
         Ok(())
     }
 
+    /// Force a re-fetch of the active detail view, bypassing the per-workflow
+    /// caches that `load_detail_data` uses to skip redundant calls. Without
+    /// this, refreshing while the selected workflow is unchanged leaves cached
+    /// views (e.g. Summary, Results) showing stale data. Table positions and
+    /// the active filter are preserved so a refresh doesn't snap the user back
+    /// to the top or silently drop their filter. Callers are expected to run
+    /// `refresh_workflows` immediately before this.
+    pub fn reload_detail_data(&mut self) -> Result<()> {
+        // The Events view streams over SSE and updates itself live; reloading
+        // it would tear down the connection and discard accumulated history,
+        // so there is nothing to refresh here.
+        if self.detail_view == DetailViewType::Events {
+            return Ok(());
+        }
+
+        // load_detail_data clears self.filter and reloads the full, unfiltered
+        // lists, so capture the active filter and table positions to restore
+        // afterward.
+        let jobs_sel = self.jobs_state.selected();
+        let files_sel = self.files_state.selected();
+        let results_sel = self.results_state.selected();
+        let compute_nodes_sel = self.compute_nodes_state.selected();
+        let scheduled_nodes_sel = self.scheduled_nodes_state.selected();
+        let slurm_stats_sel = self.slurm_stats_state.selected();
+        let prev_filter = self.filter.clone();
+        let filter_target = self.filter_target;
+
+        // Invalidate caches keyed by workflow id so load_detail_data refetches.
+        self.jobs_workflow_id = None;
+        self.results_workflow_id = None;
+        self.load_detail_data()?;
+
+        // Re-narrow freshly-loaded detail data and restore the filter flag that
+        // load_detail_data cleared. A Workflows-target filter is already
+        // re-applied (with its selection preserved) by refresh_workflows, so
+        // only its Details counterpart needs re-narrowing here.
+        if let Some(filter) = prev_filter {
+            if filter_target == FilterTarget::Details {
+                self.filter_active_view(FilterTarget::Details, &filter.column, &filter.value);
+            }
+            self.filter = Some(filter);
+        }
+
+        restore_selection(&mut self.jobs_state, jobs_sel, self.jobs.len());
+        restore_selection(&mut self.files_state, files_sel, self.files.len());
+        restore_selection(&mut self.results_state, results_sel, self.results.len());
+        restore_selection(
+            &mut self.compute_nodes_state,
+            compute_nodes_sel,
+            self.compute_nodes.len(),
+        );
+        restore_selection(
+            &mut self.scheduled_nodes_state,
+            scheduled_nodes_sel,
+            self.scheduled_nodes.len(),
+        );
+        restore_selection(
+            &mut self.slurm_stats_state,
+            slurm_stats_sel,
+            self.slurm_stats.len(),
+        );
+        Ok(())
+    }
+
     /// Sort `self.results` in-place based on `self.results_sort`. Rows with
     /// missing values sort last in both directions so they don't crowd the
     /// top.
@@ -1399,6 +1466,21 @@ impl App {
             column: column.clone(),
             value: value.clone(),
         });
+        self.filter_active_view(target, &column, &value);
+        self.focus = return_focus;
+    }
+
+    /// Narrow the visible rows of the active table (`target` plus the current
+    /// `detail_view`) to those matching `column`/`value`, resetting the
+    /// selection to the first match. Shared by interactive filtering
+    /// (`apply_filter`) and refresh (`reload_detail_data`), which must
+    /// re-narrow freshly-loaded data after the per-workflow caches are
+    /// invalidated. Leaves focus unchanged; callers manage focus.
+    fn filter_active_view(&mut self, target: FilterTarget, column: &str, value: &str) {
+        // Re-bind as owned so the verbatim match arms below can keep using
+        // `column.as_str()` / `&value`.
+        let column = column.to_string();
+        let value = value.to_string();
 
         if target == FilterTarget::Workflows {
             self.workflows = filter_workflow_list(&self.workflows_all, &column, &value);
@@ -1407,7 +1489,6 @@ impl App {
             } else {
                 self.workflows_state.select(None);
             }
-            self.focus = return_focus;
             return;
         }
 
@@ -1558,8 +1639,6 @@ impl App {
                 // Summary and DAG views don't support filtering
             }
         }
-
-        self.focus = Focus::Details;
     }
 
     pub fn clear_filter(&mut self) {
@@ -2975,7 +3054,7 @@ impl App {
         if self.auto_refresh && self.last_refresh.elapsed() > std::time::Duration::from_secs(30) {
             self.refresh_workflows()?;
             if self.selected_workflow_id.is_some() {
-                let _ = self.load_detail_data();
+                let _ = self.reload_detail_data();
             }
             self.last_refresh = std::time::Instant::now();
         }
@@ -3267,6 +3346,17 @@ impl App {
                 }
             }
         }
+    }
+}
+
+/// Restore a previously-captured table selection after a reload. A prior
+/// selection is clamped to the new row count (so an out-of-bounds index falls
+/// back to the last row); a prior `None`, or an empty table, leaves nothing
+/// selected.
+fn restore_selection(state: &mut TableState, prev: Option<usize>, len: usize) {
+    match prev {
+        Some(idx) if len > 0 => state.select(Some(idx.min(len - 1))),
+        _ => state.select(None),
     }
 }
 
