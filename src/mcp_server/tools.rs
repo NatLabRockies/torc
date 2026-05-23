@@ -1000,6 +1000,22 @@ pub fn check_offline_journals(
 ) -> Result<CallToolResult, McpError> {
     use crate::client::offline_journal::OfflineJournal;
 
+    // Build a "nothing to reconcile" success response. Used both when the
+    // workflow has never run and when no journals are found.
+    let no_journals = |run_id: Option<i64>, summary: String| {
+        let response = serde_json::json!({
+            "workflow_id": workflow_id,
+            "run_id": run_id,
+            "base_dir": base_dir.display().to_string(),
+            "journals_found": 0,
+            "reconcile_needed": false,
+            "summary": summary,
+        });
+        Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]))
+    };
+
     // Resolve the run_id to match journals against. Default to the workflow's
     // current generation so we only recommend replaying journals for the run the
     // server still considers active (reconcile rejects superseded runs anyway).
@@ -1008,29 +1024,77 @@ pub fn check_offline_journals(
         None => {
             let workflow = apis::workflows_api::get_workflow(config, workflow_id)
                 .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
-            workflow.run_id.ok_or_else(|| {
-                internal_error(format!(
-                    "Workflow {} has no run_id (it has not been run yet); nothing to reconcile",
-                    workflow_id
-                ))
-            })?
+            match workflow.run_id {
+                Some(rid) => rid,
+                // A workflow that has not been run yet has no run_id. This is a
+                // normal state, not an error: there is simply nothing to reconcile.
+                None => {
+                    return no_journals(
+                        None,
+                        format!(
+                            "Workflow {} has not been run yet (no run_id), so there are no offline-drain \
+                             journals to reconcile.",
+                            workflow_id
+                        ),
+                    );
+                }
+            }
         }
     };
 
     let files = OfflineJournal::discover(base_dir, workflow_id, run_id);
 
     if files.is_empty() {
-        let response = serde_json::json!({
-            "workflow_id": workflow_id,
-            "run_id": run_id,
-            "base_dir": base_dir.display().to_string(),
-            "journals_found": 0,
-            "reconcile_needed": false,
-            "summary": format!(
+        return no_journals(
+            Some(run_id),
+            format!(
                 "No offline-drain journals found for workflow_id={} run_id={} under {}. No reconcile needed.",
                 workflow_id,
                 run_id,
                 base_dir.display()
+            ),
+        );
+    }
+
+    // Count pending completions per journal (via SELECT COUNT(*), no payload
+    // deserialization) so the user can see how much work is waiting to be
+    // replayed. Unreadable journals are reported with a null count rather than
+    // failing the whole check.
+    let mut journal_details = Vec::new();
+    let mut total_completions = 0usize;
+    let mut unreadable = 0usize;
+    for path in &files {
+        let completions = OfflineJournal::count_file(path).ok();
+        match completions {
+            Some(n) => total_completions += n,
+            None => unreadable += 1,
+        }
+        journal_details.push(serde_json::json!({
+            "path": path.display().to_string(),
+            "completions": completions,
+        }));
+    }
+
+    // Only recommend reconcile when there is actually pending work, or when a
+    // journal could not be read (so its contents are unknown and worth checking).
+    // Empty journals (e.g. already flushed) need no action.
+    let reconcile_needed = total_completions > 0 || unreadable > 0;
+
+    if !reconcile_needed {
+        let response = serde_json::json!({
+            "workflow_id": workflow_id,
+            "run_id": run_id,
+            "base_dir": base_dir.display().to_string(),
+            "journals_found": files.len(),
+            "total_pending_completions": 0,
+            "journals": journal_details,
+            "reconcile_needed": false,
+            "summary": format!(
+                "Found {} offline-drain journal(s) for workflow_id={} run_id={}, but all are empty \
+                 (completions already flushed). No reconcile needed.",
+                files.len(),
+                workflow_id,
+                run_id
             ),
         });
         return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
@@ -1038,27 +1102,11 @@ pub fn check_offline_journals(
         )]));
     }
 
-    // Count pending completions per journal so the user can see how much work is
-    // waiting to be replayed. Unreadable journals are reported with a null count
-    // rather than failing the whole check.
-    let mut journal_details = Vec::new();
-    let mut total_completions = 0usize;
-    for path in &files {
-        let count = OfflineJournal::read_file(path).map(|entries| entries.len());
-        if let Ok(n) = count {
-            total_completions += n;
-        }
-        journal_details.push(serde_json::json!({
-            "path": path.display().to_string(),
-            "completions": count.ok(),
-        }));
-    }
-
     let reconcile_command = format!(
         "torc workflows reconcile {} {} --base-dir {}",
         workflow_id,
         run_id,
-        base_dir.display()
+        shell_quote(&base_dir.display().to_string())
     );
 
     let response = serde_json::json!({
@@ -1067,6 +1115,7 @@ pub fn check_offline_journals(
         "base_dir": base_dir.display().to_string(),
         "journals_found": files.len(),
         "total_pending_completions": total_completions,
+        "unreadable_journals": unreadable,
         "journals": journal_details,
         "reconcile_needed": true,
         "reconcile_command": reconcile_command,
@@ -1091,6 +1140,20 @@ pub fn check_offline_journals(
     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
         serde_json::to_string_pretty(&response).unwrap_or_default(),
     )]))
+}
+
+/// Quote a string for safe inclusion in a copy-pasteable POSIX shell command.
+/// Paths without shell-special characters are returned unchanged; otherwise the
+/// value is wrapped in single quotes with embedded single quotes escaped.
+fn shell_quote(s: &str) -> String {
+    let safe = !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'/'));
+    if safe {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
 }
 
 /// Get workflow summary.
