@@ -582,6 +582,15 @@ pub struct WorkflowModel {
     /// workflow creation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dynamic_jobs: Option<DynamicJobsConfig>,
+    /// Access group names granted shared access to this workflow.
+    /// Projection of the `workflow_access_group` join table (which remains the
+    /// source of truth). On create, names are resolved to group IDs and join
+    /// rows are inserted in the same transaction as the workflow row; an
+    /// unknown name fails the whole create. On read, populated from the join
+    /// table. Use `add_workflow_to_group` / `remove_workflow_from_group` for
+    /// post-creation changes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_groups: Option<Vec<String>>,
 }
 
 /// Dynamic job spawning configuration. Used both as the user-authored
@@ -1946,6 +1955,7 @@ impl WorkflowModel {
             is_canceled: None,
             is_archived: None,
             dynamic_jobs: None,
+            access_groups: None,
         }
     }
 }
@@ -2370,6 +2380,7 @@ mod tests {
             is_canceled: Some(false),
             is_archived: Some(false),
             dynamic_jobs: None,
+            access_groups: None,
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");

@@ -94,6 +94,31 @@ fn test_workflow_specification_new() {
 }
 
 #[test]
+fn test_workflow_specification_access_groups_round_trip() {
+    let json = serde_json::json!({
+        "name": "shared-wf",
+        "user": "alice",
+        "access_groups": ["naerm", "data-team"],
+        "jobs": [{
+            "name": "only-job",
+            "command": "echo hi",
+        }],
+    });
+    let spec = WorkflowSpec::from_json_value(json).expect("Failed to parse spec");
+
+    assert_eq!(
+        spec.access_groups,
+        Some(vec!["naerm".to_string(), "data-team".to_string()]),
+    );
+
+    // Round-trip through JSON should preserve the field with the same ordering.
+    let serialized = serde_json::to_string(&spec).expect("Failed to serialize");
+    let deserialized: WorkflowSpec =
+        serde_json::from_str(&serialized).expect("Failed to deserialize");
+    assert_eq!(spec.access_groups, deserialized.access_groups);
+}
+
+#[test]
 fn test_workflow_specification_minimal_serialization() {
     let jobs = vec![JobSpec::new("simple_job".to_string(), "ls".to_string())];
     let workflow = WorkflowSpec::new(

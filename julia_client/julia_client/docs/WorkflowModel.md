@@ -4,6 +4,7 @@
 ## Properties
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**access_groups** | **Vector{String}** | Access group names granted shared access to this workflow. Projection of the &#x60;workflow_access_group&#x60; join table (which remains the source of truth). On create, names are resolved to group IDs and join rows are inserted in the same transaction as the workflow row; an unknown name fails the whole create. On read, populated from the join table. Use &#x60;add_workflow_to_group&#x60; / &#x60;remove_workflow_from_group&#x60; for post-creation changes. | [optional] [default to nothing]
 **compute_node_expiration_buffer_seconds** | **Int64** |  | [optional] [default to nothing]
 **compute_node_ignore_workflow_completion** | **Bool** |  | [optional] [default to nothing]
 **compute_node_min_time_for_new_jobs_seconds** | **Int64** |  | [optional] [default to nothing]
