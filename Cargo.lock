@@ -460,7 +460,7 @@ dependencies = [
  "find-msvc-tools",
  "jobserver",
  "libc",
- "shlex",
+ "shlex 1.3.0",
 ]
 
 [[package]]
@@ -4281,6 +4281,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "shlex"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f70fe4c6ac787e57441913f82b210e668fb2033613bc7a76909cd8afce8bb1f"
+
+[[package]]
 name = "signal-hook"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5159,7 +5165,7 @@ dependencies = [
  "serial_test",
  "service-manager",
  "sha2 0.11.0",
- "shlex",
+ "shlex 2.0.0",
  "signal-hook 0.4.4",
  "sqlx",
  "sysinfo",
