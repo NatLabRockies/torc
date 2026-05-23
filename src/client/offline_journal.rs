@@ -25,6 +25,11 @@ use std::path::{Path, PathBuf};
 const JOURNAL_SUBDIR: &str = "offline_journal";
 const FILENAME_PREFIX: &str = "offline_results";
 
+/// Maximum completions to send in a single `batch_complete_jobs` request when
+/// replaying a journal. Bounds request body size and lets replay make partial
+/// progress. Shared by the runner's resume flush and `torc reconcile`.
+pub const FLUSH_BATCH_SIZE: usize = 500;
+
 /// Build the journal file name for a runner. The `workflow_id` / `run_id` prefix
 /// is what [`OfflineJournal::discover`] globs on; `unique_label` makes the name
 /// unique across the compute nodes participating in a run.

@@ -38,7 +38,7 @@ use std::time::{Duration, Instant};
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::async_cli_command::AsyncCliCommand;
-use crate::client::offline_journal::OfflineJournal;
+use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, SystemMetricsSummary};
 use crate::client::utils;
@@ -1234,10 +1234,16 @@ impl JobRunner {
         }
     }
 
-    /// Upload every journaled completion to the server in one batch, then clear
-    /// the journal. Returns the number of completions flushed. Completions are
-    /// already finalized locally (removed from `running_jobs`); this only brings
-    /// the server's view up to date so dependent jobs can unblock.
+    /// Upload journaled completions to the server, then clear the journal.
+    /// Returns the number of completions flushed. Completions are already
+    /// finalized locally (removed from `running_jobs`); this only brings the
+    /// server's view up to date so dependent jobs can unblock.
+    ///
+    /// Sent in bounded chunks so a node that drained many jobs does not produce
+    /// an oversized request. Each accepted chunk is recorded server-side, so if
+    /// a later chunk fails we leave the journal intact and stay offline; the
+    /// next resume attempt re-sends everything, and already-recorded jobs are
+    /// harmlessly rejected as duplicates by the server's run_id validation.
     fn flush_offline_journal(&self) -> Result<usize, Box<dyn std::error::Error>> {
         let journal = match &self.offline_journal {
             Some(j) => j,
@@ -1250,21 +1256,23 @@ impl JobRunner {
             return Ok(0);
         }
         let count = entries.len();
-        let request = BatchCompleteJobsRequest {
-            completions: entries,
-        };
-        let response = self.send_with_retries(|| {
-            Self::box_retry_error(apis::workflows_api::batch_complete_jobs(
-                &self.config,
-                self.workflow_id,
-                request.clone(),
-            ))
-        })?;
-        for err in &response.errors {
-            warn!(
-                "Resume flush: server rejected completion workflow_id={} job_id={} message={}",
-                self.workflow_id, err.job_id, err.message
-            );
+        for chunk in entries.chunks(FLUSH_BATCH_SIZE) {
+            let request = BatchCompleteJobsRequest {
+                completions: chunk.to_vec(),
+            };
+            let response = self.send_with_retries(|| {
+                Self::box_retry_error(apis::workflows_api::batch_complete_jobs(
+                    &self.config,
+                    self.workflow_id,
+                    request.clone(),
+                ))
+            })?;
+            for err in &response.errors {
+                warn!(
+                    "Resume flush: server rejected completion workflow_id={} job_id={} message={}",
+                    self.workflow_id, err.job_id, err.message
+                );
+            }
         }
         journal
             .clear()

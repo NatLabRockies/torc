@@ -15,12 +15,8 @@ use log::{info, warn};
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::offline_journal::OfflineJournal;
+use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
 use crate::models::BatchCompleteJobsRequest;
-
-/// Send completions to the server in batches of this size to keep request
-/// bodies bounded for runs with very large journals.
-const FLUSH_BATCH_SIZE: usize = 500;
 
 /// Outcome of a reconcile run, returned for testing and JSON output.
 #[derive(Debug, Default)]
