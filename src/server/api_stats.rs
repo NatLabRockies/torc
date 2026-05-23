@@ -6,11 +6,14 @@
 //! the server right now?" without streaming individual events.
 //!
 //! Byte counts are tallied by [`CountingBody`], an `http_body::Body`
-//! adapter that increments an atomic counter as data frames flow
-//! through; the per-request total is fed into [`ApiStatsRing::record`]
-//! once the response body completes (or is dropped). This captures
-//! chunked / streaming payloads — including the SSE event streams —
-//! that `Content-Length` headers would miss.
+//! adapter that records stats as data frames flow through. A response
+//! body fires a "request started" record on its first poll (so the
+//! request count + status appear immediately) and then attributes each
+//! data frame's bytes to the wall-clock second it is sent via
+//! [`ApiStatsRing::record_bytes_out`]. This captures chunked /
+//! streaming payloads — including the long-lived SSE event streams —
+//! without deferring all the bytes to the disconnect second, and
+//! without the 0-byte counts `Content-Length` headers would report.
 //!
 //! Stats are in-memory only; the buffer is cleared on server restart.
 
@@ -90,6 +93,23 @@ struct Inner {
     buckets: Box<[ApiStatsBucket]>,
 }
 
+impl Inner {
+    /// Return the bucket that owns `now_ms`, resetting it first if the
+    /// ring slot still holds data from an earlier second.
+    fn bucket_mut(&mut self, now_ms: i64) -> &mut ApiStatsBucket {
+        let bucket_start_ms = (now_ms / 1000) * 1000;
+        let idx = ((now_ms / 1000) as i128).rem_euclid(BUCKET_COUNT as i128) as usize;
+        let bucket = &mut self.buckets[idx];
+        if bucket.start_ms != bucket_start_ms {
+            *bucket = ApiStatsBucket {
+                start_ms: bucket_start_ms,
+                ..ApiStatsBucket::default()
+            };
+        }
+        bucket
+    }
+}
+
 impl ApiStatsRing {
     pub fn new() -> Self {
         let buckets = (0..BUCKET_COUNT)
@@ -101,21 +121,18 @@ impl ApiStatsRing {
         }
     }
 
-    /// Record a single completed request.
+    /// Record a single request against the bucket for `now_ms`,
+    /// incrementing the request count and status breakdown.
+    ///
+    /// For streaming responses this is fired once when the response
+    /// body starts (with `bytes_out = 0`); the streamed bytes are
+    /// attributed second-by-second via [`Self::record_bytes_out`].
     pub fn record(&self, now_ms: i64, status: u16, bytes_in: u64, bytes_out: u64) {
         if now_ms <= 0 {
             return;
         }
-        let bucket_start_ms = (now_ms / 1000) * 1000;
-        let idx = ((now_ms / 1000) as i128).rem_euclid(BUCKET_COUNT as i128) as usize;
         let mut guard = self.inner.lock();
-        let bucket = &mut guard.buckets[idx];
-        if bucket.start_ms != bucket_start_ms {
-            *bucket = ApiStatsBucket {
-                start_ms: bucket_start_ms,
-                ..ApiStatsBucket::default()
-            };
-        }
+        let bucket = guard.bucket_mut(now_ms);
         bucket.request_count += 1;
         bucket.bytes_in += bytes_in;
         bucket.bytes_out += bytes_out;
@@ -125,6 +142,18 @@ impl ApiStatsRing {
             5 => bucket.status_5xx += 1,
             _ => bucket.status_other += 1,
         }
+    }
+
+    /// Attribute `bytes_out` to the bucket for `now_ms` without
+    /// touching the request count or status breakdown. Used to bucket
+    /// each streamed response frame by the second it is actually sent,
+    /// rather than deferring the whole stream to the disconnect second.
+    pub fn record_bytes_out(&self, now_ms: i64, bytes_out: u64) {
+        if now_ms <= 0 || bytes_out == 0 {
+            return;
+        }
+        let mut guard = self.inner.lock();
+        guard.bucket_mut(now_ms).bytes_out += bytes_out;
     }
 
     /// Aggregate the last `window_seconds` of recorded data into
@@ -182,15 +211,22 @@ impl Default for ApiStatsRing {
 
 /// `http_body::Body` adapter that counts the bytes of each data frame
 /// as it passes through. Wrapping a request body lets us tally actual
-/// inbound bytes (chunked uploads included); wrapping a response body
-/// with [`CountingBody::with_on_end`] additionally fires a callback
-/// when the body finishes — either by yielding `Poll::Ready(None)` or
-/// by being dropped — making it the right place to call
-/// [`ApiStatsRing::record`] with the final byte total.
+/// inbound bytes (chunked uploads included). Wrapping a response body
+/// with [`CountingBody::with_recorder`] instead records stats
+/// incrementally: `on_start` fires once when the body is first polled
+/// (or, failing that, when it is dropped) so the request count and
+/// status land in the current bucket immediately, and `on_frame` fires
+/// for each data frame so its bytes are attributed to the second it is
+/// actually sent — keeping long-lived SSE streams from spiking the
+/// whole transfer into the disconnect second.
 pub struct CountingBody<B> {
     inner: B,
-    counter: Arc<AtomicU64>,
-    on_end: Option<Box<dyn FnOnce(u64) + Send>>,
+    /// Set for request bodies: the middleware reads the running total
+    /// after the handler returns. Unused for response bodies, which
+    /// report each frame through `on_frame` instead.
+    counter: Option<Arc<AtomicU64>>,
+    on_start: Option<Box<dyn FnOnce() + Send>>,
+    on_frame: Option<Box<dyn Fn(u64) + Send>>,
 }
 
 impl<B> CountingBody<B> {
@@ -201,30 +237,34 @@ impl<B> CountingBody<B> {
     pub fn new(inner: B, counter: Arc<AtomicU64>) -> Self {
         Self {
             inner,
-            counter,
-            on_end: None,
+            counter: Some(counter),
+            on_start: None,
+            on_frame: None,
         }
     }
 
-    /// Like [`CountingBody::new`], but also fires `on_end(total)`
-    /// exactly once when the body completes or is dropped. Use this
-    /// for response bodies, so the recording happens once the stream
-    /// has actually been sent — including for SSE / chunked responses
-    /// whose size isn't known up front.
-    pub fn with_on_end<F>(inner: B, counter: Arc<AtomicU64>, on_end: F) -> Self
+    /// Wrap a response `inner`, firing `on_start` exactly once when the
+    /// body is first polled (or dropped without being polled) and
+    /// `on_frame(len)` for each data frame as it is sent. This records
+    /// the request as soon as it starts and attributes streamed bytes
+    /// to the second they leave the server, rather than deferring the
+    /// whole stream to completion.
+    pub fn with_recorder<S, F>(inner: B, on_start: S, on_frame: F) -> Self
     where
-        F: FnOnce(u64) + Send + 'static,
+        S: FnOnce() + Send + 'static,
+        F: Fn(u64) + Send + 'static,
     {
         Self {
             inner,
-            counter,
-            on_end: Some(Box::new(on_end)),
+            counter: None,
+            on_start: Some(Box::new(on_start)),
+            on_frame: Some(Box::new(on_frame)),
         }
     }
 
-    fn fire_on_end(&mut self) {
-        if let Some(cb) = self.on_end.take() {
-            cb(self.counter.load(Ordering::Relaxed));
+    fn fire_on_start(&mut self) {
+        if let Some(cb) = self.on_start.take() {
+            cb();
         }
     }
 }
@@ -241,16 +281,21 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let this = self.as_mut().get_mut();
+        // Fire the "request started" record on the first poll, before
+        // we know whether any data frames will follow, so empty bodies
+        // are still counted.
+        this.fire_on_start();
         let polled = Pin::new(&mut this.inner).poll_frame(cx);
-        match &polled {
-            Poll::Ready(Some(Ok(frame))) => {
-                if let Some(data) = frame.data_ref() {
-                    this.counter
-                        .fetch_add(data.remaining() as u64, Ordering::Relaxed);
-                }
+        if let Poll::Ready(Some(Ok(frame))) = &polled
+            && let Some(data) = frame.data_ref()
+        {
+            let len = data.remaining() as u64;
+            if let Some(counter) = &this.counter {
+                counter.fetch_add(len, Ordering::Relaxed);
             }
-            Poll::Ready(None) => this.fire_on_end(),
-            _ => {}
+            if let Some(on_frame) = &this.on_frame {
+                on_frame(len);
+            }
         }
         polled
     }
@@ -266,7 +311,9 @@ where
 
 impl<B> Drop for CountingBody<B> {
     fn drop(&mut self) {
-        self.fire_on_end();
+        // Ensure the request is still recorded if the response body was
+        // dropped before it was ever polled (e.g. HEAD / 204 responses).
+        self.fire_on_start();
     }
 }
 
@@ -349,6 +396,51 @@ mod tests {
         assert!(snap.window_seconds <= BUCKET_COUNT as u64);
     }
 
+    #[test]
+    fn record_bytes_out_adds_without_counting_a_request() {
+        let ring = ApiStatsRing::new();
+        let t = 1_700_000_000_000;
+        ring.record(t, 200, 10, 0);
+        ring.record_bytes_out(t + 100, 40);
+        ring.record_bytes_out(t + 200, 60);
+
+        let snap = ring.snapshot(t + 500, 60, 60);
+        let bucket = &snap.buckets[0];
+        // Only the single `record` call counts as a request.
+        assert_eq!(bucket.request_count, 1);
+        assert_eq!(bucket.status_2xx, 1);
+        assert_eq!(bucket.bytes_in, 10);
+        // Both `record_bytes_out` calls accumulate into bytes_out.
+        assert_eq!(bucket.bytes_out, 100);
+    }
+
+    #[test]
+    fn record_bytes_out_buckets_by_send_time() {
+        let ring = ApiStatsRing::new();
+        let t = 1_700_000_000_000;
+        ring.record(t, 200, 0, 0);
+        // A frame sent 30 seconds into the stream lands in a later second.
+        ring.record_bytes_out(t + 30_000, 500);
+
+        let snap = ring.snapshot(t + 35_000, 60, 1);
+        // Newest-first: the start second has the request, the +30s
+        // second has the streamed bytes — they are not merged into one.
+        assert_eq!(snap.buckets[35].request_count, 1);
+        assert_eq!(snap.buckets[35].bytes_out, 0);
+        assert_eq!(snap.buckets[5].request_count, 0);
+        assert_eq!(snap.buckets[5].bytes_out, 500);
+    }
+
+    #[test]
+    fn record_bytes_out_ignores_zero_and_nonpositive_time() {
+        let ring = ApiStatsRing::new();
+        let t = 1_700_000_000_000;
+        ring.record_bytes_out(t, 0);
+        ring.record_bytes_out(0, 100);
+        let snap = ring.snapshot(t + 500, 60, 60);
+        assert_eq!(snap.buckets[0].bytes_out, 0);
+    }
+
     use http_body_util::{BodyExt, Full};
     use std::sync::atomic::AtomicBool;
 
@@ -361,56 +453,58 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn counting_body_on_end_fires_when_drained() {
-        let counter = Arc::new(AtomicU64::new(0));
-        let fired = Arc::new(AtomicU64::new(0));
-        let fired_clone = fired.clone();
-        let body = CountingBody::with_on_end(
+    async fn counting_body_records_start_then_each_frame() {
+        let started = Arc::new(AtomicU64::new(0));
+        let frame_bytes = Arc::new(AtomicU64::new(0));
+        let started_clone = started.clone();
+        let frame_clone = frame_bytes.clone();
+        let body = CountingBody::with_recorder(
             Full::<bytes::Bytes>::from("abcdef"),
-            counter.clone(),
-            move |total| {
-                fired_clone.store(total, Ordering::Relaxed);
+            move || {
+                started_clone.fetch_add(1, Ordering::Relaxed);
+            },
+            move |len| {
+                frame_clone.fetch_add(len, Ordering::Relaxed);
             },
         );
         let _ = body.collect().await.expect("collect body");
-        assert_eq!(fired.load(Ordering::Relaxed), 6);
+        assert_eq!(started.load(Ordering::Relaxed), 1);
+        assert_eq!(frame_bytes.load(Ordering::Relaxed), 6);
     }
 
     #[tokio::test]
-    async fn counting_body_on_end_fires_on_drop_when_not_drained() {
-        let counter = Arc::new(AtomicU64::new(0));
-        let fired = Arc::new(AtomicBool::new(false));
-        let fired_clone = fired.clone();
+    async fn counting_body_fires_start_on_drop_when_not_polled() {
+        let started = Arc::new(AtomicBool::new(false));
+        let started_clone = started.clone();
         {
-            let _body = CountingBody::with_on_end(
+            let _body = CountingBody::with_recorder(
                 Full::<bytes::Bytes>::from("never read"),
-                counter.clone(),
-                move |_| {
-                    fired_clone.store(true, Ordering::Relaxed);
+                move || {
+                    started_clone.store(true, Ordering::Relaxed);
                 },
+                |_| {},
             );
         }
         assert!(
-            fired.load(Ordering::Relaxed),
-            "on_end should fire from Drop even if the body is never polled",
+            started.load(Ordering::Relaxed),
+            "on_start should fire from Drop even if the body is never polled",
         );
     }
 
     #[tokio::test]
-    async fn counting_body_on_end_fires_exactly_once() {
-        let counter = Arc::new(AtomicU64::new(0));
+    async fn counting_body_fires_start_exactly_once() {
         let count = Arc::new(AtomicU64::new(0));
         let count_clone = count.clone();
         {
-            let body = CountingBody::with_on_end(
+            let body = CountingBody::with_recorder(
                 Full::<bytes::Bytes>::from("xyz"),
-                counter.clone(),
-                move |_| {
+                move || {
                     count_clone.fetch_add(1, Ordering::Relaxed);
                 },
+                |_| {},
             );
             let _ = body.collect().await.expect("collect body");
-            // Body now dropped at end of scope; on_end must not fire again.
+            // Body now dropped at end of scope; on_start must not fire again.
         }
         assert_eq!(count.load(Ordering::Relaxed), 1);
     }
