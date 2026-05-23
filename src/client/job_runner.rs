@@ -38,6 +38,7 @@ use std::time::{Duration, Instant};
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::async_cli_command::AsyncCliCommand;
+use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, SystemMetricsSummary};
 use crate::client::utils;
@@ -378,6 +379,31 @@ pub struct JobRunner {
     had_terminations: bool,
     /// When this job runner started (for calculating duration_seconds)
     start_instant: Instant,
+    /// Per-node label (e.g. `wf123_h<host>_r<run>`) used to build unique output
+    /// file names, including the offline-drain journal.
+    unique_label: String,
+    /// Whether offline-drain mode is enabled (from `[client.offline]` config).
+    /// When false, an unreachable server causes the runner to kill jobs and exit.
+    offline_enabled: bool,
+    /// How often to ping the server while draining to check for recovery.
+    drain_ping_interval: Duration,
+    /// True while the runner is draining: the server is unreachable, no new jobs
+    /// are claimed, and completions are written to `offline_journal`.
+    offline: bool,
+    /// Journal of job completions recorded while offline. Opened lazily when the
+    /// runner first enters drain mode; cleared and dropped on resume.
+    offline_journal: Option<OfflineJournal>,
+    /// Monotonic timestamp of the last drain-mode resume ping.
+    last_drain_ping: Option<Instant>,
+    /// Probe used by `maybe_try_resume` to ask whether the server is reachable.
+    /// In production this pings the server; tests override it to drive the
+    /// drain/resume state machine deterministically without a real server.
+    server_reachable_probe: fn(&Configuration) -> bool,
+}
+
+/// Production server-reachability probe: a successful ping means reachable.
+fn default_server_reachable_probe(config: &Configuration) -> bool {
+    apis::system_api::ping(config).is_ok()
 }
 
 impl JobRunner {
@@ -534,6 +560,9 @@ impl JobRunner {
             workflow.compute_node_wait_for_healthy_database_minutes,
             workflow.compute_node_min_time_for_new_jobs_seconds,
         );
+        let offline_enabled = torc_config.client.offline.enabled;
+        let drain_ping_interval =
+            Duration::from_secs(torc_config.client.offline.drain_ping_interval_secs.max(1));
         let execution_config = ExecutionConfig::from_workflow_model(&workflow);
         if execution_config.effective_mode() == ExecutionMode::Slurm
             && std::env::var("SLURM_JOB_ID").is_err()
@@ -580,8 +609,11 @@ impl JobRunner {
         // Initialize resource monitoring if configured
         let resource_monitor = if let Some(ref monitor_config) = workflow.resource_monitor_config {
             if monitor_config.is_enabled() {
-                match ResourceMonitor::new(monitor_config.clone(), output_dir.clone(), unique_label)
-                {
+                match ResourceMonitor::new(
+                    monitor_config.clone(),
+                    output_dir.clone(),
+                    unique_label.clone(),
+                ) {
                     Ok(monitor) => {
                         info!("Resource monitoring enabled");
                         Some(monitor)
@@ -634,6 +666,13 @@ impl JobRunner {
             had_failures: false,
             had_terminations: false,
             start_instant: Instant::now(),
+            unique_label,
+            offline_enabled,
+            drain_ping_interval,
+            offline: false,
+            offline_journal: None,
+            last_drain_ping: None,
+            server_reachable_probe: default_server_reachable_probe,
         }
     }
 
@@ -824,48 +863,82 @@ impl JobRunner {
         self.execute_worker_start_actions();
 
         loop {
-            match self.send_with_retries(|| {
-                Self::box_retry_error(apis::workflows_api::is_workflow_complete(
-                    &self.config,
-                    self.workflow_id,
-                ))
-            }) {
-                Ok(response) => {
-                    if response.is_canceled {
-                        info!("Workflow canceled workflow_id={}", self.workflow_id);
-                        self.cancel_jobs();
-                        break;
-                    }
-                    if response.is_complete {
-                        if self.rules.compute_node_ignore_workflow_completion {
-                            info!(
-                                "Workflow complete (ignoring) workflow_id={}",
-                                self.workflow_id
-                            );
-                        } else {
-                            info!("Workflow complete workflow_id={}", self.workflow_id);
-                            self.execute_workflow_complete_actions();
+            // While draining, periodically check whether the server has come
+            // back so we can flush the journal and resume normal operation.
+            if self.offline {
+                self.maybe_try_resume();
+            }
+
+            // Skip the server-side workflow-completion check while offline; the
+            // server is unreachable and we are only reaping the jobs we already
+            // started.
+            if !self.offline {
+                match self.send_with_retries(|| {
+                    Self::box_retry_error(apis::workflows_api::is_workflow_complete(
+                        &self.config,
+                        self.workflow_id,
+                    ))
+                }) {
+                    Ok(response) => {
+                        if response.is_canceled {
+                            info!("Workflow canceled workflow_id={}", self.workflow_id);
+                            self.cancel_jobs();
                             break;
                         }
+                        if response.is_complete {
+                            if self.rules.compute_node_ignore_workflow_completion {
+                                info!(
+                                    "Workflow complete (ignoring) workflow_id={}",
+                                    self.workflow_id
+                                );
+                            } else {
+                                info!("Workflow complete workflow_id={}", self.workflow_id);
+                                self.execute_workflow_complete_actions();
+                                break;
+                            }
+                        }
                     }
-                }
-                Err(retry_err) => {
-                    error!(
-                        "Failed to check workflow completion after retries: {}",
-                        retry_err
-                    );
-                    self.kill_running_jobs();
-                    return Err(
-                        format!("Unable to check workflow completion: {}", retry_err).into(),
-                    );
+                    Err(retry_err) => {
+                        if self.offline_enabled {
+                            // The server has been unreachable past the retry
+                            // window. Rather than killing in-flight jobs, drain:
+                            // finish them and journal their results.
+                            self.enter_drain_mode();
+                        } else {
+                            error!(
+                                "Failed to check workflow completion after retries: {}",
+                                retry_err
+                            );
+                            self.kill_running_jobs();
+                            return Err(format!(
+                                "Unable to check workflow completion: {}",
+                                retry_err
+                            )
+                            .into());
+                        }
+                    }
                 }
             }
 
             let completions = match self.check_job_status() {
                 Ok(count) => count,
                 Err(e) => {
-                    self.kill_running_jobs();
-                    return Err(e);
+                    // While offline, completions are journaled locally and this
+                    // should not fail on server errors. If offline-drain is
+                    // enabled, switch into drain rather than killing jobs.
+                    if self.offline {
+                        error!(
+                            "Error reaping jobs while offline (continuing to drain): {}",
+                            e
+                        );
+                        0
+                    } else if self.offline_enabled {
+                        self.enter_drain_mode();
+                        0
+                    } else {
+                        self.kill_running_jobs();
+                        return Err(e);
+                    }
                 }
             };
             if self.execution_config.limit_resources()
@@ -875,29 +948,51 @@ impl JobRunner {
                 self.kill_running_jobs();
                 return Err(e);
             }
-            self.check_and_execute_actions();
-
-            debug!("Check for new jobs");
-            if let Some(max) = self.max_parallel_jobs {
-                // Parallelism-based mode: skip if already at max parallel jobs
-                if (self.running_jobs.len() as i64) < max {
-                    self.run_ready_jobs_based_on_user_parallelism();
-                } else {
-                    debug!(
-                        "Skipping job claim: at max parallel jobs ({}/{})",
-                        self.running_jobs.len(),
-                        max
+            // While offline we never claim new jobs (claiming requires the
+            // server's write lock to avoid double-allocation across nodes) and
+            // we do not run workflow actions. Once everything we were already
+            // running has drained, exit; the journal is reconciled later.
+            if self.offline {
+                if self.running_jobs.is_empty() {
+                    let journal_path = self
+                        .offline_journal
+                        .as_ref()
+                        .map(|j| j.path().display().to_string())
+                        .unwrap_or_else(|| "<none>".to_string());
+                    info!(
+                        "Offline drain complete: all running jobs finished. Exiting job runner. \
+                         Results journaled to {}. Reconcile them with \
+                         `torc workflows reconcile {} {}` once the server is back. \
+                         workflow_id={} run_id={}",
+                        journal_path, self.workflow_id, self.run_id, self.workflow_id, self.run_id
                     );
+                    break;
                 }
             } else {
-                // Resource-based mode: skip if no CPUs available or memory nearly exhausted
-                if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
-                    self.run_ready_jobs_based_on_resources();
+                self.check_and_execute_actions();
+
+                debug!("Check for new jobs");
+                if let Some(max) = self.max_parallel_jobs {
+                    // Parallelism-based mode: skip if already at max parallel jobs
+                    if (self.running_jobs.len() as i64) < max {
+                        self.run_ready_jobs_based_on_user_parallelism();
+                    } else {
+                        debug!(
+                            "Skipping job claim: at max parallel jobs ({}/{})",
+                            self.running_jobs.len(),
+                            max
+                        );
+                    }
                 } else {
-                    debug!(
-                        "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
-                        self.resources.num_cpus, self.resources.memory_gb
-                    );
+                    // Resource-based mode: skip if no CPUs available or memory nearly exhausted
+                    if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
+                        self.run_ready_jobs_based_on_resources();
+                    } else {
+                        debug!(
+                            "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
+                            self.resources.num_cpus, self.resources.memory_gb
+                        );
+                    }
                 }
             }
 
@@ -987,7 +1082,10 @@ impl JobRunner {
             }
         }
 
-        self.execute_worker_complete_actions();
+        // Worker-complete actions run on the server; skip them when offline.
+        if !self.offline {
+            self.execute_worker_complete_actions();
+        }
 
         // Shutdown resource monitor if enabled. Capture the plot request before shutdown
         // consumes the monitor.
@@ -1007,8 +1105,18 @@ impl JobRunner {
             self.generate_resource_plots(&db_path);
         }
 
-        // Deactivate compute node and set duration
-        self.deactivate_compute_node(system_metrics_summary);
+        // Deactivate compute node and set duration. Skip when offline: the
+        // server is unreachable, so the node is left active and will be
+        // reconciled (or expire) once connectivity returns.
+        if self.offline {
+            warn!(
+                "Exiting in offline-drain mode; skipping compute node deactivation \
+                 workflow_id={} run_id={} compute_node_id={}",
+                self.workflow_id, self.run_id, self.compute_node_id
+            );
+        } else {
+            self.deactivate_compute_node(system_metrics_summary);
+        }
 
         info!(
             "Job runner completed workflow_id={} run_id={} compute_node_id={} had_failures={} had_terminations={}",
@@ -1047,6 +1155,213 @@ impl JobRunner {
                 );
             }
         }
+    }
+
+    /// Transition into offline-drain mode: stop claiming new jobs, let running
+    /// jobs finish, and journal their completions locally. Idempotent — calling
+    /// it again while already draining is a no-op.
+    fn enter_drain_mode(&mut self) {
+        if self.offline {
+            return;
+        }
+        self.offline = true;
+        // Wait a full ping interval before the first resume attempt.
+        self.last_drain_ping = Some(Instant::now());
+
+        match OfflineJournal::open_or_create(
+            &self.output_dir,
+            self.workflow_id,
+            self.run_id,
+            &self.unique_label,
+        ) {
+            Ok(journal) => {
+                warn!(
+                    "Server unreachable past the retry window: entering offline-drain mode. \
+                     Running jobs will finish and their results will be journaled to {}. \
+                     workflow_id={} run_id={} running_jobs={}",
+                    journal.path().display(),
+                    self.workflow_id,
+                    self.run_id,
+                    self.running_jobs.len()
+                );
+                self.offline_journal = Some(journal);
+            }
+            Err(e) => {
+                error!(
+                    "Failed to open offline journal: {}. Draining without a journal; \
+                     completions during the outage will not be recorded and affected jobs \
+                     will need to be retried manually. workflow_id={}",
+                    e, self.workflow_id
+                );
+            }
+        }
+    }
+
+    /// While draining, ping the server at most once per `drain_ping_interval`.
+    /// If it responds and the journal flushes cleanly, leave drain mode and
+    /// resume normal operation.
+    fn maybe_try_resume(&mut self) {
+        let due = self
+            .last_drain_ping
+            .map(|t| t.elapsed() >= self.drain_ping_interval)
+            .unwrap_or(true);
+        if !due {
+            return;
+        }
+        self.last_drain_ping = Some(Instant::now());
+
+        if !(self.server_reachable_probe)(&self.config) {
+            debug!(
+                "Offline-drain: server still unreachable workflow_id={}",
+                self.workflow_id
+            );
+            return;
+        }
+
+        info!(
+            "Offline-drain: server is reachable again. Flushing journal and resuming workflow_id={}",
+            self.workflow_id
+        );
+        match self.flush_offline_journal() {
+            Ok(count) => {
+                info!(
+                    "Flushed {} journaled completion(s); resuming online operation workflow_id={}",
+                    count, self.workflow_id
+                );
+                self.offline = false;
+                self.offline_journal = None;
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to flush offline journal on resume; staying in drain mode: {}",
+                    e
+                );
+            }
+        }
+    }
+
+    /// Upload journaled completions to the server, then clear the journal.
+    /// Returns the number of completions flushed. Completions are already
+    /// finalized locally (removed from `running_jobs`); this only brings the
+    /// server's view up to date so dependent jobs can unblock.
+    ///
+    /// Sent in bounded chunks so a node that drained many jobs does not produce
+    /// an oversized request. Each accepted chunk is recorded server-side, so if
+    /// a later chunk fails we leave the journal intact and stay offline; the
+    /// next resume attempt re-sends everything, and already-recorded jobs are
+    /// harmlessly rejected as duplicates by the server's run_id validation.
+    fn flush_offline_journal(&self) -> Result<usize, Box<dyn std::error::Error>> {
+        let journal = match &self.offline_journal {
+            Some(j) => j,
+            None => return Ok(0),
+        };
+        let entries = journal
+            .read_all()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        if entries.is_empty() {
+            return Ok(0);
+        }
+        let count = entries.len();
+        for chunk in entries.chunks(FLUSH_BATCH_SIZE) {
+            let request = BatchCompleteJobsRequest {
+                completions: chunk.to_vec(),
+            };
+            let response = self.send_with_retries(|| {
+                Self::box_retry_error(apis::workflows_api::batch_complete_jobs(
+                    &self.config,
+                    self.workflow_id,
+                    request.clone(),
+                ))
+            })?;
+            for err in &response.errors {
+                warn!(
+                    "Resume flush: server rejected completion workflow_id={} job_id={} message={}",
+                    self.workflow_id, err.job_id, err.message
+                );
+            }
+        }
+        journal
+            .clear()
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        Ok(count)
+    }
+
+    /// Offline variant of completion handling: journal each completion (no
+    /// server call, no failure-handler recovery) and finalize local state.
+    fn journal_completions_offline(
+        &mut self,
+        completions: Vec<(i64, ResultModel)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for (job_id, result) in completions {
+            // Take sacct stats so resource fields are backfilled in the journaled
+            // result; the stats themselves are not uploaded while offline.
+            let slurm_stats = self
+                .running_jobs
+                .get_mut(&job_id)
+                .and_then(|j| j.take_slurm_stats());
+            let mut final_result = result;
+            if let Some(ref stats) = slurm_stats {
+                backfill_sacct_into_result(&mut final_result, stats);
+            }
+
+            match final_result.status {
+                JobStatus::Failed | JobStatus::PendingFailed => self.had_failures = true,
+                JobStatus::Terminated => self.had_terminations = true,
+                _ => {}
+            }
+
+            let entry = JobCompletionEntry {
+                job_id,
+                status: final_result.status,
+                run_id: final_result.run_id,
+                result: final_result,
+            };
+            self.journal_entry(&entry);
+        }
+        Ok(())
+    }
+
+    /// Append one completion to the journal and finalize its local state
+    /// (release resources, clean up stdio on success, drop from `running_jobs`).
+    /// Mirrors the success path of `report_completions_batch` minus server calls.
+    fn journal_entry(&mut self, entry: &JobCompletionEntry) {
+        let job_id = entry.job_id;
+        if let Some(journal) = &self.offline_journal {
+            match journal.append(entry) {
+                Ok(()) => info!(
+                    "Journaled completion (offline) workflow_id={} job_id={} run_id={} status={:?}",
+                    self.workflow_id, job_id, entry.run_id, entry.status
+                ),
+                Err(e) => error!(
+                    "Failed to journal completion workflow_id={} job_id={}: {}",
+                    self.workflow_id, job_id, e
+                ),
+            }
+        } else {
+            error!(
+                "No offline journal available; completion not recorded workflow_id={} job_id={}",
+                self.workflow_id, job_id
+            );
+        }
+
+        if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {
+            self.increment_node_resources(job_id, &job_rr);
+            self.increment_resources(&job_rr);
+        }
+        self.last_job_claimed_time = Some(Instant::now());
+
+        if entry.result.return_code == 0
+            && let Some(cmd) = self.running_jobs.get(&job_id)
+        {
+            let job_name = &cmd.job.name;
+            if self.execution_config.delete_stdio_on_success(job_name) {
+                Self::cleanup_stdio_files(cmd);
+            }
+        }
+
+        self.running_jobs.remove(&job_id);
+        self.job_resources.remove(&job_id);
+        self.release_gpu_devices(job_id);
     }
 
     /// Generate HTML resource plots from the time-series metrics DB produced by the
@@ -1728,6 +2043,11 @@ impl JobRunner {
         &mut self,
         completions: Vec<(i64, ResultModel)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // While draining, the server is unreachable: journal completions locally
+        // instead of running the server-backed recovery + report pipeline.
+        if self.offline {
+            return self.journal_completions_offline(completions);
+        }
         let prepared: Vec<PreparedCompletion> = completions
             .into_iter()
             .filter_map(|(job_id, result)| self.prepare_job_completion(job_id, result))
@@ -1865,6 +2185,29 @@ impl JobRunner {
         }) {
             Ok(response) => response,
             Err(e) => {
+                if self.offline_enabled {
+                    // The server became unreachable mid-iteration. Rather than
+                    // dropping these finished jobs, enter drain mode and journal
+                    // them so they can be reconciled later.
+                    warn!(
+                        "batch_complete_jobs failed after retries; entering offline-drain and \
+                         journaling {} completion(s) workflow_id={} error={}",
+                        prepared.len(),
+                        self.workflow_id,
+                        e
+                    );
+                    self.enter_drain_mode();
+                    for p in prepared {
+                        let entry = JobCompletionEntry {
+                            job_id: p.job_id,
+                            status: p.final_result.status,
+                            run_id: p.final_result.run_id,
+                            result: p.final_result,
+                        };
+                        self.journal_entry(&entry);
+                    }
+                    return Ok(());
+                }
                 error!(
                     "batch_complete_jobs failed after retries workflow_id={} count={} error={}",
                     self.workflow_id,
@@ -3351,6 +3694,146 @@ mod tests {
         )
     }
 
+    /// Build a runner whose output (and therefore offline journal) lives under a
+    /// temp dir. The caller must keep the returned `TempDir` alive.
+    fn make_offline_runner(tmp: &tempfile::TempDir) -> JobRunner {
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        runner.output_dir = tmp.path().to_path_buf();
+        runner
+    }
+
+    fn failed_result(job_id: i64, run_id: i64) -> ResultModel {
+        ResultModel::new(
+            job_id,
+            1, // workflow_id
+            run_id,
+            1, // attempt_id
+            1, // compute_node_id
+            1, // return_code (failure)
+            0.1,
+            "2026-01-01T00:00:00Z".to_string(),
+            JobStatus::Failed,
+        )
+    }
+
+    #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
+    fn drain_mode_opens_journal_and_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_offline_runner(&tmp);
+
+        assert!(!runner.offline);
+        assert!(runner.offline_journal.is_none());
+
+        runner.enter_drain_mode();
+        assert!(runner.offline, "enter_drain_mode should set offline");
+        let path = runner
+            .offline_journal
+            .as_ref()
+            .expect("journal should be open")
+            .path()
+            .to_path_buf();
+        assert!(path.exists(), "journal file should exist on disk");
+
+        // Calling again while already draining is a no-op: same journal, still offline.
+        runner.enter_drain_mode();
+        assert!(runner.offline);
+        assert_eq!(
+            runner.offline_journal.as_ref().unwrap().path(),
+            path,
+            "second enter_drain_mode must not replace the journal"
+        );
+    }
+
+    #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
+    fn offline_completions_are_journaled_not_sent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_offline_runner(&tmp);
+        runner.enter_drain_mode();
+
+        // While offline this routes to the journal; if it tried the network
+        // (Configuration::default points nowhere) it would error, so Ok proves
+        // the drain path engaged.
+        runner
+            .handle_completions_batch(vec![(42, failed_result(42, 1))])
+            .expect("offline completion handling should succeed without the server");
+
+        assert!(
+            runner.had_failures,
+            "failed completion should set had_failures"
+        );
+        assert!(
+            !runner.running_jobs.contains_key(&42),
+            "finalization should drop the job from running_jobs"
+        );
+
+        let entries = runner.offline_journal.as_ref().unwrap().read_all().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].job_id, 42);
+        assert_eq!(entries[0].status, JobStatus::Failed);
+    }
+
+    #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
+    fn resume_stays_offline_when_server_unreachable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_offline_runner(&tmp);
+        runner.enter_drain_mode();
+
+        runner.server_reachable_probe = |_| false;
+        runner.last_drain_ping = None; // force a probe this iteration
+
+        runner.maybe_try_resume();
+        assert!(
+            runner.offline,
+            "should stay offline while server is unreachable"
+        );
+        assert!(runner.offline_journal.is_some());
+    }
+
+    #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
+    fn resume_returns_online_when_server_reachable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_offline_runner(&tmp);
+        runner.enter_drain_mode();
+
+        // Reachable + empty journal => flush is a no-op (no network), so the
+        // full resume transition runs deterministically.
+        runner.server_reachable_probe = |_| true;
+        runner.last_drain_ping = None; // force a probe this iteration
+
+        runner.maybe_try_resume();
+        assert!(
+            !runner.offline,
+            "should resume online when the server is reachable"
+        );
+        assert!(
+            runner.offline_journal.is_none(),
+            "journal handle should be dropped after resuming"
+        );
+    }
+
+    #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
+    fn resume_is_not_attempted_before_ping_interval() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut runner = make_offline_runner(&tmp);
+        runner.enter_drain_mode(); // sets last_drain_ping = now
+
+        // Even though the server is reachable, the recent ping + long interval
+        // means no probe should happen yet, so we remain offline.
+        runner.server_reachable_probe = |_| true;
+        runner.drain_ping_interval = Duration::from_secs(3600);
+
+        runner.maybe_try_resume();
+        assert!(
+            runner.offline,
+            "resume must respect the drain ping interval before probing"
+        );
+    }
+
     #[test]
     fn test_backfill_sacct_memory_takes_max() {
         // sacct reports higher peak than sstat: use sacct value
@@ -3615,6 +4098,7 @@ mod tests {
     /// The original bug: a single-node GPU job followed by a multi-node job
     /// would over-decrement GPUs and panic on the assertion.
     #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
     fn test_single_node_then_multi_node_no_panic() {
         // 2 nodes, 4 GPUs total (2 per node), 16 CPUs, 64 GB
         let resources = ComputeNodesResources::new(16, 64.0, 4, 2);
@@ -3709,6 +4193,7 @@ mod tests {
 
     /// Two multi-node jobs run sequentially without resource corruption.
     #[test]
+    #[serial] // constructs a runner, which reads GPU env vars mutated by other serial tests
     fn test_sequential_multi_node_jobs() {
         // 4 nodes, 8 GPUs total (2 per node)
         let resources = ComputeNodesResources::new(32, 128.0, 8, 4);

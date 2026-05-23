@@ -23,6 +23,7 @@ pub mod execution_plan;
 pub mod hpc;
 pub mod job_runner;
 pub mod log_paths;
+pub mod offline_journal;
 pub mod parameter_expansion;
 pub mod remote;
 pub mod report_models;
