@@ -93,9 +93,16 @@ async fn fetch_workflow_access_groups(
     }
 }
 
-/// Fetch access group names for a set of workflow IDs in one query. Returns a
-/// map from `workflow_id` to its (sorted) group names; workflows with no
-/// associated groups are absent from the map.
+/// Chunk size for `IN (...)` lookups. Each id consumes one bound variable, so
+/// stay well below `SQLITE_MAX_VARIABLE_NUMBER` (32766 since 3.32, 999 in
+/// older builds). `list_workflows` allows up to `MAX_RECORD_TRANSFER_COUNT`
+/// (100k) ids per page, which would blow the limit without chunking.
+const ACCESS_GROUPS_IN_CHUNK: usize = 256;
+
+/// Fetch access group names for a set of workflow IDs. Returns a map from
+/// `workflow_id` to its (sorted) group names; workflows with no associated
+/// groups are absent from the map. The `IN (...)` lookup is chunked under
+/// `ACCESS_GROUPS_IN_CHUNK` to stay below `SQLITE_MAX_VARIABLE_NUMBER`.
 async fn fetch_workflow_access_groups_batch(
     pool: &sqlx::SqlitePool,
     workflow_ids: &[i64],
@@ -104,33 +111,31 @@ async fn fetch_workflow_access_groups_batch(
     if workflow_ids.is_empty() {
         return Ok(map);
     }
-    let placeholders = workflow_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(", ");
-    let query = format!(
-        r#"
-        SELECT w.workflow_id, g.name
-        FROM workflow_access_group w
-        INNER JOIN access_group g ON g.id = w.group_id
-        WHERE w.workflow_id IN ({})
-        ORDER BY w.workflow_id, g.name
-        "#,
-        placeholders
-    );
-    let mut q = sqlx::query(&query);
-    for id in workflow_ids {
-        q = q.bind(id);
-    }
-    let rows = q
-        .fetch_all(pool)
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow access groups"))?;
-    for row in rows {
-        let wid: i64 = row.get("workflow_id");
-        let name: String = row.get("name");
-        map.entry(wid).or_default().push(name);
+    for chunk in workflow_ids.chunks(ACCESS_GROUPS_IN_CHUNK) {
+        let placeholders = vec!["?"; chunk.len()].join(", ");
+        let query = format!(
+            r#"
+            SELECT w.workflow_id, g.name
+            FROM workflow_access_group w
+            INNER JOIN access_group g ON g.id = w.group_id
+            WHERE w.workflow_id IN ({})
+            ORDER BY w.workflow_id, g.name
+            "#,
+            placeholders
+        );
+        let mut q = sqlx::query(&query);
+        for id in chunk {
+            q = q.bind(id);
+        }
+        let rows = q
+            .fetch_all(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow access groups"))?;
+        for row in rows {
+            let wid: i64 = row.get("workflow_id");
+            let name: String = row.get("name");
+            map.entry(wid).or_default().push(name);
+        }
     }
     Ok(map)
 }
@@ -820,6 +825,16 @@ where
         }
 
         body.id = Some(workflow_id);
+        // Normalize the access_groups response to match what GET returns: sort
+        // by name and collapse an empty list to None (matches the omit-when-no-
+        // groups semantics on read).
+        body.access_groups = match body.access_groups.take() {
+            Some(mut names) if !names.is_empty() => {
+                names.sort();
+                Some(names)
+            }
+            _ => None,
+        };
         let response = CreateWorkflowResponse::SuccessfulResponse(body);
         Ok(response)
     }

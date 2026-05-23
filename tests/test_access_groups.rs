@@ -423,27 +423,32 @@ fn test_create_workflow_with_access_groups(start_server: &ServerProcess) {
             .expect("Failed to create access group");
     }
 
-    // Create the workflow with access_groups declared inline.
+    // Create the workflow with access_groups declared inline (reversed order
+    // to verify the server normalizes to sorted-by-name on the response).
     let mut workflow =
         models::WorkflowModel::new("wf-with-access-groups".to_string(), "wf-user".to_string());
     workflow.access_groups = Some(vec![
-        "create-with-ag-1".to_string(),
         "create-with-ag-2".to_string(),
+        "create-with-ag-1".to_string(),
     ]);
     let created = apis::workflows_api::create_workflow(config, workflow)
         .expect("Failed to create workflow with access_groups");
     let workflow_id = created.id.expect("Created workflow missing ID");
 
-    // GET should round-trip the field, sorted by group name.
-    let fetched =
-        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to fetch workflow");
+    // POST response should already be sorted by name, matching GET.
     assert_eq!(
-        fetched.access_groups,
+        created.access_groups,
         Some(vec![
             "create-with-ag-1".to_string(),
             "create-with-ag-2".to_string(),
-        ])
+        ]),
+        "POST response should normalize access_groups to sorted-by-name order"
     );
+
+    // GET should round-trip the field, sorted by group name.
+    let fetched =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to fetch workflow");
+    assert_eq!(fetched.access_groups, created.access_groups);
 
     // The join-table API agrees with the projection.
     let groups = apis::access_control_api::list_workflow_groups(config, workflow_id, None, None)
@@ -451,6 +456,29 @@ fn test_create_workflow_with_access_groups(start_server: &ServerProcess) {
     let names: Vec<&str> = groups.items.iter().map(|g| g.name.as_str()).collect();
     assert!(names.contains(&"create-with-ag-1"));
     assert!(names.contains(&"create-with-ag-2"));
+}
+
+#[rstest]
+fn test_create_workflow_with_empty_access_groups_normalizes_to_none(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Sending an explicitly empty list should be treated the same as omitting
+    // the field, both in the POST response and in subsequent GETs.
+    let mut workflow =
+        models::WorkflowModel::new("wf-empty-access-groups".to_string(), "wf-user".to_string());
+    workflow.access_groups = Some(vec![]);
+
+    let created = apis::workflows_api::create_workflow(config, workflow)
+        .expect("Failed to create workflow with empty access_groups");
+    assert!(
+        created.access_groups.is_none(),
+        "POST response should normalize an empty access_groups list to None"
+    );
+
+    let workflow_id = created.id.expect("Created workflow missing ID");
+    let fetched =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to fetch workflow");
+    assert!(fetched.access_groups.is_none());
 }
 
 #[rstest]
