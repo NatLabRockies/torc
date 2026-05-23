@@ -73,6 +73,7 @@ mime_guess = "2.0"
 hyper = { version = "1", features = ["full"] }
 http-body = "1"
 http-body-util = "0.1"
+bytes = "1"
 serde_ignored = "0.1.1"
 percent-encoding = "2.1.0"
 regex = "1.3"
@@ -185,6 +186,7 @@ server = [
     "dep:hyper-util",
     "dep:http-body",
     "dep:http-body-util",
+    "dep:bytes",
     "dep:serde_ignored",
     "dep:percent-encoding",
     "dep:regex",
@@ -325,6 +327,7 @@ async-stream = { workspace = true, optional = true }
 hyper = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 serde_ignored = { workspace = true, optional = true }
 percent-encoding = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }

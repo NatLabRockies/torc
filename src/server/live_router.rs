@@ -6,7 +6,7 @@ use crate::server::api_event_stream::{
     body_capture_limit,
 };
 use crate::server::api_stats::{
-    ApiStatsRing, ApiStatsSnapshot, DEFAULT_INTERVAL_SECONDS, DEFAULT_WINDOW_SECONDS,
+    ApiStatsRing, ApiStatsSnapshot, CountingBody, DEFAULT_INTERVAL_SECONDS, DEFAULT_WINDOW_SECONDS,
 };
 use crate::server::auth::{SharedCredentialCache, SharedHtpasswd};
 use crate::server::authorization::AccessCheckResult;
@@ -4385,16 +4385,33 @@ async fn record_api_stats(
     request: Request,
     next: Next,
 ) -> Response<Body> {
-    let bytes_in = content_length_header(request.headers());
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicU64;
+
+    let bytes_in = Arc::new(AtomicU64::new(0));
+    let bytes_in_counter = bytes_in.clone();
+    let request = request.map(|body| Body::new(CountingBody::new(body, bytes_in_counter)));
+
     let response = next.run(request).await;
-    let bytes_out = content_length_header(response.headers());
-    stats.record(
-        chrono::Utc::now().timestamp_millis(),
-        response.status().as_u16(),
-        bytes_in,
-        bytes_out,
-    );
-    response
+    let status = response.status().as_u16();
+
+    let bytes_out = Arc::new(AtomicU64::new(0));
+    let stats_for_callback = stats.clone();
+    let bytes_in_for_callback = bytes_in.clone();
+    response.map(|body| {
+        Body::new(CountingBody::with_on_end(
+            body,
+            bytes_out,
+            move |bytes_out_total| {
+                stats_for_callback.record(
+                    chrono::Utc::now().timestamp_millis(),
+                    status,
+                    bytes_in_for_callback.load(std::sync::atomic::Ordering::Relaxed),
+                    bytes_out_total,
+                );
+            },
+        ))
+    })
 }
 
 async fn capture_api_event(
@@ -4474,14 +4491,6 @@ async fn capture_api_event(
 
     bus.broadcast(event);
     response
-}
-
-fn content_length_header(headers: &axum::http::HeaderMap) -> u64 {
-    headers
-        .get(axum::http::header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(0)
 }
 
 /// Outcome of attempting to capture a request body.
@@ -4835,6 +4844,43 @@ mod live_router_tests {
     }
 
     #[tokio::test]
+    async fn api_stats_counts_actual_response_body_bytes() {
+        // Ping has no Content-Length set on the response in axum's
+        // default path — exercising the streaming-counter path that
+        // the old Content-Length-header reader would have missed.
+        let server = test_server_with_schema().await;
+        let stats = server.api_stats.clone();
+        let router = test_router(server);
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/torc-service/v1/ping")
+                    .body(Body::empty())
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let body_len = body_bytes.len() as u64;
+        assert!(body_len > 0, "ping should return a non-empty body");
+
+        let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 60, 60);
+        let total_bytes_out: u64 = snap.buckets.iter().map(|b| b.bytes_out).sum();
+        assert_eq!(
+            total_bytes_out, body_len,
+            "stats ring should account for every byte streamed out"
+        );
+    }
+
+    #[tokio::test]
     async fn api_stats_records_unauthenticated_requests() {
         let server = test_server_with_schema().await;
         let stats = server.api_stats.clone();
@@ -4851,6 +4897,10 @@ mod live_router_tests {
             .await
             .expect("router response");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // Recording fires from the response body's Drop / completion;
+        // drop the response so the stats ring sees this request before
+        // we snapshot.
+        drop(response);
 
         let snap = stats.snapshot(chrono::Utc::now().timestamp_millis(), 60, 60);
         let total: u64 = snap.buckets.iter().map(|b| b.request_count).sum();
