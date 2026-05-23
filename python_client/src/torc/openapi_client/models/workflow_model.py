@@ -29,6 +29,7 @@ class WorkflowModel(BaseModel):
     """
     WorkflowModel
     """ # noqa: E501
+    access_groups: Optional[List[StrictStr]] = Field(default=None, description="Access group names granted shared access to this workflow. Projection of the `workflow_access_group` join table (which remains the source of truth). On create, names are resolved to group IDs and join rows are inserted in the same transaction as the workflow row; an unknown name fails the whole create. On read, populated from the join table. Use `add_workflow_to_group` / `remove_workflow_from_group` for post-creation changes.")
     compute_node_expiration_buffer_seconds: Optional[StrictInt] = None
     compute_node_ignore_workflow_completion: Optional[StrictBool] = None
     compute_node_min_time_for_new_jobs_seconds: Optional[StrictInt] = None
@@ -51,7 +52,7 @@ class WorkflowModel(BaseModel):
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["access_groups", "compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -107,6 +108,11 @@ class WorkflowModel(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of resource_monitor_config
         if self.resource_monitor_config:
             _dict['resource_monitor_config'] = self.resource_monitor_config.to_dict()
+        # set to None if access_groups (nullable) is None
+        # and model_fields_set contains the field
+        if self.access_groups is None and "access_groups" in self.model_fields_set:
+            _dict['access_groups'] = None
+
         # set to None if compute_node_expiration_buffer_seconds (nullable) is None
         # and model_fields_set contains the field
         if self.compute_node_expiration_buffer_seconds is None and "compute_node_expiration_buffer_seconds" in self.model_fields_set:
@@ -189,6 +195,7 @@ class WorkflowModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "access_groups": obj.get("access_groups"),
             "compute_node_expiration_buffer_seconds": obj.get("compute_node_expiration_buffer_seconds"),
             "compute_node_ignore_workflow_completion": obj.get("compute_node_ignore_workflow_completion"),
             "compute_node_min_time_for_new_jobs_seconds": obj.get("compute_node_min_time_for_new_jobs_seconds"),

@@ -1274,6 +1274,11 @@ pub struct WorkflowSpec {
     /// resource limits, termination signals, and timeouts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_config: Option<ExecutionConfig>,
+    /// Names of access groups granted shared access to this workflow.
+    /// Names are resolved to group IDs at workflow-creation time; an unknown
+    /// name fails the whole create with a clear error.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_groups: Option<Vec<String>>,
 }
 
 impl WorkflowSpec {
@@ -1311,6 +1316,7 @@ impl WorkflowSpec {
             project: None,
             metadata: None,
             execution_config: None,
+            access_groups: None,
         }
     }
 
@@ -3169,6 +3175,12 @@ impl WorkflowSpec {
         // Set metadata if present
         if let Some(ref value) = spec.metadata {
             workflow_model.metadata = Some(value.clone());
+        }
+
+        // Pass through declared access groups; the server resolves names to
+        // group IDs in the same transaction as the workflow create.
+        if let Some(ref groups) = spec.access_groups {
+            workflow_model.access_groups = Some(groups.clone());
         }
 
         let created_workflow = apis::workflows_api::create_workflow(config, workflow_model)
@@ -7153,6 +7165,7 @@ user_data:
             project: None,
             metadata: None,
             execution_config: None,
+            access_groups: None,
         };
 
         spec.expand_parameters()

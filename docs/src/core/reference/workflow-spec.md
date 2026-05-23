@@ -32,6 +32,7 @@ The top-level container for a complete workflow definition.
 | `compute_node_ignore_workflow_completion`        | boolean                                                 | false        | Compute nodes hold allocations even after workflow completes              |
 | `compute_node_wait_for_healthy_database_minutes` | integer                                                 | none         | Compute nodes wait this many minutes for database recovery                |
 | `enable_ro_crate`                                | boolean                                                 | false        | Enable automatic [RO-Crate](../concepts/ro-crate.md) provenance tracking  |
+| `access_groups`                                  | [string]                                                | none         | Access group names granted shared access to this workflow on creation     |
 
 ### Examples with project, metadata, and shared environment
 
@@ -86,6 +87,26 @@ jobs:
   ]
 }
 ```
+
+### Sharing a workflow with access groups
+
+Declare `access_groups` on the spec to grant teammates access at creation time instead of running
+`torc access-groups add-workflow` afterwards. Each name must match an existing group; an unknown
+name fails the create with a 422 and the workflow row is not created.
+
+```yaml
+name: shared_workflow
+access_groups:
+  - naerm
+  - data-team
+jobs:
+  - name: analyze
+    command: python analyze.py
+```
+
+Use [`torc access-groups add-workflow`](../../specialized/admin/access-groups.md) /
+`remove-workflow` for post-creation changes; the YAML field is a declarative shortcut, not the
+ongoing-management API.
 
 ## JobSpec
 

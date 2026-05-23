@@ -7407,6 +7407,20 @@ components:
       - name
       - user
       properties:
+        access_groups:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: |-
+            Access group names granted shared access to this workflow.
+            Projection of the `workflow_access_group` join table (which remains the
+            source of truth). On create, names are resolved to group IDs and join
+            rows are inserted in the same transaction as the workflow row; an
+            unknown name fails the whole create. On read, populated from the join
+            table. Use `add_workflow_to_group` / `remove_workflow_from_group` for
+            post-creation changes.
         compute_node_expiration_buffer_seconds:
           type:
           - integer

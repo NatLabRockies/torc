@@ -66,6 +66,75 @@ fn parse_optional_json<T: serde::de::DeserializeOwned>(raw: Option<String>) -> O
     raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
 
+/// Fetch the access group names associated with a workflow, in `name` order.
+/// Returns `None` if the workflow has no associated groups so the field is
+/// omitted from JSON responses; otherwise returns `Some(names)`.
+async fn fetch_workflow_access_groups(
+    pool: &sqlx::SqlitePool,
+    workflow_id: i64,
+) -> Result<Option<Vec<String>>, ApiError> {
+    let rows = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT g.name
+        FROM access_group g
+        INNER JOIN workflow_access_group w ON g.id = w.group_id
+        WHERE w.workflow_id = $1
+        ORDER BY g.name
+        "#,
+    )
+    .bind(workflow_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow access groups"))?;
+    if rows.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(rows))
+    }
+}
+
+/// Fetch access group names for a set of workflow IDs in one query. Returns a
+/// map from `workflow_id` to its (sorted) group names; workflows with no
+/// associated groups are absent from the map.
+async fn fetch_workflow_access_groups_batch(
+    pool: &sqlx::SqlitePool,
+    workflow_ids: &[i64],
+) -> Result<std::collections::HashMap<i64, Vec<String>>, ApiError> {
+    let mut map: std::collections::HashMap<i64, Vec<String>> = std::collections::HashMap::new();
+    if workflow_ids.is_empty() {
+        return Ok(map);
+    }
+    let placeholders = workflow_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let query = format!(
+        r#"
+        SELECT w.workflow_id, g.name
+        FROM workflow_access_group w
+        INNER JOIN access_group g ON g.id = w.group_id
+        WHERE w.workflow_id IN ({})
+        ORDER BY w.workflow_id, g.name
+        "#,
+        placeholders
+    );
+    let mut q = sqlx::query(&query);
+    for id in workflow_ids {
+        q = q.bind(id);
+    }
+    let rows = q
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow access groups"))?;
+    for row in rows {
+        let wid: i64 = row.get("workflow_id");
+        let name: String = row.get("name");
+        map.entry(wid).or_default().push(name);
+    }
+    Ok(map)
+}
+
 /// Trait defining workflow-related API operations
 #[async_trait]
 pub trait WorkflowsApi<C> {
@@ -408,10 +477,15 @@ impl WorkflowsApiImpl {
             }
         };
 
+        let workflow_ids: Vec<i64> = records.iter().map(|r| r.get("id")).collect();
+        let mut access_groups_map =
+            fetch_workflow_access_groups_batch(self.context.pool.as_ref(), &workflow_ids).await?;
+
         let mut items: Vec<models::WorkflowModel> = Vec::new();
         for record in records {
+            let workflow_id: i64 = record.get("id");
             items.push(models::WorkflowModel {
-                id: Some(record.get("id")),
+                id: Some(workflow_id),
                 name: record.get("name"),
                 user: record.get("user"),
                 description: record.get("description"),
@@ -471,6 +545,7 @@ impl WorkflowsApiImpl {
                         .try_get::<Option<String>, _>("dynamic_jobs")
                         .unwrap_or(None),
                 ),
+                access_groups: access_groups_map.remove(&workflow_id),
             });
         }
 
@@ -603,7 +678,30 @@ where
         let use_pending_failed_int = body.use_pending_failed.map(|v| if v { 1 } else { 0 });
         let enable_ro_crate_int = body.enable_ro_crate.map(|v| if v { 1 } else { 0 });
 
-        let workflow_result = sqlx::query!(
+        // Validate access_groups for duplicates up front so we can return a
+        // 422 before opening a transaction.
+        if let Some(ref names) = body.access_groups {
+            let mut seen = std::collections::HashSet::new();
+            for name in names {
+                if !seen.insert(name.as_str()) {
+                    return Ok(CreateWorkflowResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "access_groups contains duplicate entry '{}'",
+                            name
+                        )),
+                    ));
+                }
+            }
+        }
+
+        let mut tx = self
+            .context
+            .pool
+            .begin()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
+
+        let workflow_result = match sqlx::query!(
             r#"
             INSERT INTO workflow
             (
@@ -651,12 +749,76 @@ where
             execution_config_json,
             dynamic_jobs_json,
         )
-        .fetch_one(self.context.pool.as_ref())
+        .fetch_one(&mut *tx)
         .await
-        .map_err(|e| database_error_with_msg(e, "Failed to create workflow record"))?;
+        {
+            Ok(row) => row,
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(database_error_with_msg(e, "Failed to create workflow record"));
+            }
+        };
 
         let workflow_id = workflow_result.id;
         debug!("Workflow inserted with id: {:?}", workflow_id);
+
+        // Resolve access group names to IDs and insert join rows in the same
+        // transaction. An unknown name fails the entire create.
+        if let Some(ref names) = body.access_groups {
+            for name in names {
+                let group_id: Option<i64> = match sqlx::query_scalar::<_, i64>(
+                    "SELECT id FROM access_group WHERE name = ?",
+                )
+                .bind(name)
+                .fetch_optional(&mut *tx)
+                .await
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        let _ = tx.rollback().await;
+                        return Err(database_error_with_msg(
+                            e,
+                            "Failed to resolve access group name",
+                        ));
+                    }
+                };
+                let group_id = match group_id {
+                    Some(id) => id,
+                    None => {
+                        let _ = tx.rollback().await;
+                        return Ok(CreateWorkflowResponse::UnprocessableContentErrorResponse(
+                            message_error_response(format!(
+                                "Unknown access group '{}': create the group before referencing it",
+                                name
+                            )),
+                        ));
+                    }
+                };
+
+                if let Err(e) = sqlx::query(
+                    r#"
+                    INSERT INTO workflow_access_group (workflow_id, group_id)
+                    VALUES ($1, $2)
+                    "#,
+                )
+                .bind(workflow_id)
+                .bind(group_id)
+                .execute(&mut *tx)
+                .await
+                {
+                    let _ = tx.rollback().await;
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to associate workflow with access group",
+                    ));
+                }
+            }
+        }
+
+        if let Err(e) = tx.commit().await {
+            return Err(database_error_with_msg(e, "Failed to commit transaction"));
+        }
+
         body.id = Some(workflow_id);
         let response = CreateWorkflowResponse::SuccessfulResponse(body);
         Ok(response)
@@ -901,64 +1063,69 @@ where
         .fetch_optional(self.context.pool.as_ref())
         .await
         {
-            Ok(Some(row)) => Ok(GetWorkflowResponse::SuccessfulResponse(
-                models::WorkflowModel {
-                    id: Some(row.get("id")),
-                    name: row.get("name"),
-                    user: row.get("user"),
-                    description: row.get("description"),
-                    env: deserialize_env_map(row.get("env"), "workflow env")?,
-                    timestamp: Some(row.get("timestamp")),
-                    compute_node_expiration_buffer_seconds: row
-                        .try_get::<Option<i64>, _>("compute_node_expiration_buffer_seconds")
-                        .unwrap_or(None),
-                    compute_node_wait_for_new_jobs_seconds: Some(
-                        row.get("compute_node_wait_for_new_jobs_seconds"),
-                    ),
-                    compute_node_ignore_workflow_completion: Some(
-                        row.get::<i64, _>("compute_node_ignore_workflow_completion") != 0,
-                    ),
-                    compute_node_wait_for_healthy_database_minutes: Some(
-                        row.get("compute_node_wait_for_healthy_database_minutes"),
-                    ),
-                    compute_node_min_time_for_new_jobs_seconds: Some(
-                        row.get("compute_node_min_time_for_new_jobs_seconds"),
-                    ),
-                    resource_monitor_config: parse_optional_json(
-                        row.try_get::<Option<String>, _>("resource_monitor_config")
+            Ok(Some(row)) => {
+                let access_groups =
+                    fetch_workflow_access_groups(self.context.pool.as_ref(), id).await?;
+                Ok(GetWorkflowResponse::SuccessfulResponse(
+                    models::WorkflowModel {
+                        id: Some(row.get("id")),
+                        name: row.get("name"),
+                        user: row.get("user"),
+                        description: row.get("description"),
+                        env: deserialize_env_map(row.get("env"), "workflow env")?,
+                        timestamp: Some(row.get("timestamp")),
+                        compute_node_expiration_buffer_seconds: row
+                            .try_get::<Option<i64>, _>("compute_node_expiration_buffer_seconds")
                             .unwrap_or(None),
-                    ),
-                    slurm_defaults: parse_optional_json(
-                        row.try_get::<Option<String>, _>("slurm_defaults")
-                            .unwrap_or(None),
-                    ),
-                    use_pending_failed: row
-                        .try_get::<Option<i64>, _>("use_pending_failed")
-                        .ok()
-                        .flatten()
-                        .map(|v| v != 0),
-                    enable_ro_crate: row
-                        .try_get::<Option<i64>, _>("enable_ro_crate")
-                        .ok()
-                        .flatten()
-                        .map(|v| v != 0),
-                    project: row.get("project"),
-                    metadata: parse_optional_json(
-                        row.try_get::<Option<String>, _>("metadata").unwrap_or(None),
-                    ),
-                    execution_config: parse_optional_json(
-                        row.try_get::<Option<String>, _>("execution_config")
-                            .unwrap_or(None),
-                    ),
-                    run_id: Some(row.get("run_id")),
-                    is_canceled: Some(row.get::<i64, _>("is_canceled") != 0),
-                    is_archived: Some(row.get::<i64, _>("is_archived") != 0),
-                    dynamic_jobs: parse_dynamic_jobs(
-                        row.try_get::<Option<String>, _>("dynamic_jobs")
-                            .unwrap_or(None),
-                    ),
-                },
-            )),
+                        compute_node_wait_for_new_jobs_seconds: Some(
+                            row.get("compute_node_wait_for_new_jobs_seconds"),
+                        ),
+                        compute_node_ignore_workflow_completion: Some(
+                            row.get::<i64, _>("compute_node_ignore_workflow_completion") != 0,
+                        ),
+                        compute_node_wait_for_healthy_database_minutes: Some(
+                            row.get("compute_node_wait_for_healthy_database_minutes"),
+                        ),
+                        compute_node_min_time_for_new_jobs_seconds: Some(
+                            row.get("compute_node_min_time_for_new_jobs_seconds"),
+                        ),
+                        resource_monitor_config: parse_optional_json(
+                            row.try_get::<Option<String>, _>("resource_monitor_config")
+                                .unwrap_or(None),
+                        ),
+                        slurm_defaults: parse_optional_json(
+                            row.try_get::<Option<String>, _>("slurm_defaults")
+                                .unwrap_or(None),
+                        ),
+                        use_pending_failed: row
+                            .try_get::<Option<i64>, _>("use_pending_failed")
+                            .ok()
+                            .flatten()
+                            .map(|v| v != 0),
+                        enable_ro_crate: row
+                            .try_get::<Option<i64>, _>("enable_ro_crate")
+                            .ok()
+                            .flatten()
+                            .map(|v| v != 0),
+                        project: row.get("project"),
+                        metadata: parse_optional_json(
+                            row.try_get::<Option<String>, _>("metadata").unwrap_or(None),
+                        ),
+                        execution_config: parse_optional_json(
+                            row.try_get::<Option<String>, _>("execution_config")
+                                .unwrap_or(None),
+                        ),
+                        run_id: Some(row.get("run_id")),
+                        is_canceled: Some(row.get::<i64, _>("is_canceled") != 0),
+                        is_archived: Some(row.get::<i64, _>("is_archived") != 0),
+                        dynamic_jobs: parse_dynamic_jobs(
+                            row.try_get::<Option<String>, _>("dynamic_jobs")
+                                .unwrap_or(None),
+                        ),
+                        access_groups,
+                    },
+                ))
+            }
             Ok(None) => Ok(GetWorkflowResponse::NotFoundErrorResponse(
                 resource_not_found_response("Workflow", id),
             )),
@@ -1192,6 +1359,17 @@ where
             return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
                 message_error_response(
                     "Cannot modify dynamic_jobs - this field is immutable after workflow creation",
+                ),
+            ));
+        }
+        // `access_groups` lives in the `workflow_access_group` join table,
+        // not the workflow row. Use POST /workflows/{id}/access_groups/{group_id}
+        // and DELETE /workflows/{id}/access_groups/{group_id} for mutations;
+        // accepting it here would silently no-op. Same-value passes through.
+        if body.access_groups.is_some() && body.access_groups != current_workflow.access_groups {
+            return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify access_groups via update - use add_workflow_to_group / remove_workflow_from_group",
                 ),
             ));
         }

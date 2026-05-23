@@ -5,6 +5,7 @@
 @doc raw"""WorkflowModel
 
     WorkflowModel(;
+        access_groups=nothing,
         compute_node_expiration_buffer_seconds=nothing,
         compute_node_ignore_workflow_completion=nothing,
         compute_node_min_time_for_new_jobs_seconds=nothing,
@@ -29,6 +30,7 @@
         user=nothing,
     )
 
+    - access_groups::Vector{String} : Access group names granted shared access to this workflow. Projection of the &#x60;workflow_access_group&#x60; join table (which remains the source of truth). On create, names are resolved to group IDs and join rows are inserted in the same transaction as the workflow row; an unknown name fails the whole create. On read, populated from the join table. Use &#x60;add_workflow_to_group&#x60; / &#x60;remove_workflow_from_group&#x60; for post-creation changes.
     - compute_node_expiration_buffer_seconds::Int64
     - compute_node_ignore_workflow_completion::Bool
     - compute_node_min_time_for_new_jobs_seconds::Int64
@@ -53,6 +55,7 @@
     - user::String
 """
 Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
+    access_groups::Union{Nothing, Vector{String}} = nothing
     compute_node_expiration_buffer_seconds::Union{Nothing, Int64} = nothing
     compute_node_ignore_workflow_completion::Union{Nothing, Bool} = nothing
     compute_node_min_time_for_new_jobs_seconds::Union{Nothing, Int64} = nothing
@@ -76,14 +79,14 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     use_pending_failed::Union{Nothing, Bool} = nothing
     user::Union{Nothing, String} = nothing
 
-    function WorkflowModel(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, timestamp, use_pending_failed, user, )
-        o = new(compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, timestamp, use_pending_failed, user, )
+    function WorkflowModel(access_groups, compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, timestamp, use_pending_failed, user, )
+        o = new(access_groups, compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, timestamp, use_pending_failed, user, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowModel
 
-const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("dynamic_jobs")=>"DynamicJobsConfig", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"ExecutionConfig", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("metadata")=>"Dict{String, Any}", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"ResourceMonitorConfig", Symbol("run_id")=>"Int64", Symbol("slurm_defaults")=>"Dict{String, Any}", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
+const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("access_groups")=>"Vector{String}", Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("dynamic_jobs")=>"DynamicJobsConfig", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"ExecutionConfig", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("metadata")=>"Dict{String, Any}", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"ResourceMonitorConfig", Symbol("run_id")=>"Int64", Symbol("slurm_defaults")=>"Dict{String, Any}", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
 OpenAPI.property_type(::Type{ WorkflowModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowModel)
@@ -93,6 +96,7 @@ function OpenAPI.check_required(o::WorkflowModel)
 end
 
 function OpenAPI.validate_properties(o::WorkflowModel)
+    OpenAPI.validate_property(WorkflowModel, Symbol("access_groups"), o.access_groups)
     OpenAPI.validate_property(WorkflowModel, Symbol("compute_node_expiration_buffer_seconds"), o.compute_node_expiration_buffer_seconds)
     OpenAPI.validate_property(WorkflowModel, Symbol("compute_node_ignore_workflow_completion"), o.compute_node_ignore_workflow_completion)
     OpenAPI.validate_property(WorkflowModel, Symbol("compute_node_min_time_for_new_jobs_seconds"), o.compute_node_min_time_for_new_jobs_seconds)
@@ -118,6 +122,7 @@ function OpenAPI.validate_properties(o::WorkflowModel)
 end
 
 function OpenAPI.validate_property(::Type{ WorkflowModel }, name::Symbol, val)
+
 
     if name === Symbol("compute_node_expiration_buffer_seconds")
         OpenAPI.validate_param(name, "WorkflowModel", :format, val, "int64")
