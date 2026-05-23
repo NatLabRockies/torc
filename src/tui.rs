@@ -517,6 +517,9 @@ where
                     KeyCode::BackTab => app.previous_detail_view(),
                     KeyCode::Char('r') => {
                         app.refresh_workflows()?;
+                        if app.selected_workflow_id.is_some() {
+                            app.reload_detail_data()?;
+                        }
                         app.set_status(components::StatusMessage::info("Refreshed"));
                     }
                     KeyCode::Left | KeyCode::Right => {

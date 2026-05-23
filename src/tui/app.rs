@@ -1009,6 +1009,45 @@ impl App {
         Ok(())
     }
 
+    /// Force a re-fetch of the active detail view, bypassing the per-workflow
+    /// caches that `load_detail_data` uses to skip redundant calls. Without
+    /// this, refreshing while the selected workflow is unchanged leaves cached
+    /// views (e.g. Summary, Results) showing stale data. Table positions are
+    /// preserved so a refresh doesn't snap the user back to the top.
+    pub fn reload_detail_data(&mut self) -> Result<()> {
+        let jobs_sel = self.jobs_state.selected();
+        let files_sel = self.files_state.selected();
+        let results_sel = self.results_state.selected();
+        let compute_nodes_sel = self.compute_nodes_state.selected();
+        let scheduled_nodes_sel = self.scheduled_nodes_state.selected();
+        let slurm_stats_sel = self.slurm_stats_state.selected();
+
+        // Invalidate caches keyed by workflow id so load_detail_data refetches.
+        self.jobs_workflow_id = None;
+        self.results_workflow_id = None;
+        self.load_detail_data()?;
+
+        restore_selection(&mut self.jobs_state, jobs_sel, self.jobs.len());
+        restore_selection(&mut self.files_state, files_sel, self.files.len());
+        restore_selection(&mut self.results_state, results_sel, self.results.len());
+        restore_selection(
+            &mut self.compute_nodes_state,
+            compute_nodes_sel,
+            self.compute_nodes.len(),
+        );
+        restore_selection(
+            &mut self.scheduled_nodes_state,
+            scheduled_nodes_sel,
+            self.scheduled_nodes.len(),
+        );
+        restore_selection(
+            &mut self.slurm_stats_state,
+            slurm_stats_sel,
+            self.slurm_stats.len(),
+        );
+        Ok(())
+    }
+
     /// Sort `self.results` in-place based on `self.results_sort`. Rows with
     /// missing values sort last in both directions so they don't crowd the
     /// top.
@@ -2975,7 +3014,7 @@ impl App {
         if self.auto_refresh && self.last_refresh.elapsed() > std::time::Duration::from_secs(30) {
             self.refresh_workflows()?;
             if self.selected_workflow_id.is_some() {
-                let _ = self.load_detail_data();
+                let _ = self.reload_detail_data();
             }
             self.last_refresh = std::time::Instant::now();
         }
@@ -3267,6 +3306,17 @@ impl App {
                 }
             }
         }
+    }
+}
+
+/// Restore a previously-captured table selection after a reload, clamping to
+/// the new row count. Clears the selection when the table is empty and falls
+/// back to the last row if the prior index is now out of bounds.
+fn restore_selection(state: &mut TableState, prev: Option<usize>, len: usize) {
+    if len == 0 {
+        state.select(None);
+    } else {
+        state.select(Some(prev.unwrap_or(0).min(len - 1)));
     }
 }
 
