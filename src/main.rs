@@ -1191,6 +1191,25 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        Commands::Reconcile {
+            workflow_id,
+            run_id,
+            base_dir,
+        } => {
+            match torc::client::commands::reconcile::reconcile(
+                &config,
+                *workflow_id,
+                *run_id,
+                base_dir,
+                &format,
+            ) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("Error reconciling offline journals: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             clap_complete::generate(*shell, &mut cmd, "torc", &mut std::io::stdout());

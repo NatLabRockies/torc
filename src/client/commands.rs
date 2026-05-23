@@ -12,6 +12,7 @@ pub mod logs;
 pub mod orphan_detection;
 pub mod output;
 pub mod pagination;
+pub mod reconcile;
 pub mod recover;
 pub mod remote;
 pub mod reports;

@@ -20,6 +20,9 @@ pub struct ClientConfig {
     /// Run command configuration
     pub run: ClientRunConfig,
 
+    /// Offline-drain configuration for job runners
+    pub offline: ClientOfflineConfig,
+
     /// Slurm scheduler configuration
     pub slurm: ClientSlurmConfig,
 
@@ -40,6 +43,7 @@ impl Default for ClientConfig {
             format: "table".to_string(),
             log_level: "info".to_string(),
             run: ClientRunConfig::default(),
+            offline: ClientOfflineConfig::default(),
             slurm: ClientSlurmConfig::default(),
             hpc: ClientHpcConfig::default(),
             watch: ClientWatchConfig::default(),
@@ -91,6 +95,38 @@ impl Default for ClientRunConfig {
             num_cpus: None,
             memory_gb: None,
             num_gpus: None,
+        }
+    }
+}
+
+/// Configuration for offline-drain behavior when the server becomes unreachable.
+///
+/// When a job runner cannot reach the server for longer than the workflow's
+/// `compute_node_wait_for_healthy_database_minutes` retry window, it enters a
+/// "drain" state instead of killing its running jobs: it stops claiming new
+/// jobs, lets the jobs it already started run to completion, and journals their
+/// results to a local SQLite file. If the server comes back while jobs are
+/// still running, the runner flushes the journal and resumes normal operation;
+/// otherwise it exits once all running jobs finish. The journal can be replayed
+/// later with `torc reconcile`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClientOfflineConfig {
+    /// Whether to drain (run jobs to completion + journal results) when the
+    /// server becomes unreachable. When false, the runner reverts to the legacy
+    /// behavior of killing all running jobs and exiting.
+    pub enabled: bool,
+
+    /// While draining, how often (in seconds) to ping the server to check
+    /// whether it has recovered so the runner can flush its journal and resume.
+    pub drain_ping_interval_secs: u64,
+}
+
+impl Default for ClientOfflineConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            drain_ping_interval_secs: 120,
         }
     }
 }
