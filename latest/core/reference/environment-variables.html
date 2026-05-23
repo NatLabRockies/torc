@@ -268,6 +268,27 @@ stdout/stderr logs</li>
 <pre><code class="language-bash"># Example: Write job artifacts to output directory
 cp results.json "${TORC_OUTPUT_DIR}/job_${TORC_JOB_ID}_results.json"
 </code></pre>
+<h3 id="torc_workflow_submission_dir"><a class="header" href="#torc_workflow_submission_dir">TORC_WORKFLOW_SUBMISSION_DIR</a></h3>
+<p>The absolute path of the directory the workflow was submitted from. Captured at <code>torc create</code>,
+<code>torc run</code>, or <code>torc submit</code> time and exposed to jobs so user code with relative paths can resolve
+them against the original CWD, even when the job is running on a compute node with a different
+working directory.</p>
+<ul>
+<li><strong>Type</strong>: String (absolute path)</li>
+<li><strong>Example</strong>: <code>"/home/alice/projects/sweep-2026-05"</code></li>
+<li><strong>Use case</strong>: Jobs that read or write files using paths relative to where the user submitted the
+workflow</li>
+<li><strong>Availability</strong>: Only set when the workflow has a recorded submission directory (workflows
+created before this feature, or via direct API calls that omit the field, will not have this
+variable set)</li>
+</ul>
+<pre><code class="language-bash"># Example: Resolve an input file relative to the submission directory
+INPUT="${TORC_WORKFLOW_SUBMISSION_DIR}/data/inputs.csv"
+python process.py --input "$INPUT"
+</code></pre>
+<p><strong>Note</strong>: <code>torc slurm schedule-nodes</code> and <code>torc watch</code> warn when invoked from a different directory
+than the recorded submission directory, since this is a common source of "where did my outputs go?"
+mistakes.</p>
 <h3 id="torc_attempt_id"><a class="header" href="#torc_attempt_id">TORC_ATTEMPT_ID</a></h3>
 <p>The current attempt number for this job execution. Starts at 1 and increments with each retry when
 using failure handlers.</p>
@@ -357,6 +378,7 @@ jobs:
 <tr><td><code>TORC_JOB_NAME</code></td><td>String</td><td>Jobs, Recovery Scripts</td><td>Job name from workflow spec</td></tr>
 <tr><td><code>TORC_API_URL</code></td><td>URL</td><td>Jobs, Recovery Scripts</td><td>Torc server API endpoint</td></tr>
 <tr><td><code>TORC_OUTPUT_DIR</code></td><td>Path</td><td>Jobs, Recovery Scripts</td><td>Output directory for logs/artifacts</td></tr>
+<tr><td><code>TORC_WORKFLOW_SUBMISSION_DIR</code></td><td>Path</td><td>Jobs, Recovery Scripts</td><td>Directory the workflow was submitted from (if recorded)</td></tr>
 <tr><td><code>TORC_ATTEMPT_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Current attempt number (1, 2, 3...)</td></tr>
 <tr><td><code>TORC_RETURN_CODE</code></td><td>Integer</td><td>Recovery Scripts only</td><td>Exit code that triggered recovery</td></tr>
 </tbody></table>
