@@ -51,6 +51,23 @@ Settings for `torc run` command.
 | `memory_gb`         | float | (none)        | Available memory (GB) for resource-based scheduling |
 | `num_gpus`          | int   | (none)        | Available GPUs for resource-based scheduling        |
 
+### `[client.offline]` Section
+
+Settings for offline-drain behavior when a job runner loses contact with the server.
+
+By default, if a runner cannot reach the server for longer than the workflow's
+`compute_node_wait_for_healthy_database_minutes` retry window, it enters a "drain" state instead of
+killing its running jobs: it stops claiming new jobs, lets the jobs it already started run to
+completion, and journals their results to a local SQLite file under `<output_dir>/offline_journal/`.
+If the server recovers while jobs are still running, the runner flushes the journal and resumes
+normal operation; otherwise it exits once all running jobs finish. Replay the journals afterward
+with `torc workflows reconcile <workflow_id> <run_id>`.
+
+| Option                     | Type | Default | Description                                                        |
+| -------------------------- | ---- | ------- | ------------------------------------------------------------------ |
+| `enabled`                  | bool | `true`  | Drain (vs. kill jobs and exit) when the server becomes unreachable |
+| `drain_ping_interval_secs` | int  | `120`   | How often to ping the server while draining to check for recovery  |
+
 ### `[client.tls]` Section
 
 Settings for client-side TLS when connecting to an HTTPS server.
@@ -80,6 +97,10 @@ max_parallel_jobs = 4
 num_cpus = 8
 memory_gb = 32.0
 num_gpus = 1
+
+[client.offline]
+enabled = true
+drain_ping_interval_secs = 120
 ```
 
 ### `[client.hpc]` Section
