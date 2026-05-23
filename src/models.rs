@@ -591,6 +591,14 @@ pub struct WorkflowModel {
     /// post-creation changes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_groups: Option<Vec<String>>,
+    /// Absolute directory the workflow was originally submitted from
+    /// (captured at `torc create` / `torc run` / `torc submit` time). Exposed
+    /// to jobs as `TORC_WORKFLOW_SUBMISSION_DIR` so user code with relative
+    /// paths can resolve against the original CWD even when run on a compute
+    /// node. Set once at workflow creation and not overwritten by later
+    /// `schedule-nodes`/`watch` invocations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub submission_directory: Option<String>,
 }
 
 /// Dynamic job spawning configuration. Used both as the user-authored
@@ -1956,6 +1964,7 @@ impl WorkflowModel {
             is_archived: None,
             dynamic_jobs: None,
             access_groups: None,
+            submission_directory: None,
         }
     }
 }
@@ -2381,6 +2390,7 @@ mod tests {
             is_archived: Some(false),
             dynamic_jobs: None,
             access_groups: None,
+            submission_directory: Some("/home/alice/runs/wf".to_string()),
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");

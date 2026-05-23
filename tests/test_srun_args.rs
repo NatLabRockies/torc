@@ -147,6 +147,7 @@ fn run_and_capture_srun_args_with_headroom(
         sigkill_headroom_seconds,
         None, // target_node
         &StdioMode::Separate,
+        None, // submission_directory
     );
     assert!(
         result.is_ok(),
@@ -429,6 +430,7 @@ fn test_srun_with_end_time_insufficient_time_rejected() {
         60,
         None,
         &StdioMode::Separate,
+        None, // submission_directory
     );
 
     cleanup_srun_env();
@@ -636,6 +638,7 @@ fn test_srun_step_name_format() {
         60,   // sigkill_headroom_seconds
         None, // target_node
         &StdioMode::Separate,
+        None, // submission_directory
     );
     assert!(result.is_ok());
 

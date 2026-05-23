@@ -280,6 +280,7 @@ const WORKFLOW_COLUMNS: &[&str] = &[
     "enable_ro_crate",
     "project",
     "metadata",
+    "submission_directory",
     "run_id",
     "is_archived",
     "is_canceled",
@@ -372,6 +373,7 @@ impl WorkflowsApiImpl {
                 ,enable_ro_crate
                 ,project
                 ,metadata
+                ,submission_directory
                 ,execution_config
                 ,run_id
                 ,is_archived
@@ -551,6 +553,9 @@ impl WorkflowsApiImpl {
                         .unwrap_or(None),
                 ),
                 access_groups: access_groups_map.remove(&workflow_id),
+                submission_directory: record
+                    .try_get::<Option<String>, _>("submission_directory")
+                    .unwrap_or(None),
             });
         }
 
@@ -728,11 +733,12 @@ where
                 metadata,
                 execution_config,
                 dynamic_jobs,
+                submission_directory,
                 run_id,
                 is_archived,
                 is_canceled
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0, 0, 0)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 0, 0, 0)
             RETURNING rowid
             "#,
             body.name,
@@ -753,6 +759,7 @@ where
             metadata_json,
             execution_config_json,
             dynamic_jobs_json,
+            body.submission_directory,
         )
         .fetch_one(&mut *tx)
         .await
@@ -1065,6 +1072,7 @@ where
                     enable_ro_crate,
                     project,
                     metadata,
+                    submission_directory,
                     execution_config,
                     dynamic_jobs,
                     run_id,
@@ -1138,6 +1146,9 @@ where
                                 .unwrap_or(None),
                         ),
                         access_groups,
+                        submission_directory: row
+                            .try_get::<Option<String>, _>("submission_directory")
+                            .unwrap_or(None),
                     },
                 ))
             }
@@ -1362,6 +1373,20 @@ where
             return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
                 message_error_response(
                     "Cannot modify env - this field is immutable after workflow creation",
+                ),
+            ));
+        }
+        // `submission_directory` records the CWD captured at workflow creation
+        // and is a stable breadcrumb to where the user submitted from. Reject
+        // changes here (same-value passes through as a no-op). Slurm
+        // schedulers and `torc watch` warn on CWD mismatch rather than
+        // overwriting this field.
+        if body.submission_directory.is_some()
+            && body.submission_directory != current_workflow.submission_directory
+        {
+            return Ok(UpdateWorkflowResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "Cannot modify submission_directory - this field is immutable after workflow creation",
                 ),
             ));
         }

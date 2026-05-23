@@ -65,6 +65,74 @@ pub fn shell_command() -> Command {
     }
 }
 
+/// Emit a warning if the current working directory differs from the
+/// workflow's recorded `submission_directory`.
+///
+/// Used by `torc slurm schedule-nodes` and `torc watch` to surface a common
+/// HPC footgun: relative paths in job commands resolve against the
+/// submitter's CWD, not the workflow's. Running scheduler/watch commands
+/// from a different directory than `torc submit` typically points at user
+/// error (e.g. ran scheduler from `$HOME` while the workflow lives in
+/// `$SCRATCH/run42`).
+///
+/// Silent when `submission_directory` is unset (older workflows) or matches
+/// the current directory.
+pub fn warn_if_cwd_differs_from_submission_directory(
+    submission_directory: Option<&str>,
+    command_name: &str,
+) {
+    let Some(submission_dir) = submission_directory else {
+        return;
+    };
+    let Ok(cwd) = std::env::current_dir() else {
+        return;
+    };
+    let Some(cwd_str) = cwd.to_str() else {
+        return;
+    };
+    if cwd_str == submission_dir {
+        return;
+    }
+    warn!(
+        "Current directory {:?} differs from workflow's recorded submission_directory {:?}. \
+         Relative paths in job commands resolve against the workflow runner's CWD, not the \
+         submitter's. If your jobs use relative paths, re-run `{}` from {:?} \
+         or use TORC_WORKFLOW_SUBMISSION_DIR inside job commands.",
+        cwd_str, submission_dir, command_name, submission_dir,
+    );
+}
+
+/// Capture the current working directory as an absolute path string.
+///
+/// Used at `torc create` / `torc run` / `torc submit` time to record where the
+/// user submitted the workflow from. Stored on the workflow as
+/// `submission_directory` and exposed to jobs via
+/// `TORC_WORKFLOW_SUBMISSION_DIR`. Returns `None` (with a logged warning) if
+/// the CWD cannot be read or contains non-UTF-8 characters; the workflow
+/// still gets created in that case.
+pub fn capture_submission_directory() -> Option<String> {
+    match std::env::current_dir() {
+        Ok(path) => match path.to_str() {
+            Some(s) => Some(s.to_string()),
+            None => {
+                warn!(
+                    "Current directory contains non-UTF-8 characters; \
+                     submission_directory will not be recorded"
+                );
+                None
+            }
+        },
+        Err(e) => {
+            warn!(
+                "Failed to read current directory: {}; \
+                 submission_directory will not be recorded",
+                e
+            );
+            None
+        }
+    }
+}
+
 /// Execute an API call with automatic retries for network errors
 ///
 /// This function will immediately return non-network errors, but will retry

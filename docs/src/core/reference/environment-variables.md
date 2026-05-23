@@ -103,6 +103,31 @@ The output directory where job logs and artifacts are stored.
 cp results.json "${TORC_OUTPUT_DIR}/job_${TORC_JOB_ID}_results.json"
 ```
 
+### TORC_WORKFLOW_SUBMISSION_DIR
+
+The absolute path of the directory the workflow was submitted from. Captured at `torc create`,
+`torc run`, or `torc submit` time and exposed to jobs so user code with relative paths can resolve
+them against the original CWD, even when the job is running on a compute node with a different
+working directory.
+
+- **Type**: String (absolute path)
+- **Example**: `"/home/alice/projects/sweep-2026-05"`
+- **Use case**: Jobs that read or write files using paths relative to where the user submitted the
+  workflow
+- **Availability**: Only set when the workflow has a recorded submission directory (workflows
+  created before this feature, or via direct API calls that omit the field, will not have this
+  variable set)
+
+```bash
+# Example: Resolve an input file relative to the submission directory
+INPUT="${TORC_WORKFLOW_SUBMISSION_DIR}/data/inputs.csv"
+python process.py --input "$INPUT"
+```
+
+**Note**: `torc slurm schedule-nodes` and `torc watch` warn when invoked from a different directory
+than the recorded submission directory, since this is a common source of "where did my outputs go?"
+mistakes.
+
 ### TORC_ATTEMPT_ID
 
 The current attempt number for this job execution. Starts at 1 and increments with each retry when
@@ -198,16 +223,17 @@ jobs:
 
 ## Summary Table
 
-| Variable           | Type    | Available In           | Description                         |
-| ------------------ | ------- | ---------------------- | ----------------------------------- |
-| `TORC_WORKFLOW_ID` | Integer | Jobs, Recovery Scripts | Workflow identifier                 |
-| `TORC_RUN_ID`      | Integer | Jobs, Recovery Scripts | Workflow run number (1, 2, 3...)    |
-| `TORC_JOB_ID`      | Integer | Jobs, Recovery Scripts | Job identifier                      |
-| `TORC_JOB_NAME`    | String  | Jobs, Recovery Scripts | Job name from workflow spec         |
-| `TORC_API_URL`     | URL     | Jobs, Recovery Scripts | Torc server API endpoint            |
-| `TORC_OUTPUT_DIR`  | Path    | Jobs, Recovery Scripts | Output directory for logs/artifacts |
-| `TORC_ATTEMPT_ID`  | Integer | Jobs, Recovery Scripts | Current attempt number (1, 2, 3...) |
-| `TORC_RETURN_CODE` | Integer | Recovery Scripts only  | Exit code that triggered recovery   |
+| Variable                       | Type    | Available In           | Description                                             |
+| ------------------------------ | ------- | ---------------------- | ------------------------------------------------------- |
+| `TORC_WORKFLOW_ID`             | Integer | Jobs, Recovery Scripts | Workflow identifier                                     |
+| `TORC_RUN_ID`                  | Integer | Jobs, Recovery Scripts | Workflow run number (1, 2, 3...)                        |
+| `TORC_JOB_ID`                  | Integer | Jobs, Recovery Scripts | Job identifier                                          |
+| `TORC_JOB_NAME`                | String  | Jobs, Recovery Scripts | Job name from workflow spec                             |
+| `TORC_API_URL`                 | URL     | Jobs, Recovery Scripts | Torc server API endpoint                                |
+| `TORC_OUTPUT_DIR`              | Path    | Jobs, Recovery Scripts | Output directory for logs/artifacts                     |
+| `TORC_WORKFLOW_SUBMISSION_DIR` | Path    | Jobs, Recovery Scripts | Directory the workflow was submitted from (if recorded) |
+| `TORC_ATTEMPT_ID`              | Integer | Jobs, Recovery Scripts | Current attempt number (1, 2, 3...)                     |
+| `TORC_RETURN_CODE`             | Integer | Recovery Scripts only  | Exit code that triggered recovery                       |
 
 ## Notes
 

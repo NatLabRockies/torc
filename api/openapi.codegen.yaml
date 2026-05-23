@@ -7528,6 +7528,17 @@ components:
           additionalProperties: {}
           propertyNames:
             type: string
+        submission_directory:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Absolute directory the workflow was originally submitted from
+            (captured at `torc create` / `torc run` / `torc submit` time). Exposed
+            to jobs as `TORC_WORKFLOW_SUBMISSION_DIR` so user code with relative
+            paths can resolve against the original CWD even when run on a compute
+            node. Set once at workflow creation and not overwritten by later
+            `schedule-nodes`/`watch` invocations.
         timestamp:
           type:
           - string
