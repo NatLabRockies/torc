@@ -213,6 +213,7 @@ written in YAML, JSON, JSON5, or KDL formats.</p>
 <tr><td><code>compute_node_ignore_workflow_completion</code></td><td>boolean</td><td>false</td><td>Compute nodes hold allocations even after workflow completes</td></tr>
 <tr><td><code>compute_node_wait_for_healthy_database_minutes</code></td><td>integer</td><td>none</td><td>Compute nodes wait this many minutes for database recovery</td></tr>
 <tr><td><code>enable_ro_crate</code></td><td>boolean</td><td>false</td><td>Enable automatic <a href="../concepts/ro-crate.html">RO-Crate</a> provenance tracking</td></tr>
+<tr><td><code>access_groups</code></td><td>[string]</td><td>none</td><td>Access group names granted shared access to this workflow on creation</td></tr>
 </tbody></table>
 </div>
 <h3 id="examples-with-project-metadata-and-shared-environment"><a class="header" href="#examples-with-project-metadata-and-shared-environment">Examples with project, metadata, and shared environment</a></h3>
@@ -260,6 +261,21 @@ jobs:
   ]
 }
 </code></pre>
+<h3 id="sharing-a-workflow-with-access-groups"><a class="header" href="#sharing-a-workflow-with-access-groups">Sharing a workflow with access groups</a></h3>
+<p>Declare <code>access_groups</code> on the spec to grant teammates access at creation time instead of running
+<code>torc access-groups add-workflow</code> afterwards. Each name must match an existing group; an unknown
+name fails the create with a 422 and the workflow row is not created.</p>
+<pre><code class="language-yaml">name: shared_workflow
+access_groups:
+  - naerm
+  - data-team
+jobs:
+  - name: analyze
+    command: python analyze.py
+</code></pre>
+<p>Use <a href="../../specialized/admin/access-groups.html"><code>torc access-groups add-workflow</code></a> /
+<code>remove-workflow</code> for post-creation changes; the YAML field is a declarative shortcut, not the
+ongoing-management API.</p>
 <h2 id="jobspec"><a class="header" href="#jobspec">JobSpec</a></h2>
 <p>Defines a single computational task within a workflow.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
