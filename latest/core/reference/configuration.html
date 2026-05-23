@@ -226,6 +226,20 @@ torc config validate          # Validate current configuration
 <tr><td><code>num_gpus</code></td><td>int</td><td>(none)</td><td>Available GPUs for resource-based scheduling</td></tr>
 </tbody></table>
 </div>
+<h3 id="clientoffline-section"><a class="header" href="#clientoffline-section"><code>[client.offline]</code> Section</a></h3>
+<p>Settings for offline-drain behavior when a job runner loses contact with the server.</p>
+<p>By default, if a runner cannot reach the server for longer than the workflow's
+<code>compute_node_wait_for_healthy_database_minutes</code> retry window, it enters a "drain" state instead of
+killing its running jobs: it stops claiming new jobs, lets the jobs it already started run to
+completion, and journals their results to a local SQLite file under <code>&lt;output_dir&gt;/offline_journal/</code>.
+If the server recovers while jobs are still running, the runner flushes the journal and resumes
+normal operation; otherwise it exits once all running jobs finish. Replay the journals afterward
+with <code>torc workflows reconcile &lt;workflow_id&gt; &lt;run_id&gt;</code>.</p>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>enabled</code></td><td>bool</td><td><code>true</code></td><td>Drain (vs. kill jobs and exit) when the server becomes unreachable</td></tr>
+<tr><td><code>drain_ping_interval_secs</code></td><td>int</td><td><code>120</code></td><td>How often to ping the server while draining to check for recovery</td></tr>
+</tbody></table>
+</div>
 <h3 id="clienttls-section"><a class="header" href="#clienttls-section"><code>[client.tls]</code> Section</a></h3>
 <p>Settings for client-side TLS when connecting to an HTTPS server.</p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
@@ -251,6 +265,10 @@ max_parallel_jobs = 4
 num_cpus = 8
 memory_gb = 32.0
 num_gpus = 1
+
+[client.offline]
+enabled = true
+drain_ping_interval_secs = 120
 </code></pre>
 <h3 id="clienthpc-section"><a class="header" href="#clienthpc-section"><code>[client.hpc]</code> Section</a></h3>
 <p>Settings for HPC profile system (used by <code>torc hpc</code> and <code>torc slurm</code> commands).</p>

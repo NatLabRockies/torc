@@ -333,6 +333,64 @@ scheduling new Slurm allocations.</li>
 subprocess exit delivers <code>SIGCHLD</code></li>
 </ol>
 <p>The runner continues until the workflow is complete or canceled.</p>
+<h2 id="surviving-server-outages-offline-drain"><a class="header" href="#surviving-server-outages-offline-drain">Surviving Server Outages (Offline Drain)</a></h2>
+<p>Job runners need the server to claim work, report completions, and unblock dependents. But a running
+job is an ordinary subprocess on the compute node — it does not need the server to keep running.
+Killing in-flight jobs because the server is briefly unreachable would throw away expensive compute
+(imagine a 5-day job killed on the 4th night by a server outage that can be repaired the next day).</p>
+<p>To avoid this, every API call first retries for up to
+<code>compute_node_wait_for_healthy_database_minutes</code> (default 20). If the server is still unreachable
+after that window, the runner enters <strong>offline-drain mode</strong> instead of exiting:</p>
+<ol>
+<li><strong>Stop claiming new jobs.</strong> Claiming requires a server-side write lock that prevents two nodes
+from grabbing the same job, so no new work can start while the server is down.</li>
+<li><strong>Let running jobs finish.</strong> The runner keeps monitoring its subprocesses to completion.</li>
+<li><strong>Journal results locally.</strong> Each completion is written to a per-node SQLite file under
+<code>&lt;output_dir&gt;/offline_journal/</code>, named <code>offline_results_wf&lt;workflow_id&gt;_r&lt;run_id&gt;_&lt;label&gt;.db</code>.</li>
+<li><strong>Watch for recovery.</strong> The runner pings the server every <code>drain_ping_interval_secs</code> (default
+120). If the server comes back <strong>while jobs are still running</strong>, the runner flushes the journal,
+brings the server's view up to date, and resumes normal operation — claiming new work again with
+no lost results.</li>
+<li><strong>Exit when drained.</strong> If all running jobs finish while the server is still down, the runner
+writes its final results to the journal and exits.</li>
+</ol>
+<p>This behavior is on by default. It can be tuned (or disabled in favor of the legacy kill-and-exit
+behavior) via the <a href="../reference/configuration.html"><code>[client.offline]</code></a> configuration section.</p>
+<pre class="mermaid">flowchart TD
+    Down{Server unreachable&lt;br/&gt;past retry window?} --&gt;|No| Normal[Normal loop]
+    Down --&gt;|Yes| Drain[Offline drain:&lt;br/&gt;stop claiming, journal completions]
+    Drain --&gt; Ping{Server back&lt;br/&gt;while jobs running?}
+    Ping --&gt;|Yes| Flush[Flush journal,&lt;br/&gt;resume normal loop]
+    Ping --&gt;|No| AllDone{All running&lt;br/&gt;jobs finished?}
+    AllDone --&gt;|No| Drain
+    AllDone --&gt;|Yes| Exit([Write journal, exit])
+    Flush --&gt; Normal
+
+    style Down fill:#f59e0b,stroke:#d97706,color:#fff
+    style Ping fill:#f59e0b,stroke:#d97706,color:#fff
+    style AllDone fill:#f59e0b,stroke:#d97706,color:#fff
+    style Drain fill:#3b82f6,stroke:#2563eb,color:#fff
+    style Flush fill:#3b82f6,stroke:#2563eb,color:#fff
+    style Normal fill:#10b981,stroke:#059669,color:#fff
+    style Exit fill:#ef4444,stroke:#dc2626,color:#fff
+</pre>
+<h3 id="reconciling-journals-after-an-outage"><a class="header" href="#reconciling-journals-after-an-outage">Reconciling Journals After an Outage</a></h3>
+<p>When runners exit while the server is down (for example, a long outage where every node finishes its
+work before the server returns), replay their journals once the server is healthy:</p>
+<pre><code class="language-bash"># Reconcile every node's journal for workflow 42, run 1, found under the current directory
+torc workflows reconcile 42 1
+
+# Point at the shared output root used by all compute nodes
+torc workflows reconcile 42 1 --base-dir /scratch/run42
+</code></pre>
+<p><code>torc workflows reconcile</code> discovers <strong>all</strong> journal files for that <code>(workflow_id, run_id)</code> beneath
+the base directory — so a 1000-node run is recovered with one command, not one per node — and
+replays the completions to the server in bulk. The <code>run_id</code> is shown by <code>torc workflows status 42</code>
+and encoded in each journal's file name.</p>
+<p>Replay is idempotent and safe. The server validates each completion's <code>run_id</code> against the
+workflow's current generation, so completions from a superseded run (for example, after a manual
+restart) are rejected rather than applied; <code>torc workflows reconcile</code> reports these as rejected and
+exits without error.</p>
 <h2 id="resource-management-resource-based-allocation-only"><a class="header" href="#resource-management-resource-based-allocation-only">Resource Management (Resource-Based Allocation Only)</a></h2>
 <p>When using resource-based allocation (default), the local job runner tracks:</p>
 <ul>
