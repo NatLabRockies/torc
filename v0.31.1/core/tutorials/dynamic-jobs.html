@@ -1,0 +1,546 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Dynamic Jobs (Orchestrator Continuation) - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.31.1/docs/src/core/tutorials/dynamic-jobs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="dynamic-jobs-iterative-workflows-with-spawn_jobs"><a class="header" href="#dynamic-jobs-iterative-workflows-with-spawn_jobs">Dynamic Jobs: Iterative Workflows with <code>spawn_jobs</code></a></h1>
+<p>This tutorial teaches you how to build a torc workflow whose <strong>iteration count is decided at
+runtime</strong> — for example a numerical refinement that keeps going until it converges. The shape can't
+be expressed as a static DAG, so torc gives you one primitive to extend the workflow as it runs:
+<strong><code>spawn_jobs</code></strong>.</p>
+<h2 id="learning-objectives"><a class="header" href="#learning-objectives">Learning Objectives</a></h2>
+<p>By the end of this tutorial, you will:</p>
+<ul>
+<li>Recognize when a static DAG can't express your workflow</li>
+<li>Write a lightweight orchestrator job that adds the next iteration at runtime</li>
+<li>Build a converging loop and watch it stop on its own</li>
+<li>Run multiple independent iterations concurrently in one workflow</li>
+<li>Know how to cap a runaway loop</li>
+</ul>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li>Completed <a href="./diamond.html">Tutorial 2: Diamond Workflow</a></li>
+<li>Torc server running (see <a href="../../getting-started/quick-start-local.html">Quick Start (Local)</a>)</li>
+<li>The Python client installed: <code>pip install torc_client</code></li>
+<li><code>jq</code> and <code>awk</code> available on <code>PATH</code> (used by the demo worker)</li>
+<li>Roughly 15 minutes</li>
+</ul>
+<h2 id="the-problem-a-static-dag-cant-express"><a class="header" href="#the-problem-a-static-dag-cant-express">The Problem a Static DAG Can't Express</a></h2>
+<p>Most torc workflows are a fixed DAG declared up front: "run these N jobs in this order." That works
+when the work is known.</p>
+<p>Suppose you have a simulation that:</p>
+<ul>
+<li>Refines its estimate each iteration</li>
+<li>Converges when the change between iterations drops below a tolerance</li>
+<li>Might take 3 iterations or 30 — it depends on the data</li>
+</ul>
+<p>Three iterations of (worker → check → worker) you could write by hand. Thirty you can't, because you
+don't know it's thirty until you've already started.</p>
+<h3 id="a-naive-workaround-that-doesnt-work"><a class="header" href="#a-naive-workaround-that-doesnt-work">A Naive Workaround That Doesn't Work</a></h3>
+<p><strong>Pre-allocate the maximum and cancel the rest.</strong> Declare 30 worker jobs in a chain and have the
+converging iteration cancel the remaining 27.</p>
+<p>This is wasteful (the unused jobs still occupy slots in the dependency graph), fragile (cancellation
+has to live in your scripts), and pushes discovery into user code. For 10 concurrent runs of this
+pattern you'd be staring at 300 jobs that mostly won't run, and a debugging story that gets worse
+with every retry.</p>
+<p>There's a better primitive.</p>
+<h2 id="the-spawn-pattern"><a class="header" href="#the-spawn-pattern">The Spawn Pattern</a></h2>
+<p>A lightweight <strong>orchestrator</strong> job does three things:</p>
+<ol>
+<li>Inspects the previous iteration's output (cheap — just reads a file or a small <code>user_data</code>
+record)</li>
+<li>Calls <code>spawn_jobs</code> to add the next worker plus a <strong>continuation of itself</strong>, both blocked on this
+orchestrator</li>
+<li>Exits 0</li>
+</ol>
+<p>The torc runner completes the orchestrator on exit (the normal path). The spawned jobs were inserted
+<code>blocked</code> with an implicit dependency edge on the calling orchestrator, so the unblock cascade
+promotes them as soon as the orchestrator becomes terminal. The next orchestrator generation then
+does the same thing. <strong>Convergence is "spawn nothing."</strong> When the orchestrator decides it's done, it
+calls <code>spawn_jobs</code> with <code>jobs=[]</code> (optionally with a final state payload) and exits. With no further
+jobs in the queue, the workflow finishes naturally.</p>
+<h3 id="what-spawn_jobs-does-in-one-call"><a class="header" href="#what-spawn_jobs-does-in-one-call">What <code>spawn_jobs</code> Does in One Call</a></h3>
+<p>In one database transaction, the server:</p>
+<ol>
+<li>Inserts each requested job as <code>Blocked</code></li>
+<li>Adds an implicit <code>job_depends_on</code> edge to the calling orchestrator (you don't list it yourself)</li>
+<li>Resolves explicit <code>depends_on</code> against existing jobs and against siblings in the same batch</li>
+<li>Persists an opaque JSON <code>state</code> payload as an immutable per-generation record</li>
+</ol>
+<p>If anything in the batch is invalid — unknown <code>resource_requirements</code>, a dependency cycle, the cap
+exceeded — the whole transaction aborts and nothing is persisted.</p>
+<h2 id="step-1-write-the-worker"><a class="header" href="#step-1-write-the-worker">Step 1: Write the Worker</a></h2>
+<p>The "real work" of each iteration. For this tutorial we'll simulate convergence: each iteration's
+metric is half the previous one, so it crosses our tolerance after 7 generations.</p>
+<p>Save as <code>worker.sh</code>:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+set -euo pipefail
+lineage="$1"
+gen="$2"
+work_dir="./work/$lineage"
+mkdir -p "$work_dir"
+
+prev_file="$work_dir/worker_i$(printf '%02d' $((10#$gen - 1))).json"
+prior_metric=$(jq -r '.metric' "$prev_file" 2&gt;/dev/null || echo "1.0")
+new_metric=$(awk "BEGIN { print $prior_metric / 2 }")
+out_file="$work_dir/worker_i$(printf '%02d' "$gen").json"
+printf '{"metric": %s}\n' "$new_metric" &gt; "$out_file"
+echo "iter $gen: $prior_metric -&gt; $new_metric" &gt;&amp;2
+</code></pre>
+<h2 id="step-2-write-the-orchestrator"><a class="header" href="#step-2-write-the-orchestrator">Step 2: Write the Orchestrator</a></h2>
+<p>The orchestrator reads the prior worker's output, decides whether to continue, and either spawns the
+next iteration or stops.</p>
+<p>Save as <code>orchestrator.py</code>:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+from torc import Orchestrator, SpawnJobModel
+
+CONVERGENCE_TOLERANCE = 0.01
+
+# `Orchestrator.from_env()` reads TORC_API_URL / TORC_WORKFLOW_ID / TORC_JOB_ID
+# from the env and resolves the lineage from TORC_ORCHESTRATOR_LINEAGE_ID
+# (set by torc on every spawned continuation), falling back to `sys.argv[1]`
+# on the seed invocation.
+orch = Orchestrator.from_env(lineage_fallback=sys.argv[1] if len(sys.argv) &gt; 1 else None)
+
+current_gen = orch.generation   # 0 on the seed, derived from torc's lineage records
+next_gen = current_gen + 1
+
+# Read prior worker's metric (None on the seed generation).
+prior_file = Path(f"./work/{orch.lineage}/worker_i{current_gen:02d}.json")
+prior_metric = json.loads(prior_file.read_text())["metric"] if prior_file.exists() else None
+print(f"[orch {orch.lineage}] current_gen={current_gen} prior_metric={prior_metric}", file=sys.stderr)
+
+# Convergence: spawn nothing, write a final state record, exit.
+if prior_metric is not None and prior_metric &lt; CONVERGENCE_TOLERANCE:
+    orch.converge(state={
+        "converged": True, "final_metric": prior_metric, "iterations": current_gen,
+    })
+    print(f"[orch {orch.lineage}] converged at gen={current_gen}", file=sys.stderr)
+    sys.exit(0)
+
+# Otherwise spawn the next worker + the next orchestrator continuation.
+worker = f"worker_{orch.lineage}_i{next_gen:02d}"
+cont = f"orch_{orch.lineage}_g{next_gen:02d}"
+orch.spawn(
+    jobs=[
+        SpawnJobModel(
+            name=worker,
+            command=f"bash {os.path.abspath('worker.sh')} {orch.lineage} {next_gen}",
+            resource_requirements="worker_rr",
+        ),
+        SpawnJobModel(
+            name=cont,
+            command=f"python3 {os.path.abspath('orchestrator.py')}",
+            resource_requirements="orch_rr",
+            depends_on=[worker],
+            cancel_on_blocking_job_failure=False,
+        ),
+    ],
+    state={"generation": next_gen, "prior_metric": prior_metric},
+)
+print(f"[orch {orch.lineage}] spawned gen={next_gen}: {worker} -&gt; {cont}", file=sys.stderr)
+</code></pre>
+<p>Notice what the orchestrator does <strong>not</strong> do:</p>
+<ul>
+<li>It does <strong>not</strong> list itself in any spawned job's <code>depends_on</code>. The server adds that edge.</li>
+<li>It does <strong>not</strong> need to know how torc encodes per-lineage iteration state.
+<code>Orchestrator.generation</code> walks the <code>__torc_lineage__&lt;lineage&gt;__g######</code> <code>user_data</code> records on
+its behalf.</li>
+</ul>
+<h2 id="step-3-write-the-workflow-spec"><a class="header" href="#step-3-write-the-workflow-spec">Step 3: Write the Workflow Spec</a></h2>
+<p>Save as <code>iterative.yaml</code>:</p>
+<pre><code class="language-yaml">name: iterative_refinement
+description: Iterative loop that converges via spawn_jobs
+
+dynamic_jobs:
+  max_iterations: 20   # safety cap; 7 are expected
+
+resource_requirements:
+  - name: worker_rr
+    num_cpus: 1
+    memory: 256m
+  - name: orch_rr
+    num_cpus: 1
+    memory: 128m
+
+jobs:
+  - name: orch_caseA_g00
+    command: python3 orchestrator.py caseA
+    resource_requirements: orch_rr
+</code></pre>
+<p>The workflow declares <strong>one</strong> job — the seed orchestrator. Every worker and every continuation is
+added at runtime by <code>spawn_jobs</code>.</p>
+<h2 id="step-4-run-it"><a class="header" href="#step-4-run-it">Step 4: Run It</a></h2>
+<pre><code class="language-bash">torc run iterative.yaml
+</code></pre>
+<p>The seed orchestrator runs, sees no prior worker, and spawns <code>worker_caseA_i01</code> plus
+<code>orch_caseA_g01</code>. The runner completes the seed; the unblock cascade promotes the worker; the worker
+writes its metric; the next orchestrator unblocks, reads the metric, and spawns the next pair. This
+repeats until the metric drops below <code>0.01</code> (around generation 7).</p>
+<h2 id="step-5-watch-it-happen"><a class="header" href="#step-5-watch-it-happen">Step 5: Watch It Happen</a></h2>
+<p>While the workflow runs, list jobs at any time to watch new ones appear. Initially the table shows
+only the seed (<code>orch_caseA_g00</code>); after a few seconds <code>worker_caseA_i01</code> and <code>orch_caseA_g01</code> join
+it; and so on until convergence at generation 7.</p>
+<pre><code class="language-bash">torc jobs list &lt;workflow_id&gt;
+</code></pre>
+<p>The default table prints <code>ID | Name | Status | Priority | Command</code> — useful for tracking progress
+but not for telling spec-declared jobs apart from spawned ones. For that, dump JSON and inspect each
+job's <code>origin</code> field (<code>"spawn"</code> for jobs added by <code>spawn_jobs</code>, absent for jobs declared in the
+workflow spec):</p>
+<pre><code class="language-bash">torc -f json jobs list &lt;workflow_id&gt; \
+  | jq -r '.jobs[] | [.name, .status, (.origin // "(declared)")] | @tsv'
+</code></pre>
+<pre><code>orch_caseA_g00      completed   (declared)
+worker_caseA_i01    completed   spawn
+orch_caseA_g01      completed   spawn
+worker_caseA_i02    completed   spawn
+orch_caseA_g02      completed   spawn
+...
+worker_caseA_i07    completed   spawn
+orch_caseA_g07      completed   spawn
+</code></pre>
+<p>Things to notice:</p>
+<ul>
+<li>The seed orchestrator has no <code>origin</code> set (declared at workflow creation, so the field is omitted
+from the JSON). Every other job has <code>origin = "spawn"</code>.</li>
+<li>The orchestrators in the middle never produced output of their own — they just inspected the prior
+metric and re-spawned.</li>
+<li>The last orchestrator generation called <code>spawn_jobs</code> with <code>jobs=[]</code> and the workflow finished
+naturally with no leftover Ready or Blocked jobs.</li>
+</ul>
+<p>To inspect the final state record:</p>
+<pre><code class="language-bash">torc user-data list &lt;workflow_id&gt; | grep __torc_lineage__caseA__final
+</code></pre>
+<p>It holds <code>{"converged": true, "final_metric": ..., "iterations": 7}</code> — the payload your orchestrator
+sent on the converging call.</p>
+<h2 id="step-6-run-multiple-concurrent-lineages"><a class="header" href="#step-6-run-multiple-concurrent-lineages">Step 6: Run Multiple Concurrent Lineages</a></h2>
+<p>What if you want 10 independent runs of this same loop? Add 10 seed orchestrators:</p>
+<pre><code class="language-yaml">jobs:
+  - name: orch_caseA_g00
+    command: python3 orchestrator.py caseA
+    resource_requirements: orch_rr
+  - name: orch_caseB_g00
+    command: python3 orchestrator.py caseB
+    resource_requirements: orch_rr
+  # ... add caseC ... caseJ ...
+</code></pre>
+<p>Each runs its own independent lineage. Their per-lineage state records (<code>__torc_lineage__caseA__*</code>,
+<code>__torc_lineage__caseB__*</code>, …) and iteration counters do not interact. Torc's resource packer
+interleaves all of their workers across compute nodes; the orchestrators are cheap and don't crowd
+anything.</p>
+<p>The <code>max_iterations: 20</code> cap is <strong>per lineage</strong>, not per workflow. Case A iterating 20 times has no
+effect on Case B's allowance.</p>
+<h2 id="safety-the-iteration-cap"><a class="header" href="#safety-the-iteration-cap">Safety: the Iteration Cap</a></h2>
+<p><code>dynamic_jobs.max_iterations</code> is a runaway guard. The first attempted iteration that would push a
+lineage past the cap is rejected with HTTP 422:</p>
+<pre><code>Per-lineage iteration cap reached for lineage 'caseA':
+attempted iteration 21 exceeds dynamic_jobs.max_iterations=20 (current spawn_count=20)
+</code></pre>
+<p>When the cap rejects a call, nothing is persisted, the orchestrator stays <code>Running</code>, and you can
+investigate or raise the cap on the next run. Omit the field to use the server default (1000).</p>
+<p>The server also validates the cap at workflow-creation time: <code>max_iterations: 0</code> or negative values
+are rejected up front with 422 — they would silently disable spawning otherwise.</p>
+<h2 id="what-about-slurm"><a class="header" href="#what-about-slurm">What About Slurm?</a></h2>
+<p>A spawned job is a normal job from Slurm's perspective: it sits <code>Ready</code> until a compute node with
+matching resources claims it. If the workflow was submitted with an allocation sized only for the
+seed orchestrators, a spawned worker may have no fitting node.</p>
+<p>The fix is the same as for failure-handler retries — run <code>torc watch</code> alongside the workflow with
+<code>--auto-schedule</code>:</p>
+<pre><code class="language-bash">torc watch --auto-schedule &lt;workflow_id&gt;
+</code></pre>
+<p>The watch loop counts ready jobs with <code>origin IS NOT NULL</code> (spawned + retried) and asks
+<code>regenerate_and_submit</code> to mint a Slurm allocation sized for the currently-pending resource shapes
+when needed.</p>
+<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
+<h3 id="request-body"><a class="header" href="#request-body">Request Body</a></h3>
+<pre><code class="language-jsonc">{
+  "lineage": "caseA",
+  "jobs": [
+    {
+      "name": "worker_caseA_i01",
+      "command": "bash worker.sh caseA 1",
+      "resource_requirements": "worker_rr"
+    },
+    {
+      "name": "orch_caseA_g01",
+      "command": "python3 orchestrator.py",
+      "resource_requirements": "orch_rr",
+      "depends_on": ["worker_caseA_i01"],
+      "cancel_on_blocking_job_failure": false
+    }
+  ],
+  "state": { "generation": 1 }
+}
+</code></pre>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Rule</th><th>Why</th></tr></thead><tbody>
+<tr><td>Every spawned job is auto-blocked on the calling orchestrator</td><td>Without this, children would race the runner's completion of the caller; you'd have to coordinate it yourself</td></tr>
+<tr><td><code>depends_on</code> may reference existing jobs or siblings in the same batch</td><td>Lets one spawn call describe a small DAG (worker → next-orchestrator)</td></tr>
+<tr><td>The sibling subgraph must be acyclic</td><td>Rejected 422; the same dependency rule as static jobs</td></tr>
+<tr><td><code>resource_requirements</code> must name a record declared at workflow creation</td><td>Falls back to the workflow's <code>default</code> RR if omitted, same as <code>create_job</code></td></tr>
+<tr><td>Replays (same names already exist) are idempotent no-ops</td><td>Lets you safely re-run an orchestrator that crashed after committing its spawn — no duplicate jobs, no double-counted iteration</td></tr>
+<tr><td>Convergence is <code>jobs=[]</code>, optionally with a final <code>state</code> payload</td><td>No separate "stop" endpoint; the workflow finishes naturally once nothing else is pending</td></tr>
+<tr><td><code>job.origin</code> is <code>'spawn'</code> for spawned jobs, <code>'retry'</code> for retries, <code>NULL</code> for declared</td><td>Lets <code>torc watch --auto-schedule</code> recognize jobs that need an unplanned Slurm allocation; lets reports separate static plan from dynamic add</td></tr>
+</tbody></table>
+</div>
+<h3 id="what-stays-the-same-as-static-jobs"><a class="header" href="#what-stays-the-same-as-static-jobs">What Stays the Same as Static Jobs</a></h3>
+<ul>
+<li>Status lifecycle (<code>Blocked → Ready → Running → Completed/Failed</code>)</li>
+<li>Resource claiming and packing</li>
+<li>Restart and reset semantics (a row created by <code>spawn_jobs</code> resets the same way a declared job
+does)</li>
+<li>File and <code>user_data</code> dependencies</li>
+<li>Failure handlers and <code>cancel_on_blocking_job_failure</code></li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>The energy-modeling example under <code>examples/</code> is the same pattern applied to a ReEDS↔PRAS feedback
+loop. The orchestrator script is <code>examples/scripts/dynamic_orchestrator.py</code>; two yaml variants
+share it:
+<ul>
+<li><code>examples/yaml/dynamic_orchestrator_local.yaml</code> — laptop-scale resources, runs under <code>torc run</code>.</li>
+<li><code>examples/yaml/dynamic_orchestrator_slurm.yaml</code> — realistic HPC resource shapes (ReEDS at 8 CPU
+/ 10 GB, PRAS at 32 CPU / 120 GB), submitted with <code>torc submit</code>.</li>
+</ul>
+</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/tutorials/user-data.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/monitoring/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/tutorials/user-data.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/monitoring/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
