@@ -4395,23 +4395,28 @@ async fn record_api_stats(
     let response = next.run(request).await;
     let status = response.status().as_u16();
 
-    let bytes_out = Arc::new(AtomicU64::new(0));
-    let stats_for_callback = stats.clone();
-    let bytes_in_for_callback = bytes_in.clone();
-    response.map(|body| {
-        Body::new(CountingBody::with_on_end(
-            body,
-            bytes_out,
-            move |bytes_out_total| {
-                stats_for_callback.record(
-                    chrono::Utc::now().timestamp_millis(),
-                    status,
-                    bytes_in_for_callback.load(std::sync::atomic::Ordering::Relaxed),
-                    bytes_out_total,
-                );
-            },
-        ))
-    })
+    // Record the request (count + status + inbound bytes) when the
+    // response body starts, and attribute each outbound frame to the
+    // second it is sent. This keeps long-lived SSE streams visible
+    // immediately instead of spiking everything at disconnect time.
+    // By the time the response body is polled the handler has returned,
+    // so `bytes_in` is final.
+    let stats_for_start = stats.clone();
+    let bytes_in_for_start = bytes_in.clone();
+    let on_start = move || {
+        stats_for_start.record(
+            chrono::Utc::now().timestamp_millis(),
+            status,
+            bytes_in_for_start.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+        );
+    };
+    let stats_for_frame = stats.clone();
+    let on_frame = move |frame_len: u64| {
+        stats_for_frame.record_bytes_out(chrono::Utc::now().timestamp_millis(), frame_len);
+    };
+
+    response.map(|body| Body::new(CountingBody::with_recorder(body, on_start, on_frame)))
 }
 
 async fn capture_api_event(
