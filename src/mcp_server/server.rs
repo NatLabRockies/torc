@@ -230,6 +230,20 @@ pub struct GetWorkflowSummaryParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CheckOfflineJournalsParams {
+    #[schemars(description = "The workflow ID")]
+    pub workflow_id: i64,
+    #[schemars(
+        description = "Run ID to match journals against (optional). Defaults to the workflow's current run_id, so only journals for the run the server still considers active are reported."
+    )]
+    pub run_id: Option<i64>,
+    #[schemars(
+        description = "Base directory to search recursively for journal files (optional). Defaults to the server's output directory. For Slurm runs this is typically the shared output directory passed to `torc run`."
+    )]
+    pub base_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListResultsParams {
     #[schemars(description = "The workflow ID")]
     pub workflow_id: i64,
@@ -475,6 +489,12 @@ FILES (use when user mentions input/output files, data flow):
 - "output_files": exact file names job writes
 - "input_file_regexes": regex patterns for FAN-IN (collecting many files into one job)
 - Files with parameters: {"name": "out_{i}", "path": "out_{i}.txt", "st_mtime": null, "parameters": {"i": "0:9"}}
+
+PROVENANCE / RO-CRATE (use when user mentions "provenance", "RO-Crate", "RO crate", or "research object"):
+- Set "enable_ro_crate": true at the TOP LEVEL of the spec.
+- Torc then automatically creates RO-Crate entities for workflow files: input files get entities during initialization, output files get entities on job completion.
+- Optionally give individual files a stable "identifier" (e.g. a DOI, PURL, or URN) in the files section; it is used as the RO-Crate @id while the path is preserved as sameAs.
+- Example: {"name": "wf", "enable_ro_crate": true, "files": [...], "jobs": [...]}
 
 PARAMETERIZATION (use for N similar jobs):
 - parameters: {"i": "0:9"} generates i=0,1,2,...,9
@@ -744,6 +764,36 @@ USE CASES:
         tokio::task::spawn_blocking(move || tools::list_failed_jobs(&config, workflow_id))
             .await
             .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
+    }
+
+    /// Detect offline-drain journals and advise whether reconcile is needed.
+    #[tool(
+        description = "Check for offline-drain journal databases for a workflow and determine whether \
+        `torc workflows reconcile` should be run. When a job runner loses contact with the server it enters \
+        offline-drain mode and records job completions to local SQLite journals named \
+        offline_results_wf<workflow_id>_r<run_id>_<label>.db. Those completions are NOT reflected on the \
+        server until replayed. ALWAYS call this tool when debugging a workflow whose jobs appear to have run \
+        but show as not completed, or after any server outage. If journals are found for the current run_id, \
+        tell the user how many journals and pending completions exist and prompt them to run the \
+        reconcile_command returned in the result (reconcile is idempotent and rejects completions from a \
+        superseded run). Do NOT run reconcile without the user's confirmation. This tool is read-only."
+    )]
+    async fn check_offline_journals(
+        &self,
+        Parameters(params): Parameters<CheckOfflineJournalsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let config = self.config.clone();
+        let base_dir = params
+            .base_dir
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| self.output_dir.clone());
+        let workflow_id = params.workflow_id;
+        let run_id = params.run_id;
+        tokio::task::spawn_blocking(move || {
+            tools::check_offline_journals(&config, &base_dir, workflow_id, run_id)
+        })
+        .await
+        .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))?
     }
 
     /// Check resource utilization for a workflow.
@@ -1179,8 +1229,19 @@ impl ServerHandler for TorcMcpServer {
                  3. Add 'output_files' to jobs that write files (exact names)\n\
                  4. For FAN-IN (aggregating multiple files into one job), use 'input_file_regexes' with a regex pattern\n\
                  Example: input_file_regexes: [\"^work_out_\\\\d+$\"] matches work_out_0, work_out_1, etc.\n\n\
+                 PROVENANCE / RO-CRATE:\n\
+                 - If the user asks for provenance tracking or the RO-Crate (RO crate / research object) \
+                 feature, set 'enable_ro_crate': true at the top level of the spec. Torc then creates \
+                 RO-Crate entities for input files at initialization and output files on job completion.\n\n\
+                 DEBUGGING - CHECK FOR OFFLINE JOURNALS:\n\
+                 - When debugging a workflow (jobs that ran but appear incomplete, or after a server outage), \
+                 call check_offline_journals. It finds offline-drain journal databases and tells you whether \
+                 completions still need to be replayed for the current run_id.\n\
+                 - If journals are found, tell the user how many pending completions exist and prompt them to \
+                 run the suggested 'torc workflows reconcile' command. Do NOT run reconcile without confirmation.\n\n\
                  Tools: get_execution_plan (preview execution), get_workflow_status (check progress), \
                  list_failed_jobs, get_job_logs, analyze_workflow_logs (scan all logs for errors), \
+                 check_offline_journals (detect offline-drain journals / whether reconcile is needed), \
                  check_resource_utilization, update_job_resources, \
                  analyze_resource_usage (per-job resource data for cluster analysis), \
                  regroup_job_resources (reassign jobs to new resource groups), \

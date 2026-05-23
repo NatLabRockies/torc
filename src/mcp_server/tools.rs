@@ -984,6 +984,115 @@ pub fn analyze_workflow_logs(
     )]))
 }
 
+/// Detect offline-drain journals for a workflow and advise whether
+/// `torc workflows reconcile` should be run.
+///
+/// When a job runner loses contact with the server it journals completions to
+/// local SQLite files (see [`crate::client::offline_journal`]). Those completions
+/// are not reflected on the server until replayed, so a workflow can look stalled
+/// or partially failed when it actually finished offline. This tool only inspects
+/// the filesystem; it never replays anything.
+pub fn check_offline_journals(
+    config: &Configuration,
+    base_dir: &Path,
+    workflow_id: i64,
+    run_id: Option<i64>,
+) -> Result<CallToolResult, McpError> {
+    use crate::client::offline_journal::OfflineJournal;
+
+    // Resolve the run_id to match journals against. Default to the workflow's
+    // current generation so we only recommend replaying journals for the run the
+    // server still considers active (reconcile rejects superseded runs anyway).
+    let run_id = match run_id {
+        Some(rid) => rid,
+        None => {
+            let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+                .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
+            workflow.run_id.ok_or_else(|| {
+                internal_error(format!(
+                    "Workflow {} has no run_id (it has not been run yet); nothing to reconcile",
+                    workflow_id
+                ))
+            })?
+        }
+    };
+
+    let files = OfflineJournal::discover(base_dir, workflow_id, run_id);
+
+    if files.is_empty() {
+        let response = serde_json::json!({
+            "workflow_id": workflow_id,
+            "run_id": run_id,
+            "base_dir": base_dir.display().to_string(),
+            "journals_found": 0,
+            "reconcile_needed": false,
+            "summary": format!(
+                "No offline-drain journals found for workflow_id={} run_id={} under {}. No reconcile needed.",
+                workflow_id,
+                run_id,
+                base_dir.display()
+            ),
+        });
+        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]));
+    }
+
+    // Count pending completions per journal so the user can see how much work is
+    // waiting to be replayed. Unreadable journals are reported with a null count
+    // rather than failing the whole check.
+    let mut journal_details = Vec::new();
+    let mut total_completions = 0usize;
+    for path in &files {
+        let count = OfflineJournal::read_file(path).map(|entries| entries.len());
+        if let Ok(n) = count {
+            total_completions += n;
+        }
+        journal_details.push(serde_json::json!({
+            "path": path.display().to_string(),
+            "completions": count.ok(),
+        }));
+    }
+
+    let reconcile_command = format!(
+        "torc workflows reconcile {} {} --base-dir {}",
+        workflow_id,
+        run_id,
+        base_dir.display()
+    );
+
+    let response = serde_json::json!({
+        "workflow_id": workflow_id,
+        "run_id": run_id,
+        "base_dir": base_dir.display().to_string(),
+        "journals_found": files.len(),
+        "total_pending_completions": total_completions,
+        "journals": journal_details,
+        "reconcile_needed": true,
+        "reconcile_command": reconcile_command,
+        "summary": format!(
+            "Found {} offline-drain journal(s) with {} pending completion(s) for workflow_id={} run_id={}. \
+             These are job completions recorded locally while the server was unreachable and may not yet be \
+             reflected on the server.",
+            files.len(),
+            total_completions,
+            workflow_id,
+            run_id
+        ),
+        "recommendation": [
+            "These journals indicate the workflow ran (at least partly) in offline-drain mode.",
+            "Tell the user how many journals and pending completions were found.",
+            format!("Ask the user to confirm, then have them run: {}", reconcile_command),
+            "reconcile is idempotent and safe: the server rejects completions from a superseded run_id.",
+            "Do NOT run reconcile automatically without the user's confirmation."
+        ],
+    });
+
+    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+        serde_json::to_string_pretty(&response).unwrap_or_default(),
+    )]))
+}
+
 /// Get workflow summary.
 pub fn get_workflow_summary(
     config: &Configuration,
