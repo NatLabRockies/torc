@@ -1,4 +1,4 @@
-//! Integration test for the offline-drain → local journal → `torc reconcile` flow.
+//! Integration test for the offline-drain → local journal → `torc workflows reconcile` flow.
 //!
 //! Simulates what happens when the server is unreachable: job runners drain (run
 //! their jobs to completion) and journal the results to per-node SQLite files

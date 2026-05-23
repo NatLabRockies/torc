@@ -954,11 +954,17 @@ impl JobRunner {
             // running has drained, exit; the journal is reconciled later.
             if self.offline {
                 if self.running_jobs.is_empty() {
+                    let journal_path = self
+                        .offline_journal
+                        .as_ref()
+                        .map(|j| j.path().display().to_string())
+                        .unwrap_or_else(|| "<none>".to_string());
                     info!(
                         "Offline drain complete: all running jobs finished. Exiting job runner. \
-                         Reconcile results with `torc reconcile {} {}` once the server is back. \
+                         Results journaled to {}. Reconcile them with \
+                         `torc workflows reconcile {} {}` once the server is back. \
                          workflow_id={} run_id={}",
-                        self.workflow_id, self.run_id, self.workflow_id, self.run_id
+                        journal_path, self.workflow_id, self.run_id, self.workflow_id, self.run_id
                     );
                     break;
                 }

@@ -1,4 +1,4 @@
-//! `torc reconcile` — replay offline-drain journals back to the server.
+//! `torc workflows reconcile` — replay offline-drain journals back to the server.
 //!
 //! When job runners lose contact with the server they drain (run their jobs to
 //! completion) and journal the results to local SQLite files (see

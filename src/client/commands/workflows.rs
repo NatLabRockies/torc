@@ -19,6 +19,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mreset-status\x1b[0m     Reset workflow and job statuses
   \x1b[1;36mis-complete\x1b[0m      Check if workflow is complete
   \x1b[1;36msync-status\x1b[0m      Detect orphaned jobs from ended Slurm allocations
+  \x1b[1;36mreconcile\x1b[0m        Replay offline-drain journals after a server outage
 
 \x1b[1;32mListing & Query:\x1b[0m
   \x1b[1;36mlist\x1b[0m             List workflows
@@ -666,6 +667,29 @@ TYPICAL WORKFLOW:
         /// Preview changes without applying them
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Replay offline-drain journals back to the server
+    #[command(after_long_help = "\
+When job runners lose contact with the server they finish their running jobs and
+journal the results to local SQLite files instead of killing the jobs. After the
+server is healthy again, this command finds every journal for a workflow run
+under a base directory and uploads the completions in bulk.
+
+EXAMPLES:
+    # Reconcile journals written under the current directory
+    torc workflows reconcile 42 1
+
+    # Point at a shared output root used by all compute nodes
+    torc workflows reconcile 42 1 --base-dir /scratch/run42
+")]
+    Reconcile {
+        /// Workflow ID whose journals should be replayed
+        workflow_id: i64,
+        /// Run ID (workflow generation) whose journals should be replayed
+        run_id: i64,
+        /// Directory to search recursively for journal files
+        #[arg(long, default_value = ".")]
+        base_dir: std::path::PathBuf,
     },
 }
 
@@ -3124,6 +3148,22 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             dry_run,
         } => {
             handle_sync_status(config, *workflow_id, *dry_run, &current_user, format);
+        }
+        WorkflowCommands::Reconcile {
+            workflow_id,
+            run_id,
+            base_dir,
+        } => {
+            if let Err(e) = crate::client::commands::reconcile::reconcile(
+                config,
+                *workflow_id,
+                *run_id,
+                base_dir,
+                format,
+            ) {
+                eprintln!("Error reconciling offline journals: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }

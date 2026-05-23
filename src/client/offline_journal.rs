@@ -7,7 +7,7 @@
 //!
 //! 1. The runner itself, when the server comes back while jobs are still running:
 //!    it flushes the journal via `batch_complete_jobs` and resumes normal operation.
-//! 2. The `torc reconcile` command, which discovers every journal for a given
+//! 2. The `torc workflows reconcile` command, which discovers every journal for a given
 //!    `(workflow_id, run_id)` under a base directory and replays them in bulk so a
 //!    user does not have to run one command per compute node.
 //!
@@ -27,7 +27,7 @@ const FILENAME_PREFIX: &str = "offline_results";
 
 /// Maximum completions to send in a single `batch_complete_jobs` request when
 /// replaying a journal. Bounds request body size and lets replay make partial
-/// progress. Shared by the runner's resume flush and `torc reconcile`.
+/// progress. Shared by the runner's resume flush and `torc workflows reconcile`.
 pub const FLUSH_BATCH_SIZE: usize = 500;
 
 /// Build the journal file name for a runner. The `workflow_id` / `run_id` prefix
@@ -163,7 +163,7 @@ impl OfflineJournal {
     }
 
     /// Read all completions from a journal file at `path` without holding a
-    /// long-lived handle. Used by `torc reconcile`.
+    /// long-lived handle. Used by `torc workflows reconcile`.
     pub fn read_file(path: &Path) -> Result<Vec<JobCompletionEntry>, String> {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open journal {}: {e}", path.display()))?;

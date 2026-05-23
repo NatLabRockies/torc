@@ -1020,29 +1020,6 @@ EXAMPLES:
     /// Check if the server is running and accessible
     #[command(hide = true)]
     Ping,
-    /// Replay offline-drain journals back to the server
-    #[command(after_long_help = "\
-When job runners lose contact with the server they finish their running jobs and
-journal the results to local SQLite files instead of killing the jobs. After the
-server is healthy again, `torc reconcile` finds every journal for a workflow run
-under a base directory and uploads the completions in bulk.
-
-EXAMPLES:
-    # Reconcile journals written under the current directory
-    torc reconcile 42 1
-
-    # Point at a shared output root used by all compute nodes
-    torc reconcile 42 1 --base-dir /scratch/run42
-")]
-    Reconcile {
-        /// Workflow ID whose journals should be replayed
-        workflow_id: i64,
-        /// Run ID (workflow generation) whose journals should be replayed
-        run_id: i64,
-        /// Directory to search recursively for journal files
-        #[arg(long, default_value = ".")]
-        base_dir: std::path::PathBuf,
-    },
     /// Generate shell completions
     #[command(
         hide = true,

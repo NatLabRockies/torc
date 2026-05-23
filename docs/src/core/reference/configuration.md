@@ -61,7 +61,7 @@ killing its running jobs: it stops claiming new jobs, lets the jobs it already s
 completion, and journals their results to a local SQLite file under `<output_dir>/offline_journal/`.
 If the server recovers while jobs are still running, the runner flushes the journal and resumes
 normal operation; otherwise it exits once all running jobs finish. Replay the journals afterward
-with `torc reconcile <workflow_id> <run_id>`.
+with `torc workflows reconcile <workflow_id> <run_id>`.
 
 | Option                     | Type | Default | Description                                                        |
 | -------------------------- | ---- | ------- | ------------------------------------------------------------------ |

@@ -108,7 +108,7 @@ impl Default for ClientRunConfig {
 /// results to a local SQLite file. If the server comes back while jobs are
 /// still running, the runner flushes the journal and resumes normal operation;
 /// otherwise it exits once all running jobs finish. The journal can be replayed
-/// later with `torc reconcile`.
+/// later with `torc workflows reconcile`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClientOfflineConfig {

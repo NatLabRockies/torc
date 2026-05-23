@@ -178,7 +178,7 @@ The runner continues until the workflow is complete or canceled.
 Job runners need the server to claim work, report completions, and unblock dependents. But a running
 job is an ordinary subprocess on the compute node — it does not need the server to keep running.
 Killing in-flight jobs because the server is briefly unreachable would throw away expensive compute
-(imagine a 5-day job killed on day 4 by a transient server restart).
+(imagine a 5-day job killed on the 4th night by a server outage that can be repaired the next day).
 
 To avoid this, every API call first retries for up to
 `compute_node_wait_for_healthy_database_minutes` (default 20). If the server is still unreachable
@@ -226,21 +226,21 @@ work before the server returns), replay their journals once the server is health
 
 ```bash
 # Reconcile every node's journal for workflow 42, run 1, found under the current directory
-torc reconcile 42 1
+torc workflows reconcile 42 1
 
 # Point at the shared output root used by all compute nodes
-torc reconcile 42 1 --base-dir /scratch/run42
+torc workflows reconcile 42 1 --base-dir /scratch/run42
 ```
 
-`torc reconcile` discovers **all** journal files for that `(workflow_id, run_id)` beneath the base
-directory — so a 1000-node run is recovered with one command, not one per node — and replays the
-completions to the server in bulk. The `run_id` is shown by `torc workflows status 42` and encoded
-in each journal's file name.
+`torc workflows reconcile` discovers **all** journal files for that `(workflow_id, run_id)` beneath
+the base directory — so a 1000-node run is recovered with one command, not one per node — and
+replays the completions to the server in bulk. The `run_id` is shown by `torc workflows status 42`
+and encoded in each journal's file name.
 
 Replay is idempotent and safe. The server validates each completion's `run_id` against the
 workflow's current generation, so completions from a superseded run (for example, after a manual
-restart) are rejected rather than applied; `torc reconcile` reports these as rejected and exits
-without error.
+restart) are rejected rather than applied; `torc workflows reconcile` reports these as rejected and
+exits without error.
 
 ## Resource Management (Resource-Based Allocation Only)
 
