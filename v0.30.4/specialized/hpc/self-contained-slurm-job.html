@@ -1,0 +1,348 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Self-Contained Slurm Jobs - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.30.4/docs/src/specialized/hpc/self-contained-slurm-job.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="self-contained-slurm-jobs"><a class="header" href="#self-contained-slurm-jobs">Self-Contained Slurm Jobs</a></h1>
+<p>If you don't have access to a persistent torc server on your cluster, you can still run torc
+workflows inside a single Slurm job. The job script starts an ephemeral torc-server, runs the
+workflow, and shuts the server down when the script exits. The SQLite database persists on disk, so
+you can inspect the results afterwards from the login node.</p>
+<p>This is the simplest way to use torc on HPC when no one has set up a shared deployment.</p>
+<h2 id="when-to-use-this-pattern"><a class="header" href="#when-to-use-this-pattern">When to Use This Pattern</a></h2>
+<p>Self-contained jobs fit when:</p>
+<ul>
+<li>You only need <strong>one compute node</strong> for the whole workflow.</li>
+<li>You don't have a running torc-server and don't want to deploy one.</li>
+<li>You want a single sbatch script you can hand to a colleague.</li>
+</ul>
+<p>They do <strong>not</strong> fit when jobs must run across multiple nodes in a single allocation. The standalone
+server binds to <code>127.0.0.1</code>, so nothing outside the script's node can reach it. For multi-node
+allocations, use the <a href="#multi-node-alternative">persistent-server pattern</a> below.</p>
+<h2 id="run-a-workflow-spec"><a class="header" href="#run-a-workflow-spec">Run a Workflow Spec</a></h2>
+<p>Pass any spec file to <code>torc run</code> and add <code>-s</code>/<code>--standalone</code>:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --account=my-account
+#SBATCH --time=01:00:00
+#SBATCH --nodes=1
+
+torc -s run workflow.yaml
+</code></pre>
+<p>torc will:</p>
+<ol>
+<li>Start a local torc-server bound to <code>127.0.0.1</code> on a free port.</li>
+<li>Create the workflow, initialize it, and run all jobs on the allocated node.</li>
+<li>Shut the server down when <code>run</code> returns.</li>
+</ol>
+<p>By default the database is written to <code>./torc_output/torc.db</code>. Override with <code>--db</code> if you want it
+somewhere persistent (e.g., a project filesystem):</p>
+<pre><code class="language-bash">torc -s --db /projects/my-proj/torc/runs.db run workflow.yaml
+</code></pre>
+<h2 id="run-ad-hoc-commands"><a class="header" href="#run-ad-hoc-commands">Run Ad-Hoc Commands</a></h2>
+<p>If you have a list of shell commands rather than a spec file, use <code>torc exec</code>:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --account=my-account
+#SBATCH --time=01:00:00
+#SBATCH --nodes=1
+
+torc -s exec -C commands.txt -j 4
+</code></pre>
+<p><code>commands.txt</code> is one command per line (blank lines and <code>#</code> comments are skipped). <code>-j 4</code> caps
+concurrent jobs at 4. Torc still records per-job CPU/memory so you can tune resources after the run.
+See <a href="../../core/how-to/run-inline-commands.html">Run Inline Commands</a> for the full parameterization
+and monitoring surface.</p>
+<h2 id="inspect-results-after-the-job"><a class="header" href="#inspect-results-after-the-job">Inspect Results After the Job</a></h2>
+<p>The database file lives on disk, so after the Slurm job exits you can read it back from any host
+that can open the file — typically the login node:</p>
+<pre><code class="language-console">torc -s --db ./torc_output/torc.db workflows list
+torc -s --db ./torc_output/torc.db results list &lt;workflow-id&gt;
+torc tui --standalone --database ./torc_output/torc.db
+</code></pre>
+<p>Each <code>-s</code> invocation starts its own short-lived server against the same database, so multiple
+inspections don't conflict.</p>
+<h2 id="multi-node-alternative"><a class="header" href="#multi-node-alternative">Multi-Node Alternative</a></h2>
+<p>For allocations that span multiple compute nodes, the standalone server doesn't work — the job
+runners on other nodes can't reach <code>127.0.0.1</code> on the script's node. Start a regular torc-server
+bound to all interfaces and point clients at whichever hostname routes between compute nodes:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --account=my-account
+#SBATCH --time=01:00:00
+#SBATCH --nodes=10
+
+# Accept connections on every interface — the server doesn't need to know
+# which one compute nodes will use.
+torc-server run --host 0.0.0.0 --port 8080 &amp;
+server_pid=$!
+trap "kill $server_pid" EXIT
+
+# Point clients at the short hostname, which on most clusters resolves
+# to an in-allocation IP via shared /etc/hosts or internal DNS. If your
+# cluster needs the high-speed-interconnect (HSN) name instead, see
+# "Find the routable hostname" below.
+export TORC_API_URL="http://$(hostname -s):8080/torc-service/v1"
+sleep 2   # let the server bind before clients connect
+
+srun torc run workflow.yaml   # srun propagates TORC_API_URL by default
+</code></pre>
+<p><strong>Why <code>0.0.0.0</code> and <code>hostname -s</code>?</strong> Binding to <code>0.0.0.0</code> lets the server accept on every interface,
+so it doesn't matter which one the cluster uses. <code>hostname -s</code> (the short name) usually resolves to
+a cluster-internal IP via <code>/etc/hosts</code> or local DNS; the full <code>hostname</code> / <code>hostname -f</code> often
+returns a domain that points at a management interface compute nodes can't reach. If <code>hostname -s</code>
+doesn't resolve on your cluster either, fall back to the HSN name (next section).</p>
+<p><strong>Find the routable hostname</strong> (run from a login node on your cluster):</p>
+<pre><code class="language-bash">hostname -A                       # every name/interface attached to this host
+grep $(hostname -s) /etc/hosts    # often shows the HSN alias explicitly
+getent hosts $(hostname -s)       # canonical address lookup
+</code></pre>
+<p>On NREL Kestrel, for example, the HSN hostname follows the pattern
+<code>&lt;shortname&gt;.hsn.cm.kestrel.hpc.nrel.gov</code>. See
+<a href="./hpc-deployment.html#finding-the-internal-hostname">HPC Deployment → Finding the Internal Hostname</a>
+for cluster-specific hostnames and
+<a href="../../core/concepts/network-connectivity.html#scenario-3-hpc-with-non-routable-hostname">Network Connectivity → Scenario 3</a>
+for the broader pattern.</p>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../../core/how-to/run-inline-commands.html">Run Inline Commands (<code>torc exec</code>)</a> — full <code>exec</code> flag
+reference, parameterization, plots</li>
+<li><a href="./hpc-deployment.html">HPC Deployment</a> — persistent server deployments, hostname selection</li>
+<li><a href="./submit-slurm-workflow.html">Submitting Slurm Workflows</a> — <code>slurm generate</code> + <code>submit</code>, for
+workflows whose jobs each launch their own Slurm allocation</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/hpc/custom-hpc-profile.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/remote/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/hpc/custom-hpc-profile.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/remote/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
