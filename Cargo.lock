@@ -5101,6 +5101,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bcrypt",
+ "bytes",
  "cargo-husky",
  "chrono",
  "clap",
