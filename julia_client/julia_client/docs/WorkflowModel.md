@@ -24,6 +24,7 @@ Name | Type | Description | Notes
 **resource_monitor_config** | [***ResourceMonitorConfig**](ResourceMonitorConfig.md) |  | [optional] [default to nothing]
 **run_id** | **Int64** | Current run number; incremented on each restart/recovery. Read-only on the API: incremented as a side effect of &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored. | [optional] [readonly] [default to nothing]
 **slurm_defaults** | **Dict{String, Any}** |  | [optional] [default to nothing]
+**submission_directory** | **String** | Absolute directory the workflow was originally submitted from (captured at &#x60;torc create&#x60; / &#x60;torc run&#x60; / &#x60;torc submit&#x60; time). Exposed to jobs as &#x60;TORC_WORKFLOW_SUBMISSION_DIR&#x60; so user code with relative paths can resolve against the original CWD even when run on a compute node. Set once at workflow creation and not overwritten by later &#x60;schedule-nodes&#x60;/&#x60;watch&#x60; invocations. | [optional] [default to nothing]
 **timestamp** | **String** |  | [optional] [default to nothing]
 **use_pending_failed** | **Bool** |  | [optional] [default to nothing]
 **user** | **String** |  | [default to nothing]

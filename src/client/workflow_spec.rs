@@ -3183,6 +3183,11 @@ impl WorkflowSpec {
             workflow_model.access_groups = Some(groups.clone());
         }
 
+        // Record where the workflow was submitted from so jobs can resolve
+        // relative paths via TORC_WORKFLOW_SUBMISSION_DIR even when run on a
+        // compute node with a different CWD.
+        workflow_model.submission_directory = crate::client::utils::capture_submission_directory();
+
         let created_workflow = apis::workflows_api::create_workflow(config, workflow_model)
             .map_err(|e| format!("Failed to create workflow: {:?}", e))?;
 

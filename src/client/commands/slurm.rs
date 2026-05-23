@@ -1642,6 +1642,10 @@ pub fn schedule_slurm_nodes(
             return Err(format!("Failed to get workflow: {}", e).into());
         }
     };
+    utils::warn_if_cwd_differs_from_submission_directory(
+        workflow.submission_directory.as_deref(),
+        "torc slurm schedule-nodes",
+    );
     let execution_config = ExecutionConfig::from_workflow_model(&workflow);
     if start_one_worker_per_node && execution_config.mode != ExecutionMode::Direct {
         return Err(

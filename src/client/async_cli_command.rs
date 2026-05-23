@@ -236,6 +236,7 @@ impl AsyncCliCommand {
         sigkill_headroom_seconds: i64,
         target_node: Option<&str>,
         stdio_mode: &StdioMode,
+        submission_directory: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.is_running {
             return Err("Job is already running".into());
@@ -360,17 +361,19 @@ impl AsyncCliCommand {
                 .env("TORC_GPU_VISIBLE_DEVICES", v);
         }
 
-        let child = cmd
-            .env("TORC_WORKFLOW_ID", workflow_id_str)
+        cmd.env("TORC_WORKFLOW_ID", workflow_id_str)
             .env("TORC_RUN_ID", run_id_str)
             .env("TORC_JOB_ID", job_id_str)
             .env("TORC_JOB_NAME", &self.job.name)
             .env("TORC_OUTPUT_DIR", output_dir.to_string_lossy().to_string())
             .env("TORC_ATTEMPT_ID", attempt_id_str)
-            .env("TORC_API_URL", api_url)
-            .stdout(stdout_stdio)
-            .stderr(stderr_stdio)
-            .spawn()?;
+            .env("TORC_API_URL", api_url);
+
+        if let Some(dir) = submission_directory {
+            cmd.env("TORC_WORKFLOW_SUBMISSION_DIR", dir);
+        }
+
+        let child = cmd.stdout(stdout_stdio).stderr(stderr_stdio).spawn()?;
 
         let pid = child.id();
         self.pid = Some(pid);

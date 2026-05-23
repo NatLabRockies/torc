@@ -2444,6 +2444,7 @@ impl JobRunner {
                         self.execution_config.sigkill_headroom_seconds(),
                         target_node,
                         &stdio_config.mode,
+                        self.workflow.submission_directory.as_deref(),
                     ) {
                         Ok(()) => {
                             info!(
@@ -2598,6 +2599,7 @@ impl JobRunner {
                         self.execution_config.sigkill_headroom_seconds(),
                         None, // target_node: user-parallelism mode doesn't use per-node placement
                         &stdio_config.mode,
+                        self.workflow.submission_directory.as_deref(),
                     ) {
                         Ok(()) => {
                             info!(

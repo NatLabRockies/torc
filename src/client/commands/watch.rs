@@ -714,6 +714,15 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         std::process::exit(1);
     }
 
+    // Warn if running from a different directory than `torc submit` recorded.
+    // Best-effort: a failure to fetch the workflow shouldn't block watch.
+    if let Ok(workflow) = apis::workflows_api::get_workflow(config, args.workflow_id) {
+        utils::warn_if_cwd_differs_from_submission_directory(
+            workflow.submission_directory.as_deref(),
+            "torc watch",
+        );
+    }
+
     info!(
         "Watching workflow {} (poll interval: {}s{}{})",
         args.workflow_id,

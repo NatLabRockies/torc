@@ -49,10 +49,11 @@ class WorkflowModel(BaseModel):
     resource_monitor_config: Optional[ResourceMonitorConfig] = None
     run_id: Optional[StrictInt] = Field(default=None, description="Current run number; incremented on each restart/recovery. Read-only on the API: incremented as a side effect of `POST /workflows/{id}/reset_status`. Values supplied to create/update workflow endpoints are ignored.")
     slurm_defaults: Optional[Dict[str, Any]] = None
+    submission_directory: Optional[StrictStr] = Field(default=None, description="Absolute directory the workflow was originally submitted from (captured at `torc create` / `torc run` / `torc submit` time). Exposed to jobs as `TORC_WORKFLOW_SUBMISSION_DIR` so user code with relative paths can resolve against the original CWD even when run on a compute node. Set once at workflow creation and not overwritten by later `schedule-nodes`/`watch` invocations.")
     timestamp: Optional[StrictStr] = None
     use_pending_failed: Optional[StrictBool] = None
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["access_groups", "compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_defaults", "timestamp", "use_pending_failed", "user"]
+    __properties: ClassVar[List[str]] = ["access_groups", "compute_node_expiration_buffer_seconds", "compute_node_ignore_workflow_completion", "compute_node_min_time_for_new_jobs_seconds", "compute_node_wait_for_healthy_database_minutes", "compute_node_wait_for_new_jobs_seconds", "description", "dynamic_jobs", "enable_ro_crate", "env", "execution_config", "id", "is_archived", "is_canceled", "metadata", "name", "project", "resource_monitor_config", "run_id", "slurm_defaults", "submission_directory", "timestamp", "use_pending_failed", "user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -173,6 +174,11 @@ class WorkflowModel(BaseModel):
         if self.run_id is None and "run_id" in self.model_fields_set:
             _dict['run_id'] = None
 
+        # set to None if submission_directory (nullable) is None
+        # and model_fields_set contains the field
+        if self.submission_directory is None and "submission_directory" in self.model_fields_set:
+            _dict['submission_directory'] = None
+
         # set to None if timestamp (nullable) is None
         # and model_fields_set contains the field
         if self.timestamp is None and "timestamp" in self.model_fields_set:
@@ -215,6 +221,7 @@ class WorkflowModel(BaseModel):
             "resource_monitor_config": ResourceMonitorConfig.from_dict(obj["resource_monitor_config"]) if obj.get("resource_monitor_config") is not None else None,
             "run_id": obj.get("run_id"),
             "slurm_defaults": obj.get("slurm_defaults"),
+            "submission_directory": obj.get("submission_directory"),
             "timestamp": obj.get("timestamp"),
             "use_pending_failed": obj.get("use_pending_failed"),
             "user": obj.get("user")
