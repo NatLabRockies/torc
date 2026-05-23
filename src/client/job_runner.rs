@@ -1985,8 +1985,8 @@ impl JobRunner {
         // Run recovery script from the same working directory where job commands run
         // (the original working directory where `torc run` was executed), not from output_dir.
         // This ensures paths in recovery scripts are relative to the same base as job commands.
-        let output = crate::client::utils::shell_command()
-            .arg(script)
+        let mut cmd = crate::client::utils::shell_command();
+        cmd.arg(script)
             .env("TORC_WORKFLOW_ID", self.workflow_id.to_string())
             .env("TORC_RUN_ID", self.run_id.to_string())
             .env("TORC_JOB_ID", job_id.to_string())
@@ -1997,8 +1997,11 @@ impl JobRunner {
                 self.output_dir.to_string_lossy().to_string(),
             )
             .env("TORC_ATTEMPT_ID", attempt_id.to_string())
-            .env("TORC_RETURN_CODE", exit_code.to_string())
-            .output()?;
+            .env("TORC_RETURN_CODE", exit_code.to_string());
+        if let Some(ref dir) = self.workflow.submission_directory {
+            cmd.env("TORC_WORKFLOW_SUBMISSION_DIR", dir);
+        }
+        let output = cmd.output()?;
 
         if output.status.success() {
             info!(
