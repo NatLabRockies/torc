@@ -112,7 +112,7 @@ The dependency flow:
 
 ```bash
 # Create the workflow
-WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs

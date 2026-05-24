@@ -71,10 +71,10 @@ Response:
 
 ```bash
 # curl with jq
-curl http://localhost:8080/torc-service/v1/workflows?offset=0&limit=10 | jq '.workflows'
+curl http://localhost:8080/torc-service/v1/workflows?offset=0&limit=10 | jq '.items'
 
 # nushell (native JSON parsing)
-http get http://localhost:8080/torc-service/v1/workflows?offset=0&limit=10 | get workflows
+http get http://localhost:8080/torc-service/v1/workflows?offset=0&limit=10 | get items
 ```
 
 **Get Workflow**
@@ -126,11 +126,11 @@ curl -X POST http://localhost:8080/torc-service/v1/jobs \
 ```bash
 # curl - filter by status
 curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&status=ready" \
-  | jq '.jobs[] | {name, status, id}'
+  | jq '.items[] | {name, status, id}'
 
 # nushell - filter and format
 http get "http://localhost:8080/torc-service/v1/jobs?workflow_id=1"
-  | get jobs
+  | get items
   | where status == "ready"
   | select name status id
 ```
@@ -162,7 +162,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 **List Files**
 
 ```bash
-curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.files'
+curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.items'
 ```
 
 ### User Data
@@ -234,7 +234,7 @@ curl -X POST http://localhost:8080/torc-service/v1/compute_nodes \
 
 ```bash
 curl "http://localhost:8080/torc-service/v1/compute_nodes?workflow_id=1&is_active=true" \
-  | jq '.compute_nodes[] | {hostname, num_cpus, num_gpus}'
+  | jq '.items[] | {hostname, num_cpus, num_gpus}'
 ```
 
 ### Results
@@ -259,7 +259,7 @@ curl -X POST http://localhost:8080/torc-service/v1/results \
 
 ```bash
 curl "http://localhost:8080/torc-service/v1/events?workflow_id=1&limit=20" \
-  | jq '.events[] | {timestamp, data}'
+  | jq '.items[] | {timestamp, data}'
 ```
 
 ## Advanced Endpoints

@@ -234,7 +234,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.workflow_id')
 echo "Alice created workflow: $WORKFLOW_ID"
 ```
 

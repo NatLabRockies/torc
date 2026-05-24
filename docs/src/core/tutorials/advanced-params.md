@@ -162,7 +162,7 @@ ALL 18 metrics files."
 ## Step 2: Create and Initialize the Workflow
 
 ```bash
-WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
