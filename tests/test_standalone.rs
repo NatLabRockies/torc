@@ -441,7 +441,7 @@ fn standalone_in_memory_periodic_snapshot_lands_before_exit() {
     let listed = run_torc_standalone_ok(work.path(), &db, &["-f", "json", "workflows", "list"]);
     let stdout = String::from_utf8_lossy(&listed.stdout);
     assert!(
-        stdout.contains("\"workflows\""),
+        stdout.contains("\"items\""),
         "expected workflows list response; got {}",
         stdout
     );
