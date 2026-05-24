@@ -551,6 +551,10 @@ impl HelpPopup {
             HelpContext::DetailResults => {
                 lines.extend(Self::section("Results Tab"));
                 lines.push(Self::key_line(
+                    "E",
+                    "Sort by Runtime (cycles desc / asc / off)",
+                ));
+                lines.push(Self::key_line(
                     "m",
                     "Sort by Peak Memory (cycles desc / asc / off)",
                 ));
