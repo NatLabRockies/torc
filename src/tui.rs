@@ -516,7 +516,7 @@ where
                     KeyCode::Tab => app.next_detail_view(),
                     KeyCode::BackTab => app.previous_detail_view(),
                     // Page through the active list (Workflows / Jobs / Results /
-                    // Compute Nodes), 1000 records at a time, on demand.
+                    // Compute Nodes) one TUI_PAGE_SIZE page at a time, on demand.
                     KeyCode::Char(']') => {
                         if let Err(err) = app.next_page() {
                             app.set_status(components::StatusMessage::error(&format!(

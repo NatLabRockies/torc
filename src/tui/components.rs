@@ -512,10 +512,7 @@ impl HelpPopup {
             Self::key_line(left_right_arrows(), "Switch focus between panes"),
             Self::key_line(up_down_arrows(), "Navigate rows in tables"),
             Self::key_line("PgUp/PgDn", "Page through rows (10 at a time)"),
-            Self::key_line(
-                "] / [",
-                "Load next / previous page (1000 records, on demand)",
-            ),
+            Self::key_line("] / [", "Load next / previous page (on demand)"),
             Self::key_line("g / G", "Jump to top / bottom of table"),
             Self::key_line("Enter", "Load details / Confirm action"),
             Self::key_line("f", "Filter current pane (Workflows or Details)"),

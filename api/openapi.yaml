@@ -1385,7 +1385,9 @@ paths:
           - 'null'
       - name: name
         in: query
-        description: Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+        description: |-
+          Substring filter on the job name (SQL `LIKE %value%`, case-insensitive
+          for ASCII).
         required: false
         schema:
           type:
@@ -1393,7 +1395,9 @@ paths:
           - 'null'
       - name: command
         in: query
-        description: Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+        description: |-
+          Substring filter on the job command (SQL `LIKE %value%`, case-insensitive
+          for ASCII).
         required: false
         schema:
           type:

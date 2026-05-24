@@ -216,8 +216,8 @@ Name | Type | Description  | Notes
  **include_relationships** | **Bool** |  | [default to nothing]
  **active_compute_node_id** | **Int64** |  | [default to nothing]
  **origin_is_set** | **Bool** | When set, filters by job provenance: &#x60;true&#x60; returns only jobs with &#x60;origin IS NOT NULL&#x60; (failure-handler retries and &#x60;spawn_jobs&#x60; children); &#x60;false&#x60; returns only originally-declared jobs. Used by &#x60;torc watch --auto-schedule&#x60; to count jobs needing unplanned Slurm allocations with &#x60;limit&#x3D;1&#x60; (the response&#39;s &#x60;total_count&#x60; suffices — no rows downloaded). | [default to nothing]
- **name** | **String** | Case-sensitive substring filter on the job name (SQL &#x60;LIKE %value%&#x60;). | [default to nothing]
- **command** | **String** | Case-sensitive substring filter on the job command (SQL &#x60;LIKE %value%&#x60;). | [default to nothing]
+ **name** | **String** | Substring filter on the job name (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
+ **command** | **String** | Substring filter on the job command (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
 
 ### Return type
 

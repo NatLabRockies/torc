@@ -1749,8 +1749,8 @@ class JobsApi:
         include_relationships: Optional[StrictBool] = None,
         active_compute_node_id: Optional[StrictInt] = None,
         origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
-        name: Annotated[Optional[StrictStr], Field(description="Case-sensitive substring filter on the job name (SQL `LIKE %value%`).")] = None,
-        command: Annotated[Optional[StrictStr], Field(description="Case-sensitive substring filter on the job command (SQL `LIKE %value%`).")] = None,
+        name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
+        command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1789,9 +1789,9 @@ class JobsApi:
         :type active_compute_node_id: int
         :param origin_is_set: When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).
         :type origin_is_set: bool
-        :param name: Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+        :param name: Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type name: str
-        :param command: Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+        :param command: Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type command: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1866,8 +1866,8 @@ class JobsApi:
         include_relationships: Optional[StrictBool] = None,
         active_compute_node_id: Optional[StrictInt] = None,
         origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
-        name: Annotated[Optional[StrictStr], Field(description="Case-sensitive substring filter on the job name (SQL `LIKE %value%`).")] = None,
-        command: Annotated[Optional[StrictStr], Field(description="Case-sensitive substring filter on the job command (SQL `LIKE %value%`).")] = None,
+        name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
+        command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1906,9 +1906,9 @@ class JobsApi:
         :type active_compute_node_id: int
         :param origin_is_set: When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).
         :type origin_is_set: bool
-        :param name: Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+        :param name: Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type name: str
-        :param command: Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+        :param command: Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type command: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -1983,8 +1983,8 @@ class JobsApi:
         include_relationships: Optional[StrictBool] = None,
         active_compute_node_id: Optional[StrictInt] = None,
         origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
-        name: Annotated[Optional[StrictStr], Field(description="Case-sensitive substring filter on the job name (SQL `LIKE %value%`).")] = None,
-        command: Annotated[Optional[StrictStr], Field(description="Case-sensitive substring filter on the job command (SQL `LIKE %value%`).")] = None,
+        name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
+        command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2023,9 +2023,9 @@ class JobsApi:
         :type active_compute_node_id: int
         :param origin_is_set: When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).
         :type origin_is_set: bool
-        :param name: Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+        :param name: Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type name: str
-        :param command: Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+        :param command: Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type command: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request

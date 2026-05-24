@@ -1604,11 +1604,11 @@ impl App {
                 }
                 DetailViewType::Results => {
                     self.results_offset += TUI_PAGE_SIZE;
-                    self.load_detail_data()?;
+                    self.reload_detail_page_preserving_filter()?;
                 }
                 DetailViewType::ComputeNodes => {
                     self.compute_nodes_offset += TUI_PAGE_SIZE;
-                    self.load_detail_data()?;
+                    self.reload_detail_page_preserving_filter()?;
                 }
                 _ => {}
             },
@@ -1636,11 +1636,11 @@ impl App {
                 }
                 DetailViewType::Results if self.results_offset > 0 => {
                     self.results_offset = (self.results_offset - TUI_PAGE_SIZE).max(0);
-                    self.load_detail_data()?;
+                    self.reload_detail_page_preserving_filter()?;
                 }
                 DetailViewType::ComputeNodes if self.compute_nodes_offset > 0 => {
                     self.compute_nodes_offset = (self.compute_nodes_offset - TUI_PAGE_SIZE).max(0);
-                    self.load_detail_data()?;
+                    self.reload_detail_page_preserving_filter()?;
                 }
                 _ => {}
             },
@@ -1655,6 +1655,24 @@ impl App {
         } else {
             self.workflows_state.select(Some(0));
         }
+    }
+
+    /// Reload the active detail view's current page, preserving any active
+    /// client-side Details filter. `load_detail_data` clears `self.filter`, so
+    /// we capture it and re-narrow the freshly loaded page afterward. Used by
+    /// paging on the client-side-filtered views (Results, Compute Nodes); the
+    /// Jobs pane filters server-side via `reload_jobs_page` instead.
+    fn reload_detail_page_preserving_filter(&mut self) -> Result<()> {
+        let saved = self.filter.clone();
+        let saved_target = self.filter_target;
+        self.load_detail_data()?;
+        if saved_target == FilterTarget::Details
+            && let Some(f) = saved
+        {
+            self.filter = Some(f.clone());
+            self.filter_active_view(FilterTarget::Details, &f.column, &f.value);
+        }
+        Ok(())
     }
 
     /// Resolve the Jobs-pane filter (`self.filter`) into server-side query

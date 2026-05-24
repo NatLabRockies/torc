@@ -2220,10 +2220,12 @@ pub struct JobsListQuery {
     /// suffices — no rows downloaded).
     #[param(nullable = true)]
     pub origin_is_set: Option<bool>,
-    /// Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+    /// Substring filter on the job name (SQL `LIKE %value%`, case-insensitive
+    /// for ASCII).
     #[param(nullable = true)]
     pub name: Option<String>,
-    /// Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+    /// Substring filter on the job command (SQL `LIKE %value%`, case-insensitive
+    /// for ASCII).
     #[param(nullable = true)]
     pub command: Option<String>,
 }
