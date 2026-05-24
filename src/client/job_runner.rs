@@ -132,6 +132,23 @@ impl Default for Wakeup {
     }
 }
 
+/// Compute the next idle-wait interval for the runner's main loop given the
+/// current wait, the configured base, the configured cap, and whether the
+/// last iteration made any progress (a local completion was reaped, or a
+/// claim returned jobs).
+///
+/// Progress resets the wait to `base`. An idle iteration doubles the wait
+/// toward `cap`. The cap is clamped to at least `base` so callers cannot
+/// accidentally shrink the wait below the configured floor.
+fn next_poll_interval(current: f64, base: f64, cap: f64, made_progress: bool) -> f64 {
+    let effective_cap = cap.max(base);
+    if made_progress {
+        base
+    } else {
+        (current * 2.0).min(effective_cap).max(base)
+    }
+}
+
 /// Rule definition for failure handler (parsed from JSON stored in database)
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct FailureHandlerRule {
@@ -325,6 +342,15 @@ pub struct JobRunner {
     compute_node_id: i64,
     output_dir: PathBuf,
     job_completion_poll_interval: f64,
+    /// Upper bound (in seconds) for the adaptive backoff on the main poll
+    /// loop. Empty iterations (no completions, no jobs claimed) double the
+    /// wait toward this cap; any completion or claim resets the wait to
+    /// `job_completion_poll_interval`.
+    claim_backoff_max_secs: f64,
+    /// Current wait interval used between iterations of the main loop, in
+    /// seconds. Starts at `job_completion_poll_interval` and grows toward
+    /// `claim_backoff_max_secs` while the runner is idle.
+    current_poll_interval: f64,
     max_parallel_jobs: Option<i64>,
     time_limit: Option<String>,
     end_time: Option<DateTime<Utc>>,
@@ -630,6 +656,11 @@ impl JobRunner {
             None
         };
 
+        let claim_backoff_max_secs = torc_config
+            .client
+            .run
+            .claim_backoff_max_secs
+            .max(job_completion_poll_interval);
         JobRunner {
             config,
             torc_config,
@@ -639,6 +670,8 @@ impl JobRunner {
             compute_node_id,
             output_dir,
             job_completion_poll_interval,
+            claim_backoff_max_secs,
+            current_poll_interval: job_completion_poll_interval,
             max_parallel_jobs,
             time_limit,
             end_time,
@@ -952,30 +985,31 @@ impl JobRunner {
             // server's write lock to avoid double-allocation across nodes) and
             // we do not run workflow actions. Once everything we were already
             // running has drained, exit; the journal is reconciled later.
-            if self.offline {
-                if self.running_jobs.is_empty() {
-                    let journal_path = self
-                        .offline_journal
-                        .as_ref()
-                        .map(|j| j.path().display().to_string())
-                        .unwrap_or_else(|| "<none>".to_string());
-                    info!(
-                        "Offline drain complete: all running jobs finished. Exiting job runner. \
-                         Results journaled to {}. Reconcile them with \
-                         `torc workflows reconcile {} {}` once the server is back. \
-                         workflow_id={} run_id={}",
-                        journal_path, self.workflow_id, self.run_id, self.workflow_id, self.run_id
-                    );
-                    break;
-                }
-            } else {
+            if self.offline && self.running_jobs.is_empty() {
+                let journal_path = self
+                    .offline_journal
+                    .as_ref()
+                    .map(|j| j.path().display().to_string())
+                    .unwrap_or_else(|| "<none>".to_string());
+                info!(
+                    "Offline drain complete: all running jobs finished. Exiting job runner. \
+                     Results journaled to {}. Reconcile them with \
+                     `torc workflows reconcile {} {}` once the server is back. \
+                     workflow_id={} run_id={}",
+                    journal_path, self.workflow_id, self.run_id, self.workflow_id, self.run_id
+                );
+                break;
+            }
+
+            let mut jobs_claimed = false;
+            if !self.offline {
                 self.check_and_execute_actions();
 
                 debug!("Check for new jobs");
                 if let Some(max) = self.max_parallel_jobs {
                     // Parallelism-based mode: skip if already at max parallel jobs
                     if (self.running_jobs.len() as i64) < max {
-                        self.run_ready_jobs_based_on_user_parallelism();
+                        jobs_claimed = self.run_ready_jobs_based_on_user_parallelism();
                     } else {
                         debug!(
                             "Skipping job claim: at max parallel jobs ({}/{})",
@@ -986,7 +1020,7 @@ impl JobRunner {
                 } else {
                     // Resource-based mode: skip if no CPUs available or memory nearly exhausted
                     if self.resources.num_cpus > 0 && self.resources.memory_gb >= 0.1 {
-                        self.run_ready_jobs_based_on_resources();
+                        jobs_claimed = self.run_ready_jobs_based_on_resources();
                     } else {
                         debug!(
                             "Skipping job claim: no capacity (cpus={}, memory_gb={:.2})",
@@ -1009,9 +1043,35 @@ impl JobRunner {
             // `try_wait` on each child immediately. This eliminates the case
             // where short jobs spawned in the prior iteration finish during
             // the wait but aren't observed until the full interval elapses.
+            //
+            // Adaptive backoff: when neither a local completion nor a claim
+            // returned work, double the wait toward `claim_backoff_max_secs`.
+            // Any completion or successful claim resets the wait to the
+            // configured base. This keeps a node responsive while work is
+            // flowing but cuts request rate on long-running fully-loaded
+            // workflows, where the runner would otherwise poll the server
+            // every `job_completion_poll_interval` for hours.
+            let made_progress = completions > 0 || jobs_claimed;
             if completions == 0 {
                 self.wakeup
-                    .wait_with_timeout(Duration::from_secs_f64(self.job_completion_poll_interval));
+                    .wait_with_timeout(Duration::from_secs_f64(self.current_poll_interval));
+            }
+            let next = next_poll_interval(
+                self.current_poll_interval,
+                self.job_completion_poll_interval,
+                self.claim_backoff_max_secs,
+                made_progress,
+            );
+            if (next - self.current_poll_interval).abs() > f64::EPSILON {
+                debug!(
+                    "Adaptive backoff: poll interval {:.1}s -> {:.1}s (base {:.1}s, cap {:.1}s, made_progress={})",
+                    self.current_poll_interval,
+                    next,
+                    self.job_completion_poll_interval,
+                    self.claim_backoff_max_secs,
+                    made_progress
+                );
+                self.current_poll_interval = next;
             }
 
             if self.is_termination_requested() {
@@ -2626,7 +2686,9 @@ impl JobRunner {
         // If end_time is None, leave time_limit as-is (unlimited)
     }
 
-    fn run_ready_jobs_based_on_resources(&mut self) {
+    /// Returns true if any jobs were returned by the claim call(s) this
+    /// iteration. The main loop uses this signal to reset adaptive backoff.
+    fn run_ready_jobs_based_on_resources(&mut self) -> bool {
         self.update_remaining_time_limit();
 
         if self.node_tracker.is_some() {
@@ -2640,12 +2702,16 @@ impl JobRunner {
                 .iter()
                 .map(|n| n.name.clone())
                 .collect();
+            let mut any_claimed = false;
             for node_name in node_names {
-                self.claim_and_start_jobs_for_node(Some(&node_name));
+                if self.claim_and_start_jobs_for_node(Some(&node_name)) {
+                    any_claimed = true;
+                }
             }
+            any_claimed
         } else {
             // Single-node: one claim call, no --nodelist pinning.
-            self.claim_and_start_jobs_for_node(None);
+            self.claim_and_start_jobs_for_node(None)
         }
     }
 
@@ -2653,13 +2719,18 @@ impl JobRunner {
     /// Some, the claim uses that node's available resources and srun is invoked
     /// with `--nodelist=<node>` to pin the step. When None, the aggregate
     /// resources are used and no node pinning is done (single-node path).
-    fn claim_and_start_jobs_for_node(&mut self, target_node: Option<&str>) {
+    ///
+    /// Returns true if the server returned at least one job (regardless of
+    /// whether every start attempt succeeded). The caller uses this signal to
+    /// reset adaptive poll backoff so the runner stays responsive while there
+    /// is queued work.
+    fn claim_and_start_jobs_for_node(&mut self, target_node: Option<&str>) -> bool {
         let per_node = if let Some(node_name) = target_node {
             // Build resources from this specific node's availability
             let tracker = self.node_tracker.as_ref().unwrap();
             let node = match tracker.nodes.iter().find(|n| n.name == node_name) {
                 Some(n) => n,
-                None => return,
+                None => return false,
             };
             // Send num_nodes=1 because this claim represents a single node's
             // available resources. The PerNodeTracker path is only used when
@@ -2680,7 +2751,7 @@ impl JobRunner {
 
         // Skip nodes with no available resources
         if per_node.num_cpus <= 0 {
-            return;
+            return false;
         }
 
         let limit = per_node.num_cpus;
@@ -2697,7 +2768,7 @@ impl JobRunner {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    return;
+                    return false;
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2819,14 +2890,18 @@ impl JobRunner {
                         }
                     }
                 }
+                true
             }
             Err(err) => {
                 error!("Failed to prepare jobs for submission: {}", err);
+                false
             }
         }
     }
 
-    fn run_ready_jobs_based_on_user_parallelism(&mut self) {
+    /// Returns true if the server returned at least one job. The caller uses
+    /// this signal to reset adaptive poll backoff.
+    fn run_ready_jobs_based_on_user_parallelism(&mut self) -> bool {
         // Check if we have enough remaining time to start new jobs
         if let Some(end_time) = self.end_time {
             let remaining_seconds = (end_time - Utc::now()).num_seconds();
@@ -2835,7 +2910,7 @@ impl JobRunner {
                     "Only {} seconds remaining (min required: {}), not requesting new jobs",
                     remaining_seconds, self.rules.compute_node_min_time_for_new_jobs_seconds
                 );
-                return;
+                return false;
             }
         }
 
@@ -2853,7 +2928,7 @@ impl JobRunner {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
-                    return;
+                    return false;
                 }
                 if jobs.len() > limit as usize {
                     panic!(
@@ -2968,12 +3043,14 @@ impl JobRunner {
                         }
                     }
                 }
+                true
             }
             Err(err) => {
                 error!(
                     "Failed to claim jobs after retries workflow_id={}: {}",
                     self.workflow_id, err
                 );
+                false
             }
         }
     }
@@ -3551,6 +3628,69 @@ mod tests {
     use crate::client::apis::configuration::Configuration;
     use crate::models::{JobStatus, ResultModel, SlurmStatsModel};
     use serial_test::serial;
+
+    // Adaptive-backoff helper tests. These exercise the pure function used by
+    // the main loop without standing up a full JobRunner.
+
+    #[test]
+    fn next_poll_interval_doubles_on_idle() {
+        // Empty iterations grow the wait by a factor of two until the cap.
+        let base = 30.0;
+        let cap = 300.0;
+        let mut current = base;
+        let steps = [60.0, 120.0, 240.0, 300.0, 300.0];
+        for expected in steps {
+            current = next_poll_interval(current, base, cap, false);
+            assert!(
+                (current - expected).abs() < f64::EPSILON,
+                "expected {expected}, got {current}"
+            );
+        }
+    }
+
+    #[test]
+    fn next_poll_interval_resets_on_progress() {
+        let base = 30.0;
+        let cap = 300.0;
+        // Wind up to the cap.
+        let mut current = base;
+        for _ in 0..10 {
+            current = next_poll_interval(current, base, cap, false);
+        }
+        assert!((current - cap).abs() < f64::EPSILON);
+        // Any progress resets immediately.
+        current = next_poll_interval(current, base, cap, true);
+        assert!((current - base).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn next_poll_interval_clamps_cap_below_base() {
+        // If a misconfigured cap is below base, the function must not shrink
+        // the wait below base.
+        let base = 30.0;
+        let cap = 5.0;
+        let next = next_poll_interval(base, base, cap, false);
+        assert!((next - base).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn next_poll_interval_progress_returns_base() {
+        // Progress always returns base, even if current was below base for
+        // some reason.
+        let base = 30.0;
+        let cap = 300.0;
+        let next = next_poll_interval(10.0, base, cap, true);
+        assert!((next - base).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn next_poll_interval_idle_never_decreases() {
+        // An idle step from current=base must never return less than base.
+        let base = 30.0;
+        let cap = 300.0;
+        let next = next_poll_interval(base, base, cap, false);
+        assert!(next >= base);
+    }
 
     #[test]
     fn wakeup_notify_before_wait_returns_immediately() {
