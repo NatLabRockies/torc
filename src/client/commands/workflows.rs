@@ -2620,7 +2620,7 @@ fn handle_list(
                     })
                     .collect();
 
-                print_json_wrapped("workflows", &workflows_json, "workflows");
+                print_json_wrapped(&workflows_json, "workflows");
             } else if workflows.is_empty() {
                 if all_users {
                     println!("No workflows found.");

@@ -64,12 +64,7 @@ pub fn handle_failure_handler_commands(
             ) {
                 Ok(response) => {
                     let handlers = response.items;
-                    if print_wrapped_if_json(
-                        format,
-                        "failure_handlers",
-                        &handlers,
-                        "failure handlers",
-                    ) {
+                    if print_wrapped_if_json(format, &handlers, "failure handlers") {
                         // JSON was printed
                     } else if handlers.is_empty() {
                         println!(

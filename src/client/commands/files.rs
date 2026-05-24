@@ -214,7 +214,7 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
             match pagination::paginate_files(config, selected_workflow_id, params) {
                 Ok(files) => {
                     if format == "json" {
-                        print_json_wrapped("files", &files, "files");
+                        print_json_wrapped(&files, "files");
                     } else if files.is_empty() {
                         println!("No files found for workflow ID: {}", selected_workflow_id);
                     } else {

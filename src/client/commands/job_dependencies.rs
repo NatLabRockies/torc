@@ -1,6 +1,6 @@
-use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::commands::output::print_if_json;
+use crate::client::commands::output::print_wrapped_if_json;
+use crate::client::commands::pagination;
 use crate::client::commands::table_format::display_table_with_count;
 use crate::client::commands::{get_env_user_name, print_error, select_workflow_interactively};
 use clap::Subcommand;
@@ -112,20 +112,17 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match apis::workflows_api::list_job_dependencies(
-                config,
-                selected_workflow_id,
-                Some(*offset),
-                *limit,
-                None,
-                None,
-            ) {
-                Ok(response) => {
-                    if print_if_json(format, &response, "job dependencies") {
+            let mut params = pagination::JobDependencyListParams::new().with_offset(*offset);
+            if let Some(limit) = limit {
+                params = params.with_limit(*limit);
+            }
+
+            match pagination::paginate_job_dependencies(config, selected_workflow_id, params) {
+                Ok(dependencies) => {
+                    if print_wrapped_if_json(format, &dependencies, "job dependencies") {
                         // JSON was printed
                     } else {
-                        let rows: Vec<JobDependencyTableRow> = response
-                            .items
+                        let rows: Vec<JobDependencyTableRow> = dependencies
                             .iter()
                             .map(|dep| JobDependencyTableRow {
                                 job_id: dep.job_id,
@@ -160,20 +157,18 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match apis::workflows_api::list_job_file_relationships(
-                config,
-                selected_workflow_id,
-                Some(*offset),
-                *limit,
-                None,
-                None,
-            ) {
-                Ok(response) => {
-                    if print_if_json(format, &response, "job-file relationships") {
+            let mut params = pagination::JobFileRelationshipListParams::new().with_offset(*offset);
+            if let Some(limit) = limit {
+                params = params.with_limit(*limit);
+            }
+
+            match pagination::paginate_job_file_relationships(config, selected_workflow_id, params)
+            {
+                Ok(relationships) => {
+                    if print_wrapped_if_json(format, &relationships, "job-file relationships") {
                         // JSON was printed
                     } else {
-                        let rows: Vec<JobFileRelationshipTableRow> = response
-                            .items
+                        let rows: Vec<JobFileRelationshipTableRow> = relationships
                             .iter()
                             .map(|rel| JobFileRelationshipTableRow {
                                 file_id: rel.file_id,
@@ -222,20 +217,23 @@ pub fn handle_job_dependency_commands(
                 },
             };
 
-            match apis::workflows_api::list_job_user_data_relationships(
+            let mut params =
+                pagination::JobUserDataRelationshipListParams::new().with_offset(*offset);
+            if let Some(limit) = limit {
+                params = params.with_limit(*limit);
+            }
+
+            match pagination::paginate_job_user_data_relationships(
                 config,
                 selected_workflow_id,
-                Some(*offset),
-                *limit,
-                None,
-                None,
+                params,
             ) {
-                Ok(response) => {
-                    if print_if_json(format, &response, "job-user_data relationships") {
+                Ok(relationships) => {
+                    if print_wrapped_if_json(format, &relationships, "job-user_data relationships")
+                    {
                         // JSON was printed
                     } else {
-                        let rows: Vec<JobUserDataRelationshipTableRow> = response
-                            .items
+                        let rows: Vec<JobUserDataRelationshipTableRow> = relationships
                             .iter()
                             .map(|rel| JobUserDataRelationshipTableRow {
                                 user_data_id: rel.user_data_id,

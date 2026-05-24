@@ -130,7 +130,7 @@ fn test_user_data_add_with_job_associations(start_server: &ServerProcess) {
         .expect("Failed to list user-data by producer job ID");
 
     let producer_user_data_array = producer_list_output
-        .get("user_data")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();
@@ -161,7 +161,7 @@ fn test_user_data_add_with_job_associations(start_server: &ServerProcess) {
         .expect("Failed to list user-data by consumer job ID");
 
     let consumer_user_data_array = consumer_list_output
-        .get("user_data")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();
@@ -217,17 +217,17 @@ fn test_user_data_list_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run user-data list command");
 
-    // Verify JSON structure is an object with "user_data" field
+    // Verify JSON structure is an object with "items" field
     assert!(
         json_output.is_object(),
         "User data list should return an object"
     );
     assert!(
-        json_output.get("user_data").is_some(),
-        "Response should have 'user_data' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let user_data_array = json_output.get("user_data").unwrap().as_array().unwrap();
+    let user_data_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(
         user_data_array.len() >= 2,
         "Should have at least 2 user data records"
@@ -278,7 +278,7 @@ fn test_user_data_list_with_filters(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run user-data list with ephemeral filter");
 
-    let user_data_array = json_output.get("user_data").unwrap().as_array().unwrap();
+    let user_data_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(!user_data_array.is_empty());
 
     // All results should be ephemeral
@@ -298,11 +298,7 @@ fn test_user_data_list_with_filters(start_server: &ServerProcess) {
     let json_output_name = run_cli_with_json(&args_name_filter, start_server, None)
         .expect("Failed to run user-data list with name filter");
 
-    let filtered_array = json_output_name
-        .get("user_data")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let filtered_array = json_output_name.get("items").unwrap().as_array().unwrap();
     assert!(!filtered_array.is_empty());
 
     // All results should have the filtered name
@@ -341,7 +337,7 @@ fn test_user_data_list_pagination(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run paginated user-data list");
 
-    let user_data_array = json_output.get("user_data").unwrap().as_array().unwrap();
+    let user_data_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(user_data_array.len() <= 3, "Should respect limit parameter");
     assert!(
         !user_data_array.is_empty(),
@@ -362,11 +358,7 @@ fn test_user_data_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run user-data list with offset");
 
-    let user_data_with_offset = json_output_offset
-        .get("user_data")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let user_data_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(
         !user_data_with_offset.is_empty(),
         "Should have user data with offset"
@@ -415,7 +407,7 @@ fn test_user_data_list_sorting(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run sorted user-data list");
 
-    let user_data_array = json_output.get("user_data").unwrap().as_array().unwrap();
+    let user_data_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(user_data_array.len() >= 3);
 
     // Test reverse sorting
@@ -432,7 +424,7 @@ fn test_user_data_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run reverse sorted user-data list");
 
     let user_data_array_reverse = json_output_reverse
-        .get("user_data")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();

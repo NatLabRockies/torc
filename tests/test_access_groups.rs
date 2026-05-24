@@ -1768,9 +1768,9 @@ fn test_workflows_list_all_users_with_access_control(
     let json_output: serde_json::Value =
         serde_json::from_str(&output).expect("Failed to parse JSON output");
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
 
     let found_ids: Vec<i64> = workflows_array
         .iter()
@@ -1848,9 +1848,9 @@ fn test_admin_can_list_all_workflows(
     let json_output: serde_json::Value =
         serde_json::from_str(&output).expect("Failed to parse JSON output");
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
 
     let found_ids: Vec<i64> = workflows_array
         .iter()
@@ -1886,9 +1886,9 @@ fn test_admin_can_list_all_workflows(
     let user_x_json: serde_json::Value =
         serde_json::from_str(&user_x_output).expect("Failed to parse JSON output");
     let user_x_workflows = user_x_json
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
 
     let user_x_found_ids: Vec<i64> = user_x_workflows
         .iter()

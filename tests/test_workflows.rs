@@ -112,9 +112,9 @@ fn test_workflows_list_command_json(start_server: &ServerProcess) {
 
     // Extract workflows array from wrapped JSON response
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(
         workflows_array.len() >= 3,
         "Should have at least 3 workflows"
@@ -161,9 +161,9 @@ fn test_workflows_list_pagination(start_server: &ServerProcess) {
         .expect("Failed to run paginated workflows list");
 
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(workflows_array.len() <= 4, "Should respect limit parameter");
     assert!(
         !workflows_array.is_empty(),
@@ -178,9 +178,9 @@ fn test_workflows_list_pagination(start_server: &ServerProcess) {
             .expect("Failed to run workflows list with offset");
 
     let workflows_with_offset = json_output_offset
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(
         !workflows_with_offset.is_empty(),
         "Should have workflows with offset"
@@ -218,9 +218,9 @@ fn test_workflows_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run sorted workflows list");
 
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(workflows_array.len() >= 3);
 
     // Test reverse sorting
@@ -230,9 +230,9 @@ fn test_workflows_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run reverse sorted workflows list");
 
     let workflows_array_reverse = json_output_reverse
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(workflows_array_reverse.len() >= 3);
 
     // Verify sorting worked
@@ -685,9 +685,9 @@ fn test_workflows_different_users(start_server: &ServerProcess) {
         .expect("Failed to list workflows for user1");
 
     let workflows_user1 = json_output_user1
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(!workflows_user1.is_empty());
 
     // All workflows should belong to user1
@@ -702,9 +702,9 @@ fn test_workflows_different_users(start_server: &ServerProcess) {
         .expect("Failed to list workflows for user2");
 
     let workflows_user2 = json_output_user2
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(!workflows_user2.is_empty());
 
     // All workflows should belong to user2
@@ -861,9 +861,9 @@ fn test_workflows_list_empty_user(start_server: &ServerProcess) {
         .expect("Failed to list workflows for empty user");
 
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     assert!(
         workflows_array.is_empty(),
         "Should return empty array for user with no workflows"
@@ -895,9 +895,9 @@ fn test_workflows_name_uniqueness(start_server: &ServerProcess) {
         .expect("Failed to list workflows for user1");
 
     let workflows_user1 = json_output_user1
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     let user1_workflows: Vec<_> = workflows_user1
         .iter()
         .filter(|w| w.get("name").unwrap() == "duplicate_name")
@@ -910,9 +910,9 @@ fn test_workflows_name_uniqueness(start_server: &ServerProcess) {
         .expect("Failed to list workflows for user2");
 
     let workflows_user2 = json_output_user2
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     let user2_workflows: Vec<_> = workflows_user2
         .iter()
         .filter(|w| w.get("name").unwrap() == "duplicate_name")
@@ -1200,7 +1200,7 @@ fn test_workflow_list_excludes_archived_by_default(start_server: &ServerProcess)
     let workflows = list_output.as_array().unwrap_or_else(|| {
         // Handle object format with "workflows" field
         list_output
-            .get("workflows")
+            .get("items")
             .and_then(|w| w.as_array())
             .expect("Expected workflows array in response")
     });
@@ -1251,7 +1251,7 @@ fn test_workflow_list_archived_only(start_server: &ServerProcess) {
     let workflows = list_output.as_array().unwrap_or_else(|| {
         // Handle object format with "workflows" field
         list_output
-            .get("workflows")
+            .get("items")
             .and_then(|w| w.as_array())
             .expect("Expected workflows array in response")
     });
@@ -1449,9 +1449,9 @@ fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
 
     // Extract workflows array from wrapped JSON response
     let workflows_array = json_output
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
 
     // Find our test workflows by ID
     let wf_a_id = wf_a.id.unwrap();
@@ -1493,9 +1493,9 @@ fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
         .expect("Failed to run workflows list without --all-users");
 
     let filtered_array = json_filtered
-        .get("workflows")
+        .get("items")
         .and_then(|w| w.as_array())
-        .expect("Expected JSON object with 'workflows' array");
+        .expect("Expected JSON object with 'items' array");
     let filtered_users: Vec<&str> = filtered_array
         .iter()
         .filter_map(|w| w.get("user").and_then(|u| u.as_str()))

@@ -139,12 +139,7 @@ pub fn handle_scheduled_compute_node_commands(
                 Ok(response) => {
                     let nodes = response.items;
 
-                    if print_wrapped_if_json(
-                        format,
-                        "scheduled_compute_nodes",
-                        &nodes,
-                        "scheduled compute nodes",
-                    ) {
+                    if print_wrapped_if_json(format, &nodes, "scheduled compute nodes") {
                         // JSON was printed
                     } else if nodes.is_empty() {
                         println!(

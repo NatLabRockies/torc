@@ -185,12 +185,7 @@ pub fn handle_resource_requirements_commands(
 
             match pagination::paginate_resource_requirements(config, selected_workflow_id, params) {
                 Ok(requirements) => {
-                    if print_wrapped_if_json(
-                        format,
-                        "resource_requirements",
-                        &requirements,
-                        "resource requirements",
-                    ) {
+                    if print_wrapped_if_json(format, &requirements, "resource requirements") {
                         // JSON was printed
                     } else if requirements.is_empty() {
                         println!(

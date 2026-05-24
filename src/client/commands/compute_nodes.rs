@@ -211,7 +211,7 @@ pub fn handle_compute_node_commands(
 
             match paginate_compute_nodes(config, selected_workflow_id, params) {
                 Ok(nodes) => {
-                    if print_wrapped_if_json(format, "compute_nodes", &nodes, "compute_nodes") {
+                    if print_wrapped_if_json(format, &nodes, "compute_nodes") {
                         // JSON was printed
                     } else if nodes.is_empty() {
                         println!(

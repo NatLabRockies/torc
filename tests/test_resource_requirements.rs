@@ -180,21 +180,17 @@ fn test_resource_requirements_list_command_json(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run resource-requirements list command");
 
-    // Verify JSON structure is an object with "resource_requirements" field
+    // Verify JSON structure is an object with "items" field
     assert!(
         json_output.is_object(),
         "Resource requirements list should return an object"
     );
     assert!(
-        json_output.get("resource_requirements").is_some(),
-        "Response should have 'resource_requirements' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let requirements_array = json_output
-        .get("resource_requirements")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let requirements_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(
         requirements_array.len() >= 2,
         "Should have at least 2 resource requirements"
@@ -246,11 +242,7 @@ fn test_resource_requirements_list_pagination(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run paginated resource-requirements list");
 
-    let requirements_array = json_output
-        .get("resource_requirements")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let requirements_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(
         requirements_array.len() <= 3,
         "Should respect limit parameter"
@@ -274,11 +266,7 @@ fn test_resource_requirements_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run resource-requirements list with offset");
 
-    let requirements_with_offset = json_output_offset
-        .get("resource_requirements")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let requirements_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(
         !requirements_with_offset.is_empty(),
         "Should have requirements with offset"
@@ -328,11 +316,7 @@ fn test_resource_requirements_list_sorting(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run sorted resource-requirements list");
 
-    let requirements_array = json_output
-        .get("resource_requirements")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let requirements_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(requirements_array.len() >= 3);
 
     // Test reverse sorting
@@ -349,7 +333,7 @@ fn test_resource_requirements_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run reverse sorted resource-requirements list");
 
     let requirements_array_reverse = json_output_reverse
-        .get("resource_requirements")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();
@@ -842,11 +826,7 @@ fn test_resource_requirements_list_empty_workflow(start_server: &ServerProcess) 
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list resource requirements for empty workflow");
 
-    let requirements_array = json_output
-        .get("resource_requirements")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let requirements_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(
         requirements_array.len() == 1,
         "Should return array of length 1 for workflow with no resource requirements"
@@ -888,11 +868,7 @@ fn test_resource_requirements_mixed_workloads(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list mixed workload requirements");
 
-    let requirements_array = json_output
-        .get("resource_requirements")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let requirements_array = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(requirements_array.len(), 5 + 1);
 
     // Verify we have different resource configurations

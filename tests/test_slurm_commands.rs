@@ -1263,21 +1263,17 @@ fn test_slurm_list_configs_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run slurm list command");
 
-    // Verify JSON structure is an object with slurm_schedulers field
+    // Verify JSON structure is an object with "items" field
     assert!(
         json_output.is_object(),
         "Slurm configs list should return an object"
     );
     assert!(
-        json_output.get("slurm_schedulers").is_some(),
-        "Response should have slurm_schedulers field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let configs_array = json_output
-        .get("slurm_schedulers")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let configs_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(
         configs_array.len() >= 3,
         "Should have at least 3 Slurm configs"
@@ -1320,11 +1316,7 @@ fn test_slurm_list_pagination(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run paginated slurm list");
 
-    let configs_array = json_output
-        .get("slurm_schedulers")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let configs_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(configs_array.len() <= 3, "Should respect limit parameter");
     assert!(!configs_array.is_empty(), "Should have at least one config");
 
@@ -1342,11 +1334,7 @@ fn test_slurm_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run slurm list with offset");
 
-    let configs_with_offset = json_output_offset
-        .get("slurm_schedulers")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let configs_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(
         !configs_with_offset.is_empty(),
         "Should have configs with offset"
@@ -1472,11 +1460,7 @@ fn test_slurm_multiple_workflows(start_server: &ServerProcess) {
     let json_output1 = run_cli_with_json(&list_args1, start_server, None)
         .expect("Failed to list configs for workflow 1");
 
-    let configs1 = json_output1
-        .get("slurm_schedulers")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let configs1 = json_output1.get("items").unwrap().as_array().unwrap();
     assert!(
         !configs1.is_empty(),
         "Should have at least one config for workflow 1"
@@ -1495,11 +1479,7 @@ fn test_slurm_multiple_workflows(start_server: &ServerProcess) {
     let json_output2 = run_cli_with_json(&list_args2, start_server, None)
         .expect("Failed to list configs for workflow 2");
 
-    let configs2 = json_output2
-        .get("slurm_schedulers")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let configs2 = json_output2.get("items").unwrap().as_array().unwrap();
     assert!(
         !configs2.is_empty(),
         "Should have at least one config for workflow 2"

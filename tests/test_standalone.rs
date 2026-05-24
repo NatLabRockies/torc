@@ -71,7 +71,7 @@ fn standalone_persists_workflow_across_invocations() {
         .unwrap_or_else(|e| panic!("workflows list JSON parse failed: {}\n---\n{}", e, stdout));
     // `list_workflows` returns `{"workflows": [...]}`.
     let items = parsed
-        .get("workflows")
+        .get("items")
         .and_then(|v| v.as_array())
         .unwrap_or_else(|| panic!("expected workflows[] in list response: {}", stdout));
     assert!(
@@ -403,7 +403,7 @@ fn standalone_in_memory_snapshot_is_queryable() {
     let parsed: serde_json::Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("workflows list JSON parse failed: {}\n---\n{}", e, stdout));
     let items = parsed
-        .get("workflows")
+        .get("items")
         .and_then(|v| v.as_array())
         .unwrap_or_else(|| panic!("expected workflows[] in list response: {}", stdout));
     assert!(

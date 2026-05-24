@@ -29,22 +29,25 @@ pub fn print_json<T: Serialize>(value: &T, type_name: &str) {
     }
 }
 
-/// Print a collection wrapped in a JSON object with a named field.
+/// Print a collection wrapped in a JSON object under the `items` field.
 ///
-/// Output format: `{"field_name": [...]}`
+/// Output format: `{"items": [...]}`
+///
+/// All list commands use the same `items` key for consistency with the REST API
+/// (whose paginated responses also wrap records in `items`) and so that generic
+/// tooling (e.g. `jq '.items[]'`) works uniformly across resource types.
 ///
 /// # Arguments
-/// * `field_name` - The name of the field to wrap the items in
 /// * `items` - A slice of serializable items
 /// * `type_name` - Human-readable name for error messages
 ///
 /// # Example
 /// ```ignore
-/// print_json_wrapped("jobs", &jobs, "jobs");
-/// // Outputs: {"jobs": [...]}
+/// print_json_wrapped(&jobs, "jobs");
+/// // Outputs: {"items": [...]}
 /// ```
-pub fn print_json_wrapped<T: Serialize>(field_name: &str, items: &[T], type_name: &str) {
-    let output = serde_json::json!({ field_name: items });
+pub fn print_json_wrapped<T: Serialize>(items: &[T], type_name: &str) {
+    let output = serde_json::json!({ "items": items });
     print_json(&output, type_name);
 }
 
@@ -143,14 +146,9 @@ pub fn print_if_json<T: Serialize>(format: &str, value: &T, type_name: &str) -> 
 ///
 /// # Returns
 /// `true` if JSON was printed, `false` if caller should handle table format
-pub fn print_wrapped_if_json<T: Serialize>(
-    format: &str,
-    field_name: &str,
-    items: &[T],
-    type_name: &str,
-) -> bool {
+pub fn print_wrapped_if_json<T: Serialize>(format: &str, items: &[T], type_name: &str) -> bool {
     if format == "json" {
-        print_json_wrapped(field_name, items, type_name);
+        print_json_wrapped(items, type_name);
         true
     } else {
         false

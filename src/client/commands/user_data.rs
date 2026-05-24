@@ -231,7 +231,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
             match pagination::paginate_user_data(config, selected_workflow_id, params) {
                 Ok(user_data_list) => {
                     if format == "json" {
-                        print_json_wrapped("user_data", &user_data_list, "user_data");
+                        print_json_wrapped(&user_data_list, "user_data");
                     } else if user_data_list.is_empty() {
                         println!(
                             "No user data found for workflow ID: {}",

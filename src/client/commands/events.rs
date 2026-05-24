@@ -228,7 +228,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                     if format == "json" {
                         let json_events: Vec<EventJsonOutput> =
                             events.iter().map(EventJsonOutput::from).collect();
-                        print_json_wrapped("events", &json_events, "events");
+                        print_json_wrapped(&json_events, "events");
                     } else if events.is_empty() {
                         println!("No events found for workflow {}", selected_workflow_id);
                     } else {
