@@ -23,8 +23,9 @@ use crate::models::{self as models, JobStatus};
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
-    database_error_with_msg, deserialize_env_map, message_error_response, normalize_env_map,
-    parse_job_status, resource_not_found_response, serialize_env_map, validate_env_map,
+    database_error_with_msg, deserialize_env_map, escape_like_pattern, message_error_response,
+    normalize_env_map, parse_job_status, resource_not_found_response, serialize_env_map,
+    validate_env_map,
 };
 
 /// Per-job values prepared during the first pass of bulk `create_jobs` so the
@@ -152,6 +153,8 @@ pub trait JobsApi<C> {
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
         origin_is_set: Option<bool>,
+        name: Option<String>,
+        command: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -1855,10 +1858,12 @@ where
         include_relationships: Option<bool>,
         active_compute_node_id: Option<i64>,
         origin_is_set: Option<bool>,
+        name: Option<String>,
+        command: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -1870,6 +1875,8 @@ where
             include_relationships,
             active_compute_node_id,
             origin_is_set,
+            name,
+            command,
             context.get().0.clone()
         );
 
@@ -1916,6 +1923,16 @@ where
             where_conditions.push("origin IS NULL".to_string());
         }
 
+        // Substring filters on name/command (LIKE '%value%'), matching the
+        // pattern used by the workflows `description` filter. Bound last so the
+        // `?` placeholders line up with the manual binds below.
+        if name.is_some() {
+            where_conditions.push("name LIKE ? ESCAPE '\\'".to_string());
+        }
+        if command.is_some() {
+            where_conditions.push("command LIKE ? ESCAPE '\\'".to_string());
+        }
+
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
             if JOB_COLUMNS.contains(&col.as_str()) {
@@ -1954,6 +1971,12 @@ where
         }
         if let Some(cn_id) = active_compute_node_id {
             sqlx_query = sqlx_query.bind(cn_id);
+        }
+        if let Some(ref n) = name {
+            sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(n)));
+        }
+        if let Some(ref c) = command {
+            sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -2034,6 +2057,12 @@ where
         }
         if let Some(cn_id) = active_compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(cn_id);
+        }
+        if let Some(ref n) = name {
+            count_sqlx_query = count_sqlx_query.bind(format!("%{}%", escape_like_pattern(n)));
+        }
+        if let Some(ref c) = command {
+            count_sqlx_query = count_sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {

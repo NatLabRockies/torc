@@ -70,30 +70,39 @@ impl TorcClient {
         self.config.base_path = base_url.to_string();
     }
 
-    pub fn list_workflows(&self) -> Result<Vec<WorkflowModel>> {
+    pub fn list_workflows(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<WorkflowModel>> {
         let response = apis::workflows_api::list_workflows(
             &self.config,
-            None, // offset
-            None, // sort_by
-            None, // reverse_sort
-            None, // limit
-            None, // name
-            None, // user
-            None, // description
-            None, // is_archived
+            offset, // offset
+            limit,  // limit
+            None,   // sort_by
+            None,   // reverse_sort
+            None,   // name
+            None,   // user
+            None,   // description
+            None,   // is_archived
         )
         .context("Failed to list workflows")?;
 
         Ok(response.items)
     }
 
-    pub fn list_workflows_for_user(&self, user: &str) -> Result<Vec<WorkflowModel>> {
+    pub fn list_workflows_for_user(
+        &self,
+        user: &str,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<WorkflowModel>> {
         let response = apis::workflows_api::list_workflows(
             &self.config,
-            None,       // offset
+            offset,     // offset
+            limit,      // limit
             None,       // sort_by
             None,       // reverse_sort
-            None,       // limit
             None,       // name
             Some(user), // user filter
             None,       // description
@@ -114,20 +123,43 @@ impl TorcClient {
             .context("Failed to check workflow completion")
     }
 
-    pub fn list_jobs(&self, workflow_id: i64) -> Result<Vec<JobModel>> {
+    pub fn list_jobs(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<JobModel>> {
+        self.list_jobs_filtered(workflow_id, offset, limit, None, None, None)
+    }
+
+    /// List jobs with server-side filters applied. `status` is an exact match;
+    /// `name` and `command` are substring (`LIKE %value%`) matches. Used by the
+    /// TUI Jobs pane so filtering spans the whole workflow, not just the loaded
+    /// page.
+    pub fn list_jobs_filtered(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        status: Option<JobStatus>,
+        name: Option<&str>,
+        command: Option<&str>,
+    ) -> Result<Vec<JobModel>> {
         let response = apis::jobs_api::list_jobs(
             &self.config,
             workflow_id,
-            None, // status
-            None, // needs_file_id
-            None, // upstream_job_id
-            None, // offset
-            None, // limit
-            None, // sort_by
-            None, // reverse_sort
-            None, // include_relationships
-            None, // active_compute_node_id
-            None, // origin_is_set
+            status,  // status
+            None,    // needs_file_id
+            None,    // upstream_job_id
+            offset,  // offset
+            limit,   // limit
+            None,    // sort_by
+            None,    // reverse_sort
+            None,    // include_relationships
+            None,    // active_compute_node_id
+            None,    // origin_is_set
+            name,    // name
+            command, // command
         )
         .context("Failed to list jobs")?;
 
@@ -152,20 +184,25 @@ impl TorcClient {
         Ok(response.items)
     }
 
-    pub fn list_results(&self, workflow_id: i64) -> Result<Vec<ResultModel>> {
+    pub fn list_results(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<ResultModel>> {
         let response = apis::results_api::list_results(
             &self.config,
             workflow_id,
-            None, // job_id
-            None, // run_id
-            None, // return_code
-            None, // status
-            None, // compute_node_id
-            None, // offset
-            None, // limit
-            None, // sort_by
-            None, // reverse_sort
-            None, // all_runs
+            None,   // job_id
+            None,   // run_id
+            None,   // return_code
+            None,   // status
+            None,   // compute_node_id
+            offset, // offset
+            limit,  // limit
+            None,   // sort_by
+            None,   // reverse_sort
+            None,   // all_runs
         )
         .context("Failed to list results")?;
 
@@ -221,17 +258,22 @@ impl TorcClient {
         Ok(response.items)
     }
 
-    pub fn list_compute_nodes(&self, workflow_id: i64) -> Result<Vec<ComputeNodeModel>> {
+    pub fn list_compute_nodes(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<ComputeNodeModel>> {
         let response = apis::compute_nodes_api::list_compute_nodes(
             &self.config,
             workflow_id,
-            None, // offset
-            None, // limit
-            None, // sort_by
-            None, // reverse_sort
-            None, // hostname
-            None, // is_active
-            None, // scheduled_compute_node_id
+            offset, // offset
+            limit,  // limit
+            None,   // sort_by
+            None,   // reverse_sort
+            None,   // hostname
+            None,   // is_active
+            None,   // scheduled_compute_node_id
         )
         .context("Failed to list compute nodes")?;
 

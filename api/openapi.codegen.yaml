@@ -1383,6 +1383,22 @@ paths:
           type:
           - boolean
           - 'null'
+      - name: name
+        in: query
+        description: Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: command
+        in: query
+        description: Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: Successful response

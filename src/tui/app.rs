@@ -13,7 +13,7 @@ use crate::client::log_paths::{
 };
 use crate::client::sse_client::SseEvent;
 use crate::models::{
-    ComputeNodeModel, FileModel, JobModel, ResultModel, ScheduledComputeNodesModel,
+    ComputeNodeModel, FileModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
     SlurmStatsModel, WorkflowModel,
 };
 
@@ -269,6 +269,11 @@ pub enum FilterTarget {
 /// Number of rows to advance/retreat for PageDown/PageUp.
 pub const PAGE_STEP: usize = 10;
 
+/// Number of records the TUI fetches per page for the paginated list views
+/// (Workflows, Jobs, Results, Compute Nodes). Lists are loaded on demand one
+/// page at a time; `]` / `[` move to the next / previous page.
+pub const TUI_PAGE_SIZE: i64 = 250;
+
 /// Sort state for the Results detail table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultsSort {
@@ -392,6 +397,138 @@ impl ResultsSort {
     }
 }
 
+/// Sort state for the Workflows list. Number keys 1..3 cycle a single column
+/// at a time (None → Desc → Asc → None), mirroring [`JobsSort`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowsSort {
+    None,
+    IdDesc,
+    IdAsc,
+    NameDesc,
+    NameAsc,
+    UserDesc,
+    UserAsc,
+}
+
+impl WorkflowsSort {
+    pub fn cycle_id(self) -> Self {
+        match self {
+            Self::IdDesc => Self::IdAsc,
+            Self::IdAsc => Self::None,
+            _ => Self::IdDesc,
+        }
+    }
+    pub fn cycle_name(self) -> Self {
+        match self {
+            Self::NameDesc => Self::NameAsc,
+            Self::NameAsc => Self::None,
+            _ => Self::NameDesc,
+        }
+    }
+    pub fn cycle_user(self) -> Self {
+        match self {
+            Self::UserDesc => Self::UserAsc,
+            Self::UserAsc => Self::None,
+            _ => Self::UserDesc,
+        }
+    }
+    pub fn id_indicator(self) -> &'static str {
+        match self {
+            Self::IdDesc => " ↓",
+            Self::IdAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn name_indicator(self) -> &'static str {
+        match self {
+            Self::NameDesc => " ↓",
+            Self::NameAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn user_indicator(self) -> &'static str {
+        match self {
+            Self::UserDesc => " ↓",
+            Self::UserAsc => " ↑",
+            _ => "",
+        }
+    }
+}
+
+/// Sort state for the Compute Nodes detail table. Keys 1=ID, 2=Hostname cycle
+/// like [`JobsSort`]; `m`/`p` cycle Peak Memory / Peak CPU like [`ResultsSort`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComputeNodesSort {
+    None,
+    IdDesc,
+    IdAsc,
+    HostnameDesc,
+    HostnameAsc,
+    PeakCpuDesc,
+    PeakCpuAsc,
+    PeakMemoryDesc,
+    PeakMemoryAsc,
+}
+
+impl ComputeNodesSort {
+    pub fn cycle_id(self) -> Self {
+        match self {
+            Self::IdDesc => Self::IdAsc,
+            Self::IdAsc => Self::None,
+            _ => Self::IdDesc,
+        }
+    }
+    pub fn cycle_hostname(self) -> Self {
+        match self {
+            Self::HostnameDesc => Self::HostnameAsc,
+            Self::HostnameAsc => Self::None,
+            _ => Self::HostnameDesc,
+        }
+    }
+    pub fn cycle_peak_cpu(self) -> Self {
+        match self {
+            Self::PeakCpuDesc => Self::PeakCpuAsc,
+            Self::PeakCpuAsc => Self::None,
+            _ => Self::PeakCpuDesc,
+        }
+    }
+    pub fn cycle_peak_memory(self) -> Self {
+        match self {
+            Self::PeakMemoryDesc => Self::PeakMemoryAsc,
+            Self::PeakMemoryAsc => Self::None,
+            _ => Self::PeakMemoryDesc,
+        }
+    }
+    pub fn id_indicator(self) -> &'static str {
+        match self {
+            Self::IdDesc => " ↓",
+            Self::IdAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn hostname_indicator(self) -> &'static str {
+        match self {
+            Self::HostnameDesc => " ↓",
+            Self::HostnameAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn peak_cpu_indicator(self) -> &'static str {
+        match self {
+            Self::PeakCpuDesc => " ↓",
+            Self::PeakCpuAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn peak_memory_indicator(self) -> &'static str {
+        match self {
+            Self::PeakMemoryDesc => " ↓",
+            Self::PeakMemoryAsc => " ↑",
+            _ => "",
+        }
+    }
+}
+
 /// Aggregated high-level information about a single workflow, computed from
 /// list_jobs + get_workflow + is_workflow_complete and rendered by the
 /// Summary detail view.
@@ -416,11 +553,20 @@ pub struct App {
     pub workflows: Vec<WorkflowModel>,
     pub workflows_all: Vec<WorkflowModel>,
     pub workflows_state: TableState,
+    pub workflows_sort: WorkflowsSort,
+    /// Offset of the currently-loaded Workflows page (multiple of TUI_PAGE_SIZE).
+    pub workflows_offset: i64,
+    /// True when the last Workflows fetch filled a full page (a next page may exist).
+    pub workflows_has_more: bool,
     pub jobs: Vec<JobModel>,
     pub jobs_all: Vec<JobModel>,
     pub jobs_workflow_id: Option<i64>,
     pub jobs_state: TableState,
     pub jobs_sort: JobsSort,
+    /// Offset of the currently-loaded Jobs page on the Jobs detail tab.
+    pub jobs_offset: i64,
+    /// True when the last Jobs-tab fetch filled a full page.
+    pub jobs_has_more: bool,
     pub files: Vec<FileModel>,
     pub files_all: Vec<FileModel>,
     pub files_state: TableState,
@@ -432,10 +578,19 @@ pub struct App {
     pub results_state: TableState,
     pub results_workflow_id: Option<i64>,
     pub results_sort: ResultsSort,
+    /// Offset of the currently-loaded Results page on the Results detail tab.
+    pub results_offset: i64,
+    /// True when the last Results-tab fetch filled a full page.
+    pub results_has_more: bool,
     pub exec_time_map: std::collections::HashMap<(i64, i64, i64), f64>,
     pub compute_nodes: Vec<ComputeNodeModel>,
     pub compute_nodes_all: Vec<ComputeNodeModel>,
     pub compute_nodes_state: TableState,
+    pub compute_nodes_sort: ComputeNodesSort,
+    /// Offset of the currently-loaded Compute Nodes page.
+    pub compute_nodes_offset: i64,
+    /// True when the last Compute Nodes fetch filled a full page.
+    pub compute_nodes_has_more: bool,
     pub scheduled_nodes: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_all: Vec<ScheduledComputeNodesModel>,
     pub scheduled_nodes_state: TableState,
@@ -528,11 +683,16 @@ impl App {
             workflows: Vec::new(),
             workflows_all: Vec::new(),
             workflows_state: TableState::default(),
+            workflows_sort: WorkflowsSort::None,
+            workflows_offset: 0,
+            workflows_has_more: false,
             jobs: Vec::new(),
             jobs_all: Vec::new(),
             jobs_workflow_id: None,
             jobs_state: TableState::default(),
             jobs_sort: JobsSort::None,
+            jobs_offset: 0,
+            jobs_has_more: false,
             files: Vec::new(),
             files_all: Vec::new(),
             files_state: TableState::default(),
@@ -544,10 +704,15 @@ impl App {
             results_state: TableState::default(),
             results_workflow_id: None,
             results_sort: ResultsSort::None,
+            results_offset: 0,
+            results_has_more: false,
             exec_time_map: std::collections::HashMap::new(),
             compute_nodes: Vec::new(),
             compute_nodes_all: Vec::new(),
             compute_nodes_state: TableState::default(),
+            compute_nodes_sort: ComputeNodesSort::None,
+            compute_nodes_offset: 0,
+            compute_nodes_has_more: false,
             scheduled_nodes: Vec::new(),
             scheduled_nodes_all: Vec::new(),
             scheduled_nodes_state: TableState::default(),
@@ -607,11 +772,14 @@ impl App {
             .and_then(|i| self.workflows.get(i))
             .and_then(|w| w.id);
 
+        let offset = Some(self.workflows_offset);
+        let limit = Some(TUI_PAGE_SIZE);
         self.workflows_all = if let Some(ref user) = self.user_filter {
-            self.client.list_workflows_for_user(user)?
+            self.client.list_workflows_for_user(user, offset, limit)?
         } else {
-            self.client.list_workflows()?
+            self.client.list_workflows(offset, limit)?
         };
+        self.workflows_has_more = self.workflows_all.len() as i64 == TUI_PAGE_SIZE;
 
         // Re-apply any active workflow filter against the freshly loaded data.
         if self.filter_target == FilterTarget::Workflows
@@ -622,6 +790,7 @@ impl App {
         } else {
             self.workflows = self.workflows_all.clone();
         }
+        self.apply_workflows_sort();
 
         if let Some(id) = prev_id
             && let Some(idx) = self.workflows.iter().position(|w| w.id == Some(id))
@@ -916,17 +1085,23 @@ impl App {
 
     pub fn load_detail_data(&mut self) -> Result<()> {
         if let Some(idx) = self.workflows_state.selected()
-            && let Some(workflow) = self.workflows.get(idx)
+            && let Some(workflow_id_opt) = self.workflows.get(idx).map(|w| w.id)
         {
-            self.selected_workflow_id = workflow.id;
-            if let Some(workflow_id) = workflow.id {
+            // When the selected workflow changes, restart every detail list at
+            // its first page so we don't carry a stale offset into a workflow
+            // that may have far fewer records.
+            if self.selected_workflow_id != workflow_id_opt {
+                self.reset_detail_pagination();
+            }
+            self.selected_workflow_id = workflow_id_opt;
+            if let Some(workflow_id) = workflow_id_opt {
                 // Clear any existing filter when loading new data
                 self.filter = None;
 
                 match self.detail_view {
                     DetailViewType::Summary => {
                         if self.jobs_workflow_id != Some(workflow_id) {
-                            self.jobs_all = self.client.list_jobs(workflow_id)?;
+                            self.jobs_all = self.client.list_jobs(workflow_id, None, None)?;
                             self.jobs_workflow_id = Some(workflow_id);
                         }
                         self.jobs = self.jobs_all.clone();
@@ -952,13 +1127,10 @@ impl App {
                         });
                     }
                     DetailViewType::Jobs => {
-                        self.jobs_all = self.client.list_jobs(workflow_id)?;
-                        self.jobs_workflow_id = Some(workflow_id);
-                        self.jobs = self.jobs_all.clone();
-                        self.apply_jobs_sort();
-                        if !self.jobs.is_empty() {
-                            self.jobs_state.select(Some(0));
-                        }
+                        // self.filter was just cleared above, so this loads an
+                        // unfiltered first page. Server-side filtering is driven
+                        // through reload_jobs_page from apply_filter/paging.
+                        self.reload_jobs_page()?;
                     }
                     DetailViewType::Files => {
                         self.files_all = self.client.list_files(workflow_id)?;
@@ -972,10 +1144,16 @@ impl App {
                         self.start_sse_connection(workflow_id);
                     }
                     DetailViewType::Results => {
-                        if self.results_workflow_id != Some(workflow_id) {
-                            self.results_all = self.client.list_results(workflow_id)?;
-                            self.results_workflow_id = Some(workflow_id);
-                        }
+                        self.results_all = self.client.list_results(
+                            workflow_id,
+                            Some(self.results_offset),
+                            Some(TUI_PAGE_SIZE),
+                        )?;
+                        self.results_has_more = self.results_all.len() as i64 == TUI_PAGE_SIZE;
+                        // results_all now holds only one page; invalidate the
+                        // full-list cache so the Slurm Stats tab refetches the
+                        // complete set for its CPU%/runtime computations.
+                        self.results_workflow_id = None;
                         self.results = self.results_all.clone();
                         self.apply_results_sort();
                         if !self.results.is_empty() {
@@ -983,8 +1161,15 @@ impl App {
                         }
                     }
                     DetailViewType::ComputeNodes => {
-                        self.compute_nodes_all = self.client.list_compute_nodes(workflow_id)?;
+                        self.compute_nodes_all = self.client.list_compute_nodes(
+                            workflow_id,
+                            Some(self.compute_nodes_offset),
+                            Some(TUI_PAGE_SIZE),
+                        )?;
+                        self.compute_nodes_has_more =
+                            self.compute_nodes_all.len() as i64 == TUI_PAGE_SIZE;
                         self.compute_nodes = self.compute_nodes_all.clone();
+                        self.apply_compute_nodes_sort();
                         if !self.compute_nodes.is_empty() {
                             self.compute_nodes_state.select(Some(0));
                         }
@@ -1006,7 +1191,7 @@ impl App {
                         // Load results for CPU% computation if not already loaded
                         // for this workflow
                         if self.results_workflow_id != Some(workflow_id)
-                            && let Ok(r) = self.client.list_results(workflow_id)
+                            && let Ok(r) = self.client.list_results(workflow_id, None, None)
                         {
                             self.results_all = r;
                             self.results = self.results_all.clone();
@@ -1017,7 +1202,7 @@ impl App {
                     }
                     DetailViewType::Dag => {
                         if self.jobs_workflow_id != Some(workflow_id) {
-                            self.jobs_all = self.client.list_jobs(workflow_id)?;
+                            self.jobs_all = self.client.list_jobs(workflow_id, None, None)?;
                             self.jobs_workflow_id = Some(workflow_id);
                             self.jobs = self.jobs_all.clone();
                             self.apply_jobs_sort();
@@ -1068,7 +1253,14 @@ impl App {
         // only its Details counterpart needs re-narrowing here.
         if let Some(filter) = prev_filter {
             if filter_target == FilterTarget::Details {
-                self.filter_active_view(FilterTarget::Details, &filter.column, &filter.value);
+                if self.detail_view == DetailViewType::Jobs {
+                    // Jobs filters server-side; re-fetch the current page with
+                    // the filter rather than narrowing the loaded page.
+                    self.filter = Some(filter.clone());
+                    self.reload_jobs_page()?;
+                } else {
+                    self.filter_active_view(FilterTarget::Details, &filter.column, &filter.value);
+                }
             }
             self.filter = Some(filter);
         }
@@ -1247,6 +1439,324 @@ impl App {
         self.jobs_sort = self.jobs_sort.cycle_status();
         self.apply_jobs_sort();
         self.restore_jobs_selection(prev_id);
+    }
+
+    /// Sort `self.workflows` in-place based on `self.workflows_sort`. Rows with
+    /// missing IDs sort last in both directions.
+    pub fn apply_workflows_sort(&mut self) {
+        match self.workflows_sort {
+            WorkflowsSort::None => {}
+            WorkflowsSort::IdDesc => self
+                .workflows
+                .sort_by_key(|w| (w.id.is_none(), std::cmp::Reverse(w.id.unwrap_or(i64::MIN)))),
+            WorkflowsSort::IdAsc => self
+                .workflows
+                .sort_by_key(|w| (w.id.is_none(), w.id.unwrap_or(i64::MAX))),
+            WorkflowsSort::NameDesc => self
+                .workflows
+                .sort_by_cached_key(|w| std::cmp::Reverse(w.name.to_lowercase())),
+            WorkflowsSort::NameAsc => self.workflows.sort_by_cached_key(|w| w.name.to_lowercase()),
+            WorkflowsSort::UserDesc => self
+                .workflows
+                .sort_by_cached_key(|w| std::cmp::Reverse(w.user.to_lowercase())),
+            WorkflowsSort::UserAsc => self.workflows.sort_by_cached_key(|w| w.user.to_lowercase()),
+        }
+    }
+
+    fn selected_workflow_row_id(&self) -> Option<i64> {
+        self.workflows_state
+            .selected()
+            .and_then(|i| self.workflows.get(i))
+            .and_then(|w| w.id)
+    }
+
+    fn restore_workflows_selection(&mut self, prev_id: Option<i64>) {
+        if self.workflows.is_empty() {
+            self.workflows_state.select(None);
+            return;
+        }
+        let idx = prev_id
+            .and_then(|id| self.workflows.iter().position(|w| w.id == Some(id)))
+            .unwrap_or(0);
+        self.workflows_state.select(Some(idx));
+    }
+
+    pub fn cycle_workflows_sort_id(&mut self) {
+        let prev_id = self.selected_workflow_row_id();
+        self.workflows_sort = self.workflows_sort.cycle_id();
+        self.apply_workflows_sort();
+        self.restore_workflows_selection(prev_id);
+    }
+
+    pub fn cycle_workflows_sort_name(&mut self) {
+        let prev_id = self.selected_workflow_row_id();
+        self.workflows_sort = self.workflows_sort.cycle_name();
+        self.apply_workflows_sort();
+        self.restore_workflows_selection(prev_id);
+    }
+
+    pub fn cycle_workflows_sort_user(&mut self) {
+        let prev_id = self.selected_workflow_row_id();
+        self.workflows_sort = self.workflows_sort.cycle_user();
+        self.apply_workflows_sort();
+        self.restore_workflows_selection(prev_id);
+    }
+
+    /// Sort `self.compute_nodes` in-place based on `self.compute_nodes_sort`.
+    /// Rows with missing values sort last in both directions.
+    pub fn apply_compute_nodes_sort(&mut self) {
+        match self.compute_nodes_sort {
+            ComputeNodesSort::None => {}
+            ComputeNodesSort::IdDesc => self
+                .compute_nodes
+                .sort_by_key(|n| (n.id.is_none(), std::cmp::Reverse(n.id.unwrap_or(i64::MIN)))),
+            ComputeNodesSort::IdAsc => self
+                .compute_nodes
+                .sort_by_key(|n| (n.id.is_none(), n.id.unwrap_or(i64::MAX))),
+            ComputeNodesSort::HostnameDesc => self
+                .compute_nodes
+                .sort_by_cached_key(|n| std::cmp::Reverse(n.hostname.to_lowercase())),
+            ComputeNodesSort::HostnameAsc => self
+                .compute_nodes
+                .sort_by_cached_key(|n| n.hostname.to_lowercase()),
+            ComputeNodesSort::PeakCpuDesc => {
+                self.compute_nodes
+                    .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
+                        (Some(x), Some(y)) => y.total_cmp(&x),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    })
+            }
+            ComputeNodesSort::PeakCpuAsc => {
+                self.compute_nodes
+                    .sort_by(|a, b| match (a.peak_cpu_percent, b.peak_cpu_percent) {
+                        (Some(x), Some(y)) => x.total_cmp(&y),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    })
+            }
+            ComputeNodesSort::PeakMemoryDesc => self.compute_nodes.sort_by_key(|n| {
+                (
+                    n.peak_memory_bytes.is_none(),
+                    std::cmp::Reverse(n.peak_memory_bytes.unwrap_or(i64::MIN)),
+                )
+            }),
+            ComputeNodesSort::PeakMemoryAsc => self.compute_nodes.sort_by_key(|n| {
+                (
+                    n.peak_memory_bytes.is_none(),
+                    n.peak_memory_bytes.unwrap_or(i64::MAX),
+                )
+            }),
+        }
+    }
+
+    fn selected_compute_node_id(&self) -> Option<i64> {
+        self.compute_nodes_state
+            .selected()
+            .and_then(|i| self.compute_nodes.get(i))
+            .and_then(|n| n.id)
+    }
+
+    /// Reset every detail-list page offset back to the first page. Called when
+    /// the selected workflow changes so a stale offset isn't carried over.
+    fn reset_detail_pagination(&mut self) {
+        self.jobs_offset = 0;
+        self.jobs_has_more = false;
+        self.results_offset = 0;
+        self.results_has_more = false;
+        self.compute_nodes_offset = 0;
+        self.compute_nodes_has_more = false;
+    }
+
+    /// True when a next page may exist for the active paginated view.
+    pub fn active_page_has_more(&self) -> bool {
+        match self.focus {
+            Focus::Workflows => self.workflows_has_more,
+            Focus::Details => match self.detail_view {
+                DetailViewType::Jobs => self.jobs_has_more,
+                DetailViewType::Results => self.results_has_more,
+                DetailViewType::ComputeNodes => self.compute_nodes_has_more,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Load the next page of the active paginated view, if one may exist.
+    pub fn next_page(&mut self) -> Result<()> {
+        if !self.active_page_has_more() {
+            return Ok(());
+        }
+        match self.focus {
+            Focus::Workflows => {
+                self.workflows_offset += TUI_PAGE_SIZE;
+                self.refresh_workflows()?;
+                self.select_first_workflow_row();
+            }
+            Focus::Details => match self.detail_view {
+                DetailViewType::Jobs => {
+                    // reload_jobs_page (not load_detail_data) so the active
+                    // server-side filter is preserved across pages.
+                    self.jobs_offset += TUI_PAGE_SIZE;
+                    self.reload_jobs_page()?;
+                }
+                DetailViewType::Results => {
+                    self.results_offset += TUI_PAGE_SIZE;
+                    self.load_detail_data()?;
+                }
+                DetailViewType::ComputeNodes => {
+                    self.compute_nodes_offset += TUI_PAGE_SIZE;
+                    self.load_detail_data()?;
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Load the previous page of the active paginated view, if not already on
+    /// the first page.
+    pub fn prev_page(&mut self) -> Result<()> {
+        match self.focus {
+            Focus::Workflows => {
+                if self.workflows_offset == 0 {
+                    return Ok(());
+                }
+                self.workflows_offset = (self.workflows_offset - TUI_PAGE_SIZE).max(0);
+                self.refresh_workflows()?;
+                self.select_first_workflow_row();
+            }
+            Focus::Details => match self.detail_view {
+                DetailViewType::Jobs if self.jobs_offset > 0 => {
+                    self.jobs_offset = (self.jobs_offset - TUI_PAGE_SIZE).max(0);
+                    self.reload_jobs_page()?;
+                }
+                DetailViewType::Results if self.results_offset > 0 => {
+                    self.results_offset = (self.results_offset - TUI_PAGE_SIZE).max(0);
+                    self.load_detail_data()?;
+                }
+                DetailViewType::ComputeNodes if self.compute_nodes_offset > 0 => {
+                    self.compute_nodes_offset = (self.compute_nodes_offset - TUI_PAGE_SIZE).max(0);
+                    self.load_detail_data()?;
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn select_first_workflow_row(&mut self) {
+        if self.workflows.is_empty() {
+            self.workflows_state.select(None);
+        } else {
+            self.workflows_state.select(Some(0));
+        }
+    }
+
+    /// Resolve the Jobs-pane filter (`self.filter`) into server-side query
+    /// arguments. Returns `(status, name, command, impossible)`. `impossible`
+    /// is true when a Status filter value matches no known status, in which
+    /// case the caller should show zero rows without hitting the server.
+    /// Returns all-`None` when no Jobs filter is active.
+    fn jobs_server_filter(&self) -> (Option<JobStatus>, Option<String>, Option<String>, bool) {
+        if self.filter_target != FilterTarget::Details {
+            return (None, None, None, false);
+        }
+        let Some(filter) = self.filter.as_ref() else {
+            return (None, None, None, false);
+        };
+        match filter.column.as_str() {
+            "Status" => match resolve_job_status_filter(&filter.value) {
+                Some(s) => (Some(s), None, None, false),
+                None => (None, None, None, true),
+            },
+            "Name" => (None, Some(filter.value.clone()), None, false),
+            "Command" => (None, None, Some(filter.value.clone()), false),
+            _ => (None, None, None, false),
+        }
+    }
+
+    /// Fetch the current page of the Jobs detail table from the server,
+    /// applying the active Jobs filter server-side so it spans the whole
+    /// workflow rather than just the loaded page. Does not modify `self.filter`.
+    pub fn reload_jobs_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let (status, name, command, impossible) = self.jobs_server_filter();
+
+        // jobs_all now holds at most one (possibly filtered) page; invalidate
+        // the full-list cache so Summary/Dag refetch the complete set.
+        self.jobs_workflow_id = None;
+
+        if impossible {
+            self.jobs_all = Vec::new();
+            self.jobs = Vec::new();
+            self.jobs_has_more = false;
+            self.jobs_state.select(None);
+            return Ok(());
+        }
+
+        self.jobs_all = self.client.list_jobs_filtered(
+            workflow_id,
+            Some(self.jobs_offset),
+            Some(TUI_PAGE_SIZE),
+            status,
+            name.as_deref(),
+            command.as_deref(),
+        )?;
+        self.jobs_has_more = self.jobs_all.len() as i64 == TUI_PAGE_SIZE;
+        self.jobs = self.jobs_all.clone();
+        self.apply_jobs_sort();
+        if self.jobs.is_empty() {
+            self.jobs_state.select(None);
+        } else {
+            self.jobs_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    fn restore_compute_nodes_selection(&mut self, prev_id: Option<i64>) {
+        if self.compute_nodes.is_empty() {
+            self.compute_nodes_state.select(None);
+            return;
+        }
+        let idx = prev_id
+            .and_then(|id| self.compute_nodes.iter().position(|n| n.id == Some(id)))
+            .unwrap_or(0);
+        self.compute_nodes_state.select(Some(idx));
+    }
+
+    pub fn cycle_compute_nodes_sort_id(&mut self) {
+        let prev_id = self.selected_compute_node_id();
+        self.compute_nodes_sort = self.compute_nodes_sort.cycle_id();
+        self.apply_compute_nodes_sort();
+        self.restore_compute_nodes_selection(prev_id);
+    }
+
+    pub fn cycle_compute_nodes_sort_hostname(&mut self) {
+        let prev_id = self.selected_compute_node_id();
+        self.compute_nodes_sort = self.compute_nodes_sort.cycle_hostname();
+        self.apply_compute_nodes_sort();
+        self.restore_compute_nodes_selection(prev_id);
+    }
+
+    pub fn cycle_compute_nodes_sort_peak_cpu(&mut self) {
+        let prev_id = self.selected_compute_node_id();
+        self.compute_nodes_sort = self.compute_nodes_sort.cycle_peak_cpu();
+        self.apply_compute_nodes_sort();
+        self.restore_compute_nodes_selection(prev_id);
+    }
+
+    pub fn cycle_compute_nodes_sort_peak_memory(&mut self) {
+        let prev_id = self.selected_compute_node_id();
+        self.compute_nodes_sort = self.compute_nodes_sort.cycle_peak_memory();
+        self.apply_compute_nodes_sort();
+        self.restore_compute_nodes_selection(prev_id);
     }
 
     fn selected_job_id(&self) -> Option<i64> {
@@ -1499,7 +2009,19 @@ impl App {
             column: column.clone(),
             value: value.clone(),
         });
-        self.filter_active_view(target, &column, &value);
+        // The Jobs pane filters server-side (across the whole workflow); other
+        // views filter the loaded page client-side.
+        if target == FilterTarget::Details && self.detail_view == DetailViewType::Jobs {
+            self.jobs_offset = 0;
+            if let Err(err) = self.reload_jobs_page() {
+                self.set_status(StatusMessage::error(&format!(
+                    "Failed to filter jobs: {}",
+                    err
+                )));
+            }
+        } else {
+            self.filter_active_view(target, &column, &value);
+        }
         self.focus = return_focus;
     }
 
@@ -1517,6 +2039,7 @@ impl App {
 
         if target == FilterTarget::Workflows {
             self.workflows = filter_workflow_list(&self.workflows_all, &column, &value);
+            self.apply_workflows_sort();
             if !self.workflows.is_empty() {
                 self.workflows_state.select(Some(0));
             } else {
@@ -1617,6 +2140,7 @@ impl App {
                     })
                     .cloned()
                     .collect();
+                self.apply_compute_nodes_sort();
                 if !self.compute_nodes.is_empty() {
                     self.compute_nodes_state.select(Some(0));
                 } else {
@@ -1687,6 +2211,7 @@ impl App {
         }
         if target == FilterTarget::Workflows {
             self.workflows = self.workflows_all.clone();
+            self.apply_workflows_sort();
             if !self.workflows.is_empty() {
                 self.workflows_state.select(Some(0));
             } else {
@@ -1696,10 +2221,15 @@ impl App {
         }
         match self.detail_view {
             DetailViewType::Jobs => {
-                self.jobs = self.jobs_all.clone();
-                self.apply_jobs_sort();
-                if !self.jobs.is_empty() {
-                    self.jobs_state.select(Some(0));
+                // Re-fetch an unfiltered first page from the server (the Jobs
+                // filter is server-side, so the loaded page may be a strict
+                // subset that can't be widened client-side).
+                self.jobs_offset = 0;
+                if let Err(err) = self.reload_jobs_page() {
+                    self.set_status(StatusMessage::error(&format!(
+                        "Failed to reload jobs: {}",
+                        err
+                    )));
                 }
             }
             DetailViewType::Files => {
@@ -1723,6 +2253,7 @@ impl App {
             }
             DetailViewType::ComputeNodes => {
                 self.compute_nodes = self.compute_nodes_all.clone();
+                self.apply_compute_nodes_sort();
                 if !self.compute_nodes.is_empty() {
                     self.compute_nodes_state.select(Some(0));
                 }
@@ -1838,6 +2369,8 @@ impl App {
 
     pub fn toggle_show_all_users(&mut self) -> Result<()> {
         self.show_all_users = !self.show_all_users;
+        // The set of workflows changes, so restart at the first page.
+        self.workflows_offset = 0;
         if self.show_all_users {
             self.user_filter = None;
             self.set_status(StatusMessage::info("Showing all users"));
@@ -1917,7 +2450,7 @@ impl App {
         if should_refresh {
             if let Some(workflow_id) = self.selected_workflow_id {
                 // Refresh jobs for the current workflow
-                if let Ok(jobs) = self.client.list_jobs(workflow_id) {
+                if let Ok(jobs) = self.client.list_jobs(workflow_id, None, None) {
                     self.jobs_all = jobs.clone();
                     self.jobs_workflow_id = Some(workflow_id);
                     self.jobs = jobs;
@@ -1929,7 +2462,7 @@ impl App {
                     self.filter = None;
                 }
                 // Also refresh results
-                if let Ok(results) = self.client.list_results(workflow_id) {
+                if let Ok(results) = self.client.list_results(workflow_id, None, None) {
                     self.results_all = results.clone();
                     self.results = results;
                     self.apply_results_sort();
@@ -2824,7 +3357,7 @@ impl App {
     fn load_job_logs(&self, viewer: &mut LogViewer) -> Result<()> {
         // Try to find log files based on job results
         if let Some(workflow_id) = self.selected_workflow_id {
-            let results = self.client.list_results(workflow_id)?;
+            let results = self.client.list_results(workflow_id, None, None)?;
 
             // Find the most recent result for this job
             // Sort by (run_id, attempt_id) to get the latest attempt of the latest run
@@ -3391,6 +3924,38 @@ fn restore_selection(state: &mut TableState, prev: Option<usize>, len: usize) {
         Some(idx) if len > 0 => state.select(Some(idx.min(len - 1))),
         _ => state.select(None),
     }
+}
+
+/// Resolve a user-typed Jobs status filter to a single [`JobStatus`] for
+/// server-side filtering. Matches the status name the user sees in the table
+/// (the `{:?}` debug form, e.g. "Completed"), case-insensitively: an exact
+/// match wins, otherwise the first status whose name contains the value.
+/// Returns `None` when the value is non-empty but matches no status, so the
+/// caller can show zero rows rather than silently dropping the filter.
+fn resolve_job_status_filter(value: &str) -> Option<JobStatus> {
+    let v = value.trim().to_lowercase();
+    if v.is_empty() {
+        return None;
+    }
+    const ALL: [JobStatus; 11] = [
+        JobStatus::Uninitialized,
+        JobStatus::Blocked,
+        JobStatus::Ready,
+        JobStatus::Pending,
+        JobStatus::Running,
+        JobStatus::Completed,
+        JobStatus::Failed,
+        JobStatus::Canceled,
+        JobStatus::Terminated,
+        JobStatus::Disabled,
+        JobStatus::PendingFailed,
+    ];
+    if let Some(s) = ALL.iter().find(|s| format!("{:?}", s).to_lowercase() == v) {
+        return Some(*s);
+    }
+    ALL.iter()
+        .find(|s| format!("{:?}", s).to_lowercase().contains(&v))
+        .copied()
 }
 
 /// Apply a case-insensitive substring filter on the given column to a list of

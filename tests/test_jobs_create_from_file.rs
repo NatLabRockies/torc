@@ -55,6 +55,8 @@ fn test_create_jobs_from_file_basic(start_server: &ServerProcess) {
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 
@@ -126,6 +128,8 @@ echo 'job 3'
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 
@@ -214,6 +218,8 @@ fn test_create_jobs_from_file_with_existing_jobs(start_server: &ServerProcess) {
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 
@@ -289,6 +295,8 @@ fn test_create_jobs_from_file_name_conflicts(start_server: &ServerProcess) {
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 
@@ -465,6 +473,8 @@ ffmpeg -i input.mp4 -vcodec libx264 output.mp4"#;
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 

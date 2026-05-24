@@ -268,6 +268,68 @@ fn test_jobs_list_sorting(start_server: &ServerProcess) {
 }
 
 #[rstest]
+fn test_jobs_list_name_command_filter(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "test_name_filter_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    // create_test_job sets command = "echo 'Running <name>'".
+    let _ = create_test_job(config, workflow_id, "alpha_job");
+    let _ = create_test_job(config, workflow_id, "beta_job");
+    let _ = create_test_job(config, workflow_id, "gamma_job");
+
+    let list = |name: Option<&str>, command: Option<&str>| {
+        apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None, // status
+            None, // needs_file_id
+            None, // upstream_job_id
+            None, // offset
+            None, // limit
+            None, // sort_by
+            None, // reverse_sort
+            None, // include_relationships
+            None, // active_compute_node_id
+            None, // origin_is_set
+            name,
+            command,
+        )
+        .expect("list_jobs failed")
+    };
+
+    // Name substring matches a single job.
+    let alpha = list(Some("alpha"), None);
+    assert_eq!(alpha.total_count, 1);
+    assert_eq!(alpha.items.len(), 1);
+    assert_eq!(alpha.items[0].name, "alpha_job");
+
+    // Name substring shared by all jobs matches every job.
+    let all = list(Some("job"), None);
+    assert_eq!(all.total_count, 3);
+
+    // Command substring filter (command embeds the job name).
+    let beta = list(None, Some("Running beta"));
+    assert_eq!(beta.total_count, 1);
+    assert_eq!(beta.items[0].name, "beta_job");
+
+    // Case-insensitive for ASCII (SQLite LIKE default).
+    let upper = list(Some("GAMMA"), None);
+    assert_eq!(upper.total_count, 1);
+    assert_eq!(upper.items[0].name, "gamma_job");
+
+    // No match yields zero rows and zero total_count.
+    let none = list(Some("does_not_exist"), None);
+    assert_eq!(none.total_count, 0);
+    assert!(none.items.is_empty());
+
+    // Name and command together are ANDed.
+    let both = list(Some("alpha"), Some("Running beta"));
+    assert_eq!(both.total_count, 0);
+}
+
+#[rstest]
 fn test_jobs_get_command_json(start_server: &ServerProcess) {
     let config = &start_server.config;
 
@@ -1017,6 +1079,8 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs before deletion");
     assert_eq!(
@@ -1049,6 +1113,8 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs after deletion");
     assert_eq!(

@@ -512,6 +512,10 @@ impl HelpPopup {
             Self::key_line(left_right_arrows(), "Switch focus between panes"),
             Self::key_line(up_down_arrows(), "Navigate rows in tables"),
             Self::key_line("PgUp/PgDn", "Page through rows (10 at a time)"),
+            Self::key_line(
+                "] / [",
+                "Load next / previous page (1000 records, on demand)",
+            ),
             Self::key_line("g / G", "Jump to top / bottom of table"),
             Self::key_line("Enter", "Load details / Confirm action"),
             Self::key_line("f", "Filter current pane (Workflows or Details)"),
@@ -538,9 +542,14 @@ impl HelpPopup {
                     "C",
                     "Cancel workflow (Jobs tab: cancel job)",
                 ));
+                lines.push(Self::key_line("1 / 2 / 3", "Sort by ID / Name / User"));
             }
             HelpContext::DetailJobs => {
                 lines.extend(Self::section("Jobs Tab"));
+                lines.push(Self::key_line(
+                    "f",
+                    "Filter by Status/Name/Command (server-side, whole workflow)",
+                ));
                 lines.push(Self::key_line("Enter", "View job details"));
                 lines.push(Self::key_line("l", "View logs"));
                 lines.push(Self::key_line("C", "Cancel job"));
@@ -563,6 +572,18 @@ impl HelpPopup {
                     "Sort by Peak CPU % (cycles desc / asc / off)",
                 ));
             }
+            HelpContext::DetailComputeNodes => {
+                lines.extend(Self::section("Compute Nodes Tab"));
+                lines.push(Self::key_line("1 / 2", "Sort by ID / Hostname"));
+                lines.push(Self::key_line(
+                    "m",
+                    "Sort by Peak Memory (cycles desc / asc / off)",
+                ));
+                lines.push(Self::key_line(
+                    "p",
+                    "Sort by Peak CPU % (cycles desc / asc / off)",
+                ));
+            }
             HelpContext::DetailScheduledNodes => {
                 lines.extend(Self::section("Scheduled Nodes Tab"));
                 lines.push(Self::key_line("l", "View Slurm stdout/stderr logs"));
@@ -576,7 +597,6 @@ impl HelpPopup {
             HelpContext::DetailSummary
             | HelpContext::DetailFiles
             | HelpContext::DetailEvents
-            | HelpContext::DetailComputeNodes
             | HelpContext::DetailSlurmStats
             | HelpContext::DetailDag
             | HelpContext::Other => {

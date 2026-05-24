@@ -543,6 +543,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     println!("  Command: {}", job.command);
                     println!("  Workflow ID: {}", job.workflow_id);
                     println!("  Status: {}", status);
+                    println!("  Priority: {}", job.priority.unwrap_or(0));
                     println!(
                         "  Blocking job IDs: {}",
                         job.depends_on_job_ids
@@ -792,6 +793,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None,    // include_relationships
                 None,    // active_compute_node_id
                 None,    // origin_is_set
+                None,    // name
+                None,    // command
             ) {
                 Ok(response) => {
                     let job_count = response.total_count;
@@ -1243,6 +1246,8 @@ pub fn get_current_job_count(
         None,    // include_relationships
         None,    // active_compute_node_id
         None,    // origin_is_set
+        None,    // name
+        None,    // command
     )
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
@@ -1272,6 +1277,8 @@ pub fn get_existing_job_names(
             None, // include_relationships
             None, // active_compute_node_id
             None, // origin_is_set
+            None, // name
+            None, // command
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 

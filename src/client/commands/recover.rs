@@ -486,6 +486,8 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
         None,                                   // include_relationships
         None,                                   // active_compute_node_id
         None,                                   // origin_is_set
+        None,                                   // name
+        None,                                   // command
     )
     .map_err(|e| format!("Failed to list failed jobs: {}", e))?;
 
@@ -502,6 +504,8 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
         None,                                       // include_relationships
         None,                                       // active_compute_node_id
         None,                                       // origin_is_set
+        None,                                       // name
+        None,                                       // command
     )
     .map_err(|e| format!("Failed to list terminated jobs: {}", e))?;
 
@@ -658,6 +662,8 @@ fn count_pending_failed_jobs(config: &Configuration, workflow_id: i64) -> Result
         None,    // include_relationships
         None,    // active_compute_node_id
         None,    // origin_is_set
+        None,    // name
+        None,    // command
     )
     .map_err(|e| format!("Failed to list pending_failed jobs: {}", e))?;
 

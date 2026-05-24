@@ -2220,6 +2220,12 @@ pub struct JobsListQuery {
     /// suffices — no rows downloaded).
     #[param(nullable = true)]
     pub origin_is_set: Option<bool>,
+    /// Case-sensitive substring filter on the job name (SQL `LIKE %value%`).
+    #[param(nullable = true)]
+    pub name: Option<String>,
+    /// Case-sensitive substring filter on the job command (SQL `LIKE %value%`).
+    #[param(nullable = true)]
+    pub command: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2264,6 +2270,8 @@ pub async fn list_jobs(
             query.include_relationships,
             query.active_compute_node_id,
             query.origin_is_set,
+            query.name,
+            query.command,
             &context,
         )
         .await

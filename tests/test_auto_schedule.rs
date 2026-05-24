@@ -139,6 +139,8 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
         None,
         None,
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 
@@ -194,6 +196,8 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
         None,
         None,
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 
