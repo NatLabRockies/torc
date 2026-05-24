@@ -2738,6 +2738,14 @@ fn test_expand_rejects_parameters_file_with_inline_parameters() {
 
     let err = job.expand().expect_err("expected mutual-exclusion error");
     assert!(err.contains("parameters_file"), "got: {err}");
+
+    // Also rejected when combined with use_parameters (not just inline parameters).
+    let mut job = JobSpec::new("job_{i}".to_string(), "echo {i}".to_string());
+    job.parameters_file = Some("sweep.csv".to_string());
+    job.use_parameters = Some(vec!["i".to_string()]);
+
+    let err = job.expand().expect_err("expected mutual-exclusion error");
+    assert!(err.contains("use_parameters"), "got: {err}");
 }
 
 /// A workflow-level `parameters_file` is shared: jobs opt in with

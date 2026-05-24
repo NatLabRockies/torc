@@ -297,7 +297,8 @@ fn load_parameter_table_json(path: &str) -> Result<Vec<HashMap<String, Parameter
         let serde_json::Value::Object(map) = item else {
             return Err(format!(
                 "Element {} of parameters_file '{}' is not a JSON object",
-                idx, path
+                idx + 1,
+                path
             ));
         };
         let row = map
@@ -863,6 +864,19 @@ mod tests {
         let result = load_parameter_table(path.to_str().unwrap());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("array of objects"));
+    }
+
+    #[test]
+    fn test_load_parameter_table_json_non_object_element_is_one_based() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad_element.json");
+        let mut f = std::fs::File::create(&path).unwrap();
+        // Second element (1-based) is not an object.
+        write!(f, r#"[{{"model": "resnet"}}, 42]"#).unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("Element 2"), "got: {err}");
     }
 
     #[test]

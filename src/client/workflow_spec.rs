@@ -26,18 +26,20 @@ static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
 /// signalling the caller to emit a single un-expanded clone.
 ///
 /// The two sources are mutually exclusive: setting `parameters_file` alongside
-/// inline `parameters`/`parameter_mode` is an error. This guard also catches
-/// callers that invoke `expand()` directly, without going through the
-/// workflow-level [`validate_parameter_source`] check.
+/// inline `parameters`/`parameter_mode`/`use_parameters` is an error. This guard
+/// also catches callers that invoke `expand()` directly, without going through
+/// the workflow-level [`validate_parameter_source`] check.
 fn build_parameter_combinations(
     parameters: &Option<HashMap<String, String>>,
     parameter_mode: &Option<String>,
+    use_parameters: &Option<Vec<String>>,
     parameters_file: &Option<String>,
 ) -> Result<Option<Vec<HashMap<String, ParameterValue>>>, String> {
     if let Some(path) = parameters_file {
-        if parameters.is_some() || parameter_mode.is_some() {
+        if parameters.is_some() || parameter_mode.is_some() || use_parameters.is_some() {
             return Err(
-                "`parameters_file` cannot be combined with `parameters` or `parameter_mode`"
+                "`parameters_file` cannot be combined with `parameters`, `parameter_mode`, or \
+                 `use_parameters`"
                     .to_string(),
             );
         }
@@ -255,6 +257,7 @@ impl FileSpec {
         let combinations = match build_parameter_combinations(
             &self.parameters,
             &self.parameter_mode,
+            &self.use_parameters,
             &self.parameters_file,
         )? {
             Some(combos) => combos,
@@ -335,6 +338,7 @@ impl UserDataSpec {
         let combinations = match build_parameter_combinations(
             &self.parameters,
             &self.parameter_mode,
+            &self.use_parameters,
             &self.parameters_file,
         )? {
             Some(combos) => combos,
@@ -758,6 +762,7 @@ impl JobSpec {
         let combinations = match build_parameter_combinations(
             &self.parameters,
             &self.parameter_mode,
+            &self.use_parameters,
             &self.parameters_file,
         )? {
             Some(combos) => combos,
