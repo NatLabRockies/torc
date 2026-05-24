@@ -24,12 +24,23 @@ static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
 ///
 /// Returns `Ok(None)` when the spec is not parameterized (neither source set),
 /// signalling the caller to emit a single un-expanded clone.
+///
+/// The two sources are mutually exclusive: setting `parameters_file` alongside
+/// inline `parameters`/`parameter_mode` is an error. This guard also catches
+/// callers that invoke `expand()` directly, without going through the
+/// workflow-level [`validate_parameter_source`] check.
 fn build_parameter_combinations(
     parameters: &Option<HashMap<String, String>>,
     parameter_mode: &Option<String>,
     parameters_file: &Option<String>,
 ) -> Result<Option<Vec<HashMap<String, ParameterValue>>>, String> {
     if let Some(path) = parameters_file {
+        if parameters.is_some() || parameter_mode.is_some() {
+            return Err(
+                "`parameters_file` cannot be combined with `parameters` or `parameter_mode`"
+                    .to_string(),
+            );
+        }
         return Ok(Some(load_parameter_table(path)?));
     }
 

@@ -2726,6 +2726,20 @@ fn test_parameters_file_conflicts_with_parameters() {
     );
 }
 
+/// Calling `JobSpec::expand` directly (bypassing workflow-level validation) still
+/// rejects a spec that sets both a table source and inline parameters.
+#[test]
+fn test_expand_rejects_parameters_file_with_inline_parameters() {
+    use std::collections::HashMap;
+
+    let mut job = JobSpec::new("job_{i}".to_string(), "echo {i}".to_string());
+    job.parameters_file = Some("sweep.csv".to_string());
+    job.parameters = Some(HashMap::from([("i".to_string(), "1:3".to_string())]));
+
+    let err = job.expand().expect_err("expected mutual-exclusion error");
+    assert!(err.contains("parameters_file"), "got: {err}");
+}
+
 /// A workflow-level `parameters_file` is shared: jobs opt in with
 /// `use_parameters_file: true` and each expands over every row of the table.
 #[test]

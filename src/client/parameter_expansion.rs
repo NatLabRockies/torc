@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Represents a single parameter value (integer, float, or string)
 #[derive(Clone, Debug, PartialEq)]
@@ -220,8 +220,12 @@ pub fn load_parameter_table(path: &str) -> Result<Vec<HashMap<String, ParameterV
 
 /// Load parameter rows from a CSV file (header row supplies column names).
 fn load_parameter_table_csv(path: &str) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
+    // `flexible(true)` lets rows with the wrong field count parse so we can
+    // report a clear, row-numbered error below rather than the csv crate's
+    // generic "unequal lengths" message.
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .trim(csv::Trim::All)
         .from_path(path)
         .map_err(|e| format!("Failed to read parameters_file '{}': {}", path, e))?;
@@ -234,10 +238,37 @@ fn load_parameter_table_csv(path: &str) -> Result<Vec<HashMap<String, ParameterV
         return Err(format!("parameters_file '{}' has no columns", path));
     }
 
+    // Column names must be non-empty and unique so each row maps cleanly to a
+    // distinct parameter name.
+    let mut seen = HashSet::with_capacity(headers.len());
+    for header in headers.iter() {
+        if header.is_empty() {
+            return Err(format!(
+                "parameters_file '{}' has an empty column name in its header",
+                path
+            ));
+        }
+        if !seen.insert(header) {
+            return Err(format!(
+                "parameters_file '{}' has a duplicate column name '{}'",
+                path, header
+            ));
+        }
+    }
+
     let mut rows = Vec::new();
     for (idx, record) in reader.records().enumerate() {
         let record =
             record.map_err(|e| format!("Failed to read row {} of '{}': {}", idx + 1, path, e))?;
+        if record.len() != headers.len() {
+            return Err(format!(
+                "Row {} of '{}' has {} fields but the header has {} columns",
+                idx + 1,
+                path,
+                record.len(),
+                headers.len()
+            ));
+        }
         let mut row = HashMap::new();
         for (header, field) in headers.iter().zip(record.iter()) {
             row.insert(header.to_string(), infer_value(field));
@@ -757,6 +788,45 @@ mod tests {
         let result = load_parameter_table(path.to_str().unwrap());
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("line 2"));
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv_duplicate_header() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("dup.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,model\nresnet,vit\n").unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("duplicate column name"), "got: {err}");
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv_empty_header() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty_header.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,,lr\nresnet,x,0.1\n").unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("empty column name"), "got: {err}");
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv_row_length_mismatch() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ragged.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,lr,batch_size\nresnet,0.1\n").unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(
+            err.contains("Row 1") && err.contains("fields"),
+            "got: {err}"
+        );
     }
 
     #[test]
