@@ -640,6 +640,12 @@ where
                     {
                         app.cycle_results_sort_peak_cpu();
                     }
+                    KeyCode::Char('E')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_runtime();
+                    }
                     // Sort the Jobs table by column index 1=ID, 2=Name, 3=Status.
                     KeyCode::Char('1')
                         if app.focus == Focus::Details

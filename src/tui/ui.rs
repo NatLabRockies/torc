@@ -1024,6 +1024,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
 
     let peak_mem_header = format!("Peak Mem{}", app.results_sort.peak_memory_indicator());
     let peak_cpu_header = format!("Peak CPU %{}", app.results_sort.peak_cpu_indicator());
+    let runtime_header = format!("Runtime (m){}", app.results_sort.runtime_indicator());
     let header = Row::new(vec![
         "ID".to_string(),
         "Job ID".to_string(),
@@ -1031,6 +1032,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         "Attempt".to_string(),
         "Return".to_string(),
         "Status".to_string(),
+        runtime_header,
         peak_mem_header,
         peak_cpu_header,
     ])
@@ -1044,6 +1046,8 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         let attempt_id = result.attempt_id.unwrap_or(1).to_string();
         let return_code = result.return_code;
         let status = format!("{:?}", result.status);
+
+        let runtime = format!("{:.2}", result.exec_time_minutes);
 
         // Format peak memory (bytes to human readable)
         let peak_mem = result
@@ -1073,6 +1077,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Style::default().fg(row_color),
             )),
             Cell::from(Span::styled(status, Style::default().fg(row_color))),
+            Cell::from(runtime),
             Cell::from(peak_mem),
             Cell::from(peak_cpu),
         ])
@@ -1108,6 +1113,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(7),  // Attempt
             Constraint::Length(7),  // Return
             Constraint::Length(12), // Status
+            Constraint::Length(13), // Runtime (m) (+ optional sort indicator)
             Constraint::Length(11), // Peak Mem (+ optional sort indicator)
             Constraint::Length(13), // Peak CPU % (+ optional sort indicator)
         ],

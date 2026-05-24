@@ -405,10 +405,17 @@ mod unix_main {
         };
 
         let job_id_int: i64 = job_id.parse().unwrap_or(0);
+        // Record SLURM_NODEID and SLURM_TASK_PID alongside slurm_job_id so report
+        // tooling can rebuild log paths that match what was written above. The
+        // log filename uses these IDs, but compute_node.hostname/pid do not (hostname
+        // is the OS hostname, pid is the runner process — neither matches when
+        // SLURM_NODEID is something like "0" and SLURM_TASK_PID differs from PID).
         let scheduler = serde_json::json!({
             "scheduler_id": scheduler_id,
             "type": "slurm",
             "slurm_job_id": job_id_int,
+            "slurm_node_id": node_id,
+            "slurm_task_pid": task_pid,
         });
         let compute_node =
             create_compute_node(&config, args.workflow_id, &resources, &hostname, scheduler);

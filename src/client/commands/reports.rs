@@ -719,16 +719,28 @@ pub fn build_results_report(
                         {
                             slurm_job_id = Some(slurm_job_id_str.to_string());
 
-                            // Build slurm job runner log path
-                            // Use hostname as node_id and pid as task_pid for the log path
-                            let node_id = &compute_node.hostname;
-                            let task_pid = compute_node.pid as usize;
+                            // Prefer the SLURM identifiers stored in the scheduler JSON
+                            // (added by torc-slurm-job-runner so the path matches what
+                            // it wrote). Fall back to hostname/pid for compute nodes
+                            // created before those fields were recorded.
+                            let node_id_owned = scheduler_value
+                                .get("slurm_node_id")
+                                .and_then(|v| {
+                                    v.as_str()
+                                        .map(|s| s.to_string())
+                                        .or_else(|| v.as_i64().map(|n| n.to_string()))
+                                })
+                                .unwrap_or_else(|| compute_node.hostname.clone());
+                            let task_pid = scheduler_value
+                                .get("slurm_task_pid")
+                                .and_then(|v| v.as_u64().map(|n| n as usize))
+                                .unwrap_or(compute_node.pid as usize);
 
                             let log_path = get_slurm_job_runner_log_file(
                                 output_dir.to_path_buf(),
                                 wf_id,
                                 slurm_job_id_str,
-                                node_id,
+                                &node_id_owned,
                                 task_pid,
                             );
                             check_log_file_exists(&log_path, "slurm job runner", job_id);

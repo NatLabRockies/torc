@@ -277,6 +277,8 @@ pub enum ResultsSort {
     PeakMemoryAsc,
     PeakCpuDesc,
     PeakCpuAsc,
+    RuntimeDesc,
+    RuntimeAsc,
 }
 
 /// Sort state for the Jobs detail table. Number keys 1..3 cycle a single
@@ -356,6 +358,14 @@ impl ResultsSort {
         }
     }
 
+    pub fn cycle_runtime(self) -> Self {
+        match self {
+            Self::RuntimeDesc => Self::RuntimeAsc,
+            Self::RuntimeAsc => Self::None,
+            _ => Self::RuntimeDesc,
+        }
+    }
+
     /// Returns the arrow indicator for the Peak Memory column header.
     pub fn peak_memory_indicator(self) -> &'static str {
         match self {
@@ -369,6 +379,14 @@ impl ResultsSort {
         match self {
             Self::PeakCpuDesc => " ↓",
             Self::PeakCpuAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn runtime_indicator(self) -> &'static str {
+        match self {
+            Self::RuntimeDesc => " ↓",
+            Self::RuntimeAsc => " ↑",
             _ => "",
         }
     }
@@ -1123,6 +1141,14 @@ impl App {
                         (None, None) => std::cmp::Ordering::Equal,
                     });
             }
+            ResultsSort::RuntimeDesc => {
+                self.results
+                    .sort_by(|a, b| b.exec_time_minutes.total_cmp(&a.exec_time_minutes));
+            }
+            ResultsSort::RuntimeAsc => {
+                self.results
+                    .sort_by(|a, b| a.exec_time_minutes.total_cmp(&b.exec_time_minutes));
+            }
         }
     }
 
@@ -1136,6 +1162,13 @@ impl App {
     pub fn cycle_results_sort_peak_cpu(&mut self) {
         let prev_id = self.selected_result_id();
         self.results_sort = self.results_sort.cycle_peak_cpu();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_runtime(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_runtime();
         self.apply_results_sort();
         self.restore_results_selection(prev_id);
     }
