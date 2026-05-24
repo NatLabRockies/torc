@@ -1051,27 +1051,55 @@ impl JobRunner {
             // flowing but cuts request rate on long-running fully-loaded
             // workflows, where the runner would otherwise poll the server
             // every `job_completion_poll_interval` for hours.
-            let made_progress = completions > 0 || jobs_claimed;
-            if completions == 0 {
-                self.wakeup
-                    .wait_with_timeout(Duration::from_secs_f64(self.current_poll_interval));
+            //
+            // While offline-drain mode is active, hold the wait at the
+            // configured base regardless of activity: the loop is only
+            // reaping running children and calling `maybe_try_resume()`,
+            // and stretching iterations past `drain_ping_interval_secs`
+            // would delay server-recovery detection. Reset the stored
+            // interval too, so an eventual transition back online starts
+            // fresh rather than inheriting a stale long wait.
+            let pre_sleep_progress = completions > 0 || jobs_claimed;
+            if self.offline {
+                self.current_poll_interval = self.job_completion_poll_interval;
             }
-            let next = next_poll_interval(
-                self.current_poll_interval,
-                self.job_completion_poll_interval,
-                self.claim_backoff_max_secs,
-                made_progress,
-            );
-            if (next - self.current_poll_interval).abs() > f64::EPSILON {
-                debug!(
-                    "Adaptive backoff: poll interval {:.1}s -> {:.1}s (base {:.1}s, cap {:.1}s, made_progress={})",
+            // When progress already happened this iteration, sleep the
+            // base interval rather than a previously-backed-off value so
+            // we react to the next change promptly.
+            let wait_secs = if pre_sleep_progress {
+                self.job_completion_poll_interval
+            } else {
+                self.current_poll_interval
+            };
+            let notified = if completions == 0 {
+                self.wakeup
+                    .wait_with_timeout(Duration::from_secs_f64(wait_secs))
+            } else {
+                false
+            };
+            // SIGCHLD waking the loop early means a child likely exited
+            // mid-sleep. The next `check_job_status` will reap it, so
+            // treat the early wakeup as progress now to avoid spuriously
+            // bumping the backoff (and logging) for one extra iteration.
+            let made_progress = pre_sleep_progress || notified;
+            if !self.offline {
+                let next = next_poll_interval(
                     self.current_poll_interval,
-                    next,
                     self.job_completion_poll_interval,
                     self.claim_backoff_max_secs,
-                    made_progress
+                    made_progress,
                 );
-                self.current_poll_interval = next;
+                if (next - self.current_poll_interval).abs() > f64::EPSILON {
+                    debug!(
+                        "Adaptive backoff: poll interval {:.1}s -> {:.1}s (base {:.1}s, cap {:.1}s, made_progress={})",
+                        self.current_poll_interval,
+                        next,
+                        self.job_completion_poll_interval,
+                        self.claim_backoff_max_secs,
+                        made_progress
+                    );
+                    self.current_poll_interval = next;
+                }
             }
 
             if self.is_termination_requested() {
