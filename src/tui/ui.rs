@@ -62,6 +62,19 @@ fn filter_suffix(app: &App, target: FilterTarget) -> String {
     }
 }
 
+/// Title suffix showing the current page for a paginated list. `offset` is the
+/// loaded page's record offset and `has_more` indicates a possible next page.
+/// Empty for the first page when no further pages exist.
+fn page_suffix(offset: i64, has_more: bool) -> String {
+    if offset == 0 && !has_more {
+        return String::new();
+    }
+    let page = offset / super::app::TUI_PAGE_SIZE + 1;
+    let next = if has_more { " ]:next" } else { "" };
+    let prev = if offset > 0 { " [:prev" } else { "" };
+    format!(" │ pg {}{}{}", page, prev, next)
+}
+
 fn format_timestamp_ms(timestamp_ms: i64) -> String {
     DateTime::from_timestamp_millis(timestamp_ms)
         .map(|dt: DateTime<Utc>| {
@@ -414,9 +427,17 @@ fn draw_workflows_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
-    let header = Row::new(vec!["ID", "Name", "User", "Description"])
-        .style(header_style)
-        .bottom_margin(1);
+    let id_header = format!("ID{}", app.workflows_sort.id_indicator());
+    let name_header = format!("Name{}", app.workflows_sort.name_indicator());
+    let user_header = format!("User{}", app.workflows_sort.user_indicator());
+    let header = Row::new(vec![
+        id_header,
+        name_header,
+        user_header,
+        "Description".to_string(),
+    ])
+    .style(header_style)
+    .bottom_margin(1);
 
     let rows = app.workflows.iter().map(|workflow| {
         let id = workflow.id.map(|i| i.to_string()).unwrap_or_default();
@@ -436,12 +457,14 @@ fn draw_workflows_table(f: &mut Frame, area: Rect, app: &mut App) {
     });
 
     let filter = filter_suffix(app, FilterTarget::Workflows);
+    let page = page_suffix(app.workflows_offset, app.workflows_has_more);
     let (title, border_style) = if app.focus == Focus::Workflows {
         (
             Line::from(vec![
                 Span::styled("◆ ", Style::default().fg(Color::Green)),
                 Span::styled("Workflows", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     " │ Enter: load details",
                     Style::default().fg(Color::DarkGray),
@@ -455,6 +478,7 @@ fn draw_workflows_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("◇ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Workflows", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -798,12 +822,14 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
     });
 
     let filter = filter_suffix(app, FilterTarget::Details);
+    let page = page_suffix(app.jobs_offset, app.jobs_has_more);
     let (title, border_style) = if app.focus == Focus::Details {
         (
             Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(Color::Green)),
                 Span::styled("Jobs", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     " │ Enter: details  l: logs  C: cancel  t: terminate  y: retry",
                     Style::default().fg(Color::DarkGray),
@@ -817,6 +843,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("▶ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Jobs", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -1084,12 +1111,14 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
     });
 
     let filter = filter_suffix(app, FilterTarget::Details);
+    let page = page_suffix(app.results_offset, app.results_has_more);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
                 Span::styled("✓ ", Style::default().fg(Color::Green)),
                 Span::styled("Results", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -1099,6 +1128,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("✓ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Results", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::DarkGray),
         )
@@ -1140,15 +1170,25 @@ fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let id_header = format!("ID{}", app.compute_nodes_sort.id_indicator());
+    let hostname_header = format!("Hostname{}", app.compute_nodes_sort.hostname_indicator());
+    let cpu_header = format!(
+        "CPU peak/avg{}",
+        app.compute_nodes_sort.peak_cpu_indicator()
+    );
+    let mem_header = format!(
+        "Mem peak/avg{}",
+        app.compute_nodes_sort.peak_memory_indicator()
+    );
     let header = Row::new(vec![
-        "ID",
-        "Hostname",
-        "CPUs",
-        "Memory",
-        "GPUs",
-        "Active",
-        "CPU peak/avg",
-        "Mem peak/avg",
+        id_header,
+        hostname_header,
+        "CPUs".to_string(),
+        "Memory".to_string(),
+        "GPUs".to_string(),
+        "Active".to_string(),
+        cpu_header,
+        mem_header,
     ])
     .style(header_style)
     .bottom_margin(1);
@@ -1182,12 +1222,14 @@ fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
     });
 
     let filter = filter_suffix(app, FilterTarget::Details);
+    let page = page_suffix(app.compute_nodes_offset, app.compute_nodes_has_more);
     let (title, border_style) = if is_focused {
         (
             Line::from(vec![
                 Span::styled("▣ ", Style::default().fg(Color::Green)),
                 Span::styled("Compute Nodes", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::Green),
         )
@@ -1197,6 +1239,7 @@ fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("▣ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Compute Nodes", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::DarkGray),
         )

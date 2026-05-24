@@ -1383,6 +1383,26 @@ paths:
           type:
           - boolean
           - 'null'
+      - name: name
+        in: query
+        description: |-
+          Substring filter on the job name (SQL `LIKE %value%`, case-insensitive
+          for ASCII).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: command
+        in: query
+        description: |-
+          Substring filter on the job command (SQL `LIKE %value%`, case-insensitive
+          for ASCII).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: Successful response

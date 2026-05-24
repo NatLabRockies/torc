@@ -1563,6 +1563,8 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
         Some(true), // include_relationships - needed for tests that check dependencies/files
         None,       // active_compute_node_id
         None,       // origin_is_set
+        None,       // name
+        None,       // command
     )
     .expect("Failed to list jobs");
 
@@ -1657,6 +1659,8 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
         Some(true), // include_relationships - needed for tests that check dependencies/files
         None,       // active_compute_node_id
         None,       // origin_is_set
+        None,       // name
+        None,       // command
     )
     .expect("Failed to list jobs");
 
@@ -1744,6 +1748,8 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
         Some(true), // include_relationships - needed for tests that check dependencies/files
         None,       // active_compute_node_id
         None,       // origin_is_set
+        None,       // name
+        None,       // command
     )
     .expect("Failed to list jobs");
 
@@ -1834,6 +1840,8 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
         Some(true), // include_relationships - needed for tests that check dependencies/files
         None,       // active_compute_node_id
         None,       // origin_is_set
+        None,       // name
+        None,       // command
     )
     .expect("Failed to list jobs");
 
@@ -3914,6 +3922,8 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
             None,
             None, // active_compute_node_id
             None, // origin_is_set
+            None, // name
+            None, // command
         )
         .expect("Failed to list jobs");
 
@@ -4081,6 +4091,8 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         Some(true), // include_relationships - this is key!
         None,       // active_compute_node_id
         None,       // origin_is_set
+        None,       // name
+        None,       // command
     )
     .expect("Failed to list jobs")
     .items;
@@ -4249,6 +4261,8 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         Some(true), // include_relationships
         None,       // active_compute_node_id
         None,       // origin_is_set
+        None,       // name
+        None,       // command
     )
     .expect("Failed to list jobs")
     .items;

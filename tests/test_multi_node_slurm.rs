@@ -307,6 +307,8 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         None, // include_relationships
         None, // active_compute_node_id
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs")
     .items;

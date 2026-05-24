@@ -74,12 +74,27 @@ use crate::models::JobStatus;
 use serde_json;
 use tabled::Tabled;
 
+/// Render an optional boolean status flag as a compact "yes"/"no" string.
+fn yes_no(value: Option<bool>) -> String {
+    if value.unwrap_or(false) {
+        "yes".to_string()
+    } else {
+        "no".to_string()
+    }
+}
+
 #[derive(Tabled)]
 struct WorkflowTableRowNoUser {
     #[tabled(rename = "ID")]
     id: i64,
     #[tabled(rename = "Name")]
     name: String,
+    #[tabled(rename = "Run")]
+    run_id: String,
+    #[tabled(rename = "Canceled")]
+    canceled: String,
+    #[tabled(rename = "Archived")]
+    archived: String,
     #[tabled(rename = "Description")]
     description: String,
     #[tabled(rename = "Project")]
@@ -98,6 +113,12 @@ struct WorkflowTableRow {
     user: String,
     #[tabled(rename = "Name")]
     name: String,
+    #[tabled(rename = "Run")]
+    run_id: String,
+    #[tabled(rename = "Canceled")]
+    canceled: String,
+    #[tabled(rename = "Archived")]
+    archived: String,
     #[tabled(rename = "Description")]
     description: String,
     #[tabled(rename = "Project")]
@@ -2280,6 +2301,8 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             None,    // include_relationships
             None,    // active_compute_node_id
             None,    // origin_is_set
+            None,    // name
+            None,    // command
         ) {
             Ok(response) => response.total_count,
             Err(e) => {
@@ -2494,6 +2517,11 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                 if let Some(timestamp) = &workflow.timestamp {
                     println!("  Timestamp: {}", timestamp);
                 }
+                if let Some(run_id) = workflow.run_id {
+                    println!("  Run ID: {}", run_id);
+                }
+                println!("  Canceled: {}", workflow.is_canceled.unwrap_or(false));
+                println!("  Archived: {}", workflow.is_archived.unwrap_or(false));
                 if let Some(defaults_map) = &workflow.slurm_defaults {
                     println!("  Slurm Defaults:");
                     for (key, value) in defaults_map {
@@ -2508,6 +2536,20 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                     && let Ok(serde_json::Value::Object(obj)) = serde_json::to_value(config)
                 {
                     println!("  Resource Monitor:");
+                    for (key, value) in &obj {
+                        let value_str = match value {
+                            serde_json::Value::String(s) => s.clone(),
+                            serde_json::Value::Bool(b) => b.to_string(),
+                            serde_json::Value::Number(n) => n.to_string(),
+                            _ => value.to_string(),
+                        };
+                        println!("    {}: {}", key, value_str);
+                    }
+                }
+                if let Some(exec_config) = &workflow.execution_config
+                    && let Ok(serde_json::Value::Object(obj)) = serde_json::to_value(exec_config)
+                {
+                    println!("  Execution Config:");
                     for (key, value) in &obj {
                         let value_str = match value {
                             serde_json::Value::String(s) => s.clone(),
@@ -2593,6 +2635,12 @@ fn handle_list(
                         id: workflow.id.unwrap_or(-1),
                         user: workflow.user.clone(),
                         name: workflow.name.clone(),
+                        run_id: workflow
+                            .run_id
+                            .map(|r| r.to_string())
+                            .unwrap_or_else(|| "-".to_string()),
+                        canceled: yes_no(workflow.is_canceled),
+                        archived: yes_no(workflow.is_archived),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
                         project: workflow.project.as_deref().unwrap_or("").to_string(),
                         metadata: workflow
@@ -2611,6 +2659,12 @@ fn handle_list(
                     .map(|workflow| WorkflowTableRowNoUser {
                         id: workflow.id.unwrap_or(-1),
                         name: workflow.name.clone(),
+                        run_id: workflow
+                            .run_id
+                            .map(|r| r.to_string())
+                            .unwrap_or_else(|| "-".to_string()),
+                        canceled: yes_no(workflow.is_canceled),
+                        archived: yes_no(workflow.is_archived),
                         description: workflow.description.as_deref().unwrap_or("").to_string(),
                         project: workflow.project.as_deref().unwrap_or("").to_string(),
                         metadata: workflow

@@ -347,6 +347,15 @@ cascade-delete the entire database contents.
 - Generated Rust surfaces should not be hand-edited. Keep deterministic post-processing under the
   Rust-owned OpenAPI workflow under `api/sync_openapi.sh`.
 - Implement business logic in non-generated modules (e.g., `server/src/bin/server/api/*.rs`)
+- Client regeneration (`sync_openapi.sh clients`, `regenerate_clients.sh`,
+  `regenerate_rust_client.sh`, `check_client_codegen_parity.sh`) runs the `openapi-generator-cli`
+  container. The scripts honor `CONTAINER_EXEC` (default `docker`). **If Docker is unavailable, use
+  Podman:** prefix the command with `CONTAINER_EXEC=podman`, e.g.
+  `cd api && CONTAINER_EXEC=podman bash sync_openapi.sh clients`. Podman is CLI-compatible with the
+  scripts' `run -v … <image> generate …` invocation and pulls the right arch from the pinned
+  multi-arch digest. On macOS a Linux VM must be running first
+  (`podman machine init && podman machine start`); host paths under `$HOME` are shared by default.
+  The `emit`/`check`/`promote` subcommands are pure `cargo` and need no container.
 
 ### Documentation Build
 

@@ -138,6 +138,8 @@ impl Paginatable for JobModel {
             params.include_relationships,
             params.active_compute_node_id,
             params.origin_is_set,
+            None, // name
+            None, // command
         )?;
 
         Ok(PaginatedResponse {

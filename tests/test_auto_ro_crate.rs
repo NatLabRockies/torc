@@ -715,6 +715,8 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
         None,
         None,
         None, // origin_is_set
+        None, // name
+        None, // command
     )
     .expect("Failed to list jobs");
 

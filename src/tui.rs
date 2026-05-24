@@ -515,6 +515,24 @@ where
                     }
                     KeyCode::Tab => app.next_detail_view(),
                     KeyCode::BackTab => app.previous_detail_view(),
+                    // Page through the active list (Workflows / Jobs / Results /
+                    // Compute Nodes) one TUI_PAGE_SIZE page at a time, on demand.
+                    KeyCode::Char(']') => {
+                        if let Err(err) = app.next_page() {
+                            app.set_status(components::StatusMessage::error(&format!(
+                                "Failed to load next page: {}",
+                                err
+                            )));
+                        }
+                    }
+                    KeyCode::Char('[') => {
+                        if let Err(err) = app.prev_page() {
+                            app.set_status(components::StatusMessage::error(&format!(
+                                "Failed to load previous page: {}",
+                                err
+                            )));
+                        }
+                    }
                     KeyCode::Char('r') => {
                         app.refresh_workflows()?;
                         if app.selected_workflow_id.is_some() {
@@ -639,6 +657,42 @@ where
                             && app.detail_view == DetailViewType::Results =>
                     {
                         app.cycle_results_sort_peak_cpu();
+                    }
+                    // Sort the Compute Nodes table: 1=ID, 2=Hostname, m=Peak
+                    // Memory, p=Peak CPU. Each press cycles None → Desc → Asc.
+                    KeyCode::Char('1')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::ComputeNodes =>
+                    {
+                        app.cycle_compute_nodes_sort_id();
+                    }
+                    KeyCode::Char('2')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::ComputeNodes =>
+                    {
+                        app.cycle_compute_nodes_sort_hostname();
+                    }
+                    KeyCode::Char('m')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::ComputeNodes =>
+                    {
+                        app.cycle_compute_nodes_sort_peak_memory();
+                    }
+                    KeyCode::Char('p')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::ComputeNodes =>
+                    {
+                        app.cycle_compute_nodes_sort_peak_cpu();
+                    }
+                    // Sort the Workflows list: 1=ID, 2=Name, 3=User.
+                    KeyCode::Char('1') if app.focus == Focus::Workflows => {
+                        app.cycle_workflows_sort_id();
+                    }
+                    KeyCode::Char('2') if app.focus == Focus::Workflows => {
+                        app.cycle_workflows_sort_name();
+                    }
+                    KeyCode::Char('3') if app.focus == Focus::Workflows => {
+                        app.cycle_workflows_sort_user();
                     }
                     KeyCode::Char('E')
                         if app.focus == Focus::Details
