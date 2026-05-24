@@ -2546,8 +2546,8 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                         println!("    {}: {}", key, value_str);
                     }
                 }
-                if let Some(config) = &workflow.execution_config
-                    && let Ok(serde_json::Value::Object(obj)) = serde_json::to_value(config)
+                if let Some(exec_config) = &workflow.execution_config
+                    && let Ok(serde_json::Value::Object(obj)) = serde_json::to_value(exec_config)
                 {
                     println!("  Execution Config:");
                     for (key, value) in &obj {

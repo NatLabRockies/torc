@@ -74,7 +74,7 @@ impl TorcClient {
         &self,
         offset: Option<i64>,
         limit: Option<i64>,
-    ) -> Result<Vec<WorkflowModel>> {
+    ) -> Result<(Vec<WorkflowModel>, bool)> {
         let response = apis::workflows_api::list_workflows(
             &self.config,
             offset, // offset
@@ -88,7 +88,7 @@ impl TorcClient {
         )
         .context("Failed to list workflows")?;
 
-        Ok(response.items)
+        Ok((response.items, response.has_more))
     }
 
     pub fn list_workflows_for_user(
@@ -96,7 +96,7 @@ impl TorcClient {
         user: &str,
         offset: Option<i64>,
         limit: Option<i64>,
-    ) -> Result<Vec<WorkflowModel>> {
+    ) -> Result<(Vec<WorkflowModel>, bool)> {
         let response = apis::workflows_api::list_workflows(
             &self.config,
             offset,     // offset
@@ -110,7 +110,7 @@ impl TorcClient {
         )
         .context("Failed to list workflows")?;
 
-        Ok(response.items)
+        Ok((response.items, response.has_more))
     }
 
     pub fn get_workflow(&self, workflow_id: i64) -> Result<WorkflowModel> {
@@ -129,13 +129,17 @@ impl TorcClient {
         offset: Option<i64>,
         limit: Option<i64>,
     ) -> Result<Vec<JobModel>> {
-        self.list_jobs_filtered(workflow_id, offset, limit, None, None, None)
+        // Callers of this unfiltered variant load the full list (no paging), so
+        // the server's has_more is not needed here.
+        Ok(self
+            .list_jobs_filtered(workflow_id, offset, limit, None, None, None)?
+            .0)
     }
 
     /// List jobs with server-side filters applied. `status` is an exact match;
     /// `name` and `command` are substring (`LIKE %value%`) matches. Used by the
     /// TUI Jobs pane so filtering spans the whole workflow, not just the loaded
-    /// page.
+    /// page. Returns the page items plus the server's `has_more` flag.
     pub fn list_jobs_filtered(
         &self,
         workflow_id: i64,
@@ -144,7 +148,7 @@ impl TorcClient {
         status: Option<JobStatus>,
         name: Option<&str>,
         command: Option<&str>,
-    ) -> Result<Vec<JobModel>> {
+    ) -> Result<(Vec<JobModel>, bool)> {
         let response = apis::jobs_api::list_jobs(
             &self.config,
             workflow_id,
@@ -163,7 +167,7 @@ impl TorcClient {
         )
         .context("Failed to list jobs")?;
 
-        Ok(response.items)
+        Ok((response.items, response.has_more))
     }
 
     pub fn list_files(&self, workflow_id: i64) -> Result<Vec<FileModel>> {
@@ -184,12 +188,14 @@ impl TorcClient {
         Ok(response.items)
     }
 
+    /// Returns the page items plus the server's `has_more` flag. Callers that
+    /// load the full list (offset/limit `None`) can ignore the flag.
     pub fn list_results(
         &self,
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
-    ) -> Result<Vec<ResultModel>> {
+    ) -> Result<(Vec<ResultModel>, bool)> {
         let response = apis::results_api::list_results(
             &self.config,
             workflow_id,
@@ -206,7 +212,7 @@ impl TorcClient {
         )
         .context("Failed to list results")?;
 
-        Ok(response.items)
+        Ok((response.items, response.has_more))
     }
 
     pub fn list_job_dependencies(&self, workflow_id: i64) -> Result<Vec<JobDependencyModel>> {
@@ -263,7 +269,7 @@ impl TorcClient {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
-    ) -> Result<Vec<ComputeNodeModel>> {
+    ) -> Result<(Vec<ComputeNodeModel>, bool)> {
         let response = apis::compute_nodes_api::list_compute_nodes(
             &self.config,
             workflow_id,
@@ -277,7 +283,7 @@ impl TorcClient {
         )
         .context("Failed to list compute nodes")?;
 
-        Ok(response.items)
+        Ok((response.items, response.has_more))
     }
 
     // === Workflow Actions ===

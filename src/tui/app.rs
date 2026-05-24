@@ -774,12 +774,13 @@ impl App {
 
         let offset = Some(self.workflows_offset);
         let limit = Some(TUI_PAGE_SIZE);
-        self.workflows_all = if let Some(ref user) = self.user_filter {
+        let has_more;
+        (self.workflows_all, has_more) = if let Some(ref user) = self.user_filter {
             self.client.list_workflows_for_user(user, offset, limit)?
         } else {
             self.client.list_workflows(offset, limit)?
         };
-        self.workflows_has_more = self.workflows_all.len() as i64 == TUI_PAGE_SIZE;
+        self.workflows_has_more = has_more;
 
         // Re-apply any active workflow filter against the freshly loaded data.
         if self.filter_target == FilterTarget::Workflows
@@ -1144,12 +1145,11 @@ impl App {
                         self.start_sse_connection(workflow_id);
                     }
                     DetailViewType::Results => {
-                        self.results_all = self.client.list_results(
+                        (self.results_all, self.results_has_more) = self.client.list_results(
                             workflow_id,
                             Some(self.results_offset),
                             Some(TUI_PAGE_SIZE),
                         )?;
-                        self.results_has_more = self.results_all.len() as i64 == TUI_PAGE_SIZE;
                         // results_all now holds only one page; invalidate the
                         // full-list cache so the Slurm Stats tab refetches the
                         // complete set for its CPU%/runtime computations.
@@ -1161,13 +1161,12 @@ impl App {
                         }
                     }
                     DetailViewType::ComputeNodes => {
-                        self.compute_nodes_all = self.client.list_compute_nodes(
-                            workflow_id,
-                            Some(self.compute_nodes_offset),
-                            Some(TUI_PAGE_SIZE),
-                        )?;
-                        self.compute_nodes_has_more =
-                            self.compute_nodes_all.len() as i64 == TUI_PAGE_SIZE;
+                        (self.compute_nodes_all, self.compute_nodes_has_more) =
+                            self.client.list_compute_nodes(
+                                workflow_id,
+                                Some(self.compute_nodes_offset),
+                                Some(TUI_PAGE_SIZE),
+                            )?;
                         self.compute_nodes = self.compute_nodes_all.clone();
                         self.apply_compute_nodes_sort();
                         if !self.compute_nodes.is_empty() {
@@ -1191,7 +1190,7 @@ impl App {
                         // Load results for CPU% computation if not already loaded
                         // for this workflow
                         if self.results_workflow_id != Some(workflow_id)
-                            && let Ok(r) = self.client.list_results(workflow_id, None, None)
+                            && let Ok((r, _)) = self.client.list_results(workflow_id, None, None)
                         {
                             self.results_all = r;
                             self.results = self.results_all.clone();
@@ -1676,25 +1675,52 @@ impl App {
     }
 
     /// Resolve the Jobs-pane filter (`self.filter`) into server-side query
-    /// arguments. Returns `(status, name, command, impossible)`. `impossible`
-    /// is true when a Status filter value matches no known status, in which
-    /// case the caller should show zero rows without hitting the server.
-    /// Returns all-`None` when no Jobs filter is active.
-    fn jobs_server_filter(&self) -> (Option<JobStatus>, Option<String>, Option<String>, bool) {
+    /// arguments. Returns `(status, name, command, impossible, message)`.
+    /// `impossible` is true when a Status filter value cannot be resolved to a
+    /// single status (unknown or ambiguous), in which case the caller should
+    /// show zero rows without hitting the server; `message`, when present,
+    /// explains why so the caller can surface it. Returns all-`None`/empty when
+    /// no Jobs filter is active.
+    fn jobs_server_filter(
+        &self,
+    ) -> (
+        Option<JobStatus>,
+        Option<String>,
+        Option<String>,
+        bool,
+        Option<String>,
+    ) {
         if self.filter_target != FilterTarget::Details {
-            return (None, None, None, false);
+            return (None, None, None, false, None);
         }
         let Some(filter) = self.filter.as_ref() else {
-            return (None, None, None, false);
+            return (None, None, None, false, None);
         };
         match filter.column.as_str() {
             "Status" => match resolve_job_status_filter(&filter.value) {
-                Some(s) => (Some(s), None, None, false),
-                None => (None, None, None, true),
+                StatusFilterResolution::Matched(s) => (Some(s), None, None, false, None),
+                StatusFilterResolution::Unknown => (
+                    None,
+                    None,
+                    None,
+                    true,
+                    Some(format!("No job status matches \"{}\"", filter.value)),
+                ),
+                StatusFilterResolution::Ambiguous(names) => (
+                    None,
+                    None,
+                    None,
+                    true,
+                    Some(format!(
+                        "\"{}\" is ambiguous; matches {}. Type a full status name.",
+                        filter.value,
+                        names.join(", ")
+                    )),
+                ),
             },
-            "Name" => (None, Some(filter.value.clone()), None, false),
-            "Command" => (None, None, Some(filter.value.clone()), false),
-            _ => (None, None, None, false),
+            "Name" => (None, Some(filter.value.clone()), None, false, None),
+            "Command" => (None, None, Some(filter.value.clone()), false, None),
+            _ => (None, None, None, false, None),
         }
     }
 
@@ -1705,7 +1731,7 @@ impl App {
         let Some(workflow_id) = self.selected_workflow_id else {
             return Ok(());
         };
-        let (status, name, command, impossible) = self.jobs_server_filter();
+        let (status, name, command, impossible, message) = self.jobs_server_filter();
 
         // jobs_all now holds at most one (possibly filtered) page; invalidate
         // the full-list cache so Summary/Dag refetch the complete set.
@@ -1716,10 +1742,13 @@ impl App {
             self.jobs = Vec::new();
             self.jobs_has_more = false;
             self.jobs_state.select(None);
+            if let Some(msg) = message {
+                self.set_status(StatusMessage::error(&msg));
+            }
             return Ok(());
         }
 
-        self.jobs_all = self.client.list_jobs_filtered(
+        (self.jobs_all, self.jobs_has_more) = self.client.list_jobs_filtered(
             workflow_id,
             Some(self.jobs_offset),
             Some(TUI_PAGE_SIZE),
@@ -1727,7 +1756,6 @@ impl App {
             name.as_deref(),
             command.as_deref(),
         )?;
-        self.jobs_has_more = self.jobs_all.len() as i64 == TUI_PAGE_SIZE;
         self.jobs = self.jobs_all.clone();
         self.apply_jobs_sort();
         if self.jobs.is_empty() {
@@ -2034,6 +2062,18 @@ impl App {
             if let Err(err) = self.reload_jobs_page() {
                 self.set_status(StatusMessage::error(&format!(
                     "Failed to filter jobs: {}",
+                    err
+                )));
+            }
+        } else if target == FilterTarget::Workflows {
+            // Workflows filtering narrows the loaded page client-side, so
+            // restart from page 1 first; otherwise filtering while on, say,
+            // page 3 would search only that page. refresh_workflows re-applies
+            // the active filter (now set above) to the freshly loaded page.
+            self.workflows_offset = 0;
+            if let Err(err) = self.refresh_workflows() {
+                self.set_status(StatusMessage::error(&format!(
+                    "Failed to filter workflows: {}",
                     err
                 )));
             }
@@ -2480,7 +2520,7 @@ impl App {
                     self.filter = None;
                 }
                 // Also refresh results
-                if let Ok(results) = self.client.list_results(workflow_id, None, None) {
+                if let Ok((results, _)) = self.client.list_results(workflow_id, None, None) {
                     self.results_all = results.clone();
                     self.results = results;
                     self.apply_results_sort();
@@ -3375,7 +3415,7 @@ impl App {
     fn load_job_logs(&self, viewer: &mut LogViewer) -> Result<()> {
         // Try to find log files based on job results
         if let Some(workflow_id) = self.selected_workflow_id {
-            let results = self.client.list_results(workflow_id, None, None)?;
+            let (results, _) = self.client.list_results(workflow_id, None, None)?;
 
             // Find the most recent result for this job
             // Sort by (run_id, attempt_id) to get the latest attempt of the latest run
@@ -3944,16 +3984,30 @@ fn restore_selection(state: &mut TableState, prev: Option<usize>, len: usize) {
     }
 }
 
+/// Outcome of resolving a user-typed Jobs status filter against the known
+/// statuses.
+enum StatusFilterResolution {
+    /// The value resolved to exactly one status (exact match or unique
+    /// substring).
+    Matched(JobStatus),
+    /// The value matched no status name.
+    Unknown,
+    /// The value is a substring of more than one status name; we refuse to
+    /// guess. Holds the matching status names for a helpful message.
+    Ambiguous(Vec<String>),
+}
+
 /// Resolve a user-typed Jobs status filter to a single [`JobStatus`] for
 /// server-side filtering. Matches the status name the user sees in the table
 /// (the `{:?}` debug form, e.g. "Completed"), case-insensitively: an exact
-/// match wins, otherwise the first status whose name contains the value.
-/// Returns `None` when the value is non-empty but matches no status, so the
-/// caller can show zero rows rather than silently dropping the filter.
-fn resolve_job_status_filter(value: &str) -> Option<JobStatus> {
+/// match wins; otherwise a substring is accepted only when it matches exactly
+/// one status. An empty value is treated as `Unknown`. Substrings that match
+/// several statuses (e.g. "ed" → Completed/Failed/…) return `Ambiguous` so the
+/// caller can surface the ambiguity instead of silently picking one.
+fn resolve_job_status_filter(value: &str) -> StatusFilterResolution {
     let v = value.trim().to_lowercase();
     if v.is_empty() {
-        return None;
+        return StatusFilterResolution::Unknown;
     }
     const ALL: [JobStatus; 11] = [
         JobStatus::Uninitialized,
@@ -3969,11 +4023,20 @@ fn resolve_job_status_filter(value: &str) -> Option<JobStatus> {
         JobStatus::PendingFailed,
     ];
     if let Some(s) = ALL.iter().find(|s| format!("{:?}", s).to_lowercase() == v) {
-        return Some(*s);
+        return StatusFilterResolution::Matched(*s);
     }
-    ALL.iter()
-        .find(|s| format!("{:?}", s).to_lowercase().contains(&v))
+    let matches: Vec<JobStatus> = ALL
+        .iter()
+        .filter(|s| format!("{:?}", s).to_lowercase().contains(&v))
         .copied()
+        .collect();
+    match matches.as_slice() {
+        [] => StatusFilterResolution::Unknown,
+        [s] => StatusFilterResolution::Matched(*s),
+        many => {
+            StatusFilterResolution::Ambiguous(many.iter().map(|s| format!("{:?}", s)).collect())
+        }
+    }
 }
 
 /// Apply a case-insensitive substring filter on the given column to a list of
