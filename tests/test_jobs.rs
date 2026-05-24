@@ -482,7 +482,7 @@ fn test_jobs_delete_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run jobs delete command");
 
-    // Verify JSON structure shows the removed job in "jobs" array
+    // Verify JSON structure shows the removed job in "items" array
     assert!(json_output.get("items").is_some());
     let jobs = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(jobs.len(), 1, "Should have 1 deleted job");
@@ -1007,7 +1007,7 @@ fn test_jobs_delete_multiple(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run jobs delete with multiple IDs");
 
-    // Verify JSON structure shows deleted jobs in "jobs" field
+    // Verify JSON structure shows deleted jobs in "items" field
     assert!(json_output.get("items").is_some());
     let jobs = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(jobs.len(), 3, "Should have deleted 3 jobs");

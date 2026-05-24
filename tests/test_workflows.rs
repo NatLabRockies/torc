@@ -1198,7 +1198,7 @@ fn test_workflow_list_excludes_archived_by_default(start_server: &ServerProcess)
 
     // Extract workflow IDs from response
     let workflows = list_output.as_array().unwrap_or_else(|| {
-        // Handle object format with "workflows" field
+        // Handle object format with "items" field
         list_output
             .get("items")
             .and_then(|w| w.as_array())
@@ -1249,7 +1249,7 @@ fn test_workflow_list_archived_only(start_server: &ServerProcess) {
 
     // Extract workflow IDs from response
     let workflows = list_output.as_array().unwrap_or_else(|| {
-        // Handle object format with "workflows" field
+        // Handle object format with "items" field
         list_output
             .get("items")
             .and_then(|w| w.as_array())

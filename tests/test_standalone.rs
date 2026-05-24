@@ -69,7 +69,7 @@ fn standalone_persists_workflow_across_invocations() {
     let stdout = String::from_utf8_lossy(&second.stdout).to_string();
     let parsed: serde_json::Value = serde_json::from_str(&stdout)
         .unwrap_or_else(|e| panic!("workflows list JSON parse failed: {}\n---\n{}", e, stdout));
-    // `list_workflows` returns `{"workflows": [...]}`.
+    // `list_workflows` returns `{"items": [...]}`.
     let items = parsed
         .get("items")
         .and_then(|v| v.as_array())
