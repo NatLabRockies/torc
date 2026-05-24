@@ -161,7 +161,7 @@ torc run $WORKFLOW_ID
 After `generate_config` completes, check the updated user_data:
 
 ```bash
-torc user-data list $WORKFLOW_ID -f json | jq '.[] | {name, data}'
+torc user-data list $WORKFLOW_ID -f json | jq '.items[] | {name, data}'
 ```
 
 Output:

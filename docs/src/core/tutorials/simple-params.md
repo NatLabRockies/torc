@@ -72,7 +72,7 @@ All 10 jobs run in parallel since they have no dependencies.
 ## Step 3: Verify the Expansion
 
 ```bash
-torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[].name' | sort
+torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
 ```
 
 Output:
@@ -159,13 +159,13 @@ torc workflows init $WORKFLOW_ID
 
 ```bash
 # Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)
-torc jobs list $WORKFLOW_ID -f json | jq '.jobs | length'
+torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
 ```
 
 List the job names:
 
 ```bash
-torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[].name' | sort
+torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
 ```
 
 Output:

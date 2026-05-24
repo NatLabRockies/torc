@@ -224,7 +224,7 @@ workflow spec):
 
 ```bash
 torc -f json jobs list <workflow_id> \
-  | jq -r '.jobs[] | [.name, .status, (.origin // "(declared)")] | @tsv'
+  | jq -r '.items[] | [.name, .status, (.origin // "(declared)")] | @tsv'
 ```
 
 ```

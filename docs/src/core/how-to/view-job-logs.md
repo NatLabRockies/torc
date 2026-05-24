@@ -80,7 +80,7 @@ Open every failed job's stderr file in your editor in one go:
 
 ```bash
 nvim $(torc -f json results list --include-logs <workflow_id> \
-  | jq -r '.results[] | select(.return_code != 0) | .job_stderr')
+  | jq -r '.items[] | select(.return_code != 0) | .job_stderr')
 ```
 
 Swap `nvim` for any tool that takes a list of paths (`less`, `grep -l "OutOfMemory"`, `code -d`,
@@ -95,7 +95,7 @@ editor is slow. Print the last N lines of each instead — usually enough to spo
 
 ```bash
 torc -f json results list --include-logs <workflow_id> \
-  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | jq -r '.items[] | select(.return_code != 0) | .job_stderr' \
   | xargs -I{} sh -c 'echo "=== {} ==="; tail -n 50 {}'
 ```
 
@@ -103,7 +103,7 @@ To find which failures share a root cause, grep across all of them at once:
 
 ```bash
 torc -f json results list --include-logs <workflow_id> \
-  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | jq -r '.items[] | select(.return_code != 0) | .job_stderr' \
   | xargs grep -l "OutOfMemoryError"
 ```
 
