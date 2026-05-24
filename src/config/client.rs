@@ -70,6 +70,14 @@ pub struct ClientRunConfig {
     /// Job completion poll interval in seconds
     pub poll_interval: f64,
 
+    /// Upper bound (in seconds) for the adaptive backoff applied to the
+    /// runner's main poll loop. After an iteration where no local job
+    /// completes and no new jobs are claimed, the wait between iterations
+    /// doubles from `poll_interval` toward this cap. The wait is reset to
+    /// `poll_interval` as soon as a job completes locally or a claim returns
+    /// jobs. Set to `poll_interval` (or lower) to disable backoff.
+    pub claim_backoff_max_secs: f64,
+
     /// Maximum number of parallel jobs to run concurrently
     pub max_parallel_jobs: Option<i64>,
 
@@ -90,6 +98,7 @@ impl Default for ClientRunConfig {
     fn default() -> Self {
         Self {
             poll_interval: 5.0,
+            claim_backoff_max_secs: 300.0,
             max_parallel_jobs: None,
             output_dir: PathBuf::from("torc_output"),
             num_cpus: None,
@@ -326,6 +335,7 @@ mod tests {
     fn test_run_config_defaults() {
         let config = ClientRunConfig::default();
         assert_eq!(config.poll_interval, 5.0);
+        assert_eq!(config.claim_backoff_max_secs, 300.0);
         assert!(config.max_parallel_jobs.is_none());
         assert_eq!(config.output_dir, PathBuf::from("torc_output"));
     }
