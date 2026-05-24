@@ -2921,7 +2921,12 @@ impl JobRunner {
                 true
             }
             Err(err) => {
-                error!("Failed to prepare jobs for submission: {}", err);
+                error!(
+                    "Failed to claim jobs after retries workflow_id={}{}: {}",
+                    self.workflow_id,
+                    target_node.map_or(String::new(), |n| format!(" node={}", n)),
+                    err
+                );
                 false
             }
         }
