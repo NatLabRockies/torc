@@ -151,6 +151,8 @@ fn test_workflow_specification_complete_serialization() {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            parameters_file: None,
+            use_parameters_file: None,
         },
         UserDataSpec {
             is_ephemeral: Some(false),
@@ -159,6 +161,8 @@ fn test_workflow_specification_complete_serialization() {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            parameters_file: None,
+            use_parameters_file: None,
         },
     ];
 
@@ -1047,6 +1051,8 @@ fn test_workflow_specification_with_all_resource_types() {
         parameters: None,
         parameter_mode: None,
         use_parameters: None,
+        parameters_file: None,
+        use_parameters_file: None,
     }];
 
     let resource_requirements = vec![ResourceRequirementsSpec {
@@ -1224,6 +1230,8 @@ fn test_specification_structs_serialization() {
         parameters: None,
         parameter_mode: None,
         use_parameters: None,
+        parameters_file: None,
+        use_parameters_file: None,
     };
 
     let resource_spec = ResourceRequirementsSpec {
@@ -1290,6 +1298,8 @@ fn test_workflow_specification_with_new_structs() {
         parameters: None,
         parameter_mode: None,
         use_parameters: None,
+        parameters_file: None,
+        use_parameters_file: None,
     }];
 
     let resource_requirements = vec![ResourceRequirementsSpec {
@@ -1383,6 +1393,8 @@ fn test_json_field_name_compatibility() {
         parameters: None,
         parameter_mode: None,
         use_parameters: None,
+        parameters_file: None,
+        use_parameters_file: None,
         failure_handler: None,
         stdio: None,
         priority: None,
@@ -2589,6 +2601,244 @@ fn test_validate_spec_with_parameterization() {
     // Verify job names are expanded correctly
     assert!(result.summary.job_names.contains(&"job_001".to_string()));
     assert!(result.summary.job_names.contains(&"job_010".to_string()));
+}
+
+/// A job with `parameters_file` pointing at a CSV table expands to one job per row,
+/// with columns inferred to the right types and substituted into the name/command.
+#[test]
+fn test_parameters_file_csv_expands_jobs() {
+    let csv = tempfile::Builder::new()
+        .suffix(".csv")
+        .tempfile()
+        .expect("Failed to create temp csv");
+    fs::write(
+        csv.path(),
+        "model,lr,batch_size\nresnet,0.001,32\nvit,0.0001,16\n",
+    )
+    .expect("Failed to write csv");
+
+    let workflow_data = serde_json::json!({
+        "name": "csv_table_workflow",
+        "jobs": [
+            {
+                "name": "train_{model}_bs{batch_size}",
+                "command": "echo {model} lr={lr} bs={batch_size}",
+                "parameters_file": csv.path().to_str().unwrap(),
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    spec.expand_parameters().expect("expand_parameters failed");
+
+    let names: Vec<&str> = spec.jobs.iter().map(|j| j.name.as_str()).collect();
+    assert_eq!(spec.jobs.len(), 2, "Expected one job per CSV row");
+    assert!(names.contains(&"train_resnet_bs32"));
+    assert!(names.contains(&"train_vit_bs16"));
+}
+
+/// A job with `parameters_file` pointing at a JSON array expands to one job per object,
+/// preserving native numeric types (so float format specifiers like {lr:.4f} work).
+#[test]
+fn test_parameters_file_json_expands_jobs() {
+    let json = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("Failed to create temp json");
+    fs::write(
+        json.path(),
+        r#"[{"model": "resnet", "lr": 0.001}, {"model": "vit", "lr": 0.0001}]"#,
+    )
+    .expect("Failed to write json");
+
+    let workflow_data = serde_json::json!({
+        "name": "json_table_workflow",
+        "jobs": [
+            {
+                "name": "train_{model}_lr{lr:.4f}",
+                "command": "echo {model} {lr}",
+                "parameters_file": json.path().to_str().unwrap(),
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    spec.expand_parameters().expect("expand_parameters failed");
+
+    let names: Vec<&str> = spec.jobs.iter().map(|j| j.name.as_str()).collect();
+    assert_eq!(spec.jobs.len(), 2);
+    assert!(names.contains(&"train_resnet_lr0.0010"));
+    assert!(names.contains(&"train_vit_lr0.0001"));
+}
+
+/// The shipped CSV/JSON table examples parse and expand to the expected jobs.
+/// Relative `parameters_file` paths resolve against the current working
+/// directory, which is the crate root when tests run.
+#[test]
+fn test_parameters_file_examples_expand() {
+    for example in [
+        "examples/yaml/parameterized_from_csv.yaml",
+        "examples/yaml/parameterized_from_json.yaml",
+    ] {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(example);
+        let mut spec = WorkflowSpec::from_spec_file(&path)
+            .unwrap_or_else(|e| panic!("Failed to parse {example}: {e}"));
+        spec.expand_parameters()
+            .unwrap_or_else(|e| panic!("Failed to expand {example}: {e}"));
+        assert_eq!(spec.jobs.len(), 4, "{example} should expand to 4 jobs");
+        let names: Vec<&str> = spec.jobs.iter().map(|j| j.name.as_str()).collect();
+        assert!(
+            names.contains(&"train_resnet_cifar10_bs32"),
+            "{example} job names: {names:?}"
+        );
+        assert!(
+            names.contains(&"train_vit_imagenet_bs16"),
+            "{example} job names: {names:?}"
+        );
+    }
+}
+
+/// `parameters_file` cannot be combined with the inline `parameters` mechanism.
+#[test]
+fn test_parameters_file_conflicts_with_parameters() {
+    let workflow_data = serde_json::json!({
+        "name": "conflict_workflow",
+        "jobs": [
+            {
+                "name": "job_{i}",
+                "command": "echo {i}",
+                "parameters": { "i": "1:3" },
+                "parameters_file": "sweep.csv",
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    let err = spec
+        .expand_parameters()
+        .expect_err("expected a mutual-exclusion error");
+    assert!(
+        err.to_string().contains("parameters_file"),
+        "error should mention parameters_file, got: {err}"
+    );
+}
+
+/// Calling `JobSpec::expand` directly (bypassing workflow-level validation) still
+/// rejects a spec that sets both a table source and inline parameters.
+#[test]
+fn test_expand_rejects_parameters_file_with_inline_parameters() {
+    use std::collections::HashMap;
+
+    let mut job = JobSpec::new("job_{i}".to_string(), "echo {i}".to_string());
+    job.parameters_file = Some("sweep.csv".to_string());
+    job.parameters = Some(HashMap::from([("i".to_string(), "1:3".to_string())]));
+
+    let err = job.expand().expect_err("expected mutual-exclusion error");
+    assert!(err.contains("parameters_file"), "got: {err}");
+
+    // Also rejected when combined with use_parameters (not just inline parameters).
+    let mut job = JobSpec::new("job_{i}".to_string(), "echo {i}".to_string());
+    job.parameters_file = Some("sweep.csv".to_string());
+    job.use_parameters = Some(vec!["i".to_string()]);
+
+    let err = job.expand().expect_err("expected mutual-exclusion error");
+    assert!(err.contains("use_parameters"), "got: {err}");
+}
+
+/// A workflow-level `parameters_file` is shared: jobs opt in with
+/// `use_parameters_file: true` and each expands over every row of the table.
+#[test]
+fn test_workflow_level_parameters_file_inherited() {
+    let csv = tempfile::Builder::new()
+        .suffix(".csv")
+        .tempfile()
+        .expect("Failed to create temp csv");
+    fs::write(csv.path(), "model,seed\nresnet,1\nresnet,2\nvit,1\n").expect("Failed to write csv");
+
+    let workflow_data = serde_json::json!({
+        "name": "shared_table_workflow",
+        "parameters_file": csv.path().to_str().unwrap(),
+        "jobs": [
+            {
+                "name": "train_{model}_s{seed}",
+                "command": "echo train {model} {seed}",
+                "use_parameters_file": true,
+            },
+            {
+                "name": "eval_{model}_s{seed}",
+                "command": "echo eval {model} {seed}",
+                "use_parameters_file": true,
+            },
+            {
+                // A job that does not opt in is left untouched (single instance).
+                "name": "report",
+                "command": "echo report",
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    spec.expand_parameters().expect("expand_parameters failed");
+
+    // 3 rows x 2 opted-in jobs + 1 non-parameterized job = 7 jobs.
+    assert_eq!(spec.jobs.len(), 7);
+    let names: Vec<&str> = spec.jobs.iter().map(|j| j.name.as_str()).collect();
+    assert!(names.contains(&"train_resnet_s1"));
+    assert!(names.contains(&"train_vit_s1"));
+    assert!(names.contains(&"eval_resnet_s2"));
+    assert!(names.contains(&"report"));
+}
+
+/// `use_parameters_file: true` requires a workflow-level `parameters_file`.
+#[test]
+fn test_use_parameters_file_without_workflow_table_errors() {
+    let workflow_data = serde_json::json!({
+        "name": "missing_table_workflow",
+        "jobs": [
+            {
+                "name": "train_{model}",
+                "command": "echo {model}",
+                "use_parameters_file": true,
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    let err = spec
+        .expand_parameters()
+        .expect_err("expected an error for missing workflow table");
+    assert!(
+        err.to_string().contains("use_parameters_file"),
+        "error should mention use_parameters_file, got: {err}"
+    );
+}
+
+/// Workflow-level `parameters` and `parameters_file` cannot both be set.
+#[test]
+fn test_workflow_parameters_and_parameters_file_mutually_exclusive() {
+    let workflow_data = serde_json::json!({
+        "name": "double_source_workflow",
+        "parameters": { "i": "1:3" },
+        "parameters_file": "sweep.csv",
+        "jobs": [
+            { "name": "job", "command": "echo hello" }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    let err = spec
+        .expand_parameters()
+        .expect_err("expected a workflow-level mutual-exclusion error");
+    assert!(
+        err.to_string().contains("mutually"),
+        "error should mention mutual exclusion, got: {err}"
+    );
 }
 
 /// Test that validate_spec returns errors for invalid workflow

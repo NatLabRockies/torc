@@ -1,6 +1,7 @@
 use crate::client::apis::{self, configuration::Configuration};
 use crate::client::parameter_expansion::{
-    ParameterValue, cartesian_product, parse_parameter_value, substitute_parameters, zip_parameters,
+    ParameterValue, cartesian_product, load_parameter_table, parse_parameter_value,
+    substitute_parameters, zip_parameters,
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -13,6 +14,95 @@ use serde::{Deserialize, Serialize};
 
 static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
+
+/// Build the set of parameter combinations for a parameterized spec.
+///
+/// The combinations come from exactly one source:
+/// - `parameters_file`: a CSV/JSON table where each row is one combination.
+/// - `parameters`: inline parameter values combined via `parameter_mode`
+///   ("product" by default, or "zip").
+///
+/// Returns `Ok(None)` when the spec is not parameterized (neither source set),
+/// signalling the caller to emit a single un-expanded clone.
+///
+/// The two sources are mutually exclusive: setting `parameters_file` alongside
+/// inline `parameters`/`parameter_mode`/`use_parameters` is an error. This guard
+/// also catches callers that invoke `expand()` directly, without going through
+/// the workflow-level [`validate_parameter_source`] check.
+fn build_parameter_combinations(
+    parameters: &Option<HashMap<String, String>>,
+    parameter_mode: &Option<String>,
+    use_parameters: &Option<Vec<String>>,
+    parameters_file: &Option<String>,
+) -> Result<Option<Vec<HashMap<String, ParameterValue>>>, String> {
+    if let Some(path) = parameters_file {
+        if parameters.is_some() || parameter_mode.is_some() || use_parameters.is_some() {
+            return Err(
+                "`parameters_file` cannot be combined with `parameters`, `parameter_mode`, or \
+                 `use_parameters`"
+                    .to_string(),
+            );
+        }
+        return Ok(Some(load_parameter_table(path)?));
+    }
+
+    let Some(params) = parameters else {
+        return Ok(None);
+    };
+
+    let mut parsed_params: HashMap<String, Vec<ParameterValue>> = HashMap::new();
+    for (name, value) in params {
+        parsed_params.insert(name.clone(), parse_parameter_value(value)?);
+    }
+
+    let combinations = match parameter_mode.as_deref().unwrap_or("product") {
+        "zip" => zip_parameters(&parsed_params)?,
+        _ => cartesian_product(&parsed_params),
+    };
+    Ok(Some(combinations))
+}
+
+/// Validate that a parameterized spec uses only one parameter source.
+///
+/// A CSV/JSON parameter table -- whether a local `parameters_file` or the
+/// workflow-level table opted into via `use_parameters_file: true` -- defines
+/// explicit combinations, so it cannot be combined with the inline
+/// `parameters`/`parameter_mode` mechanism or with `use_parameters` inheritance.
+fn validate_parameter_source(
+    label: &str,
+    parameters: &Option<HashMap<String, String>>,
+    parameter_mode: &Option<String>,
+    use_parameters: &Option<Vec<String>>,
+    parameters_file: &Option<String>,
+    use_parameters_file: Option<bool>,
+    workflow_parameters_file: &Option<String>,
+) -> Result<(), String> {
+    let opts_into_workflow_table = use_parameters_file == Some(true);
+    let table_source = parameters_file.is_some() || opts_into_workflow_table;
+    let inline_source =
+        parameters.is_some() || use_parameters.is_some() || parameter_mode.is_some();
+
+    if table_source && inline_source {
+        return Err(format!(
+            "{}: a CSV/JSON parameter table (`parameters_file`/`use_parameters_file`) cannot be \
+             combined with `parameters`, `parameter_mode`, or `use_parameters`",
+            label
+        ));
+    }
+    if parameters_file.is_some() && opts_into_workflow_table {
+        return Err(format!(
+            "{}: set either a local `parameters_file` or `use_parameters_file: true`, not both",
+            label
+        ));
+    }
+    if opts_into_workflow_table && workflow_parameters_file.is_none() {
+        return Err(format!(
+            "{}: `use_parameters_file: true` requires a workflow-level `parameters_file`",
+            label
+        ));
+    }
+    Ok(())
+}
 
 /// Matches the four workflow-variable forms understood by [`substitute_and_extract`]:
 ///   `${files.input.NAME}`, `${files.output.NAME}`,
@@ -133,6 +223,15 @@ pub struct FileSpec {
     /// If set, only these parameters from the workflow will be used
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_parameters: Option<Vec<String>>,
+    /// Path to a CSV or JSON file supplying parameter combinations as a table.
+    /// Each CSV row / JSON array object becomes one generated file. Mutually
+    /// exclusive with `parameters`, `parameter_mode`, and `use_parameters`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters_file: Option<String>,
+    /// Expand this file over the workflow-level `parameters_file` table when set to
+    /// true. Mutually exclusive with the per-file parameter sources above.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_parameters_file: Option<bool>,
 }
 
 impl FileSpec {
@@ -147,29 +246,22 @@ impl FileSpec {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            parameters_file: None,
+            use_parameters_file: None,
         }
     }
 
     /// Expand this FileSpec into multiple FileSpecs based on its parameters
     /// Returns a single-element vec if no parameters are present
     pub fn expand(&self) -> Result<Vec<FileSpec>, String> {
-        // If no parameters, return a clone
-        let Some(ref params) = self.parameters else {
-            return Ok(vec![self.clone()]);
-        };
-
-        // Parse all parameter values
-        let mut parsed_params: HashMap<String, Vec<ParameterValue>> = HashMap::new();
-        for (name, value) in params {
-            let values = parse_parameter_value(value)?;
-            parsed_params.insert(name.clone(), values);
-        }
-
-        // Generate combinations based on parameter_mode
-        let mode = self.parameter_mode.as_deref().unwrap_or("product");
-        let combinations = match mode {
-            "zip" => zip_parameters(&parsed_params)?,
-            _ => cartesian_product(&parsed_params),
+        let combinations = match build_parameter_combinations(
+            &self.parameters,
+            &self.parameter_mode,
+            &self.use_parameters,
+            &self.parameters_file,
+        )? {
+            Some(combos) => combos,
+            None => return Ok(vec![self.clone()]),
         };
 
         // Create a FileSpec for each combination
@@ -178,6 +270,7 @@ impl FileSpec {
             let mut new_spec = self.clone();
             new_spec.parameters = None; // Remove parameters from expanded specs
             new_spec.parameter_mode = None; // Remove parameter_mode from expanded specs
+            new_spec.parameters_file = None; // Remove parameters_file from expanded specs
 
             // Substitute parameters in name, path, and (when set) identifier.
             new_spec.name = substitute_parameters(&self.name, &combo);
@@ -221,6 +314,15 @@ pub struct UserDataSpec {
     /// If set, only these parameters from the workflow will be used
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_parameters: Option<Vec<String>>,
+    /// Path to a CSV or JSON file supplying parameter combinations as a table.
+    /// Each CSV row / JSON array object becomes one generated user_data record.
+    /// Mutually exclusive with `parameters`, `parameter_mode`, and `use_parameters`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters_file: Option<String>,
+    /// Expand this user_data over the workflow-level `parameters_file` table when set
+    /// to true. Mutually exclusive with the per-record parameter sources above.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_parameters_file: Option<bool>,
 }
 
 impl UserDataSpec {
@@ -233,23 +335,14 @@ impl UserDataSpec {
     /// though they could in principle be rewritten -- substitution is string-only,
     /// matching how FileSpec handles `name` and `path`.
     pub fn expand(&self) -> Result<Vec<UserDataSpec>, String> {
-        // If no parameters, return a clone
-        let Some(ref params) = self.parameters else {
-            return Ok(vec![self.clone()]);
-        };
-
-        // Parse all parameter values
-        let mut parsed_params: HashMap<String, Vec<ParameterValue>> = HashMap::new();
-        for (name, value) in params {
-            let values = parse_parameter_value(value)?;
-            parsed_params.insert(name.clone(), values);
-        }
-
-        // Generate combinations based on parameter_mode
-        let mode = self.parameter_mode.as_deref().unwrap_or("product");
-        let combinations = match mode {
-            "zip" => zip_parameters(&parsed_params)?,
-            _ => cartesian_product(&parsed_params),
+        let combinations = match build_parameter_combinations(
+            &self.parameters,
+            &self.parameter_mode,
+            &self.use_parameters,
+            &self.parameters_file,
+        )? {
+            Some(combos) => combos,
+            None => return Ok(vec![self.clone()]),
         };
 
         // Create a UserDataSpec for each combination
@@ -258,6 +351,7 @@ impl UserDataSpec {
             let mut new_spec = self.clone();
             new_spec.parameters = None; // Remove parameters from expanded specs
             new_spec.parameter_mode = None; // Remove parameter_mode from expanded specs
+            new_spec.parameters_file = None; // Remove parameters_file from expanded specs
 
             // Substitute parameters in name (if any)
             if let Some(ref n) = self.name {
@@ -609,6 +703,16 @@ pub struct JobSpec {
     /// If set, only these parameters from the workflow will be used
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_parameters: Option<Vec<String>>,
+    /// Path to a CSV or JSON file supplying parameter combinations as a table.
+    /// Each CSV row / JSON array object becomes one generated job, with its
+    /// columns/keys available for template substitution. Mutually exclusive with
+    /// `parameters`, `parameter_mode`, and `use_parameters`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters_file: Option<String>,
+    /// Expand this job over the workflow-level `parameters_file` table when set to
+    /// true. Mutually exclusive with the per-job parameter sources above.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_parameters_file: Option<bool>,
     /// Per-job override for stdout/stderr capture configuration.
     /// If set, overrides the workflow-level `execution_config.stdio` for this job.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -645,6 +749,8 @@ impl JobSpec {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            parameters_file: None,
+            use_parameters_file: None,
             stdio: None,
             priority: None,
         }
@@ -653,23 +759,14 @@ impl JobSpec {
     /// Expand this JobSpec into multiple JobSpecs based on its parameters
     /// Returns a single-element vec if no parameters are present
     pub fn expand(&self) -> Result<Vec<JobSpec>, String> {
-        // If no parameters, return a clone
-        let Some(ref params) = self.parameters else {
-            return Ok(vec![self.clone()]);
-        };
-
-        // Parse all parameter values
-        let mut parsed_params: HashMap<String, Vec<ParameterValue>> = HashMap::new();
-        for (name, value) in params {
-            let values = parse_parameter_value(value)?;
-            parsed_params.insert(name.clone(), values);
-        }
-
-        // Generate combinations based on parameter_mode
-        let mode = self.parameter_mode.as_deref().unwrap_or("product");
-        let combinations = match mode {
-            "zip" => zip_parameters(&parsed_params)?,
-            _ => cartesian_product(&parsed_params),
+        let combinations = match build_parameter_combinations(
+            &self.parameters,
+            &self.parameter_mode,
+            &self.use_parameters,
+            &self.parameters_file,
+        )? {
+            Some(combos) => combos,
+            None => return Ok(vec![self.clone()]),
         };
 
         // Create a JobSpec for each combination
@@ -678,6 +775,7 @@ impl JobSpec {
             let mut new_spec = self.clone();
             new_spec.parameters = None; // Remove parameters from expanded specs
             new_spec.parameter_mode = None; // Remove parameter_mode from expanded specs
+            new_spec.parameters_file = None; // Remove parameters_file from expanded specs
 
             // Substitute parameters in all string fields
             new_spec.name = substitute_parameters(&self.name, &combo);
@@ -1205,6 +1303,11 @@ pub struct WorkflowSpec {
     /// Jobs/files can reference these by setting use_parameters to parameter names
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<HashMap<String, String>>,
+    /// Shared CSV/JSON parameter table for the whole workflow. Jobs/files/user_data
+    /// opt in by setting `use_parameters_file: true`, which expands them over every
+    /// row of this table. Mutually exclusive with the workflow-level `parameters`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters_file: Option<String>,
     /// Workflow-level constants substituted into every string field of the spec.
     /// Unlike `parameters`, variables do not trigger Cartesian expansion -- each
     /// `{name}` reference is replaced once with the variable's value before the
@@ -1295,6 +1398,7 @@ impl WorkflowSpec {
             user: Some(user),
             description,
             parameters: None,
+            parameters_file: None,
             variables: None,
             env: None,
             compute_node_expiration_buffer_seconds: None,
@@ -1348,7 +1452,15 @@ impl WorkflowSpec {
     ///    workflow params)
     /// 2. If job/file/user_data has `use_parameters`, select only those from workflow-level params
     pub fn expand_parameters(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.parameters.is_some() && self.parameters_file.is_some() {
+            return Err(
+                "Workflow-level `parameters` and `parameters_file` are mutually \
+                        exclusive; use one shared parameter source per workflow"
+                    .into(),
+            );
+        }
         let workflow_params = self.parameters.clone();
+        let workflow_parameters_file = self.parameters_file.clone();
         let workflow_env_params: Option<HashMap<String, ParameterValue>> =
             workflow_params.as_ref().map(|params| {
                 params
@@ -1375,12 +1487,27 @@ impl WorkflowSpec {
         // Expand all jobs
         let mut expanded_jobs = Vec::new();
         for job in &self.jobs {
+            validate_parameter_source(
+                &format!("Job '{}'", job.name),
+                &job.parameters,
+                &job.parameter_mode,
+                &job.use_parameters,
+                &job.parameters_file,
+                job.use_parameters_file,
+                &workflow_parameters_file,
+            )?;
             // Resolve parameters for this job
             let mut job_with_params = job.clone();
             job_with_params.parameters =
                 Self::resolve_parameters(&job.parameters, &job.use_parameters, &workflow_params);
-            // Clear use_parameters after resolution
+            job_with_params.parameters_file = Self::resolve_parameters_file(
+                &job.parameters_file,
+                job.use_parameters_file,
+                &workflow_parameters_file,
+            );
+            // Clear the inheritance opt-ins after resolution
             job_with_params.use_parameters = None;
+            job_with_params.use_parameters_file = None;
 
             let expanded = job_with_params
                 .expand()
@@ -1393,6 +1520,15 @@ impl WorkflowSpec {
         if let Some(ref files) = self.files {
             let mut expanded_files = Vec::new();
             for file in files {
+                validate_parameter_source(
+                    &format!("File '{}'", file.name),
+                    &file.parameters,
+                    &file.parameter_mode,
+                    &file.use_parameters,
+                    &file.parameters_file,
+                    file.use_parameters_file,
+                    &workflow_parameters_file,
+                )?;
                 // Resolve parameters for this file
                 let mut file_with_params = file.clone();
                 file_with_params.parameters = Self::resolve_parameters(
@@ -1400,8 +1536,14 @@ impl WorkflowSpec {
                     &file.use_parameters,
                     &workflow_params,
                 );
-                // Clear use_parameters after resolution
+                file_with_params.parameters_file = Self::resolve_parameters_file(
+                    &file.parameters_file,
+                    file.use_parameters_file,
+                    &workflow_parameters_file,
+                );
+                // Clear the inheritance opt-ins after resolution
                 file_with_params.use_parameters = None;
+                file_with_params.use_parameters_file = None;
 
                 let expanded = file_with_params
                     .expand()
@@ -1415,12 +1557,27 @@ impl WorkflowSpec {
         if let Some(ref user_data) = self.user_data {
             let mut expanded_user_data = Vec::new();
             for ud in user_data {
+                validate_parameter_source(
+                    &format!("User data '{}'", ud.name.as_deref().unwrap_or("<unnamed>")),
+                    &ud.parameters,
+                    &ud.parameter_mode,
+                    &ud.use_parameters,
+                    &ud.parameters_file,
+                    ud.use_parameters_file,
+                    &workflow_parameters_file,
+                )?;
                 // Resolve parameters for this user_data record
                 let mut ud_with_params = ud.clone();
                 ud_with_params.parameters =
                     Self::resolve_parameters(&ud.parameters, &ud.use_parameters, &workflow_params);
-                // Clear use_parameters after resolution
+                ud_with_params.parameters_file = Self::resolve_parameters_file(
+                    &ud.parameters_file,
+                    ud.use_parameters_file,
+                    &workflow_parameters_file,
+                );
+                // Clear the inheritance opt-ins after resolution
                 ud_with_params.use_parameters = None;
+                ud_with_params.use_parameters_file = None;
 
                 let label = ud.name.as_deref().unwrap_or("<unnamed>");
                 let expanded = ud_with_params
@@ -1432,6 +1589,26 @@ impl WorkflowSpec {
         }
 
         Ok(())
+    }
+
+    /// Resolve the effective `parameters_file` for a job, file, or user_data.
+    ///
+    /// A local `parameters_file` takes precedence; otherwise `use_parameters_file: true`
+    /// inherits the workflow-level table. Returns `None` when neither applies.
+    /// Validation (mutual exclusion, missing workflow table) is handled separately
+    /// by [`validate_parameter_source`].
+    fn resolve_parameters_file(
+        local_file: &Option<String>,
+        use_parameters_file: Option<bool>,
+        workflow_file: &Option<String>,
+    ) -> Option<String> {
+        if local_file.is_some() {
+            return local_file.clone();
+        }
+        if use_parameters_file == Some(true) {
+            return workflow_file.clone();
+        }
+        None
     }
 
     /// Resolve parameters for a job or file
@@ -6890,6 +7067,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            parameters_file: None,
+            use_parameters_file: None,
         };
         let mut params = HashMap::new();
         params.insert(
@@ -6977,6 +7156,8 @@ user_data:
             parameters: None,
             parameter_mode: None,
             use_parameters: None,
+            parameters_file: None,
+            use_parameters_file: None,
         };
         let expanded = ud.expand().expect("expand should succeed");
         assert_eq!(expanded.len(), 1);
@@ -7001,6 +7182,8 @@ user_data:
             parameters: None,
             parameter_mode: None,
             use_parameters: Some(vec!["i".to_string()]),
+            parameters_file: None,
+            use_parameters_file: None,
         }]);
 
         spec.expand_parameters()
@@ -7115,6 +7298,7 @@ user_data:
             compute_node_ignore_workflow_completion: None,
             compute_node_wait_for_new_jobs_seconds: None,
             parameters: None,
+            parameters_file: None,
             variables: None,
             env: None,
             jobs: vec![JobSpec {
@@ -7143,6 +7327,8 @@ user_data:
                 }),
                 parameter_mode: None,
                 use_parameters: None,
+                parameters_file: None,
+                use_parameters_file: None,
                 failure_handler: None,
                 stdio: None,
                 priority: None,

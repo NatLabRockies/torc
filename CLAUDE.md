@@ -275,10 +275,23 @@ a single specification:
   - Lists: `"[1,5,10]"` or `"['train','test','validation']"`
 - **Multi-dimensional**: Multiple parameters create Cartesian product (e.g., 3 learning rates × 3
   batch sizes = 9 jobs)
-- **Implementation**: `parameter_expansion.rs` module with `ParameterValue` enum and expansion
-  functions
-- **Examples**: See `examples/hundred_jobs_parameterized.yaml`, `hyperparameter_sweep.yaml`, and
-  `data_pipeline_parameterized.yaml`
+- **Table-based (`parameters_file`)**: Point a job/file/user_data at a CSV, JSON (array of objects),
+  or line-delimited JSON (`.jsonl`/`.ndjson`) file (selected by extension) to supply an explicit
+  table of combinations. Each CSV row / JSON object becomes one instance, with columns/keys
+  available as substitution tokens. CSV cells are inferred as integer → float → string; JSON keeps
+  native types and stringifies nested/non-scalar values. Paths resolve relative to the current
+  working directory (like the `@file` list syntax). Mutually exclusive with `parameters`,
+  `parameter_mode`, and `use_parameters`; an empty table is an error.
+- **Shared table (workflow-level `parameters_file` + `use_parameters_file: true`)**: Declare one
+  table at the workflow level and have multiple jobs/files/user_data opt in via
+  `use_parameters_file: true`; each opted-in spec expands over all rows. Workflow-level `parameters`
+  and `parameters_file` are mutually exclusive. `use_parameters_file` is a whole-table boolean
+  opt-in (no column subsetting), resolved in `expand_parameters` via `resolve_parameters_file`.
+- **Implementation**: `parameter_expansion.rs` module with `ParameterValue` enum, expansion
+  functions, and `load_parameter_table()` for CSV/JSON tables
+- **Examples**: See `examples/yaml/hundred_jobs_parameterized.yaml`, `hyperparameter_sweep.yaml`,
+  `data_pipeline_parameterized.yaml`, `parameterized_from_csv.yaml`, and
+  `parameterized_from_json.yaml`
 
 ### Pagination
 

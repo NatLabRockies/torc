@@ -1,0 +1,6 @@
+[
+  { "model": "resnet", "lr": 0.001, "batch_size": 32, "dataset": "cifar10" },
+  { "model": "resnet", "lr": 0.0001, "batch_size": 64, "dataset": "cifar10" },
+  { "model": "vit", "lr": 0.001, "batch_size": 16, "dataset": "imagenet" },
+  { "model": "vit", "lr": 0.0001, "batch_size": 32, "dataset": "imagenet" }
+]

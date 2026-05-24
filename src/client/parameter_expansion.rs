@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Represents a single parameter value (integer, float, or string)
 #[derive(Clone, Debug, PartialEq)]
@@ -101,6 +101,20 @@ pub fn parse_parameter_value(value: &str) -> Result<Vec<ParameterValue>, String>
     Ok(vec![ParameterValue::String(trimmed.to_string())])
 }
 
+/// Infer a `ParameterValue` from a raw string, trying Integer -> Float -> String.
+///
+/// Used for unquoted scalar tokens (file lines, CSV cells). It does not strip
+/// quotes; callers that need quote handling (e.g. list parsing) do that first.
+fn infer_value(s: &str) -> ParameterValue {
+    if let Ok(i) = s.parse::<i64>() {
+        ParameterValue::Integer(i)
+    } else if let Ok(f) = s.parse::<f64>() {
+        ParameterValue::Float(f)
+    } else {
+        ParameterValue::String(s.to_string())
+    }
+}
+
 /// Parse a list notation like "[1,5,10]" or "['a','b','c']"
 fn parse_list(value: &str) -> Result<Vec<ParameterValue>, String> {
     let inner = value.trim_start_matches('[').trim_end_matches(']').trim();
@@ -155,15 +169,203 @@ fn parse_file_list(path: &str) -> Result<Vec<ParameterValue>, String> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if let Ok(i) = line.parse::<i64>() {
-            values.push(ParameterValue::Integer(i));
-        } else if let Ok(f) = line.parse::<f64>() {
-            values.push(ParameterValue::Float(f));
-        } else {
-            values.push(ParameterValue::String(line.to_string()));
-        }
+        values.push(infer_value(line));
     }
     Ok(values)
+}
+
+/// Load a table of parameter combinations from a CSV or JSON file.
+///
+/// Each CSV data row / JSON object becomes one combination: a map of column
+/// (CSV) or key (JSON) name to `ParameterValue`. The format is selected by the
+/// file extension.
+///
+/// - `.csv`: the header row supplies column names; each cell is inferred as
+///   Integer -> Float -> String.
+/// - `.json`: the document must be an array of objects.
+/// - `.jsonl` / `.ndjson`: line-delimited JSON; each non-blank line is one
+///   object.
+///
+/// For all JSON variants, numbers map to Integer/Float, strings to String, and
+/// any other value (bool, null, object, array) is stringified into a String.
+///
+/// Returns an error if the file is missing, has an unsupported extension, is
+/// malformed, or contains zero rows.
+pub fn load_parameter_table(path: &str) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Empty parameters_file path".to_string());
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    let rows = if lower.ends_with(".csv") {
+        load_parameter_table_csv(trimmed)?
+    } else if lower.ends_with(".jsonl") || lower.ends_with(".ndjson") {
+        load_parameter_table_jsonl(trimmed)?
+    } else if lower.ends_with(".json") {
+        load_parameter_table_json(trimmed)?
+    } else {
+        return Err(format!(
+            "Unsupported parameters_file extension for '{}': expected '.csv', '.json', '.jsonl', \
+             or '.ndjson'",
+            trimmed
+        ));
+    };
+
+    if rows.is_empty() {
+        return Err(format!("parameters_file '{}' contains no rows", trimmed));
+    }
+    Ok(rows)
+}
+
+/// Load parameter rows from a CSV file (header row supplies column names).
+fn load_parameter_table_csv(path: &str) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
+    // `flexible(true)` lets rows with the wrong field count parse so we can
+    // report a clear, row-numbered error below rather than the csv crate's
+    // generic "unequal lengths" message.
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_path(path)
+        .map_err(|e| format!("Failed to read parameters_file '{}': {}", path, e))?;
+
+    let headers = reader
+        .headers()
+        .map_err(|e| format!("Failed to read CSV headers from '{}': {}", path, e))?
+        .clone();
+    if headers.is_empty() {
+        return Err(format!("parameters_file '{}' has no columns", path));
+    }
+
+    // Column names must be non-empty and unique so each row maps cleanly to a
+    // distinct parameter name.
+    let mut seen = HashSet::with_capacity(headers.len());
+    for header in headers.iter() {
+        if header.is_empty() {
+            return Err(format!(
+                "parameters_file '{}' has an empty column name in its header",
+                path
+            ));
+        }
+        if !seen.insert(header) {
+            return Err(format!(
+                "parameters_file '{}' has a duplicate column name '{}'",
+                path, header
+            ));
+        }
+    }
+
+    let mut rows = Vec::new();
+    for (idx, record) in reader.records().enumerate() {
+        let record =
+            record.map_err(|e| format!("Failed to read row {} of '{}': {}", idx + 1, path, e))?;
+        if record.len() != headers.len() {
+            return Err(format!(
+                "Row {} of '{}' has {} fields but the header has {} columns",
+                idx + 1,
+                path,
+                record.len(),
+                headers.len()
+            ));
+        }
+        let mut row = HashMap::new();
+        for (header, field) in headers.iter().zip(record.iter()) {
+            row.insert(header.to_string(), infer_value(field));
+        }
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+/// Load parameter rows from a JSON file (must be an array of objects).
+fn load_parameter_table_json(path: &str) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read parameters_file '{}': {}", path, e))?;
+    let value: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse JSON parameters_file '{}': {}", path, e))?;
+
+    let serde_json::Value::Array(items) = value else {
+        return Err(format!(
+            "parameters_file '{}' must contain a JSON array of objects",
+            path
+        ));
+    };
+
+    let mut rows = Vec::new();
+    for (idx, item) in items.into_iter().enumerate() {
+        let serde_json::Value::Object(map) = item else {
+            return Err(format!(
+                "Element {} of parameters_file '{}' is not a JSON object",
+                idx + 1,
+                path
+            ));
+        };
+        let row = map
+            .into_iter()
+            .map(|(key, val)| (key, json_value_to_parameter(val)))
+            .collect();
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+/// Load parameter rows from a line-delimited JSON file (`.jsonl` / `.ndjson`).
+///
+/// Each non-blank line must be a single JSON object. Shares the same value
+/// mapping as [`load_parameter_table_json`].
+fn load_parameter_table_jsonl(path: &str) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read parameters_file '{}': {}", path, e))?;
+
+    let mut rows = Vec::new();
+    for (idx, raw) in content.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_str(line).map_err(|e| {
+            format!(
+                "Failed to parse line {} of parameters_file '{}': {}",
+                idx + 1,
+                path,
+                e
+            )
+        })?;
+        let serde_json::Value::Object(map) = value else {
+            return Err(format!(
+                "Line {} of parameters_file '{}' is not a JSON object",
+                idx + 1,
+                path
+            ));
+        };
+        let row = map
+            .into_iter()
+            .map(|(key, val)| (key, json_value_to_parameter(val)))
+            .collect();
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+/// Convert a JSON value to a `ParameterValue`.
+///
+/// Numbers become Integer/Float; strings become String (without added quotes);
+/// any other value (bool, null, object, array) is stringified.
+fn json_value_to_parameter(value: serde_json::Value) -> ParameterValue {
+    match value {
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                ParameterValue::Integer(i)
+            } else if let Some(f) = n.as_f64() {
+                ParameterValue::Float(f)
+            } else {
+                ParameterValue::String(n.to_string())
+            }
+        }
+        serde_json::Value::String(s) => ParameterValue::String(s),
+        other => ParameterValue::String(other.to_string()),
+    }
 }
 
 /// Parse a range notation like "1:100" or "0.0:1.0:0.1"
@@ -491,6 +693,190 @@ mod tests {
     fn test_parse_file_list_empty_path() {
         let result = parse_parameter_value("@");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sweep.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,lr,batch_size").unwrap();
+        writeln!(f, "resnet,0.001,32").unwrap();
+        writeln!(f, "vit,0.0001,16").unwrap();
+
+        let rows = load_parameter_table(path.to_str().unwrap()).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0]["model"],
+            ParameterValue::String("resnet".to_string())
+        );
+        assert_eq!(rows[0]["lr"], ParameterValue::Float(0.001));
+        assert_eq!(rows[0]["batch_size"], ParameterValue::Integer(32));
+        assert_eq!(rows[1]["model"], ParameterValue::String("vit".to_string()));
+        assert_eq!(rows[1]["batch_size"], ParameterValue::Integer(16));
+    }
+
+    #[test]
+    fn test_load_parameter_table_json() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sweep.json");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            r#"[
+                {{"model": "resnet", "lr": 0.001, "epochs": 10, "augment": true, "tags": ["a", "b"]}},
+                {{"model": "vit", "lr": 0.0001, "epochs": 20, "augment": false, "tags": []}}
+            ]"#
+        )
+        .unwrap();
+
+        let rows = load_parameter_table(path.to_str().unwrap()).unwrap();
+        assert_eq!(rows.len(), 2);
+        // Native JSON types are preserved.
+        assert_eq!(
+            rows[0]["model"],
+            ParameterValue::String("resnet".to_string())
+        );
+        assert_eq!(rows[0]["lr"], ParameterValue::Float(0.001));
+        assert_eq!(rows[0]["epochs"], ParameterValue::Integer(10));
+        // bool and arrays are stringified.
+        assert_eq!(
+            rows[0]["augment"],
+            ParameterValue::String("true".to_string())
+        );
+        assert_eq!(
+            rows[0]["tags"],
+            ParameterValue::String("[\"a\",\"b\"]".to_string())
+        );
+        assert_eq!(
+            rows[1]["augment"],
+            ParameterValue::String("false".to_string())
+        );
+    }
+
+    #[test]
+    fn test_load_parameter_table_jsonl() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sweep.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        // Includes a blank line, which must be skipped.
+        writeln!(f, r#"{{"model": "resnet", "lr": 0.001, "epochs": 10}}"#).unwrap();
+        writeln!(f).unwrap();
+        writeln!(f, r#"{{"model": "vit", "lr": 0.0001, "epochs": 20}}"#).unwrap();
+
+        let rows = load_parameter_table(path.to_str().unwrap()).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0]["model"],
+            ParameterValue::String("resnet".to_string())
+        );
+        assert_eq!(rows[0]["lr"], ParameterValue::Float(0.001));
+        assert_eq!(rows[1]["epochs"], ParameterValue::Integer(20));
+    }
+
+    #[test]
+    fn test_load_parameter_table_jsonl_bad_line() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.ndjson");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, r#"{{"model": "resnet"}}"#).unwrap();
+        writeln!(f, "not json").unwrap();
+
+        let result = load_parameter_table(path.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("line 2"));
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv_duplicate_header() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("dup.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,model\nresnet,vit\n").unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("duplicate column name"), "got: {err}");
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv_empty_header() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty_header.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,,lr\nresnet,x,0.1\n").unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("empty column name"), "got: {err}");
+    }
+
+    #[test]
+    fn test_load_parameter_table_csv_row_length_mismatch() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ragged.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,lr,batch_size\nresnet,0.1\n").unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(
+            err.contains("Row 1") && err.contains("fields"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_load_parameter_table_missing_file() {
+        assert!(load_parameter_table("/definitely/not/real.csv").is_err());
+    }
+
+    #[test]
+    fn test_load_parameter_table_unsupported_extension() {
+        assert!(load_parameter_table("/tmp/params.txt").is_err());
+    }
+
+    #[test]
+    fn test_load_parameter_table_empty_rows() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.csv");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "model,lr").unwrap(); // header only, no data rows
+
+        let result = load_parameter_table(path.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("no rows"));
+    }
+
+    #[test]
+    fn test_load_parameter_table_json_not_array() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.json");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, r#"{{"model": "resnet"}}"#).unwrap();
+
+        let result = load_parameter_table(path.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("array of objects"));
+    }
+
+    #[test]
+    fn test_load_parameter_table_json_non_object_element_is_one_based() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad_element.json");
+        let mut f = std::fs::File::create(&path).unwrap();
+        // Second element (1-based) is not an object.
+        write!(f, r#"[{{"model": "resnet"}}, 42]"#).unwrap();
+
+        let err = load_parameter_table(path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("Element 2"), "got: {err}");
     }
 
     #[test]

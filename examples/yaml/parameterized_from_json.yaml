@@ -1,0 +1,29 @@
+# Table-Based Parameterization from a JSON File
+# Like parameterized_from_csv.yaml, but the combinations come from a JSON array
+# of objects (see examples/parameter_tables/sweep.json). JSON preserves native
+# types, so numbers map directly to integers/floats without inference; any
+# nested value (object, array, bool, null) is stringified.
+#
+# Run from the repository root:
+#   torc create examples/yaml/parameterized_from_json.yaml
+#
+# `parameters_file` is mutually exclusive with `parameters`, `parameter_mode`,
+# and `use_parameters`.
+
+name: parameterized_from_json
+description: Train one model per object in a JSON sweep table
+
+jobs:
+  # One job per JSON array element (4 elements -> 4 jobs).
+  - name: train_{model}_{dataset}_bs{batch_size}
+    command: echo "training {model} on {dataset} lr={lr} batch_size={batch_size}"
+    resource_requirements: minimal
+    parameters_file: examples/parameter_tables/sweep.json
+
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1g
+    runtime: PT5M

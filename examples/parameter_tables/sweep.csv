@@ -1,0 +1,5 @@
+model,lr,batch_size,dataset
+resnet,0.001,32,cifar10
+resnet,0.0001,64,cifar10
+vit,0.001,16,imagenet
+vit,0.0001,32,imagenet
