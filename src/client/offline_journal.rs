@@ -170,6 +170,20 @@ impl OfflineJournal {
         Self::read_all_from_conn(&conn)
     }
 
+    /// Count the journaled completions in the file at `path` without
+    /// deserializing each payload. Cheaper than [`read_file`] when only the
+    /// number of pending completions is needed (e.g. an advisory check).
+    pub fn count_file(path: &Path) -> Result<usize, String> {
+        let conn = Connection::open(path)
+            .map_err(|e| format!("Failed to open journal {}: {e}", path.display()))?;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM journaled_completions", [], |row| {
+                row.get(0)
+            })
+            .map_err(|e| format!("Failed to count journal {}: {e}", path.display()))?;
+        Ok(count.max(0) as usize)
+    }
+
     /// Find every journal file for a `(workflow_id, run_id)` by recursively
     /// walking `base_dir`. Matching is by file name prefix, so journals written
     /// to per-node `output_dir`s nested anywhere under `base_dir` are all found.
