@@ -1,0 +1,54 @@
+# Shared (Workflow-Level) Table Parameterization
+# Declare a CSV/JSON parameter table once at the workflow level, then have
+# multiple jobs and files expand over the SAME rows by opting in with
+# `use_parameters_file: true`. This is the DRY counterpart to declaring
+# `parameters_file` on every spec individually.
+#
+# Each opted-in spec expands over every row of the table (all columns are
+# available as {tokens}); specs without the opt-in are left as single instances.
+#
+# Run from the repository root:
+#   torc create examples/yaml/parameterized_shared_table.yaml
+
+name: parameterized_shared_table
+description: Train and evaluate one model per row of a shared sweep table
+
+# Workflow-level table shared across jobs/files (model,lr,batch_size,dataset).
+# Mutually exclusive with a workflow-level `parameters` map.
+parameters_file: examples/parameter_tables/sweep.csv
+
+jobs:
+  - name: train_{model}_{dataset}_bs{batch_size}
+    command: echo "train {model} on {dataset} lr={lr} bs={batch_size}"
+    resource_requirements: minimal
+    output_files:
+      - model_{model}_{dataset}_bs{batch_size}
+    use_parameters_file: true
+
+  - name: eval_{model}_{dataset}_bs{batch_size}
+    command: echo "eval {model} on {dataset}"
+    resource_requirements: minimal
+    depends_on:
+      - train_{model}_{dataset}_bs{batch_size}
+    use_parameters_file: true
+
+  # No opt-in: a single aggregation job that fans in over all eval runs via a
+  # regex (it is not parameterized, so it cannot use the per-row templated name).
+  - name: aggregate
+    command: echo "aggregating all runs"
+    resource_requirements: minimal
+    depends_on_regexes:
+      - "eval_.*"
+
+files:
+  - name: model_{model}_{dataset}_bs{batch_size}
+    path: models/{model}_{dataset}_bs{batch_size}.pt
+    use_parameters_file: true
+
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1g
+    runtime: PT5M
