@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Tabs, Wrap},
 };
 
+use crate::client::utils::format_local_timestamp_epoch;
 use crate::models::JobStatus;
 
 use super::app::{App, DetailViewType, FilterTarget, Focus, PopupType, WorkflowSummary};
@@ -911,19 +912,6 @@ fn format_elapsed(start_time: Option<&str>) -> String {
     }
 }
 
-/// Format epoch seconds as a local timestamp with explicit offset suffix.
-fn format_timestamp(epoch_secs: f64) -> String {
-    let secs = epoch_secs as i64;
-    let nsecs = ((epoch_secs - secs as f64) * 1_000_000_000.0) as u32;
-    DateTime::<Utc>::from_timestamp(secs, nsecs)
-        .map(|dt| {
-            dt.with_timezone(&Local)
-                .format("%Y-%m-%d %H:%M:%S %z")
-                .to_string()
-        })
-        .unwrap_or_default()
-}
-
 fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
     let is_focused = app.focus == Focus::Details;
     let selected_style = Style::default()
@@ -941,7 +929,10 @@ fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
         let id = file.id.map(|i| i.to_string()).unwrap_or_default();
         let name = file.name.clone();
         let path = file.path.clone();
-        let st_mtime = file.st_mtime.map(format_timestamp).unwrap_or_default();
+        let st_mtime = file
+            .st_mtime
+            .map(format_local_timestamp_epoch)
+            .unwrap_or_default();
 
         Row::new(vec![
             Cell::from(id),

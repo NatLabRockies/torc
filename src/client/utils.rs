@@ -619,15 +619,16 @@ pub fn format_local_timestamp(rfc3339_utc: &str) -> String {
 /// Same as [`format_local_timestamp`] but for unix-epoch seconds (e.g.
 /// `file.st_mtime`).
 pub fn format_local_timestamp_epoch(epoch_secs: f64) -> String {
-    let secs = epoch_secs as i64;
-    let nsecs = ((epoch_secs - secs as f64) * 1_000_000_000.0).round() as u32;
-    match DateTime::<Utc>::from_timestamp(secs, nsecs) {
-        Some(dt) => dt
-            .with_timezone(&Local)
-            .format(HUMAN_TIMESTAMP_FORMAT)
-            .to_string(),
-        None => format!("{}", epoch_secs),
-    }
+    // Converting (secs: i64, nsecs: u32) via `from_timestamp` is fragile here:
+    // float rounding can push `nsecs` to 1_000_000_000, and pre-epoch values
+    // give negative fractional nsecs that underflow the u32 cast. Both make
+    // chrono return `None` and silently lose the timestamp. Going through a
+    // total-nanos i64 sidesteps both issues and saturates cleanly on NaN/inf.
+    let nanos = (epoch_secs * 1_000_000_000.0).round() as i64;
+    DateTime::<Utc>::from_timestamp_nanos(nanos)
+        .with_timezone(&Local)
+        .format(HUMAN_TIMESTAMP_FORMAT)
+        .to_string()
 }
 
 #[cfg(test)]
@@ -669,6 +670,24 @@ mod tests {
     #[test]
     fn test_format_local_timestamp_epoch_includes_offset() {
         let formatted = format_local_timestamp_epoch(1_748_174_400.0);
+        assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_epoch_handles_subsecond_rounding() {
+        // A fractional second close to 1.0 used to round to nsecs=1_000_000_000,
+        // which `from_timestamp(secs, nsecs)` rejects. Routing through total
+        // nanos avoids that and we still get a well-formed local timestamp.
+        let formatted = format_local_timestamp_epoch(1_748_174_400.999_999_9);
+        assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_epoch_handles_pre_epoch() {
+        // Negative epochs are uncommon for file mtimes but valid; the previous
+        // (secs, nsecs) split underflowed the u32 nsecs cast and silently
+        // produced a raw float string.
+        let formatted = format_local_timestamp_epoch(-1.5);
         assert_local_with_offset(&formatted);
     }
 

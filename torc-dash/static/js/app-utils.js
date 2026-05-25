@@ -47,23 +47,21 @@ Object.assign(TorcDashboard.prototype, {
 
     formatTimestamp(timestamp) {
         if (!timestamp) return '-';
-        try {
-            const date = new Date(timestamp);
-            return this.formatDateLocal(date);
-        } catch {
-            return timestamp;
-        }
+        // `new Date("garbage")` returns an Invalid Date instead of throwing,
+        // so guard explicitly — otherwise formatDateLocal renders the value
+        // as `NaN-NaN-NaN ... +NaNNaN`.
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return this.escapeHtml(String(timestamp));
+        return this.formatDateLocal(date);
     },
 
     formatUnixTimestamp(unixTime) {
         if (unixTime == null) return '-';
-        try {
-            // Unix timestamp is in seconds (as a float)
-            const date = new Date(unixTime * 1000);
-            return this.formatDateLocal(date);
-        } catch {
-            return '-';
-        }
+        // Unix timestamp is in seconds (as a float). Same Invalid-Date guard
+        // as formatTimestamp — non-numeric input silently produces NaN here.
+        const date = new Date(unixTime * 1000);
+        if (isNaN(date.getTime())) return '-';
+        return this.formatDateLocal(date);
     },
 
     formatDateLocal(date) {
