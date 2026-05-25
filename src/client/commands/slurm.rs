@@ -3917,8 +3917,12 @@ fn handle_plan_allocations(
     walltime_multiplier: f64,
     format: &str,
 ) {
+    // Preserve the original CLI argument for user-facing "Suggested" commands
+    // below; for stdin ("-") the staged temp path is not reusable by the user.
+    let workflow_file_arg = workflow_file.to_string_lossy().into_owned();
+
     // Resolve the spec source once (handles `-` reading from stdin).
-    let spec_source = match WorkflowSpec::resolve_spec_source(&workflow_file.to_string_lossy()) {
+    let spec_source = match WorkflowSpec::resolve_spec_source(&workflow_file_arg) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Error reading workflow spec: {}", e);
@@ -4109,15 +4113,13 @@ fn handle_plan_allocations(
                 "single" if rec.total_nodes > 1 => {
                     println!(
                         "    Suggested: torc slurm generate --account {} --single-allocation {}",
-                        result.account,
-                        workflow_file.display()
+                        result.account, workflow_file_arg
                     );
                 }
                 "many-small" => {
                     println!(
                         "    Suggested: torc slurm generate --account {} {}",
-                        result.account,
-                        workflow_file.display()
+                        result.account, workflow_file_arg
                     );
                 }
                 "chunked" => {

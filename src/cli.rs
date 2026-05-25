@@ -198,8 +198,8 @@ EXAMPLES:
         /// - KDL (.kdl): KDL document format
         ///
         /// Format is auto-detected from file extension, with fallback parsing attempted.
-        /// Pass "-" to read the spec from stdin (e.g. `torc slurm generate w.yaml | torc create -`);
-        /// the format is detected from the piped content.
+        /// Pass "-" to read the spec from stdin -- e.g. `torc slurm generate w.yaml | torc create -`.
+        /// The format is detected from the piped content.
         #[arg()]
         file: String,
         /// Disable resource monitoring (default: enabled with summary granularity and 5s sample rate)

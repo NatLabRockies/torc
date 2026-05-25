@@ -829,11 +829,19 @@ fn main() {
                     eprintln!("To submit to Slurm, either:");
                     eprintln!();
                     eprintln!("  1. Use 'torc slurm generate' to auto-generate schedulers:");
-                    eprintln!(
-                        "     torc slurm generate --account <account> -o {} {}",
-                        workflow_spec_or_id, workflow_spec_or_id
-                    );
-                    eprintln!("     torc submit {}", workflow_spec_or_id);
+                    if workflow_spec_or_id == "-" {
+                        // The spec came from stdin; a path-based example would be
+                        // misleading (the staged temp file is gone). Show a pipeline.
+                        eprintln!(
+                            "     ... | torc slurm generate --account <account> - | torc submit -"
+                        );
+                    } else {
+                        eprintln!(
+                            "     torc slurm generate --account <account> -o {} {}",
+                            workflow_spec_or_id, workflow_spec_or_id
+                        );
+                        eprintln!("     torc submit {}", workflow_spec_or_id);
+                    }
                     eprintln!();
                     eprintln!("  2. Add a workflow action manually:");
                     eprintln!("     actions:");
@@ -843,7 +851,11 @@ fn main() {
                     eprintln!("         scheduler: \"my-scheduler\"");
                     eprintln!();
                     eprintln!("Or run locally instead:");
-                    eprintln!("  torc run {}", workflow_spec_or_id);
+                    if workflow_spec_or_id == "-" {
+                        eprintln!("  ... | torc run -");
+                    } else {
+                        eprintln!("  torc run {}", workflow_spec_or_id);
+                    }
                     std::process::exit(1);
                 }
 
