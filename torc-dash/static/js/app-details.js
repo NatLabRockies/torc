@@ -400,15 +400,13 @@ Object.assign(TorcDashboard.prototype, {
     },
 
     renderTableBodyRows(items, tabType, jobNameMap) {
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
-
         switch (tabType) {
             case 'jobs':
                 return items.map(job => `
                     <tr>
                         <td><code>${job.id ?? '-'}</code></td>
                         <td>${this.escapeHtml(job.name || '-')}</td>
-                        <td><span class="status-badge status-${statusNames[job.status]?.toLowerCase() || 'unknown'}">${statusNames[job.status] || job.status}</span></td>
+                        <td><span class="status-badge status-${this.jobStatusSlug(job.status)}">${this.formatJobStatus(job.status)}</span></td>
                         <td><code>${this.escapeHtml(this.truncate(job.command || '-', 80))}</code></td>
                         <td><button class="btn-job-details" data-job-id="${job.id}" data-job-name="${this.escapeHtml(job.name || '')}">Details</button></td>
                     </tr>
@@ -422,10 +420,10 @@ Object.assign(TorcDashboard.prototype, {
                         <td>${result.run_id ?? '-'}</td>
                         <td>${result.attempt_id ?? 1}</td>
                         <td class="${result.return_code === 0 ? 'return-code-0' : 'return-code-error'}">${result.return_code ?? '-'}</td>
-                        <td><span class="status-badge status-${statusNames[result.status]?.toLowerCase() || 'unknown'}">${statusNames[result.status] || result.status}</span></td>
+                        <td><span class="status-badge status-${this.jobStatusSlug(result.status)}">${this.formatJobStatus(result.status)}</span></td>
                         <td>${result.exec_time_minutes != null ? result.exec_time_minutes.toFixed(2) : '-'}</td>
                         <td>${this.formatBytes(result.peak_memory_bytes)}</td>
-                        <td>${result.avg_cpu_percent != null ? result.avg_cpu_percent.toFixed(1) : '-'}</td>
+                        <td>${result.peak_cpu_percent != null ? result.peak_cpu_percent.toFixed(1) : '-'}</td>
                     </tr>
                 `).join('');
 
@@ -570,14 +568,10 @@ Object.assign(TorcDashboard.prototype, {
             let itemValue = this.getFieldValue(item, field, tabType, jobNameMap);
 
             if (field === 'status') {
-                const statusNames = ['uninitialized', 'blocked', 'ready', 'pending', 'running', 'completed', 'failed', 'canceled', 'terminated', 'disabled'];
                 const filterStatusName = value.toLowerCase();
-                let itemStatusName;
-                if (typeof item.status === 'number') {
-                    itemStatusName = statusNames[item.status] || '';
-                } else {
-                    itemStatusName = String(item.status).toLowerCase();
-                }
+                const itemStatusName = typeof item.status === 'number'
+                    ? (this.JOB_STATUS_ORDER[item.status] || '')
+                    : String(item.status).toLowerCase();
                 switch (operator) {
                     case '=': return itemStatusName === filterStatusName;
                     case '!=': return itemStatusName !== filterStatusName;
@@ -631,11 +625,10 @@ Object.assign(TorcDashboard.prototype, {
     },
 
     getSearchableText(item, tabType, jobNameMap) {
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
         const parts = [];
         if (item.id != null) parts.push(String(item.id));
         if (item.name) parts.push(item.name);
-        if (item.status != null) parts.push(statusNames[item.status] || '');
+        if (item.status != null) parts.push(this.formatJobStatus(item.status));
 
         switch (tabType) {
             case 'jobs':

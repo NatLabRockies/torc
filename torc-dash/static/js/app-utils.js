@@ -101,6 +101,52 @@ Object.assign(TorcDashboard.prototype, {
         return `${secs}s`;
     },
 
+    // Canonical capitalized display names for JobStatus, keyed by the
+    // snake_case strings the server sends per the OpenAPI enum. Older code
+    // indexed `['Uninitialized', ...]` by an integer status, which silently
+    // returned undefined once the API switched to string status — keep both
+    // shapes working so the dash doesn't quietly fall back to "unknown".
+    JOB_STATUS_NAMES: {
+        uninitialized: 'Uninitialized',
+        blocked: 'Blocked',
+        ready: 'Ready',
+        pending: 'Pending',
+        running: 'Running',
+        completed: 'Completed',
+        failed: 'Failed',
+        canceled: 'Canceled',
+        terminated: 'Terminated',
+        disabled: 'Disabled',
+        pending_failed: 'Pending Failed',
+    },
+
+    JOB_STATUS_ORDER: [
+        'uninitialized', 'blocked', 'ready', 'pending', 'running',
+        'completed', 'failed', 'canceled', 'terminated', 'disabled',
+        'pending_failed',
+    ],
+
+    // Return the capitalized display name for a JobStatus, accepting either
+    // the snake_case string (current API) or the legacy integer index.
+    // Falls back to stringifying unknown values rather than returning ''.
+    formatJobStatus(status) {
+        if (status == null) return '';
+        if (typeof status === 'number') {
+            return this.JOB_STATUS_NAMES[this.JOB_STATUS_ORDER[status]] || String(status);
+        }
+        return this.JOB_STATUS_NAMES[status] || String(status);
+    },
+
+    // CSS-class slug for the status badge ("running", "completed", ...).
+    // Returns 'unknown' for nulls/unrecognized values.
+    jobStatusSlug(status) {
+        if (status == null) return 'unknown';
+        if (typeof status === 'number') {
+            return this.JOB_STATUS_ORDER[status] || 'unknown';
+        }
+        return this.JOB_STATUS_NAMES[status] ? status : 'unknown';
+    },
+
     formatBytes(bytes) {
         if (bytes == null) return '-';
         if (bytes === 0) return '0 B';

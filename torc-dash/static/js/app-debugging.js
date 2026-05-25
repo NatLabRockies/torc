@@ -151,8 +151,6 @@ Object.assign(TorcDashboard.prototype, {
             return;
         }
 
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
-
         container.innerHTML = `
             <table class="data-table">
                 <thead>
@@ -170,7 +168,7 @@ Object.assign(TorcDashboard.prototype, {
                         return `
                             <tr class="debug-table-row" onclick="app.selectDebugJob(${idx})">
                                 <td>${this.escapeHtml(job.name || '-')}</td>
-                                <td><span class="status-badge status-${statusNames[job.status]?.toLowerCase() || 'unknown'}">${statusNames[job.status] || '-'}</span></td>
+                                <td><span class="status-badge status-${this.jobStatusSlug(job.status)}">${this.formatJobStatus(job.status) || '-'}</span></td>
                                 <td class="${result?.return_code === 0 ? 'return-code-0' : 'return-code-error'}">${result?.return_code ?? '-'}</td>
                                 <td><code>${result?.stdoutPath ? this.escapeHtml(this.truncate(result.stdoutPath, 40)) : '-'}</code></td>
                                 <td><code>${result?.stderrPath ? this.escapeHtml(this.truncate(result.stderrPath, 40)) : '-'}</code></td>

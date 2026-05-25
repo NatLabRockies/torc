@@ -144,7 +144,6 @@ Object.assign(TorcDashboard.prototype, {
     },
 
     renderJobDetailsSummary(job) {
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
         const summaryEl = document.getElementById('job-details-summary');
 
         summaryEl.innerHTML = `
@@ -159,7 +158,7 @@ Object.assign(TorcDashboard.prototype, {
                 </div>
                 <div class="job-details-summary-item">
                     <span class="label">Status</span>
-                    <span class="value"><span class="status-badge status-${statusNames[job.status]?.toLowerCase() || 'unknown'}">${statusNames[job.status] || job.status}</span></span>
+                    <span class="value"><span class="status-badge status-${this.jobStatusSlug(job.status)}">${this.formatJobStatus(job.status)}</span></span>
                 </div>
                 <div class="job-details-summary-item">
                     <span class="label">Compute Node</span>
@@ -196,7 +195,6 @@ Object.assign(TorcDashboard.prototype, {
         }
 
         const data = this.jobDetailsData;
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
 
         switch (tabName) {
             case 'results':
@@ -213,7 +211,7 @@ Object.assign(TorcDashboard.prototype, {
                                     <th>Status</th>
                                     <th>Exec Time (min)</th>
                                     <th>Peak Mem</th>
-                                    <th>Avg CPU %</th>
+                                    <th>Peak CPU %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -222,10 +220,10 @@ Object.assign(TorcDashboard.prototype, {
                                         <td>${r.run_id ?? '-'}</td>
                                         <td>${r.attempt_id ?? 1}</td>
                                         <td class="${r.return_code === 0 ? 'return-code-0' : 'return-code-error'}">${r.return_code ?? '-'}</td>
-                                        <td><span class="status-badge status-${statusNames[r.status]?.toLowerCase() || 'unknown'}">${statusNames[r.status] || r.status}</span></td>
+                                        <td><span class="status-badge status-${this.jobStatusSlug(r.status)}">${this.formatJobStatus(r.status)}</span></td>
                                         <td>${r.exec_time_minutes != null ? r.exec_time_minutes.toFixed(2) : '-'}</td>
                                         <td>${this.formatBytes(r.peak_memory_bytes)}</td>
-                                        <td>${r.avg_cpu_percent != null ? r.avg_cpu_percent.toFixed(1) : '-'}</td>
+                                        <td>${r.peak_cpu_percent != null ? r.peak_cpu_percent.toFixed(1) : '-'}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -306,7 +304,7 @@ Object.assign(TorcDashboard.prototype, {
                                         <tr>
                                             <td><code>${j.id ?? '-'}</code></td>
                                             <td>${this.escapeHtml(j.name || '-')}</td>
-                                            <td><span class="status-badge status-${statusNames[j.status]?.toLowerCase() || 'unknown'}">${statusNames[j.status] || j.status}</span></td>
+                                            <td><span class="status-badge status-${this.jobStatusSlug(j.status)}">${this.formatJobStatus(j.status)}</span></td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -330,7 +328,7 @@ Object.assign(TorcDashboard.prototype, {
                                         <tr>
                                             <td><code>${j.id ?? '-'}</code></td>
                                             <td>${this.escapeHtml(j.name || '-')}</td>
-                                            <td><span class="status-badge status-${statusNames[j.status]?.toLowerCase() || 'unknown'}">${statusNames[j.status] || j.status}</span></td>
+                                            <td><span class="status-badge status-${this.jobStatusSlug(j.status)}">${this.formatJobStatus(j.status)}</span></td>
                                         </tr>
                                     `).join('')}
                                 </tbody>

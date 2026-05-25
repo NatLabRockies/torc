@@ -623,6 +623,7 @@ body {
 .status-running { background: #cce5ff; color: #004085; }
 .status-completed { background: #d4edda; color: #155724; }
 .status-failed { background: #f8d7da; color: #721c24; }
+.status-pending_failed { background: #f8d7da; color: #721c24; }
 .status-canceled { background: #e2d9f3; color: #4a235a; }
 .status-terminated { background: #d6d8db; color: #383d41; }
 .status-disabled { background: #fdfdfe; color: #818182; }

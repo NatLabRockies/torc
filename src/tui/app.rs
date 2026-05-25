@@ -683,7 +683,9 @@ impl App {
             workflows: Vec::new(),
             workflows_all: Vec::new(),
             workflows_state: TableState::default(),
-            workflows_sort: WorkflowsSort::None,
+            // Default to newest-first to match the dash. Users can cycle
+            // through Asc / unsorted with the ID column shortcut.
+            workflows_sort: WorkflowsSort::IdDesc,
             workflows_offset: 0,
             workflows_has_more: false,
             jobs: Vec::new(),
