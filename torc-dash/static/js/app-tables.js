@@ -62,7 +62,9 @@ Object.assign(TorcDashboard.prototype, {
                 </thead>
                 <tbody>
                     ${jobs.map(job => {
-                        const isRunning = job.status === 'running';
+                        // Route through jobStatusSlug so the legacy-integer
+                        // fallback in the helper covers both wire formats.
+                        const isRunning = this.jobStatusSlug(job.status) === 'running';
                         const elapsed = isRunning ? this.formatElapsedSince(job.start_time) : '-';
                         return `
                         <tr>
