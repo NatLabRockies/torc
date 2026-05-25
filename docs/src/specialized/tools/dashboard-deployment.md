@@ -19,7 +19,7 @@ Each scenario addresses different environments and use cases.
 
 Before starting, ensure you have:
 
-1. **Built Torc binaries** (see [Installation](../installation.md)):
+1. **Built Torc binaries** (see [Installation](../../getting-started/installation.md)):
    ```bash
    cargo build --release --workspace
    ```

@@ -158,7 +158,7 @@ echo -e "apple red\nbanana yellow\ncherry red\ndate brown" > /tmp/input.txt
 
 ```bash
 # Create the workflow and capture the ID
-WORKFLOW_ID=$(torc create diamond.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create diamond.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Ensure the input file timestamp is current

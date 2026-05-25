@@ -234,7 +234,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create /tmp/ml_training.yaml | jq -r '.workflow_id')
 echo "Alice created workflow: $WORKFLOW_ID"
 ```
 
@@ -465,6 +465,6 @@ In this tutorial, you learned:
 
 ## Next Steps
 
-- Learn about [Configuration Files](./configuration.md) to set up persistent configuration
+- Learn about [Configuration Files](./configuration-files.md) to set up persistent configuration
 - Explore [Server Deployment](./server-deployment.md) for production setups
 - See the [Access Groups Reference](./access-groups.md) for all available commands

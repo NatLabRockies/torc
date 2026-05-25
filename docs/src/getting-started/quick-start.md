@@ -16,7 +16,7 @@ These guides are for users with specific infrastructure needs:
 
 | Environment       | Guide                                                                       | When to Use                           |
 | ----------------- | --------------------------------------------------------------------------- | ------------------------------------- |
-| HPC Cluster       | [Quick Start (HPC)](../specialized/hpc/quick-start-hpc.md)                  | You have access to a Slurm cluster    |
+| HPC Cluster       | [Quick Start (HPC)](../getting-started/quick-start-hpc.md)                  | You have access to a Slurm cluster    |
 | Multiple Machines | [Quick Start (Remote Workers)](../specialized/remote/quick-start-remote.md) | You want to distribute jobs via SSH   |
 | AI-Assisted       | [AI-Assisted Workflow Management](../specialized/tools/ai-assistant.md)     | You prefer conversational interaction |
 

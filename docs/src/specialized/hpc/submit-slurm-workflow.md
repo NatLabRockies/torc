@@ -28,16 +28,6 @@ Either way, torc will:
 3. Generate Slurm scheduler configurations
 4. Submit everything for execution
 
-## Preview Before Submitting
-
-Preview the generated configuration without creating anything:
-
-```bash
-torc slurm generate --account <your-account> --dry-run workflow.yaml
-```
-
-This shows the Slurm schedulers and workflow actions that would be created.
-
 ## Requirements
 
 Your workflow must define resource requirements for jobs:

@@ -267,6 +267,9 @@ jobs:
           sed -i "s|edit-url-template = \"https://github.com/NatLabRockies/torc/edit/main/docs/{path}\"|edit-url-template = \"https://github.com/NatLabRockies/torc/tree/${VERSION}/docs/{path}\"|" book.toml
           mdbook build
 
+      - name: Check documentation links
+        run: python3 .github/scripts/check-doc-links.py --internal --external
+
       - name: Setup gh-pages branch
         run: .github/scripts/gh-pages-setup.sh
         env:

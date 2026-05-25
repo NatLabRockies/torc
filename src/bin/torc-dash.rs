@@ -2515,7 +2515,7 @@ struct HpcProfilesResponse {
 
 /// List available HPC profiles and detect current profile
 async fn cli_hpc_profiles_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    // Run: torc hpc list -f json
+    // Run: torc -f json hpc list
     let args = vec!["-f", "json", "hpc", "list"];
 
     info!("Running: {} {}", state.torc_bin, args.join(" "));

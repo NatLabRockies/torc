@@ -28,7 +28,7 @@ Torc generates several types of log files during workflow execution:
 > enabled, files are removed when a job completes with exit code 0.
 
 For detailed information about log file contents, see [Debugging Workflows](debugging.md) and
-[Debugging Slurm Workflows](debugging-slurm.md).
+[Debugging Slurm Workflows](../../specialized/hpc/debugging-slurm.md).
 
 ## Bundling Logs
 
@@ -183,4 +183,5 @@ torc logs analyze wf<id>/
 ## See Also
 
 - [Debugging Workflows](debugging.md) — General debugging workflow and log file details
-- [Debugging Slurm Workflows](debugging-slurm.md) — Slurm-specific debugging tools
+- [Debugging Slurm Workflows](../../specialized/hpc/debugging-slurm.md) — Slurm-specific debugging
+  tools

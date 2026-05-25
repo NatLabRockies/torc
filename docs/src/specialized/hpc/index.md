@@ -2,6 +2,8 @@
 
 Running Torc workflows on HPC clusters with Slurm.
 
+- [Choosing a Server Deployment](../admin/choosing-deployment.md) - Pick shared server, standalone,
+  login-node, dedicated allocation, or in-memory mode
 - [Slurm Overview](./slurm-workflows.md) - How Torc simplifies Slurm workflows
 - [Submitting Slurm Workflows](./submit-slurm-workflow.md) - Running workflows on HPC clusters
 - [Advanced Slurm Configuration](./slurm.md) - Manual Slurm scheduler setup

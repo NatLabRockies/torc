@@ -486,5 +486,6 @@ allocations have been submitted and will execute these jobs automatically.
 
 - [Configuring AI Assistants](./ai-assistants.md) — Full configuration options, all tools,
   troubleshooting
-- [Automatic Failure Recovery](./automatic-recovery.md) — Use `torc watch` for automated recovery
+- [Automatic Failure Recovery](../fault-tolerance/automatic-recovery.md) — Use `torc watch` for
+  automated recovery
 - [Configuration Files](./configuration.md) — Set up Torc configuration

@@ -470,8 +470,7 @@ Validate your workflow logic locally before submitting to HPC:
 torc run workflow.yaml
 
 # Then submit to HPC
-torc slurm generate --account myproject workflow.yaml
-torc submit workflow.yaml
+torc slurm generate --account myproject workflow.yaml | torc submit -
 ```
 
 ## Limitations and Caveats

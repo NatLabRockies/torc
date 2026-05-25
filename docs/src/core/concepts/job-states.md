@@ -58,4 +58,4 @@ stateDiagram-v2
 - **terminated** (8) - Explicitly terminated by system, such as at wall-time timeout
 - **pending_failed** (10) - Job failed without a matching failure handler. Awaiting AI-assisted
   classification to determine if the error is transient (retry) or permanent (fail). See
-  [AI-Assisted Recovery](../specialized/fault-tolerance/ai-assisted-recovery.md).
+  [AI-Assisted Recovery](../../specialized/fault-tolerance/ai-assisted-recovery.md).

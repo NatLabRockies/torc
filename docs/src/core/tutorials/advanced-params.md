@@ -162,7 +162,7 @@ ALL 18 metrics files."
 ## Step 2: Create and Initialize the Workflow
 
 ```bash
-WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create grid_search.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
@@ -173,7 +173,7 @@ torc workflows init $WORKFLOW_ID
 Count the jobs:
 
 ```bash
-torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
+torc -f json jobs list $WORKFLOW_ID | jq '.items | length'
 ```
 
 Expected: **21 jobs** (1 prepare + 18 training + 1 aggregate + 1 select)
@@ -181,7 +181,7 @@ Expected: **21 jobs** (1 prepare + 18 training + 1 aggregate + 1 select)
 List the training jobs:
 
 ```bash
-torc jobs list $WORKFLOW_ID -f json | jq -r '.items[] | select(.name | startswith("train_")) | .name' | sort
+torc -f json jobs list $WORKFLOW_ID | jq -r '.items[] | select(.name | startswith("train_")) | .name' | sort
 ```
 
 Output (18 training jobs):

@@ -46,7 +46,7 @@ configuration.
 
 To use dynamic Slurm detection, you can:
 
-1. **Explicitly request it**: Use `--hpc-profile slurm` in any command that requires a profile.
+1. **Explicitly request it**: Use `--profile slurm` in any command that requires a profile.
 2. **Let Torc auto-detect it**: If you're on a Slurm system and haven't specified a profile or
    matched a built-in one, Torc will automatically fall back to dynamic Slurm detection.
 

@@ -7,7 +7,7 @@ This document contains the help content for the `torc` command-line program.
 - [`torc`](#torc)
 - [`torc run`](#torc-run)
 - [`torc submit`](#torc-submit)
-- [`torc slurm generate` + `torc submit`](#torc-submit-slurm)
+- [`torc slurm generate` + `torc submit`](#torc-slurm-generate-torc-submit)
 - [`torc watch`](#torc-watch)
 - [`torc recover`](#torc-recover)
 - [`torc workflows`](#torc-workflows)
@@ -2172,4 +2172,4 @@ Generate shell completions
 <hr/>
 
 <small><i>This document was generated automatically by
-<a href="https://crates.io/crates/clap-markdown"><code>clap-markdown</code></a>.</i></small>
+<a href="https://docs.rs/clap-markdown/latest/clap_markdown/"><code>clap-markdown</code></a>.</i></small>

@@ -307,7 +307,7 @@ waiting:
 
 ```bash
 # Submit a workflow with failure handlers
-torc slurm generate --account my_project workflow.yaml && torc submit workflow.yaml
+torc slurm generate --account my_project workflow.yaml | torc submit -
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule

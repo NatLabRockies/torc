@@ -29,7 +29,7 @@ If you are on a Slurm system, you can use Torc immediately without any configura
 
 1. **Auto-detection**: Torc automatically falls back to dynamic Slurm detection if no other profile
    matches.
-2. **Explicit use**: You can force dynamic detection by using `--hpc-profile slurm` in any command.
+2. **Explicit use**: You can force dynamic detection by using `--profile slurm` in any command.
 
 Verify it works on your system:
 

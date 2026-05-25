@@ -264,11 +264,11 @@ Your script can use torc CLI commands to query and modify the workflow:
 WORKFLOW_ID=$1  # or use $TORC_WORKFLOW_ID
 
 # Find failed jobs
-FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.items[].id')
+FAILED_JOBS=$(torc -f json jobs list $WORKFLOW_ID --status failed | jq -r '.items[].id')
 
 for JOB_ID in $FAILED_JOBS; do
     # Get current resource requirements
-    JOB_INFO=$(torc jobs get $JOB_ID -f json)
+    JOB_INFO=$(torc -f json jobs get $JOB_ID)
     RR_ID=$(echo "$JOB_INFO" | jq -r '.resource_requirements_id')
 
     # Check if this is a Spark job that needs more nodes
@@ -310,7 +310,7 @@ scheduled without manual intervention.
 
 ```bash
 # Submit a workflow with failure handlers
-torc slurm generate --account my_project workflow.yaml && torc submit workflow.yaml
+torc slurm generate --account my_project workflow.yaml | torc submit -
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule

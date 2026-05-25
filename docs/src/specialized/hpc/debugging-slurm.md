@@ -4,7 +4,7 @@ When running workflows on Slurm clusters, Torc provides additional debugging too
 designed for Slurm environments. This guide covers Slurm-specific debugging techniques and tools.
 
 For general debugging concepts and tools that apply to all workflows, see
-[Debugging Workflows](debugging.md).
+[Debugging Workflows](../../core/monitoring/debugging.md).
 
 ## Overview
 
@@ -75,13 +75,10 @@ correlates them with affected Torc jobs:
 
 ```bash
 # Parse logs for a specific workflow
-torc slurm parse-logs <workflow_id>
-
-# Specify custom output directory
-torc slurm parse-logs <workflow_id> --output-dir /path/to/torc_output
+torc slurm parse-logs --workflow-id=<workflow_id> <output-directory>
 
 # Output as JSON for programmatic processing
-torc slurm parse-logs <workflow_id> --format json
+torc -f json slurm parse-logs --workflow-id=<workflow_id> <output-directory>
 ```
 
 ### Detected Error Patterns
@@ -157,7 +154,7 @@ torc slurm sacct <workflow_id>
 torc slurm sacct <workflow_id> --save-json --output-dir /path/to/torc_output
 
 # Output as JSON for programmatic processing
-torc slurm sacct <workflow_id> --format json
+torc -f json slurm sacct <workflow_id>
 ```
 
 ### Summary Table Fields
@@ -418,5 +415,5 @@ when:
 
 ## See Also
 
-- [Debugging Workflows](debugging.md) — General debugging tools and workflows
-- [Working with Logs](working-with-logs.md) — Bundling and analyzing logs
+- [Debugging Workflows](../../core/monitoring/debugging.md) — General debugging tools and workflows
+- [Working with Logs](../../core/monitoring/working-with-logs.md) — Bundling and analyzing logs

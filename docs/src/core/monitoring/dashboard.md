@@ -309,7 +309,7 @@ enterprise account, you can connect `torc-mcp-server` directly to your AI tool:
 - **Claude Code** (Pro/Max/Team/Enterprise): Add `torc-mcp-server` as an MCP server -- see
   [AI-Assisted Workflow Management](../../specialized/tools/ai-assistant.md#quick-setup-claude-code)
 - **VS Code + Copilot** (enterprise): Add `torc-mcp-server` to `.vscode/mcp.json` -- see
-  [AI-Assisted Workflow Management](../../specialized/tools/ai-assistant.md#quick-setup-vs-code--copilot)
+  [AI-Assisted Workflow Management](../../specialized/tools/ai-assistant.md#quick-setup-vs-code-copilot)
 
 These approaches use the AI provider's own authentication and give you the same Torc tools in your
 terminal or editor instead of the dashboard.
@@ -413,7 +413,7 @@ Settings are saved to browser local storage.
    Connect via `ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node`.
 3. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS
 4. **Authentication**: Torc server supports htpasswd-based authentication (see
-   [Authentication](./authentication.md))
+   [Authentication](../../specialized/admin/authentication.md))
 
 ## Troubleshooting
 

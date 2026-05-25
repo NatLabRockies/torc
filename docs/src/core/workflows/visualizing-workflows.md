@@ -108,7 +108,8 @@ This helps you understand the workflow topology before adding Slurm configuratio
 
 ## DAG Visualization in the Dashboard
 
-The [web dashboard](./dashboard.md) provides interactive DAG (Directed Acyclic Graph) visualization.
+The [web dashboard](../monitoring/dashboard.md) provides interactive DAG (Directed Acyclic Graph)
+visualization.
 
 ### Viewing the DAG
 
