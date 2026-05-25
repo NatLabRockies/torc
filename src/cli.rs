@@ -173,13 +173,16 @@ pub enum Commands {
     // =========================================================================
     // Workflow Execution - Primary commands for running workflows
     // =========================================================================
-    /// Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)
+    /// Create a workflow from a specification file or stdin (supports JSON, JSON5, YAML, and KDL)
     #[command(
         hide = true,
         after_long_help = "\
 EXAMPLES:
     # Create workflow from YAML
     torc create my_workflow.yaml
+
+    # Read the spec from stdin (format detected from the piped content)
+    cat my_workflow.yaml | torc create -
 
     # Validate spec before creating
     torc create --dry-run my_workflow.yaml
@@ -213,13 +216,16 @@ EXAMPLES:
         #[arg(long)]
         dry_run: bool,
     },
-    /// Run a workflow locally (create from spec file or run existing workflow by ID)
+    /// Run a workflow locally (create from spec file or stdin, or run existing workflow by ID)
     #[command(
         hide = true,
         after_long_help = "\
 EXAMPLES:
     # Run from spec file
     torc run workflow.yaml
+
+    # Read the spec from stdin
+    cat workflow.yaml | torc run -
 
     # Run existing workflow
     torc run 123
@@ -397,7 +403,7 @@ SEE ALSO:
         #[arg(hide = true, trailing_var_arg = true)]
         trailing: Vec<String>,
     },
-    /// Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
+    /// Submit a workflow to scheduler (create from spec file or stdin, or submit existing by ID)
     ///
     /// Requires workflow to have an on_workflow_start action with schedule_nodes.
     /// For Slurm workflows without pre-configured schedulers, use

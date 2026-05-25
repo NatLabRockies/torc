@@ -23,6 +23,23 @@ torc create workflow.kdl
 
 Torc detects the format from the file extension.
 
+### Create from stdin
+
+Pass `-` instead of a path to read the spec from stdin. This is handy for shell pipelines and for
+generating a spec on the fly. The format is auto-detected from the piped content (no extension is
+available), so JSON, JSON5, YAML, and KDL all work.
+
+```bash
+# Pipe a file
+cat workflow.yaml | torc create -
+
+# Generate a spec and create in one pipeline
+torc slurm generate --account myproject workflow.yaml | torc submit -
+```
+
+The same `-` convention works for `torc run`, `torc submit`, `torc slurm generate`, and
+`torc slurm plan-allocations`.
+
 ### Create and Run in One Step
 
 For quick iteration, combine creation and execution:

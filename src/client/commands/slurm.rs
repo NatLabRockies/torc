@@ -521,6 +521,12 @@ EXAMPLES:
     # Save to new file
     torc slurm generate --account myproject -o workflow_with_slurm.yaml workflow.yaml
 
+    # Generate and submit in one pipeline (output piped straight into submit)
+    torc slurm generate --account myproject workflow.yaml | torc submit -
+
+    # Read the spec from stdin, too
+    cat workflow.yaml | torc slurm generate --account myproject -
+
     # Use specific HPC profile
     torc slurm generate --account myproject --profile kestrel workflow.yaml
 
@@ -713,6 +719,9 @@ EXAMPLES:
 
     # Offline mode (skip sinfo/squeue, only analyze workflow)
     torc slurm plan-allocations --account myproject --offline workflow.yaml
+
+    # Read the spec from stdin
+    cat workflow.yaml | torc slurm plan-allocations --account myproject -
 "
     )]
     PlanAllocations {

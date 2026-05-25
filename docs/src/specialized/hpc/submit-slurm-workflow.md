@@ -4,14 +4,24 @@ Submit a workflow specification to a Slurm-based HPC system with automatic sched
 
 ## Quick Start
 
-Generate Slurm schedulers and submit in two steps:
+Generate Slurm schedulers and submit in a single pipeline. `torc slurm generate` writes the
+augmented spec to stdout, and `torc submit -` reads it from stdin:
 
 ```bash
-torc slurm generate --account <your-account> workflow.yaml
-torc submit workflow.yaml
+torc slurm generate --account <your-account> workflow.yaml | torc submit -
 ```
 
-Torc will:
+Prefer two explicit steps? Save the generated spec to a file first, then submit that file:
+
+```bash
+torc slurm generate --account <your-account> -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
+```
+
+> Note: `torc slurm generate` does not modify the input file in place — it emits the augmented spec
+> to stdout (or to `-o <file>`). Submit the generated output, not the original `workflow.yaml`.
+
+Either way, torc will:
 
 1. Detect your HPC system (e.g., NLR Kestrel)
 2. Match job requirements to appropriate partitions
