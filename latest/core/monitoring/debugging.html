@@ -612,8 +612,8 @@ torc slurm schedule-nodes &lt;workflow_id&gt; --output-dir /path/to/my_output
 # Generate report using the same directory
 torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/my_output
 </code></pre>
-<p><strong>Default behavior</strong>: If <code>--output-dir</code> is not specified, both the runner and reports command
-default to <code>./output</code>.</p>
+<p><strong>Default behavior</strong>: If <code>--output-dir</code> is not specified, both the runner and the
+<code>results list --include-logs</code> command default to <code>./output</code>.</p>
 <h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
 <ol>
 <li>
@@ -639,7 +639,7 @@ configuration issues</p>
 </li>
 <li>
 <p><strong>Combine with resource monitoring</strong>: Use <code>results list --include-logs</code> for log files and
-<code>reports check-resource-utilization</code> for performance issues</p>
+<code>workflows check-resources</code> for performance issues</p>
 <pre><code class="language-bash"># Check if job failed due to resource constraints
 torc workflows check-resources "$WF_ID"
 torc results list --include-logs "$WF_ID" &gt; report.json

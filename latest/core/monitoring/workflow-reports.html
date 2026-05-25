@@ -247,7 +247,7 @@ network load if you are using a shared server.</p>
 </code></pre>
 <h3 id="json-output"><a class="header" href="#json-output">JSON Output</a></h3>
 <p>This is useful for scripts:</p>
-<pre><code class="language-bash">torc -f json reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">torc -f json status &lt;workflow_id&gt;
 </code></pre>
 <pre><code class="language-json">{
   "workflow_id": 42,
@@ -280,7 +280,7 @@ WORKFLOW_ID=$1
 # Check completion status
 if torc -f json workflows is-complete "$WORKFLOW_ID" | jq -e '.is_complete' &gt; /dev/null; then
     echo "Workflow complete, generating summary..."
-    torc -f json reports summary "$WORKFLOW_ID" &gt; "summary_${WORKFLOW_ID}.json"
+    torc -f json status "$WORKFLOW_ID" &gt; "summary_${WORKFLOW_ID}.json"
 else
     echo "Workflow not yet complete"
     exit 1

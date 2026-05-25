@@ -280,9 +280,17 @@ needing a running server. See <a href="../how-to/run-inline-commands.html">Run I
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--url &lt;URL&gt;</code></td><td>Server URL (or set <code>TORC_API_URL</code>)</td></tr>
 <tr><td><code>-f json</code></td><td>Output as JSON instead of table</td></tr>
+<tr><td><code>-f csv</code></td><td>Output list commands as CSV (e.g. <code>results</code>)</td></tr>
 <tr><td><code>--log-level debug</code></td><td>Enable debug logging</td></tr>
 </tbody></table>
-</div></div>
+</div>
+<p>Export results to a spreadsheet-friendly CSV:</p>
+<pre><code class="language-bash">torc -f csv results list &lt;workflow_id&gt; &gt; results.csv
+</code></pre>
+<p><code>-f csv</code> works for list commands (<code>jobs list</code>, <code>results list</code>, <code>workflows list</code>, <code>files list</code>, …).
+Single-record commands (e.g. <code>jobs get</code>) and multi-section reports (<code>status</code>,
+<code>workflows check-resources</code>) reject <code>csv</code> with a clear error.</p>
+</div>
 
                     </main>
 

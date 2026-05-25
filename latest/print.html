@@ -7889,7 +7889,7 @@ network load if you are using a shared server.</p>
 </code></pre>
 <h3 id="json-output"><a class="header" href="#json-output">JSON Output</a></h3>
 <p>This is useful for scripts:</p>
-<pre><code class="language-bash">torc -f json reports summary &lt;workflow_id&gt;
+<pre><code class="language-bash">torc -f json status &lt;workflow_id&gt;
 </code></pre>
 <pre><code class="language-json">{
   "workflow_id": 42,
@@ -7922,7 +7922,7 @@ WORKFLOW_ID=$1
 # Check completion status
 if torc -f json workflows is-complete "$WORKFLOW_ID" | jq -e '.is_complete' &gt; /dev/null; then
     echo "Workflow complete, generating summary..."
-    torc -f json reports summary "$WORKFLOW_ID" &gt; "summary_${WORKFLOW_ID}.json"
+    torc -f json status "$WORKFLOW_ID" &gt; "summary_${WORKFLOW_ID}.json"
 else
     echo "Workflow not yet complete"
     exit 1
@@ -8532,8 +8532,8 @@ torc slurm schedule-nodes &lt;workflow_id&gt; --output-dir /path/to/my_output
 # Generate report using the same directory
 torc results list --include-logs &lt;workflow_id&gt; --output-dir /path/to/my_output
 </code></pre>
-<p><strong>Default behavior</strong>: If <code>--output-dir</code> is not specified, both the runner and reports command
-default to <code>./output</code>.</p>
+<p><strong>Default behavior</strong>: If <code>--output-dir</code> is not specified, both the runner and the
+<code>results list --include-logs</code> command default to <code>./output</code>.</p>
 <h2 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h2>
 <ol>
 <li>
@@ -8559,7 +8559,7 @@ configuration issues</p>
 </li>
 <li>
 <p><strong>Combine with resource monitoring</strong>: Use <code>results list --include-logs</code> for log files and
-<code>reports check-resource-utilization</code> for performance issues</p>
+<code>workflows check-resources</code> for performance issues</p>
 <pre><code class="language-bash"># Check if job failed due to resource constraints
 torc workflows check-resources "$WF_ID"
 torc results list --include-logs "$WF_ID" &gt; report.json
@@ -8884,9 +8884,17 @@ needing a running server. See <a href="core/reference/../how-to/run-inline-comma
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--url &lt;URL&gt;</code></td><td>Server URL (or set <code>TORC_API_URL</code>)</td></tr>
 <tr><td><code>-f json</code></td><td>Output as JSON instead of table</td></tr>
+<tr><td><code>-f csv</code></td><td>Output list commands as CSV (e.g. <code>results</code>)</td></tr>
 <tr><td><code>--log-level debug</code></td><td>Enable debug logging</td></tr>
 </tbody></table>
-</div></div>
+</div>
+<p>Export results to a spreadsheet-friendly CSV:</p>
+<pre><code class="language-bash">torc -f csv results list &lt;workflow_id&gt; &gt; results.csv
+</code></pre>
+<p><code>-f csv</code> works for list commands (<code>jobs list</code>, <code>results list</code>, <code>workflows list</code>, <code>files list</code>, …).
+Single-record commands (e.g. <code>jobs get</code>) and multi-section reports (<code>status</code>,
+<code>workflows check-resources</code>) reject <code>csv</code> with a clear error.</p>
+</div>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>This document contains the help content for the <code>torc</code> command-line program.</p>
 <p><strong>Command Overview:</strong></p>
@@ -8911,7 +8919,6 @@ needing a running server. See <a href="core/reference/../how-to/run-inline-comma
 <li><a href="core/reference/cli.html#torc-remote"><code>torc remote</code></a></li>
 <li><a href="core/reference/cli.html#torc-scheduled-compute-nodes"><code>torc scheduled-compute-nodes</code></a></li>
 <li><a href="core/reference/cli.html#torc-hpc"><code>torc hpc</code></a></li>
-<li><a href="core/reference/cli.html#torc-reports"><code>torc reports</code></a></li>
 <li><a href="core/reference/cli.html#torc-config"><code>torc config</code></a></li>
 <li><a href="core/reference/cli.html#torc-tui"><code>torc tui</code></a></li>
 <li><a href="core/reference/cli.html#torc-plot-resources"><code>torc plot-resources</code></a></li>
@@ -8941,7 +8948,6 @@ ID)</li>
 <li><code>remote</code> — Remote worker execution commands (SSH-based distributed execution)</li>
 <li><code>scheduled-compute-nodes</code> — Scheduled compute node management commands</li>
 <li><code>hpc</code> — HPC system profiles and partition information</li>
-<li><code>reports</code> — Generate reports and analytics</li>
 <li><code>config</code> — Manage configuration files and settings</li>
 <li><code>tui</code> — Interactive terminal UI for managing workflows</li>
 <li><code>plot-resources</code> — Generate interactive HTML plots from resource monitoring data</li>
@@ -8950,7 +8956,9 @@ ID)</li>
 <h6 id="options"><a class="header" href="#options"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--log-level &lt;LOG_LEVEL&gt;</code> — Log level (error, warn, info, debug, trace)</li>
-<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (table or json). Default: <code>table</code></li>
+<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (table, json, or csv). Default: <code>table</code>. <code>csv</code> is
+supported for list commands (e.g. <code>jobs list</code>, <code>results list</code>, <code>workflows list</code>); single-record
+and multi-section report commands reject it.</li>
 <li><code>--url &lt;URL&gt;</code> — URL of torc server</li>
 <li><code>--username &lt;USERNAME&gt;</code> — Username for basic authentication</li>
 <li><code>--password &lt;PASSWORD&gt;</code> — Password for basic authentication (will prompt if username provided but
@@ -10526,16 +10534,6 @@ system.</li>
 <li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (prints to stdout if not specified)</li>
 <li><code>--skip-stdby</code> — Skip standby partitions (ones ending in -stdby)</li>
 </ul>
-<h2 id="torc-reports"><a class="header" href="#torc-reports"><code>torc reports</code></a></h2>
-<p>Generate reports and analytics</p>
-<p><strong>Usage:</strong> <code>torc reports &lt;COMMAND&gt;</code></p>
-<h6 id="subcommands-14"><a class="header" href="#subcommands-14"><strong>Subcommands:</strong></a></h6>
-<ul>
-<li><code>check-resource-utilization</code> — Check resource utilization and report jobs that exceeded their
-specified requirements</li>
-<li><code>results</code> — Generate a comprehensive JSON report of job results including all log file paths</li>
-<li><code>summary</code> — Generate a summary of workflow results (requires workflow to be complete)</li>
-</ul>
 <h2 id="torc-workflows-check-resources"><a class="header" href="#torc-workflows-check-resources"><code>torc workflows check-resources</code></a></h2>
 <p>Check resource utilization and report jobs that exceeded their specified requirements</p>
 <p><strong>Usage:</strong> <code>torc workflows check-resources [OPTIONS] [WORKFLOW_ID]</code></p>
@@ -10574,7 +10572,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config"><a class="header" href="#torc-config"><code>torc config</code></a></h2>
 <p>Manage configuration files and settings</p>
 <p><strong>Usage:</strong> <code>torc config &lt;COMMAND&gt;</code></p>
-<h6 id="subcommands-15"><a class="header" href="#subcommands-15"><strong>Subcommands:</strong></a></h6>
+<h6 id="subcommands-14"><a class="header" href="#subcommands-14"><strong>Subcommands:</strong></a></h6>
 <ul>
 <li><code>show</code> — Show the effective configuration (merged from all sources)</li>
 <li><code>paths</code> — Show configuration file paths</li>
@@ -12386,7 +12384,7 @@ torc config validate          # Validate current configuration
 <h3 id="client-section"><a class="header" href="#client-section"><code>[client]</code> Section</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>api_url</code></td><td>string</td><td><code>http://localhost:8080/torc-service/v1</code></td><td>Torc server API URL</td></tr>
-<tr><td><code>format</code></td><td>string</td><td><code>table</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
+<tr><td><code>format</code></td><td>string</td><td><code>table</code></td><td>Output format: <code>table</code>, <code>json</code>, or <code>csv</code></td></tr>
 <tr><td><code>log_level</code></td><td>string</td><td><code>info</code></td><td>Log level: <code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td></tr>
 <tr><td><code>username</code></td><td>string</td><td>(none)</td><td>Username for basic authentication</td></tr>
 </tbody></table>
@@ -14732,7 +14730,7 @@ the current cluster.</p>
 </code></pre>
 <p><strong>Options:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
+<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code>, <code>json</code>, or <code>csv</code></td></tr>
 </tbody></table>
 </div>
 <p><strong>Output columns:</strong></p>
@@ -14749,7 +14747,7 @@ the current cluster.</p>
 </code></pre>
 <p><strong>Options:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
+<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code>, <code>json</code>, or <code>csv</code></td></tr>
 </tbody></table>
 </div>
 <p>Returns the detected profile name. If no built-in or custom profile matches but Slurm is available,
@@ -14766,7 +14764,7 @@ it returns a dynamic Slurm profile.</p>
 </div>
 <p><strong>Options:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
+<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code>, <code>json</code>, or <code>csv</code></td></tr>
 </tbody></table>
 </div>
 <hr />
@@ -14795,7 +14793,7 @@ it returns a dynamic Slurm profile.</p>
 <tr><td><code>--memory &lt;SIZE&gt;</code></td><td>Required memory (e.g., <code>64g</code>, <code>512m</code>)</td></tr>
 <tr><td><code>--walltime &lt;DURATION&gt;</code></td><td>Required walltime (e.g., <code>02:00:00</code>, <code>30:00</code>)</td></tr>
 <tr><td><code>--gpus &lt;N&gt;</code></td><td>Required GPUs</td></tr>
-<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code> or <code>json</code></td></tr>
+<tr><td><code>-f, --format &lt;FORMAT&gt;</code></td><td>Output format: <code>table</code>, <code>json</code>, or <code>csv</code></td></tr>
 </tbody></table>
 </div>
 <p><strong>Memory format:</strong> <code>&lt;number&gt;&lt;unit&gt;</code> where unit is <code>k</code>, <code>m</code>, <code>g</code>, or <code>t</code> (case-insensitive).</p>

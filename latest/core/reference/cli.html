@@ -208,7 +208,6 @@
 <li><a href="#torc-remote"><code>torc remote</code></a></li>
 <li><a href="#torc-scheduled-compute-nodes"><code>torc scheduled-compute-nodes</code></a></li>
 <li><a href="#torc-hpc"><code>torc hpc</code></a></li>
-<li><a href="#torc-reports"><code>torc reports</code></a></li>
 <li><a href="#torc-config"><code>torc config</code></a></li>
 <li><a href="#torc-tui"><code>torc tui</code></a></li>
 <li><a href="#torc-plot-resources"><code>torc plot-resources</code></a></li>
@@ -238,7 +237,6 @@ ID)</li>
 <li><code>remote</code> — Remote worker execution commands (SSH-based distributed execution)</li>
 <li><code>scheduled-compute-nodes</code> — Scheduled compute node management commands</li>
 <li><code>hpc</code> — HPC system profiles and partition information</li>
-<li><code>reports</code> — Generate reports and analytics</li>
 <li><code>config</code> — Manage configuration files and settings</li>
 <li><code>tui</code> — Interactive terminal UI for managing workflows</li>
 <li><code>plot-resources</code> — Generate interactive HTML plots from resource monitoring data</li>
@@ -247,7 +245,9 @@ ID)</li>
 <h6 id="options"><a class="header" href="#options"><strong>Options:</strong></a></h6>
 <ul>
 <li><code>--log-level &lt;LOG_LEVEL&gt;</code> — Log level (error, warn, info, debug, trace)</li>
-<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (table or json). Default: <code>table</code></li>
+<li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format (table, json, or csv). Default: <code>table</code>. <code>csv</code> is
+supported for list commands (e.g. <code>jobs list</code>, <code>results list</code>, <code>workflows list</code>); single-record
+and multi-section report commands reject it.</li>
 <li><code>--url &lt;URL&gt;</code> — URL of torc server</li>
 <li><code>--username &lt;USERNAME&gt;</code> — Username for basic authentication</li>
 <li><code>--password &lt;PASSWORD&gt;</code> — Password for basic authentication (will prompt if username provided but
@@ -1823,16 +1823,6 @@ system.</li>
 <li><code>-o</code>, <code>--output &lt;OUTPUT&gt;</code> — Output file path (prints to stdout if not specified)</li>
 <li><code>--skip-stdby</code> — Skip standby partitions (ones ending in -stdby)</li>
 </ul>
-<h2 id="torc-reports"><a class="header" href="#torc-reports"><code>torc reports</code></a></h2>
-<p>Generate reports and analytics</p>
-<p><strong>Usage:</strong> <code>torc reports &lt;COMMAND&gt;</code></p>
-<h6 id="subcommands-14"><a class="header" href="#subcommands-14"><strong>Subcommands:</strong></a></h6>
-<ul>
-<li><code>check-resource-utilization</code> — Check resource utilization and report jobs that exceeded their
-specified requirements</li>
-<li><code>results</code> — Generate a comprehensive JSON report of job results including all log file paths</li>
-<li><code>summary</code> — Generate a summary of workflow results (requires workflow to be complete)</li>
-</ul>
 <h2 id="torc-workflows-check-resources"><a class="header" href="#torc-workflows-check-resources"><code>torc workflows check-resources</code></a></h2>
 <p>Check resource utilization and report jobs that exceeded their specified requirements</p>
 <p><strong>Usage:</strong> <code>torc workflows check-resources [OPTIONS] [WORKFLOW_ID]</code></p>
@@ -1871,7 +1861,7 @@ violation (default: 1.0%)</li>
 <h2 id="torc-config"><a class="header" href="#torc-config"><code>torc config</code></a></h2>
 <p>Manage configuration files and settings</p>
 <p><strong>Usage:</strong> <code>torc config &lt;COMMAND&gt;</code></p>
-<h6 id="subcommands-15"><a class="header" href="#subcommands-15"><strong>Subcommands:</strong></a></h6>
+<h6 id="subcommands-14"><a class="header" href="#subcommands-14"><strong>Subcommands:</strong></a></h6>
 <ul>
 <li><code>show</code> — Show the effective configuration (merged from all sources)</li>
 <li><code>paths</code> — Show configuration file paths</li>
