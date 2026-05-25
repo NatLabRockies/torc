@@ -1,7 +1,7 @@
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::output::print_wrapped_if_json;
 use crate::client::commands::pagination;
-use crate::client::commands::table_format::display_table_with_count;
+use crate::client::commands::table_format::{display_csv_if_csv, display_table_with_count};
 use crate::client::commands::{get_env_user_name, print_error, select_workflow_interactively};
 use clap::Subcommand;
 use tabled::Tabled;
@@ -132,7 +132,9 @@ pub fn handle_job_dependency_commands(
                             })
                             .collect();
 
-                        display_table_with_count(&rows, "job dependencies");
+                        if !display_csv_if_csv(format, &rows) {
+                            display_table_with_count(&rows, "job dependencies");
+                        }
                     }
                 }
                 Err(e) => {
@@ -192,7 +194,9 @@ pub fn handle_job_dependency_commands(
                             })
                             .collect();
 
-                        display_table_with_count(&rows, "job-file relationships");
+                        if !display_csv_if_csv(format, &rows) {
+                            display_table_with_count(&rows, "job-file relationships");
+                        }
                     }
                 }
                 Err(e) => {
@@ -257,7 +261,9 @@ pub fn handle_job_dependency_commands(
                             })
                             .collect();
 
-                        display_table_with_count(&rows, "job-user_data relationships");
+                        if !display_csv_if_csv(format, &rows) {
+                            display_table_with_count(&rows, "job-user_data relationships");
+                        }
                     }
                 }
                 Err(e) => {

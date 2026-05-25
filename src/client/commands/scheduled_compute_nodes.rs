@@ -3,7 +3,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_json, print_wrapped_if_json};
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -141,7 +142,7 @@ pub fn handle_scheduled_compute_node_commands(
 
                     if print_wrapped_if_json(format, &nodes, "scheduled compute nodes") {
                         // JSON was printed
-                    } else if nodes.is_empty() {
+                    } else if nodes.is_empty() && format != "csv" {
                         println!(
                             "No scheduled compute nodes found for workflow {}",
                             selected_workflow_id
@@ -149,13 +150,17 @@ pub fn handle_scheduled_compute_node_commands(
                     } else {
                         let rows: Vec<ScheduledComputeNodeTableRow> =
                             nodes.iter().map(|n| n.into()).collect();
-                        display_table_with_count(&rows, "scheduled compute nodes");
-                        if response.total_count as usize > nodes.len() {
-                            println!(
-                                "\nShowing {} of {} total scheduled compute nodes",
-                                nodes.len(),
-                                response.total_count
-                            );
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            display_table_with_count(&rows, "scheduled compute nodes");
+                            if response.total_count as usize > nodes.len() {
+                                println!(
+                                    "\nShowing {} of {} total scheduled compute nodes",
+                                    nodes.len(),
+                                    response.total_count
+                                );
+                            }
                         }
                     }
                 }

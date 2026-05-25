@@ -53,7 +53,8 @@ use crate::client::commands::pagination::{
     paginate_scheduled_compute_nodes, paginate_slurm_schedulers,
 };
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::client::hpc::HpcProfile;
 use crate::client::hpc::hpc_interface::HpcInterface;
@@ -1218,8 +1219,12 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                             })
                             .collect();
 
-                        println!("Slurm configurations for workflow {}", wf_id);
-                        display_table_with_count(&rows, "configs");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("Slurm configurations for workflow {}", wf_id);
+                            display_table_with_count(&rows, "configs");
+                        }
                     }
                 }
                 Err(e) => {
@@ -3147,6 +3152,8 @@ pub fn run_sacct_for_workflow(
                 }),
                 "Slurm sacct",
             );
+        } else if format == "csv" {
+            display_csv(&all_summary_rows);
         } else {
             println!(
                 "No Slurm scheduled compute nodes found for workflow {}",
@@ -3165,6 +3172,14 @@ pub fn run_sacct_for_workflow(
             "errors": errors,
         });
         print_json(&output, "Slurm sacct");
+    } else if format == "csv" {
+        display_csv(&all_summary_rows);
+        if !errors.is_empty() {
+            eprintln!("\nErrors:");
+            for err in &errors {
+                eprintln!("  {}", err);
+            }
+        }
     } else if all_summary_rows.is_empty() && errors.is_empty() {
         println!(
             "No sacct data available for workflow {} (checked {} Slurm job(s))",
@@ -5207,7 +5222,7 @@ fn handle_slurm_stats(
         return;
     }
 
-    if all_items.is_empty() {
+    if all_items.is_empty() && format != "csv" {
         println!("No Slurm stats found for workflow {}", workflow_id);
         return;
     }
@@ -5233,7 +5248,11 @@ fn handle_slurm_stats(
         })
         .collect();
 
-    display_table_with_count(&rows, "slurm stats");
+    if format == "csv" {
+        display_csv(&rows);
+    } else {
+        display_table_with_count(&rows, "slurm stats");
+    }
 }
 
 /// Build a map of (job_id, run_id, attempt_id) -> exec_time_minutes from results.

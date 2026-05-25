@@ -10,7 +10,9 @@ use crate::client::commands::{
     output::{print_if_json, print_json, print_json_wrapped},
     pagination::{self, JobListParams},
     print_error, select_workflow_interactively,
-    table_format::{display_table_excluding, display_table_with_count},
+    table_format::{
+        display_csv, display_csv_excluding, display_table_excluding, display_table_with_count,
+    },
 };
 use crate::models;
 use tabled::Tabled;
@@ -232,7 +234,7 @@ EXAMPLES:
         /// Include job relationships (depends_on_job_ids, input/output file/user_data IDs) - slower but more complete
         #[arg(long)]
         include_relationships: bool,
-        /// Exclude columns from table output (case-insensitive, can be repeated)
+        /// Exclude columns from table/csv output (case-insensitive, can be repeated)
         #[arg(short = 'x', long = "exclude")]
         exclude_columns: Vec<String>,
     },
@@ -505,10 +507,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 Ok(jobs) => {
                     if format == "json" {
                         print_json_wrapped(&jobs, "jobs");
-                    } else if jobs.is_empty() {
+                    } else if jobs.is_empty() && format != "csv" {
                         println!("No jobs found for workflow ID: {}", selected_workflow_id);
                     } else {
-                        println!("Jobs for workflow ID {}:", selected_workflow_id);
                         let rows: Vec<JobTableRow> = jobs
                             .iter()
                             .map(|job| JobTableRow {
@@ -519,10 +520,19 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                                 command: job.command.clone(),
                             })
                             .collect();
-                        if exclude_columns.is_empty() {
-                            display_table_with_count(&rows, "jobs");
+                        if format == "csv" {
+                            if exclude_columns.is_empty() {
+                                display_csv(&rows);
+                            } else {
+                                display_csv_excluding(&rows, exclude_columns);
+                            }
                         } else {
-                            display_table_excluding(&rows, exclude_columns, "jobs");
+                            println!("Jobs for workflow ID {}:", selected_workflow_id);
+                            if exclude_columns.is_empty() {
+                                display_table_with_count(&rows, "jobs");
+                            } else {
+                                display_table_excluding(&rows, exclude_columns, "jobs");
+                            }
                         }
                     }
                 }
@@ -1006,7 +1016,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     })
                     .collect();
 
-                if rows.is_empty() {
+                if format == "csv" {
+                    display_csv(&rows);
+                } else if rows.is_empty() {
                     println!("No jobs with resource requirements found");
                 } else {
                     display_table_with_count(&rows, "jobs with resource requirements");
@@ -1112,7 +1124,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     })
                     .collect();
 
-                if rows.is_empty() {
+                if format == "csv" {
+                    display_csv(&rows);
+                } else if rows.is_empty() {
                     println!("No jobs with failure handlers found");
                 } else {
                     display_table_with_count(&rows, "jobs with failure handlers");

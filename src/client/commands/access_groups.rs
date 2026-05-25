@@ -3,7 +3,7 @@
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::output::{print_if_json, print_json_wrapped};
-use crate::client::commands::table_format::display_table_with_count;
+use crate::client::commands::table_format::{display_csv, display_table_with_count};
 use crate::models::{AccessGroupModel, UserGroupMembershipModel};
 use tabled::Tabled;
 
@@ -202,7 +202,7 @@ pub fn handle_access_group_commands(
                 Ok(response) => {
                     if format == "json" {
                         print_json_wrapped(&response.items, "groups");
-                    } else if response.items.is_empty() {
+                    } else if response.items.is_empty() && format != "csv" {
                         println!("No access groups found");
                     } else {
                         let rows: Vec<GroupTableRow> = response
@@ -215,7 +215,11 @@ pub fn handle_access_group_commands(
                                 created_at: g.created_at.clone().unwrap_or_default(),
                             })
                             .collect();
-                        display_table_with_count(&rows, "access groups");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            display_table_with_count(&rows, "access groups");
+                        }
                     }
                 }
                 Err(e) => {
@@ -299,10 +303,9 @@ pub fn handle_access_group_commands(
                 Ok(response) => {
                     if format == "json" {
                         print_json_wrapped(&response.items, "members");
-                    } else if response.items.is_empty() {
+                    } else if response.items.is_empty() && format != "csv" {
                         println!("No members found in group {}", group_id);
                     } else {
-                        println!("Members of group {}:", group_id);
                         let rows: Vec<MemberTableRow> = response
                             .items
                             .iter()
@@ -312,7 +315,12 @@ pub fn handle_access_group_commands(
                                 created_at: m.created_at.clone().unwrap_or_default(),
                             })
                             .collect();
-                        display_table_with_count(&rows, "members");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("Members of group {}:", group_id);
+                            display_table_with_count(&rows, "members");
+                        }
                     }
                 }
                 Err(e) => {
@@ -334,10 +342,9 @@ pub fn handle_access_group_commands(
             Ok(response) => {
                 if format == "json" {
                     print_json_wrapped(&response.items, "groups");
-                } else if response.items.is_empty() {
+                } else if response.items.is_empty() && format != "csv" {
                     println!("User '{}' is not a member of any groups", user_name);
                 } else {
-                    println!("Groups for user '{}':", user_name);
                     let rows: Vec<GroupTableRow> = response
                         .items
                         .iter()
@@ -348,7 +355,12 @@ pub fn handle_access_group_commands(
                             created_at: g.created_at.clone().unwrap_or_default(),
                         })
                         .collect();
-                    display_table_with_count(&rows, "groups");
+                    if format == "csv" {
+                        display_csv(&rows);
+                    } else {
+                        println!("Groups for user '{}':", user_name);
+                        display_table_with_count(&rows, "groups");
+                    }
                 }
             }
             Err(e) => {
@@ -403,10 +415,9 @@ pub fn handle_access_group_commands(
                 Ok(response) => {
                     if format == "json" {
                         print_json_wrapped(&response.items, "groups");
-                    } else if response.items.is_empty() {
+                    } else if response.items.is_empty() && format != "csv" {
                         println!("Workflow {} is not associated with any groups", workflow_id);
                     } else {
-                        println!("Groups with access to workflow {}:", workflow_id);
                         let rows: Vec<GroupTableRow> = response
                             .items
                             .iter()
@@ -417,7 +428,12 @@ pub fn handle_access_group_commands(
                                 created_at: g.created_at.clone().unwrap_or_default(),
                             })
                             .collect();
-                        display_table_with_count(&rows, "groups");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("Groups with access to workflow {}:", workflow_id);
+                            display_table_with_count(&rows, "groups");
+                        }
                     }
                 }
                 Err(e) => {

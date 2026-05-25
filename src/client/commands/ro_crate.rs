@@ -7,7 +7,8 @@ use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::pagination::{RoCrateEntityListParams, paginate_ro_crate_entities};
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use log::{error, info};
@@ -248,16 +249,12 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                 Ok(entities) => {
                     if print_wrapped_if_json(format, &entities, "RO-Crate entities") {
                         // JSON printed
-                    } else if entities.is_empty() {
+                    } else if entities.is_empty() && format != "csv" {
                         println!(
                             "No RO-Crate entities found for workflow ID: {}",
                             selected_workflow_id
                         );
                     } else {
-                        println!(
-                            "RO-Crate entities for workflow ID {}:",
-                            selected_workflow_id
-                        );
                         let rows: Vec<RoCrateEntityTableRow> = entities
                             .iter()
                             .map(|e| RoCrateEntityTableRow {
@@ -270,7 +267,15 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
                                     .unwrap_or_else(|| "-".to_string()),
                             })
                             .collect();
-                        display_table_with_count(&rows, "RO-Crate entities");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!(
+                                "RO-Crate entities for workflow ID {}:",
+                                selected_workflow_id
+                            );
+                            display_table_with_count(&rows, "RO-Crate entities");
+                        }
                     }
                 }
                 Err(e) => {

@@ -3,7 +3,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
-    pagination, print_error, select_workflow_interactively, table_format::display_table_with_count,
+    pagination, print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -246,7 +247,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
 
                     if print_wrapped_if_json(format, &results, "results") {
                         // JSON was printed
-                    } else if results.is_empty() {
+                    } else if results.is_empty() && format != "csv" {
                         if let Some(jid) = job_id {
                             println!(
                                 "No results found for workflow ID {} and job ID: {}",
@@ -256,15 +257,6 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                             println!("No results found for workflow ID: {}", selected_workflow_id);
                         }
                     } else {
-                        if let Some(jid) = job_id {
-                            println!(
-                                "Results for workflow ID {} and job ID {}:",
-                                selected_workflow_id, jid
-                            );
-                        } else {
-                            println!("Results for workflow ID {}:", selected_workflow_id);
-                        }
-
                         // Fetch job names for the workflow
                         let job_names = get_job_name_map(config, selected_workflow_id);
 
@@ -288,7 +280,19 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                                 status: format!("{:?}", result.status),
                             })
                             .collect();
-                        display_table_with_count(&rows, "results");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            if let Some(jid) = job_id {
+                                println!(
+                                    "Results for workflow ID {} and job ID {}:",
+                                    selected_workflow_id, jid
+                                );
+                            } else {
+                                println!("Results for workflow ID {}:", selected_workflow_id);
+                            }
+                            display_table_with_count(&rows, "results");
+                        }
                     }
                 }
                 Err(e) => {

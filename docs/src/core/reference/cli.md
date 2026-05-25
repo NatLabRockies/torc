@@ -24,7 +24,6 @@ This document contains the help content for the `torc` command-line program.
 - [`torc remote`](#torc-remote)
 - [`torc scheduled-compute-nodes`](#torc-scheduled-compute-nodes)
 - [`torc hpc`](#torc-hpc)
-- [`torc reports`](#torc-reports)
 - [`torc config`](#torc-config)
 - [`torc tui`](#torc-tui)
 - [`torc plot-resources`](#torc-plot-resources)
@@ -57,7 +56,6 @@ Torc workflow orchestration system
 - `remote` — Remote worker execution commands (SSH-based distributed execution)
 - `scheduled-compute-nodes` — Scheduled compute node management commands
 - `hpc` — HPC system profiles and partition information
-- `reports` — Generate reports and analytics
 - `config` — Manage configuration files and settings
 - `tui` — Interactive terminal UI for managing workflows
 - `plot-resources` — Generate interactive HTML plots from resource monitoring data
@@ -66,7 +64,9 @@ Torc workflow orchestration system
 ###### **Options:**
 
 - `--log-level <LOG_LEVEL>` — Log level (error, warn, info, debug, trace)
-- `-f`, `--format <FORMAT>` — Output format (table or json). Default: `table`
+- `-f`, `--format <FORMAT>` — Output format (table, json, or csv). Default: `table`. `csv` is
+  supported for list commands (e.g. `jobs list`, `results list`, `workflows list`); single-record
+  and multi-section report commands reject it.
 - `--url <URL>` — URL of torc server
 - `--username <USERNAME>` — Username for basic authentication
 - `--password <PASSWORD>` — Password for basic authentication (will prompt if username provided but
@@ -2023,19 +2023,6 @@ Generate an HPC profile configuration from the current Slurm cluster
 - `-d`, `--display-name <DISPLAY_NAME>` — Human-readable display name
 - `-o`, `--output <OUTPUT>` — Output file path (prints to stdout if not specified)
 - `--skip-stdby` — Skip standby partitions (ones ending in -stdby)
-
-## `torc reports`
-
-Generate reports and analytics
-
-**Usage:** `torc reports <COMMAND>`
-
-###### **Subcommands:**
-
-- `check-resource-utilization` — Check resource utilization and report jobs that exceeded their
-  specified requirements
-- `results` — Generate a comprehensive JSON report of job results including all log file paths
-- `summary` — Generate a summary of workflow results (requires workflow to be complete)
 
 ## `torc workflows check-resources`
 

@@ -11,7 +11,7 @@ use super::output::print_json;
 use crate::client::hpc::{HpcPartition, HpcProfile, HpcProfileRegistry};
 use crate::config::{ClientHpcConfig, TorcConfig};
 
-use super::table_format::display_table_with_count;
+use super::table_format::{display_csv, display_table_with_count};
 
 /// Create an HPC profile registry with built-in profiles and user-defined profiles from config
 ///
@@ -259,6 +259,8 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
 
             if format == "json" {
                 print_json(&rows, "hpc profiles");
+            } else if format == "csv" {
+                display_csv(&rows);
             } else {
                 display_table_with_count(&rows, "HPC profiles");
             }
@@ -345,6 +347,8 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
 
                 if format == "json" {
                     print_json(&rows, &format!("partitions for {}", profile.name));
+                } else if format == "csv" {
+                    display_csv(&rows);
                 } else {
                     display_table_with_count(&rows, &format!("partitions for {}", profile.name));
                 }
@@ -428,15 +432,19 @@ pub fn handle_hpc_commands(command: &HpcCommands, format: &str) {
                         })
                         .collect();
 
-                    display_table_with_count(&rows, "matching partitions");
+                    if format == "csv" {
+                        display_csv(&rows);
+                    } else {
+                        display_table_with_count(&rows, "matching partitions");
 
-                    if let Some(best) = best {
-                        println!();
-                        println!("Recommended: {} partition", best.name);
-                        if best.requires_explicit_request {
-                            println!("  Use: --partition={}", best.name);
-                        } else {
-                            println!("  (Auto-routed based on requirements)");
+                        if let Some(best) = best {
+                            println!();
+                            println!("Recommended: {} partition", best.name);
+                            if best.requires_explicit_request {
+                                println!("  Use: --partition={}", best.name);
+                            } else {
+                                println!("  (Auto-routed based on requirements)");
+                            }
                         }
                     }
                 }

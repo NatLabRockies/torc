@@ -56,8 +56,10 @@ use crate::client::commands::workflow_export::{
     EXPORT_VERSION, ExportImportStats, IdMappings, WorkflowExport,
 };
 use crate::client::commands::{
-    get_env_user_name, output::print_json_wrapped, print_error, select_workflow_interactively,
-    table_format::display_table_with_count,
+    get_env_user_name,
+    output::print_json_wrapped,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::client::hpc::hpc_interface::HpcInterface;
 use crate::client::report_models::ResourceUtilizationReport;
@@ -993,15 +995,12 @@ fn handle_list_actions(
                         std::process::exit(1);
                     }
                 }
-            } else if actions.is_empty() {
+            } else if actions.is_empty() && format != "csv" {
                 println!(
                     "No workflow actions found for workflow {}",
                     selected_workflow_id
                 );
             } else {
-                println!("Workflow Actions for workflow {}:", selected_workflow_id);
-                println!();
-
                 let rows: Vec<WorkflowActionTableRow> = actions
                     .iter()
                     .map(|action| {
@@ -1053,18 +1052,24 @@ fn handle_list_actions(
                     })
                     .collect();
 
-                display_table_with_count(&rows, "actions");
+                if format == "csv" {
+                    display_csv(&rows);
+                } else {
+                    println!("Workflow Actions for workflow {}:", selected_workflow_id);
+                    println!();
+                    display_table_with_count(&rows, "actions");
 
-                // Print a helpful legend
-                println!();
-                println!("Status legend:");
-                println!(
-                    "  Waiting  - trigger_count < required_triggers (action not yet triggered)"
-                );
-                println!(
-                    "  Pending  - trigger_count >= required_triggers (ready to be claimed and executed)"
-                );
-                println!("  Executed - action has been claimed and executed");
+                    // Print a helpful legend
+                    println!();
+                    println!("Status legend:");
+                    println!(
+                        "  Waiting  - trigger_count < required_triggers (action not yet triggered)"
+                    );
+                    println!(
+                        "  Pending  - trigger_count >= required_triggers (ready to be claimed and executed)"
+                    );
+                    println!("  Executed - action has been claimed and executed");
+                }
             }
         }
         Err(e) => {
@@ -2621,14 +2626,13 @@ fn handle_list(
                     .collect();
 
                 print_json_wrapped(&workflows_json, "workflows");
-            } else if workflows.is_empty() {
+            } else if workflows.is_empty() && format != "csv" {
                 if all_users {
                     println!("No workflows found.");
                 } else {
                     println!("No workflows found for user: {}", user);
                 }
             } else if all_users {
-                println!("All workflows:");
                 let rows: Vec<WorkflowTableRow> = workflows
                     .iter()
                     .map(|workflow| WorkflowTableRow {
@@ -2651,9 +2655,13 @@ fn handle_list(
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
-                display_table_with_count(&rows, "workflows");
+                if format == "csv" {
+                    display_csv(&rows);
+                } else {
+                    println!("All workflows:");
+                    display_table_with_count(&rows, "workflows");
+                }
             } else {
-                println!("Workflows for user {}:", user);
                 let rows: Vec<WorkflowTableRowNoUser> = workflows
                     .iter()
                     .map(|workflow| WorkflowTableRowNoUser {
@@ -2675,7 +2683,12 @@ fn handle_list(
                         timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
                     })
                     .collect();
-                display_table_with_count(&rows, "workflows");
+                if format == "csv" {
+                    display_csv(&rows);
+                } else {
+                    println!("Workflows for user {}:", user);
+                    display_table_with_count(&rows, "workflows");
+                }
             }
         }
         Err(e) => {

@@ -97,7 +97,7 @@ watch -n 10 torc status <workflow_id>
 This is useful for scripts:
 
 ```bash
-torc -f json reports summary <workflow_id>
+torc -f json status <workflow_id>
 ```
 
 ```json
@@ -136,7 +136,7 @@ WORKFLOW_ID=$1
 # Check completion status
 if torc -f json workflows is-complete "$WORKFLOW_ID" | jq -e '.is_complete' > /dev/null; then
     echo "Workflow complete, generating summary..."
-    torc -f json reports summary "$WORKFLOW_ID" > "summary_${WORKFLOW_ID}.json"
+    torc -f json status "$WORKFLOW_ID" > "summary_${WORKFLOW_ID}.json"
 else
     echo "Workflow not yet complete"
     exit 1

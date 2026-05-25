@@ -494,8 +494,8 @@ fn main() {
     };
 
     // Validate format option for API commands
-    if !matches!(format.as_str(), "table" | "json") {
-        eprintln!("Error: format must be either 'table' or 'json'");
+    if !matches!(format.as_str(), "table" | "json" | "csv") {
+        eprintln!("Error: format must be one of 'table', 'json', or 'csv'");
         std::process::exit(1);
     }
 

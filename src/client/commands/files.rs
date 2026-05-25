@@ -8,7 +8,7 @@ use crate::client::commands::{
     output::{print_if_json, print_json_wrapped},
     pagination::{self, FileListParams},
     print_error, select_workflow_interactively,
-    table_format::display_table_with_count,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -215,10 +215,9 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                 Ok(files) => {
                     if format == "json" {
                         print_json_wrapped(&files, "files");
-                    } else if files.is_empty() {
+                    } else if files.is_empty() && format != "csv" {
                         println!("No files found for workflow ID: {}", selected_workflow_id);
                     } else {
-                        println!("Files for workflow ID {}:", selected_workflow_id);
                         let rows: Vec<FileTableRow> = files
                             .iter()
                             .map(|file| FileTableRow {
@@ -228,7 +227,12 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                                 st_mtime: format_mtime(file.st_mtime),
                             })
                             .collect();
-                        display_table_with_count(&rows, "files");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("Files for workflow ID {}:", selected_workflow_id);
+                            display_table_with_count(&rows, "files");
+                        }
                     }
                 }
                 Err(e) => {

@@ -140,6 +140,12 @@ pub fn check_resource_utilization(
         "json" => {
             print_json(&report, "resource utilization");
         }
+        "csv" => {
+            eprintln!(
+                "Error: csv format is not supported for this resource-utilization report (multi-section output). Use -f json or -f table."
+            );
+            std::process::exit(1);
+        }
         _ => {
             if violation_rows.is_empty() && within_limits_rows.is_empty() {
                 println!(
@@ -812,6 +818,11 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
 
     if format == "json" {
         print_json(&report, "workflow summary");
+    } else if format == "csv" {
+        eprintln!(
+            "Error: csv format is not supported for this workflow summary (not tabular output). Use -f json or -f table."
+        );
+        std::process::exit(1);
     } else {
         let workflow_id = report["workflow_id"].as_i64().unwrap_or(-1);
         let workflow_name = report["workflow_name"].as_str().unwrap_or("");

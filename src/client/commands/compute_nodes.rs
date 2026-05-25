@@ -4,7 +4,8 @@ use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::pagination::{ComputeNodeListParams, paginate_compute_nodes};
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -213,7 +214,7 @@ pub fn handle_compute_node_commands(
                 Ok(nodes) => {
                     if print_wrapped_if_json(format, &nodes, "compute_nodes") {
                         // JSON was printed
-                    } else if nodes.is_empty() {
+                    } else if nodes.is_empty() && format != "csv" {
                         println!(
                             "No compute nodes found for workflow {}",
                             selected_workflow_id
@@ -221,7 +222,11 @@ pub fn handle_compute_node_commands(
                     } else {
                         let rows: Vec<ComputeNodeTableRow> =
                             nodes.iter().map(|n| n.into()).collect();
-                        display_table_with_count(&rows, "compute nodes");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            display_table_with_count(&rows, "compute nodes");
+                        }
                     }
                 }
                 Err(e) => {
