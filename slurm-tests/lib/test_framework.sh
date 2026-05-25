@@ -239,15 +239,22 @@ assert_parse_logs_detect_oom() {
 
 # assert_logs_analyze_detect_oom WF_ID OUTPUT_DIR
 #   Runs `torc logs analyze` and checks for OOM-related output.
+#   Retries briefly to absorb parallel-filesystem propagation lag on HPC
+#   (slurmstepd/srun teardown lines may arrive on the login node a moment
+#   after the job is marked complete).
 assert_logs_analyze_detect_oom() {
     local wf_id="$1" output_dir="$2"
     local analyze_output
-    analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$output_dir" --workflow-id "$wf_id" 2>&1) || true
-    if echo "$analyze_output" | grep -qiE "out.of.memory|oom-kill|oom_kill|killed process|exceeded memory|OUT_OF_MEMORY"; then
-        _pass "logs analyze detected OOM for workflow $wf_id"
-    else
-        _fail "logs analyze did NOT detect OOM for workflow $wf_id"
-    fi
+    local pattern='out.of.memory|oom-kill|oom_kill|killed process|exceeded memory|OUT_OF_MEMORY|\bOOM\b|return code.*137|exit.*137'
+    for _ in 1 2 3 4 5; do
+        analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$output_dir" --workflow-id "$wf_id" 2>&1) || true
+        if echo "$analyze_output" | grep -qiE "$pattern"; then
+            _pass "logs analyze detected OOM for workflow $wf_id"
+            return
+        fi
+        sleep 2
+    done
+    _fail "logs analyze did NOT detect OOM for workflow $wf_id"
 }
 
 # assert_parse_logs_detect_timeout WF_ID OUTPUT_DIR
