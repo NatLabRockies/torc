@@ -112,7 +112,7 @@ The dependency flow:
 
 ```bash
 # Create the workflow
-WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
@@ -161,7 +161,7 @@ torc run $WORKFLOW_ID
 After `generate_config` completes, check the updated user_data:
 
 ```bash
-torc user-data list $WORKFLOW_ID -f json | jq '.[] | {name, data}'
+torc user-data list $WORKFLOW_ID -f json | jq '.items[] | {name, data}'
 ```
 
 Output:

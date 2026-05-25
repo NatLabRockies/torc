@@ -244,7 +244,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                         results.retain(|r| r.return_code != 0);
                     }
 
-                    if print_wrapped_if_json(format, "results", &results, "results") {
+                    if print_wrapped_if_json(format, &results, "results") {
                         // JSON was printed
                     } else if results.is_empty() {
                         if let Some(jid) = job_id {

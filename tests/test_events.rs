@@ -124,17 +124,17 @@ fn test_events_list_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run events list command");
 
-    // Verify JSON structure is an object with "events" field
+    // Verify JSON structure is an object with "items" field
     assert!(
         json_output.is_object(),
         "Events list should return an object"
     );
     assert!(
-        json_output.get("events").is_some(),
-        "Response should have 'events' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let events_array = json_output.get("events").unwrap().as_array().unwrap();
+    let events_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(events_array.len() >= 2, "Should have at least 2 events");
 
     // Verify each event has the expected structure
@@ -178,7 +178,7 @@ fn test_events_list_pagination(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run paginated events list");
 
-    let events_array = json_output.get("events").unwrap().as_array().unwrap();
+    let events_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(events_array.len() <= 3, "Should respect limit parameter");
     assert!(!events_array.is_empty(), "Should have at least one event");
 
@@ -196,11 +196,7 @@ fn test_events_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run events list with offset");
 
-    let events_with_offset = json_output_offset
-        .get("events")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let events_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(
         !events_with_offset.is_empty(),
         "Should have events with offset"
@@ -240,7 +236,7 @@ fn test_events_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run default sorted events list");
 
     let events_array_default = json_output_default
-        .get("events")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();
@@ -260,7 +256,7 @@ fn test_events_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run reverse sorted events list");
 
     let events_array_reverse = json_output_reverse
-        .get("events")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();
@@ -393,7 +389,7 @@ fn test_events_remove_command_json(start_server: &ServerProcess) {
     let list_output = run_cli_with_json(&list_args, start_server, None)
         .expect("Failed to list events after removal");
 
-    let events_array = list_output.get("events").unwrap().as_array().unwrap();
+    let events_array = list_output.get("items").unwrap().as_array().unwrap();
     let removed_event_exists = events_array
         .iter()
         .any(|event| event.get("id").unwrap() == &json!(event_id));
@@ -471,7 +467,7 @@ fn test_events_timestamp_ordering(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list events for timestamp test");
 
-    let events_array = json_output.get("events").unwrap().as_array().unwrap();
+    let events_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(events_array.len() >= 3);
 
     // Verify events are in correct order (oldest first)
@@ -541,7 +537,7 @@ fn test_events_large_data_handling(start_server: &ServerProcess) {
     let list_output = run_cli_with_json(&list_args, start_server, None)
         .expect("Failed to list events with large data");
 
-    let events_array = list_output.get("events").unwrap().as_array().unwrap();
+    let events_array = list_output.get("items").unwrap().as_array().unwrap();
     let found_event = events_array
         .iter()
         .find(|event| event.get("id").unwrap() == &json!(event_id));
@@ -591,7 +587,7 @@ fn test_events_error_handling(start_server: &ServerProcess) {
     let result = run_cli_with_json(&args_list, start_server, None);
     // This might succeed with empty results or fail - both are acceptable
     if let Ok(json_output) = result {
-        let events_array = json_output.get("events").unwrap().as_array().unwrap();
+        let events_array = json_output.get("items").unwrap().as_array().unwrap();
         assert!(
             events_array.is_empty(),
             "Should return empty array for non-existent workflow"
@@ -691,7 +687,7 @@ fn test_events_concurrent_additions(start_server: &ServerProcess) {
     let list_output = run_cli_with_json(&list_args, start_server, None)
         .expect("Failed to list concurrent events");
 
-    let events_array = list_output.get("events").unwrap().as_array().unwrap();
+    let events_array = list_output.get("items").unwrap().as_array().unwrap();
     let batch_events: Vec<_> = events_array
         .iter()
         .filter(|event| {
@@ -751,8 +747,8 @@ fn test_events_list_with_category_filter(start_server: &ServerProcess) {
         "Events list should return an object"
     );
     assert!(
-        json_output.get("events").is_some(),
-        "Response should have 'events' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
     // The command should execute without error

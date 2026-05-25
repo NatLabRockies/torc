@@ -201,7 +201,7 @@ pub fn handle_access_group_commands(
             {
                 Ok(response) => {
                     if format == "json" {
-                        print_json_wrapped("groups", &response.items, "groups");
+                        print_json_wrapped(&response.items, "groups");
                     } else if response.items.is_empty() {
                         println!("No access groups found");
                     } else {
@@ -298,7 +298,7 @@ pub fn handle_access_group_commands(
             ) {
                 Ok(response) => {
                     if format == "json" {
-                        print_json_wrapped("members", &response.items, "members");
+                        print_json_wrapped(&response.items, "members");
                     } else if response.items.is_empty() {
                         println!("No members found in group {}", group_id);
                     } else {
@@ -333,7 +333,7 @@ pub fn handle_access_group_commands(
         ) {
             Ok(response) => {
                 if format == "json" {
-                    print_json_wrapped("groups", &response.items, "groups");
+                    print_json_wrapped(&response.items, "groups");
                 } else if response.items.is_empty() {
                     println!("User '{}' is not a member of any groups", user_name);
                 } else {
@@ -402,7 +402,7 @@ pub fn handle_access_group_commands(
             match apis::access_control_api::list_workflow_groups(config, *workflow_id, None, None) {
                 Ok(response) => {
                     if format == "json" {
-                        print_json_wrapped("groups", &response.items, "groups");
+                        print_json_wrapped(&response.items, "groups");
                     } else if response.items.is_empty() {
                         println!("Workflow {} is not associated with any groups", workflow_id);
                     } else {

@@ -504,7 +504,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             match pagination::paginate_jobs(config, selected_workflow_id, params) {
                 Ok(jobs) => {
                     if format == "json" {
-                        print_json_wrapped("jobs", &jobs, "jobs");
+                        print_json_wrapped(&jobs, "jobs");
                     } else if jobs.is_empty() {
                         println!("No jobs found for workflow ID: {}", selected_workflow_id);
                     } else {
@@ -756,7 +756,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             }
 
             if format == "json" {
-                print_json_wrapped("jobs", &deleted_jobs, "jobs");
+                print_json_wrapped(&deleted_jobs, "jobs");
             } else {
                 println!("Successfully removed {} job(s):", deleted_jobs.len());
                 for job in &deleted_jobs {

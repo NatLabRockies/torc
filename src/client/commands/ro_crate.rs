@@ -246,12 +246,7 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
 
             match paginate_ro_crate_entities(config, selected_workflow_id, params) {
                 Ok(entities) => {
-                    if print_wrapped_if_json(
-                        format,
-                        "ro_crate_entities",
-                        &entities,
-                        "RO-Crate entities",
-                    ) {
+                    if print_wrapped_if_json(format, &entities, "RO-Crate entities") {
                         // JSON printed
                     } else if entities.is_empty() {
                         println!(

@@ -69,7 +69,7 @@ fn exec_single_command_creates_one_job_workflow() {
     // Inspect the jobs with a follow-up query to the same DB.
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs
-        .get("jobs")
+        .get("items")
         .and_then(|v| v.as_array())
         .expect("jobs[] in jobs list");
     assert_eq!(items.len(), 1, "expected 1 job, got: {}", jobs);
@@ -113,7 +113,10 @@ fn exec_multiple_commands_creates_one_job_each() {
         extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("workflow id in stdout");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
-    let items = jobs.get("jobs").and_then(|v| v.as_array()).expect("jobs[]");
+    let items = jobs
+        .get("items")
+        .and_then(|v| v.as_array())
+        .expect("jobs[]");
     assert_eq!(items.len(), 3, "expected 3 jobs, got: {}", jobs);
 
     // Jobs are named job1..jobN by expand_jobs().
@@ -139,7 +142,10 @@ fn exec_shell_style_invocation_creates_one_command() {
         extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("workflow id in stdout");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
-    let items = jobs.get("jobs").and_then(|v| v.as_array()).expect("jobs[]");
+    let items = jobs
+        .get("items")
+        .and_then(|v| v.as_array())
+        .expect("jobs[]");
     assert_eq!(items.len(), 1, "expected 1 shell-style job, got: {}", jobs);
     assert_eq!(items[0]["command"], "echo 'two words'");
 }
@@ -172,7 +178,7 @@ echo third
     let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
-    let items = jobs.get("jobs").and_then(|v| v.as_array()).unwrap();
+    let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
     assert_eq!(
         items.len(),
         3,
@@ -218,7 +224,7 @@ fn exec_param_product_creates_cartesian_jobs() {
     let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
-    let items = jobs.get("jobs").and_then(|v| v.as_array()).unwrap();
+    let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
     assert_eq!(
         items.len(),
         4,
@@ -259,7 +265,7 @@ fn exec_param_zip_creates_elementwise_jobs() {
     let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
-    let items = jobs.get("jobs").and_then(|v| v.as_array()).unwrap();
+    let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
     assert_eq!(
         items.len(),
         3,
@@ -291,7 +297,7 @@ fn exec_param_integer_range() {
     let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
-    let items = jobs.get("jobs").and_then(|v| v.as_array()).unwrap();
+    let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
     assert_eq!(
         items.len(),
         5,

@@ -264,7 +264,7 @@ Your script can use torc CLI commands to query and modify the workflow:
 WORKFLOW_ID=$1  # or use $TORC_WORKFLOW_ID
 
 # Find failed jobs
-FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.[].id')
+FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.items[].id')
 
 for JOB_ID in $FAILED_JOBS; do
     # Get current resource requirements

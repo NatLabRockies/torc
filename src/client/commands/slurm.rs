@@ -1202,12 +1202,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
 
             match paginate_slurm_schedulers(config, wf_id, params) {
                 Ok(schedulers) => {
-                    if print_wrapped_if_json(
-                        format,
-                        "slurm_schedulers",
-                        &schedulers,
-                        "Slurm schedulers",
-                    ) {
+                    if print_wrapped_if_json(format, &schedulers, "Slurm schedulers") {
                         // JSON was printed
                     } else {
                         let rows: Vec<SlurmSchedulerTableRow> = schedulers

@@ -163,17 +163,17 @@ fn test_files_list_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run files list command");
 
-    // Verify JSON structure is an object with "files" field
+    // Verify JSON structure is an object with "items" field
     assert!(
         json_output.is_object(),
         "Files list should return an object"
     );
     assert!(
-        json_output.get("files").is_some(),
-        "Response should have 'files' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let files_array = json_output.get("files").unwrap().as_array().unwrap();
+    let files_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(files_array.len() >= 3, "Should have at least 3 files");
 
     // Verify each file has the expected structure
@@ -209,7 +209,7 @@ fn test_files_list_pagination(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run paginated files list");
 
-    let files_array = json_output.get("files").unwrap().as_array().unwrap();
+    let files_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(files_array.len() <= 4, "Should respect limit parameter");
     assert!(!files_array.is_empty(), "Should have at least one file");
 
@@ -227,7 +227,7 @@ fn test_files_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run files list with offset");
 
-    let files_with_offset = json_output_offset.get("files").unwrap().as_array().unwrap();
+    let files_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(
         !files_with_offset.is_empty(),
         "Should have files with offset"
@@ -258,7 +258,7 @@ fn test_files_list_sorting(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run sorted files list");
 
-    let files_array = json_output.get("files").unwrap().as_array().unwrap();
+    let files_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(files_array.len() >= 3);
 
     // Test reverse sorting
@@ -275,7 +275,7 @@ fn test_files_list_sorting(start_server: &ServerProcess) {
         .expect("Failed to run reverse sorted files list");
 
     let files_array_reverse = json_output_reverse
-        .get("files")
+        .get("items")
         .unwrap()
         .as_array()
         .unwrap();
@@ -650,7 +650,7 @@ fn test_files_workflow_organization(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list workflow organization files");
 
-    let files_array = json_output.get("files").unwrap().as_array().unwrap();
+    let files_array = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(files_array.len(), workflow_files.len());
 
     // Verify we have files from different categories
@@ -717,7 +717,7 @@ fn test_files_list_empty_workflow(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list files for empty workflow");
 
-    let files_array = json_output.get("files").unwrap().as_array().unwrap();
+    let files_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(files_array.is_empty(), "Should have no files");
 }
 
@@ -758,8 +758,8 @@ fn test_files_list_with_produced_by_job_id_filter(start_server: &ServerProcess) 
         "Files list should return an object"
     );
     assert!(
-        json_output.get("files").is_some(),
-        "Response should have 'files' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
     // The actual number of results depends on backend implementation of job-file relationships

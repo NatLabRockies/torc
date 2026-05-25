@@ -154,14 +154,14 @@ fn test_jobs_list_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run jobs list command");
 
-    // Verify JSON structure is an object with "jobs" field
+    // Verify JSON structure is an object with "items" field
     assert!(json_output.is_object(), "Jobs list should return an object");
     assert!(
-        json_output.get("jobs").is_some(),
-        "Response should have 'jobs' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let jobs_array = json_output.get("jobs").unwrap().as_array().unwrap();
+    let jobs_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(jobs_array.len() >= 2, "Should have at least 2 jobs");
 
     // Verify each job has the expected structure
@@ -192,7 +192,7 @@ fn test_jobs_list_pagination(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run paginated jobs list");
 
-    let jobs_array = json_output.get("jobs").unwrap().as_array().unwrap();
+    let jobs_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(jobs_array.len() <= 3, "Should respect limit parameter");
     assert!(!jobs_array.is_empty(), "Should have at least one job");
 
@@ -210,7 +210,7 @@ fn test_jobs_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run jobs list with offset");
 
-    let jobs_with_offset = json_output_offset.get("jobs").unwrap().as_array().unwrap();
+    let jobs_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(!jobs_with_offset.is_empty(), "Should have jobs with offset");
 }
 
@@ -238,7 +238,7 @@ fn test_jobs_list_sorting(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run sorted jobs list");
 
-    let jobs_array = json_output.get("jobs").unwrap().as_array().unwrap();
+    let jobs_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(jobs_array.len() >= 3);
 
     // Test reverse sorting
@@ -254,7 +254,11 @@ fn test_jobs_list_sorting(start_server: &ServerProcess) {
     let json_output_reverse = run_cli_with_json(&args_reverse, start_server, None)
         .expect("Failed to run reverse sorted jobs list");
 
-    let jobs_array_reverse = json_output_reverse.get("jobs").unwrap().as_array().unwrap();
+    let jobs_array_reverse = json_output_reverse
+        .get("items")
+        .unwrap()
+        .as_array()
+        .unwrap();
     assert!(jobs_array_reverse.len() >= 3);
 
     // Verify sorting worked (first job should be different in regular vs reverse)
@@ -478,9 +482,9 @@ fn test_jobs_delete_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run jobs delete command");
 
-    // Verify JSON structure shows the removed job in "jobs" array
-    assert!(json_output.get("jobs").is_some());
-    let jobs = json_output.get("jobs").unwrap().as_array().unwrap();
+    // Verify JSON structure shows the removed job in "items" array
+    assert!(json_output.get("items").is_some());
+    let jobs = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(jobs.len(), 1, "Should have 1 deleted job");
 
     let deleted_job = &jobs[0];
@@ -820,8 +824,8 @@ fn test_jobs_list_with_upstream_job_id_filter(start_server: &ServerProcess) {
     // Verify the response structure is correct
     assert!(json_output.is_object(), "Jobs list should return an object");
     assert!(
-        json_output.get("jobs").is_some(),
-        "Response should have 'jobs' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
     // The command should execute without error
@@ -1003,9 +1007,9 @@ fn test_jobs_delete_multiple(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run jobs delete with multiple IDs");
 
-    // Verify JSON structure shows deleted jobs in "jobs" field
-    assert!(json_output.get("jobs").is_some());
-    let jobs = json_output.get("jobs").unwrap().as_array().unwrap();
+    // Verify JSON structure shows deleted jobs in "items" field
+    assert!(json_output.get("items").is_some());
+    let jobs = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(jobs.len(), 3, "Should have deleted 3 jobs");
 
     // Verify all jobs are actually removed

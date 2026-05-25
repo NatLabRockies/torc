@@ -40,17 +40,17 @@ fn test_results_list_command_json(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run results list command");
 
-    // Verify JSON structure is an object with "results" field
+    // Verify JSON structure is an object with "items" field
     assert!(
         json_output.is_object(),
         "Results list should return an object"
     );
     assert!(
-        json_output.get("results").is_some(),
-        "Response should have 'results' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(results_array.len() >= 2, "Should have at least 2 results");
 
     // Verify each result has the expected structure
@@ -92,7 +92,7 @@ fn test_results_list_with_job_filter(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run results list with job filter");
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(!results_array.is_empty());
 
     // All results should be for the specified job
@@ -184,7 +184,7 @@ fn test_results_list_pagination(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run paginated results list");
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(results_array.len() >= 3, "Should respect limit parameter");
 
     // Test with offset - use --all-runs since we created results directly
@@ -202,11 +202,7 @@ fn test_results_list_pagination(start_server: &ServerProcess) {
     let json_output_offset = run_cli_with_json(&args_with_offset, start_server, None)
         .expect("Failed to run results list with offset");
 
-    let results_with_offset = json_output_offset
-        .get("results")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let results_with_offset = json_output_offset.get("items").unwrap().as_array().unwrap();
     assert!(
         !results_with_offset.is_empty(),
         "Should have results with offset"
@@ -252,7 +248,7 @@ fn test_results_list_sorting(start_server: &ServerProcess) {
     let json_output =
         run_cli_with_json(&args, start_server, None).expect("Failed to run sorted results list");
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     assert!(results_array.len() >= 3);
 
     // Verify sorting (should be in reverse order, so highest return_code first)
@@ -382,8 +378,8 @@ fn test_results_list_with_return_code_filter(start_server: &ServerProcess) {
         "Results list should return an object"
     );
     assert!(
-        json_output.get("results").is_some(),
-        "Response should have 'results' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
     // The command should execute without error
@@ -449,8 +445,8 @@ fn test_results_list_with_status_filter(start_server: &ServerProcess) {
         "Results list should return an object"
     );
     assert!(
-        json_output.get("results").is_some(),
-        "Response should have 'results' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
     // The command should execute without error
@@ -587,11 +583,11 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
         "Results list should return an object"
     );
     assert!(
-        json_output.get("results").is_some(),
-        "Response should have 'results' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
 
     // Should only show 2 results (from run 2)
     assert_eq!(
@@ -728,11 +724,11 @@ fn test_results_list_all_runs_true(start_server: &ServerProcess) {
         "Results list should return an object"
     );
     assert!(
-        json_output.get("results").is_some(),
-        "Response should have 'results' field"
+        json_output.get("items").is_some(),
+        "Response should have 'items' field"
     );
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
 
     // Should show all 5 results (2 from run 1, 2 from run 2, 1 from run 3)
     assert_eq!(
@@ -853,7 +849,7 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run results list with --all-runs and job filter");
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(
         results_array.len(),
         2,
@@ -882,7 +878,7 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run results list with --all-runs and status filter");
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     assert_eq!(
         results_array.len(),
         1,
@@ -901,7 +897,7 @@ fn test_results_list_all_runs_with_filters(start_server: &ServerProcess) {
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run results list with status filter (no --all-runs)");
 
-    let results_array = json_output.get("results").unwrap().as_array().unwrap();
+    let results_array = json_output.get("items").unwrap().as_array().unwrap();
     // Run 2 has no terminated results, so should be empty
     assert_eq!(
         results_array.len(),
@@ -980,12 +976,7 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list results before reinitialize");
     assert_eq!(
-        json_output
-            .get("results")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
+        json_output.get("items").unwrap().as_array().unwrap().len(),
         2,
         "Should have 2 current results before reinitialize"
     );
@@ -1004,12 +995,7 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to list results after reinitialize");
     assert_eq!(
-        json_output
-            .get("results")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
+        json_output.get("items").unwrap().as_array().unwrap().len(),
         0,
         "Default list should show 0 results after reinitialize (workflow_result cleaned up)"
     );
@@ -1019,12 +1005,7 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
     let json_output = run_cli_with_json(&args_all_runs, start_server, None)
         .expect("Failed to list all results after reinitialize");
     assert_eq!(
-        json_output
-            .get("results")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len(),
+        json_output.get("items").unwrap().as_array().unwrap().len(),
         2,
         "With --all-runs should still show 2 historical results after reinitialize"
     );

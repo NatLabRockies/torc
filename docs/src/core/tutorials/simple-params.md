@@ -61,7 +61,7 @@ This expands to 10 jobs: `task_1`, `task_2`, ..., `task_10`.
 ## Step 2: Create and Run the Workflow
 
 ```bash
-WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc run $WORKFLOW_ID
@@ -72,7 +72,7 @@ All 10 jobs run in parallel since they have no dependencies.
 ## Step 3: Verify the Expansion
 
 ```bash
-torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[].name' | sort
+torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
 ```
 
 Output:
@@ -149,7 +149,7 @@ all 5 process jobs.
 ## Step 2: Create and Initialize the Workflow
 
 ```bash
-WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
@@ -159,13 +159,13 @@ torc workflows init $WORKFLOW_ID
 
 ```bash
 # Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)
-torc jobs list $WORKFLOW_ID -f json | jq '.jobs | length'
+torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
 ```
 
 List the job names:
 
 ```bash
-torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[].name' | sort
+torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
 ```
 
 Output:
