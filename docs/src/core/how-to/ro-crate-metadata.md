@@ -324,7 +324,7 @@ Entities are also automatically deleted when their parent workflow is deleted (c
 ## Exporting an RO-Crate Document
 
 The `export` command assembles all entities into a valid
-[RO-Crate 1.1](https://w3id.org/ro/crate/1.1) metadata document:
+[RO-Crate 1.1](https://www.researchobject.org/ro-crate/1.1/) metadata document:
 
 ```bash
 # Write to file

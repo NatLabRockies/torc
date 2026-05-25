@@ -18,7 +18,7 @@ Torc automatically captures return codes and multiple log files for each job exe
 - **Job stdout/stderr**: Output from your job commands
 - **Job runner logs**: Internal logs from the Torc job runner
 - **Slurm logs**: Additional logs when using Slurm scheduler (see
-  [Debugging Slurm Workflows](debugging-slurm.md))
+  [Debugging Slurm Workflows](../../specialized/hpc/debugging-slurm.md))
 
 The `results list --include-logs` command consolidates all this information into a single JSON
 report, making it easy to locate and examine relevant log files for debugging.
@@ -189,8 +189,8 @@ For jobs executed by the local job runner (`compute_node_type: "local"`):
 For jobs executed via Slurm scheduler (`compute_node_type: "slurm"`), additional log files are
 available including Slurm stdout/stderr, environment logs, and dmesg logs.
 
-See [Debugging Slurm Workflows](debugging-slurm.md) for detailed information about Slurm-specific
-log files and debugging tools.
+See [Debugging Slurm Workflows](../../specialized/hpc/debugging-slurm.md) for detailed information
+about Slurm-specific log files and debugging tools.
 
 ## Using the torc-dash Debugging Tab
 
@@ -577,4 +577,5 @@ torc results list --include-logs <workflow_id> --output-dir <correct_path>
 ## See Also
 
 - [Working with Logs](working-with-logs.md) — Bundling and analyzing logs
-- [Debugging Slurm Workflows](debugging-slurm.md) — Slurm-specific debugging tools
+- [Debugging Slurm Workflows](../../specialized/hpc/debugging-slurm.md) — Slurm-specific debugging
+  tools

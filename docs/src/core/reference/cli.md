@@ -7,7 +7,7 @@ This document contains the help content for the `torc` command-line program.
 - [`torc`](#torc)
 - [`torc run`](#torc-run)
 - [`torc submit`](#torc-submit)
-- [`torc slurm generate` + `torc submit`](#torc-submit-slurm)
+- [`torc slurm generate` + `torc submit`](#torc-slurm-generate-torc-submit)
 - [`torc watch`](#torc-watch)
 - [`torc recover`](#torc-recover)
 - [`torc workflows`](#torc-workflows)
@@ -1621,15 +1621,16 @@ Schedule compute nodes using Slurm
 
 Parse Slurm log files for known error messages
 
-**Usage:** `torc slurm parse-logs [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc slurm parse-logs [OPTIONS] <PATH>`
 
 ###### **Arguments:**
 
-- `<WORKFLOW_ID>` — Workflow ID
+- `<PATH>` — Path to output directory containing Slurm log files
 
 ###### **Options:**
 
-- `-o`, `--output-dir <OUTPUT_DIR>` — Output directory containing Slurm log files. Default: `output`
+- `-w`, `--workflow-id <WORKFLOW_ID>` — Workflow ID to filter logs (required when directory contains
+  multiple workflows)
 - `--errors-only` — Only show errors (skip warnings). Default: `false`
 
 ## `torc slurm sacct`
@@ -2172,4 +2173,4 @@ Generate shell completions
 <hr/>
 
 <small><i>This document was generated automatically by
-<a href="https://crates.io/crates/clap-markdown"><code>clap-markdown</code></a>.</i></small>
+<a href="https://docs.rs/clap-markdown/latest/clap_markdown/"><code>clap-markdown</code></a>.</i></small>

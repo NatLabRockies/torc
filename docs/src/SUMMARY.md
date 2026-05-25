@@ -74,6 +74,7 @@
 # Execution Modes
 
 - [HPC & Slurm](./specialized/hpc/index.md)
+  - [Choosing a Server Deployment](./specialized/admin/choosing-deployment.md)
   - [Slurm Overview](./specialized/hpc/slurm-workflows.md)
   - [Submitting Slurm Workflows](./specialized/hpc/submit-slurm-workflow.md)
   - [Multi-Node Jobs](./specialized/hpc/multi-node-jobs.md)

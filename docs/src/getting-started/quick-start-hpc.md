@@ -62,7 +62,8 @@ If detected, you'll see your HPC system name. To see available partitions:
 torc hpc partitions <profile-name>
 ```
 
-> **Note:** If your HPC system isn't detected, see [Custom HPC Profile](./custom-hpc-profile.md) or
+> **Note:** If your HPC system isn't detected, see
+> [Custom HPC Profile](../specialized/hpc/custom-hpc-profile.md) or
 > [request built-in support](https://github.com/NatLabRockies/torc/issues).
 
 ## Create a Workflow with Resource Requirements
@@ -101,8 +102,7 @@ Key differences from local workflows:
 First, generate Slurm schedulers for your account, then submit:
 
 ```console
-torc slurm generate --account <your-account> workflow.yaml -o workflow_slurm.yaml
-torc submit workflow_slurm.yaml
+torc slurm generate --account <your-account> workflow.yaml | torc submit -
 ```
 
 Torc will:
@@ -205,8 +205,10 @@ This shows what schedulers and actions Torc will create without submitting anyth
 ## Next Steps
 
 - [CLI Cheat Sheet](../core/reference/cli-cheatsheet.md) — Quick reference for all common commands
-- [Slurm Overview](./slurm-workflows.md) — How Torc manages Slurm
-- [Resource Requirements](../../core/reference/resources.md) — All resource options
-- [HPC Profiles](./hpc-profiles.md) — Managing HPC configurations
-- [Advanced Slurm Configuration](./slurm.md) — Manual Slurm scheduler setup
-- [Debugging Slurm Workflows](./debugging-slurm.md) — Troubleshooting
+- [Choosing a Server Deployment](../specialized/admin/choosing-deployment.md) — Pick the right
+  server pattern for HPC workflows
+- [Slurm Overview](../specialized/hpc/slurm-workflows.md) — How Torc manages Slurm
+- [Resource Requirements](../core/reference/resources.md) — All resource options
+- [HPC Profiles](../specialized/hpc/hpc-profiles.md) — Managing HPC configurations
+- [Advanced Slurm Configuration](../specialized/hpc/slurm.md) — Manual Slurm scheduler setup
+- [Debugging Slurm Workflows](../specialized/hpc/debugging-slurm.md) — Troubleshooting

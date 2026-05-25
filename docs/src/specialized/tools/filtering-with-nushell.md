@@ -26,10 +26,10 @@ Compare filtering failed jobs:
 
 ```bash
 # jq (cryptic syntax)
-torc jobs list 123 -f json | jq '.items[] | select(.status == "failed")'
+torc -f json jobs list 123 | jq '.items[] | select(.status == "failed")'
 
 # Nushell (readable, SQL-like)
-torc jobs list 123 -f json | from json | get items | where status == "failed"
+torc -f json jobs list 123 | from json | get items | where status == "failed"
 ```
 
 Nushell is:
@@ -71,7 +71,7 @@ let wf = 123
 ### List All Jobs
 
 ```nu
-torc jobs list $wf -f json | from json | get items
+torc -f json jobs list $wf | from json | get items
 ```
 
 This parses the JSON and extracts the `jobs` array into a table.
@@ -81,13 +81,13 @@ This parses the JSON and extracts the `jobs` array into a table.
 Find all failed jobs:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed"
+torc -f json jobs list $wf | from json | get items | where status == "failed"
 ```
 
 Find jobs that are ready or running:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status in ["ready", "running"]
+torc -f json jobs list $wf | from json | get items | where status in ["ready", "running"]
 ```
 
 ### Filter by Name Pattern
@@ -95,7 +95,7 @@ torc jobs list $wf -f json | from json | get items | where status in ["ready", "
 Find jobs with "train" in the name:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where name =~ "train"
+torc -f json jobs list $wf | from json | get items | where name =~ "train"
 ```
 
 The `=~` operator performs substring/regex matching.
@@ -105,13 +105,13 @@ The `=~` operator performs substring/regex matching.
 Find failed jobs with "process" in the name:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "process"
+torc -f json jobs list $wf | from json | get items | where status == "failed" and name =~ "process"
 ```
 
 Find jobs that failed or were canceled:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed" or status == "canceled"
+torc -f json jobs list $wf | from json | get items | where status == "failed" or status == "canceled"
 ```
 
 ## Selecting and Formatting Output
@@ -121,7 +121,7 @@ torc jobs list $wf -f json | from json | get items | where status == "failed" or
 Show only name and status:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | select name status
+torc -f json jobs list $wf | from json | get items | select name status
 ```
 
 ### Sort Results
@@ -129,13 +129,13 @@ torc jobs list $wf -f json | from json | get items | select name status
 Sort by name:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | sort-by name
+torc -f json jobs list $wf | from json | get items | sort-by name
 ```
 
 Sort failed jobs by ID (descending):
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed" | sort-by id -r
+torc -f json jobs list $wf | from json | get items | where status == "failed" | sort-by id -r
 ```
 
 ### Count Results
@@ -143,13 +143,13 @@ torc jobs list $wf -f json | from json | get items | where status == "failed" | 
 Count jobs by status:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
+torc -f json jobs list $wf | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
 ```
 
 Or more simply, count failed jobs:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed" | length
+torc -f json jobs list $wf | from json | get items | where status == "failed" | length
 ```
 
 ## Analyzing Results
@@ -157,13 +157,13 @@ torc jobs list $wf -f json | from json | get items | where status == "failed" | 
 ### Find Jobs with Non-Zero Return Codes
 
 ```nu
-torc results list $wf -f json | from json | get items | where return_code != 0
+torc -f json results list $wf | from json | get items | where return_code != 0
 ```
 
 ### Find Results with Specific Errors
 
 ```nu
-torc results list $wf -f json | from json | get items | where return_code != 0 | select job_id return_code
+torc -f json results list $wf | from json | get items | where return_code != 0 | select job_id return_code
 ```
 
 ### Join Jobs with Results
@@ -171,8 +171,8 @@ torc results list $wf -f json | from json | get items | where return_code != 0 |
 Get job names for failed results:
 
 ```nu
-let jobs = (torc jobs list $wf -f json | from json | get items)
-let results = (torc results list $wf -f json | from json | get items | where return_code != 0)
+let jobs = (torc -f json jobs list $wf | from json | get items)
+let results = (torc -f json results list $wf | from json | get items | where return_code != 0)
 $results | each { |r|
     let job = ($jobs | where id == $r.job_id | first)
     { name: $job.name, return_code: $r.return_code, job_id: $r.job_id }
@@ -184,7 +184,7 @@ $results | each { |r|
 ### List User Data Entries
 
 ```nu
-torc user-data list $wf -f json | from json | get items
+torc -f json user-data list $wf | from json | get items
 ```
 
 ### Filter by Key
@@ -192,7 +192,7 @@ torc user-data list $wf -f json | from json | get items
 Find user data with a specific key:
 
 ```nu
-torc user-data list $wf -f json | from json | get items | where key =~ "config"
+torc -f json user-data list $wf | from json | get items | where key =~ "config"
 ```
 
 ### Parse JSON Values
@@ -200,7 +200,7 @@ torc user-data list $wf -f json | from json | get items | where key =~ "config"
 User data values are JSON strings. Parse and filter them:
 
 ```nu
-torc user-data list $wf -f json | from json | get items | each { |ud|
+torc -f json user-data list $wf | from json | get items | each { |ud|
     { key: $ud.key, value: ($ud.value | from json) }
 }
 ```
@@ -213,10 +213,10 @@ Find failed jobs and get their result details:
 
 ```nu
 # Get failed job IDs
-let failed_ids = (torc jobs list $wf -f json | from json | get items | where status == "failed" | get id)
+let failed_ids = (torc -f json jobs list $wf | from json | get items | where status == "failed" | get id)
 
 # Show results for those jobs
-torc results list $wf -f json | from json | get items | where job_id in $failed_ids | select job_id return_code
+torc -f json results list $wf | from json | get items | where job_id in $failed_ids | select job_id return_code
 ```
 
 ### Example 2: Find Stuck Jobs
@@ -224,7 +224,7 @@ torc results list $wf -f json | from json | get items | where job_id in $failed_
 Find jobs that have been running for a long time (status is "running"):
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "running" | select id name
+torc -f json jobs list $wf | from json | get items | where status == "running" | select id name
 ```
 
 ### Example 3: Parameter Sweep Analysis
@@ -232,7 +232,7 @@ torc jobs list $wf -f json | from json | get items | where status == "running" |
 For a parameterized workflow, find which parameter values failed:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "lr" | get name
+torc -f json jobs list $wf | from json | get items | where status == "failed" and name =~ "lr" | get name
 ```
 
 ### Example 4: Export to CSV
@@ -240,7 +240,7 @@ torc jobs list $wf -f json | from json | get items | where status == "failed" an
 Export failed jobs to CSV for further analysis:
 
 ```nu
-torc jobs list $wf -f json | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
+torc -f json jobs list $wf | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
 ```
 
 ## Quick Reference

@@ -52,7 +52,7 @@ from all compute nodes.
 
 ```bash
 # Your config file handles TLS — just submit as normal
-torc slurm generate --account myproject workflow.yaml && torc submit workflow.yaml
+torc slurm generate --account myproject workflow.yaml | torc submit -
 ```
 
 ## Advanced Configuration

@@ -13,7 +13,7 @@ By the end of this tutorial, you will:
 
 ## Prerequisites
 
-- Torc server running (see [Installation](../installation.md))
+- Torc server running (see [Installation](../../getting-started/installation.md))
 - Basic familiarity with YAML syntax
 
 ## Use Cases

@@ -457,6 +457,6 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ## Additional Resources
 
 - [Bash Completion Documentation](https://github.com/scop/bash-completion)
-- [Zsh Completion System](http://zsh.sourceforge.net/Doc/Release/Completion-System.html)
+- [Zsh Completion System](https://zsh.sourceforge.io/Doc/Release/Completion-System.html)
 - [Fish Completion Tutorial](https://fishshell.com/docs/current/completions.html)
 - [PowerShell Tab Completion](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_tab_expansion)

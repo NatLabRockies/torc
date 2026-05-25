@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'docs/**'
+      - '.github/scripts/check-doc-links.py'
       - '.github/workflows/docs.yml'
 
 # contents:write is required to push to the gh-pages branch directly
@@ -38,6 +39,9 @@ jobs:
           # Override site-url for versioned path
           sed -i 's|site-url = "/torc/"|site-url = "/torc/latest/"|' book.toml
           mdbook build
+
+      - name: Check documentation links
+        run: python3 .github/scripts/check-doc-links.py --internal --external
 
       - name: Setup gh-pages branch
         run: .github/scripts/gh-pages-setup.sh

@@ -2,6 +2,7 @@
 
 Server deployment, configuration, and security.
 
+- [Choosing a Server Deployment](./choosing-deployment.md) - Pick a server setup for your workflow
 - [Server Deployment](./server-deployment.md) - Deploying the Torc server
 - [Configuration Files](./configuration-files.md) - Server configuration
 - [Authentication](./authentication.md) - User authentication setup

@@ -124,10 +124,10 @@ jobs:
 torc workflows list
 
 # View in JSON format for programmatic access
-torc workflows list -f json
+torc -f json workflows list
 
 # Get details of a specific workflow
-torc workflows get <workflow_id> -f json
+torc -f json workflows get <workflow_id>
 ```
 
 ### JSON Output Example

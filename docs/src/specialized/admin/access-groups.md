@@ -168,10 +168,10 @@ All commands support JSON output format for scripting:
 
 ```bash
 # List groups in JSON format
-torc access-groups list --format json
+torc -f json access-groups list
 
 # Get group details in JSON
-torc access-groups get 1 --format json
+torc -f json access-groups get 1
 ```
 
 ## Database Schema

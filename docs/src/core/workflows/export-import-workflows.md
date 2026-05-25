@@ -64,7 +64,7 @@ torc workflows export 123 > my_workflow.json
 Use `--format json` for machine-readable output with export statistics:
 
 ```bash
-torc workflows export 123 --output my_workflow.json --format json
+torc -f json workflows export 123 --output my_workflow.json
 ```
 
 Output:
@@ -133,7 +133,7 @@ torc workflows import my_workflow.json --skip-events
 Use `--format json` for machine-readable output:
 
 ```bash
-torc workflows import my_workflow.json --format json
+torc -f json workflows import my_workflow.json
 ```
 
 Output:
@@ -207,7 +207,7 @@ are specified.
 ### Backup All Active Workflows
 
 ```bash
-for id in $(torc workflows list --format json | jq -r '.items[].id'); do
+for id in $(torc -f json workflows list | jq -r '.items[].id'); do
   torc workflows export $id --output "backup_workflow_${id}.json"
 done
 ```
