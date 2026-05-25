@@ -45,8 +45,6 @@ Object.assign(TorcDashboard.prototype, {
             return `${controls}<div class="placeholder-message">No jobs in this workflow</div>`;
         }
 
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
-
         return `
             ${controls}
             ${count}
@@ -64,13 +62,13 @@ Object.assign(TorcDashboard.prototype, {
                 </thead>
                 <tbody>
                     ${jobs.map(job => {
-                        const isRunning = statusNames[job.status] === 'Running';
+                        const isRunning = job.status === 'running';
                         const elapsed = isRunning ? this.formatElapsedSince(job.start_time) : '-';
                         return `
                         <tr>
                             <td><code>${job.id ?? '-'}</code></td>
                             <td>${this.escapeHtml(job.name || '-')}</td>
-                            <td><span class="status-badge status-${statusNames[job.status]?.toLowerCase() || 'unknown'}">${statusNames[job.status] || job.status}</span></td>
+                            <td><span class="status-badge status-${this.jobStatusSlug(job.status)}">${this.formatJobStatus(job.status)}</span></td>
                             <td><code>${job.compute_node_id ?? '-'}</code></td>
                             <td><code>${elapsed}</code></td>
                             <td><code>${this.escapeHtml(this.truncate(job.command || '-', 80))}</code></td>
@@ -167,8 +165,6 @@ Object.assign(TorcDashboard.prototype, {
             });
         }
 
-        const statusNames = ['Uninitialized', 'Blocked', 'Ready', 'Pending', 'Running', 'Completed', 'Failed', 'Canceled', 'Terminated', 'Disabled'];
-
         return `
             ${controls}
             ${count}
@@ -183,7 +179,7 @@ Object.assign(TorcDashboard.prototype, {
                         ${this.renderSortableHeader('Status', 'status')}
                         ${this.renderSortableHeader('Exec Time (min)', 'exec_time_minutes')}
                         ${this.renderSortableHeader('Peak Mem', 'peak_memory_bytes')}
-                        ${this.renderSortableHeader('Avg CPU %', 'avg_cpu_percent')}
+                        ${this.renderSortableHeader('Peak CPU %', 'peak_cpu_percent')}
                     </tr>
                 </thead>
                 <tbody>
@@ -194,10 +190,10 @@ Object.assign(TorcDashboard.prototype, {
                             <td>${result.run_id ?? '-'}</td>
                             <td>${result.attempt_id ?? 1}</td>
                             <td class="${result.return_code === 0 ? 'return-code-0' : 'return-code-error'}">${result.return_code ?? '-'}</td>
-                            <td><span class="status-badge status-${statusNames[result.status]?.toLowerCase() || 'unknown'}">${statusNames[result.status] || result.status}</span></td>
+                            <td><span class="status-badge status-${this.jobStatusSlug(result.status)}">${this.formatJobStatus(result.status)}</span></td>
                             <td>${result.exec_time_minutes != null ? result.exec_time_minutes.toFixed(2) : '-'}</td>
                             <td>${this.formatBytes(result.peak_memory_bytes)}</td>
-                            <td>${result.avg_cpu_percent != null ? result.avg_cpu_percent.toFixed(1) : '-'}</td>
+                            <td>${result.peak_cpu_percent != null ? result.peak_cpu_percent.toFixed(1) : '-'}</td>
                         </tr>
                     `).join('')}
                 </tbody>

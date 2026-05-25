@@ -12,30 +12,36 @@ class DAGVisualizer {
     }
 
     // Status to color mapping
+    // Keyed by the snake_case JobStatus string the server sends, per the
+    // OpenAPI enum. (Previously keyed by the legacy integer status, which
+    // made every node fall back to the gray default once the API switched
+    // to string status.)
     static statusColors = {
-        0: '#6c757d', // uninitialized
-        1: '#ffc107', // blocked
-        2: '#17a2b8', // ready
-        3: '#fd7e14', // pending
-        4: '#007bff', // running
-        5: '#28a745', // completed
-        6: '#dc3545', // failed
-        7: '#6f42c1', // canceled
-        8: '#adb5bd', // terminated
-        9: '#e9ecef', // disabled
+        uninitialized: '#6c757d',
+        blocked: '#ffc107',
+        ready: '#17a2b8',
+        pending: '#fd7e14',
+        running: '#007bff',
+        completed: '#28a745',
+        failed: '#dc3545',
+        canceled: '#6f42c1',
+        terminated: '#adb5bd',
+        disabled: '#e9ecef',
+        pending_failed: '#dc3545',
     };
 
     static statusNames = {
-        0: 'Uninitialized',
-        1: 'Blocked',
-        2: 'Ready',
-        3: 'Pending',
-        4: 'Running',
-        5: 'Completed',
-        6: 'Failed',
-        7: 'Canceled',
-        8: 'Terminated',
-        9: 'Disabled',
+        uninitialized: 'Uninitialized',
+        blocked: 'Blocked',
+        ready: 'Ready',
+        pending: 'Pending',
+        running: 'Running',
+        completed: 'Completed',
+        failed: 'Failed',
+        canceled: 'Canceled',
+        terminated: 'Terminated',
+        disabled: 'Disabled',
+        pending_failed: 'Pending Failed',
     };
 
     initialize() {
