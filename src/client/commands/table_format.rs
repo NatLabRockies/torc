@@ -9,15 +9,31 @@ use tabled::{Table, Tabled};
 /// stringified cell values. A header row is always emitted, even for an empty
 /// slice, so downstream tooling always sees the column names.
 ///
-/// Errors writing CSV (e.g. a broken pipe) are reported to stderr and exit 1.
+/// Records are streamed straight to a locked stdout handle (no full
+/// materialization). A broken pipe (e.g. piping into `head`) exits silently
+/// with code 0; any other write error is reported to stderr and exits 1.
 pub fn display_csv<T: Tabled>(items: &[T]) {
-    print!("{}", build_csv(items));
+    display_csv_excluding(items, &[]);
 }
 
 /// Render a slice of `Tabled` rows as CSV, excluding the named columns
 /// (case-insensitive match against the headers). Unknown column names are
 /// reported as warnings on stderr, matching `display_table_excluding`.
+///
+/// Shares the streaming/error behavior documented on [`display_csv`].
 pub fn display_csv_excluding<T: Tabled>(items: &[T], exclude_columns: &[String]) {
+    warn_unknown_columns::<T>(exclude_columns);
+    let keep = kept_columns::<T>(exclude_columns);
+
+    let stdout = std::io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    if let Err(e) = write_csv(&mut wtr, items, &keep) {
+        handle_csv_write_error(e);
+    }
+}
+
+/// Warn (on stderr) about any requested exclude column that is not a header.
+fn warn_unknown_columns<T: Tabled>(exclude_columns: &[String]) {
     for col in exclude_columns {
         if !T::headers()
             .iter()
@@ -31,65 +47,48 @@ pub fn display_csv_excluding<T: Tabled>(items: &[T], exclude_columns: &[String])
             );
         }
     }
-    print!("{}", build_csv_excluding(items, exclude_columns));
 }
 
-/// Build the CSV representation of `items` as a `String` (header + data rows).
-fn build_csv<T: Tabled>(items: &[T]) -> String {
-    let headers: Vec<String> = T::headers().into_iter().map(|h| h.to_string()).collect();
-    let rows: Vec<Vec<String>> = items
-        .iter()
-        .map(|item| item.fields().into_iter().map(|f| f.to_string()).collect())
-        .collect();
-    csv_string(&headers, &rows)
-}
-
-/// Build the CSV representation of `items`, dropping the excluded columns.
-fn build_csv_excluding<T: Tabled>(items: &[T], exclude_columns: &[String]) -> String {
-    let headers: Vec<String> = T::headers().into_iter().map(|h| h.to_string()).collect();
+/// Indices of the columns to emit (those whose header is not excluded,
+/// case-insensitive). With an empty exclude list this is every column.
+fn kept_columns<T: Tabled>(exclude_columns: &[String]) -> Vec<usize> {
     let exclude_lower: Vec<String> = exclude_columns.iter().map(|c| c.to_lowercase()).collect();
-
-    // Indices of columns to keep (those whose header is not excluded).
-    let keep: Vec<usize> = headers
+    T::headers()
         .iter()
         .enumerate()
         .filter(|(_, h)| !exclude_lower.contains(&h.to_lowercase()))
         .map(|(i, _)| i)
-        .collect();
-
-    let kept_headers: Vec<String> = keep.iter().map(|&i| headers[i].clone()).collect();
-    let rows: Vec<Vec<String>> = items
-        .iter()
-        .map(|item| {
-            let fields: Vec<String> = item.fields().into_iter().map(|f| f.to_string()).collect();
-            keep.iter().map(|&i| fields[i].clone()).collect()
-        })
-        .collect();
-    csv_string(&kept_headers, &rows)
+        .collect()
 }
 
-/// Serialize a header row plus data rows into an RFC 4180 CSV string.
-fn csv_string(headers: &[String], rows: &[Vec<String>]) -> String {
-    let mut wtr = csv::Writer::from_writer(Vec::new());
-    let write = |wtr: &mut csv::Writer<Vec<u8>>| -> csv::Result<()> {
-        wtr.write_record(headers)?;
-        for row in rows {
-            wtr.write_record(row)?;
-        }
-        wtr.flush()?;
-        Ok(())
-    };
-    if let Err(e) = write(&mut wtr) {
-        eprintln!("Error writing CSV output: {}", e);
-        std::process::exit(1);
+/// Stream the header row plus one record per item into `wtr`, emitting only the
+/// columns in `keep`. Generic over the writer so tests can render to a buffer.
+fn write_csv<W: std::io::Write, T: Tabled>(
+    wtr: &mut csv::Writer<W>,
+    items: &[T],
+    keep: &[usize],
+) -> csv::Result<()> {
+    let headers: Vec<String> = T::headers().into_iter().map(|h| h.to_string()).collect();
+    wtr.write_record(keep.iter().map(|&i| headers[i].as_str()))?;
+    for item in items {
+        let fields: Vec<String> = item.fields().into_iter().map(|f| f.to_string()).collect();
+        wtr.write_record(keep.iter().map(|&i| fields[i].as_str()))?;
     }
-    match wtr.into_inner() {
-        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-        Err(e) => {
-            eprintln!("Error finalizing CSV output: {}", e);
-            std::process::exit(1);
-        }
+    wtr.flush()?;
+    Ok(())
+}
+
+/// Report a CSV write failure. A broken pipe is the normal result of a
+/// downstream consumer closing early (e.g. `| head`), so exit quietly; anything
+/// else is a real error reported to stderr.
+fn handle_csv_write_error(e: csv::Error) -> ! {
+    if let csv::ErrorKind::Io(io_err) = e.kind()
+        && io_err.kind() == std::io::ErrorKind::BrokenPipe
+    {
+        std::process::exit(0);
     }
+    eprintln!("Error writing CSV output: {}", e);
+    std::process::exit(1);
 }
 
 /// Conditionally render rows as CSV.
@@ -217,6 +216,20 @@ mod tests {
                 status: "running".into(),
             },
         ]
+    }
+
+    /// Render rows to a CSV `String` using the same streaming path as
+    /// `display_csv`, but into an in-memory buffer instead of stdout.
+    fn build_csv<T: Tabled>(items: &[T]) -> String {
+        build_csv_excluding(items, &[])
+    }
+
+    fn build_csv_excluding<T: Tabled>(items: &[T], exclude_columns: &[String]) -> String {
+        let keep = kept_columns::<T>(exclude_columns);
+        let mut wtr = csv::Writer::from_writer(Vec::new());
+        write_csv(&mut wtr, items, &keep).expect("writing CSV to a Vec cannot fail");
+        let bytes = wtr.into_inner().expect("flushing CSV to a Vec cannot fail");
+        String::from_utf8(bytes).expect("CSV output is valid UTF-8")
     }
 
     #[test]
