@@ -90,9 +90,9 @@ Object.assign(TorcDashboard.prototype, {
         secs -= hours * 3600;
         const mins = Math.floor(secs / 60);
         secs -= mins * 60;
-        if (days > 0) return `${days}d${String(hours).padStart(2, '0')}h`;
-        if (hours > 0) return `${hours}h${String(mins).padStart(2, '0')}m`;
-        if (mins > 0) return `${mins}m${String(secs).padStart(2, '0')}s`;
+        if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`;
+        if (hours > 0) return `${hours}h ${String(mins).padStart(2, '0')}m`;
+        if (mins > 0) return `${mins}m ${String(secs).padStart(2, '0')}s`;
         return `${secs}s`;
     },
 

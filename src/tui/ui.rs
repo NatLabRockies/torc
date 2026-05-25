@@ -901,11 +901,11 @@ fn format_elapsed(start_time: Option<&str>) -> String {
     let mins = (total_secs % 3_600) / 60;
     let secs = total_secs % 60;
     if days > 0 {
-        format!("{}d{:02}h", days, hours)
+        format!("{}d {:02}h", days, hours)
     } else if hours > 0 {
-        format!("{}h{:02}m", hours, mins)
+        format!("{}h {:02}m", hours, mins)
     } else if mins > 0 {
-        format!("{}m{:02}s", mins, secs)
+        format!("{}m {:02}s", mins, secs)
     } else {
         format!("{}s", secs)
     }
