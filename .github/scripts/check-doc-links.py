@@ -39,14 +39,26 @@ def docs_files() -> list[Path]:
     return sorted(DOCS_SRC.rglob("*.md")) + [DOCS_ROOT / "README.md"]
 
 
+def fence_marker(line: str) -> tuple[str, int] | None:
+    match = re.match(r"^\s*(?:>\s*)*([`~]{3,})", line)
+    if not match:
+        return None
+    marker = match.group(1)
+    return marker[0], len(marker)
+
+
 def non_code_lines(text: str, *, strip_inline_code: bool) -> list[tuple[int, str]]:
     lines: list[tuple[int, str]] = []
-    in_fence = False
+    fence: tuple[str, int] | None = None
     for line_no, line in enumerate(text.splitlines(), 1):
-        if re.match(r"^\s*```", line):
-            in_fence = not in_fence
+        marker = fence_marker(line)
+        if marker and fence is None:
+            fence = marker
             continue
-        if in_fence:
+        if marker and fence is not None and marker[0] == fence[0] and marker[1] >= fence[1]:
+            fence = None
+            continue
+        if fence is not None:
             continue
         if strip_inline_code:
             line = re.sub(r"`[^`]*`", "", line)

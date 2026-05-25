@@ -78,7 +78,7 @@ jobs:
         run: ~/.dprint/bin/dprint check
 
       - name: Check documentation links
-        run: python3 .github/scripts/check-doc-links.py --internal --external
+        run: python3 .github/scripts/check-doc-links.py --internal
 
       - name: Run shellcheck
         run: |

@@ -1621,15 +1621,16 @@ Schedule compute nodes using Slurm
 
 Parse Slurm log files for known error messages
 
-**Usage:** `torc slurm parse-logs [OPTIONS] [WORKFLOW_ID]`
+**Usage:** `torc slurm parse-logs [OPTIONS] <PATH>`
 
 ###### **Arguments:**
 
-- `<WORKFLOW_ID>` — Workflow ID
+- `<PATH>` — Path to output directory containing Slurm log files
 
 ###### **Options:**
 
-- `-o`, `--output-dir <OUTPUT_DIR>` — Output directory containing Slurm log files. Default: `output`
+- `-w`, `--workflow-id <WORKFLOW_ID>` — Workflow ID to filter logs (required when directory contains
+  multiple workflows)
 - `--errors-only` — Only show errors (skip warnings). Default: `false`
 
 ## `torc slurm sacct`

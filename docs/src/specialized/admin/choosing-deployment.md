@@ -83,7 +83,7 @@ the workflow. Jobs submitted to Slurm reach it over the cluster interconnect:
 
 ```bash
 torc-server run \
-    --database /tmp/$USER/torc.db \
+    --database /tmp/torc-$USER.db \
     --host <internal-hostname> \
     --port 8085
 ```

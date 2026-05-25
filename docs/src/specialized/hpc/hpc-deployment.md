@@ -108,7 +108,7 @@ whose home/scratch is fast and POSIX-correct, but when in doubt prefer `/tmp`:
 ```bash
 # Live DB on node-local disk; back up to durable shared storage periodically
 torc-server run \
-    --database /tmp/$USER/torc.db \
+    --database /tmp/torc-$USER.db \
     --host $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
     --port 8085
 ```
@@ -122,7 +122,7 @@ For long-running workflows, periodically backup the database:
 
 ```bash
 # SQLite backup (safe while server is running)
-sqlite3 /tmp/$USER/torc.db ".backup /projects/$USER/torc_backup.db"
+sqlite3 /tmp/torc-$USER.db ".backup /projects/$USER/torc_backup.db"
 ```
 
 You can also snapshot a running server with `SIGUSR1` (works for on-disk and in-memory databases) —
