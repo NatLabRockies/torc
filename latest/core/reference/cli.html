@@ -254,11 +254,12 @@ and multi-section report commands reject it.</li>
 password not)</li>
 </ul>
 <h2 id="torc-run"><a class="header" href="#torc-run"><code>torc run</code></a></h2>
-<p>Run a workflow locally (create from spec file or run existing workflow by ID)</p>
+<p>Run a workflow locally (create from spec file or stdin, or run existing workflow by ID)</p>
 <p><strong>Usage:</strong> <code>torc run [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
 <h6 id="arguments"><a class="header" href="#arguments"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID</li>
+<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or <code>-</code> to
+read the spec from stdin</li>
 </ul>
 <h6 id="options-1"><a class="header" href="#options-1"><strong>Options:</strong></a></h6>
 <ul>
@@ -272,13 +273,14 @@ password not)</li>
 Default: <code>false</code></li>
 </ul>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
-<p>Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)</p>
+<p>Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)</p>
 <p>Requires workflow to have an on_workflow_start action with schedule_nodes. For Slurm workflows
 without pre-configured schedulers, use <code>slurm generate</code> + <code>submit</code> instead.</p>
 <p><strong>Usage:</strong> <code>torc submit [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
 <h6 id="arguments-1"><a class="header" href="#arguments-1"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID</li>
+<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or <code>-</code> to
+read the spec from stdin</li>
 </ul>
 <h6 id="options-2"><a class="header" href="#options-2"><strong>Options:</strong></a></h6>
 <ul>
@@ -296,13 +298,18 @@ waste allocation time.</p>
 <pre><code class="language-bash">torc slurm generate --account &lt;account&gt; workflow.yaml
 </code></pre>
 <p>Review the schedulers and actions to ensure they are appropriate for your workflow before
-submitting. You can save the output and submit manually:</p>
+submitting. Then submit in one pipeline (<code>generate</code> writes to stdout, <code>submit -</code> reads stdin):</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;account&gt; workflow.yaml | torc submit -
+</code></pre>
+<p>Or save the output to a file and submit that file:</p>
 <pre><code class="language-bash">torc slurm generate --account &lt;account&gt; -o workflow_with_schedulers.yaml workflow.yaml
 torc submit workflow_with_schedulers.yaml
 </code></pre>
 <p><strong>Usage:</strong></p>
 <pre><code class="language-bash">torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;
 torc submit &lt;OUTPUT_FILE&gt;
+# or, in a single pipeline:
+torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt; | torc submit -
 </code></pre>
 <p>See <a href="#torc-slurm-generate"><code>torc slurm generate</code></a> for full options.</p>
 <h2 id="torc-watch"><a class="header" href="#torc-watch"><code>torc watch</code></a></h2>
@@ -510,12 +517,13 @@ guide</li>
 <p>Note: Lifecycle commands (<code>create</code>, <code>run</code>, <code>submit</code>, <code>status</code>, <code>cancel</code>, <code>delete</code>) are at the top
 level. Run <code>torc --help</code> to see all commands.</p>
 <h2 id="torc-create"><a class="header" href="#torc-create"><code>torc create</code></a></h2>
-<p>Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)</p>
+<p>Create a workflow from a specification file or stdin (supports JSON, JSON5, YAML, and KDL formats)</p>
 <p><strong>Usage:</strong> <code>torc create [OPTIONS] --user &lt;USER&gt; &lt;FILE&gt;</code></p>
 <h6 id="arguments-4"><a class="header" href="#arguments-4"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec. Supported formats: JSON (.json),
-JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is auto-detected from file extension.</li>
+<li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec, or <code>-</code> to read the spec from stdin.
+Supported formats: JSON (.json), JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is
+auto-detected from file extension, or from the content itself when reading stdin.</li>
 </ul>
 <h6 id="options-5"><a class="header" href="#options-5"><strong>Options:</strong></a></h6>
 <ul>
@@ -1534,7 +1542,8 @@ which detects spawned jobs and submits the extra Slurm allocations they need.</p
 </blockquote>
 <h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL)</li>
+<li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL), or <code>-</code> to
+read the spec from stdin</li>
 </ul>
 <h6 id="options-50"><a class="header" href="#options-50"><strong>Options:</strong></a></h6>
 <ul>

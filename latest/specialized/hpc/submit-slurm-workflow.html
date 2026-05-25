@@ -187,11 +187,19 @@
                         <h1 id="submitting-slurm-workflows"><a class="header" href="#submitting-slurm-workflows">Submitting Slurm Workflows</a></h1>
 <p>Submit a workflow specification to a Slurm-based HPC system with automatic scheduler generation.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
-<p>Generate Slurm schedulers and submit in two steps:</p>
-<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; workflow.yaml
-torc submit workflow.yaml
+<p>Generate Slurm schedulers and submit in a single pipeline. <code>torc slurm generate</code> writes the
+augmented spec to stdout, and <code>torc submit -</code> reads it from stdin:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; workflow.yaml | torc submit -
 </code></pre>
-<p>Torc will:</p>
+<p>Prefer two explicit steps? Save the generated spec to a file first, then submit that file:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
+</code></pre>
+<blockquote>
+<p>Note: <code>torc slurm generate</code> does not modify the input file in place — it emits the augmented spec
+to stdout (or to <code>-o &lt;file&gt;</code>). Submit the generated output, not the original <code>workflow.yaml</code>.</p>
+</blockquote>
+<p>Either way, torc will:</p>
 <ol>
 <li>Detect your HPC system (e.g., NLR Kestrel)</li>
 <li>Match job requirements to appropriate partitions</li>

@@ -247,8 +247,12 @@ jobs:
     depends_on: [evaluate]
 </code></pre>
 <h3 id="submitting-the-workflow"><a class="header" href="#submitting-the-workflow">Submitting the Workflow</a></h3>
-<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml
-torc submit workflow.yaml
+<p><code>torc slurm generate</code> writes the augmented spec to stdout, so pipe it straight into <code>torc submit -</code>:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml | torc submit -
+</code></pre>
+<p>Or save the generated spec to a file and submit that file:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>

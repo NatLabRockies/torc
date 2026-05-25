@@ -2854,6 +2854,18 @@ formats.</p>
 torc create workflow.kdl
 </code></pre>
 <p>Torc detects the format from the file extension.</p>
+<h3 id="create-from-stdin"><a class="header" href="#create-from-stdin">Create from stdin</a></h3>
+<p>Pass <code>-</code> instead of a path to read the spec from stdin. This is handy for shell pipelines and for
+generating a spec on the fly. The format is auto-detected from the piped content (no extension is
+available), so JSON, JSON5, YAML, and KDL all work.</p>
+<pre><code class="language-bash"># Pipe a file
+cat workflow.yaml | torc create -
+
+# Generate a spec and create in one pipeline
+torc slurm generate --account myproject workflow.yaml | torc submit -
+</code></pre>
+<p>The same <code>-</code> convention works for <code>torc run</code>, <code>torc submit</code>, <code>torc slurm generate</code>, and
+<code>torc slurm plan-allocations</code>.</p>
 <h3 id="create-and-run-in-one-step"><a class="header" href="#create-and-run-in-one-step">Create and Run in One Step</a></h3>
 <p>For quick iteration, combine creation and execution:</p>
 <pre><code class="language-bash"># Create and run locally
@@ -8965,11 +8977,12 @@ and multi-section report commands reject it.</li>
 password not)</li>
 </ul>
 <h2 id="torc-run"><a class="header" href="#torc-run"><code>torc run</code></a></h2>
-<p>Run a workflow locally (create from spec file or run existing workflow by ID)</p>
+<p>Run a workflow locally (create from spec file or stdin, or run existing workflow by ID)</p>
 <p><strong>Usage:</strong> <code>torc run [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
 <h6 id="arguments"><a class="header" href="#arguments"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID</li>
+<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or <code>-</code> to
+read the spec from stdin</li>
 </ul>
 <h6 id="options-1"><a class="header" href="#options-1"><strong>Options:</strong></a></h6>
 <ul>
@@ -8983,13 +8996,14 @@ password not)</li>
 Default: <code>false</code></li>
 </ul>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
-<p>Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)</p>
+<p>Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)</p>
 <p>Requires workflow to have an on_workflow_start action with schedule_nodes. For Slurm workflows
 without pre-configured schedulers, use <code>slurm generate</code> + <code>submit</code> instead.</p>
 <p><strong>Usage:</strong> <code>torc submit [OPTIONS] &lt;WORKFLOW_SPEC_OR_ID&gt;</code></p>
 <h6 id="arguments-1"><a class="header" href="#arguments-1"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID</li>
+<li><code>&lt;WORKFLOW_SPEC_OR_ID&gt;</code> — Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or <code>-</code> to
+read the spec from stdin</li>
 </ul>
 <h6 id="options-2"><a class="header" href="#options-2"><strong>Options:</strong></a></h6>
 <ul>
@@ -9007,13 +9021,18 @@ waste allocation time.</p>
 <pre><code class="language-bash">torc slurm generate --account &lt;account&gt; workflow.yaml
 </code></pre>
 <p>Review the schedulers and actions to ensure they are appropriate for your workflow before
-submitting. You can save the output and submit manually:</p>
+submitting. Then submit in one pipeline (<code>generate</code> writes to stdout, <code>submit -</code> reads stdin):</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;account&gt; workflow.yaml | torc submit -
+</code></pre>
+<p>Or save the output to a file and submit that file:</p>
 <pre><code class="language-bash">torc slurm generate --account &lt;account&gt; -o workflow_with_schedulers.yaml workflow.yaml
 torc submit workflow_with_schedulers.yaml
 </code></pre>
 <p><strong>Usage:</strong></p>
 <pre><code class="language-bash">torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt;
 torc submit &lt;OUTPUT_FILE&gt;
+# or, in a single pipeline:
+torc slurm generate [OPTIONS] --account &lt;ACCOUNT&gt; &lt;WORKFLOW_FILE&gt; | torc submit -
 </code></pre>
 <p>See <a href="core/reference/cli.html#torc-slurm-generate"><code>torc slurm generate</code></a> for full options.</p>
 <h2 id="torc-watch"><a class="header" href="#torc-watch"><code>torc watch</code></a></h2>
@@ -9221,12 +9240,13 @@ guide</li>
 <p>Note: Lifecycle commands (<code>create</code>, <code>run</code>, <code>submit</code>, <code>status</code>, <code>cancel</code>, <code>delete</code>) are at the top
 level. Run <code>torc --help</code> to see all commands.</p>
 <h2 id="torc-create"><a class="header" href="#torc-create"><code>torc create</code></a></h2>
-<p>Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)</p>
+<p>Create a workflow from a specification file or stdin (supports JSON, JSON5, YAML, and KDL formats)</p>
 <p><strong>Usage:</strong> <code>torc create [OPTIONS] --user &lt;USER&gt; &lt;FILE&gt;</code></p>
 <h6 id="arguments-4"><a class="header" href="#arguments-4"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec. Supported formats: JSON (.json),
-JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is auto-detected from file extension.</li>
+<li><code>&lt;FILE&gt;</code> — Path to specification file containing WorkflowSpec, or <code>-</code> to read the spec from stdin.
+Supported formats: JSON (.json), JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is
+auto-detected from file extension, or from the content itself when reading stdin.</li>
 </ul>
 <h6 id="options-5"><a class="header" href="#options-5"><strong>Options:</strong></a></h6>
 <ul>
@@ -10245,7 +10265,8 @@ which detects spawned jobs and submits the extra Slurm allocations they need.</p
 </blockquote>
 <h6 id="arguments-70"><a class="header" href="#arguments-70"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL)</li>
+<li><code>&lt;WORKFLOW_FILE&gt;</code> — Path to workflow specification file (YAML, JSON, JSON5, or KDL), or <code>-</code> to
+read the spec from stdin</li>
 </ul>
 <h6 id="options-50"><a class="header" href="#options-50"><strong>Options:</strong></a></h6>
 <ul>
@@ -12968,8 +12989,12 @@ jobs:
     depends_on: [evaluate]
 </code></pre>
 <h3 id="submitting-the-workflow"><a class="header" href="#submitting-the-workflow">Submitting the Workflow</a></h3>
-<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml
-torc submit workflow.yaml
+<p><code>torc slurm generate</code> writes the augmented spec to stdout, so pipe it straight into <code>torc submit -</code>:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml | torc submit -
+</code></pre>
+<p>Or save the generated spec to a file and submit that file:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -13374,11 +13399,19 @@ and DAG visualization</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="submitting-slurm-workflows"><a class="header" href="#submitting-slurm-workflows">Submitting Slurm Workflows</a></h1>
 <p>Submit a workflow specification to a Slurm-based HPC system with automatic scheduler generation.</p>
 <h2 id="quick-start-5"><a class="header" href="#quick-start-5">Quick Start</a></h2>
-<p>Generate Slurm schedulers and submit in two steps:</p>
-<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; workflow.yaml
-torc submit workflow.yaml
+<p>Generate Slurm schedulers and submit in a single pipeline. <code>torc slurm generate</code> writes the
+augmented spec to stdout, and <code>torc submit -</code> reads it from stdin:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; workflow.yaml | torc submit -
 </code></pre>
-<p>Torc will:</p>
+<p>Prefer two explicit steps? Save the generated spec to a file first, then submit that file:</p>
+<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
+</code></pre>
+<blockquote>
+<p>Note: <code>torc slurm generate</code> does not modify the input file in place — it emits the augmented spec
+to stdout (or to <code>-o &lt;file&gt;</code>). Submit the generated output, not the original <code>workflow.yaml</code>.</p>
+</blockquote>
+<p>Either way, torc will:</p>
 <ol>
 <li>Detect your HPC system (e.g., NLR Kestrel)</li>
 <li>Match job requirements to appropriate partitions</li>
