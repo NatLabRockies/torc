@@ -77,6 +77,9 @@ jobs:
       - name: Check markdown formatting
         run: ~/.dprint/bin/dprint check
 
+      - name: Test documentation link checker
+        run: python3 .github/scripts/test_check_doc_links.py
+
       - name: Check documentation links
         run: python3 .github/scripts/check-doc-links.py --internal
 
