@@ -42,7 +42,7 @@ run_test_job_parallelism() {
         if [ -n "$ts" ]; then
             timestamps+=("$ts")
         fi
-    done < <(echo "$jobs_json" | jq -r '.jobs[].id')
+    done < <(echo "$jobs_json" | jq -r '.items[].id')
 
     # If we got at least 2 timestamps, check for overlap
     if [ ${#timestamps[@]} -ge 2 ]; then

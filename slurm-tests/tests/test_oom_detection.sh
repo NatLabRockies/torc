@@ -24,7 +24,7 @@ run_test_oom_detection() {
     # OOM job should fail (status may be "failed" or "terminated")
     local oom_status
     oom_status=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r '.jobs[] | select(.name == "oom_job") | .status')
+        | jq -r '.items[] | select(.name == "oom_job") | .status')
     if [ "$oom_status" = "failed" ] || [ "$oom_status" = "terminated" ]; then
         _pass "oom_job has terminal failure status ($oom_status)"
     else
@@ -36,7 +36,7 @@ run_test_oom_detection() {
     local oom_id
     oom_id=$(get_job_id "$wf_id" "oom_job")
     oom_rc=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $oom_id)] | sort_by(.attempt_id) | last | .return_code")
+        | jq -r "[.items[] | select(.job_id == $oom_id)] | sort_by(.attempt_id) | last | .return_code")
     assert_ne "${oom_rc:-0}" "0" "oom_job has non-zero return code (got $oom_rc)"
     # srun may report exit code 1 for OOM kills instead of 137 (SIGKILL)
     if [ "${oom_rc:-0}" = "137" ] || [ "${oom_rc:-0}" = "1" ]; then

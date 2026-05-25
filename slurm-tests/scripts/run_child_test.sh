@@ -73,7 +73,7 @@ run_pre_poll_actions() {
       local sync_slurm_ids
       sync_slurm_ids=$(torc --url "$TORC_API_URL" -f json scheduled-compute-nodes list "$wf_id" \
         2>/dev/null \
-        | jq -r '.scheduled_compute_nodes[].scheduler_id' 2>/dev/null \
+        | jq -r '.items[].scheduler_id' 2>/dev/null \
         | tr '\n' ' ')
       if [ -n "$sync_slurm_ids" ]; then
         echo "Externally killing Slurm allocation(s): $sync_slurm_ids"

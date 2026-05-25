@@ -191,8 +191,8 @@ assert_all_jobs_completed() {
     local jobs_json
     jobs_json=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null)
     local total completed
-    total=$(echo "$jobs_json" | jq '.jobs | length')
-    completed=$(echo "$jobs_json" | jq '[.jobs[] | select(.status == "completed")] | length')
+    total=$(echo "$jobs_json" | jq '.items | length')
+    completed=$(echo "$jobs_json" | jq '[.items[] | select(.status == "completed")] | length')
     assert_eq "$completed" "$expected" "workflow $wf_id: $expected jobs completed"
     assert_eq "$total" "$expected" "workflow $wf_id: $expected total jobs"
 }
@@ -202,7 +202,7 @@ assert_job_status() {
     local wf_id="$1" job_name="$2" expected_status="$3"
     local status
     status=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".jobs[] | select(.name == \"$job_name\") | .status")
+        | jq -r ".items[] | select(.name == \"$job_name\") | .status")
     assert_eq "$status" "$expected_status" "job '$job_name' has status '$expected_status'"
 }
 
@@ -218,9 +218,9 @@ assert_return_code() {
     local wf_id="$1" job_name="$2" expected_code="$3"
     local job_id rc
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".items[] | select(.name == \"$job_name\") | .id")
     rc=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .return_code")
+        | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .return_code")
     assert_eq "$rc" "$expected_code" "job '$job_name' return code is $expected_code"
 }
 
@@ -305,7 +305,7 @@ assert_multi_node_dispatch() {
         if [ -n "$host" ]; then
             hostnames="$hostnames $host"
         fi
-    done < <(echo "$jobs_json" | jq -r '.jobs[].id')
+    done < <(echo "$jobs_json" | jq -r '.items[].id')
     count=$(echo "$hostnames" | tr ' ' '\n' | sort -u | grep -c . || echo 0)
     assert_ge "$count" "$expected" "workflow $wf_id dispatched to >= $expected distinct nodes (got $count)"
 }
@@ -316,9 +316,9 @@ assert_avg_cpu_nonzero() {
     local wf_id="$1" job_name="$2"
     local job_id avg_cpu
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".items[] | select(.name == \"$job_name\") | .id")
     avg_cpu=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .avg_cpu_percent // 0")
+        | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .avg_cpu_percent // 0")
     assert_gt_float "${avg_cpu:-0}" "0" "job '$job_name' avg_cpu_percent > 0 (got $avg_cpu)"
 }
 
@@ -327,7 +327,7 @@ assert_any_avg_cpu_nonzero() {
     local wf_id="$1"
     local max_avg_cpu
     max_avg_cpu=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
-        | jq -r '[.results[].avg_cpu_percent // 0] | max // 0')
+        | jq -r '[.items[].avg_cpu_percent // 0] | max // 0')
     assert_gt_float "${max_avg_cpu:-0}" "0" "at least one job has avg_cpu_percent > 0 (max=$max_avg_cpu)"
 }
 
@@ -336,9 +336,9 @@ assert_peak_memory_nonzero() {
     local wf_id="$1" job_name="$2"
     local job_id peak_mem
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".items[] | select(.name == \"$job_name\") | .id")
     peak_mem=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
+        | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
     assert_gt "${peak_mem:-0}" "0" "job '$job_name' peak_memory_bytes > 0 (got $peak_mem)"
 }
 
@@ -348,9 +348,9 @@ assert_peak_memory_ge() {
     local wf_id="$1" job_name="$2" threshold="$3"
     local job_id peak_mem
     job_id=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id")
+        | jq -r ".items[] | select(.name == \"$job_name\") | .id")
     peak_mem=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
+        | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .peak_memory_bytes // 0")
     assert_ge "${peak_mem:-0}" "$threshold" "job '$job_name' peak_memory_bytes >= $threshold (got $peak_mem)"
 }
 

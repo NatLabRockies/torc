@@ -23,7 +23,7 @@ run_test_watch_recover_oom() {
     local attempts
     oom_job_id=$(get_job_id "$wf_id" "recoverable_oom_job")
     attempts=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $oom_job_id)] | length")
+        | jq -r "[.items[] | select(.job_id == $oom_job_id)] | length")
     assert_ge "${attempts:-0}" "2" "recoverable_oom_job was retried after OOM"
 
     local watch_log
