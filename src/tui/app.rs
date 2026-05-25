@@ -3377,6 +3377,8 @@ impl App {
                     .as_ref()
                     .map(|s| format!("{:?}", s))
                     .unwrap_or_default(),
+                job.compute_node_id,
+                job.start_time.clone(),
             );
             self.previous_focus = self.focus;
             self.focus = Focus::Popup;

@@ -92,7 +92,7 @@ impl<C> Server<C> {
             let disabled_int = models::JobStatus::Disabled.to_int();
             let pending_failed_int = models::JobStatus::PendingFailed.to_int();
             match sqlx::query!(
-                "UPDATE job SET status = ?, unblocking_processed = 0 WHERE id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
+                "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL WHERE id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
                 new_status_int,
                 job_id,
                 completed_int,
@@ -155,7 +155,7 @@ impl<C> Server<C> {
             );
         } else {
             match sqlx::query!(
-                "UPDATE job SET status = ? WHERE id = ?",
+                "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL WHERE id = ?",
                 new_status_int,
                 job_id
             )
@@ -434,7 +434,7 @@ impl<C> Server<C> {
                   AND dj.level < 100
             )
             UPDATE job
-            SET status = ?
+            SET status = ?, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = ?
               AND id IN (SELECT DISTINCT job_id FROM downstream_jobs)
             "#,

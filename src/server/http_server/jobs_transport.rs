@@ -754,6 +754,8 @@ fn claim_candidate_row(
         env: crate::server::api::deserialize_env_map(row.get("env"), "job env")?,
         invocation_script: row.get("invocation_script"),
         status: Some(models::JobStatus::Pending),
+        start_time: None,
+        compute_node_id: None,
         schedule_compute_nodes: None,
         cancel_on_blocking_job_failure: Some(row.get("cancel_on_blocking_job_failure")),
         supports_termination: Some(row.get("supports_termination")),
@@ -1415,9 +1417,14 @@ where
 
         let pending_int = models::JobStatus::Pending.to_int();
         let running_int = models::JobStatus::Running.to_int();
+        let start_time = chrono::Utc::now().to_rfc3339();
         let start_result = sqlx::query!(
-            "UPDATE job SET status = ? WHERE id = ? AND status = ?",
+            "UPDATE job
+             SET status = ?, start_time = ?, compute_node_id = ?
+             WHERE id = ? AND status = ?",
             running_int,
+            start_time,
+            compute_node_id,
             id,
             pending_int,
         )
@@ -1437,28 +1444,6 @@ where
                 "job_id={} status was concurrently modified, cannot start",
                 id
             )));
-        }
-
-        match sqlx::query!(
-            "UPDATE job_internal SET active_compute_node_id = ? WHERE job_id = ?",
-            compute_node_id,
-            id
-        )
-        .execute(self.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!(
-                    "Set active_compute_node_id={} for job_id={}",
-                    compute_node_id, id
-                );
-            }
-            Err(e) => {
-                error!(
-                    "Failed to set active_compute_node_id for job_id={}: {}",
-                    id, e
-                );
-            }
         }
 
         self.event_broadcaster.broadcast(BroadcastEvent {
@@ -1584,18 +1569,18 @@ where
         job.status = Some(status);
 
         match sqlx::query!(
-            "UPDATE job_internal SET active_compute_node_id = NULL WHERE job_id = ?",
+            "UPDATE job SET start_time = NULL, compute_node_id = NULL WHERE id = ?",
             id
         )
         .execute(self.pool.as_ref())
         .await
         {
             Ok(_) => {
-                debug!("Cleared active_compute_node_id for job_id={}", id);
+                debug!("Cleared start_time and compute_node_id for job_id={}", id);
             }
             Err(e) => {
                 error!(
-                    "Failed to clear active_compute_node_id for job_id={}: {}",
+                    "Failed to clear runtime state on job for job_id={}: {}",
                     id, e
                 );
             }
@@ -1809,14 +1794,14 @@ where
         }
 
         if let Err(e) = sqlx::query!(
-            "UPDATE job_internal SET active_compute_node_id = NULL WHERE job_id = ?",
+            "UPDATE job SET start_time = NULL, compute_node_id = NULL WHERE id = ?",
             id
         )
         .execute(&mut **tx)
         .await
         {
             error!(
-                "Failed to clear active_compute_node_id for job_id={}: {}",
+                "Failed to clear runtime state on job for job_id={}: {}",
                 id, e
             );
         }
@@ -1961,6 +1946,8 @@ where
             invocation_script: None,
             env: None,
             status: Some(status),
+            start_time: None,
+            compute_node_id: None,
             schedule_compute_nodes: None,
             cancel_on_blocking_job_failure: None,
             supports_termination: None,

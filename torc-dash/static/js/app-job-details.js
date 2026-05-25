@@ -162,6 +162,14 @@ Object.assign(TorcDashboard.prototype, {
                     <span class="value"><span class="status-badge status-${statusNames[job.status]?.toLowerCase() || 'unknown'}">${statusNames[job.status] || job.status}</span></span>
                 </div>
                 <div class="job-details-summary-item">
+                    <span class="label">Compute Node</span>
+                    <span class="value"><code>${job.compute_node_id ?? '-'}</code></span>
+                </div>
+                <div class="job-details-summary-item">
+                    <span class="label">Start Time</span>
+                    <span class="value"><code>${job.start_time ? this.escapeHtml(job.start_time) : '-'}</code></span>
+                </div>
+                <div class="job-details-summary-item">
                     <span class="label">Command</span>
                     <span class="value"><code>${this.escapeHtml(this.truncate(job.command || '-', 50))}</code></span>
                 </div>

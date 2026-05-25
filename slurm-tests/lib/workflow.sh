@@ -156,7 +156,7 @@ poll_all_workflows() {
 get_job_id() {
     local wf_id="$1" job_name="$2"
     torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq -r ".jobs[] | select(.name == \"$job_name\") | .id"
+        | jq -r ".items[] | select(.name == \"$job_name\") | .id"
 }
 
 # get_job_stdout WF_ID JOB_ID
@@ -166,8 +166,8 @@ get_job_stdout() {
     local wf_id="$1" job_id="$2"
     local result run_id attempt_id stdout_path
     result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null) || return 0
-    run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
-    attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
+    run_id=$(echo "$result" | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
+    attempt_id=$(echo "$result" | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
     if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
         return 0
     fi
@@ -182,8 +182,8 @@ get_job_stderr() {
     local wf_id="$1" job_id="$2"
     local result run_id attempt_id stderr_path
     result=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" --all-runs 2>/dev/null) || return 0
-    run_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
-    attempt_id=$(echo "$result" | jq -r "[.results[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
+    run_id=$(echo "$result" | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .run_id")
+    attempt_id=$(echo "$result" | jq -r "[.items[] | select(.job_id == $job_id)] | sort_by(.attempt_id) | last | .attempt_id // 1")
     if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
         return 0
     fi

@@ -36,7 +36,7 @@ run_test_failure_recovery() {
     # Check that work_3 was retried by verifying its attempt_id >= 2
     local work3_attempt
     work3_attempt=$(torc --url "$TORC_API_URL" -f json results list "$wf_id" 2>/dev/null \
-        | jq -r "[.results[] | select(.job_id == $work3_id)] | sort_by(.attempt_id) | last | .attempt_id // 0")
+        | jq -r "[.items[] | select(.job_id == $work3_id)] | sort_by(.attempt_id) | last | .attempt_id // 0")
     assert_ge "${work3_attempt:-0}" "2" "work_3 attempt_id >= 2 (retry evidence)"
 
     # postprocess should contain completion message

@@ -45,6 +45,6 @@ run_test_cancel_workflow() {
     # No jobs should remain in "running" status
     local running_count
     running_count=$(torc --url "$TORC_API_URL" -f json jobs list "$wf_id" 2>/dev/null \
-        | jq '[.jobs[] | select(.status == "running")] | length')
+        | jq '[.items[] | select(.status == "running")] | length')
     assert_eq "$running_count" "0" "no jobs remain in running status"
 }

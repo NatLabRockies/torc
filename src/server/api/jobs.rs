@@ -406,7 +406,8 @@ impl JobsApiImpl {
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id, priority, origin
+                       failure_handler_id, attempt_id, priority, origin,
+                       start_time, compute_node_id
                 FROM job
                 WHERE id = ?
             "#,
@@ -569,6 +570,14 @@ impl JobsApiImpl {
             resource_requirements_id: record.try_get("resource_requirements_id").ok(),
             invocation_script: record.try_get("invocation_script").ok(),
             status: Some(status),
+            start_time: record
+                .try_get::<Option<String>, _>("start_time")
+                .ok()
+                .flatten(),
+            compute_node_id: record
+                .try_get::<Option<i64>, _>("compute_node_id")
+                .ok()
+                .flatten(),
             scheduler_id: record.try_get("scheduler_id").ok(),
             schedule_compute_nodes: None, // This field is not stored in the database
             failure_handler_id: record.try_get("failure_handler_id").ok(),
@@ -627,9 +636,9 @@ impl JobsApiImpl {
                 continue;
             };
 
-            // Reset the job status
+            // Reset the job status and clear runtime state from any prior attempt.
             match sqlx::query!(
-                "UPDATE job SET status = $1 WHERE id = $2",
+                "UPDATE job SET status = $1, start_time = NULL, compute_node_id = NULL WHERE id = $2",
                 uninitialized_status,
                 job_id
             )
@@ -639,21 +648,6 @@ impl JobsApiImpl {
                 Ok(result) => {
                     if result.rows_affected() > 0 {
                         total_reset_count += 1;
-
-                        // Clear active_compute_node_id for the reset job
-                        if let Err(e) = sqlx::query!(
-                            "UPDATE job_internal SET active_compute_node_id = NULL WHERE job_id = ?",
-                            job_id
-                        )
-                        .execute(self.context.pool.as_ref())
-                        .await
-                        {
-                            error!(
-                                "Failed to clear active_compute_node_id for job {}: {}",
-                                job_id, e
-                            );
-                            // Continue anyway
-                        }
 
                         // If the job was previously complete, trigger completion reversal for downstream jobs
                         if current_status.is_complete() {
@@ -755,7 +749,7 @@ impl JobsApiImpl {
                   AND dj.level < 100  -- Prevent infinite loops
             )
             UPDATE job
-            SET status = ?
+            SET status = ?, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = ?
               AND id IN (SELECT DISTINCT job_id FROM downstream_jobs)
             "#,
@@ -1881,7 +1875,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, start_time, compute_node_id FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1907,10 +1901,7 @@ where
         }
 
         if active_compute_node_id.is_some() {
-            where_conditions.push(
-                "id IN (SELECT job_id FROM job_internal WHERE active_compute_node_id = ?)"
-                    .to_string(),
-            );
+            where_conditions.push("compute_node_id = ?".to_string());
         }
 
         // Filter by provenance: `true` matches `'retry'`/`'spawn'`; `false`
@@ -2029,6 +2020,14 @@ where
                     resource_requirements_id: record.try_get("resource_requirements_id").ok(),
                     invocation_script: record.try_get("invocation_script").ok(),
                     status: Some(status),
+                    start_time: record
+                        .try_get::<Option<String>, _>("start_time")
+                        .ok()
+                        .flatten(),
+                    compute_node_id: record
+                        .try_get::<Option<i64>, _>("compute_node_id")
+                        .ok()
+                        .flatten(),
                     scheduler_id: record.try_get("scheduler_id").ok(),
                     schedule_compute_nodes: None,
                     failure_handler_id: record.try_get("failure_handler_id").ok(),
@@ -2530,6 +2529,8 @@ where
                 env: deserialize_env_map(row.get("env"), "job env")?,
                 invocation_script: row.get("invocation_script"),
                 status: Some(models::JobStatus::Pending),
+                start_time: None,
+                compute_node_id: None,
                 schedule_compute_nodes: None,
                 cancel_on_blocking_job_failure: Some(row.get("cancel_on_blocking_job_failure")),
                 supports_termination: Some(row.get("supports_termination")),
@@ -2878,7 +2879,7 @@ where
         let result = match sqlx::query!(
             r#"
             UPDATE job
-            SET status = $1
+            SET status = $1, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = $2 AND status != $1
             "#,
             uninitialized_status,
@@ -2894,21 +2895,6 @@ where
         };
 
         let updated_count = result.rows_affected();
-
-        // Clear active_compute_node_id for all jobs in the workflow
-        if let Err(e) = sqlx::query!(
-            "UPDATE job_internal SET active_compute_node_id = NULL WHERE job_id IN (SELECT id FROM job WHERE workflow_id = ?)",
-            id
-        )
-        .execute(self.context.pool.as_ref())
-        .await
-        {
-            error!(
-                "Failed to clear active_compute_node_id for workflow {}: {}",
-                id, e
-            );
-            // Continue anyway - the job status reset succeeded
-        }
 
         info!(
             "Jobs status reset workflow_id={} count={} new_status=uninitialized",
@@ -3075,7 +3061,8 @@ where
         if let Err(e) = sqlx::query(
             r#"
             UPDATE job
-            SET status = ?, attempt_id = ?, origin = COALESCE(origin, 'retry')
+            SET status = ?, attempt_id = ?, origin = COALESCE(origin, 'retry'),
+                start_time = NULL, compute_node_id = NULL
             WHERE id = ?
             "#,
         )
@@ -3146,6 +3133,8 @@ where
             invocation_script,
             env,
             status: Some(status),
+            start_time: None,
+            compute_node_id: None,
             schedule_compute_nodes: None,
             cancel_on_blocking_job_failure,
             supports_termination,

@@ -77,6 +77,25 @@ Object.assign(TorcDashboard.prototype, {
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     },
 
+    // Compact elapsed-time string from an RFC3339 start_time to now.
+    // Returns '-' if start_time is null/unparseable.
+    formatElapsedSince(startTime) {
+        if (!startTime) return '-';
+        const start = Date.parse(startTime);
+        if (Number.isNaN(start)) return '-';
+        let secs = Math.max(0, Math.floor((Date.now() - start) / 1000));
+        const days = Math.floor(secs / 86400);
+        secs -= days * 86400;
+        const hours = Math.floor(secs / 3600);
+        secs -= hours * 3600;
+        const mins = Math.floor(secs / 60);
+        secs -= mins * 60;
+        if (days > 0) return `${days}d ${String(hours).padStart(2, '0')}h`;
+        if (hours > 0) return `${hours}h ${String(mins).padStart(2, '0')}m`;
+        if (mins > 0) return `${mins}m ${String(secs).padStart(2, '0')}s`;
+        return `${secs}s`;
+    },
+
     formatBytes(bytes) {
         if (bytes == null) return '-';
         if (bytes === 0) return '0 B';

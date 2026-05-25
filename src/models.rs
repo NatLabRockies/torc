@@ -240,6 +240,16 @@ pub struct JobModel {
     pub env: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<JobStatus>,
+    /// Timestamp when the current attempt began running. Set by start_job and
+    /// cleared by complete_job and the reset/retry paths. NULL when the job is
+    /// not running (use `status` as the source of truth for "is running").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    /// Compute node executing the current attempt. Set by start_job and cleared
+    /// by complete_job and the reset/retry paths. For completed attempts, the
+    /// compute node is recorded on the result record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compute_node_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_compute_nodes: Option<ComputeNodeSchedule>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1604,6 +1614,8 @@ impl JobModel {
             invocation_script: None,
             env: None,
             status: Some(JobStatus::Uninitialized),
+            start_time: None,
+            compute_node_id: None,
             schedule_compute_nodes: None,
             cancel_on_blocking_job_failure: Some(true),
             supports_termination: Some(false),
@@ -2441,6 +2453,8 @@ mod tests {
             invocation_script: None,
             env: None,
             status: Some(JobStatus::Ready),
+            start_time: None,
+            compute_node_id: None,
             schedule_compute_nodes: None,
             cancel_on_blocking_job_failure: Some(true),
             supports_termination: Some(false),

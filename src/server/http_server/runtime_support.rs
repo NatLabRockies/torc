@@ -88,7 +88,7 @@ impl<C> Server<C> {
                 WHERE jbb.workflow_id = $1
             )
             UPDATE job
-            SET status = $2
+            SET status = $2, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = $1
             AND id IN (SELECT job_id FROM jobs_to_uninitialize)
             "#,
@@ -125,7 +125,7 @@ impl<C> Server<C> {
         let sql = if only_uninitialized {
             r#"
             UPDATE job
-            SET status = $1
+            SET status = $1, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = $2
             AND status = $3
             AND id IN (
@@ -139,7 +139,7 @@ impl<C> Server<C> {
         } else {
             r#"
             UPDATE job
-            SET status = $1
+            SET status = $1, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = $2
             AND id IN (
                 SELECT DISTINCT jbb.job_id
@@ -255,7 +255,7 @@ impl<C> Server<C> {
         match sqlx::query!(
             r#"
             UPDATE job
-            SET status = $1
+            SET status = $1, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = $2
             AND status NOT IN ($3, $4, $5, $6, $7, $8)
             "#,
