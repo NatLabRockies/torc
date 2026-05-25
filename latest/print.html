@@ -4229,7 +4229,7 @@ torc results list --include-logs &lt;workflow_id&gt; --job-id &lt;failed_job_id&
 <h3 id="power-user-one-liner"><a class="header" href="#power-user-one-liner">Power-User One-Liner</a></h3>
 <p>Open every failed job's stderr file in your editor in one go:</p>
 <pre><code class="language-bash">nvim $(torc -f json results list --include-logs &lt;workflow_id&gt; \
-  | jq -r '.results[] | select(.return_code != 0) | .job_stderr')
+  | jq -r '.items[] | select(.return_code != 0) | .job_stderr')
 </code></pre>
 <p>Swap <code>nvim</code> for any tool that takes a list of paths (<code>less</code>, <code>grep -l "OutOfMemory"</code>, <code>code -d</code>,
 etc.). Drop <code>select(.return_code != 0)</code> to open every result's stderr, not just the failures. If
@@ -4239,12 +4239,12 @@ your workflow uses combined <code>stdio</code> mode (single <code>.log</code> fi
 <p>When you're SSH'd into a login node post-mortem-ing dozens of failures, opening every stderr in an
 editor is slow. Print the last N lines of each instead — usually enough to spot the error block:</p>
 <pre><code class="language-bash">torc -f json results list --include-logs &lt;workflow_id&gt; \
-  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | jq -r '.items[] | select(.return_code != 0) | .job_stderr' \
   | xargs -I{} sh -c 'echo "=== {} ==="; tail -n 50 {}'
 </code></pre>
 <p>To find which failures share a root cause, grep across all of them at once:</p>
 <pre><code class="language-bash">torc -f json results list --include-logs &lt;workflow_id&gt; \
-  | jq -r '.results[] | select(.return_code != 0) | .job_stderr' \
+  | jq -r '.items[] | select(.return_code != 0) | .job_stderr' \
   | xargs grep -l "OutOfMemoryError"
 </code></pre>
 <h2 id="view-logs-in-tui-or-dashboard"><a class="header" href="#view-logs-in-tui-or-dashboard">View Logs in TUI or Dashboard</a></h2>
@@ -5573,7 +5573,7 @@ echo -e "apple red\nbanana yellow\ncherry red\ndate brown" &gt; /tmp/input.txt
 </code></pre>
 <h2 id="step-3-create-and-initialize-the-workflow"><a class="header" href="#step-3-create-and-initialize-the-workflow">Step 3: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow and capture the ID
-WORKFLOW_ID=$(torc create diamond.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create diamond.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Ensure the input file timestamp is current
@@ -5720,14 +5720,14 @@ jobs:
 </code></pre>
 <p>This expands to 10 jobs: <code>task_1</code>, <code>task_2</code>, ..., <code>task_10</code>.</p>
 <h2 id="step-2-create-and-run-the-workflow"><a class="header" href="#step-2-create-and-run-the-workflow">Step 2: Create and Run the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc run $WORKFLOW_ID
 </code></pre>
 <p>All 10 jobs run in parallel since they have no dependencies.</p>
 <h2 id="step-3-verify-the-expansion"><a class="header" href="#step-3-verify-the-expansion">Step 3: Verify the Expansion</a></h2>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[].name' | sort
+<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
 </code></pre>
 <p>Output:</p>
 <pre><code>task_1
@@ -5792,17 +5792,17 @@ all 5 process jobs.</p>
 <li>All <code>evaluate_*</code> jobs → unblock <code>compare_results</code></li>
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-1"><a class="header" href="#step-3-verify-the-expansion-1">Step 3: Verify the Expansion</a></h2>
 <pre><code class="language-bash"># Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)
-torc jobs list $WORKFLOW_ID -f json | jq '.jobs | length'
+torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
 </code></pre>
 <p>List the job names:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[].name' | sort
+<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
 </code></pre>
 <p>Output:</p>
 <pre><code>compare_results
@@ -6075,18 +6075,18 @@ resource_requirements:
 needs <code>parameters:</code> to match the parameterized <code>input_files</code>. This tells Torc: "this job depends on
 ALL 18 metrics files."</p>
 <h2 id="step-2-create-and-initialize-the-workflow-1"><a class="header" href="#step-2-create-and-initialize-the-workflow-1">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-2"><a class="header" href="#step-3-verify-the-expansion-2">Step 3: Verify the Expansion</a></h2>
 <p>Count the jobs:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq '.jobs | length'
+<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
 </code></pre>
 <p>Expected: <strong>21 jobs</strong> (1 prepare + 18 training + 1 aggregate + 1 select)</p>
 <p>List the training jobs:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.jobs[] | select(.name | startswith("train_")) | .name' | sort
+<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[] | select(.name | startswith("train_")) | .name' | sort
 </code></pre>
 <p>Output (18 training jobs):</p>
 <pre><code>train_lr0.0001_bs16_optadam
@@ -6725,7 +6725,7 @@ resource_requirements:
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow-2"><a class="header" href="#step-2-create-and-initialize-the-workflow-2">Step 2: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow
-WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
@@ -6757,7 +6757,7 @@ torc user-data list $WORKFLOW_ID
 </code></pre>
 <h2 id="step-5-observe-the-data-flow"><a class="header" href="#step-5-observe-the-data-flow">Step 5: Observe the Data Flow</a></h2>
 <p>After <code>generate_config</code> completes, check the updated user_data:</p>
-<pre><code class="language-bash">torc user-data list $WORKFLOW_ID -f json | jq '.[] | {name, data}'
+<pre><code class="language-bash">torc user-data list $WORKFLOW_ID -f json | jq '.items[] | {name, data}'
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{
@@ -7035,7 +7035,7 @@ but not for telling spec-declared jobs apart from spawned ones. For that, dump J
 job's <code>origin</code> field (<code>"spawn"</code> for jobs added by <code>spawn_jobs</code>, absent for jobs declared in the
 workflow spec):</p>
 <pre><code class="language-bash">torc -f json jobs list &lt;workflow_id&gt; \
-  | jq -r '.jobs[] | [.name, .status, (.origin // "(declared)")] | @tsv'
+  | jq -r '.items[] | [.name, .status, (.origin // "(declared)")] | @tsv'
 </code></pre>
 <pre><code>orch_caseA_g00      completed   (declared)
 worker_caseA_i01    completed   spawn
@@ -12742,10 +12742,10 @@ http post http://localhost:8080/torc-service/v1/workflows {
 </code></pre>
 <p><strong>List Workflows</strong></p>
 <pre><code class="language-bash"># curl with jq
-curl http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | jq '.workflows'
+curl http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | jq '.items'
 
 # nushell (native JSON parsing)
-http get http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | get workflows
+http get http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | get items
 </code></pre>
 <p><strong>Get Workflow</strong></p>
 <pre><code class="language-bash"># curl
@@ -12784,11 +12784,11 @@ curl -X POST http://localhost:8080/torc-service/v1/jobs \
 <p><strong>List Jobs</strong></p>
 <pre><code class="language-bash"># curl - filter by status
 curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&amp;status=ready" \
-  | jq '.jobs[] | {name, status, id}'
+  | jq '.items[] | {name, status, id}'
 
 # nushell - filter and format
 http get "http://localhost:8080/torc-service/v1/jobs?workflow_id=1"
-  | get jobs
+  | get items
   | where status == "ready"
   | select name status id
 </code></pre>
@@ -12810,7 +12810,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
   }' | jq '.'
 </code></pre>
 <p><strong>List Files</strong></p>
-<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.files'
+<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.items'
 </code></pre>
 <h3 id="user-data"><a class="header" href="#user-data">User Data</a></h3>
 <p><strong>Create User Data</strong></p>
@@ -12862,7 +12862,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 </code></pre>
 <p><strong>List Active Compute Nodes</strong></p>
 <pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/compute_nodes?workflow_id=1&amp;is_active=true" \
-  | jq '.compute_nodes[] | {hostname, num_cpus, num_gpus}'
+  | jq '.items[] | {hostname, num_cpus, num_gpus}'
 </code></pre>
 <h3 id="results"><a class="header" href="#results">Results</a></h3>
 <p><strong>Create Result</strong></p>
@@ -12879,7 +12879,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 <h3 id="events"><a class="header" href="#events">Events</a></h3>
 <p><strong>List Events</strong></p>
 <pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/events?workflow_id=1&amp;limit=20" \
-  | jq '.events[] | {timestamp, data}'
+  | jq '.items[] | {timestamp, data}'
 </code></pre>
 <h2 id="advanced-endpoints"><a class="header" href="#advanced-endpoints">Advanced Endpoints</a></h2>
 <p><strong>Prepare Next Jobs for Submission</strong> (Job Runner)</p>
@@ -16210,7 +16210,7 @@ adjusting Apache Spark cluster sizes or fixing configuration issues.</p>
 WORKFLOW_ID=$1  # or use $TORC_WORKFLOW_ID
 
 # Find failed jobs
-FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.[].id')
+FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.items[].id')
 
 for JOB_ID in $FAILED_JOBS; do
     # Get current resource requirements
@@ -19307,7 +19307,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.id')
+WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.workflow_id')
 echo "Alice created workflow: $WORKFLOW_ID"
 </code></pre>
 <h3 id="as-carol-data-team"><a class="header" href="#as-carol-data-team">As Carol (Data Team)</a></h3>
@@ -21995,10 +21995,10 @@ discussed elsewhere in this documentation.</p>
 offers a more readable, SQL-like syntax that's easier to learn and use interactively.</p>
 <p>Compare filtering failed jobs:</p>
 <pre><code class="language-bash"># jq (cryptic syntax)
-torc jobs list 123 -f json | jq '.jobs[] | select(.status == "failed")'
+torc jobs list 123 -f json | jq '.items[] | select(.status == "failed")'
 
 # Nushell (readable, SQL-like)
-torc jobs list 123 -f json | from json | get jobs | where status == "failed"
+torc jobs list 123 -f json | from json | get items | where status == "failed"
 </code></pre>
 <p>Nushell is:</p>
 <ul>
@@ -22027,58 +22027,58 @@ individual commands with <code>nu -c "command"</code>.</p>
 let wf = 123
 </code></pre>
 <h3 id="list-all-jobs"><a class="header" href="#list-all-jobs">List All Jobs</a></h3>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items
 </code></pre>
 <p>This parses the JSON and extracts the <code>jobs</code> array into a table.</p>
 <h3 id="filter-by-status"><a class="header" href="#filter-by-status">Filter by Status</a></h3>
 <p>Find all failed jobs:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed"
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed"
 </code></pre>
 <p>Find jobs that are ready or running:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status in ["ready", "running"]
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status in ["ready", "running"]
 </code></pre>
 <h3 id="filter-by-name-pattern"><a class="header" href="#filter-by-name-pattern">Filter by Name Pattern</a></h3>
 <p>Find jobs with "train" in the name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where name =~ "train"
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where name =~ "train"
 </code></pre>
 <p>The <code>=~</code> operator performs substring/regex matching.</p>
 <h3 id="combine-conditions"><a class="header" href="#combine-conditions">Combine Conditions</a></h3>
 <p>Find failed jobs with "process" in the name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed" and name =~ "process"
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "process"
 </code></pre>
 <p>Find jobs that failed or were canceled:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed" or status == "canceled"
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" or status == "canceled"
 </code></pre>
 <h2 id="selecting-and-formatting-output"><a class="header" href="#selecting-and-formatting-output">Selecting and Formatting Output</a></h2>
 <h3 id="select-specific-columns"><a class="header" href="#select-specific-columns">Select Specific Columns</a></h3>
 <p>Show only name and status:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | select name status
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | select name status
 </code></pre>
 <h3 id="sort-results"><a class="header" href="#sort-results">Sort Results</a></h3>
 <p>Sort by name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | sort-by name
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | sort-by name
 </code></pre>
 <p>Sort failed jobs by ID (descending):</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed" | sort-by id -r
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | sort-by id -r
 </code></pre>
 <h3 id="count-results"><a class="header" href="#count-results">Count Results</a></h3>
 <p>Count jobs by status:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
 </code></pre>
 <p>Or more simply, count failed jobs:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed" | length
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | length
 </code></pre>
 <h2 id="analyzing-results"><a class="header" href="#analyzing-results">Analyzing Results</a></h2>
 <h3 id="find-jobs-with-non-zero-return-codes"><a class="header" href="#find-jobs-with-non-zero-return-codes">Find Jobs with Non-Zero Return Codes</a></h3>
-<pre><code class="language-nu">torc results list $wf -f json | from json | get results | where return_code != 0
+<pre><code class="language-nu">torc results list $wf -f json | from json | get items | where return_code != 0
 </code></pre>
 <h3 id="find-results-with-specific-errors"><a class="header" href="#find-results-with-specific-errors">Find Results with Specific Errors</a></h3>
-<pre><code class="language-nu">torc results list $wf -f json | from json | get results | where return_code != 0 | select job_id return_code
+<pre><code class="language-nu">torc results list $wf -f json | from json | get items | where return_code != 0 | select job_id return_code
 </code></pre>
 <h3 id="join-jobs-with-results"><a class="header" href="#join-jobs-with-results">Join Jobs with Results</a></h3>
 <p>Get job names for failed results:</p>
-<pre><code class="language-nu">let jobs = (torc jobs list $wf -f json | from json | get jobs)
-let results = (torc results list $wf -f json | from json | get results | where return_code != 0)
+<pre><code class="language-nu">let jobs = (torc jobs list $wf -f json | from json | get items)
+let results = (torc results list $wf -f json | from json | get items | where return_code != 0)
 $results | each { |r|
     let job = ($jobs | where id == $r.job_id | first)
     { name: $job.name, return_code: $r.return_code, job_id: $r.job_id }
@@ -22086,15 +22086,15 @@ $results | each { |r|
 </code></pre>
 <h2 id="working-with-user-data"><a class="header" href="#working-with-user-data">Working with User Data</a></h2>
 <h3 id="list-user-data-entries"><a class="header" href="#list-user-data-entries">List User Data Entries</a></h3>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get user_data
+<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items
 </code></pre>
 <h3 id="filter-by-key"><a class="header" href="#filter-by-key">Filter by Key</a></h3>
 <p>Find user data with a specific key:</p>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get user_data | where key =~ "config"
+<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items | where key =~ "config"
 </code></pre>
 <h3 id="parse-json-values"><a class="header" href="#parse-json-values">Parse JSON Values</a></h3>
 <p>User data values are JSON strings. Parse and filter them:</p>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get user_data | each { |ud|
+<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items | each { |ud|
     { key: $ud.key, value: ($ud.value | from json) }
 }
 </code></pre>
@@ -22102,27 +22102,27 @@ $results | each { |r|
 <h3 id="example-1-debug-failed-jobs"><a class="header" href="#example-1-debug-failed-jobs">Example 1: Debug Failed Jobs</a></h3>
 <p>Find failed jobs and get their result details:</p>
 <pre><code class="language-nu"># Get failed job IDs
-let failed_ids = (torc jobs list $wf -f json | from json | get jobs | where status == "failed" | get id)
+let failed_ids = (torc jobs list $wf -f json | from json | get items | where status == "failed" | get id)
 
 # Show results for those jobs
-torc results list $wf -f json | from json | get results | where job_id in $failed_ids | select job_id return_code
+torc results list $wf -f json | from json | get items | where job_id in $failed_ids | select job_id return_code
 </code></pre>
 <h3 id="example-2-find-stuck-jobs"><a class="header" href="#example-2-find-stuck-jobs">Example 2: Find Stuck Jobs</a></h3>
 <p>Find jobs that have been running for a long time (status is "running"):</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "running" | select id name
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "running" | select id name
 </code></pre>
 <h3 id="example-3-parameter-sweep-analysis"><a class="header" href="#example-3-parameter-sweep-analysis">Example 3: Parameter Sweep Analysis</a></h3>
 <p>For a parameterized workflow, find which parameter values failed:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed" and name =~ "lr" | get name
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "lr" | get name
 </code></pre>
 <h3 id="example-4-export-to-csv"><a class="header" href="#example-4-export-to-csv">Example 4: Export to CSV</a></h3>
 <p>Export failed jobs to CSV for further analysis:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get jobs | where status == "failed" | to csv | save failed_jobs.csv
+<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
 </code></pre>
 <h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Nushell Command</th></tr></thead><tbody>
 <tr><td>Parse JSON</td><td><code>from json</code></td></tr>
-<tr><td>Get field</td><td><code>get jobs</code></td></tr>
+<tr><td>Get field</td><td><code>get items</code></td></tr>
 <tr><td>Filter rows</td><td><code>where status == "failed"</code></td></tr>
 <tr><td>Select columns</td><td><code>select name status id</code></td></tr>
 <tr><td>Sort</td><td><code>sort-by name</code></td></tr>

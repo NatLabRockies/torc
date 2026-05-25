@@ -371,7 +371,7 @@ but not for telling spec-declared jobs apart from spawned ones. For that, dump J
 job's <code>origin</code> field (<code>"spawn"</code> for jobs added by <code>spawn_jobs</code>, absent for jobs declared in the
 workflow spec):</p>
 <pre><code class="language-bash">torc -f json jobs list &lt;workflow_id&gt; \
-  | jq -r '.jobs[] | [.name, .status, (.origin // "(declared)")] | @tsv'
+  | jq -r '.items[] | [.name, .status, (.origin // "(declared)")] | @tsv'
 </code></pre>
 <pre><code>orch_caseA_g00      completed   (declared)
 worker_caseA_i01    completed   spawn

@@ -410,7 +410,7 @@ adjusting Apache Spark cluster sizes or fixing configuration issues.</p>
 WORKFLOW_ID=$1  # or use $TORC_WORKFLOW_ID
 
 # Find failed jobs
-FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.[].id')
+FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.items[].id')
 
 for JOB_ID in $FAILED_JOBS; do
     # Get current resource requirements

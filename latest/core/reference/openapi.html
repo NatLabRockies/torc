@@ -239,10 +239,10 @@ http post http://localhost:8080/torc-service/v1/workflows {
 </code></pre>
 <p><strong>List Workflows</strong></p>
 <pre><code class="language-bash"># curl with jq
-curl http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | jq '.workflows'
+curl http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | jq '.items'
 
 # nushell (native JSON parsing)
-http get http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | get workflows
+http get http://localhost:8080/torc-service/v1/workflows?offset=0&amp;limit=10 | get items
 </code></pre>
 <p><strong>Get Workflow</strong></p>
 <pre><code class="language-bash"># curl
@@ -281,11 +281,11 @@ curl -X POST http://localhost:8080/torc-service/v1/jobs \
 <p><strong>List Jobs</strong></p>
 <pre><code class="language-bash"># curl - filter by status
 curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&amp;status=ready" \
-  | jq '.jobs[] | {name, status, id}'
+  | jq '.items[] | {name, status, id}'
 
 # nushell - filter and format
 http get "http://localhost:8080/torc-service/v1/jobs?workflow_id=1"
-  | get jobs
+  | get items
   | where status == "ready"
   | select name status id
 </code></pre>
@@ -307,7 +307,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
   }' | jq '.'
 </code></pre>
 <p><strong>List Files</strong></p>
-<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.files'
+<pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/files?workflow_id=1" | jq '.items'
 </code></pre>
 <h3 id="user-data"><a class="header" href="#user-data">User Data</a></h3>
 <p><strong>Create User Data</strong></p>
@@ -359,7 +359,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 </code></pre>
 <p><strong>List Active Compute Nodes</strong></p>
 <pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/compute_nodes?workflow_id=1&amp;is_active=true" \
-  | jq '.compute_nodes[] | {hostname, num_cpus, num_gpus}'
+  | jq '.items[] | {hostname, num_cpus, num_gpus}'
 </code></pre>
 <h3 id="results"><a class="header" href="#results">Results</a></h3>
 <p><strong>Create Result</strong></p>
@@ -376,7 +376,7 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 <h3 id="events"><a class="header" href="#events">Events</a></h3>
 <p><strong>List Events</strong></p>
 <pre><code class="language-bash">curl "http://localhost:8080/torc-service/v1/events?workflow_id=1&amp;limit=20" \
-  | jq '.events[] | {timestamp, data}'
+  | jq '.items[] | {timestamp, data}'
 </code></pre>
 <h2 id="advanced-endpoints"><a class="header" href="#advanced-endpoints">Advanced Endpoints</a></h2>
 <p><strong>Prepare Next Jobs for Submission</strong> (Job Runner)</p>
