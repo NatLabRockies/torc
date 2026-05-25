@@ -749,7 +749,7 @@ impl JobsApiImpl {
                   AND dj.level < 100  -- Prevent infinite loops
             )
             UPDATE job
-            SET status = ?
+            SET status = ?, start_time = NULL, compute_node_id = NULL
             WHERE workflow_id = ?
               AND id IN (SELECT DISTINCT job_id FROM downstream_jobs)
             "#,
