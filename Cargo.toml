@@ -236,6 +236,7 @@ client = [
     "dep:flate2",
     "dep:tar",
     "dep:mime_guess",
+    "dep:tempfile",
     "config",
 ]
 tui = [

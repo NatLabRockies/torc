@@ -189,7 +189,7 @@ EXAMPLES:
 "
     )]
     Create {
-        /// Path to specification file containing WorkflowSpec
+        /// Path to specification file containing WorkflowSpec (or "-" to read from stdin)
         ///
         /// Supported formats:
         /// - JSON (.json): Standard JSON format
@@ -197,7 +197,9 @@ EXAMPLES:
         /// - YAML (.yaml, .yml): Human-readable YAML format
         /// - KDL (.kdl): KDL document format
         ///
-        /// Format is auto-detected from file extension, with fallback parsing attempted
+        /// Format is auto-detected from file extension, with fallback parsing attempted.
+        /// Pass "-" to read the spec from stdin (e.g. `torc slurm generate w.yaml | torc create -`);
+        /// the format is detected from the piped content.
         #[arg()]
         file: String,
         /// Disable resource monitoring (default: enabled with summary granularity and 5s sample rate)
@@ -236,7 +238,8 @@ SEE ALSO:
 "
     )]
     Run {
-        /// Path to workflow spec file (JSON/JSON5/YAML) or workflow ID
+        /// Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or "-" to read the spec
+        /// from stdin
         #[arg()]
         workflow_spec_or_id: String,
         /// Maximum number of parallel jobs to run concurrently
@@ -409,6 +412,9 @@ EXAMPLES:
     # Submit existing workflow
     torc submit 123
 
+    # Generate Slurm schedulers and submit in one pipeline (spec read from stdin)
+    torc slurm generate --account myproj workflow.yaml | torc submit -
+
     # Ignore missing input data
     torc submit -i workflow.yaml
 
@@ -420,7 +426,8 @@ EXAMPLES:
 "
     )]
     Submit {
-        /// Path to workflow spec file (JSON/JSON5/YAML) or workflow ID
+        /// Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or "-" to read the spec
+        /// from stdin
         #[arg()]
         workflow_spec_or_id: String,
         /// Ignore missing data (defaults to false)
