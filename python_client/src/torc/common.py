@@ -4,7 +4,7 @@ import enum
 import importlib
 import sys
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from types import ModuleType
 
 from pydantic import BaseModel, ConfigDict
@@ -98,16 +98,21 @@ def check_function(
 
 
 def convert_timestamp(timestamp: int) -> datetime:
-    """Convert the timestamp stored in the database to a datetime.
+    """Convert a server-side timestamp (UTC milliseconds) to a tz-aware datetime.
+
+    The torc server stores timestamps as UTC; this helper returns a
+    timezone-aware ``datetime`` in UTC so callers cannot accidentally mix it
+    with a naive local-time value. Use ``.astimezone()`` to render in the
+    caller's local timezone for display.
 
     Parameters
     ----------
     timestamp : int
-        Timestamp in milliseconds.
+        Timestamp in UTC milliseconds since the unix epoch.
 
     Returns
     -------
     datetime
-        Converted datetime object.
+        Timezone-aware datetime in UTC.
     """
-    return datetime.fromtimestamp(timestamp / 1000)
+    return datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)

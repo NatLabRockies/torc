@@ -16,14 +16,23 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use tabled::Tabled;
 
-/// Format a timestamp (milliseconds since epoch) as a human-readable local time string
+/// Format an epoch-milliseconds timestamp for human display: local time with
+/// the explicit ±HHMM offset, plus millisecond precision (events arrive
+/// frequently enough that the milliseconds matter for ordering).
 fn format_timestamp_ms(timestamp_ms: i64) -> String {
     DateTime::from_timestamp_millis(timestamp_ms)
         .map(|dt: DateTime<Utc>| {
             dt.with_timezone(&Local)
-                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .format("%Y-%m-%d %H:%M:%S%.3f %z")
                 .to_string()
         })
+        .unwrap_or_else(|| format!("{}ms", timestamp_ms))
+}
+
+/// Format an epoch-milliseconds timestamp as UTC RFC3339 for JSON output.
+fn format_timestamp_ms_utc(timestamp_ms: i64) -> String {
+    DateTime::from_timestamp_millis(timestamp_ms)
+        .map(|dt: DateTime<Utc>| dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
         .unwrap_or_else(|| format!("{}ms", timestamp_ms))
 }
 
@@ -43,7 +52,7 @@ impl From<&models::EventModel> for EventJsonOutput {
             id: event.id,
             workflow_id: event.workflow_id,
             timestamp: event.timestamp,
-            timestamp_formatted: format_timestamp_ms(event.timestamp),
+            timestamp_formatted: format_timestamp_ms_utc(event.timestamp),
             data: event.data.clone(),
         }
     }
@@ -378,7 +387,7 @@ impl From<&SseEvent> for SseEventJsonOutput {
         SseEventJsonOutput {
             workflow_id: event.workflow_id,
             timestamp: event.timestamp,
-            timestamp_formatted: format_timestamp_ms(event.timestamp),
+            timestamp_formatted: format_timestamp_ms_utc(event.timestamp),
             event_type: event.event_type.clone(),
             severity: event.severity,
             data: event.data.clone(),

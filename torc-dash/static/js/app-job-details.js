@@ -167,7 +167,7 @@ Object.assign(TorcDashboard.prototype, {
                 </div>
                 <div class="job-details-summary-item">
                     <span class="label">Start Time</span>
-                    <span class="value"><code>${job.start_time ? this.escapeHtml(job.start_time) : '-'}</code></span>
+                    <span class="value"><code>${this.formatTimestamp(job.start_time)}</code></span>
                 </div>
                 <div class="job-details-summary-item">
                     <span class="label">Command</span>

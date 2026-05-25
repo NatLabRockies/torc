@@ -7,6 +7,7 @@ use crate::client::commands::{
     print_error, select_workflow_interactively,
     table_format::{display_csv, display_table_with_count},
 };
+use crate::client::utils::format_local_timestamp;
 use crate::models;
 use tabled::Tabled;
 
@@ -57,7 +58,7 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
             memory_gb: format!("{:.2}", node.memory_gb),
             num_gpus: node.num_gpus,
             is_active,
-            start_time: node.start_time.clone(),
+            start_time: format_local_timestamp(&node.start_time),
             duration,
             system_cpu: format_system_cpu(node),
             system_memory: format_system_memory(node),
@@ -155,7 +156,7 @@ pub fn handle_compute_node_commands(
                                 None => "Unknown",
                             }
                         );
-                        println!("  Start Time: {}", node.start_time);
+                        println!("  Start Time: {}", format_local_timestamp(&node.start_time));
                         if let Some(duration) = node.duration_seconds {
                             println!("  Duration: {:.2} seconds", duration);
                         }

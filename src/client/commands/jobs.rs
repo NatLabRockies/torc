@@ -14,6 +14,7 @@ use crate::client::commands::{
         display_csv, display_csv_excluding, display_table_excluding, display_table_with_count,
     },
 };
+use crate::client::utils::format_local_timestamp;
 use crate::models;
 use tabled::Tabled;
 
@@ -605,7 +606,10 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     );
                     println!(
                         "  Start Time: {}",
-                        job.start_time.as_deref().unwrap_or("None")
+                        job.start_time
+                            .as_deref()
+                            .map(format_local_timestamp)
+                            .unwrap_or_else(|| "None".to_string())
                     );
                     println!(
                         "  Blocking job IDs: {}",

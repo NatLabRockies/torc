@@ -11,6 +11,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
+use crate::client::utils::format_local_timestamp;
+
 /// A confirmation dialog that asks the user to confirm an action
 #[derive(Debug, Clone)]
 pub struct ConfirmationDialog {
@@ -729,7 +731,12 @@ impl JobDetailsPopup {
             ]),
             Line::from(vec![
                 Span::styled("Start Time: ", Style::default().fg(Color::DarkGray)),
-                Span::raw(self.start_time.clone().unwrap_or_else(|| "—".to_string())),
+                Span::raw(
+                    self.start_time
+                        .as_deref()
+                        .map(format_local_timestamp)
+                        .unwrap_or_else(|| "—".to_string()),
+                ),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(

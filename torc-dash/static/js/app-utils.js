@@ -67,14 +67,21 @@ Object.assign(TorcDashboard.prototype, {
     },
 
     formatDateLocal(date) {
-        // Format as YYYY-MM-DD HH:MM:SS in local timezone
+        // Format as YYYY-MM-DD HH:MM:SS ±HHMM in local timezone.
+        // The explicit offset prevents ambiguity when the dash and server
+        // are in different timezones.
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
         const seconds = String(date.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        const offsetMin = -date.getTimezoneOffset();
+        const sign = offsetMin >= 0 ? '+' : '-';
+        const absMin = Math.abs(offsetMin);
+        const offHours = String(Math.floor(absMin / 60)).padStart(2, '0');
+        const offMinutes = String(absMin % 60).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${sign}${offHours}${offMinutes}`;
     },
 
     // Compact elapsed-time string from an RFC3339 start_time to now.

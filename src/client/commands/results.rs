@@ -6,6 +6,7 @@ use crate::client::commands::{
     pagination, print_error, select_workflow_interactively,
     table_format::{display_csv, display_table_with_count},
 };
+use crate::client::utils::format_local_timestamp;
 use crate::models;
 use tabled::Tabled;
 
@@ -276,7 +277,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                                 exec_time: format!("{:.2}", result.exec_time_minutes),
                                 peak_memory: format_memory(result.peak_memory_bytes),
                                 peak_cpu: format_cpu(result.peak_cpu_percent),
-                                completion_time: result.completion_time.clone(),
+                                completion_time: format_local_timestamp(&result.completion_time),
                                 status: format!("{:?}", result.status),
                             })
                             .collect();
@@ -316,7 +317,10 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                         "  Execution Time (minutes): {:.2}",
                         result.exec_time_minutes
                     );
-                    println!("  Completion Time: {}", result.completion_time);
+                    println!(
+                        "  Completion Time: {}",
+                        format_local_timestamp(&result.completion_time)
+                    );
                     println!("  Status: {:?}", result.status);
 
                     // Display resource metrics if available

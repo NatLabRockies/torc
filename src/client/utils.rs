@@ -19,7 +19,7 @@
 //! # }
 //! ```
 
-use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use log::{debug, error, info, warn};
 use std::fs::File;
 use std::io::Write;
@@ -596,9 +596,81 @@ fn parse_dmesg_timestamp(line: &str) -> Option<DateTime<Local>> {
     Local.from_local_datetime(&naive).single()
 }
 
+/// Display format used everywhere humans see timestamps in the CLI/TUI/dash:
+/// `YYYY-MM-DD HH:MM:SS ±HHMM` in the client's local timezone.
+pub const HUMAN_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
+
+/// Render an RFC3339 timestamp (as returned by the server) as a local-time
+/// string with an explicit ±HHMM offset. Returns the input verbatim if it
+/// cannot be parsed so callers don't lose information on schema drift.
+///
+/// JSON output should keep the raw RFC3339 UTC value — only call this when
+/// rendering for human consumption (tables, detail views).
+pub fn format_local_timestamp(rfc3339_utc: &str) -> String {
+    match DateTime::parse_from_rfc3339(rfc3339_utc) {
+        Ok(dt) => dt
+            .with_timezone(&Local)
+            .format(HUMAN_TIMESTAMP_FORMAT)
+            .to_string(),
+        Err(_) => rfc3339_utc.to_string(),
+    }
+}
+
+/// Same as [`format_local_timestamp`] but for unix-epoch seconds (e.g.
+/// `file.st_mtime`).
+pub fn format_local_timestamp_epoch(epoch_secs: f64) -> String {
+    let secs = epoch_secs as i64;
+    let nsecs = ((epoch_secs - secs as f64) * 1_000_000_000.0).round() as u32;
+    match DateTime::<Utc>::from_timestamp(secs, nsecs) {
+        Some(dt) => dt
+            .with_timezone(&Local)
+            .format(HUMAN_TIMESTAMP_FORMAT)
+            .to_string(),
+        None => format!("{}", epoch_secs),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_local_with_offset(formatted: &str) {
+        // `YYYY-MM-DD HH:MM:SS ±HHMM` is 25 chars; the offset must be the
+        // last token and start with a sign.
+        assert_eq!(
+            formatted.len(),
+            25,
+            "expected 25-char `YYYY-MM-DD HH:MM:SS ±HHMM`, got `{formatted}`"
+        );
+        let offset = &formatted[20..];
+        assert!(
+            offset.starts_with('+') || offset.starts_with('-'),
+            "missing offset sign in `{formatted}`"
+        );
+        assert!(
+            offset[1..].chars().all(|c| c.is_ascii_digit()),
+            "offset must be 4 digits in `{formatted}`"
+        );
+    }
+
+    #[test]
+    fn test_format_local_timestamp_includes_offset() {
+        let formatted = format_local_timestamp("2026-05-25T12:00:00Z");
+        assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_passthrough_on_parse_failure() {
+        // Unparseable input is returned verbatim rather than dropped.
+        let garbage = "not-a-timestamp";
+        assert_eq!(format_local_timestamp(garbage), garbage);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_epoch_includes_offset() {
+        let formatted = format_local_timestamp_epoch(1_748_174_400.0);
+        assert_local_with_offset(&formatted);
+    }
 
     #[test]
     fn test_parse_dmesg_timestamp() {
