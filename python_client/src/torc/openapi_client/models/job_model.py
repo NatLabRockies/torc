@@ -32,6 +32,7 @@ class JobModel(BaseModel):
     attempt_id: Optional[StrictInt] = None
     cancel_on_blocking_job_failure: Optional[StrictBool] = None
     command: StrictStr
+    compute_node_id: Optional[StrictInt] = Field(default=None, description="Compute node executing the current attempt. Set by start_job and cleared by complete_job and the reset/retry paths. For completed attempts, the compute node is recorded on the result record.")
     depends_on_job_ids: Optional[List[StrictInt]] = None
     env: Optional[Dict[str, StrictStr]] = None
     failure_handler_id: Optional[StrictInt] = None
@@ -47,10 +48,11 @@ class JobModel(BaseModel):
     resource_requirements_id: Optional[StrictInt] = None
     schedule_compute_nodes: Optional[ComputeNodeSchedule] = None
     scheduler_id: Optional[StrictInt] = None
+    start_time: Optional[StrictStr] = Field(default=None, description="Timestamp when the current attempt began running. Set by start_job and cleared by complete_job and the reset/retry paths. NULL when the job is not running (use `status` as the source of truth for \"is running\").")
     status: Optional[JobStatus] = None
     supports_termination: Optional[StrictBool] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "depends_on_job_ids", "env", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "origin", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "status", "supports_termination", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "compute_node_id", "depends_on_job_ids", "env", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "origin", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "start_time", "status", "supports_termination", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -103,6 +105,11 @@ class JobModel(BaseModel):
         # and model_fields_set contains the field
         if self.cancel_on_blocking_job_failure is None and "cancel_on_blocking_job_failure" in self.model_fields_set:
             _dict['cancel_on_blocking_job_failure'] = None
+
+        # set to None if compute_node_id (nullable) is None
+        # and model_fields_set contains the field
+        if self.compute_node_id is None and "compute_node_id" in self.model_fields_set:
+            _dict['compute_node_id'] = None
 
         # set to None if depends_on_job_ids (nullable) is None
         # and model_fields_set contains the field
@@ -164,6 +171,11 @@ class JobModel(BaseModel):
         if self.scheduler_id is None and "scheduler_id" in self.model_fields_set:
             _dict['scheduler_id'] = None
 
+        # set to None if start_time (nullable) is None
+        # and model_fields_set contains the field
+        if self.start_time is None and "start_time" in self.model_fields_set:
+            _dict['start_time'] = None
+
         # set to None if supports_termination (nullable) is None
         # and model_fields_set contains the field
         if self.supports_termination is None and "supports_termination" in self.model_fields_set:
@@ -184,6 +196,7 @@ class JobModel(BaseModel):
             "attempt_id": obj.get("attempt_id"),
             "cancel_on_blocking_job_failure": obj.get("cancel_on_blocking_job_failure"),
             "command": obj.get("command"),
+            "compute_node_id": obj.get("compute_node_id"),
             "depends_on_job_ids": obj.get("depends_on_job_ids"),
             "env": obj.get("env"),
             "failure_handler_id": obj.get("failure_handler_id"),
@@ -199,6 +212,7 @@ class JobModel(BaseModel):
             "resource_requirements_id": obj.get("resource_requirements_id"),
             "schedule_compute_nodes": ComputeNodeSchedule.from_dict(obj["schedule_compute_nodes"]) if obj.get("schedule_compute_nodes") is not None else None,
             "scheduler_id": obj.get("scheduler_id"),
+            "start_time": obj.get("start_time"),
             "status": obj.get("status"),
             "supports_termination": obj.get("supports_termination"),
             "workflow_id": obj.get("workflow_id")

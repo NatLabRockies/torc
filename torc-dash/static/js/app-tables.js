@@ -56,20 +56,27 @@ Object.assign(TorcDashboard.prototype, {
                         ${this.renderSortableHeader('ID', 'id')}
                         ${this.renderSortableHeader('Name', 'name')}
                         ${this.renderSortableHeader('Status', 'status')}
+                        ${this.renderSortableHeader('Node', 'compute_node_id')}
+                        ${this.renderSortableHeader('Elapsed', 'start_time')}
                         ${this.renderSortableHeader('Command', 'command')}
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${jobs.map(job => `
+                    ${jobs.map(job => {
+                        const isRunning = statusNames[job.status] === 'Running';
+                        const elapsed = isRunning ? this.formatElapsedSince(job.start_time) : '-';
+                        return `
                         <tr>
                             <td><code>${job.id ?? '-'}</code></td>
                             <td>${this.escapeHtml(job.name || '-')}</td>
                             <td><span class="status-badge status-${statusNames[job.status]?.toLowerCase() || 'unknown'}">${statusNames[job.status] || job.status}</span></td>
+                            <td><code>${job.compute_node_id ?? '-'}</code></td>
+                            <td><code>${elapsed}</code></td>
                             <td><code>${this.escapeHtml(this.truncate(job.command || '-', 80))}</code></td>
                             <td><button class="btn-job-details" data-job-id="${job.id}" data-job-name="${this.escapeHtml(job.name || '')}">Details</button></td>
                         </tr>
-                    `).join('')}
+                    `;}).join('')}
                 </tbody>
             </table>
         `;

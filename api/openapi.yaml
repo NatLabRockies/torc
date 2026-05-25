@@ -6001,6 +6001,15 @@ components:
           - 'null'
         command:
           type: string
+        compute_node_id:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Compute node executing the current attempt. Set by start_job and cleared
+            by complete_job and the reset/retry paths. For completed attempts, the
+            compute node is recorded on the result record.
         depends_on_job_ids:
           type:
           - array
@@ -6092,6 +6101,14 @@ components:
           - integer
           - 'null'
           format: int64
+        start_time:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Timestamp when the current attempt began running. Set by start_job and
+            cleared by complete_job and the reset/retry paths. NULL when the job is
+            not running (use `status` as the source of truth for "is running").
         status:
           $ref: '#/components/schemas/JobStatus'
         supports_termination:

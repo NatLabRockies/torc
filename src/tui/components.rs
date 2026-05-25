@@ -650,16 +650,27 @@ pub struct JobDetailsPopup {
     pub job_name: String,
     pub command: String,
     pub status: String,
+    pub compute_node_id: Option<i64>,
+    pub start_time: Option<String>,
     pub scroll_offset: u16,
 }
 
 impl JobDetailsPopup {
-    pub fn new(job_id: i64, job_name: String, command: String, status: String) -> Self {
+    pub fn new(
+        job_id: i64,
+        job_name: String,
+        command: String,
+        status: String,
+        compute_node_id: Option<i64>,
+        start_time: Option<String>,
+    ) -> Self {
         Self {
             job_id,
             job_name,
             command,
             status,
+            compute_node_id,
+            start_time,
             scroll_offset: 0,
         }
     }
@@ -707,6 +718,18 @@ impl JobDetailsPopup {
             Line::from(vec![
                 Span::styled("Status: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(&self.status, Style::default().fg(status_color)),
+            ]),
+            Line::from(vec![
+                Span::styled("Compute Node: ", Style::default().fg(Color::DarkGray)),
+                Span::raw(
+                    self.compute_node_id
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "—".to_string()),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Start Time: ", Style::default().fg(Color::DarkGray)),
+                Span::raw(self.start_time.clone().unwrap_or_else(|| "—".to_string())),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(

@@ -798,6 +798,8 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
         id_header,
         name_header,
         status_header,
+        "Node".to_string(),
+        "Elapsed".to_string(),
         "Command".to_string(),
     ])
     .style(header_style)
@@ -811,12 +813,23 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
             None => (String::new(), Color::White),
         };
 
+        let node = job
+            .compute_node_id
+            .map(|n| n.to_string())
+            .unwrap_or_default();
+        let elapsed = if matches!(job.status, Some(crate::models::JobStatus::Running)) {
+            format_elapsed(job.start_time.as_deref())
+        } else {
+            String::new()
+        };
         let command = job.command.clone();
 
         Row::new(vec![
             Cell::from(id),
             Cell::from(name),
             Cell::from(Span::styled(status_str, Style::default().fg(color))),
+            Cell::from(node),
+            Cell::from(elapsed),
             Cell::from(command),
         ])
     });
@@ -855,6 +868,8 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(8),
             Constraint::Length(20),
             Constraint::Length(15),
+            Constraint::Length(6),
+            Constraint::Length(9),
             Constraint::Percentage(100),
         ],
     )
@@ -869,6 +884,31 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
     .highlight_symbol("▸ ");
 
     f.render_stateful_widget(table, area, &mut app.jobs_state);
+}
+
+/// Compute elapsed time from an RFC3339 start_time to now, formatted compactly.
+fn format_elapsed(start_time: Option<&str>) -> String {
+    let Some(s) = start_time else {
+        return String::new();
+    };
+    let Ok(start) = chrono::DateTime::parse_from_rfc3339(s) else {
+        return String::new();
+    };
+    let elapsed = chrono::Utc::now().signed_duration_since(start.with_timezone(&chrono::Utc));
+    let total_secs = elapsed.num_seconds().max(0);
+    let days = total_secs / 86_400;
+    let hours = (total_secs % 86_400) / 3_600;
+    let mins = (total_secs % 3_600) / 60;
+    let secs = total_secs % 60;
+    if days > 0 {
+        format!("{}d{:02}h", days, hours)
+    } else if hours > 0 {
+        format!("{}h{:02}m", hours, mins)
+    } else if mins > 0 {
+        format!("{}m{:02}s", mins, secs)
+    } else {
+        format!("{}s", secs)
+    }
 }
 
 /// Format epoch seconds as ISO 8601 timestamp

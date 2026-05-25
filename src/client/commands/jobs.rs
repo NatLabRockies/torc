@@ -27,8 +27,38 @@ struct JobTableRow {
     status: String,
     #[tabled(rename = "Priority")]
     priority: i64,
+    #[tabled(rename = "Compute Node")]
+    compute_node: String,
+    #[tabled(rename = "Elapsed")]
+    elapsed: String,
     #[tabled(rename = "Command")]
     command: String,
+}
+
+/// Compute elapsed time from an RFC3339 start_time to now, formatted compactly.
+/// Returns an empty string if start_time is missing or unparseable.
+fn format_elapsed(start_time: Option<&str>) -> String {
+    let Some(s) = start_time else {
+        return String::new();
+    };
+    let Ok(start) = chrono::DateTime::parse_from_rfc3339(s) else {
+        return String::new();
+    };
+    let elapsed = chrono::Utc::now().signed_duration_since(start.with_timezone(&chrono::Utc));
+    let total_secs = elapsed.num_seconds().max(0);
+    let days = total_secs / 86_400;
+    let hours = (total_secs % 86_400) / 3_600;
+    let mins = (total_secs % 3_600) / 60;
+    let secs = total_secs % 60;
+    if days > 0 {
+        format!("{}d{:02}h", days, hours)
+    } else if hours > 0 {
+        format!("{}h{:02}m", hours, mins)
+    } else if mins > 0 {
+        format!("{}m{:02}s", mins, secs)
+    } else {
+        format!("{}s", secs)
+    }
 }
 
 #[derive(Tabled)]
@@ -512,12 +542,25 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     } else {
                         let rows: Vec<JobTableRow> = jobs
                             .iter()
-                            .map(|job| JobTableRow {
-                                id: job.id.unwrap_or(-1),
-                                name: job.name.clone(),
-                                status: job.status.expect("Job status is missing").to_string(),
-                                priority: job.priority.unwrap_or(0),
-                                command: job.command.clone(),
+                            .map(|job| {
+                                let status = job.status.expect("Job status is missing");
+                                let elapsed = if matches!(status, models::JobStatus::Running) {
+                                    format_elapsed(job.start_time.as_deref())
+                                } else {
+                                    String::new()
+                                };
+                                JobTableRow {
+                                    id: job.id.unwrap_or(-1),
+                                    name: job.name.clone(),
+                                    status: status.to_string(),
+                                    priority: job.priority.unwrap_or(0),
+                                    compute_node: job
+                                        .compute_node_id
+                                        .map(|n| n.to_string())
+                                        .unwrap_or_default(),
+                                    elapsed,
+                                    command: job.command.clone(),
+                                }
                             })
                             .collect();
                         if format == "csv" {
@@ -554,6 +597,16 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     println!("  Workflow ID: {}", job.workflow_id);
                     println!("  Status: {}", status);
                     println!("  Priority: {}", job.priority.unwrap_or(0));
+                    println!(
+                        "  Compute Node: {}",
+                        job.compute_node_id
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "None".to_string())
+                    );
+                    println!(
+                        "  Start Time: {}",
+                        job.start_time.as_deref().unwrap_or("None")
+                    );
                     println!(
                         "  Blocking job IDs: {}",
                         job.depends_on_job_ids
