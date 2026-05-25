@@ -191,7 +191,7 @@
 <li><a href="#torc"><code>torc</code></a></li>
 <li><a href="#torc-run"><code>torc run</code></a></li>
 <li><a href="#torc-submit"><code>torc submit</code></a></li>
-<li><a href="#torc-submit-slurm"><code>torc slurm generate</code> + <code>torc submit</code></a></li>
+<li><a href="#torc-slurm-generate-torc-submit"><code>torc slurm generate</code> + <code>torc submit</code></a></li>
 <li><a href="#torc-watch"><code>torc watch</code></a></li>
 <li><a href="#torc-recover"><code>torc recover</code></a></li>
 <li><a href="#torc-workflows"><code>torc workflows</code></a></li>
@@ -1498,14 +1498,15 @@ done, ready, scheduled, running, pending, disabled)</li>
 </ul>
 <h2 id="torc-slurm-parse-logs"><a class="header" href="#torc-slurm-parse-logs"><code>torc slurm parse-logs</code></a></h2>
 <p>Parse Slurm log files for known error messages</p>
-<p><strong>Usage:</strong> <code>torc slurm parse-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<p><strong>Usage:</strong> <code>torc slurm parse-logs [OPTIONS] &lt;PATH&gt;</code></p>
 <h6 id="arguments-67"><a class="header" href="#arguments-67"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+<li><code>&lt;PATH&gt;</code> — Path to output directory containing Slurm log files</li>
 </ul>
 <h6 id="options-47"><a class="header" href="#options-47"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory containing Slurm log files. Default: <code>output</code></li>
+<li><code>-w</code>, <code>--workflow-id &lt;WORKFLOW_ID&gt;</code> — Workflow ID to filter logs (required when directory contains
+multiple workflows)</li>
 <li><code>--errors-only</code> — Only show errors (skip warnings). Default: <code>false</code></li>
 </ul>
 <h2 id="torc-slurm-sacct"><a class="header" href="#torc-slurm-sacct"><code>torc slurm sacct</code></a></h2>
@@ -1934,7 +1935,7 @@ directory). Default: <code>.</code></li>
 </ul>
 <hr/>
 <p><small><i>This document was generated automatically by
-<a href="https://crates.io/crates/clap-markdown"><code>clap-markdown</code></a>.</i></small></p>
+<a href="https://docs.rs/clap-markdown/latest/clap_markdown/"><code>clap-markdown</code></a>.</i></small></p>
 
                     </main>
 

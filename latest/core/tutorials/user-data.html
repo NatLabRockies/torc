@@ -285,7 +285,7 @@ resource_requirements:
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow
-WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create user_data_workflow.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
@@ -317,7 +317,7 @@ torc user-data list $WORKFLOW_ID
 </code></pre>
 <h2 id="step-5-observe-the-data-flow"><a class="header" href="#step-5-observe-the-data-flow">Step 5: Observe the Data Flow</a></h2>
 <p>After <code>generate_config</code> completes, check the updated user_data:</p>
-<pre><code class="language-bash">torc user-data list $WORKFLOW_ID -f json | jq '.items[] | {name, data}'
+<pre><code class="language-bash">torc -f json user-data list $WORKFLOW_ID | jq '.items[] | {name, data}'
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{

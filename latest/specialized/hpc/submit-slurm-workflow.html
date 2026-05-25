@@ -206,11 +206,6 @@ to stdout (or to <code>-o &lt;file&gt;</code>). Submit the generated output, not
 <li>Generate Slurm scheduler configurations</li>
 <li>Submit everything for execution</li>
 </ol>
-<h2 id="preview-before-submitting"><a class="header" href="#preview-before-submitting">Preview Before Submitting</a></h2>
-<p>Preview the generated configuration without creating anything:</p>
-<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; --dry-run workflow.yaml
-</code></pre>
-<p>This shows the Slurm schedulers and workflow actions that would be created.</p>
 <h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
 <p>Your workflow must define resource requirements for jobs:</p>
 <pre><code class="language-yaml">name: my_workflow

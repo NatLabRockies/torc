@@ -185,8 +185,12 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="server-deployment"><a class="header" href="#server-deployment">Server Deployment</a></h1>
-<p>This guide covers deploying and operating the Torc server in production environments, including
-logging configuration, daemonization, and service management.</p>
+<p>This guide covers operating <code>torc-server</code>: command modes, logging, daemonization, service
+management, database snapshots, and related server administration.</p>
+<p>If you are deciding <strong>where</strong> to run the server for an HPC workflow — shared server, standalone
+single-node run, login-node process, dedicated Slurm allocation, or in-memory mode — start with
+<a href="./choosing-deployment.html">Choosing a Server Deployment</a>. This page is the implementation and
+reference guide once you know which pattern you want.</p>
 <h2 id="server-subcommands"><a class="header" href="#server-subcommands">Server Subcommands</a></h2>
 <p>The <code>torc-server</code> binary has two main subcommands:</p>
 <h3 id="torc-server-run"><a class="header" href="#torc-server-run"><code>torc-server run</code></a></h3>
@@ -209,7 +213,7 @@ torc-server run --completion-check-interval-secs 5
 <h3 id="torc-server-service"><a class="header" href="#torc-server-service"><code>torc-server service</code></a></h3>
 <p>Use <code>torc-server service</code> for:</p>
 <ul>
-<li><strong>Production deployment</strong> - Install as a system service that starts on boot</li>
+<li><strong>Managed service deployment</strong> - Install as a system service that starts on boot</li>
 <li><strong>Reliability</strong> - Automatic restart on failure</li>
 <li><strong>Managed lifecycle</strong> - Standard start/stop/status commands</li>
 <li><strong>Platform integration</strong> - Uses systemd (Linux), launchd (macOS), or Windows Services</li>
@@ -225,8 +229,10 @@ sudo torc-server service start
 <p><strong>Which to choose?</strong></p>
 <ul>
 <li>For <strong>HPC login nodes/development/testing</strong>: Use <code>torc-server run</code></li>
-<li>For <strong>production servers/standalone computers</strong>: Use <code>torc-server service install</code></li>
+<li>For <strong>durable managed servers/standalone computers</strong>: Use <code>torc-server service install</code></li>
 </ul>
+<p>For HPC workflows, this choice is only one piece of the deployment decision. See
+<a href="./choosing-deployment.html">Choosing a Server Deployment</a> for the full server placement guide.</p>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <h3 id="user-service-development"><a class="header" href="#user-service-development">User Service (Development)</a></h3>
 <p>For development, install as a user service (no root required):</p>
@@ -236,18 +242,17 @@ torc-server service install --user
 # Start the service
 torc-server service start --user
 </code></pre>
-<h3 id="system-service-production"><a class="header" href="#system-service-production">System Service (Production)</a></h3>
-<p>For production deployment, install as a system service:</p>
+<h3 id="system-service-managed-server"><a class="header" href="#system-service-managed-server">System Service (Managed Server)</a></h3>
+<p>For a durable managed server, install as a system service:</p>
 <pre><code class="language-bash"># Install with automatic defaults (logs to /var/log/torc, db at /var/lib/torc/torc.db)
-sudo torc-server service install --user
+sudo torc-server service install
 
 # Start the service
-sudo torc-server service start --user
+sudo torc-server service start
 </code></pre>
 <p>The service will automatically start on boot and restart on failure. Logs are automatically
 configured to rotate when they reach 10 MiB (keeping 5 files max). See the
-<a href="#service-management-recommended-for-production">Service Management</a> section for customization
-options.</p>
+<a href="#service-management-for-managed-servers">Service Management</a> section for customization options.</p>
 <h2 id="logging-system"><a class="header" href="#logging-system">Logging System</a></h2>
 <p>Torc-server uses the <code>tracing</code> ecosystem for structured, high-performance logging with automatic
 size-based file rotation.</p>
@@ -564,7 +569,7 @@ torc-server run \
     --auth-file /etc/torc/htpasswd \
     --require-auth
 </code></pre>
-<h2 id="service-management-recommended-for-production"><a class="header" href="#service-management-recommended-for-production">Service Management (Recommended for Production)</a></h2>
+<h2 id="service-management-for-managed-servers"><a class="header" href="#service-management-for-managed-servers">Service Management for Managed Servers</a></h2>
 <h3 id="automatic-installation"><a class="header" href="#automatic-installation">Automatic Installation</a></h3>
 <p>The easiest way to install torc-server as a service is using the built-in service management
 commands.</p>
@@ -601,7 +606,7 @@ torc-server service uninstall --user
 <li>Worker threads: 4</li>
 </ul>
 <h4 id="system-service-requires-root"><a class="header" href="#system-service-requires-root">System Service (Requires Root)</a></h4>
-<p>Install as a system-wide service (recommended for production):</p>
+<p>Install as a system-wide service for a durable managed server:</p>
 <pre><code class="language-bash"># Install with defaults
 sudo torc-server service install
 

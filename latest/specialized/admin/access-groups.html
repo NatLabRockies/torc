@@ -313,10 +313,10 @@ torc access-groups list-workflow-groups 42
 <h2 id="json-output"><a class="header" href="#json-output">JSON Output</a></h2>
 <p>All commands support JSON output format for scripting:</p>
 <pre><code class="language-bash"># List groups in JSON format
-torc access-groups list --format json
+torc -f json access-groups list
 
 # Get group details in JSON
-torc access-groups get 1 --format json
+torc -f json access-groups get 1
 </code></pre>
 <h2 id="database-schema"><a class="header" href="#database-schema">Database Schema</a></h2>
 <p>Access groups use three tables:</p>

@@ -205,10 +205,10 @@
 offers a more readable, SQL-like syntax that's easier to learn and use interactively.</p>
 <p>Compare filtering failed jobs:</p>
 <pre><code class="language-bash"># jq (cryptic syntax)
-torc jobs list 123 -f json | jq '.items[] | select(.status == "failed")'
+torc -f json jobs list 123 | jq '.items[] | select(.status == "failed")'
 
 # Nushell (readable, SQL-like)
-torc jobs list 123 -f json | from json | get items | where status == "failed"
+torc -f json jobs list 123 | from json | get items | where status == "failed"
 </code></pre>
 <p>Nushell is:</p>
 <ul>
@@ -237,58 +237,58 @@ individual commands with <code>nu -c "command"</code>.</p>
 let wf = 123
 </code></pre>
 <h3 id="list-all-jobs"><a class="header" href="#list-all-jobs">List All Jobs</a></h3>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items
 </code></pre>
 <p>This parses the JSON and extracts the <code>jobs</code> array into a table.</p>
 <h3 id="filter-by-status"><a class="header" href="#filter-by-status">Filter by Status</a></h3>
 <p>Find all failed jobs:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed"
 </code></pre>
 <p>Find jobs that are ready or running:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status in ["ready", "running"]
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status in ["ready", "running"]
 </code></pre>
 <h3 id="filter-by-name-pattern"><a class="header" href="#filter-by-name-pattern">Filter by Name Pattern</a></h3>
 <p>Find jobs with "train" in the name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where name =~ "train"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where name =~ "train"
 </code></pre>
 <p>The <code>=~</code> operator performs substring/regex matching.</p>
 <h3 id="combine-conditions"><a class="header" href="#combine-conditions">Combine Conditions</a></h3>
 <p>Find failed jobs with "process" in the name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "process"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" and name =~ "process"
 </code></pre>
 <p>Find jobs that failed or were canceled:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" or status == "canceled"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" or status == "canceled"
 </code></pre>
 <h2 id="selecting-and-formatting-output"><a class="header" href="#selecting-and-formatting-output">Selecting and Formatting Output</a></h2>
 <h3 id="select-specific-columns"><a class="header" href="#select-specific-columns">Select Specific Columns</a></h3>
 <p>Show only name and status:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | select name status
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | select name status
 </code></pre>
 <h3 id="sort-results"><a class="header" href="#sort-results">Sort Results</a></h3>
 <p>Sort by name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | sort-by name
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | sort-by name
 </code></pre>
 <p>Sort failed jobs by ID (descending):</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | sort-by id -r
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" | sort-by id -r
 </code></pre>
 <h3 id="count-results"><a class="header" href="#count-results">Count Results</a></h3>
 <p>Count jobs by status:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
 </code></pre>
 <p>Or more simply, count failed jobs:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | length
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" | length
 </code></pre>
 <h2 id="analyzing-results"><a class="header" href="#analyzing-results">Analyzing Results</a></h2>
 <h3 id="find-jobs-with-non-zero-return-codes"><a class="header" href="#find-jobs-with-non-zero-return-codes">Find Jobs with Non-Zero Return Codes</a></h3>
-<pre><code class="language-nu">torc results list $wf -f json | from json | get items | where return_code != 0
+<pre><code class="language-nu">torc -f json results list $wf | from json | get items | where return_code != 0
 </code></pre>
 <h3 id="find-results-with-specific-errors"><a class="header" href="#find-results-with-specific-errors">Find Results with Specific Errors</a></h3>
-<pre><code class="language-nu">torc results list $wf -f json | from json | get items | where return_code != 0 | select job_id return_code
+<pre><code class="language-nu">torc -f json results list $wf | from json | get items | where return_code != 0 | select job_id return_code
 </code></pre>
 <h3 id="join-jobs-with-results"><a class="header" href="#join-jobs-with-results">Join Jobs with Results</a></h3>
 <p>Get job names for failed results:</p>
-<pre><code class="language-nu">let jobs = (torc jobs list $wf -f json | from json | get items)
-let results = (torc results list $wf -f json | from json | get items | where return_code != 0)
+<pre><code class="language-nu">let jobs = (torc -f json jobs list $wf | from json | get items)
+let results = (torc -f json results list $wf | from json | get items | where return_code != 0)
 $results | each { |r|
     let job = ($jobs | where id == $r.job_id | first)
     { name: $job.name, return_code: $r.return_code, job_id: $r.job_id }
@@ -296,15 +296,15 @@ $results | each { |r|
 </code></pre>
 <h2 id="working-with-user-data"><a class="header" href="#working-with-user-data">Working with User Data</a></h2>
 <h3 id="list-user-data-entries"><a class="header" href="#list-user-data-entries">List User Data Entries</a></h3>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items
+<pre><code class="language-nu">torc -f json user-data list $wf | from json | get items
 </code></pre>
 <h3 id="filter-by-key"><a class="header" href="#filter-by-key">Filter by Key</a></h3>
 <p>Find user data with a specific key:</p>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items | where key =~ "config"
+<pre><code class="language-nu">torc -f json user-data list $wf | from json | get items | where key =~ "config"
 </code></pre>
 <h3 id="parse-json-values"><a class="header" href="#parse-json-values">Parse JSON Values</a></h3>
 <p>User data values are JSON strings. Parse and filter them:</p>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items | each { |ud|
+<pre><code class="language-nu">torc -f json user-data list $wf | from json | get items | each { |ud|
     { key: $ud.key, value: ($ud.value | from json) }
 }
 </code></pre>
@@ -312,22 +312,22 @@ $results | each { |r|
 <h3 id="example-1-debug-failed-jobs"><a class="header" href="#example-1-debug-failed-jobs">Example 1: Debug Failed Jobs</a></h3>
 <p>Find failed jobs and get their result details:</p>
 <pre><code class="language-nu"># Get failed job IDs
-let failed_ids = (torc jobs list $wf -f json | from json | get items | where status == "failed" | get id)
+let failed_ids = (torc -f json jobs list $wf | from json | get items | where status == "failed" | get id)
 
 # Show results for those jobs
-torc results list $wf -f json | from json | get items | where job_id in $failed_ids | select job_id return_code
+torc -f json results list $wf | from json | get items | where job_id in $failed_ids | select job_id return_code
 </code></pre>
 <h3 id="example-2-find-stuck-jobs"><a class="header" href="#example-2-find-stuck-jobs">Example 2: Find Stuck Jobs</a></h3>
 <p>Find jobs that have been running for a long time (status is "running"):</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "running" | select id name
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "running" | select id name
 </code></pre>
 <h3 id="example-3-parameter-sweep-analysis"><a class="header" href="#example-3-parameter-sweep-analysis">Example 3: Parameter Sweep Analysis</a></h3>
 <p>For a parameterized workflow, find which parameter values failed:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "lr" | get name
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" and name =~ "lr" | get name
 </code></pre>
 <h3 id="example-4-export-to-csv"><a class="header" href="#example-4-export-to-csv">Example 4: Export to CSV</a></h3>
 <p>Export failed jobs to CSV for further analysis:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
 </code></pre>
 <h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Nushell Command</th></tr></thead><tbody>

@@ -256,7 +256,7 @@ server:</p>
 <pre><code class="language-console">torc -s results list                # most recent run's jobs + metrics
 torc -s workflows list              # every workflow in the standalone DB
 torc -s jobs list &lt;workflow_id&gt;     # job statuses for a specific workflow
-torc tui --standalone               # interactive browser
+torc tui --standalone               # terminal UI
 </code></pre>
 <p>Give the workflow a friendly name up front to make it easier to find:</p>
 <pre><code class="language-console">torc -s exec -n hparam-sweep --description "LR sweep over ResNet50" \

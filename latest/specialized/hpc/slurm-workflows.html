@@ -573,8 +573,7 @@ jobs:
 torc run workflow.yaml
 
 # Then submit to HPC
-torc slurm generate --account myproject workflow.yaml
-torc submit workflow.yaml
+torc slurm generate --account myproject workflow.yaml | torc submit -
 </code></pre>
 <h2 id="limitations-and-caveats"><a class="header" href="#limitations-and-caveats">Limitations and Caveats</a></h2>
 <p>The auto-generation in <code>torc slurm generate</code> uses heuristics that work well for common workflow
@@ -659,7 +658,7 @@ and DAG visualization</li>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../specialized/hpc/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../specialized/admin/choosing-deployment.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -673,7 +672,7 @@ and DAG visualization</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../specialized/hpc/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../specialized/admin/choosing-deployment.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

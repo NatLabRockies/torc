@@ -190,7 +190,8 @@
 <p>Running Torc on HPC systems requires special configuration to ensure:</p>
 <ul>
 <li>Compute nodes can reach the torc-server running on a login node</li>
-<li>The database is stored on a filesystem accessible to all nodes</li>
+<li>The database lives on storage the <strong>server host</strong> can lock correctly (compute nodes never open the
+database file directly — they reach it through the server over HTTP)</li>
 <li>Network paths use the correct hostnames for the HPC interconnect</li>
 </ul>
 <h2 id="server-configuration-on-login-nodes"><a class="header" href="#server-configuration-on-login-nodes">Server Configuration on Login Nodes</a></h2>
@@ -237,34 +238,49 @@ grep $(hostname -s) /etc/hosts
 scontrol show config | grep ControlMachine
 </code></pre>
 <p>Consult your HPC system's documentation or support team for the correct internal hostname format.</p>
-<h2 id="database-placement"><a class="header" href="#database-placement">Database Placement</a></h2>
-<p>The SQLite database must be on a filesystem accessible to both:</p>
+<h2 id="database-storage-requirements"><a class="header" href="#database-storage-requirements">Database Storage Requirements</a></h2>
+<p>Only the <code>torc-server</code> process opens the SQLite database — compute nodes reach it through the server
+over HTTP. So the database does <strong>not</strong> need to be on a filesystem shared with the compute nodes; it
+only needs to be on storage the <strong>server host</strong> can open and lock correctly.</p>
+<h3 id="avoid-parallel-and-networked-filesystems-for-the-live-database"><a class="header" href="#avoid-parallel-and-networked-filesystems-for-the-live-database">Avoid parallel and networked filesystems for the live database</a></h3>
+<p>SQLite coordinates concurrent access using POSIX byte-range (<code>fcntl</code>) advisory locks. Parallel and
+distributed filesystems implement these locks poorly or not at all:</p>
 <ul>
-<li>The login node running <code>torc-server</code></li>
-<li>All compute nodes running jobs</li>
+<li><strong>Lustre</strong> — <code>flock</code>/<code>fcntl</code> locking works only when the filesystem is mounted with the <code>flock</code>
+option, and even then SQLite throughput is poor and lock semantics can be unreliable. <strong>Lustre is
+not a good place for the live database.</strong></li>
+<li><strong>GPFS / NFS</strong> — advisory locking is frequently misconfigured, partial, or high-latency. NFS in
+particular is a classic source of <code>database is locked</code> errors and, in the worst case, corruption.</li>
 </ul>
-<h3 id="recommended-locations"><a class="header" href="#recommended-locations">Recommended Locations</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Filesystem</th><th>Pros</th><th>Cons</th></tr></thead><tbody>
-<tr><td>Scratch (<code>/scratch/$USER/</code>)</td><td>Fast, shared, high capacity</td><td>May be purged periodically</td></tr>
-<tr><td>Project (<code>/projects/</code>)</td><td>Persistent, shared</td><td>May have quotas</td></tr>
-<tr><td>Home (<code>~</code>)</td><td>Persistent</td><td>Often slow, limited space</td></tr>
+<p>A stalled shared filesystem can also hang the server's request handlers for tens of seconds, since
+the in-flight SQLite call blocks on I/O.</p>
+<h3 id="recommended-storage"><a class="header" href="#recommended-storage">Recommended storage</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Storage</th><th>Suitability for the live DB</th></tr></thead><tbody>
+<tr><td>Node-local disk / <code>/tmp</code> on the server</td><td><strong>Best.</strong> Correct locking, lowest latency. Pair with snapshots for durability.</td></tr>
+<tr><td>In-memory (<code>:memory:</code>)</td><td><strong>Best for high throughput.</strong> RAM-backed; snapshot to disk for persistence.</td></tr>
+<tr><td>Scratch (Lustre/GPFS, e.g. <code>/scratch</code>)</td><td>Avoid for the live DB (locking + stalls). Fine as a <em>snapshot/backup</em> target.</td></tr>
+<tr><td>Project (<code>/projects/</code>)</td><td>Avoid for the live DB. Good for archiving completed databases.</td></tr>
+<tr><td>Home (<code>~</code>, often NFS)</td><td>Avoid — slow and locking-prone.</td></tr>
 </tbody></table>
 </div>
-<p><strong>Best practice:</strong> Use scratch for active workflows, backup completed workflows to project storage.</p>
-<pre><code class="language-bash"># Create a dedicated directory
-mkdir -p /scratch/$USER/torc
-
-# Start server with scratch database
+<p><strong>Best practice:</strong> run the live database on node-local disk (or in memory), and snapshot/back up to
+scratch or project storage. The default <code>torc.db</code> in the current directory is fine on a login node
+whose home/scratch is fast and POSIX-correct, but when in doubt prefer <code>/tmp</code>:</p>
+<pre><code class="language-bash"># Live DB on node-local disk; back up to durable shared storage periodically
 torc-server run \
-    --database /scratch/$USER/torc/workflows.db \
+    --database /tmp/torc-$USER.db \
     --host $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
     --port 8085
 </code></pre>
+<p>For RAM-backed operation with snapshots, see
+<a href="../admin/server-deployment.html#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>.</p>
 <h3 id="database-backup"><a class="header" href="#database-backup">Database Backup</a></h3>
 <p>For long-running workflows, periodically backup the database:</p>
 <pre><code class="language-bash"># SQLite backup (safe while server is running)
-sqlite3 /scratch/$USER/torc.db ".backup /projects/$USER/torc_backup.db"
+sqlite3 /tmp/torc-$USER.db ".backup /projects/$USER/torc_backup.db"
 </code></pre>
+<p>You can also snapshot a running server with <code>SIGUSR1</code> (works for on-disk and in-memory databases) —
+see <a href="../admin/server-deployment.html#persisting-state-with-sigusr1">Persisting State with SIGUSR1</a>.</p>
 <h2 id="port-selection"><a class="header" href="#port-selection">Port Selection</a></h2>
 <p>Login nodes are shared resources. To avoid conflicts:</p>
 <ol>
@@ -293,6 +309,48 @@ torc-server run \
 # Detach with Ctrl+b, then d
 # Reattach later with: tmux attach -t torc
 </code></pre>
+<h2 id="running-the-server-in-a-dedicated-slurm-allocation"><a class="header" href="#running-the-server-in-a-dedicated-slurm-allocation">Running the Server in a Dedicated Slurm Allocation</a></h2>
+<p>When login-node policy forbids long-running processes, or you want the server isolated from a busy,
+oversubscribed login node, run <code>torc-server</code> inside its <strong>own</strong> small Slurm allocation while your
+jobs draw their own, independent allocations. Request a few CPUs from a shared/standby partition for
+the full duration of the workflow:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=torc-server
+#SBATCH --partition=shared      # a partition that allows small, long-lived jobs
+#SBATCH --account=my-account
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=24:00:00         # long enough to outlast the workflow
+
+# Live DB on the server node's local disk (correct locking, low latency).
+torc-server run \
+    --database /tmp/torc.db \
+    --host 0.0.0.0 \
+    --port 8085 \
+    --threads 4
+</code></pre>
+<p>Submit it, wait for it to start, then discover the node it landed on and point clients (and the jobs
+they submit) at it:</p>
+<pre><code class="language-bash">sbatch torc-server.sbatch
+# Once it is RUNNING:
+SERVER_NODE=$(squeue --me --name torc-server -h -o %N)
+export TORC_API_URL="http://${SERVER_NODE}:8085/torc-service/v1"
+torc workflows list
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><strong>Bind to <code>0.0.0.0</code></strong> so the server accepts connections on whichever interface compute nodes use.
+If the bare node name isn't routable between nodes on your cluster, use the HSN name (see
+<a href="#finding-the-internal-hostname">Finding the Internal Hostname</a>).</li>
+<li><strong>The server allocation is independent of the job allocations.</strong> Jobs schedule and scale on their
+own; the server just needs to stay up. Size <code>--time</code> to cover the whole workflow — if the server
+allocation expires mid-run, runners lose the server. Pair with periodic
+<a href="../admin/server-deployment.html#persisting-state-with-sigusr1">snapshots</a> so you can restart and
+resume if that happens.</li>
+<li><strong>Keep the database on node-local disk</strong> (<code>/tmp</code>), not a parallel filesystem — see
+<a href="#database-storage-requirements">Database Storage Requirements</a>.</li>
+</ul>
 <h2 id="complete-configuration-example"><a class="header" href="#complete-configuration-example">Complete Configuration Example</a></h2>
 <h3 id="server-configuration-file"><a class="header" href="#server-configuration-file">Server Configuration File</a></h3>
 <p>Create <code>~/.config/torc/config.toml</code>:</p>

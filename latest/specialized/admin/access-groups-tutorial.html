@@ -353,7 +353,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create /tmp/ml_training.yaml | jq -r '.workflow_id')
 echo "Alice created workflow: $WORKFLOW_ID"
 </code></pre>
 <h3 id="as-carol-data-team"><a class="header" href="#as-carol-data-team">As Carol (Data Team)</a></h3>
@@ -522,7 +522,7 @@ user to an appropriate group.</p>
 </ul>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
-<li>Learn about <a href="./configuration.html">Configuration Files</a> to set up persistent configuration</li>
+<li>Learn about <a href="./configuration-files.html">Configuration Files</a> to set up persistent configuration</li>
 <li>Explore <a href="./server-deployment.html">Server Deployment</a> for production setups</li>
 <li>See the <a href="./access-groups.html">Access Groups Reference</a> for all available commands</li>
 </ul>

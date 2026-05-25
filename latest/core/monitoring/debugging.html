@@ -202,7 +202,7 @@ and all associated log file paths</li>
 <li><strong>Job stdout/stderr</strong>: Output from your job commands</li>
 <li><strong>Job runner logs</strong>: Internal logs from the Torc job runner</li>
 <li><strong>Slurm logs</strong>: Additional logs when using Slurm scheduler (see
-<a href="debugging-slurm.html">Debugging Slurm Workflows</a>)</li>
+<a href="../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a>)</li>
 </ul>
 <p>The <code>results list --include-logs</code> command consolidates all this information into a single JSON
 report, making it easy to locate and examine relevant log files for debugging.</p>
@@ -348,8 +348,8 @@ the compute node type.</p>
 <h3 id="slurm-runner-log-files"><a class="header" href="#slurm-runner-log-files">Slurm Runner Log Files</a></h3>
 <p>For jobs executed via Slurm scheduler (<code>compute_node_type: "slurm"</code>), additional log files are
 available including Slurm stdout/stderr, environment logs, and dmesg logs.</p>
-<p>See <a href="debugging-slurm.html">Debugging Slurm Workflows</a> for detailed information about Slurm-specific
-log files and debugging tools.</p>
+<p>See <a href="../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a> for detailed information
+about Slurm-specific log files and debugging tools.</p>
 <h2 id="using-the-torc-dash-debugging-tab"><a class="header" href="#using-the-torc-dash-debugging-tab">Using the torc-dash Debugging Tab</a></h2>
 <p>The torc-dash web interface provides an interactive Debugging tab for visual debugging of workflow
 jobs. This is often the quickest way to investigate failed jobs without using command-line tools.</p>
@@ -688,7 +688,8 @@ torc results list --include-logs &lt;workflow_id&gt; --output-dir &lt;correct_pa
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>
 <li><a href="working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
-<li><a href="debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
+<li><a href="../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging
+tools</li>
 </ul>
 
                     </main>

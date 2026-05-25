@@ -188,7 +188,7 @@
 <p>When running workflows on Slurm clusters, Torc provides additional debugging tools specifically
 designed for Slurm environments. This guide covers Slurm-specific debugging techniques and tools.</p>
 <p>For general debugging concepts and tools that apply to all workflows, see
-<a href="debugging.html">Debugging Workflows</a>.</p>
+<a href="../../core/monitoring/debugging.html">Debugging Workflows</a>.</p>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>Slurm workflows generate additional log files beyond the standard job logs:</p>
 <ul>
@@ -263,13 +263,10 @@ filename for easy filtering and correlation with Slurm's own logs.</p>
 <p>The <code>torc slurm parse-logs</code> command scans Slurm stdout/stderr log files for known error patterns and
 correlates them with affected Torc jobs:</p>
 <pre><code class="language-bash"># Parse logs for a specific workflow
-torc slurm parse-logs &lt;workflow_id&gt;
-
-# Specify custom output directory
-torc slurm parse-logs &lt;workflow_id&gt; --output-dir /path/to/torc_output
+torc slurm parse-logs --workflow-id=&lt;workflow_id&gt; &lt;output-directory&gt;
 
 # Output as JSON for programmatic processing
-torc slurm parse-logs &lt;workflow_id&gt; --format json
+torc -f json slurm parse-logs --workflow-id=&lt;workflow_id&gt; &lt;output-directory&gt;
 </code></pre>
 <h3 id="detected-error-patterns"><a class="header" href="#detected-error-patterns">Detected Error Patterns</a></h3>
 <p>The command detects common Slurm failure patterns including:</p>
@@ -335,7 +332,7 @@ torc slurm sacct &lt;workflow_id&gt;
 torc slurm sacct &lt;workflow_id&gt; --save-json --output-dir /path/to/torc_output
 
 # Output as JSON for programmatic processing
-torc slurm sacct &lt;workflow_id&gt; --format json
+torc -f json slurm sacct &lt;workflow_id&gt;
 </code></pre>
 <h3 id="summary-table-fields"><a class="header" href="#summary-table-fields">Summary Table Fields</a></h3>
 <p>The command displays a summary table with key metrics:</p>
@@ -564,8 +561,8 @@ when:</p>
 </ul>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>
-<li><a href="debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
-<li><a href="working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
+<li><a href="../../core/monitoring/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
+<li><a href="../../core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
 </ul>
 
                     </main>

@@ -686,7 +686,7 @@ more workflow examples in YAML, JSON5, and KDL formats.</p>
 <h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
 <ul>
 <li><a href="getting-started/../core/reference/cli-cheatsheet.html">CLI Cheat Sheet</a> - Quick reference for all common commands</li>
-<li><a href="getting-started/../specialized/hpc/quick-start-hpc.html">Quick Start (HPC)</a> - Run workflows on Slurm clusters</li>
+<li><a href="getting-started/./quick-start-hpc.html">Quick Start (HPC)</a> - Run workflows on Slurm clusters</li>
 <li><a href="getting-started/../core/workflows/creating-workflows.html">Creating Workflows</a> - Detailed workflow creation guide</li>
 <li><a href="getting-started/../core/monitoring/tui.html">Terminal UI</a> - Interactive workflow monitoring</li>
 </ul>
@@ -733,7 +733,8 @@ that can reach this host. For networks with untrusted users, see
 <pre><code class="language-console">torc hpc partitions &lt;profile-name&gt;
 </code></pre>
 <blockquote>
-<p><strong>Note:</strong> If your HPC system isn't detected, see <a href="getting-started/./custom-hpc-profile.html">Custom HPC Profile</a> or
+<p><strong>Note:</strong> If your HPC system isn't detected, see
+<a href="getting-started/../specialized/hpc/custom-hpc-profile.html">Custom HPC Profile</a> or
 <a href="https://github.com/NatLabRockies/torc/issues">request built-in support</a>.</p>
 </blockquote>
 <h2 id="create-a-workflow-with-resource-requirements"><a class="header" href="#create-a-workflow-with-resource-requirements">Create a Workflow with Resource Requirements</a></h2>
@@ -765,8 +766,7 @@ jobs:
 </ul>
 <h2 id="submit-the-workflow"><a class="header" href="#submit-the-workflow">Submit the Workflow</a></h2>
 <p>First, generate Slurm schedulers for your account, then submit:</p>
-<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml -o workflow_slurm.yaml
-torc submit workflow_slurm.yaml
+<pre><code class="language-console">torc slurm generate --account &lt;your-account&gt; workflow.yaml | torc submit -
 </code></pre>
 <p>Torc will:</p>
 <ol>
@@ -843,11 +843,13 @@ jobs:
 <h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
 <ul>
 <li><a href="getting-started/../core/reference/cli-cheatsheet.html">CLI Cheat Sheet</a> — Quick reference for all common commands</li>
-<li><a href="getting-started/./slurm-workflows.html">Slurm Overview</a> — How Torc manages Slurm</li>
-<li><a href="getting-started/../../core/reference/resources.html">Resource Requirements</a> — All resource options</li>
-<li><a href="getting-started/./hpc-profiles.html">HPC Profiles</a> — Managing HPC configurations</li>
-<li><a href="getting-started/./slurm.html">Advanced Slurm Configuration</a> — Manual Slurm scheduler setup</li>
-<li><a href="getting-started/./debugging-slurm.html">Debugging Slurm Workflows</a> — Troubleshooting</li>
+<li><a href="getting-started/../specialized/admin/choosing-deployment.html">Choosing a Server Deployment</a> — Pick the right
+server pattern for HPC workflows</li>
+<li><a href="getting-started/../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — How Torc manages Slurm</li>
+<li><a href="getting-started/../core/reference/resources.html">Resource Requirements</a> — All resource options</li>
+<li><a href="getting-started/../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Managing HPC configurations</li>
+<li><a href="getting-started/../specialized/hpc/slurm.html">Advanced Slurm Configuration</a> — Manual Slurm scheduler setup</li>
+<li><a href="getting-started/../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a> — Troubleshooting</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start-remote-workers"><a class="header" href="#quick-start-remote-workers">Quick Start (Remote Workers)</a></h1>
 <p>This guide walks you through running a Torc workflow on multiple remote machines via SSH. Jobs are
@@ -933,10 +935,10 @@ jobs:
 <h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
 <ul>
 <li><a href="getting-started/../core/reference/cli-cheatsheet.html">CLI Cheat Sheet</a> - Quick reference for all common commands</li>
-<li><a href="getting-started/./remote-workers.html">Remote Workers Guide</a> - Detailed configuration and troubleshooting</li>
-<li><a href="getting-started/../../core/workflows/creating-workflows.html">Creating Workflows</a> - Workflow specification format</li>
-<li><a href="getting-started/../../core/monitoring/resource-monitoring.html">Resource Monitoring</a> - Track CPU/memory usage per
-job</li>
+<li><a href="getting-started/../specialized/remote/remote-workers.html">Remote Workers Guide</a> - Detailed configuration and
+troubleshooting</li>
+<li><a href="getting-started/../core/workflows/creating-workflows.html">Creating Workflows</a> - Workflow specification format</li>
+<li><a href="getting-started/../core/monitoring/resource-monitoring.html">Resource Monitoring</a> - Track CPU/memory usage per job</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h1>
 <p>This section covers the fundamental concepts you need to understand to work effectively with Torc.</p>
@@ -1438,7 +1440,7 @@ jobs:
 <li><strong>terminated</strong> (8) - Explicitly terminated by system, such as at wall-time timeout</li>
 <li><strong>pending_failed</strong> (10) - Job failed without a matching failure handler. Awaiting AI-assisted
 classification to determine if the error is transient (retry) or permanent (fail). See
-<a href="core/concepts/../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a>.</li>
+<a href="core/concepts/../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="dependency-resolution"><a class="header" href="#dependency-resolution">Dependency Resolution</a></h1>
 <p>Torc supports two types of dependencies: <strong>explicit</strong> (declared via <code>depends_on</code>) and <strong>implicit</strong>
@@ -3648,7 +3650,8 @@ Total Stages: 3
 <li><strong>Verify auto-generated schedulers</strong>: Check that <code>torc slurm generate</code> created appropriate staging</li>
 </ul>
 <h2 id="dag-visualization-in-the-dashboard"><a class="header" href="#dag-visualization-in-the-dashboard">DAG Visualization in the Dashboard</a></h2>
-<p>The <a href="core/workflows/./dashboard.html">web dashboard</a> provides interactive DAG (Directed Acyclic Graph) visualization.</p>
+<p>The <a href="core/workflows/../monitoring/dashboard.html">web dashboard</a> provides interactive DAG (Directed Acyclic Graph)
+visualization.</p>
 <h3 id="viewing-the-dag"><a class="header" href="#viewing-the-dag">Viewing the DAG</a></h3>
 <ol>
 <li>Navigate to the <strong>Details</strong> tab</li>
@@ -3751,7 +3754,7 @@ different Torc servers. This is useful for:</p>
 </code></pre>
 <h3 id="json-output-format"><a class="header" href="#json-output-format">JSON Output Format</a></h3>
 <p>Use <code>--format json</code> for machine-readable output with export statistics:</p>
-<pre><code class="language-bash">torc workflows export 123 --output my_workflow.json --format json
+<pre><code class="language-bash">torc -f json workflows export 123 --output my_workflow.json
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{
@@ -3793,7 +3796,7 @@ different Torc servers. This is useful for:</p>
 </code></pre>
 <h3 id="json-output-format-1"><a class="header" href="#json-output-format-1">JSON Output Format</a></h3>
 <p>Use <code>--format json</code> for machine-readable output:</p>
-<pre><code class="language-bash">torc workflows import my_workflow.json --format json
+<pre><code class="language-bash">torc -f json workflows import my_workflow.json
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{
@@ -3846,7 +3849,7 @@ exported "default" resource requirements are mapped to the new workflow's defaul
 are specified.</p>
 <h2 id="common-workflows"><a class="header" href="#common-workflows">Common Workflows</a></h2>
 <h3 id="backup-all-active-workflows"><a class="header" href="#backup-all-active-workflows">Backup All Active Workflows</a></h3>
-<pre><code class="language-bash">for id in $(torc workflows list --format json | jq -r '.items[].id'); do
+<pre><code class="language-bash">for id in $(torc -f json workflows list | jq -r '.items[].id'); do
   torc workflows export $id --output "backup_workflow_${id}.json"
 done
 </code></pre>
@@ -5115,7 +5118,7 @@ torc ro-crate delete 1
 <p>Entities are also automatically deleted when their parent workflow is deleted (cascade delete).</p>
 <h2 id="exporting-an-ro-crate-document"><a class="header" href="#exporting-an-ro-crate-document">Exporting an RO-Crate Document</a></h2>
 <p>The <code>export</code> command assembles all entities into a valid
-<a href="https://w3id.org/ro/crate/1.1">RO-Crate 1.1</a> metadata document:</p>
+<a href="https://www.researchobject.org/ro-crate/1.1/">RO-Crate 1.1</a> metadata document:</p>
 <pre><code class="language-bash"># Write to file
 torc ro-crate export 123 -o ro-crate-metadata.json
 
@@ -5243,7 +5246,7 @@ server:</p>
 <pre><code class="language-console">torc -s results list                # most recent run's jobs + metrics
 torc -s workflows list              # every workflow in the standalone DB
 torc -s jobs list &lt;workflow_id&gt;     # job statuses for a specific workflow
-torc tui --standalone               # interactive browser
+torc tui --standalone               # terminal UI
 </code></pre>
 <p>Give the workflow a friendly name up front to make it easier to find:</p>
 <pre><code class="language-console">torc -s exec -n hparam-sweep --description "LR sweep over ResNet50" \
@@ -5321,7 +5324,7 @@ Torc's parameterization feature.</p>
 </ul>
 <h2 id="prerequisites-7"><a class="header" href="#prerequisites-7">Prerequisites</a></h2>
 <ul>
-<li>Torc server running (see <a href="core/tutorials/../installation.html">Installation</a>)</li>
+<li>Torc server running (see <a href="core/tutorials/../../getting-started/installation.html">Installation</a>)</li>
 <li>Basic familiarity with YAML syntax</li>
 </ul>
 <h2 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h2>
@@ -5585,7 +5588,7 @@ echo -e "apple red\nbanana yellow\ncherry red\ndate brown" &gt; /tmp/input.txt
 </code></pre>
 <h2 id="step-3-create-and-initialize-the-workflow"><a class="header" href="#step-3-create-and-initialize-the-workflow">Step 3: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow and capture the ID
-WORKFLOW_ID=$(torc create diamond.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create diamond.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Ensure the input file timestamp is current
@@ -5732,14 +5735,14 @@ jobs:
 </code></pre>
 <p>This expands to 10 jobs: <code>task_1</code>, <code>task_2</code>, ..., <code>task_10</code>.</p>
 <h2 id="step-2-create-and-run-the-workflow"><a class="header" href="#step-2-create-and-run-the-workflow">Step 2: Create and Run the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.workflow_id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc -f json create parallel_tasks.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc run $WORKFLOW_ID
 </code></pre>
 <p>All 10 jobs run in parallel since they have no dependencies.</p>
 <h2 id="step-3-verify-the-expansion"><a class="header" href="#step-3-verify-the-expansion">Step 3: Verify the Expansion</a></h2>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
+<pre><code class="language-bash">torc -f json jobs list $WORKFLOW_ID | jq -r '.items[].name' | sort
 </code></pre>
 <p>Output:</p>
 <pre><code>task_1
@@ -5804,17 +5807,17 @@ all 5 process jobs.</p>
 <li>All <code>evaluate_*</code> jobs → unblock <code>compare_results</code></li>
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.workflow_id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc -f json create learning_rate_sweep.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-1"><a class="header" href="#step-3-verify-the-expansion-1">Step 3: Verify the Expansion</a></h2>
 <pre><code class="language-bash"># Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)
-torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
+torc -f json jobs list $WORKFLOW_ID | jq '.items | length'
 </code></pre>
 <p>List the job names:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
+<pre><code class="language-bash">torc -f json jobs list $WORKFLOW_ID | jq -r '.items[].name' | sort
 </code></pre>
 <p>Output:</p>
 <pre><code>compare_results
@@ -6087,18 +6090,18 @@ resource_requirements:
 needs <code>parameters:</code> to match the parameterized <code>input_files</code>. This tells Torc: "this job depends on
 ALL 18 metrics files."</p>
 <h2 id="step-2-create-and-initialize-the-workflow-1"><a class="header" href="#step-2-create-and-initialize-the-workflow-1">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create grid_search.yaml -f json | jq -r '.workflow_id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc -f json create grid_search.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-2"><a class="header" href="#step-3-verify-the-expansion-2">Step 3: Verify the Expansion</a></h2>
 <p>Count the jobs:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
+<pre><code class="language-bash">torc -f json jobs list $WORKFLOW_ID | jq '.items | length'
 </code></pre>
 <p>Expected: <strong>21 jobs</strong> (1 prepare + 18 training + 1 aggregate + 1 select)</p>
 <p>List the training jobs:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[] | select(.name | startswith("train_")) | .name' | sort
+<pre><code class="language-bash">torc -f json jobs list $WORKFLOW_ID | jq -r '.items[] | select(.name | startswith("train_")) | .name' | sort
 </code></pre>
 <p>Output (18 training jobs):</p>
 <pre><code>train_lr0.0001_bs16_optadam
@@ -6737,7 +6740,7 @@ resource_requirements:
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow-2"><a class="header" href="#step-2-create-and-initialize-the-workflow-2">Step 2: Create and Initialize the Workflow</a></h2>
 <pre><code class="language-bash"># Create the workflow
-WORKFLOW_ID=$(torc create user_data_workflow.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create user_data_workflow.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 # Initialize jobs
@@ -6769,7 +6772,7 @@ torc user-data list $WORKFLOW_ID
 </code></pre>
 <h2 id="step-5-observe-the-data-flow"><a class="header" href="#step-5-observe-the-data-flow">Step 5: Observe the Data Flow</a></h2>
 <p>After <code>generate_config</code> completes, check the updated user_data:</p>
-<pre><code class="language-bash">torc user-data list $WORKFLOW_ID -f json | jq '.items[] | {name, data}'
+<pre><code class="language-bash">torc -f json user-data list $WORKFLOW_ID | jq '.items[] | {name, data}'
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{
@@ -7429,7 +7432,7 @@ enterprise account, you can connect <code>torc-mcp-server</code> directly to you
 <li><strong>Claude Code</strong> (Pro/Max/Team/Enterprise): Add <code>torc-mcp-server</code> as an MCP server -- see
 <a href="core/monitoring/../../specialized/tools/ai-assistant.html#quick-setup-claude-code">AI-Assisted Workflow Management</a></li>
 <li><strong>VS Code + Copilot</strong> (enterprise): Add <code>torc-mcp-server</code> to <code>.vscode/mcp.json</code> -- see
-<a href="core/monitoring/../../specialized/tools/ai-assistant.html#quick-setup-vs-code--copilot">AI-Assisted Workflow Management</a></li>
+<a href="core/monitoring/../../specialized/tools/ai-assistant.html#quick-setup-vs-code-copilot">AI-Assisted Workflow Management</a></li>
 </ul>
 <p>These approaches use the AI provider's own authentication and give you the same Torc tools in your
 terminal or editor instead of the dashboard.</p>
@@ -7526,7 +7529,7 @@ nodes. The socket file is created with 0600 permissions, restricting access to y
 Connect via <code>ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node</code>.</li>
 <li><strong>Remote Access</strong>: Use <code>--host 0.0.0.0</code> with caution; consider a reverse proxy with HTTPS</li>
 <li><strong>Authentication</strong>: Torc server supports htpasswd-based authentication (see
-<a href="core/monitoring/./authentication.html">Authentication</a>)</li>
+<a href="core/monitoring/../../specialized/admin/authentication.html">Authentication</a>)</li>
 </ol>
 <h2 id="troubleshooting-2"><a class="header" href="#troubleshooting-2">Troubleshooting</a></h2>
 <h3 id="cannot-connect-to-server"><a class="header" href="#cannot-connect-to-server">Cannot Connect to Server</a></h3>
@@ -8134,7 +8137,7 @@ and all associated log file paths</li>
 <li><strong>Job stdout/stderr</strong>: Output from your job commands</li>
 <li><strong>Job runner logs</strong>: Internal logs from the Torc job runner</li>
 <li><strong>Slurm logs</strong>: Additional logs when using Slurm scheduler (see
-<a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a>)</li>
+<a href="core/monitoring/../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a>)</li>
 </ul>
 <p>The <code>results list --include-logs</code> command consolidates all this information into a single JSON
 report, making it easy to locate and examine relevant log files for debugging.</p>
@@ -8280,8 +8283,8 @@ the compute node type.</p>
 <h3 id="slurm-runner-log-files"><a class="header" href="#slurm-runner-log-files">Slurm Runner Log Files</a></h3>
 <p>For jobs executed via Slurm scheduler (<code>compute_node_type: "slurm"</code>), additional log files are
 available including Slurm stdout/stderr, environment logs, and dmesg logs.</p>
-<p>See <a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> for detailed information about Slurm-specific
-log files and debugging tools.</p>
+<p>See <a href="core/monitoring/../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a> for detailed information
+about Slurm-specific log files and debugging tools.</p>
 <h2 id="using-the-torc-dash-debugging-tab"><a class="header" href="#using-the-torc-dash-debugging-tab">Using the torc-dash Debugging Tab</a></h2>
 <p>The torc-dash web interface provides an interactive Debugging tab for visual debugging of workflow
 jobs. This is often the quickest way to investigate failed jobs without using command-line tools.</p>
@@ -8620,7 +8623,8 @@ torc results list --include-logs &lt;workflow_id&gt; --output-dir &lt;correct_pa
 <h2 id="see-also-17"><a class="header" href="#see-also-17">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
-<li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
+<li><a href="core/monitoring/../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging
+tools</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="working-with-logs"><a class="header" href="#working-with-logs">Working with Logs</a></h1>
 <p>Torc provides tools for bundling and analyzing workflow logs. These are useful for:</p>
@@ -8650,7 +8654,7 @@ jobs produce <code>.o</code> and <code>.e</code> files. In <code>combined</code>
 enabled, files are removed when a job completes with exit code 0.</p>
 </blockquote>
 <p>For detailed information about log file contents, see <a href="core/monitoring/debugging.html">Debugging Workflows</a> and
-<a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a>.</p>
+<a href="core/monitoring/../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a>.</p>
 <h2 id="bundling-logs"><a class="header" href="#bundling-logs">Bundling Logs</a></h2>
 <p>The <code>torc logs bundle</code> command packages all logs for a workflow into a compressed tarball:</p>
 <pre><code class="language-bash"># Bundle all logs for a workflow
@@ -8782,7 +8786,8 @@ torc logs analyze wf&lt;id&gt;/
 <h2 id="see-also-18"><a class="header" href="#see-also-18">See Also</a></h2>
 <ul>
 <li><a href="core/monitoring/debugging.html">Debugging Workflows</a> — General debugging workflow and log file details</li>
-<li><a href="core/monitoring/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging tools</li>
+<li><a href="core/monitoring/../../specialized/hpc/debugging-slurm.html">Debugging Slurm Workflows</a> — Slurm-specific debugging
+tools</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="reference-1"><a class="header" href="#reference-1">Reference</a></h1>
 <p>Comprehensive reference documentation.</p>
@@ -8914,7 +8919,7 @@ Single-record commands (e.g. <code>jobs get</code>) and multi-section reports (<
 <li><a href="core/reference/cli.html#torc"><code>torc</code></a></li>
 <li><a href="core/reference/cli.html#torc-run"><code>torc run</code></a></li>
 <li><a href="core/reference/cli.html#torc-submit"><code>torc submit</code></a></li>
-<li><a href="core/reference/cli.html#torc-submit-slurm"><code>torc slurm generate</code> + <code>torc submit</code></a></li>
+<li><a href="core/reference/cli.html#torc-slurm-generate-torc-submit"><code>torc slurm generate</code> + <code>torc submit</code></a></li>
 <li><a href="core/reference/cli.html#torc-watch"><code>torc watch</code></a></li>
 <li><a href="core/reference/cli.html#torc-recover"><code>torc recover</code></a></li>
 <li><a href="core/reference/cli.html#torc-workflows"><code>torc workflows</code></a></li>
@@ -10221,14 +10226,15 @@ done, ready, scheduled, running, pending, disabled)</li>
 </ul>
 <h2 id="torc-slurm-parse-logs"><a class="header" href="#torc-slurm-parse-logs"><code>torc slurm parse-logs</code></a></h2>
 <p>Parse Slurm log files for known error messages</p>
-<p><strong>Usage:</strong> <code>torc slurm parse-logs [OPTIONS] [WORKFLOW_ID]</code></p>
+<p><strong>Usage:</strong> <code>torc slurm parse-logs [OPTIONS] &lt;PATH&gt;</code></p>
 <h6 id="arguments-67"><a class="header" href="#arguments-67"><strong>Arguments:</strong></a></h6>
 <ul>
-<li><code>&lt;WORKFLOW_ID&gt;</code> — Workflow ID</li>
+<li><code>&lt;PATH&gt;</code> — Path to output directory containing Slurm log files</li>
 </ul>
 <h6 id="options-47"><a class="header" href="#options-47"><strong>Options:</strong></a></h6>
 <ul>
-<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory containing Slurm log files. Default: <code>output</code></li>
+<li><code>-w</code>, <code>--workflow-id &lt;WORKFLOW_ID&gt;</code> — Workflow ID to filter logs (required when directory contains
+multiple workflows)</li>
 <li><code>--errors-only</code> — Only show errors (skip warnings). Default: <code>false</code></li>
 </ul>
 <h2 id="torc-slurm-sacct"><a class="header" href="#torc-slurm-sacct"><code>torc slurm sacct</code></a></h2>
@@ -10657,7 +10663,7 @@ directory). Default: <code>.</code></li>
 </ul>
 <hr/>
 <p><small><i>This document was generated automatically by
-<a href="https://crates.io/crates/clap-markdown"><code>clap-markdown</code></a>.</i></small></p>
+<a href="https://docs.rs/clap-markdown/latest/clap_markdown/"><code>clap-markdown</code></a>.</i></small></p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="workflow-specification-reference"><a class="header" href="#workflow-specification-reference">Workflow Specification Reference</a></h1>
 <p>This page documents all data models used in workflow specification files. Workflow specs can be
 written in YAML, JSON, JSON5, or KDL formats.</p>
@@ -12914,6 +12920,8 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 <div style="break-before: page; page-break-before: always;"></div><h1 id="hpc--slurm"><a class="header" href="#hpc--slurm">HPC &amp; Slurm</a></h1>
 <p>Running Torc workflows on HPC clusters with Slurm.</p>
 <ul>
+<li><a href="specialized/hpc/../admin/choosing-deployment.html">Choosing a Server Deployment</a> - Pick shared server, standalone,
+login-node, dedicated allocation, or in-memory mode</li>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> - How Torc simplifies Slurm workflows</li>
 <li><a href="specialized/hpc/./submit-slurm-workflow.html">Submitting Slurm Workflows</a> - Running workflows on HPC clusters</li>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> - Manual Slurm scheduler setup</li>
@@ -12925,6 +12933,157 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile</a> - Creating custom profiles</li>
 <li><a href="specialized/hpc/./self-contained-slurm-job.html">Self-Contained Slurm Jobs</a> - Run torc inside a single Slurm job
 without a persistent server</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="choosing-a-server-deployment"><a class="header" href="#choosing-a-server-deployment">Choosing a Server Deployment</a></h1>
+<p>Torc is a client-server system: every workflow talks to a <code>torc-server</code> over HTTP, and the server
+owns the SQLite database. How you run that server depends on three things:</p>
+<ol>
+<li>Whether a <strong>shared server</strong> already exists on your system.</li>
+<li>How many jobs the workflow has and how long they run.</li>
+<li>Whether jobs span <strong>one node</strong> or <strong>multiple nodes</strong>.</li>
+</ol>
+<p>This page helps you pick a deployment and points to the detailed guide for each. If you are new and
+just want to get a small workflow running, start with
+<a href="specialized/admin/choosing-deployment.html#1-use-the-shared-server-default">Use the shared server</a>.</p>
+<h2 id="quick-decision"><a class="header" href="#quick-decision">Quick decision</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Your situation</th><th>Recommended deployment</th></tr></thead><tbody>
+<tr><td>A shared server exists and your workflow is small/moderate (≲ a few thousand jobs)</td><td><a href="specialized/admin/choosing-deployment.html#1-use-the-shared-server-default">Use the shared server</a></td></tr>
+<tr><td>No shared server, all jobs fit on <strong>one node</strong></td><td><a href="specialized/admin/choosing-deployment.html#2a-single-node-standalone-ephemeral-server">Standalone ephemeral server</a></td></tr>
+<tr><td>No shared server, jobs span <strong>multiple nodes</strong></td><td><a href="specialized/admin/choosing-deployment.html#2b-multi-node-login-node-server">Login-node server</a> or <a href="specialized/admin/choosing-deployment.html#2c-multi-node-dedicated-server-allocation">dedicated server allocation</a></td></tr>
+<tr><td>Very large workflow (≳10⁵ jobs), short jobs, or a slow shared filesystem</td><td><a href="specialized/admin/choosing-deployment.html#3-very-large-or-high-throughput-workflows">In-memory server with snapshots</a></td></tr>
+</tbody></table>
+</div>
+<h2 id="what-the-server-actually-needs"><a class="header" href="#what-the-server-actually-needs">What the server actually needs</a></h2>
+<p>A key fact that drives every choice below: <strong>only the server process opens the database file.</strong> Job
+runners on compute nodes never touch the SQLite file directly — they make HTTP requests to the
+server. So the database only has to live somewhere the <em>server host</em> can open it with correct file
+locking. It does <strong>not</strong> need to be on a filesystem shared with the compute nodes.</p>
+<p>This is why putting the database on node-local storage (and avoiding parallel filesystems like
+Lustre) is both safe and recommended. See
+<a href="specialized/admin/../hpc/hpc-deployment.html#database-storage-requirements">Database storage requirements</a> for the
+details and the locking caveats.</p>
+<h2 id="1-use-the-shared-server-default"><a class="header" href="#1-use-the-shared-server-default">1. Use the shared server (default)</a></h2>
+<p>If your HPC system or team already runs a persistent <code>torc-server</code>, this is the simplest path and
+the right default for the common case — a workflow with up to a few thousand jobs whose individual
+runs take more than a few seconds. You do not run or configure a server at all; you just point the
+client at it:</p>
+<pre><code class="language-bash">export TORC_API_URL="http://&lt;server-host&gt;:&lt;port&gt;/torc-service/v1"
+torc create workflow.yaml
+torc submit &lt;workflow_id&gt;
+</code></pre>
+<p>If the shared server requires authentication, also set credentials — see
+<a href="specialized/admin/./authentication.html">Authentication</a>.</p>
+<p>Move to one of the options below if no shared server exists, or if your workflow is large enough or
+fast enough that a single shared SQLite database would become a bottleneck (see
+<a href="specialized/admin/choosing-deployment.html#3-very-large-or-high-throughput-workflows">scenario 3</a>).</p>
+<h2 id="2-no-shared-server"><a class="header" href="#2-no-shared-server">2. No shared server</a></h2>
+<p>When nobody has deployed a server, you run your own. Which pattern depends on node topology.</p>
+<h3 id="2a-single-node-standalone-ephemeral-server"><a class="header" href="#2a-single-node-standalone-ephemeral-server">2a. Single-node: standalone ephemeral server</a></h3>
+<p>If every job fits on one compute node, the standalone client starts an ephemeral server for you,
+runs the workflow, and shuts the server down on exit. This is the simplest self-contained option:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --time=01:00:00
+
+torc -s run workflow.yaml          # spec file
+# or:  torc -s exec -C commands.txt -j 4   # ad-hoc command list
+</code></pre>
+<p>The database persists to <code>./torc_output/torc.db</code> (override with <code>--db</code>) so you can inspect results
+afterward. Full details: <a href="specialized/admin/../hpc/self-contained-slurm-job.html">Self-Contained Slurm Jobs</a>.</p>
+<p>The standalone server binds to <code>127.0.0.1</code>, so this pattern <strong>cannot</strong> be used for jobs that run on
+other nodes. For that, use one of the multi-node patterns below.</p>
+<h3 id="2b-multi-node-login-node-server"><a class="header" href="#2b-multi-node-login-node-server">2b. Multi-node: login-node server</a></h3>
+<p>Run a persistent <code>torc-server</code> on a login node, in a <code>tmux</code>/<code>screen</code> session, for the duration of
+the workflow. Jobs submitted to Slurm reach it over the cluster interconnect:</p>
+<pre><code class="language-bash">torc-server run \
+    --database /tmp/torc-$USER.db \
+    --host &lt;internal-hostname&gt; \
+    --port 8085
+</code></pre>
+<p>The critical detail is the <code>--host</code> value: it must be the <strong>internal/routable hostname</strong> compute
+nodes can reach, not the external SSH name. See <a href="specialized/admin/../hpc/hpc-deployment.html">HPC Deployment</a> for
+hostname selection, port choice, and <code>tmux</code> guidance.</p>
+<h3 id="2c-multi-node-dedicated-server-allocation"><a class="header" href="#2c-multi-node-dedicated-server-allocation">2c. Multi-node: dedicated server allocation</a></h3>
+<p>If login-node policy forbids long-running processes, or you want the server isolated from a busy
+login node, run the server <strong>inside its own small Slurm allocation</strong> while jobs draw their own,
+independent allocations. Grab a few CPUs from a shared/standby partition for the workflow's
+duration:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=torc-server
+#SBATCH --partition=shared      # a partition that allows small, long-lived jobs
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=24:00:00         # cover the whole workflow
+
+# Use node-local disk on the server node.
+torc-server run \
+    --database /tmp/torc.db \
+    --host 0.0.0.0 \
+    --port 8085 \
+    --threads 4
+</code></pre>
+<p>Submit this first, find the node it landed on, and point clients (and the jobs they submit) at it:</p>
+<pre><code class="language-bash">SERVER_NODE=$(squeue --me --name torc-server -h -o %N)
+export TORC_API_URL="http://${SERVER_NODE}:8085/torc-service/v1"
+</code></pre>
+<p>The job allocations are completely separate from the server allocation, so jobs schedule and scale
+independently. Because only the server opens the database, you can — and should — keep it on the
+server node's local disk rather than a shared parallel filesystem. See
+<a href="specialized/admin/../hpc/hpc-deployment.html#running-the-server-in-a-dedicated-slurm-allocation">Running the server in a dedicated allocation</a>.</p>
+<h2 id="3-very-large-or-high-throughput-workflows"><a class="header" href="#3-very-large-or-high-throughput-workflows">3. Very large or high-throughput workflows</a></h2>
+<p>For workflows with very many jobs (10⁵–10⁶), very short jobs (seconds), or on systems whose shared
+filesystem stalls intermittently, an on-disk SQLite database becomes the bottleneck. Run the server
+<strong>in-memory</strong> and snapshot to disk for persistence. The canonical example is <strong>one million jobs that
+each run for a few seconds</strong>.</p>
+<p>Assemble these pieces:</p>
+<ol>
+<li>
+<p><strong>In-memory server, bound for multi-node access.</strong> Start the server with an in-memory database on
+all interfaces (the <code>torc -s --in-memory</code> standalone shortcut binds to <code>127.0.0.1</code> and is
+single-node only, so for multi-node use <code>torc-server</code> directly):</p>
+<pre><code class="language-bash">torc-server run -d ":memory:" --host 0.0.0.0 --port 8085 --threads 8
+</code></pre>
+<p>The in-memory database lives in RAM. Size the server node's memory for your job count — roughly
+on the order of a gigabyte per million jobs, plus indexes; measure on a smaller run first.</p>
+</li>
+<li>
+<p><strong>Periodic snapshots for durability.</strong> The in-memory database is lost if the process dies, so
+snapshot it to fast local storage. Send <code>SIGUSR1</code> (e.g. from cron or a sidecar), tuning retention
+via <code>TORC_SERVER_SNAPSHOT_PATH</code> / <code>TORC_SERVER_SNAPSHOT_KEEP</code>:</p>
+<pre><code class="language-bash">export TORC_SERVER_SNAPSHOT_PATH=/tmp/$USER/torc-snapshots/torc.db
+kill -USR1 $(pgrep -f 'torc-server run')
+</code></pre>
+<p>With the standalone runner you can instead snapshot on a timer:
+<code>torc -s --in-memory --snapshot-interval-seconds 600 run workflow.yaml</code>. Each snapshot briefly
+serializes against writes (seconds for a very large database), so prefer larger intervals at
+scale. See
+<a href="specialized/admin/./server-deployment.html#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>.</p>
+</li>
+<li>
+<p><strong>Use the barrier pattern to keep dependencies tractable.</strong> A fan-out/fan-in workflow expressed
+as all-to-all dependencies generates <code>N × M</code> edges — a million jobs feeding a million jobs is a
+trillion dependencies. A barrier collapses that to roughly <code>N + M</code>. This is essential at this
+scale; see <a href="specialized/admin/../../core/tutorials/multi-stage-barrier.html">Multi-Stage Workflows with Barriers</a>.</p>
+</li>
+<li>
+<p><strong>Expect a startup burst.</strong> When thousands of allocations start at once they all contact the
+server simultaneously. Torc staggers runner startup automatically; raise <code>--threads</code> on the
+server to widen the connection pool. See
+<a href="specialized/admin/../hpc/hpc-deployment.html#large-scale-deployments">Large-Scale Deployments</a>.</p>
+</li>
+</ol>
+<p>Multi-node jobs still require Slurm allocations as in <a href="specialized/admin/choosing-deployment.html#2-no-shared-server">scenario 2</a>; the only
+change here is the in-memory database and snapshotting.</p>
+<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<ul>
+<li><a href="specialized/admin/./server-deployment.html">Server Deployment</a> — full <code>torc-server</code> flag and service reference</li>
+<li><a href="specialized/admin/../hpc/hpc-deployment.html">HPC Deployment</a> — hostnames, ports, database storage, dedicated
+allocations</li>
+<li><a href="specialized/admin/../hpc/self-contained-slurm-job.html">Self-Contained Slurm Jobs</a> — the standalone single-node and
+multi-node patterns</li>
+<li><a href="specialized/admin/../../core/concepts/network-connectivity.html">Network Connectivity</a> — how clients reach the server
+in each topology</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="slurm-overview"><a class="header" href="#slurm-overview">Slurm Overview</a></h1>
 <p>This document explains how Torc simplifies running workflows on Slurm-based HPC systems. The key
@@ -13315,8 +13474,7 @@ jobs:
 torc run workflow.yaml
 
 # Then submit to HPC
-torc slurm generate --account myproject workflow.yaml
-torc submit workflow.yaml
+torc slurm generate --account myproject workflow.yaml | torc submit -
 </code></pre>
 <h2 id="limitations-and-caveats"><a class="header" href="#limitations-and-caveats">Limitations and Caveats</a></h2>
 <p>The auto-generation in <code>torc slurm generate</code> uses heuristics that work well for common workflow
@@ -13387,7 +13545,7 @@ curl $TORC_API_URL/health
 <p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
 <pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
 </code></pre>
-<h2 id="see-also-22"><a class="header" href="#see-also-22">See Also</a></h2>
+<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> — Execution plans
 and DAG visualization</li>
@@ -13418,11 +13576,6 @@ to stdout (or to <code>-o &lt;file&gt;</code>). Submit the generated output, not
 <li>Generate Slurm scheduler configurations</li>
 <li>Submit everything for execution</li>
 </ol>
-<h2 id="preview-before-submitting-1"><a class="header" href="#preview-before-submitting-1">Preview Before Submitting</a></h2>
-<p>Preview the generated configuration without creating anything:</p>
-<pre><code class="language-bash">torc slurm generate --account &lt;your-account&gt; --dry-run workflow.yaml
-</code></pre>
-<p>This shows the Slurm schedulers and workflow actions that would be created.</p>
 <h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
 <p>Your workflow must define resource requirements for jobs:</p>
 <pre><code class="language-yaml">name: my_workflow
@@ -13443,7 +13596,7 @@ jobs:
 torc slurm generate --help
 torc submit --help
 </code></pre>
-<h2 id="see-also-23"><a class="header" href="#see-also-23">See Also</a></h2>
+<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../specialized/hpc/slurm-workflows.html">Slurm Overview</a> — Full Slurm integration guide</li>
 <li><a href="specialized/hpc/../../specialized/hpc/hpc-profiles.html">HPC Profiles</a> — Available HPC system configurations</li>
@@ -13804,7 +13957,7 @@ wrap the command with <code>srun</code>.</p>
 <h3 id="using-num_nodes--1-for-independent-jobs"><a class="header" href="#using-num_nodes--1-for-independent-jobs">Using <code>num_nodes &gt; 1</code> for independent jobs</a></h3>
 <p>If your jobs don't need inter-node communication, keep <code>num_nodes=1</code> (the default) and let Torc
 schedule them independently across nodes for maximum throughput.</p>
-<h2 id="see-also-24"><a class="header" href="#see-also-24">See Also</a></h2>
+<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Auto-generated Slurm configuration with
 <code>slurm generate</code> + <code>submit</code></li>
@@ -14156,7 +14309,7 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <h3 id="local-execution-1"><a class="header" href="#local-execution-1">Local Execution</a></h3>
 <p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
 and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
-<h2 id="see-also-25"><a class="header" href="#see-also-25">See Also</a></h2>
+<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>
 <li><a href="specialized/hpc/./hpc-profiles.html">HPC Profiles</a> — Automatic partition matching</li>
@@ -14245,7 +14398,7 @@ with exit code 152, which Torc can distinguish from user-initiated cancellation.
 <p>When running workflows on Slurm clusters, Torc provides additional debugging tools specifically
 designed for Slurm environments. This guide covers Slurm-specific debugging techniques and tools.</p>
 <p>For general debugging concepts and tools that apply to all workflows, see
-<a href="specialized/hpc/debugging.html">Debugging Workflows</a>.</p>
+<a href="specialized/hpc/../../core/monitoring/debugging.html">Debugging Workflows</a>.</p>
 <h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
 <p>Slurm workflows generate additional log files beyond the standard job logs:</p>
 <ul>
@@ -14320,13 +14473,10 @@ filename for easy filtering and correlation with Slurm's own logs.</p>
 <p>The <code>torc slurm parse-logs</code> command scans Slurm stdout/stderr log files for known error patterns and
 correlates them with affected Torc jobs:</p>
 <pre><code class="language-bash"># Parse logs for a specific workflow
-torc slurm parse-logs &lt;workflow_id&gt;
-
-# Specify custom output directory
-torc slurm parse-logs &lt;workflow_id&gt; --output-dir /path/to/torc_output
+torc slurm parse-logs --workflow-id=&lt;workflow_id&gt; &lt;output-directory&gt;
 
 # Output as JSON for programmatic processing
-torc slurm parse-logs &lt;workflow_id&gt; --format json
+torc -f json slurm parse-logs --workflow-id=&lt;workflow_id&gt; &lt;output-directory&gt;
 </code></pre>
 <h3 id="detected-error-patterns-1"><a class="header" href="#detected-error-patterns-1">Detected Error Patterns</a></h3>
 <p>The command detects common Slurm failure patterns including:</p>
@@ -14392,7 +14542,7 @@ torc slurm sacct &lt;workflow_id&gt;
 torc slurm sacct &lt;workflow_id&gt; --save-json --output-dir /path/to/torc_output
 
 # Output as JSON for programmatic processing
-torc slurm sacct &lt;workflow_id&gt; --format json
+torc -f json slurm sacct &lt;workflow_id&gt;
 </code></pre>
 <h3 id="summary-table-fields"><a class="header" href="#summary-table-fields">Summary Table Fields</a></h3>
 <p>The command displays a summary table with key metrics:</p>
@@ -14619,10 +14769,10 @@ when:</p>
 <li><strong><code>torc-dash</code></strong>: Launch web interface with Slurm log viewing</li>
 <li><strong><code>torc tui</code></strong>: Launch terminal UI with Slurm log viewing</li>
 </ul>
-<h2 id="see-also-26"><a class="header" href="#see-also-26">See Also</a></h2>
+<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
 <ul>
-<li><a href="specialized/hpc/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
-<li><a href="specialized/hpc/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
+<li><a href="specialized/hpc/../../core/monitoring/debugging.html">Debugging Workflows</a> — General debugging tools and workflows</li>
+<li><a href="specialized/hpc/../../core/monitoring/working-with-logs.html">Working with Logs</a> — Bundling and analyzing logs</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="working-with-hpc-profiles"><a class="header" href="#working-with-hpc-profiles">Working with HPC Profiles</a></h1>
 <p>HPC (High-Performance Computing) profiles provide pre-configured knowledge about specific HPC
@@ -14658,7 +14808,7 @@ querying the cluster itself. This means you can use Torc on almost any Slurm sys
 configuration.</p>
 <p>To use dynamic Slurm detection, you can:</p>
 <ol>
-<li><strong>Explicitly request it</strong>: Use <code>--hpc-profile slurm</code> in any command that requires a profile.</li>
+<li><strong>Explicitly request it</strong>: Use <code>--profile slurm</code> in any command that requires a profile.</li>
 <li><strong>Let Torc auto-detect it</strong>: If you're on a Slurm system and haven't specified a profile or
 matched a built-in one, Torc will automatically fall back to dynamic Slurm detection.</li>
 </ol>
@@ -14741,7 +14891,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <ul>
 <li><code>torc slurm generate</code> + <code>torc submit</code> - Submit workflows with auto-generated schedulers</li>
 </ul>
-<h2 id="see-also-27"><a class="header" href="#see-also-27">See Also</a></h2>
+<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -15077,7 +15227,7 @@ default_account = "my_default_account"
 </div>
 <p>Generated walltime uses <code>HH:MM:SS</code> format (e.g., <code>04:00:00</code>).</p>
 <hr />
-<h2 id="see-also-28"><a class="header" href="#see-also-28">See Also</a></h2>
+<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a></li>
 <li><a href="specialized/hpc/./custom-hpc-profile.html">Custom HPC Profile Tutorial</a></li>
@@ -15091,7 +15241,8 @@ default_account = "my_default_account"
 <p>Running Torc on HPC systems requires special configuration to ensure:</p>
 <ul>
 <li>Compute nodes can reach the torc-server running on a login node</li>
-<li>The database is stored on a filesystem accessible to all nodes</li>
+<li>The database lives on storage the <strong>server host</strong> can lock correctly (compute nodes never open the
+database file directly — they reach it through the server over HTTP)</li>
 <li>Network paths use the correct hostnames for the HPC interconnect</li>
 </ul>
 <h2 id="server-configuration-on-login-nodes"><a class="header" href="#server-configuration-on-login-nodes">Server Configuration on Login Nodes</a></h2>
@@ -15138,34 +15289,49 @@ grep $(hostname -s) /etc/hosts
 scontrol show config | grep ControlMachine
 </code></pre>
 <p>Consult your HPC system's documentation or support team for the correct internal hostname format.</p>
-<h2 id="database-placement"><a class="header" href="#database-placement">Database Placement</a></h2>
-<p>The SQLite database must be on a filesystem accessible to both:</p>
+<h2 id="database-storage-requirements"><a class="header" href="#database-storage-requirements">Database Storage Requirements</a></h2>
+<p>Only the <code>torc-server</code> process opens the SQLite database — compute nodes reach it through the server
+over HTTP. So the database does <strong>not</strong> need to be on a filesystem shared with the compute nodes; it
+only needs to be on storage the <strong>server host</strong> can open and lock correctly.</p>
+<h3 id="avoid-parallel-and-networked-filesystems-for-the-live-database"><a class="header" href="#avoid-parallel-and-networked-filesystems-for-the-live-database">Avoid parallel and networked filesystems for the live database</a></h3>
+<p>SQLite coordinates concurrent access using POSIX byte-range (<code>fcntl</code>) advisory locks. Parallel and
+distributed filesystems implement these locks poorly or not at all:</p>
 <ul>
-<li>The login node running <code>torc-server</code></li>
-<li>All compute nodes running jobs</li>
+<li><strong>Lustre</strong> — <code>flock</code>/<code>fcntl</code> locking works only when the filesystem is mounted with the <code>flock</code>
+option, and even then SQLite throughput is poor and lock semantics can be unreliable. <strong>Lustre is
+not a good place for the live database.</strong></li>
+<li><strong>GPFS / NFS</strong> — advisory locking is frequently misconfigured, partial, or high-latency. NFS in
+particular is a classic source of <code>database is locked</code> errors and, in the worst case, corruption.</li>
 </ul>
-<h3 id="recommended-locations"><a class="header" href="#recommended-locations">Recommended Locations</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Filesystem</th><th>Pros</th><th>Cons</th></tr></thead><tbody>
-<tr><td>Scratch (<code>/scratch/$USER/</code>)</td><td>Fast, shared, high capacity</td><td>May be purged periodically</td></tr>
-<tr><td>Project (<code>/projects/</code>)</td><td>Persistent, shared</td><td>May have quotas</td></tr>
-<tr><td>Home (<code>~</code>)</td><td>Persistent</td><td>Often slow, limited space</td></tr>
+<p>A stalled shared filesystem can also hang the server's request handlers for tens of seconds, since
+the in-flight SQLite call blocks on I/O.</p>
+<h3 id="recommended-storage"><a class="header" href="#recommended-storage">Recommended storage</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Storage</th><th>Suitability for the live DB</th></tr></thead><tbody>
+<tr><td>Node-local disk / <code>/tmp</code> on the server</td><td><strong>Best.</strong> Correct locking, lowest latency. Pair with snapshots for durability.</td></tr>
+<tr><td>In-memory (<code>:memory:</code>)</td><td><strong>Best for high throughput.</strong> RAM-backed; snapshot to disk for persistence.</td></tr>
+<tr><td>Scratch (Lustre/GPFS, e.g. <code>/scratch</code>)</td><td>Avoid for the live DB (locking + stalls). Fine as a <em>snapshot/backup</em> target.</td></tr>
+<tr><td>Project (<code>/projects/</code>)</td><td>Avoid for the live DB. Good for archiving completed databases.</td></tr>
+<tr><td>Home (<code>~</code>, often NFS)</td><td>Avoid — slow and locking-prone.</td></tr>
 </tbody></table>
 </div>
-<p><strong>Best practice:</strong> Use scratch for active workflows, backup completed workflows to project storage.</p>
-<pre><code class="language-bash"># Create a dedicated directory
-mkdir -p /scratch/$USER/torc
-
-# Start server with scratch database
+<p><strong>Best practice:</strong> run the live database on node-local disk (or in memory), and snapshot/back up to
+scratch or project storage. The default <code>torc.db</code> in the current directory is fine on a login node
+whose home/scratch is fast and POSIX-correct, but when in doubt prefer <code>/tmp</code>:</p>
+<pre><code class="language-bash"># Live DB on node-local disk; back up to durable shared storage periodically
 torc-server run \
-    --database /scratch/$USER/torc/workflows.db \
+    --database /tmp/torc-$USER.db \
     --host $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
     --port 8085
 </code></pre>
+<p>For RAM-backed operation with snapshots, see
+<a href="specialized/hpc/../admin/server-deployment.html#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>.</p>
 <h3 id="database-backup"><a class="header" href="#database-backup">Database Backup</a></h3>
 <p>For long-running workflows, periodically backup the database:</p>
 <pre><code class="language-bash"># SQLite backup (safe while server is running)
-sqlite3 /scratch/$USER/torc.db ".backup /projects/$USER/torc_backup.db"
+sqlite3 /tmp/torc-$USER.db ".backup /projects/$USER/torc_backup.db"
 </code></pre>
+<p>You can also snapshot a running server with <code>SIGUSR1</code> (works for on-disk and in-memory databases) —
+see <a href="specialized/hpc/../admin/server-deployment.html#persisting-state-with-sigusr1">Persisting State with SIGUSR1</a>.</p>
 <h2 id="port-selection"><a class="header" href="#port-selection">Port Selection</a></h2>
 <p>Login nodes are shared resources. To avoid conflicts:</p>
 <ol>
@@ -15194,6 +15360,48 @@ torc-server run \
 # Detach with Ctrl+b, then d
 # Reattach later with: tmux attach -t torc
 </code></pre>
+<h2 id="running-the-server-in-a-dedicated-slurm-allocation"><a class="header" href="#running-the-server-in-a-dedicated-slurm-allocation">Running the Server in a Dedicated Slurm Allocation</a></h2>
+<p>When login-node policy forbids long-running processes, or you want the server isolated from a busy,
+oversubscribed login node, run <code>torc-server</code> inside its <strong>own</strong> small Slurm allocation while your
+jobs draw their own, independent allocations. Request a few CPUs from a shared/standby partition for
+the full duration of the workflow:</p>
+<pre><code class="language-bash">#!/bin/bash
+#SBATCH --job-name=torc-server
+#SBATCH --partition=shared      # a partition that allows small, long-lived jobs
+#SBATCH --account=my-account
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=24:00:00         # long enough to outlast the workflow
+
+# Live DB on the server node's local disk (correct locking, low latency).
+torc-server run \
+    --database /tmp/torc.db \
+    --host 0.0.0.0 \
+    --port 8085 \
+    --threads 4
+</code></pre>
+<p>Submit it, wait for it to start, then discover the node it landed on and point clients (and the jobs
+they submit) at it:</p>
+<pre><code class="language-bash">sbatch torc-server.sbatch
+# Once it is RUNNING:
+SERVER_NODE=$(squeue --me --name torc-server -h -o %N)
+export TORC_API_URL="http://${SERVER_NODE}:8085/torc-service/v1"
+torc workflows list
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><strong>Bind to <code>0.0.0.0</code></strong> so the server accepts connections on whichever interface compute nodes use.
+If the bare node name isn't routable between nodes on your cluster, use the HSN name (see
+<a href="specialized/hpc/hpc-deployment.html#finding-the-internal-hostname">Finding the Internal Hostname</a>).</li>
+<li><strong>The server allocation is independent of the job allocations.</strong> Jobs schedule and scale on their
+own; the server just needs to stay up. Size <code>--time</code> to cover the whole workflow — if the server
+allocation expires mid-run, runners lose the server. Pair with periodic
+<a href="specialized/hpc/../admin/server-deployment.html#persisting-state-with-sigusr1">snapshots</a> so you can restart and
+resume if that happens.</li>
+<li><strong>Keep the database on node-local disk</strong> (<code>/tmp</code>), not a parallel filesystem — see
+<a href="specialized/hpc/hpc-deployment.html#database-storage-requirements">Database Storage Requirements</a>.</li>
+</ul>
 <h2 id="complete-configuration-example"><a class="header" href="#complete-configuration-example">Complete Configuration Example</a></h2>
 <h3 id="server-configuration-file"><a class="header" href="#server-configuration-file">Server Configuration File</a></h3>
 <p>Create <code>~/.config/torc/config.toml</code>:</p>
@@ -15309,7 +15517,7 @@ pgrep -f torc-server
 # Check server logs
 tail -100 /scratch/$USER/torc/logs/torc-server*.log
 </code></pre>
-<h2 id="see-also-29"><a class="header" href="#see-also-29">See Also</a></h2>
+<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/reference/configuration.html">Configuration Reference</a></li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a></li>
@@ -15341,7 +15549,7 @@ query your cluster to discover its partitions and resource limits.</p>
 <ol>
 <li><strong>Auto-detection</strong>: Torc automatically falls back to dynamic Slurm detection if no other profile
 matches.</li>
-<li><strong>Explicit use</strong>: You can force dynamic detection by using <code>--hpc-profile slurm</code> in any command.</li>
+<li><strong>Explicit use</strong>: You can force dynamic detection by using <code>--profile slurm</code> in any command.</li>
 </ol>
 <p>Verify it works on your system:</p>
 <pre><code class="language-bash"># Show partitions detected from your Slurm cluster
@@ -15623,7 +15831,7 @@ hostname
 </ol>
 <p>Or simply <a href="https://github.com/NatLabRockies/torc/issues">open an issue</a> with your partition
 information and we'll add it for you.</p>
-<h2 id="see-also-30"><a class="header" href="#see-also-30">See Also</a></h2>
+<h2 id="see-also-31"><a class="header" href="#see-also-31">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/./hpc-profiles.html">Working with HPC Profiles</a> - General HPC profile usage</li>
 <li><a href="specialized/hpc/./hpc-profiles-reference.html">HPC Profiles Reference</a> - Complete configuration options</li>
@@ -15726,7 +15934,7 @@ getent hosts $(hostname -s)       # canonical address lookup
 for cluster-specific hostnames and
 <a href="specialized/hpc/../../core/concepts/network-connectivity.html#scenario-3-hpc-with-non-routable-hostname">Network Connectivity → Scenario 3</a>
 for the broader pattern.</p>
-<h2 id="see-also-31"><a class="header" href="#see-also-31">See Also</a></h2>
+<h2 id="see-also-32"><a class="header" href="#see-also-32">See Also</a></h2>
 <ul>
 <li><a href="specialized/hpc/../../core/how-to/run-inline-commands.html">Run Inline Commands (<code>torc exec</code>)</a> — full <code>exec</code> flag
 reference, parameterization, plots</li>
@@ -16241,11 +16449,11 @@ adjusting Apache Spark cluster sizes or fixing configuration issues.</p>
 WORKFLOW_ID=$1  # or use $TORC_WORKFLOW_ID
 
 # Find failed jobs
-FAILED_JOBS=$(torc jobs list $WORKFLOW_ID --status failed -f json | jq -r '.items[].id')
+FAILED_JOBS=$(torc -f json jobs list $WORKFLOW_ID --status failed | jq -r '.items[].id')
 
 for JOB_ID in $FAILED_JOBS; do
     # Get current resource requirements
-    JOB_INFO=$(torc jobs get $JOB_ID -f json)
+    JOB_INFO=$(torc -f json jobs get $JOB_ID)
     RR_ID=$(echo "$JOB_INFO" | jq -r '.resource_requirements_id')
 
     # Check if this is a Spark job that needs more nodes
@@ -16285,7 +16493,7 @@ jobs at runtime via <a href="specialized/fault-tolerance/../../core/tutorials/dy
 scheduled without manual intervention.</p>
 <h3 id="example-failure-handler-with-auto-scheduling"><a class="header" href="#example-failure-handler-with-auto-scheduling">Example: Failure Handler with Auto-Scheduling</a></h3>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
-torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
+torc slurm generate --account my_project workflow.yaml | torc submit -
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule
@@ -16558,7 +16766,7 @@ for more details.</p>
 <li>Update jobs with new scheduler reference</li>
 <li>Submit allocations via sbatch</li>
 </ol>
-<h2 id="see-also-32"><a class="header" href="#see-also-32">See Also</a></h2>
+<h2 id="see-also-33"><a class="header" href="#see-also-33">See Also</a></h2>
 <ul>
 <li><a href="specialized/fault-tolerance/./failure-handlers.html">Configurable Failure Handlers</a> - Per-job retry with exit-code-specific
 recovery</li>
@@ -16820,7 +17028,7 @@ retries.</p>
 <p>Use <code>torc watch --auto-schedule</code> to automatically submit new Slurm allocations when retry jobs are
 waiting:</p>
 <pre><code class="language-bash"># Submit a workflow with failure handlers
-torc slurm generate --account my_project workflow.yaml &amp;&amp; torc submit workflow.yaml
+torc slurm generate --account my_project workflow.yaml | torc submit -
 
 # Watch with auto-scheduling enabled (uses defaults)
 torc watch $WORKFLOW_ID --auto-schedule
@@ -17683,6 +17891,7 @@ recover failed jobs</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="administration--security"><a class="header" href="#administration--security">Administration &amp; Security</a></h1>
 <p>Server deployment, configuration, and security.</p>
 <ul>
+<li><a href="specialized/admin/./choosing-deployment.html">Choosing a Server Deployment</a> - Pick a server setup for your workflow</li>
 <li><a href="specialized/admin/./server-deployment.html">Server Deployment</a> - Deploying the Torc server</li>
 <li><a href="specialized/admin/./configuration-files.html">Configuration Files</a> - Server configuration</li>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> - User authentication setup</li>
@@ -17692,8 +17901,12 @@ recover failed jobs</li>
 <li><a href="specialized/admin/./security.html">Security Reference</a> - Security best practices</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="server-deployment"><a class="header" href="#server-deployment">Server Deployment</a></h1>
-<p>This guide covers deploying and operating the Torc server in production environments, including
-logging configuration, daemonization, and service management.</p>
+<p>This guide covers operating <code>torc-server</code>: command modes, logging, daemonization, service
+management, database snapshots, and related server administration.</p>
+<p>If you are deciding <strong>where</strong> to run the server for an HPC workflow — shared server, standalone
+single-node run, login-node process, dedicated Slurm allocation, or in-memory mode — start with
+<a href="specialized/admin/./choosing-deployment.html">Choosing a Server Deployment</a>. This page is the implementation and
+reference guide once you know which pattern you want.</p>
 <h2 id="server-subcommands"><a class="header" href="#server-subcommands">Server Subcommands</a></h2>
 <p>The <code>torc-server</code> binary has two main subcommands:</p>
 <h3 id="torc-server-run"><a class="header" href="#torc-server-run"><code>torc-server run</code></a></h3>
@@ -17716,7 +17929,7 @@ torc-server run --completion-check-interval-secs 5
 <h3 id="torc-server-service"><a class="header" href="#torc-server-service"><code>torc-server service</code></a></h3>
 <p>Use <code>torc-server service</code> for:</p>
 <ul>
-<li><strong>Production deployment</strong> - Install as a system service that starts on boot</li>
+<li><strong>Managed service deployment</strong> - Install as a system service that starts on boot</li>
 <li><strong>Reliability</strong> - Automatic restart on failure</li>
 <li><strong>Managed lifecycle</strong> - Standard start/stop/status commands</li>
 <li><strong>Platform integration</strong> - Uses systemd (Linux), launchd (macOS), or Windows Services</li>
@@ -17732,8 +17945,10 @@ sudo torc-server service start
 <p><strong>Which to choose?</strong></p>
 <ul>
 <li>For <strong>HPC login nodes/development/testing</strong>: Use <code>torc-server run</code></li>
-<li>For <strong>production servers/standalone computers</strong>: Use <code>torc-server service install</code></li>
+<li>For <strong>durable managed servers/standalone computers</strong>: Use <code>torc-server service install</code></li>
 </ul>
+<p>For HPC workflows, this choice is only one piece of the deployment decision. See
+<a href="specialized/admin/./choosing-deployment.html">Choosing a Server Deployment</a> for the full server placement guide.</p>
 <h2 id="quick-start-8"><a class="header" href="#quick-start-8">Quick Start</a></h2>
 <h3 id="user-service-development"><a class="header" href="#user-service-development">User Service (Development)</a></h3>
 <p>For development, install as a user service (no root required):</p>
@@ -17743,18 +17958,17 @@ torc-server service install --user
 # Start the service
 torc-server service start --user
 </code></pre>
-<h3 id="system-service-production"><a class="header" href="#system-service-production">System Service (Production)</a></h3>
-<p>For production deployment, install as a system service:</p>
+<h3 id="system-service-managed-server"><a class="header" href="#system-service-managed-server">System Service (Managed Server)</a></h3>
+<p>For a durable managed server, install as a system service:</p>
 <pre><code class="language-bash"># Install with automatic defaults (logs to /var/log/torc, db at /var/lib/torc/torc.db)
-sudo torc-server service install --user
+sudo torc-server service install
 
 # Start the service
-sudo torc-server service start --user
+sudo torc-server service start
 </code></pre>
 <p>The service will automatically start on boot and restart on failure. Logs are automatically
 configured to rotate when they reach 10 MiB (keeping 5 files max). See the
-<a href="specialized/admin/server-deployment.html#service-management-recommended-for-production">Service Management</a> section for customization
-options.</p>
+<a href="specialized/admin/server-deployment.html#service-management-for-managed-servers">Service Management</a> section for customization options.</p>
 <h2 id="logging-system"><a class="header" href="#logging-system">Logging System</a></h2>
 <p>Torc-server uses the <code>tracing</code> ecosystem for structured, high-performance logging with automatic
 size-based file rotation.</p>
@@ -18071,7 +18285,7 @@ torc-server run \
     --auth-file /etc/torc/htpasswd \
     --require-auth
 </code></pre>
-<h2 id="service-management-recommended-for-production"><a class="header" href="#service-management-recommended-for-production">Service Management (Recommended for Production)</a></h2>
+<h2 id="service-management-for-managed-servers"><a class="header" href="#service-management-for-managed-servers">Service Management for Managed Servers</a></h2>
 <h3 id="automatic-installation"><a class="header" href="#automatic-installation">Automatic Installation</a></h3>
 <p>The easiest way to install torc-server as a service is using the built-in service management
 commands.</p>
@@ -18108,7 +18322,7 @@ torc-server service uninstall --user
 <li>Worker threads: 4</li>
 </ul>
 <h4 id="system-service-requires-root"><a class="header" href="#system-service-requires-root">System Service (Requires Root)</a></h4>
-<p>Install as a system-wide service (recommended for production):</p>
+<p>Install as a system-wide service for a durable managed server:</p>
 <pre><code class="language-bash"># Install with defaults
 sudo torc-server service install
 
@@ -18884,7 +19098,7 @@ that runs on compute nodes. No extra environment variable setup is needed.</p>
 <p>The only requirement is that the CA certificate file must be on a <strong>shared filesystem</strong> accessible
 from all compute nodes.</p>
 <pre><code class="language-bash"># Your config file handles TLS — just submit as normal
-torc slurm generate --account myproject workflow.yaml &amp;&amp; torc submit workflow.yaml
+torc slurm generate --account myproject workflow.yaml | torc submit -
 </code></pre>
 <h2 id="advanced-configuration-1"><a class="header" href="#advanced-configuration-1">Advanced Configuration</a></h2>
 <h3 id="cli-flags"><a class="header" href="#cli-flags">CLI Flags</a></h3>
@@ -18965,7 +19179,7 @@ check that the proxy is configured and the URL is correct.</p>
 <li><strong>Format:</strong> PEM-encoded (Base64 ASCII, begins with <code>-----BEGIN CERTIFICATE-----</code>)</li>
 <li><strong>Type:</strong> CA certificate (not the server's leaf certificate)</li>
 </ul>
-<h2 id="see-also-33"><a class="header" href="#see-also-33">See Also</a></h2>
+<h2 id="see-also-34"><a class="header" href="#see-also-34">See Also</a></h2>
 <ul>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> — Setting up user authentication</li>
 <li><a href="specialized/admin/./security.html">Security Reference</a> — Security best practices and threat model</li>
@@ -19101,10 +19315,10 @@ torc access-groups list-workflow-groups 42
 <h2 id="json-output-1"><a class="header" href="#json-output-1">JSON Output</a></h2>
 <p>All commands support JSON output format for scripting:</p>
 <pre><code class="language-bash"># List groups in JSON format
-torc access-groups list --format json
+torc -f json access-groups list
 
 # Get group details in JSON
-torc access-groups get 1 --format json
+torc -f json access-groups get 1
 </code></pre>
 <h2 id="database-schema"><a class="header" href="#database-schema">Database Schema</a></h2>
 <p>Access groups use three tables:</p>
@@ -19338,7 +19552,7 @@ resource_requirements:
     runtime: PT10M
 EOF
 
-WORKFLOW_ID=$(torc create /tmp/ml_training.yaml -f json | jq -r '.workflow_id')
+WORKFLOW_ID=$(torc -f json create /tmp/ml_training.yaml | jq -r '.workflow_id')
 echo "Alice created workflow: $WORKFLOW_ID"
 </code></pre>
 <h3 id="as-carol-data-team"><a class="header" href="#as-carol-data-team">As Carol (Data Team)</a></h3>
@@ -19507,7 +19721,7 @@ user to an appropriate group.</p>
 </ul>
 <h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
 <ul>
-<li>Learn about <a href="specialized/admin/./configuration.html">Configuration Files</a> to set up persistent configuration</li>
+<li>Learn about <a href="specialized/admin/./configuration-files.html">Configuration Files</a> to set up persistent configuration</li>
 <li>Explore <a href="specialized/admin/./server-deployment.html">Server Deployment</a> for production setups</li>
 <li>See the <a href="specialized/admin/./access-groups.html">Access Groups Reference</a> for all available commands</li>
 </ul>
@@ -20324,8 +20538,9 @@ postprocess
 </ul>
 <h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
 <ul>
-<li><a href="specialized/tools/./diamond.html">Diamond Workflow</a> - Learn about file-based implicit dependencies</li>
-<li><a href="specialized/tools/./simple-params.html">Simple Parameterization</a> - Create parameter sweeps programmatically</li>
+<li><a href="specialized/tools/../../core/tutorials/diamond.html">Diamond Workflow</a> - Learn about file-based implicit dependencies</li>
+<li><a href="specialized/tools/../../core/tutorials/simple-params.html">Simple Parameterization</a> - Create parameter sweeps
+programmatically</li>
 <li><a href="specialized/tools/../hpc/slurm.html">Advanced Slurm Configuration</a> - Manual Slurm scheduler setup</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-files-tutorial"><a class="header" href="#configuration-files-tutorial">Configuration Files Tutorial</a></h1>
@@ -20584,7 +20799,7 @@ workflow and job management capabilities without requiring a web browser or SSH 
 <p>Before starting, ensure you have:</p>
 <ol>
 <li>
-<p><strong>Built Torc binaries</strong> (see <a href="specialized/tools/../installation.html">Installation</a>):</p>
+<p><strong>Built Torc binaries</strong> (see <a href="specialized/tools/../../getting-started/installation.html">Installation</a>):</p>
 <pre><code class="language-bash">cargo build --release --workspace
 </code></pre>
 </li>
@@ -21175,7 +21390,7 @@ remains in Torc's database.</p>
 <li>Check that jobs have actually run (logs are created at runtime)</li>
 </ul>
 <hr />
-<h2 id="see-also-34"><a class="header" href="#see-also-34">See Also</a></h2>
+<h2 id="see-also-35"><a class="header" href="#see-also-35">See Also</a></h2>
 <ul>
 <li><a href="specialized/tools/./ai-assistant.html">AI-Assisted Workflow Management Tutorial</a></li>
 <li><a href="specialized/tools/../../core/reference/configuration.html">Configuration Reference</a></li>
@@ -21598,7 +21813,8 @@ allocations have been submitted and will execute these jobs automatically.</p>
 <ul>
 <li><a href="specialized/tools/./ai-assistants.html">Configuring AI Assistants</a> — Full configuration options, all tools,
 troubleshooting</li>
-<li><a href="specialized/tools/./automatic-recovery.html">Automatic Failure Recovery</a> — Use <code>torc watch</code> for automated recovery</li>
+<li><a href="specialized/tools/../fault-tolerance/automatic-recovery.html">Automatic Failure Recovery</a> — Use <code>torc watch</code> for
+automated recovery</li>
 <li><a href="specialized/tools/./configuration.html">Configuration Files</a> — Set up Torc configuration</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="analyzing-torc-workflows-with-datasight"><a class="header" href="#analyzing-torc-workflows-with-datasight">Analyzing Torc Workflows with datasight</a></h1>
@@ -22026,10 +22242,10 @@ discussed elsewhere in this documentation.</p>
 offers a more readable, SQL-like syntax that's easier to learn and use interactively.</p>
 <p>Compare filtering failed jobs:</p>
 <pre><code class="language-bash"># jq (cryptic syntax)
-torc jobs list 123 -f json | jq '.items[] | select(.status == "failed")'
+torc -f json jobs list 123 | jq '.items[] | select(.status == "failed")'
 
 # Nushell (readable, SQL-like)
-torc jobs list 123 -f json | from json | get items | where status == "failed"
+torc -f json jobs list 123 | from json | get items | where status == "failed"
 </code></pre>
 <p>Nushell is:</p>
 <ul>
@@ -22058,58 +22274,58 @@ individual commands with <code>nu -c "command"</code>.</p>
 let wf = 123
 </code></pre>
 <h3 id="list-all-jobs"><a class="header" href="#list-all-jobs">List All Jobs</a></h3>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items
 </code></pre>
 <p>This parses the JSON and extracts the <code>jobs</code> array into a table.</p>
 <h3 id="filter-by-status"><a class="header" href="#filter-by-status">Filter by Status</a></h3>
 <p>Find all failed jobs:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed"
 </code></pre>
 <p>Find jobs that are ready or running:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status in ["ready", "running"]
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status in ["ready", "running"]
 </code></pre>
 <h3 id="filter-by-name-pattern"><a class="header" href="#filter-by-name-pattern">Filter by Name Pattern</a></h3>
 <p>Find jobs with "train" in the name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where name =~ "train"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where name =~ "train"
 </code></pre>
 <p>The <code>=~</code> operator performs substring/regex matching.</p>
 <h3 id="combine-conditions"><a class="header" href="#combine-conditions">Combine Conditions</a></h3>
 <p>Find failed jobs with "process" in the name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "process"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" and name =~ "process"
 </code></pre>
 <p>Find jobs that failed or were canceled:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" or status == "canceled"
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" or status == "canceled"
 </code></pre>
 <h2 id="selecting-and-formatting-output"><a class="header" href="#selecting-and-formatting-output">Selecting and Formatting Output</a></h2>
 <h3 id="select-specific-columns"><a class="header" href="#select-specific-columns">Select Specific Columns</a></h3>
 <p>Show only name and status:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | select name status
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | select name status
 </code></pre>
 <h3 id="sort-results"><a class="header" href="#sort-results">Sort Results</a></h3>
 <p>Sort by name:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | sort-by name
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | sort-by name
 </code></pre>
 <p>Sort failed jobs by ID (descending):</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | sort-by id -r
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" | sort-by id -r
 </code></pre>
 <h3 id="count-results"><a class="header" href="#count-results">Count Results</a></h3>
 <p>Count jobs by status:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | group-by status | transpose status jobs | each { |row| { status: $row.status, count: ($row.jobs | length) } }
 </code></pre>
 <p>Or more simply, count failed jobs:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | length
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" | length
 </code></pre>
 <h2 id="analyzing-results"><a class="header" href="#analyzing-results">Analyzing Results</a></h2>
 <h3 id="find-jobs-with-non-zero-return-codes"><a class="header" href="#find-jobs-with-non-zero-return-codes">Find Jobs with Non-Zero Return Codes</a></h3>
-<pre><code class="language-nu">torc results list $wf -f json | from json | get items | where return_code != 0
+<pre><code class="language-nu">torc -f json results list $wf | from json | get items | where return_code != 0
 </code></pre>
 <h3 id="find-results-with-specific-errors"><a class="header" href="#find-results-with-specific-errors">Find Results with Specific Errors</a></h3>
-<pre><code class="language-nu">torc results list $wf -f json | from json | get items | where return_code != 0 | select job_id return_code
+<pre><code class="language-nu">torc -f json results list $wf | from json | get items | where return_code != 0 | select job_id return_code
 </code></pre>
 <h3 id="join-jobs-with-results"><a class="header" href="#join-jobs-with-results">Join Jobs with Results</a></h3>
 <p>Get job names for failed results:</p>
-<pre><code class="language-nu">let jobs = (torc jobs list $wf -f json | from json | get items)
-let results = (torc results list $wf -f json | from json | get items | where return_code != 0)
+<pre><code class="language-nu">let jobs = (torc -f json jobs list $wf | from json | get items)
+let results = (torc -f json results list $wf | from json | get items | where return_code != 0)
 $results | each { |r|
     let job = ($jobs | where id == $r.job_id | first)
     { name: $job.name, return_code: $r.return_code, job_id: $r.job_id }
@@ -22117,15 +22333,15 @@ $results | each { |r|
 </code></pre>
 <h2 id="working-with-user-data"><a class="header" href="#working-with-user-data">Working with User Data</a></h2>
 <h3 id="list-user-data-entries"><a class="header" href="#list-user-data-entries">List User Data Entries</a></h3>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items
+<pre><code class="language-nu">torc -f json user-data list $wf | from json | get items
 </code></pre>
 <h3 id="filter-by-key"><a class="header" href="#filter-by-key">Filter by Key</a></h3>
 <p>Find user data with a specific key:</p>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items | where key =~ "config"
+<pre><code class="language-nu">torc -f json user-data list $wf | from json | get items | where key =~ "config"
 </code></pre>
 <h3 id="parse-json-values"><a class="header" href="#parse-json-values">Parse JSON Values</a></h3>
 <p>User data values are JSON strings. Parse and filter them:</p>
-<pre><code class="language-nu">torc user-data list $wf -f json | from json | get items | each { |ud|
+<pre><code class="language-nu">torc -f json user-data list $wf | from json | get items | each { |ud|
     { key: $ud.key, value: ($ud.value | from json) }
 }
 </code></pre>
@@ -22133,22 +22349,22 @@ $results | each { |r|
 <h3 id="example-1-debug-failed-jobs"><a class="header" href="#example-1-debug-failed-jobs">Example 1: Debug Failed Jobs</a></h3>
 <p>Find failed jobs and get their result details:</p>
 <pre><code class="language-nu"># Get failed job IDs
-let failed_ids = (torc jobs list $wf -f json | from json | get items | where status == "failed" | get id)
+let failed_ids = (torc -f json jobs list $wf | from json | get items | where status == "failed" | get id)
 
 # Show results for those jobs
-torc results list $wf -f json | from json | get items | where job_id in $failed_ids | select job_id return_code
+torc -f json results list $wf | from json | get items | where job_id in $failed_ids | select job_id return_code
 </code></pre>
 <h3 id="example-2-find-stuck-jobs"><a class="header" href="#example-2-find-stuck-jobs">Example 2: Find Stuck Jobs</a></h3>
 <p>Find jobs that have been running for a long time (status is "running"):</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "running" | select id name
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "running" | select id name
 </code></pre>
 <h3 id="example-3-parameter-sweep-analysis"><a class="header" href="#example-3-parameter-sweep-analysis">Example 3: Parameter Sweep Analysis</a></h3>
 <p>For a parameterized workflow, find which parameter values failed:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" and name =~ "lr" | get name
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" and name =~ "lr" | get name
 </code></pre>
 <h3 id="example-4-export-to-csv"><a class="header" href="#example-4-export-to-csv">Example 4: Export to CSV</a></h3>
 <p>Export failed jobs to CSV for further analysis:</p>
-<pre><code class="language-nu">torc jobs list $wf -f json | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
+<pre><code class="language-nu">torc -f json jobs list $wf | from json | get items | where status == "failed" | to csv | save failed_jobs.csv
 </code></pre>
 <h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Nushell Command</th></tr></thead><tbody>
@@ -22556,7 +22772,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 <h2 id="additional-resources"><a class="header" href="#additional-resources">Additional Resources</a></h2>
 <ul>
 <li><a href="https://github.com/scop/bash-completion">Bash Completion Documentation</a></li>
-<li><a href="http://zsh.sourceforge.net/Doc/Release/Completion-System.html">Zsh Completion System</a></li>
+<li><a href="https://zsh.sourceforge.io/Doc/Release/Completion-System.html">Zsh Completion System</a></li>
 <li><a href="https://fishshell.com/docs/current/completions.html">Fish Completion Tutorial</a></li>
 <li><a href="https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_tab_expansion">PowerShell Tab Completion</a></li>
 </ul>

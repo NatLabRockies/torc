@@ -225,7 +225,7 @@ different Torc servers. This is useful for:</p>
 </code></pre>
 <h3 id="json-output-format"><a class="header" href="#json-output-format">JSON Output Format</a></h3>
 <p>Use <code>--format json</code> for machine-readable output with export statistics:</p>
-<pre><code class="language-bash">torc workflows export 123 --output my_workflow.json --format json
+<pre><code class="language-bash">torc -f json workflows export 123 --output my_workflow.json
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{
@@ -267,7 +267,7 @@ different Torc servers. This is useful for:</p>
 </code></pre>
 <h3 id="json-output-format-1"><a class="header" href="#json-output-format-1">JSON Output Format</a></h3>
 <p>Use <code>--format json</code> for machine-readable output:</p>
-<pre><code class="language-bash">torc workflows import my_workflow.json --format json
+<pre><code class="language-bash">torc -f json workflows import my_workflow.json
 </code></pre>
 <p>Output:</p>
 <pre><code class="language-json">{
@@ -320,7 +320,7 @@ exported "default" resource requirements are mapped to the new workflow's defaul
 are specified.</p>
 <h2 id="common-workflows"><a class="header" href="#common-workflows">Common Workflows</a></h2>
 <h3 id="backup-all-active-workflows"><a class="header" href="#backup-all-active-workflows">Backup All Active Workflows</a></h3>
-<pre><code class="language-bash">for id in $(torc workflows list --format json | jq -r '.items[].id'); do
+<pre><code class="language-bash">for id in $(torc -f json workflows list | jq -r '.items[].id'); do
   torc workflows export $id --output "backup_workflow_${id}.json"
 done
 </code></pre>

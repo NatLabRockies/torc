@@ -233,14 +233,14 @@ jobs:
 </code></pre>
 <p>This expands to 10 jobs: <code>task_1</code>, <code>task_2</code>, ..., <code>task_10</code>.</p>
 <h2 id="step-2-create-and-run-the-workflow"><a class="header" href="#step-2-create-and-run-the-workflow">Step 2: Create and Run the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create parallel_tasks.yaml -f json | jq -r '.workflow_id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc -f json create parallel_tasks.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc run $WORKFLOW_ID
 </code></pre>
 <p>All 10 jobs run in parallel since they have no dependencies.</p>
 <h2 id="step-3-verify-the-expansion"><a class="header" href="#step-3-verify-the-expansion">Step 3: Verify the Expansion</a></h2>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
+<pre><code class="language-bash">torc -f json jobs list $WORKFLOW_ID | jq -r '.items[].name' | sort
 </code></pre>
 <p>Output:</p>
 <pre><code>task_1
@@ -305,17 +305,17 @@ all 5 process jobs.</p>
 <li>All <code>evaluate_*</code> jobs → unblock <code>compare_results</code></li>
 </ol>
 <h2 id="step-2-create-and-initialize-the-workflow"><a class="header" href="#step-2-create-and-initialize-the-workflow">Step 2: Create and Initialize the Workflow</a></h2>
-<pre><code class="language-bash">WORKFLOW_ID=$(torc create learning_rate_sweep.yaml -f json | jq -r '.workflow_id')
+<pre><code class="language-bash">WORKFLOW_ID=$(torc -f json create learning_rate_sweep.yaml | jq -r '.workflow_id')
 echo "Created workflow: $WORKFLOW_ID"
 
 torc workflows init $WORKFLOW_ID
 </code></pre>
 <h2 id="step-3-verify-the-expansion-1"><a class="header" href="#step-3-verify-the-expansion-1">Step 3: Verify the Expansion</a></h2>
 <pre><code class="language-bash"># Count jobs (should be 11: 5 train + 5 evaluate + 1 compare)
-torc jobs list $WORKFLOW_ID -f json | jq '.items | length'
+torc -f json jobs list $WORKFLOW_ID | jq '.items | length'
 </code></pre>
 <p>List the job names:</p>
-<pre><code class="language-bash">torc jobs list $WORKFLOW_ID -f json | jq -r '.items[].name' | sort
+<pre><code class="language-bash">torc -f json jobs list $WORKFLOW_ID | jq -r '.items[].name' | sort
 </code></pre>
 <p>Output:</p>
 <pre><code>compare_results
