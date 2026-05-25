@@ -447,7 +447,9 @@ fn start_standalone_server(opts: StandaloneOptions) -> Result<StandaloneServer, 
 
 /// Helper function to determine if a string is a file path or workflow ID
 fn is_spec_file(arg: &str) -> bool {
-    arg.ends_with(".yaml")
+    // "-" reads a spec from stdin (e.g. `torc slurm generate ... | torc submit -`).
+    arg == "-"
+        || arg.ends_with(".yaml")
         || arg.ends_with(".yml")
         || arg.ends_with(".json")
         || arg.ends_with(".json5")
@@ -634,10 +636,19 @@ fn main() {
             skip_checks,
             dry_run,
         } => {
+            // Resolve the spec source once (handles `-` reading from stdin); the
+            // staged path is read multiple times by handle_create.
+            let spec_source = match WorkflowSpec::resolve_spec_source(file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error reading workflow spec: {}", e);
+                    std::process::exit(1);
+                }
+            };
             let user = torc::get_username();
             torc::client::commands::workflows::handle_create(
                 &config,
-                file,
+                &spec_source.path().to_string_lossy(),
                 &user,
                 *no_resource_monitoring,
                 *skip_checks,
@@ -658,18 +669,24 @@ fn main() {
             skip_checks,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
+                // Resolve the spec source once (handles `-` reading from stdin) so
+                // both prevalidation and creation read the same staged content.
+                let spec_source = match WorkflowSpec::resolve_spec_source(workflow_spec_or_id) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Error reading workflow spec: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                let spec_path = spec_source.path();
+
                 if !*skip_checks {
-                    WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                    WorkflowSpec::prevalidate_or_exit(spec_path);
                 }
 
                 // Create workflow from spec file
                 let user = torc::get_username();
-                match WorkflowSpec::create_workflow_from_spec(
-                    &config,
-                    workflow_spec_or_id,
-                    &user,
-                    true,
-                ) {
+                match WorkflowSpec::create_workflow_from_spec(&config, spec_path, &user, true) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
                         id
@@ -781,8 +798,20 @@ fn main() {
             poll_interval,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
+                // Resolve the spec source once (handles `-` reading from stdin) so the
+                // schedule_nodes check, prevalidation, and creation all read the same
+                // staged content -- stdin can only be consumed a single time.
+                let spec_source = match WorkflowSpec::resolve_spec_source(workflow_spec_or_id) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Error reading workflow spec: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                let spec_path = spec_source.path();
+
                 // Load and validate spec file
-                let spec = match WorkflowSpec::from_spec_file(workflow_spec_or_id) {
+                let spec = match WorkflowSpec::from_spec_file(spec_path) {
                     Ok(spec) => spec,
                     Err(e) => {
                         eprintln!("Error loading workflow spec: {}", e);
@@ -800,11 +829,19 @@ fn main() {
                     eprintln!("To submit to Slurm, either:");
                     eprintln!();
                     eprintln!("  1. Use 'torc slurm generate' to auto-generate schedulers:");
-                    eprintln!(
-                        "     torc slurm generate --account <account> -o {} {}",
-                        workflow_spec_or_id, workflow_spec_or_id
-                    );
-                    eprintln!("     torc submit {}", workflow_spec_or_id);
+                    if workflow_spec_or_id == "-" {
+                        // The spec came from stdin; a path-based example would be
+                        // misleading (the staged temp file is gone). Show a pipeline.
+                        eprintln!(
+                            "     ... | torc slurm generate --account <account> - | torc submit -"
+                        );
+                    } else {
+                        eprintln!(
+                            "     torc slurm generate --account <account> -o {} {}",
+                            workflow_spec_or_id, workflow_spec_or_id
+                        );
+                        eprintln!("     torc submit {}", workflow_spec_or_id);
+                    }
                     eprintln!();
                     eprintln!("  2. Add a workflow action manually:");
                     eprintln!("     actions:");
@@ -814,23 +851,22 @@ fn main() {
                     eprintln!("         scheduler: \"my-scheduler\"");
                     eprintln!();
                     eprintln!("Or run locally instead:");
-                    eprintln!("  torc run {}", workflow_spec_or_id);
+                    if workflow_spec_or_id == "-" {
+                        eprintln!("  ... | torc run -");
+                    } else {
+                        eprintln!("  torc run {}", workflow_spec_or_id);
+                    }
                     std::process::exit(1);
                 }
 
                 if !*skip_checks {
-                    WorkflowSpec::prevalidate_or_exit(workflow_spec_or_id);
+                    WorkflowSpec::prevalidate_or_exit(spec_path);
                 }
 
                 // Create workflow from spec
                 let user = torc::get_username();
 
-                match WorkflowSpec::create_workflow_from_spec(
-                    &config,
-                    workflow_spec_or_id,
-                    &user,
-                    true,
-                ) {
+                match WorkflowSpec::create_workflow_from_spec(&config, spec_path, &user, true) {
                     Ok(id) => {
                         print_workflow_message(&format, id, &format!("Created workflow {}", id));
                         id

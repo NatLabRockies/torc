@@ -74,13 +74,14 @@ Torc workflow orchestration system
 
 ## `torc run`
 
-Run a workflow locally (create from spec file or run existing workflow by ID)
+Run a workflow locally (create from spec file or stdin, or run existing workflow by ID)
 
 **Usage:** `torc run [OPTIONS] <WORKFLOW_SPEC_OR_ID>`
 
 ###### **Arguments:**
 
-- `<WORKFLOW_SPEC_OR_ID>` — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID
+- `<WORKFLOW_SPEC_OR_ID>` — Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or `-` to
+  read the spec from stdin
 
 ###### **Options:**
 
@@ -95,7 +96,7 @@ Run a workflow locally (create from spec file or run existing workflow by ID)
 
 ## `torc submit`
 
-Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
+Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)
 
 Requires workflow to have an on_workflow_start action with schedule_nodes. For Slurm workflows
 without pre-configured schedulers, use `slurm generate` + `submit` instead.
@@ -104,7 +105,8 @@ without pre-configured schedulers, use `slurm generate` + `submit` instead.
 
 ###### **Arguments:**
 
-- `<WORKFLOW_SPEC_OR_ID>` — Path to workflow spec file (JSON/JSON5/YAML) or workflow ID
+- `<WORKFLOW_SPEC_OR_ID>` — Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or `-` to
+  read the spec from stdin
 
 ###### **Options:**
 
@@ -129,7 +131,13 @@ torc slurm generate --account <account> workflow.yaml
 ```
 
 Review the schedulers and actions to ensure they are appropriate for your workflow before
-submitting. You can save the output and submit manually:
+submitting. Then submit in one pipeline (`generate` writes to stdout, `submit -` reads stdin):
+
+```bash
+torc slurm generate --account <account> workflow.yaml | torc submit -
+```
+
+Or save the output to a file and submit that file:
 
 ```bash
 torc slurm generate --account <account> -o workflow_with_schedulers.yaml workflow.yaml
@@ -141,6 +149,8 @@ torc submit workflow_with_schedulers.yaml
 ```bash
 torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>
 torc submit <OUTPUT_FILE>
+# or, in a single pipeline:
+torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE> | torc submit -
 ```
 
 See [`torc slurm generate`](#torc-slurm-generate) for full options.
@@ -378,14 +388,15 @@ level. Run `torc --help` to see all commands.
 
 ## `torc create`
 
-Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)
+Create a workflow from a specification file or stdin (supports JSON, JSON5, YAML, and KDL formats)
 
 **Usage:** `torc create [OPTIONS] --user <USER> <FILE>`
 
 ###### **Arguments:**
 
-- `<FILE>` — Path to specification file containing WorkflowSpec. Supported formats: JSON (.json),
-  JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is auto-detected from file extension.
+- `<FILE>` — Path to specification file containing WorkflowSpec, or `-` to read the spec from stdin.
+  Supported formats: JSON (.json), JSON5 (.json5), YAML (.yaml, .yml), KDL (.kdl). Format is
+  auto-detected from file extension, or from the content itself when reading stdin.
 
 ###### **Options:**
 
@@ -1663,7 +1674,8 @@ Generate Slurm schedulers for a workflow based on job resource requirements
 
 ###### **Arguments:**
 
-- `<WORKFLOW_FILE>` — Path to workflow specification file (YAML, JSON, JSON5, or KDL)
+- `<WORKFLOW_FILE>` — Path to workflow specification file (YAML, JSON, JSON5, or KDL), or `-` to
+  read the spec from stdin
 
 ###### **Options:**
 

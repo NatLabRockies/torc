@@ -521,6 +521,12 @@ EXAMPLES:
     # Save to new file
     torc slurm generate --account myproject -o workflow_with_slurm.yaml workflow.yaml
 
+    # Generate and submit in one pipeline (output piped straight into submit)
+    torc slurm generate --account myproject workflow.yaml | torc submit -
+
+    # Read the spec from stdin, too
+    cat workflow.yaml | torc slurm generate --account myproject -
+
     # Use specific HPC profile
     torc slurm generate --account myproject --profile kestrel workflow.yaml
 
@@ -529,7 +535,8 @@ EXAMPLES:
 "
     )]
     Generate {
-        /// Path to workflow specification file (YAML, JSON, JSON5, or KDL)
+        /// Path to workflow specification file (YAML, JSON, JSON5, or KDL), or "-" to read the
+        /// spec from stdin
         #[arg()]
         workflow_file: PathBuf,
 
@@ -712,10 +719,14 @@ EXAMPLES:
 
     # Offline mode (skip sinfo/squeue, only analyze workflow)
     torc slurm plan-allocations --account myproject --offline workflow.yaml
+
+    # Read the spec from stdin
+    cat workflow.yaml | torc slurm plan-allocations --account myproject -
 "
     )]
     PlanAllocations {
-        /// Path to workflow specification file (YAML, JSON, JSON5, or KDL)
+        /// Path to workflow specification file (YAML, JSON, JSON5, or KDL), or "-" to read the
+        /// spec from stdin
         #[arg()]
         workflow_file: PathBuf,
 
@@ -3904,7 +3915,7 @@ pub fn analyze_plan_allocations(
 /// Handle the plan-allocations command
 #[allow(clippy::too_many_arguments)]
 fn handle_plan_allocations(
-    workflow_file: &PathBuf,
+    workflow_file: &Path,
     account: Option<&str>,
     partition: Option<&str>,
     profile_name: Option<&str>,
@@ -3915,6 +3926,20 @@ fn handle_plan_allocations(
     walltime_multiplier: f64,
     format: &str,
 ) {
+    // Preserve the original CLI argument for user-facing "Suggested" commands
+    // below; for stdin ("-") the staged temp path is not reusable by the user.
+    let workflow_file_arg = workflow_file.to_string_lossy().into_owned();
+
+    // Resolve the spec source once (handles `-` reading from stdin).
+    let spec_source = match WorkflowSpec::resolve_spec_source(&workflow_file_arg) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading workflow spec: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let workflow_file: &Path = spec_source.path();
+
     // Load HPC config and registry
     let torc_config = TorcConfig::load().unwrap_or_default();
     let registry = create_registry_with_config_public(&torc_config.client.hpc);
@@ -4097,15 +4122,13 @@ fn handle_plan_allocations(
                 "single" if rec.total_nodes > 1 => {
                     println!(
                         "    Suggested: torc slurm generate --account {} --single-allocation {}",
-                        result.account,
-                        workflow_file.display()
+                        result.account, workflow_file_arg
                     );
                 }
                 "many-small" => {
                     println!(
                         "    Suggested: torc slurm generate --account {} {}",
-                        result.account,
-                        workflow_file.display()
+                        result.account, workflow_file_arg
                     );
                 }
                 "chunked" => {
@@ -4138,7 +4161,7 @@ fn handle_plan_allocations(
 /// Handle the generate command - generates Slurm schedulers for a workflow
 #[allow(clippy::too_many_arguments)]
 fn handle_generate(
-    workflow_file: &PathBuf,
+    workflow_file: &Path,
     account: Option<&str>,
     profile_name: Option<&str>,
     output: Option<&PathBuf>,
@@ -4151,6 +4174,18 @@ fn handle_generate(
     dry_run: bool,
     format: &str,
 ) {
+    // Resolve the spec source once (handles `-` reading from stdin). The staged
+    // temp file carries the detected extension so the output-format heuristic
+    // below still matches the input format.
+    let spec_source = match WorkflowSpec::resolve_spec_source(&workflow_file.to_string_lossy()) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading workflow spec: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let workflow_file: &Path = spec_source.path();
+
     // Load HPC config and registry
     let torc_config = TorcConfig::load().unwrap_or_default();
     let registry = create_registry_with_config_public(&torc_config.client.hpc);

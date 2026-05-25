@@ -173,13 +173,16 @@ pub enum Commands {
     // =========================================================================
     // Workflow Execution - Primary commands for running workflows
     // =========================================================================
-    /// Create a workflow from a specification file (supports JSON, JSON5, YAML, and KDL formats)
+    /// Create a workflow from a specification file or stdin (supports JSON, JSON5, YAML, and KDL)
     #[command(
         hide = true,
         after_long_help = "\
 EXAMPLES:
     # Create workflow from YAML
     torc create my_workflow.yaml
+
+    # Read the spec from stdin (format detected from the piped content)
+    cat my_workflow.yaml | torc create -
 
     # Validate spec before creating
     torc create --dry-run my_workflow.yaml
@@ -189,7 +192,7 @@ EXAMPLES:
 "
     )]
     Create {
-        /// Path to specification file containing WorkflowSpec
+        /// Path to specification file containing WorkflowSpec (or "-" to read from stdin)
         ///
         /// Supported formats:
         /// - JSON (.json): Standard JSON format
@@ -197,7 +200,9 @@ EXAMPLES:
         /// - YAML (.yaml, .yml): Human-readable YAML format
         /// - KDL (.kdl): KDL document format
         ///
-        /// Format is auto-detected from file extension, with fallback parsing attempted
+        /// Format is auto-detected from file extension, with fallback parsing attempted.
+        /// Pass "-" to read the spec from stdin -- e.g. `torc slurm generate w.yaml | torc create -`.
+        /// The format is detected from the piped content.
         #[arg()]
         file: String,
         /// Disable resource monitoring (default: enabled with summary granularity and 5s sample rate)
@@ -211,13 +216,16 @@ EXAMPLES:
         #[arg(long)]
         dry_run: bool,
     },
-    /// Run a workflow locally (create from spec file or run existing workflow by ID)
+    /// Run a workflow locally (create from spec file or stdin, or run existing workflow by ID)
     #[command(
         hide = true,
         after_long_help = "\
 EXAMPLES:
     # Run from spec file
     torc run workflow.yaml
+
+    # Read the spec from stdin
+    cat workflow.yaml | torc run -
 
     # Run existing workflow
     torc run 123
@@ -236,7 +244,8 @@ SEE ALSO:
 "
     )]
     Run {
-        /// Path to workflow spec file (JSON/JSON5/YAML) or workflow ID
+        /// Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or "-" to read the spec
+        /// from stdin
         #[arg()]
         workflow_spec_or_id: String,
         /// Maximum number of parallel jobs to run concurrently
@@ -394,7 +403,7 @@ SEE ALSO:
         #[arg(hide = true, trailing_var_arg = true)]
         trailing: Vec<String>,
     },
-    /// Submit a workflow to scheduler (create from spec file or submit existing workflow by ID)
+    /// Submit a workflow to scheduler (create from spec file or stdin, or submit existing by ID)
     ///
     /// Requires workflow to have an on_workflow_start action with schedule_nodes.
     /// For Slurm workflows without pre-configured schedulers, use
@@ -409,6 +418,9 @@ EXAMPLES:
     # Submit existing workflow
     torc submit 123
 
+    # Generate Slurm schedulers and submit in one pipeline (spec read from stdin)
+    torc slurm generate --account myproj workflow.yaml | torc submit -
+
     # Ignore missing input data
     torc submit -i workflow.yaml
 
@@ -420,7 +432,8 @@ EXAMPLES:
 "
     )]
     Submit {
-        /// Path to workflow spec file (JSON/JSON5/YAML) or workflow ID
+        /// Path to workflow spec file (JSON/JSON5/YAML/KDL), workflow ID, or "-" to read the spec
+        /// from stdin
         #[arg()]
         workflow_spec_or_id: String,
         /// Ignore missing data (defaults to false)

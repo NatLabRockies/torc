@@ -5,7 +5,7 @@ use crate::client::parameter_expansion::{
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use crate::models;
@@ -1382,6 +1382,25 @@ pub struct WorkflowSpec {
     /// name fails the whole create with a clear error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_groups: Option<Vec<String>>,
+}
+
+/// A workflow-spec source resolved from a CLI argument that may be `-` (stdin).
+///
+/// When the argument is `-`, the stdin contents are staged in a temp file whose
+/// handle is held here; the file is removed when this value is dropped, so it
+/// must outlive any use of [`ResolvedSpecSource::path`].
+#[cfg(feature = "client")]
+pub struct ResolvedSpecSource {
+    _temp: Option<tempfile::NamedTempFile>,
+    path: PathBuf,
+}
+
+#[cfg(feature = "client")]
+impl ResolvedSpecSource {
+    /// Path to the spec file (the original argument, or the staged stdin temp file).
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 impl WorkflowSpec {
@@ -6106,6 +6125,83 @@ impl WorkflowSpec {
         Self::from_json_value(json_value)
     }
 
+    /// Detect the format of workflow-spec content by attempting each parser in
+    /// the same order as `from_spec_file`'s extension-less fallback. Returns a
+    /// canonical file extension ("json", "json5", "yaml", or "kdl"), or `None`
+    /// when the content cannot be parsed by any supported format.
+    pub fn detect_spec_format(content: &str) -> Option<&'static str> {
+        // A workflow spec is always a mapping/object. Requiring an object (rather
+        // than just "parses successfully") avoids false positives -- notably YAML,
+        // which happily parses arbitrary text such as KDL as a bare scalar string.
+        let parses_as_object = |v: Option<serde_json::Value>| v.is_some_and(|v| v.is_object());
+        if parses_as_object(serde_json::from_str(content).ok()) {
+            Some("json")
+        } else if parses_as_object(json5::from_str(content).ok()) {
+            Some("json5")
+        } else if parses_as_object(serde_yaml::from_str(content).ok()) {
+            Some("yaml")
+        } else {
+            #[cfg(feature = "client")]
+            {
+                if Self::kdl_to_json_value(content).is_ok() {
+                    return Some("kdl");
+                }
+            }
+            None
+        }
+    }
+
+    /// Resolve a workflow-spec CLI argument that may be `-` (stdin).
+    ///
+    /// For a normal path, the argument is used as-is. For `-`, the spec is read
+    /// once from stdin, its format is detected, and it is staged in a temp file
+    /// with a matching extension so the existing path-based loaders -- which may
+    /// read the file more than once (prevalidate, then create) -- work unchanged.
+    ///
+    /// The returned [`ResolvedSpecSource`] owns the temp file; keep it alive for
+    /// as long as its `path()` is used.
+    #[cfg(feature = "client")]
+    pub fn resolve_spec_source(
+        arg: &str,
+    ) -> Result<ResolvedSpecSource, Box<dyn std::error::Error>> {
+        use std::io::{IsTerminal, Read, Write};
+
+        if arg != "-" {
+            return Ok(ResolvedSpecSource {
+                _temp: None,
+                path: PathBuf::from(arg),
+            });
+        }
+
+        if std::io::stdin().is_terminal() {
+            return Err("workflow spec '-' requires piped stdin, but stdin is a terminal".into());
+        }
+
+        let mut content = String::new();
+        std::io::stdin().read_to_string(&mut content)?;
+        if content.trim().is_empty() {
+            return Err("workflow spec read from stdin is empty".into());
+        }
+
+        let ext = Self::detect_spec_format(&content).ok_or(
+            "unable to detect the format of the workflow spec read from stdin \
+             (expected JSON, JSON5, YAML, or KDL)",
+        )?;
+
+        let mut tmp = tempfile::Builder::new()
+            .prefix("torc-stdin-spec-")
+            .suffix(&format!(".{}", ext))
+            .tempfile()?;
+        tmp.write_all(content.as_bytes())?;
+        tmp.flush()?;
+        let path = tmp.path().to_path_buf();
+
+        Ok(ResolvedSpecSource {
+            _temp: Some(tmp),
+            path,
+        })
+    }
+
     /// Deserialize a WorkflowSpec from string content with a specified format
     /// Useful for testing or when content is already loaded
     /// All formats are first converted to serde_json::Value, then to WorkflowSpec,
@@ -6339,6 +6435,32 @@ mod tests {
     use super::*;
     use crate::client::resource_monitor::MonitorGranularity;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_detect_spec_format() {
+        // Strict JSON is detected as JSON (and takes precedence over the JSON5/YAML
+        // supersets, since the checks run in that order).
+        assert_eq!(
+            WorkflowSpec::detect_spec_format(r#"{"name": "wf", "jobs": []}"#),
+            Some("json")
+        );
+        // JSON5-only syntax (comments, trailing commas, unquoted keys) is not valid JSON.
+        assert_eq!(
+            WorkflowSpec::detect_spec_format("{ name: 'wf', /* c */ jobs: [], }"),
+            Some("json5")
+        );
+        // Block-style YAML is neither JSON nor JSON5.
+        assert_eq!(
+            WorkflowSpec::detect_spec_format("name: wf\njobs:\n  - name: a\n    command: echo"),
+            Some("yaml")
+        );
+        // KDL is only attempted under the client feature.
+        #[cfg(feature = "client")]
+        assert_eq!(
+            WorkflowSpec::detect_spec_format("name \"wf\"\njobs {\n  job name=\"a\"\n}"),
+            Some("kdl")
+        );
+    }
 
     #[test]
     fn test_legacy_resource_monitor_yaml_controls_jobs() {

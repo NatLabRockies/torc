@@ -69,9 +69,17 @@ jobs:
 
 ### Submitting the Workflow
 
+`torc slurm generate` writes the augmented spec to stdout, so pipe it straight into `torc submit -`:
+
 ```bash
-torc slurm generate --account myproject workflow.yaml
-torc submit workflow.yaml
+torc slurm generate --account myproject workflow.yaml | torc submit -
+```
+
+Or save the generated spec to a file and submit that file:
+
+```bash
+torc slurm generate --account myproject -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
 ```
 
 Torc will:
