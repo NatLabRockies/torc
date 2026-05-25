@@ -19,7 +19,7 @@
 //! # }
 //! ```
 
-use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use log::{debug, error, info, warn};
 use std::fs::File;
 use std::io::Write;
@@ -596,9 +596,100 @@ fn parse_dmesg_timestamp(line: &str) -> Option<DateTime<Local>> {
     Local.from_local_datetime(&naive).single()
 }
 
+/// Display format used everywhere humans see timestamps in the CLI/TUI/dash:
+/// `YYYY-MM-DD HH:MM:SS ±HHMM` in the client's local timezone.
+pub const HUMAN_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
+
+/// Render an RFC3339 timestamp (as returned by the server) as a local-time
+/// string with an explicit ±HHMM offset. Returns the input verbatim if it
+/// cannot be parsed so callers don't lose information on schema drift.
+///
+/// JSON output should keep the raw RFC3339 UTC value — only call this when
+/// rendering for human consumption (tables, detail views).
+pub fn format_local_timestamp(rfc3339_utc: &str) -> String {
+    match DateTime::parse_from_rfc3339(rfc3339_utc) {
+        Ok(dt) => dt
+            .with_timezone(&Local)
+            .format(HUMAN_TIMESTAMP_FORMAT)
+            .to_string(),
+        Err(_) => rfc3339_utc.to_string(),
+    }
+}
+
+/// Same as [`format_local_timestamp`] but for unix-epoch seconds (e.g.
+/// `file.st_mtime`).
+pub fn format_local_timestamp_epoch(epoch_secs: f64) -> String {
+    // Converting (secs: i64, nsecs: u32) via `from_timestamp` is fragile here:
+    // float rounding can push `nsecs` to 1_000_000_000, and pre-epoch values
+    // give negative fractional nsecs that underflow the u32 cast. Both make
+    // chrono return `None` and silently lose the timestamp. Going through a
+    // total-nanos i64 sidesteps both issues and saturates cleanly on NaN/inf.
+    let nanos = (epoch_secs * 1_000_000_000.0).round() as i64;
+    DateTime::<Utc>::from_timestamp_nanos(nanos)
+        .with_timezone(&Local)
+        .format(HUMAN_TIMESTAMP_FORMAT)
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_local_with_offset(formatted: &str) {
+        // `YYYY-MM-DD HH:MM:SS ±HHMM` is 25 chars; the offset must be the
+        // last token and start with a sign.
+        assert_eq!(
+            formatted.len(),
+            25,
+            "expected 25-char `YYYY-MM-DD HH:MM:SS ±HHMM`, got `{formatted}`"
+        );
+        let offset = &formatted[20..];
+        assert!(
+            offset.starts_with('+') || offset.starts_with('-'),
+            "missing offset sign in `{formatted}`"
+        );
+        assert!(
+            offset[1..].chars().all(|c| c.is_ascii_digit()),
+            "offset must be 4 digits in `{formatted}`"
+        );
+    }
+
+    #[test]
+    fn test_format_local_timestamp_includes_offset() {
+        let formatted = format_local_timestamp("2026-05-25T12:00:00Z");
+        assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_passthrough_on_parse_failure() {
+        // Unparseable input is returned verbatim rather than dropped.
+        let garbage = "not-a-timestamp";
+        assert_eq!(format_local_timestamp(garbage), garbage);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_epoch_includes_offset() {
+        let formatted = format_local_timestamp_epoch(1_748_174_400.0);
+        assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_epoch_handles_subsecond_rounding() {
+        // A fractional second close to 1.0 used to round to nsecs=1_000_000_000,
+        // which `from_timestamp(secs, nsecs)` rejects. Routing through total
+        // nanos avoids that and we still get a well-formed local timestamp.
+        let formatted = format_local_timestamp_epoch(1_748_174_400.999_999_9);
+        assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn test_format_local_timestamp_epoch_handles_pre_epoch() {
+        // Negative epochs are uncommon for file mtimes but valid; the previous
+        // (secs, nsecs) split underflowed the u32 nsecs cast and silently
+        // produced a raw float string.
+        let formatted = format_local_timestamp_epoch(-1.5);
+        assert_local_with_offset(&formatted);
+    }
 
     #[test]
     fn test_parse_dmesg_timestamp() {

@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Tabs, Wrap},
 };
 
+use crate::client::utils::format_local_timestamp_epoch;
 use crate::models::JobStatus;
 
 use super::app::{App, DetailViewType, FilterTarget, Focus, PopupType, WorkflowSummary};
@@ -79,7 +80,7 @@ fn format_timestamp_ms(timestamp_ms: i64) -> String {
     DateTime::from_timestamp_millis(timestamp_ms)
         .map(|dt: DateTime<Utc>| {
             dt.with_timezone(&Local)
-                .format("%Y-%m-%d %H:%M:%S")
+                .format("%Y-%m-%d %H:%M:%S %z")
                 .to_string()
         })
         .unwrap_or_else(|| format!("{}ms", timestamp_ms))
@@ -911,16 +912,6 @@ fn format_elapsed(start_time: Option<&str>) -> String {
     }
 }
 
-/// Format epoch seconds as ISO 8601 timestamp
-fn format_timestamp(epoch_secs: f64) -> String {
-    use chrono::{DateTime, Utc};
-    let secs = epoch_secs as i64;
-    let nsecs = ((epoch_secs - secs as f64) * 1_000_000_000.0) as u32;
-    DateTime::<Utc>::from_timestamp(secs, nsecs)
-        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-        .unwrap_or_default()
-}
-
 fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
     let is_focused = app.focus == Focus::Details;
     let selected_style = Style::default()
@@ -938,7 +929,10 @@ fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
         let id = file.id.map(|i| i.to_string()).unwrap_or_default();
         let name = file.name.clone();
         let path = file.path.clone();
-        let st_mtime = file.st_mtime.map(format_timestamp).unwrap_or_default();
+        let st_mtime = file
+            .st_mtime
+            .map(format_local_timestamp_epoch)
+            .unwrap_or_default();
 
         Row::new(vec![
             Cell::from(id),
@@ -975,7 +969,7 @@ fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(8),
             Constraint::Length(20),
             Constraint::Percentage(50),
-            Constraint::Length(20),
+            Constraint::Length(25),
         ],
     )
     .header(header)
@@ -1061,7 +1055,7 @@ fn draw_events_table(f: &mut Frame, area: Rect, app: &mut App) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(20),     // Timestamp
+            Constraint::Length(25),     // Timestamp
             Constraint::Length(10),     // Level
             Constraint::Length(25),     // Event Type
             Constraint::Percentage(55), // Data

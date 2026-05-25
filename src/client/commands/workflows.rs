@@ -68,6 +68,7 @@ use crate::client::resource_correction::{
     apply_resource_corrections, detect_cpu_violation, detect_memory_violation,
     detect_runtime_violation, detect_timeout,
 };
+use crate::client::utils::format_local_timestamp;
 use crate::client::workflow_manager::WorkflowManager;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::config::TorcConfig;
@@ -2520,7 +2521,7 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                     println!("  Description: {}", desc);
                 }
                 if let Some(timestamp) = &workflow.timestamp {
-                    println!("  Timestamp: {}", timestamp);
+                    println!("  Timestamp: {}", format_local_timestamp(timestamp));
                 }
                 if let Some(run_id) = workflow.run_id {
                     println!("  Run ID: {}", run_id);
@@ -2652,7 +2653,11 @@ fn handle_list(
                             .as_ref()
                             .map(|m| serde_json::to_string(m).unwrap_or_default())
                             .unwrap_or_default(),
-                        timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
+                        timestamp: workflow
+                            .timestamp
+                            .as_deref()
+                            .map(format_local_timestamp)
+                            .unwrap_or_default(),
                     })
                     .collect();
                 if format == "csv" {
@@ -2680,7 +2685,11 @@ fn handle_list(
                             .as_ref()
                             .map(|m| serde_json::to_string(m).unwrap_or_default())
                             .unwrap_or_default(),
-                        timestamp: workflow.timestamp.as_deref().unwrap_or("").to_string(),
+                        timestamp: workflow
+                            .timestamp
+                            .as_deref()
+                            .map(format_local_timestamp)
+                            .unwrap_or_default(),
                     })
                     .collect();
                 if format == "csv" {
