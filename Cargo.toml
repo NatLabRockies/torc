@@ -34,7 +34,7 @@ toml = "1.1"
 serde_repr = "0.1"
 serde_with = { version = "3.20", default-features = false, features = ["base64", "std", "macros"] }
 chrono = { version = "0.4", features = ["serde"] }
-log = "0.4.28"
+log = "0.4.30"
 env_logger = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
