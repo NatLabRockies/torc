@@ -6,7 +6,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::output::{print_if_json, print_json, print_json_wrapped};
 use crate::client::commands::{get_env_user_name, pagination};
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -232,13 +233,12 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                 Ok(user_data_list) => {
                     if format == "json" {
                         print_json_wrapped(&user_data_list, "user_data");
-                    } else if user_data_list.is_empty() {
+                    } else if user_data_list.is_empty() && format != "csv" {
                         println!(
                             "No user data found for workflow ID: {}",
                             selected_workflow_id
                         );
                     } else {
-                        println!("User data for workflow ID {}:", selected_workflow_id);
                         let rows: Vec<UserDataTableRow> = user_data_list
                             .iter()
                             .map(|user_data| UserDataTableRow {
@@ -254,7 +254,12 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                                     .unwrap_or_else(|| "N/A".to_string()),
                             })
                             .collect();
-                        display_table_with_count(&rows, "user data records");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("User data for workflow ID {}:", selected_workflow_id);
+                            display_table_with_count(&rows, "user data records");
+                        }
                     }
                 }
                 Err(e) => {

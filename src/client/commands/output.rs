@@ -131,14 +131,26 @@ pub fn print_error_json_and_exit(message: &str, details: Option<serde_json::Valu
 /// This is a helper for the common pattern where we check format and either
 /// print JSON or continue with table formatting.
 ///
+/// The `csv` format is only meaningful for tabular list commands; callers of
+/// this helper render a single record, which has no clean CSV representation.
+/// Requesting `csv` here prints a clear error and exits with code 1.
+///
 /// # Returns
 /// `true` if JSON was printed, `false` if caller should handle table format
 pub fn print_if_json<T: Serialize>(format: &str, value: &T, type_name: &str) -> bool {
-    if format == "json" {
-        print_json(value, type_name);
-        true
-    } else {
-        false
+    match format {
+        "json" => {
+            print_json(value, type_name);
+            true
+        }
+        "csv" => {
+            eprintln!(
+                "Error: csv format is only supported for list commands; '{}' returns a single record. Use -f json or -f table.",
+                type_name
+            );
+            std::process::exit(1);
+        }
+        _ => false,
     }
 }
 

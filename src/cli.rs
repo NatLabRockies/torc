@@ -96,7 +96,7 @@ pub struct Cli {
     /// Log level (error, warn, info, debug, trace)
     #[arg(long, env = "RUST_LOG")]
     pub log_level: Option<String>,
-    /// Output format (table or json)
+    /// Output format (table, json, or csv). csv is supported for list commands.
     #[arg(short, long, default_value = "table")]
     pub format: String,
     /// URL of torc server

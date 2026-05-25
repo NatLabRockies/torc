@@ -519,9 +519,10 @@ sqlite3 server/db/sqlite/dev.db
 
 **Reports**:
 
-- `torc reports summary <workflow_id>` - Workflow execution summary and job statistics
-- `torc reports results <workflow_id>` - Job execution results with resource metrics
-- `torc reports check-resource-utilization <workflow_id>` - Check for resource violations
+- `torc status <workflow_id>` - Workflow execution summary and job statistics
+- `torc results list <workflow_id>` - Job execution results with resource metrics (add
+  `--include-logs` for a comprehensive JSON report with log file paths)
+- `torc workflows check-resources <workflow_id>` - Check for resource violations
 
 **Execution**:
 

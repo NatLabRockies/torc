@@ -6,7 +6,8 @@ use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_json, print_json_wrapped};
 use crate::client::commands::pagination::{EventListParams, paginate_events};
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::client::sse_client::{SseConnection, SseEvent};
 use crate::models;
@@ -229,10 +230,9 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                         let json_events: Vec<EventJsonOutput> =
                             events.iter().map(EventJsonOutput::from).collect();
                         print_json_wrapped(&json_events, "events");
-                    } else if events.is_empty() {
+                    } else if events.is_empty() && format != "csv" {
                         println!("No events found for workflow {}", selected_workflow_id);
                     } else {
-                        println!("Events for workflow {}:", selected_workflow_id);
                         let rows: Vec<EventTableRow> = events
                             .iter()
                             .map(|event| {
@@ -262,7 +262,12 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                                 }
                             })
                             .collect();
-                        display_table_with_count(&rows, "events");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("Events for workflow {}:", selected_workflow_id);
+                            display_table_with_count(&rows, "events");
+                        }
                     }
                 }
                 Err(e) => {

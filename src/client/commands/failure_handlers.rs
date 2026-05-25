@@ -3,7 +3,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
-    print_error, select_workflow_interactively, table_format::display_table_with_count,
+    print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use tabled::Tabled;
 
@@ -66,13 +67,12 @@ pub fn handle_failure_handler_commands(
                     let handlers = response.items;
                     if print_wrapped_if_json(format, &handlers, "failure handlers") {
                         // JSON was printed
-                    } else if handlers.is_empty() {
+                    } else if handlers.is_empty() && format != "csv" {
                         println!(
                             "No failure handlers found for workflow ID: {}",
                             selected_workflow_id
                         );
                     } else {
-                        println!("Failure handlers for workflow ID {}:", selected_workflow_id);
                         let rows: Vec<FailureHandlerTableRow> = handlers
                             .iter()
                             .map(|handler| {
@@ -85,7 +85,12 @@ pub fn handle_failure_handler_commands(
                                 }
                             })
                             .collect();
-                        display_table_with_count(&rows, "failure handlers");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!("Failure handlers for workflow ID {}:", selected_workflow_id);
+                            display_table_with_count(&rows, "failure handlers");
+                        }
                     }
                 }
                 Err(e) => {

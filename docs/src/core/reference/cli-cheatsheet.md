@@ -104,10 +104,21 @@ needing a running server. See [Run Inline Commands](../how-to/run-inline-command
 
 ## Global Options
 
-| Option              | Description                        |
-| ------------------- | ---------------------------------- |
-| `--url <URL>`       | Server URL (or set `TORC_API_URL`) |
-| `-f json`           | Output as JSON instead of table    |
-| `--log-level debug` | Enable debug logging               |
+| Option              | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `--url <URL>`       | Server URL (or set `TORC_API_URL`)           |
+| `-f json`           | Output as JSON instead of table              |
+| `-f csv`            | Output list commands as CSV (e.g. `results`) |
+| `--log-level debug` | Enable debug logging                         |
+
+Export results to a spreadsheet-friendly CSV:
+
+```bash
+torc -f csv results list <workflow_id> > results.csv
+```
+
+`-f csv` works for list commands (`jobs list`, `results list`, `workflows list`, `files list`, …).
+Single-record commands (e.g. `jobs get`) and multi-section reports (`status`,
+`workflows check-resources`) reject `csv` with a clear error.
 
 </div>

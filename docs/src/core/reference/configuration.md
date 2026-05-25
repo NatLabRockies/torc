@@ -34,7 +34,7 @@ Settings for the `torc` CLI.
 | Option      | Type   | Default                                 | Description                                          |
 | ----------- | ------ | --------------------------------------- | ---------------------------------------------------- |
 | `api_url`   | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                                  |
-| `format`    | string | `table`                                 | Output format: `table` or `json`                     |
+| `format`    | string | `table`                                 | Output format: `table`, `json`, or `csv`             |
 | `log_level` | string | `info`                                  | Log level: `error`, `warn`, `info`, `debug`, `trace` |
 | `username`  | string | (none)                                  | Username for basic authentication                    |
 

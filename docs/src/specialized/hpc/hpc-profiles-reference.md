@@ -21,9 +21,9 @@ torc hpc list [OPTIONS]
 
 **Options:**
 
-| Option                  | Description                      |
-| ----------------------- | -------------------------------- |
-| `-f, --format <FORMAT>` | Output format: `table` or `json` |
+| Option                  | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `-f, --format <FORMAT>` | Output format: `table`, `json`, or `csv` |
 
 **Output columns:**
 
@@ -44,9 +44,9 @@ torc hpc detect [OPTIONS]
 
 **Options:**
 
-| Option                  | Description                      |
-| ----------------------- | -------------------------------- |
-| `-f, --format <FORMAT>` | Output format: `table` or `json` |
+| Option                  | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `-f, --format <FORMAT>` | Output format: `table`, `json`, or `csv` |
 
 Returns the detected profile name. If no built-in or custom profile matches but Slurm is available,
 it returns a dynamic Slurm profile.
@@ -69,9 +69,9 @@ torc hpc show <PROFILE> [OPTIONS]
 
 **Options:**
 
-| Option                  | Description                      |
-| ----------------------- | -------------------------------- |
-| `-f, --format <FORMAT>` | Output format: `table` or `json` |
+| Option                  | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `-f, --format <FORMAT>` | Output format: `table`, `json`, or `csv` |
 
 ---
 
@@ -113,7 +113,7 @@ torc hpc match [OPTIONS] [PROFILE]
 | `--memory <SIZE>`       | Required memory (e.g., `64g`, `512m`)         |
 | `--walltime <DURATION>` | Required walltime (e.g., `02:00:00`, `30:00`) |
 | `--gpus <N>`            | Required GPUs                                 |
-| `-f, --format <FORMAT>` | Output format: `table` or `json`              |
+| `-f, --format <FORMAT>` | Output format: `table`, `json`, or `csv`      |
 
 **Memory format:** `<number><unit>` where unit is `k`, `m`, `g`, or `t` (case-insensitive).
 

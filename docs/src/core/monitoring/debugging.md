@@ -489,8 +489,8 @@ torc slurm schedule-nodes <workflow_id> --output-dir /path/to/my_output
 torc results list --include-logs <workflow_id> --output-dir /path/to/my_output
 ```
 
-**Default behavior**: If `--output-dir` is not specified, both the runner and reports command
-default to `./output`.
+**Default behavior**: If `--output-dir` is not specified, both the runner and the
+`results list --include-logs` command default to `./output`.
 
 ## Best Practices
 
@@ -512,7 +512,7 @@ default to `./output`.
    configuration issues
 
 6. **Combine with resource monitoring**: Use `results list --include-logs` for log files and
-   `reports check-resource-utilization` for performance issues
+   `workflows check-resources` for performance issues
    ```bash
    # Check if job failed due to resource constraints
    torc workflows check-resources "$WF_ID"

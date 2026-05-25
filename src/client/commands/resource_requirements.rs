@@ -3,7 +3,8 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
-    pagination, print_error, select_workflow_interactively, table_format::display_table_with_count,
+    pagination, print_error, select_workflow_interactively,
+    table_format::{display_csv, display_table_with_count},
 };
 use crate::models;
 use tabled::Tabled;
@@ -187,16 +188,12 @@ pub fn handle_resource_requirements_commands(
                 Ok(requirements) => {
                     if print_wrapped_if_json(format, &requirements, "resource requirements") {
                         // JSON was printed
-                    } else if requirements.is_empty() {
+                    } else if requirements.is_empty() && format != "csv" {
                         println!(
                             "No resource requirements found for workflow ID: {}",
                             selected_workflow_id
                         );
                     } else {
-                        println!(
-                            "Resource requirements for workflow ID {}:",
-                            selected_workflow_id
-                        );
                         let rows: Vec<ResourceRequirementsTableRow> = requirements
                             .iter()
                             .map(|req| ResourceRequirementsTableRow {
@@ -209,7 +206,15 @@ pub fn handle_resource_requirements_commands(
                                 runtime: req.runtime.clone(),
                             })
                             .collect();
-                        display_table_with_count(&rows, "resource requirements");
+                        if format == "csv" {
+                            display_csv(&rows);
+                        } else {
+                            println!(
+                                "Resource requirements for workflow ID {}:",
+                                selected_workflow_id
+                            );
+                            display_table_with_count(&rows, "resource requirements");
+                        }
                     }
                 }
                 Err(e) => {
