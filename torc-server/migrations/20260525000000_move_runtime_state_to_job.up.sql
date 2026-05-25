@@ -5,7 +5,7 @@
 -- Both columns are set in start_job and cleared in complete_job / reset paths.
 -- `job.status` (not these columns) remains the source of truth for "is running."
 
-ALTER TABLE job ADD COLUMN start_time TIMESTAMP NULL;
+ALTER TABLE job ADD COLUMN start_time TEXT NULL;
 ALTER TABLE job ADD COLUMN compute_node_id INTEGER NULL
   REFERENCES compute_node(id) ON DELETE SET NULL;
 
