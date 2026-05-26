@@ -567,6 +567,11 @@ pub struct App {
     pub jobs_offset: i64,
     /// True when the last Jobs-tab fetch filled a full page.
     pub jobs_has_more: bool,
+    /// Wall-clock time of the most recent `jobs_all` fetch. The Jobs table's
+    /// Elapsed column is computed relative to this snapshot instead of
+    /// `Utc::now()` so it doesn't keep ticking up against stale rows whose
+    /// server-side status has since moved off Running.
+    pub jobs_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
     pub files: Vec<FileModel>,
     pub files_all: Vec<FileModel>,
     pub files_state: TableState,
@@ -695,6 +700,7 @@ impl App {
             jobs_sort: JobsSort::None,
             jobs_offset: 0,
             jobs_has_more: false,
+            jobs_fetched_at: None,
             files: Vec::new(),
             files_all: Vec::new(),
             files_state: TableState::default(),
@@ -1106,6 +1112,7 @@ impl App {
                         if self.jobs_workflow_id != Some(workflow_id) {
                             self.jobs_all = self.client.list_jobs(workflow_id, None, None)?;
                             self.jobs_workflow_id = Some(workflow_id);
+                            self.jobs_fetched_at = Some(chrono::Utc::now());
                         }
                         self.jobs = self.jobs_all.clone();
                         self.apply_jobs_sort();
@@ -1205,6 +1212,7 @@ impl App {
                         if self.jobs_workflow_id != Some(workflow_id) {
                             self.jobs_all = self.client.list_jobs(workflow_id, None, None)?;
                             self.jobs_workflow_id = Some(workflow_id);
+                            self.jobs_fetched_at = Some(chrono::Utc::now());
                             self.jobs = self.jobs_all.clone();
                             self.apply_jobs_sort();
                         }
@@ -1744,6 +1752,7 @@ impl App {
             self.jobs = Vec::new();
             self.jobs_has_more = false;
             self.jobs_state.select(None);
+            self.jobs_fetched_at = None;
             if let Some(msg) = message {
                 self.set_status(StatusMessage::error(&msg));
             }
@@ -1758,6 +1767,7 @@ impl App {
             name.as_deref(),
             command.as_deref(),
         )?;
+        self.jobs_fetched_at = Some(chrono::Utc::now());
         self.jobs = self.jobs_all.clone();
         self.apply_jobs_sort();
         if self.jobs.is_empty() {
@@ -2513,6 +2523,7 @@ impl App {
                 if let Ok(jobs) = self.client.list_jobs(workflow_id, None, None) {
                     self.jobs_all = jobs.clone();
                     self.jobs_workflow_id = Some(workflow_id);
+                    self.jobs_fetched_at = Some(chrono::Utc::now());
                     self.jobs = jobs;
                     self.apply_jobs_sort();
                     if !self.jobs.is_empty() {
