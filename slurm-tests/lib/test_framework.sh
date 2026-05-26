@@ -16,6 +16,12 @@ CURRENT_WF_ID=""
 # Accumulated failures for the final report
 declare -a FAILURE_MESSAGES=()
 
+# Extra debug content for the next _dump_debug_info dump. Assertions can set
+# this before calling _fail to capture command output the generic dump misses
+# (e.g., the stdout of a `torc logs analyze` invocation that didn't match).
+# Cleared after each dump.
+FAILURE_EXTRA_DEBUG=""
+
 # ── Core helpers ──────────────────────────────────────────────────────────────
 
 _pass() {
@@ -51,8 +57,13 @@ _dump_debug_info() {
         echo "--- Results ---"
         torc --url "$TORC_API_URL" -f json results list "$CURRENT_WF_ID" --all-runs \
             --include-logs 2>&1 || true
+        if [ -n "${FAILURE_EXTRA_DEBUG:-}" ]; then
+            echo ""
+            printf '%s\n' "$FAILURE_EXTRA_DEBUG"
+        fi
     } > "$debug_file" 2>&1
     echo "    (debug info saved to $debug_file)"
+    FAILURE_EXTRA_DEBUG=""
 }
 
 _skip() {
@@ -239,21 +250,24 @@ assert_parse_logs_detect_oom() {
 
 # assert_logs_analyze_detect_oom WF_ID OUTPUT_DIR
 #   Runs `torc logs analyze` and checks for OOM-related output.
-#   Retries briefly to absorb parallel-filesystem propagation lag on HPC
-#   (slurmstepd/srun teardown lines may arrive on the login node a moment
-#   after the job is marked complete).
+#   Retries up to 30 seconds to absorb parallel-filesystem propagation lag on
+#   HPC (slurmstepd/srun teardown lines and dmesg captures may arrive on the
+#   login node tens of seconds after the job is marked complete).
 assert_logs_analyze_detect_oom() {
     local wf_id="$1" output_dir="$2"
-    local analyze_output
+    local analyze_output=""
     local pattern='out.of.memory|oom-kill|oom_kill|killed process|exceeded memory|OUT_OF_MEMORY|\bOOM\b|return code.*137|exit.*137'
-    for _ in 1 2 3 4 5; do
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
         analyze_output=$(torc --url "$TORC_API_URL" logs analyze "$output_dir" --workflow-id "$wf_id" 2>&1) || true
         if echo "$analyze_output" | grep -qiE "$pattern"; then
             _pass "logs analyze detected OOM for workflow $wf_id"
             return
         fi
-        sleep 2
+        sleep 3
     done
+    # shellcheck disable=SC2016  # backticks are literal markdown in the header
+    FAILURE_EXTRA_DEBUG=$(printf -- '--- Last `torc logs analyze` output (workflow %s, dir %s) ---\n%s\n' \
+        "$wf_id" "$output_dir" "$analyze_output")
     _fail "logs analyze did NOT detect OOM for workflow $wf_id"
 }
 
