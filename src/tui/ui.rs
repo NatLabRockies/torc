@@ -10,7 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, Tabs, Wrap},
 };
 
-use crate::client::utils::format_local_timestamp_epoch;
+use crate::client::utils::{format_local_timestamp, format_local_timestamp_epoch};
 use crate::models::JobStatus;
 
 use super::app::{App, DetailViewType, FilterTarget, Focus, PopupType, WorkflowSummary};
@@ -1089,11 +1089,10 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
     let header = Row::new(vec![
         "ID".to_string(),
         "Job ID".to_string(),
-        "Run".to_string(),
-        "Attempt".to_string(),
         "Return".to_string(),
         "Status".to_string(),
         runtime_header,
+        "Completion Time".to_string(),
         peak_mem_header,
         peak_cpu_header,
     ])
@@ -1103,8 +1102,6 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
     let rows = app.results.iter().map(|result| {
         let id = result.id.map(|i| i.to_string()).unwrap_or_default();
         let job_id = result.job_id.to_string();
-        let run_id = result.run_id.to_string();
-        let attempt_id = result.attempt_id.unwrap_or(1).to_string();
         let return_code = result.return_code;
         let status = format!("{:?}", result.status);
 
@@ -1121,6 +1118,8 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
             .map(|pct| format!("{:.1}%", pct))
             .unwrap_or_else(|| "-".to_string());
 
+        let completion_time = format_local_timestamp(&result.completion_time);
+
         // Color based on return code
         let row_color = if return_code == 0 {
             Color::Green
@@ -1131,14 +1130,13 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         Row::new(vec![
             Cell::from(id),
             Cell::from(job_id),
-            Cell::from(run_id),
-            Cell::from(attempt_id),
             Cell::from(Span::styled(
                 return_code.to_string(),
                 Style::default().fg(row_color),
             )),
             Cell::from(Span::styled(status, Style::default().fg(row_color))),
             Cell::from(runtime),
+            Cell::from(completion_time),
             Cell::from(peak_mem),
             Cell::from(peak_cpu),
         ])
@@ -1173,11 +1171,10 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         [
             Constraint::Length(6),  // ID
             Constraint::Length(8),  // Job ID
-            Constraint::Length(5),  // Run
-            Constraint::Length(7),  // Attempt
             Constraint::Length(7),  // Return
             Constraint::Length(12), // Status
             Constraint::Length(13), // Runtime (m) (+ optional sort indicator)
+            Constraint::Length(26), // Completion Time (matches CLI format)
             Constraint::Length(11), // Peak Mem (+ optional sort indicator)
             Constraint::Length(13), // Peak CPU % (+ optional sort indicator)
         ],

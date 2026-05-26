@@ -4,7 +4,7 @@ use crate::client::commands::get_env_user_name;
 use crate::client::commands::output::{print_if_json, print_wrapped_if_json};
 use crate::client::commands::{
     pagination, print_error, select_workflow_interactively,
-    table_format::{display_csv, display_table_with_count},
+    table_format::{display_csv, display_table_excluding},
 };
 use crate::client::utils::format_local_timestamp;
 use crate::models;
@@ -292,7 +292,12 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                             } else {
                                 println!("Results for workflow ID {}:", selected_workflow_id);
                             }
-                            display_table_with_count(&rows, "results");
+                            let exclude = vec![
+                                "WF ID".to_string(),
+                                "Run ID".to_string(),
+                                "Attempt".to_string(),
+                            ];
+                            display_table_excluding(&rows, &exclude, "results");
                         }
                     }
                 }
