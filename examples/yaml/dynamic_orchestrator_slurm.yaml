@@ -20,7 +20,7 @@
 #      workflow finishes for that lineage.
 #
 # The orchestrator script is `examples/scripts/dynamic_orchestrator.py`. It
-# uses the torc Python client (`pip install torc_client`, published on PyPI).
+# uses the torc Python client (`pip install torc-client`, published on PyPI).
 #
 # Run on a Slurm cluster:
 #   1. Set the account/partition below.

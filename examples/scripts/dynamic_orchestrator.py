@@ -21,7 +21,7 @@ Spawned continuations inherit the lineage via `TORC_ORCHESTRATOR_LINEAGE_ID`,
 which torc sets in the spawned job's environment, so argv is only used on the
 seed.
 
-Requires the torc Python client (`pip install torc_client`, published on PyPI).
+Requires the torc Python client (`pip install torc-client`, published on PyPI).
 """
 from __future__ import annotations
 

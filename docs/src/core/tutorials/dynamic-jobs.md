@@ -19,7 +19,7 @@ By the end of this tutorial, you will:
 
 - Completed [Tutorial 2: Diamond Workflow](./diamond.md)
 - Torc server running (see [Quick Start (Local)](../../getting-started/quick-start-local.md))
-- The Python client installed: `pip install torc_client`
+- The Python client installed: `pip install torc-client`
 - `jq` and `awk` available on `PATH` (used by the demo worker)
 - Roughly 15 minutes
 
