@@ -819,7 +819,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
             .map(|n| n.to_string())
             .unwrap_or_default();
         let elapsed = if matches!(job.status, Some(crate::models::JobStatus::Running)) {
-            format_elapsed(job.start_time.as_deref())
+            format_elapsed(job.start_time.as_deref(), app.jobs_fetched_at)
         } else {
             String::new()
         };
@@ -887,15 +887,23 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_stateful_widget(table, area, &mut app.jobs_state);
 }
 
-/// Compute elapsed time from an RFC3339 start_time to now, formatted compactly.
-fn format_elapsed(start_time: Option<&str>) -> String {
+/// Compute elapsed time from an RFC3339 start_time to a reference instant,
+/// formatted compactly. The reference is the wall-clock time when the Jobs
+/// list was last fetched from the server (falling back to `Utc::now()`) so the
+/// value freezes between refreshes instead of ticking up against stale rows
+/// whose server-side status has since moved off Running.
+fn format_elapsed(
+    start_time: Option<&str>,
+    as_of: Option<chrono::DateTime<chrono::Utc>>,
+) -> String {
     let Some(s) = start_time else {
         return String::new();
     };
     let Ok(start) = chrono::DateTime::parse_from_rfc3339(s) else {
         return String::new();
     };
-    let elapsed = chrono::Utc::now().signed_duration_since(start.with_timezone(&chrono::Utc));
+    let reference = as_of.unwrap_or_else(chrono::Utc::now);
+    let elapsed = reference.signed_duration_since(start.with_timezone(&chrono::Utc));
     let total_secs = elapsed.num_seconds().max(0);
     let days = total_secs / 86_400;
     let hours = (total_secs % 86_400) / 3_600;
