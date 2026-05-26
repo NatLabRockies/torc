@@ -118,60 +118,128 @@ torc run $WORKFLOW_ID \
 
 ## Job Runner Workflow
 
-The job runner executes a continuous loop with these steps:
+A worker has three phases: a short setup phase that runs once, a per-iteration loop that drives
+execution, and a teardown phase that runs once on exit. Most of the runner's complexity lives in the
+loop, where each iteration polls the server, reaps subprocesses, claims new work, and checks a
+handful of exit conditions.
+
+### Worker Lifecycle
 
 ```mermaid
 flowchart TD
-    Start([Start]) --> CheckStatus[Check workflow status]
-    CheckStatus --> IsComplete{Workflow complete<br/>or canceled?}
-    IsComplete -->|Yes| End([Exit])
-    IsComplete -->|No| MonitorJobs[Monitor running jobs]
-    MonitorJobs --> CompleteFinished[Complete finished jobs<br/>Update server status]
-    CompleteFinished --> ExecuteActions[Execute workflow actions<br/>e.g., schedule Slurm allocations]
-    ExecuteActions --> ClaimJobs[Claim new jobs from server]
-    ClaimJobs --> ResourceCheck{Allocation<br/>strategy?}
-    ResourceCheck -->|Resource-based| ClaimResources[claim_jobs_based_on_resources<br/>Filter by CPU/memory/GPU]
-    ResourceCheck -->|Queue-based| ClaimQueue[claim_next_jobs<br/>Up to max-parallel-jobs]
-    ClaimResources --> StartJobs
-    ClaimQueue --> StartJobs
-    StartJobs[Start claimed jobs] --> ForEachJob[For each job:<br/>1. Call start_job<br/>2. Execute command<br/>3. Record stdout/stderr]
-    ForEachJob --> Wait[Wait for poll interval<br/>or SIGCHLD wakeup]
-    Wait --> CheckStatus
+    Start([Start worker]) --> Init[Version check<br/>+ RO-Crate provenance entities]
+    Init --> StartActions[Run on_workflow_start<br/>+ on_worker_start actions]
+    StartActions --> Loop[[Per-iteration loop<br/>see chart below]]
+    Loop --> WorkerComplete[Run on_worker_complete actions<br/><i>skipped if offline</i>]
+    WorkerComplete --> Monitor[Shutdown resource monitor<br/>+ generate plots if requested]
+    Monitor --> Deactivate[deactivate_compute_node<br/><i>skipped if offline</i>]
+    Deactivate --> End([End])
 
     style Start fill:#10b981,stroke:#059669,color:#fff
     style End fill:#ef4444,stroke:#dc2626,color:#fff
+    style Loop fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    style Init fill:#3b82f6,stroke:#2563eb,color:#fff
+    style StartActions fill:#3b82f6,stroke:#2563eb,color:#fff
+    style WorkerComplete fill:#3b82f6,stroke:#2563eb,color:#fff
+    style Monitor fill:#3b82f6,stroke:#2563eb,color:#fff
+    style Deactivate fill:#3b82f6,stroke:#2563eb,color:#fff
+```
+
+While the worker is in offline-drain mode, `on_worker_complete` and `deactivate_compute_node` are
+both skipped — the server is unreachable, so the node is left active and the journal is replayed via
+`torc workflows reconcile` once connectivity returns.
+
+### Per-Iteration Logic
+
+```mermaid
+flowchart TD
+    Iter([Loop iteration]) --> OfflineCheck{Offline?}
+    OfflineCheck -->|Yes| TryResume[maybe_try_resume<br/>throttled to drain_ping_interval]
+    OfflineCheck -->|No| CheckStatus[Check workflow status]
+    TryResume --> ReapJobs
+    CheckStatus --> IsComplete{Workflow complete<br/>or canceled?}
+    IsComplete -->|Yes| WorkflowDone[Run on_workflow_complete actions]
+    WorkflowDone --> Exit([Exit loop])
+    IsComplete -->|No| ReapJobs[check_job_status<br/>reap completions, free resources]
+    ReapJobs --> OomCheck{Direct mode +<br/>resource limits?}
+    OomCheck -->|Yes| OomHandler[handle_oom_violations<br/>SIGKILL offenders,<br/>report as failed]
+    OomCheck -->|No| DrainDone{Offline AND<br/>no running jobs?}
+    OomHandler --> DrainDone
+    DrainDone -->|Yes| DrainExit[Log reconcile hint]
+    DrainExit --> Exit
+    DrainDone -->|No| OnlineForClaim{Online?}
+    OnlineForClaim -->|No| Wait
+    OnlineForClaim -->|Yes| ExecActions[check_and_execute_actions<br/>on_jobs_ready, on_jobs_complete]
+    ExecActions --> ClaimBranch{Allocation strategy?}
+    ClaimBranch -->|Resource-based| ClaimResources[claim_jobs_based_on_resources<br/>per-node CPU/memory/GPU tracking]
+    ClaimBranch -->|Queue-based| MinTimeGate{Remaining time ≥<br/>compute_node_min_time?}
+    MinTimeGate -->|Yes| ClaimQueue[claim_next_jobs<br/>up to max-parallel-jobs]
+    MinTimeGate -->|No| Wait
+    ClaimResources --> StartJobs[Start claimed jobs<br/>start_job + AsyncCliCommand<br/>+ GPU round-robin assignment]
+    ClaimQueue --> StartJobs
+    StartJobs --> Wait[Wait: adaptive backoff with<br/>SIGCHLD-aware wakeup;<br/>reset to base on progress,<br/>pinned to base while offline]
+    Wait --> Sigterm{SIGTERM<br/>received?}
+    Sigterm -->|Yes| TermJobs[terminate_jobs:<br/>SIGTERM + lead, then SIGKILL]
+    TermJobs --> Exit
+    Sigterm -->|No| Deadline{end_time reached?<br/>direct mode applies a<br/>pre-deadline window}
+    Deadline -->|Yes| TermJobs
+    Deadline -->|No| IdleExit{Idle past threshold<br/>and no pending actions?}
+    IdleExit -->|Yes| Exit
+    IdleExit -->|No| Iter
+
+    style Iter fill:#10b981,stroke:#059669,color:#fff
+    style Exit fill:#ef4444,stroke:#dc2626,color:#fff
+    style OfflineCheck fill:#f59e0b,stroke:#d97706,color:#fff
     style IsComplete fill:#f59e0b,stroke:#d97706,color:#fff
-    style ResourceCheck fill:#f59e0b,stroke:#d97706,color:#fff
+    style OomCheck fill:#f59e0b,stroke:#d97706,color:#fff
+    style DrainDone fill:#f59e0b,stroke:#d97706,color:#fff
+    style OnlineForClaim fill:#f59e0b,stroke:#d97706,color:#fff
+    style ClaimBranch fill:#f59e0b,stroke:#d97706,color:#fff
+    style MinTimeGate fill:#f59e0b,stroke:#d97706,color:#fff
+    style Sigterm fill:#f59e0b,stroke:#d97706,color:#fff
+    style Deadline fill:#f59e0b,stroke:#d97706,color:#fff
+    style IdleExit fill:#f59e0b,stroke:#d97706,color:#fff
+    style TryResume fill:#3b82f6,stroke:#2563eb,color:#fff
     style CheckStatus fill:#3b82f6,stroke:#2563eb,color:#fff
-    style MonitorJobs fill:#3b82f6,stroke:#2563eb,color:#fff
-    style CompleteFinished fill:#3b82f6,stroke:#2563eb,color:#fff
-    style ExecuteActions fill:#3b82f6,stroke:#2563eb,color:#fff
-    style ClaimJobs fill:#3b82f6,stroke:#2563eb,color:#fff
+    style ReapJobs fill:#3b82f6,stroke:#2563eb,color:#fff
+    style OomHandler fill:#3b82f6,stroke:#2563eb,color:#fff
+    style WorkflowDone fill:#3b82f6,stroke:#2563eb,color:#fff
+    style DrainExit fill:#3b82f6,stroke:#2563eb,color:#fff
+    style ExecActions fill:#3b82f6,stroke:#2563eb,color:#fff
     style StartJobs fill:#3b82f6,stroke:#2563eb,color:#fff
-    style ForEachJob fill:#3b82f6,stroke:#2563eb,color:#fff
+    style TermJobs fill:#3b82f6,stroke:#2563eb,color:#fff
     style Wait fill:#6b7280,stroke:#4b5563,color:#fff
     style ClaimResources fill:#8b5cf6,stroke:#7c3aed,color:#fff
     style ClaimQueue fill:#ec4899,stroke:#db2777,color:#fff
 ```
 
-1. **Check workflow status** - Poll server to check if workflow is complete or canceled
-2. **Monitor running jobs** - Check status of currently executing jobs
-3. **Execute workflow actions** - Check for and execute any pending workflow actions, such as
-   scheduling new Slurm allocations.
-4. **Claim new jobs** - Request ready jobs from server based on allocation strategy:
-   - Resource-based: `claim_jobs_based_on_resources`
-   - Queue-based: `claim_next_jobs`
-5. **Start jobs** - For each claimed job:
-   - Call `start_job` to mark job as started in database
-   - Execute job command in a non-blocking subprocess
-   - Record stdout/stderr output to files
-6. **Complete jobs** - When running jobs finish:
-   - Report completions to the server using `batch_complete_jobs`
-   - Server updates job status and automatically marks dependent jobs as ready
-7. **Wait and repeat** - Wait for the job completion poll interval, but wake early when a local
-   subprocess exit delivers `SIGCHLD`
+Each iteration runs the following steps and either continues or exits via one of the termination
+branches above:
 
-The runner continues until the workflow is complete or canceled.
+1. **Resume probe** (offline only) — `maybe_try_resume` pings the server at most once per
+   `drain_ping_interval`. If it responds, flush the journal and return to normal operation.
+2. **Workflow status check** (online only) — exit on `is_complete` or `is_canceled`. If the server
+   is unreachable past the retry window, enter offline-drain mode (see below).
+3. **Reap completions** — `check_job_status` collects exit codes, reports completions to the server
+   (or to the local journal while offline), and frees per-node resources.
+4. **OOM enforcement** (direct mode with resource limits) — kill jobs that exceeded their memory
+   reservation and report them as failed.
+5. **Drain-complete exit** — in offline mode, once all running jobs have finished, log the reconcile
+   hint and exit; the journal will be replayed once the server is back.
+6. **Workflow actions** (online only) — execute pending `on_jobs_ready` and `on_jobs_complete`
+   actions (e.g., schedule new Slurm allocations).
+7. **Claim new jobs** (online only) — resource-based mode filters by per-node CPU/memory/GPU
+   capacity; queue-based mode claims up to `--max-parallel-jobs`, but only if remaining time exceeds
+   `compute_node_min_time_for_new_jobs_seconds`.
+8. **Start jobs** — call `start_job`, assign a GPU device if needed, then spawn the command via
+   `AsyncCliCommand`, recording stdout/stderr to per-job log files.
+9. **Wait** — sleep with `SIGCHLD`-aware wakeup so subprocess exits are observed promptly. Adaptive
+   backoff doubles the interval toward `claim_backoff_max_secs` when an iteration produces no
+   progress; any completion, claim, or early wakeup resets it to the base interval. Pinned to the
+   base interval while offline so the drain-ping cadence is preserved.
+10. **Exit checks** — break out on `SIGTERM`, on the end-of-allocation deadline (direct mode applies
+    a pre-deadline window so `SIGTERM` has time to land before `SIGKILL`), or after an idle interval
+    past `compute_node_wait_for_new_jobs_seconds` with no pending actions that could add capacity.
 
 ## Surviving Server Outages (Offline Drain)
 
