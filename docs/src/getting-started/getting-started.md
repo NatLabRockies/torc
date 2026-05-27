@@ -11,9 +11,9 @@ Choose the interface that fits your workflow:
 - **Dashboard** — Web UI ([torc-dash](../core/monitoring/dashboard.md)) for visual configuration and
   monitoring
 - **TUI** — Terminal User Interface (`torc tui`) for visual monitoring in a terminal
-- **AI Assistants** — Use [Claude Code](https://claude.ai/code) or GitHub Copilot to manage
-  workflows through natural language. _"Create a workflow with 10 parallel jobs"_ or _"Why did job 5
-  fail?"_
+- **AI Assistants** — Use [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) or
+  GitHub Copilot to manage workflows through natural language. _"Create a workflow with 10 parallel
+  jobs"_ or _"Why did job 5 fail?"_
 - **Spec Files** — YAML, KDL, or JSON5 files for version-controlled workflow definitions
 - **Python/Julia APIs** — Libraries for programmatic workflow generation
 
