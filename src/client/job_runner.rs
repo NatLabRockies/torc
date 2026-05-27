@@ -144,8 +144,10 @@ const IDLE_BACKOFF_CAP_SECS: f64 = 30.0;
 /// there are no children to check, that rationale doesn't apply and we'd
 /// rather keep closing-case detection (workflow-complete, idle-exit,
 /// `end_time`) responsive. So idle waits clamp at
-/// `min(base, IDLE_BACKOFF_CAP_SECS)`: never slower than 30s, never faster
-/// than the user's configured base.
+/// `min(base, IDLE_BACKOFF_CAP_SECS)`: at most 30s so a long configured
+/// base does not delay closing-case detection, and never longer than the
+/// configured base so a user who chose a base shorter than 30s keeps that
+/// tighter cadence.
 fn idle_poll_interval(base: f64) -> f64 {
     base.min(IDLE_BACKOFF_CAP_SECS)
 }

@@ -261,9 +261,9 @@ or a `SIGCHLD` wake-up.
 `SIGCHLD` cannot fire — every wake-up has to come from the timer, and the only things the loop can
 react to are workflow-complete, idle-exit (`compute_node_wait_for_new_jobs_seconds`), and the
 `end_time` deadline. Letting the wait grow toward the busy cap would only delay these checks. The
-idle wait therefore clamps to `min(job_completion_poll_interval, 30s)`: never slower than 30s (so
-closing-case detection stays responsive even when a long base is configured for cost reasons), never
-faster than the base (so a user's configured minimum interval is respected when it is tight).
+idle wait therefore clamps to `min(job_completion_poll_interval, 30s)`: at most 30s, so a long
+configured base does not delay closing-case detection; and never longer than the configured base, so
+a user who chose a base shorter than 30s keeps that tighter cadence.
 
 **Example.** A 5000-job × 5-day workflow run with `job_completion_poll_interval = 300s` and
 `claim_backoff_max_secs = 3600s`:
