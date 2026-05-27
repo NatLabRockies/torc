@@ -132,15 +132,50 @@ impl Default for Wakeup {
     }
 }
 
+/// Upper bound on the idle-wait interval when the runner has no tracked
+/// children. In that state every wake-up has to come from the timer
+/// (SIGCHLD can't fire), and the only things we'd react to are
+/// workflow-complete and idle-exit (`compute_node_wait_for_new_jobs_seconds`)
+/// — neither needs slower than 30s resolution.
+const IDLE_BACKOFF_CAP_SECS: f64 = 30.0;
+
+/// Effective sleep interval when the runner has no tracked children. The
+/// configured base is the runner's preferred completion-check cadence; when
+/// there are no children to check, that rationale doesn't apply and we'd
+/// rather keep closing-case detection (workflow-complete, idle-exit,
+/// `end_time`) responsive. So idle waits clamp at
+/// `min(base, IDLE_BACKOFF_CAP_SECS)`: at most 30s so a long configured
+/// base does not delay closing-case detection, and never longer than the
+/// configured base so a user who chose a base shorter than 30s keeps that
+/// tighter cadence.
+fn idle_poll_interval(base: f64) -> f64 {
+    base.min(IDLE_BACKOFF_CAP_SECS)
+}
+
 /// Compute the next idle-wait interval for the runner's main loop given the
-/// current wait, the configured base, the configured cap, and whether the
-/// last iteration made any progress (a local completion was reaped, or a
-/// claim returned jobs).
+/// current wait, the configured base, the configured cap, whether the last
+/// iteration made any progress (a local completion was reaped, or a claim
+/// returned jobs), and whether the runner is currently idle (no children
+/// being tracked).
 ///
-/// Progress resets the wait to `base`. An idle iteration doubles the wait
-/// toward `cap`. The cap is clamped to at least `base` so callers cannot
-/// accidentally shrink the wait below the configured floor.
-fn next_poll_interval(current: f64, base: f64, cap: f64, made_progress: bool) -> f64 {
+/// In the non-idle path, progress resets the wait to `base`; an idle
+/// iteration doubles the wait toward `cap`. The cap is clamped to at least
+/// `base` so callers cannot accidentally shrink the wait below the
+/// configured floor.
+///
+/// In the idle path, the runner is in a closing state (workflow tail or
+/// pre-idle-exit) and the wait is simply [`idle_poll_interval`] — no ramp,
+/// no base floor. See `idle_poll_interval` for the rationale.
+fn next_poll_interval(
+    current: f64,
+    base: f64,
+    cap: f64,
+    made_progress: bool,
+    is_idle: bool,
+) -> f64 {
+    if is_idle {
+        return idle_poll_interval(base);
+    }
     let effective_cap = cap.max(base);
     if made_progress {
         base
@@ -1060,13 +1095,23 @@ impl JobRunner {
             // interval too, so an eventual transition back online starts
             // fresh rather than inheriting a stale long wait.
             let pre_sleep_progress = completions > 0 || jobs_claimed;
+            let is_idle_now = self.running_jobs.is_empty();
             if self.offline {
                 self.current_poll_interval = self.job_completion_poll_interval;
             }
-            // When progress already happened this iteration, sleep the
-            // base interval rather than a previously-backed-off value so
-            // we react to the next change promptly.
-            let wait_secs = if pre_sleep_progress {
+            // When the runner has no children to reap, the configured base
+            // interval (which controls completion-check cadence) is
+            // irrelevant — every wake has to come from the timer, and the
+            // only things we'd react to are workflow-complete, idle-exit,
+            // and end_time. Use `idle_poll_interval` so closing-case
+            // detection stays responsive even when the user has set a
+            // long base for cost reasons. Otherwise, when progress already
+            // happened this iteration, sleep the base interval rather
+            // than a previously-backed-off value so we react to the next
+            // change promptly.
+            let wait_secs = if is_idle_now {
+                idle_poll_interval(self.job_completion_poll_interval)
+            } else if pre_sleep_progress {
                 self.job_completion_poll_interval
             } else {
                 self.current_poll_interval
@@ -1088,15 +1133,17 @@ impl JobRunner {
                     self.job_completion_poll_interval,
                     self.claim_backoff_max_secs,
                     made_progress,
+                    is_idle_now,
                 );
                 if (next - self.current_poll_interval).abs() > f64::EPSILON {
                     debug!(
-                        "Adaptive backoff: poll interval {:.1}s -> {:.1}s (base {:.1}s, cap {:.1}s, made_progress={})",
+                        "Adaptive backoff: poll interval {:.1}s -> {:.1}s (base {:.1}s, cap {:.1}s, made_progress={}, is_idle={})",
                         self.current_poll_interval,
                         next,
                         self.job_completion_poll_interval,
                         self.claim_backoff_max_secs,
-                        made_progress
+                        made_progress,
+                        is_idle_now
                     );
                     self.current_poll_interval = next;
                 }
@@ -3673,7 +3720,7 @@ mod tests {
         let mut current = base;
         let steps = [60.0, 120.0, 240.0, 300.0, 300.0];
         for expected in steps {
-            current = next_poll_interval(current, base, cap, false);
+            current = next_poll_interval(current, base, cap, false, false);
             assert!(
                 (current - expected).abs() < f64::EPSILON,
                 "expected {expected}, got {current}"
@@ -3688,11 +3735,11 @@ mod tests {
         // Wind up to the cap.
         let mut current = base;
         for _ in 0..10 {
-            current = next_poll_interval(current, base, cap, false);
+            current = next_poll_interval(current, base, cap, false, false);
         }
         assert!((current - cap).abs() < f64::EPSILON);
         // Any progress resets immediately.
-        current = next_poll_interval(current, base, cap, true);
+        current = next_poll_interval(current, base, cap, true, false);
         assert!((current - base).abs() < f64::EPSILON);
     }
 
@@ -3702,7 +3749,7 @@ mod tests {
         // the wait below base.
         let base = 30.0;
         let cap = 5.0;
-        let next = next_poll_interval(base, base, cap, false);
+        let next = next_poll_interval(base, base, cap, false, false);
         assert!((next - base).abs() < f64::EPSILON);
     }
 
@@ -3712,7 +3759,7 @@ mod tests {
         // some reason.
         let base = 30.0;
         let cap = 300.0;
-        let next = next_poll_interval(10.0, base, cap, true);
+        let next = next_poll_interval(10.0, base, cap, true, false);
         assert!((next - base).abs() < f64::EPSILON);
     }
 
@@ -3721,8 +3768,67 @@ mod tests {
         // An idle step from current=base must never return less than base.
         let base = 30.0;
         let cap = 300.0;
-        let next = next_poll_interval(base, base, cap, false);
+        let next = next_poll_interval(base, base, cap, false, false);
         assert!(next >= base);
+    }
+
+    #[test]
+    fn next_poll_interval_is_idle_short_base_keeps_base() {
+        // When `base` is shorter than the idle cap, idle waits stay at
+        // base (don't slow down to 30s). Default-config case.
+        let base = 5.0;
+        let cap = 1800.0;
+        let next = next_poll_interval(cap, base, cap, false, true);
+        assert!(
+            (next - base).abs() < f64::EPSILON,
+            "expected base {base}, got {next}"
+        );
+    }
+
+    #[test]
+    fn next_poll_interval_is_idle_long_base_clamps_to_idle_cap() {
+        // When `base` is longer than the idle cap, idle waits clamp to
+        // 30s — the case the user with base=300s and cap=1hr cares about.
+        // Worst-case closing detection lag is bounded by the idle cap,
+        // independent of the configured base and cap.
+        let base = 300.0;
+        let cap = 3600.0;
+        let next = next_poll_interval(cap, base, cap, false, true);
+        assert!(
+            (next - IDLE_BACKOFF_CAP_SECS).abs() < f64::EPSILON,
+            "expected idle cap {IDLE_BACKOFF_CAP_SECS}, got {next}"
+        );
+    }
+
+    #[test]
+    fn next_poll_interval_is_idle_ignores_progress_and_current() {
+        // Idle wait is purely a function of (base, IDLE_BACKOFF_CAP_SECS):
+        // it does not ramp from `current` and is unaffected by progress.
+        let base = 60.0;
+        let cap = 1800.0;
+        let expected = idle_poll_interval(base);
+        for current in [base, 100.0, 900.0, cap] {
+            for made_progress in [true, false] {
+                let next = next_poll_interval(current, base, cap, made_progress, true);
+                assert!(
+                    (next - expected).abs() < f64::EPSILON,
+                    "current={current} made_progress={made_progress}: \
+                     expected {expected}, got {next}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn idle_poll_interval_returns_minimum() {
+        // Direct invariant test on the helper: idle wait is always the
+        // minimum of base and the constant cap.
+        assert!((idle_poll_interval(5.0) - 5.0).abs() < f64::EPSILON);
+        assert!((idle_poll_interval(300.0) - IDLE_BACKOFF_CAP_SECS).abs() < f64::EPSILON);
+        assert!(
+            (idle_poll_interval(IDLE_BACKOFF_CAP_SECS) - IDLE_BACKOFF_CAP_SECS).abs()
+                < f64::EPSILON
+        );
     }
 
     #[test]
