@@ -233,13 +233,48 @@ branches above:
    `compute_node_min_time_for_new_jobs_seconds`.
 8. **Start jobs** — call `start_job`, assign a GPU device if needed, then spawn the command via
    `AsyncCliCommand`, recording stdout/stderr to per-job log files.
-9. **Wait** — sleep with `SIGCHLD`-aware wakeup so subprocess exits are observed promptly. Adaptive
-   backoff doubles the interval toward `claim_backoff_max_secs` when an iteration produces no
-   progress; any completion, claim, or early wakeup resets it to the base interval. Pinned to the
-   base interval while offline so the drain-ping cadence is preserved.
+9. **Wait** — sleep with `SIGCHLD`-aware wakeup so subprocess exits are observed promptly. The sleep
+   length is set by the adaptive-backoff rules described in [Adaptive Backoff](#adaptive-backoff).
+   While offline, the adaptive ramp is bypassed so drain-ping cadence is preserved (the drain ping
+   itself self-rate-limits via `drain_ping_interval_secs`).
 10. **Exit checks** — break out on `SIGTERM`, on the end-of-allocation deadline (direct mode applies
     a pre-deadline window so `SIGTERM` has time to land before `SIGKILL`), or after an idle interval
     past `compute_node_wait_for_new_jobs_seconds` with no pending actions that could add capacity.
+
+### Adaptive Backoff
+
+The wait between iterations adapts to what the runner is doing. Three regimes:
+
+| State                         | Wait                                     |
+| ----------------------------- | ---------------------------------------- |
+| Making progress               | `job_completion_poll_interval` (base)    |
+| Busy at capacity, no progress | doubles toward `claim_backoff_max_secs`  |
+| Idle (no children to reap)    | `min(job_completion_poll_interval, 30s)` |
+
+**Busy-at-capacity case (long-running workflows).** When the runner is fully loaded and nothing is
+completing or being claimed, polling at the base interval would generate unnecessary requests for
+hours. Each iteration with no progress doubles the wait, capped at `claim_backoff_max_secs` (default
+300s). The wait resets to base immediately on any progress: a local completion, a successful claim,
+or a `SIGCHLD` wake-up.
+
+**Closing case (workflow tail or pre-idle-exit).** When the runner has no tracked children,
+`SIGCHLD` cannot fire — every wake-up has to come from the timer, and the only things the loop can
+react to are workflow-complete, idle-exit (`compute_node_wait_for_new_jobs_seconds`), and the
+`end_time` deadline. Letting the wait grow toward the busy cap would only delay these checks. The
+idle wait therefore clamps to `min(job_completion_poll_interval, 30s)`: never slower than 30s (so
+closing-case detection stays responsive even when a long base is configured for cost reasons), never
+faster than the base (so a user's configured minimum interval is respected when it is tight).
+
+**Example.** A 5000-job × 5-day workflow run with `job_completion_poll_interval = 300s` and
+`claim_backoff_max_secs = 3600s`:
+
+- During the busy phase, each runner polls at 300s — about 12 requests/hour.
+- After a runner finishes its last local job but the workflow is not yet done, it polls at 30s until
+  the workflow is observed complete or the idle-exit timer fires.
+
+Without the idle clamp, a node that drained near the start of a 1-hour backoff window could sit
+asleep for nearly the full hour after the workflow completed elsewhere. The clamp bounds that
+worst-case waste to ~30s.
 
 ## Surviving Server Outages (Offline Drain)
 
