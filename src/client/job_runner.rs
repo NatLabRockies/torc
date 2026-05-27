@@ -158,10 +158,13 @@ fn idle_poll_interval(base: f64) -> f64 {
 /// returned jobs), and whether the runner is currently idle (no children
 /// being tracked).
 ///
-/// In the non-idle path, progress resets the wait to `base`; an idle
-/// iteration doubles the wait toward `cap`. The cap is clamped to at least
-/// `base` so callers cannot accidentally shrink the wait below the
-/// configured floor.
+/// In the non-idle path, progress resets the wait to `base`; a
+/// no-progress iteration doubles the wait toward `cap`. The cap is
+/// clamped to at least `base` so callers cannot accidentally shrink
+/// the wait below the configured floor. ("No-progress" here means the
+/// iteration produced no local completion and no claim returned work;
+/// it does not imply `is_idle` — a runner with children running can
+/// still take a no-progress iteration.)
 ///
 /// In the idle path, the runner is in a closing state (workflow tail or
 /// pre-idle-exit) and the wait is simply [`idle_poll_interval`] — no ramp,
@@ -3713,8 +3716,9 @@ mod tests {
     // the main loop without standing up a full JobRunner.
 
     #[test]
-    fn next_poll_interval_doubles_on_idle() {
-        // Empty iterations grow the wait by a factor of two until the cap.
+    fn next_poll_interval_doubles_on_no_progress() {
+        // No-progress iterations (with children still running, i.e.
+        // is_idle=false) grow the wait by a factor of two until the cap.
         let base = 30.0;
         let cap = 300.0;
         let mut current = base;
@@ -3764,8 +3768,9 @@ mod tests {
     }
 
     #[test]
-    fn next_poll_interval_idle_never_decreases() {
-        // An idle step from current=base must never return less than base.
+    fn next_poll_interval_no_progress_never_decreases() {
+        // A no-progress step (is_idle=false) from current=base must never
+        // return less than base.
         let base = 30.0;
         let cap = 300.0;
         let next = next_poll_interval(base, base, cap, false, false);

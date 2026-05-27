@@ -245,17 +245,19 @@ branches above:
 
 The wait between iterations adapts to what the runner is doing. Three regimes:
 
-| State                         | Wait                                     |
-| ----------------------------- | ---------------------------------------- |
-| Making progress               | `job_completion_poll_interval` (base)    |
-| Busy at capacity, no progress | doubles toward `claim_backoff_max_secs`  |
-| Idle (no children to reap)    | `min(job_completion_poll_interval, 30s)` |
+| State                                | Wait                                     |
+| ------------------------------------ | ---------------------------------------- |
+| Making progress                      | `job_completion_poll_interval` (base)    |
+| No progress (children still running) | doubles toward `claim_backoff_max_secs`  |
+| Idle (no children to reap)           | `min(job_completion_poll_interval, 30s)` |
 
-**Busy-at-capacity case (long-running workflows).** When the runner is fully loaded and nothing is
-completing or being claimed, polling at the base interval would generate unnecessary requests for
-hours. Each iteration with no progress doubles the wait, capped at `claim_backoff_max_secs` (default
-300s). The wait resets to base immediately on any progress: a local completion, a successful claim,
-or a `SIGCHLD` wake-up.
+**No-progress ramp (children still running).** When the runner has children but the iteration
+produces no local completion and no successful claim, polling at the base interval would generate
+unnecessary requests for hours. This is most common during a fully-loaded long-running workflow, but
+the ramp also engages whenever spare capacity exists but no claim returns work (for example,
+dependencies are not yet ready). Each such iteration doubles the wait, capped at
+`claim_backoff_max_secs` (default 300s). The wait resets to base immediately on any progress: a
+local completion, a successful claim, or a `SIGCHLD` wake-up.
 
 **Closing case (workflow tail or pre-idle-exit).** When the runner has no tracked children,
 `SIGCHLD` cannot fire — every wake-up has to come from the timer, and the only things the loop can
