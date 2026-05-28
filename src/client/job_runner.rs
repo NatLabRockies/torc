@@ -916,8 +916,8 @@ impl JobRunner {
         info!(
             "Starting torc job runner version={} client_api_version={} server_version={} server_api_version={} \
             workflow_id={} hostname={} output_dir={} resources={:?} rules={:?} \
-            job_completion_poll_interval={}s max_parallel_jobs={:?} end_time={:?} strict_scheduler_match={} \
-            execution_mode={:?} limit_resources={}",
+            job_completion_poll_interval={}s claim_backoff_max_secs={}s max_parallel_jobs={:?} \
+            end_time={:?} strict_scheduler_match={} execution_mode={:?} limit_resources={}",
             version,
             version_check::CLIENT_API_VERSION,
             server_version,
@@ -928,6 +928,7 @@ impl JobRunner {
             self.resources,
             self.rules,
             self.job_completion_poll_interval,
+            self.claim_backoff_max_secs,
             self.max_parallel_jobs,
             self.end_time,
             self.torc_config.client.slurm.strict_scheduler_match,
