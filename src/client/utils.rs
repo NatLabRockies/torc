@@ -616,6 +616,24 @@ pub fn format_local_timestamp(rfc3339_utc: &str) -> String {
     }
 }
 
+/// clap value parser for a finite, non-negative `f64` seconds value.
+///
+/// Rejects `NaN`, `+/-inf`, and negative values at parse time so bad input
+/// fails fast with a CLI error instead of crashing the runner mid-loop in
+/// `Duration::from_secs_f64` (which panics on non-finite inputs).
+pub fn parse_finite_non_negative_secs(s: &str) -> Result<f64, String> {
+    let v: f64 = s
+        .parse()
+        .map_err(|e: std::num::ParseFloatError| e.to_string())?;
+    if !v.is_finite() {
+        return Err(format!("must be a finite number, got {}", s));
+    }
+    if v < 0.0 {
+        return Err(format!("must be >= 0, got {}", v));
+    }
+    Ok(v)
+}
+
 /// Same as [`format_local_timestamp`] but for unix-epoch seconds (e.g.
 /// `file.st_mtime`).
 pub fn format_local_timestamp_epoch(epoch_secs: f64) -> String {
@@ -658,6 +676,32 @@ mod tests {
     fn test_format_local_timestamp_includes_offset() {
         let formatted = format_local_timestamp("2026-05-25T12:00:00Z");
         assert_local_with_offset(&formatted);
+    }
+
+    #[test]
+    fn parse_finite_non_negative_secs_accepts_valid() {
+        assert_eq!(parse_finite_non_negative_secs("0").unwrap(), 0.0);
+        assert_eq!(parse_finite_non_negative_secs("300").unwrap(), 300.0);
+        assert_eq!(parse_finite_non_negative_secs("1.5").unwrap(), 1.5);
+    }
+
+    #[test]
+    fn parse_finite_non_negative_secs_rejects_non_finite() {
+        assert!(parse_finite_non_negative_secs("inf").is_err());
+        assert!(parse_finite_non_negative_secs("-inf").is_err());
+        assert!(parse_finite_non_negative_secs("NaN").is_err());
+    }
+
+    #[test]
+    fn parse_finite_non_negative_secs_rejects_negative() {
+        assert!(parse_finite_non_negative_secs("-1").is_err());
+        assert!(parse_finite_non_negative_secs("-0.1").is_err());
+    }
+
+    #[test]
+    fn parse_finite_non_negative_secs_rejects_garbage() {
+        assert!(parse_finite_non_negative_secs("not-a-number").is_err());
+        assert!(parse_finite_non_negative_secs("").is_err());
     }
 
     #[test]

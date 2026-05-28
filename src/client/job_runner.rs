@@ -752,8 +752,14 @@ impl JobRunner {
     /// `None` leaves the value loaded from `client.run.claim_backoff_max_secs`
     /// unchanged. The override is clamped to at least
     /// `job_completion_poll_interval`, matching the constructor's invariant.
+    /// Non-finite values (`NaN`, `+/-inf`) are ignored to keep
+    /// `Duration::from_secs_f64` from panicking later — CLI parsing already
+    /// rejects these, this is a defense-in-depth guard for config-sourced
+    /// values that bypass the CLI parser.
     pub fn override_claim_backoff_max_secs(&mut self, secs: Option<f64>) {
-        if let Some(s) = secs {
+        if let Some(s) = secs
+            && s.is_finite()
+        {
             self.claim_backoff_max_secs = s.max(self.job_completion_poll_interval);
         }
     }
@@ -3813,6 +3819,19 @@ mod tests {
         let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
         runner.override_claim_backoff_max_secs(Some(0.1));
         assert!((runner.claim_backoff_max_secs - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn override_claim_backoff_max_secs_ignores_non_finite() {
+        // NaN / +inf / -inf in a config file must not crash the runner via
+        // Duration::from_secs_f64 later. The guard drops them silently and
+        // keeps the constructor-loaded value.
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        let before = runner.claim_backoff_max_secs;
+        runner.override_claim_backoff_max_secs(Some(f64::NAN));
+        runner.override_claim_backoff_max_secs(Some(f64::INFINITY));
+        runner.override_claim_backoff_max_secs(Some(f64::NEG_INFINITY));
+        assert!((runner.claim_backoff_max_secs - before).abs() < f64::EPSILON);
     }
 
     #[test]

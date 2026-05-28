@@ -88,7 +88,7 @@ pub struct Args {
     /// iterations doubles from `poll_interval` toward this cap and resets on
     /// any progress. Set to `poll_interval` or lower to disable backoff.
     /// Falls back to `client.run.claim_backoff_max_secs` in config (default 300).
-    #[arg(long)]
+    #[arg(long, value_parser = crate::client::utils::parse_finite_non_negative_secs)]
     pub claim_backoff_max_secs: Option<f64>,
     /// Maximum number of parallel jobs to run concurrently.
     /// When NOT set: Uses resource-based job allocation (considers CPU, memory, GPU requirements).

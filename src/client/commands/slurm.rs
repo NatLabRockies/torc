@@ -434,7 +434,7 @@ EXAMPLES:
         /// submission scripts as `--claim-backoff-max-secs`. When unset, the
         /// runner falls back to `client.run.claim_backoff_max_secs` in its
         /// own config (300 seconds out of the box).
-        #[arg(long)]
+        #[arg(long, value_parser = crate::client::utils::parse_finite_non_negative_secs)]
         claim_backoff_max_secs: Option<f64>,
         /// Scheduler config ID (ignored if --auto is set)
         #[arg(long)]

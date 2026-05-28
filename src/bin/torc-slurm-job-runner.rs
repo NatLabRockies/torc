@@ -67,7 +67,7 @@ mod unix_main {
         /// Upper bound (seconds) on the adaptive claim/poll backoff used while
         /// the runner is idle. Defaults to `client.run.claim_backoff_max_secs`
         /// in config (300 seconds out of the box).
-        #[arg(long)]
+        #[arg(long, value_parser = torc::client::utils::parse_finite_non_negative_secs)]
         claim_backoff_max_secs: Option<f64>,
 
         /// Set to true if this is a subtask and multiple workers are running on one Slurm allocation
