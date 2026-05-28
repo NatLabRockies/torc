@@ -429,6 +429,13 @@ EXAMPLES:
         /// Poll interval in seconds (default: from config file or 30)
         #[arg(short, long)]
         poll_interval: Option<i32>,
+        /// Upper bound (seconds) on the adaptive claim/poll backoff used while
+        /// runners are idle. When set, propagated to the generated Slurm
+        /// submission scripts as `--claim-backoff-max-secs`. When unset, the
+        /// runner falls back to `client.run.claim_backoff_max_secs` in its
+        /// own config (300 seconds out of the box).
+        #[arg(long)]
+        claim_backoff_max_secs: Option<f64>,
         /// Scheduler config ID (ignored if --auto is set)
         #[arg(long)]
         scheduler_config_id: Option<i64>,
@@ -1309,6 +1316,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             num_hpc_jobs,
             output,
             poll_interval,
+            claim_backoff_max_secs,
             scheduler_config_id,
         } => {
             let user_name = get_env_user_name();
@@ -1397,7 +1405,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 effective_poll_interval,
                 *max_parallel_jobs,
                 *keep_submission_scripts,
-                None,
+                *claim_backoff_max_secs,
             ) {
                 Ok(()) => {
                     eprintln!("Successfully running {} Slurm job(s)", num_hpc_jobs);
