@@ -722,9 +722,7 @@ fn main() {
                     .clone()
                     .unwrap_or_else(|| run_config.output_dir.clone()),
                 poll_interval: poll_interval.unwrap_or(run_config.poll_interval),
-                claim_backoff_max_secs: Some(
-                    claim_backoff_max_secs.unwrap_or(run_config.claim_backoff_max_secs),
-                ),
+                claim_backoff_max_secs: *claim_backoff_max_secs,
                 max_parallel_jobs: max_parallel_jobs.or(run_config.max_parallel_jobs),
                 time_limit: time_limit.clone(),
                 end_time: end_time.clone(),

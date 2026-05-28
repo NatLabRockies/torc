@@ -316,10 +316,6 @@ impl WorkflowManager {
                     });
                     let poll_interval = poll_interval_override
                         .unwrap_or(self.torc_config.client.slurm.poll_interval);
-                    let claim_backoff_max_secs = Some(
-                        claim_backoff_max_secs_override
-                            .unwrap_or(self.torc_config.client.run.claim_backoff_max_secs),
-                    );
 
                     match crate::client::commands::slurm::schedule_slurm_nodes(
                         &self.config,
@@ -332,7 +328,7 @@ impl WorkflowManager {
                         poll_interval,
                         max_parallel_jobs,
                         self.torc_config.client.slurm.keep_submission_scripts,
-                        claim_backoff_max_secs,
+                        claim_backoff_max_secs_override,
                     ) {
                         Ok(()) => {
                             info!(

@@ -1397,7 +1397,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 effective_poll_interval,
                 *max_parallel_jobs,
                 *keep_submission_scripts,
-                Some(torc_config.client.run.claim_backoff_max_secs),
+                None,
             ) {
                 Ok(()) => {
                     eprintln!("Successfully running {} Slurm job(s)", num_hpc_jobs);
@@ -5100,7 +5100,7 @@ fn handle_regenerate(
                 effective_poll_interval,
                 None,  // max_parallel_jobs
                 false, // keep_submission_scripts
-                Some(torc_config.client.run.claim_backoff_max_secs),
+                None,  // claim_backoff_max_secs (rely on runner-side config)
             ) {
                 Ok(()) => {
                     println!(
