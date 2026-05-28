@@ -663,6 +663,7 @@ fn main() {
             memory_gb,
             num_gpus,
             poll_interval,
+            claim_backoff_max_secs,
             output_dir,
             time_limit,
             end_time,
@@ -721,6 +722,9 @@ fn main() {
                     .clone()
                     .unwrap_or_else(|| run_config.output_dir.clone()),
                 poll_interval: poll_interval.unwrap_or(run_config.poll_interval),
+                claim_backoff_max_secs: Some(
+                    claim_backoff_max_secs.unwrap_or(run_config.claim_backoff_max_secs),
+                ),
                 max_parallel_jobs: max_parallel_jobs.or(run_config.max_parallel_jobs),
                 time_limit: time_limit.clone(),
                 end_time: end_time.clone(),
@@ -796,6 +800,7 @@ fn main() {
             max_parallel_jobs,
             output_dir,
             poll_interval,
+            claim_backoff_max_secs,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Resolve the spec source once (handles `-` reading from stdin) so the
@@ -932,6 +937,7 @@ fn main() {
                         *max_parallel_jobs,
                         output_dir,
                         *poll_interval,
+                        *claim_backoff_max_secs,
                     ) {
                         Ok(()) => {
                             print_workflow_message(

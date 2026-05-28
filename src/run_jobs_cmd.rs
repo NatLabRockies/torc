@@ -83,6 +83,13 @@ pub struct Args {
     /// Job completion poll interval in seconds
     #[arg(short, long, default_value = "5.0")]
     pub poll_interval: f64,
+    /// Upper bound (seconds) on the adaptive claim/poll backoff. After an
+    /// iteration with no completions and no claimed jobs, the wait between
+    /// iterations doubles from `poll_interval` toward this cap and resets on
+    /// any progress. Set to `poll_interval` or lower to disable backoff.
+    /// Falls back to `client.run.claim_backoff_max_secs` in config (default 300).
+    #[arg(long)]
+    pub claim_backoff_max_secs: Option<f64>,
     /// Maximum number of parallel jobs to run concurrently.
     /// When NOT set: Uses resource-based job allocation (considers CPU, memory, GPU requirements).
     /// When set: Uses simple queue-based allocation with this parallel limit (ignores resource requirements).
@@ -367,6 +374,7 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         unique_label,
         None, // No per-node tracking for local runner
     );
+    job_runner.override_claim_backoff_max_secs(args.claim_backoff_max_secs);
 
     register_sigchld_wakeup(&job_runner);
 

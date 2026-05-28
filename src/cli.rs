@@ -263,6 +263,11 @@ SEE ALSO:
         /// Job completion poll interval in seconds
         #[arg(short, long)]
         poll_interval: Option<f64>,
+        /// Upper bound (seconds) on the adaptive claim/poll backoff used while
+        /// the runner is idle. Defaults to `client.run.claim_backoff_max_secs`
+        /// in config (300 seconds out of the box).
+        #[arg(long)]
+        claim_backoff_max_secs: Option<f64>,
         /// Output directory for jobs
         #[arg(short, long)]
         output_dir: Option<PathBuf>,
@@ -451,6 +456,12 @@ EXAMPLES:
         /// Job completion poll interval in seconds
         #[arg(short, long)]
         poll_interval: Option<i32>,
+        /// Upper bound (seconds) on the adaptive claim/poll backoff used while
+        /// runners are idle. Defaults to `client.run.claim_backoff_max_secs`
+        /// in config (300 seconds out of the box). Propagated to the
+        /// generated Slurm submission scripts as `--claim-backoff-max-secs`.
+        #[arg(long)]
+        claim_backoff_max_secs: Option<f64>,
     },
     /// Watch a workflow and automatically recover from failures
     ///

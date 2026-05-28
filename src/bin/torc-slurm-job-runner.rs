@@ -64,6 +64,12 @@ mod unix_main {
         #[arg(short, long)]
         poll_interval: Option<i64>,
 
+        /// Upper bound (seconds) on the adaptive claim/poll backoff used while
+        /// the runner is idle. Defaults to `client.run.claim_backoff_max_secs`
+        /// in config (300 seconds out of the box).
+        #[arg(long)]
+        claim_backoff_max_secs: Option<f64>,
+
         /// Set to true if this is a subtask and multiple workers are running on one Slurm allocation
         #[arg(long, default_value = "false")]
         is_subtask: bool,
@@ -455,6 +461,10 @@ mod unix_main {
             unique_label,
             node_tracker,
         );
+        job_runner.override_claim_backoff_max_secs(Some(
+            args.claim_backoff_max_secs
+                .unwrap_or(file_config.client.run.claim_backoff_max_secs),
+        ));
 
         // Register SIGTERM and SIGCHLD signal handlers.
         //

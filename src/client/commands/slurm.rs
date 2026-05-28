@@ -1397,6 +1397,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 effective_poll_interval,
                 *max_parallel_jobs,
                 *keep_submission_scripts,
+                Some(torc_config.client.run.claim_backoff_max_secs),
             ) {
                 Ok(()) => {
                     eprintln!("Successfully running {} Slurm job(s)", num_hpc_jobs);
@@ -1625,6 +1626,7 @@ pub fn schedule_slurm_nodes(
     poll_interval: i32,
     max_parallel_jobs: Option<i32>,
     keep_submission_scripts: bool,
+    claim_backoff_max_secs: Option<f64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let scheduler = match utils::send_with_retries(
         config,
@@ -1765,6 +1767,7 @@ pub fn schedule_slurm_nodes(
             tls_ca_cert,
             tls_insecure,
             startup_delay_seconds,
+            claim_backoff_max_secs,
         ) {
             error!("Error creating submission script: {}", e);
             return Err(e.into());
@@ -5097,6 +5100,7 @@ fn handle_regenerate(
                 effective_poll_interval,
                 None,  // max_parallel_jobs
                 false, // keep_submission_scripts
+                Some(torc_config.client.run.claim_backoff_max_secs),
             ) {
                 Ok(()) => {
                     println!(

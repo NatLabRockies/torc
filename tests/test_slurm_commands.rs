@@ -382,6 +382,7 @@ fn test_create_submission_script() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(
@@ -462,6 +463,7 @@ fn test_create_submission_script_with_extra() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(
@@ -510,6 +512,7 @@ fn test_create_submission_script_without_srun() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(
@@ -566,6 +569,7 @@ fn test_create_submission_script_with_srun() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(
@@ -615,6 +619,7 @@ fn test_create_submission_script_with_srun_mpi() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(
@@ -661,6 +666,7 @@ fn test_create_submission_script_with_invalid_srun_mpi_rejected() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(result.is_err(), "Expected invalid srun_mpi to be rejected");
@@ -721,6 +727,7 @@ fn test_create_submission_script_with_startup_delay() {
         None,
         false,
         30,
+        None,
     );
 
     assert!(
@@ -765,6 +772,7 @@ fn test_create_submission_script_without_startup_delay() {
         None,
         false,
         0,
+        None,
     );
 
     assert!(
@@ -779,6 +787,96 @@ fn test_create_submission_script_without_startup_delay() {
     assert!(
         !script_content.contains("--startup-delay-seconds"),
         "Should NOT have --startup-delay-seconds flag when delay is 0"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
+fn test_create_submission_script_with_claim_backoff_max_secs() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_claim_backoff.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_job",
+        "http://localhost:8080/torc-service/v1",
+        12345,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        None,
+        false,
+        0,
+        Some(600.0),
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        script_content.contains("--claim-backoff-max-secs 600"),
+        "Should have --claim-backoff-max-secs flag when override is Some"
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
+#[test]
+fn test_create_submission_script_without_claim_backoff_max_secs() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_no_claim_backoff.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+
+    let result = interface.create_submission_script(
+        "test_job",
+        "http://localhost:8080/torc-service/v1",
+        12345,
+        "/tmp/output",
+        5,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        None,
+        false,
+        0,
+        None,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        !script_content.contains("--claim-backoff-max-secs"),
+        "Should NOT have --claim-backoff-max-secs flag when override is None"
     );
 
     let _ = fs::remove_file(&script_path);

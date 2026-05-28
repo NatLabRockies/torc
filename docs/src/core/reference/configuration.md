@@ -42,14 +42,15 @@ Settings for the `torc` CLI.
 
 Settings for `torc run` command.
 
-| Option              | Type  | Default       | Description                                         |
-| ------------------- | ----- | ------------- | --------------------------------------------------- |
-| `poll_interval`     | float | `5.0`         | Job completion poll interval (seconds)              |
-| `output_dir`        | path  | `torc_output` | Output directory for job logs                       |
-| `max_parallel_jobs` | int   | (none)        | Maximum parallel jobs (overrides resource-based)    |
-| `num_cpus`          | int   | (none)        | Available CPUs for resource-based scheduling        |
-| `memory_gb`         | float | (none)        | Available memory (GB) for resource-based scheduling |
-| `num_gpus`          | int   | (none)        | Available GPUs for resource-based scheduling        |
+| Option                   | Type  | Default       | Description                                                            |
+| ------------------------ | ----- | ------------- | ---------------------------------------------------------------------- |
+| `poll_interval`          | float | `5.0`         | Job completion poll interval (seconds)                                 |
+| `claim_backoff_max_secs` | float | `300.0`       | Upper bound (seconds) for the adaptive idle backoff (see job-runners). |
+| `output_dir`             | path  | `torc_output` | Output directory for job logs                                          |
+| `max_parallel_jobs`      | int   | (none)        | Maximum parallel jobs (overrides resource-based)                       |
+| `num_cpus`               | int   | (none)        | Available CPUs for resource-based scheduling                           |
+| `memory_gb`              | float | (none)        | Available memory (GB) for resource-based scheduling                    |
+| `num_gpus`               | int   | (none)        | Available GPUs for resource-based scheduling                           |
 
 ### `[client.offline]` Section
 
@@ -264,20 +265,21 @@ Environment variables use double underscore (`__`) to separate nested keys.
 
 ### Client Variables
 
-| Variable                              | Maps To                        |
-| ------------------------------------- | ------------------------------ |
-| `TORC_CLIENT__API_URL`                | `client.api_url`               |
-| `TORC_CLIENT__FORMAT`                 | `client.format`                |
-| `TORC_CLIENT__LOG_LEVEL`              | `client.log_level`             |
-| `TORC_CLIENT__USERNAME`               | `client.username`              |
-| `TORC_CLIENT__RUN__POLL_INTERVAL`     | `client.run.poll_interval`     |
-| `TORC_CLIENT__RUN__OUTPUT_DIR`        | `client.run.output_dir`        |
-| `TORC_CLIENT__RUN__MAX_PARALLEL_JOBS` | `client.run.max_parallel_jobs` |
-| `TORC_CLIENT__RUN__NUM_CPUS`          | `client.run.num_cpus`          |
-| `TORC_CLIENT__RUN__MEMORY_GB`         | `client.run.memory_gb`         |
-| `TORC_CLIENT__RUN__NUM_GPUS`          | `client.run.num_gpus`          |
-| `TORC_CLIENT__TLS__CA_CERT`           | `client.tls.ca_cert`           |
-| `TORC_CLIENT__TLS__INSECURE`          | `client.tls.insecure`          |
+| Variable                                   | Maps To                             |
+| ------------------------------------------ | ----------------------------------- |
+| `TORC_CLIENT__API_URL`                     | `client.api_url`                    |
+| `TORC_CLIENT__FORMAT`                      | `client.format`                     |
+| `TORC_CLIENT__LOG_LEVEL`                   | `client.log_level`                  |
+| `TORC_CLIENT__USERNAME`                    | `client.username`                   |
+| `TORC_CLIENT__RUN__POLL_INTERVAL`          | `client.run.poll_interval`          |
+| `TORC_CLIENT__RUN__CLAIM_BACKOFF_MAX_SECS` | `client.run.claim_backoff_max_secs` |
+| `TORC_CLIENT__RUN__OUTPUT_DIR`             | `client.run.output_dir`             |
+| `TORC_CLIENT__RUN__MAX_PARALLEL_JOBS`      | `client.run.max_parallel_jobs`      |
+| `TORC_CLIENT__RUN__NUM_CPUS`               | `client.run.num_cpus`               |
+| `TORC_CLIENT__RUN__MEMORY_GB`              | `client.run.memory_gb`              |
+| `TORC_CLIENT__RUN__NUM_GPUS`               | `client.run.num_gpus`               |
+| `TORC_CLIENT__TLS__CA_CERT`                | `client.tls.ca_cert`                |
+| `TORC_CLIENT__TLS__INSECURE`               | `client.tls.insecure`               |
 
 ### Server Variables
 

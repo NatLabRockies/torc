@@ -195,6 +195,13 @@ log_level = "info"
 # Job completion poll interval in seconds
 poll_interval = 5.0
 
+# Upper bound (seconds) on the adaptive claim/poll backoff used while the
+# runner is idle. After an iteration with no completions and no claimed
+# jobs, the wait between iterations doubles from `poll_interval` toward
+# this cap and resets on any progress. Set to `poll_interval` or lower
+# to disable backoff.
+claim_backoff_max_secs = 300.0
+
 # Output directory for job logs and artifacts
 output_dir = "torc_output"
 

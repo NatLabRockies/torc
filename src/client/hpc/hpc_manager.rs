@@ -155,6 +155,7 @@ impl HpcManager {
             tls_ca_cert,
             tls_insecure,
             startup_delay_seconds,
+            None,
         )?;
 
         trace!("Created submission script {:?}", filename);
