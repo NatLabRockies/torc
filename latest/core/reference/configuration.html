@@ -219,6 +219,7 @@ torc config validate          # Validate current configuration
 <p>Settings for <code>torc run</code> command.</p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>poll_interval</code></td><td>float</td><td><code>5.0</code></td><td>Job completion poll interval (seconds)</td></tr>
+<tr><td><code>claim_backoff_max_secs</code></td><td>float</td><td><code>300.0</code></td><td>Upper bound (seconds) for the adaptive idle backoff (see job-runners).</td></tr>
 <tr><td><code>output_dir</code></td><td>path</td><td><code>torc_output</code></td><td>Output directory for job logs</td></tr>
 <tr><td><code>max_parallel_jobs</code></td><td>int</td><td>(none)</td><td>Maximum parallel jobs (overrides resource-based)</td></tr>
 <tr><td><code>num_cpus</code></td><td>int</td><td>(none)</td><td>Available CPUs for resource-based scheduling</td></tr>
@@ -410,6 +411,7 @@ completion_check_interval_secs = 5
 <tr><td><code>TORC_CLIENT__LOG_LEVEL</code></td><td><code>client.log_level</code></td></tr>
 <tr><td><code>TORC_CLIENT__USERNAME</code></td><td><code>client.username</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__POLL_INTERVAL</code></td><td><code>client.run.poll_interval</code></td></tr>
+<tr><td><code>TORC_CLIENT__RUN__CLAIM_BACKOFF_MAX_SECS</code></td><td><code>client.run.claim_backoff_max_secs</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__OUTPUT_DIR</code></td><td><code>client.run.output_dir</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__MAX_PARALLEL_JOBS</code></td><td><code>client.run.max_parallel_jobs</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__NUM_CPUS</code></td><td><code>client.run.num_cpus</code></td></tr>

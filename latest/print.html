@@ -285,9 +285,9 @@ coordination, while clients create workflows and job runners execute tasks on co
 <li><strong>Dashboard</strong> — Web UI (<a href="getting-started/../core/monitoring/dashboard.html">torc-dash</a>) for visual configuration and
 monitoring</li>
 <li><strong>TUI</strong> — Terminal User Interface (<code>torc tui</code>) for visual monitoring in a terminal</li>
-<li><strong>AI Assistants</strong> — Use <a href="https://claude.ai/code">Claude Code</a> or GitHub Copilot to manage
-workflows through natural language. <em>"Create a workflow with 10 parallel jobs"</em> or <em>"Why did job 5
-fail?"</em></li>
+<li><strong>AI Assistants</strong> — Use <a href="https://docs.claude.com/en/docs/claude-code/overview">Claude Code</a> or
+GitHub Copilot to manage workflows through natural language. <em>"Create a workflow with 10 parallel
+jobs"</em> or <em>"Why did job 5 fail?"</em></li>
 <li><strong>Spec Files</strong> — YAML, KDL, or JSON5 files for version-controlled workflow definitions</li>
 <li><strong>Python/Julia APIs</strong> — Libraries for programmatic workflow generation</li>
 </ul>
@@ -425,9 +425,9 @@ listed below.</p>
 <h3 id="nlr-kestrel"><a class="header" href="#nlr-kestrel">NLR Kestrel</a></h3>
 <p><strong>Pre-installed binaries</strong> are available at:</p>
 <pre><code>/scratch/dthom/torc/
-├── 0.33.1/
+├── 0.33.2/
 ├── ...
-└── latest -&gt; 0.33.1  (symlink to current version)
+└── latest -&gt; 0.33.2  (symlink to current version)
 </code></pre>
 <blockquote>
 <p><strong>Recommended</strong>: Use the <code>latest</code> directory. Torc maintains backwards compatibility, so you'll
@@ -1745,14 +1745,46 @@ capacity; queue-based mode claims up to <code>--max-parallel-jobs</code>, but on
 <code>compute_node_min_time_for_new_jobs_seconds</code>.</li>
 <li><strong>Start jobs</strong> — call <code>start_job</code>, assign a GPU device if needed, then spawn the command via
 <code>AsyncCliCommand</code>, recording stdout/stderr to per-job log files.</li>
-<li><strong>Wait</strong> — sleep with <code>SIGCHLD</code>-aware wakeup so subprocess exits are observed promptly. Adaptive
-backoff doubles the interval toward <code>claim_backoff_max_secs</code> when an iteration produces no
-progress; any completion, claim, or early wakeup resets it to the base interval. Pinned to the
-base interval while offline so the drain-ping cadence is preserved.</li>
+<li><strong>Wait</strong> — sleep with <code>SIGCHLD</code>-aware wakeup so subprocess exits are observed promptly. The sleep
+length is set by the adaptive-backoff rules described in <a href="core/concepts/job-runners.html#adaptive-backoff">Adaptive Backoff</a>.
+While offline, the adaptive ramp is bypassed so drain-ping cadence is preserved (the drain ping
+itself self-rate-limits via <code>drain_ping_interval_secs</code>).</li>
 <li><strong>Exit checks</strong> — break out on <code>SIGTERM</code>, on the end-of-allocation deadline (direct mode applies
 a pre-deadline window so <code>SIGTERM</code> has time to land before <code>SIGKILL</code>), or after an idle interval
 past <code>compute_node_wait_for_new_jobs_seconds</code> with no pending actions that could add capacity.</li>
 </ol>
+<h3 id="adaptive-backoff"><a class="header" href="#adaptive-backoff">Adaptive Backoff</a></h3>
+<p>The wait between iterations adapts to what the runner is doing. Three regimes:</p>
+<div class="table-wrapper"><table><thead><tr><th>State</th><th>Wait</th></tr></thead><tbody>
+<tr><td>Making progress</td><td><code>job_completion_poll_interval</code> (base)</td></tr>
+<tr><td>No progress (children still running)</td><td>doubles toward <code>claim_backoff_max_secs</code></td></tr>
+<tr><td>Idle (no children to reap)</td><td><code>min(job_completion_poll_interval, 30s)</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>No-progress ramp (children still running).</strong> When the runner has children but the iteration
+produces no local completion and no successful claim, polling at the base interval would generate
+unnecessary requests for hours. This is most common during a fully-loaded long-running workflow, but
+the ramp also engages whenever spare capacity exists but no claim returns work (for example,
+dependencies are not yet ready). Each such iteration doubles the wait, capped at
+<code>claim_backoff_max_secs</code> (default 300s). The wait resets to base immediately on any progress: a
+local completion, a successful claim, or a <code>SIGCHLD</code> wake-up.</p>
+<p><strong>Closing case (workflow tail or pre-idle-exit).</strong> When the runner has no tracked children,
+<code>SIGCHLD</code> cannot fire — every wake-up has to come from the timer, and the only things the loop can
+react to are workflow-complete, idle-exit (<code>compute_node_wait_for_new_jobs_seconds</code>), and the
+<code>end_time</code> deadline. Letting the wait grow toward the busy cap would only delay these checks. The
+idle wait therefore clamps to <code>min(job_completion_poll_interval, 30s)</code>: at most 30s, so a long
+configured base does not delay closing-case detection; and never longer than the configured base, so
+a user who chose a base shorter than 30s keeps that tighter cadence.</p>
+<p><strong>Example.</strong> A 5000-job × 5-day workflow run with <code>job_completion_poll_interval = 300s</code> and
+<code>claim_backoff_max_secs = 3600s</code>:</p>
+<ul>
+<li>During the busy phase, each runner polls at 300s — about 12 requests/hour.</li>
+<li>After a runner finishes its last local job but the workflow is not yet done, it polls at 30s until
+the workflow is observed complete or the idle-exit timer fires.</li>
+</ul>
+<p>Without the idle clamp, a node that drained near the start of a 1-hour backoff window could sit
+asleep for nearly the full hour after the workflow completed elsewhere. The clamp bounds that
+worst-case waste to ~30s.</p>
 <h2 id="surviving-server-outages-offline-drain"><a class="header" href="#surviving-server-outages-offline-drain">Surviving Server Outages (Offline Drain)</a></h2>
 <p>Job runners need the server to claim work, report completions, and unblock dependents. But a running
 job is an ordinary subprocess on the compute node — it does not need the server to keep running.
@@ -12474,6 +12506,7 @@ torc config validate          # Validate current configuration
 <p>Settings for <code>torc run</code> command.</p>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>poll_interval</code></td><td>float</td><td><code>5.0</code></td><td>Job completion poll interval (seconds)</td></tr>
+<tr><td><code>claim_backoff_max_secs</code></td><td>float</td><td><code>300.0</code></td><td>Upper bound (seconds) for the adaptive idle backoff (see job-runners).</td></tr>
 <tr><td><code>output_dir</code></td><td>path</td><td><code>torc_output</code></td><td>Output directory for job logs</td></tr>
 <tr><td><code>max_parallel_jobs</code></td><td>int</td><td>(none)</td><td>Maximum parallel jobs (overrides resource-based)</td></tr>
 <tr><td><code>num_cpus</code></td><td>int</td><td>(none)</td><td>Available CPUs for resource-based scheduling</td></tr>
@@ -12665,6 +12698,7 @@ completion_check_interval_secs = 5
 <tr><td><code>TORC_CLIENT__LOG_LEVEL</code></td><td><code>client.log_level</code></td></tr>
 <tr><td><code>TORC_CLIENT__USERNAME</code></td><td><code>client.username</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__POLL_INTERVAL</code></td><td><code>client.run.poll_interval</code></td></tr>
+<tr><td><code>TORC_CLIENT__RUN__CLAIM_BACKOFF_MAX_SECS</code></td><td><code>client.run.claim_backoff_max_secs</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__OUTPUT_DIR</code></td><td><code>client.run.output_dir</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__MAX_PARALLEL_JOBS</code></td><td><code>client.run.max_parallel_jobs</code></td></tr>
 <tr><td><code>TORC_CLIENT__RUN__NUM_CPUS</code></td><td><code>client.run.num_cpus</code></td></tr>
