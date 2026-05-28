@@ -747,6 +747,23 @@ impl JobRunner {
         }
     }
 
+    /// Override the claim-backoff cap loaded from config, e.g. from a CLI flag.
+    ///
+    /// `None` leaves the value loaded from `client.run.claim_backoff_max_secs`
+    /// unchanged. The override is clamped to at least
+    /// `job_completion_poll_interval`, matching the constructor's invariant.
+    /// Non-finite values (`NaN`, `+/-inf`) are ignored to keep
+    /// `Duration::from_secs_f64` from panicking later — CLI parsing already
+    /// rejects these, this is a defense-in-depth guard for config-sourced
+    /// values that bypass the CLI parser.
+    pub fn override_claim_backoff_max_secs(&mut self, secs: Option<f64>) {
+        if let Some(s) = secs
+            && s.is_finite()
+        {
+            self.claim_backoff_max_secs = s.max(self.job_completion_poll_interval);
+        }
+    }
+
     /// Execute an API call with automatic retries for network errors.
     ///
     /// This is a convenience method that wraps [`utils::send_with_retries`] with
@@ -905,8 +922,8 @@ impl JobRunner {
         info!(
             "Starting torc job runner version={} client_api_version={} server_version={} server_api_version={} \
             workflow_id={} hostname={} output_dir={} resources={:?} rules={:?} \
-            job_completion_poll_interval={}s max_parallel_jobs={:?} end_time={:?} strict_scheduler_match={} \
-            execution_mode={:?} limit_resources={}",
+            job_completion_poll_interval={}s claim_backoff_max_secs={}s max_parallel_jobs={:?} \
+            end_time={:?} strict_scheduler_match={} execution_mode={:?} limit_resources={}",
             version,
             version_check::CLIENT_API_VERSION,
             server_version,
@@ -917,6 +934,7 @@ impl JobRunner {
             self.resources,
             self.rules,
             self.job_completion_poll_interval,
+            self.claim_backoff_max_secs,
             self.max_parallel_jobs,
             self.end_time,
             self.torc_config.client.slurm.strict_scheduler_match,
@@ -3539,6 +3557,7 @@ impl JobRunner {
                         self.torc_config.client.slurm.poll_interval,
                         max_parallel_jobs,
                         self.torc_config.client.slurm.keep_submission_scripts,
+                        Some(self.claim_backoff_max_secs),
                     ) {
                         Ok(()) => {
                             info!("Successfully scheduled {} Slurm job(s)", num_allocations);
@@ -3775,6 +3794,44 @@ mod tests {
         let cap = 300.0;
         let next = next_poll_interval(base, base, cap, false, false);
         assert!(next >= base);
+    }
+
+    #[test]
+    fn override_claim_backoff_max_secs_applies_value() {
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        runner.override_claim_backoff_max_secs(Some(120.0));
+        assert!((runner.claim_backoff_max_secs - 120.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn override_claim_backoff_max_secs_none_keeps_existing() {
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        let before = runner.claim_backoff_max_secs;
+        runner.override_claim_backoff_max_secs(None);
+        assert!((runner.claim_backoff_max_secs - before).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn override_claim_backoff_max_secs_clamps_to_base_poll_interval() {
+        // make_runner uses job_completion_poll_interval = 1.0; an override
+        // below that must clamp up to the base so the cap never falls below
+        // the poll interval.
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        runner.override_claim_backoff_max_secs(Some(0.1));
+        assert!((runner.claim_backoff_max_secs - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn override_claim_backoff_max_secs_ignores_non_finite() {
+        // NaN / +inf / -inf in a config file must not crash the runner via
+        // Duration::from_secs_f64 later. The guard drops them silently and
+        // keeps the constructor-loaded value.
+        let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
+        let before = runner.claim_backoff_max_secs;
+        runner.override_claim_backoff_max_secs(Some(f64::NAN));
+        runner.override_claim_backoff_max_secs(Some(f64::INFINITY));
+        runner.override_claim_backoff_max_secs(Some(f64::NEG_INFINITY));
+        assert!((runner.claim_backoff_max_secs - before).abs() < f64::EPSILON);
     }
 
     #[test]

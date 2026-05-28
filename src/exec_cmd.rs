@@ -176,6 +176,7 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         url: args.url,
         output_dir: args.output_dir,
         poll_interval: 5.0,
+        claim_backoff_max_secs: None,
         max_parallel_jobs: args.max_parallel_jobs,
         time_limit: None,
         end_time: None,

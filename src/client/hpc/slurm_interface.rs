@@ -220,6 +220,7 @@ impl HpcInterface for SlurmInterface {
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
         startup_delay_seconds: u64,
+        claim_backoff_max_secs: Option<f64>,
     ) -> Result<()> {
         let mut script = format!(
             "#!/bin/bash\n\
@@ -266,6 +267,10 @@ impl HpcInterface for SlurmInterface {
 
         if let Some(max_jobs) = max_parallel_jobs {
             command.push_str(&format!(" --max-parallel-jobs {}", max_jobs));
+        }
+
+        if let Some(secs) = claim_backoff_max_secs {
+            command.push_str(&format!(" --claim-backoff-max-secs {}", secs));
         }
 
         // Propagate TLS settings as CLI flags.

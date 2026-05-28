@@ -214,6 +214,7 @@ impl WorkflowManager {
         max_parallel_jobs_override: Option<i32>,
         output_dir: &str,
         poll_interval_override: Option<i32>,
+        claim_backoff_max_secs_override: Option<f64>,
     ) -> Result<(), TorcError> {
         // Check if workflow is uninitialized
         match apis::workflows_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
@@ -327,6 +328,7 @@ impl WorkflowManager {
                         poll_interval,
                         max_parallel_jobs,
                         self.torc_config.client.slurm.keep_submission_scripts,
+                        claim_backoff_max_secs_override,
                     ) {
                         Ok(()) => {
                             info!(

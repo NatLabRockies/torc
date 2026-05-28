@@ -59,6 +59,9 @@ pub trait HpcInterface: Send + Sync {
     /// * `tls_ca_cert` - Optional path to a PEM-encoded CA certificate
     /// * `tls_insecure` - Whether to skip certificate verification
     /// * `startup_delay_seconds` - Maximum startup jitter in seconds (0 to disable)
+    /// * `claim_backoff_max_secs` - Optional upper bound for the adaptive
+    ///   claim/poll backoff used inside the runner. When `Some`, propagated to
+    ///   the runner via `--claim-backoff-max-secs`.
     #[allow(clippy::too_many_arguments)]
     fn create_submission_script(
         &self,
@@ -75,6 +78,7 @@ pub trait HpcInterface: Send + Sync {
         tls_ca_cert: Option<&str>,
         tls_insecure: bool,
         startup_delay_seconds: u64,
+        claim_backoff_max_secs: Option<f64>,
     ) -> Result<()>;
 
     /// Get the current HPC job ID from environment variables
