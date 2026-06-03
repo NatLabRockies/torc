@@ -428,6 +428,113 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
     assert_eq!(fetched_scheduled.status, "complete");
 }
 
+/// Regression test for the bug where `torc cancel` left compute nodes active.
+///
+/// Reproduces the reported scenario: a workflow has an active compute node whose
+/// scheduled compute node is in "canceled" status (as `torc cancel` leaves it),
+/// no jobs are still running, and the underlying Slurm allocation is gone. Before
+/// the fix, `cleanup_orphaned_jobs` skipped such nodes entirely (Step 1 only looks
+/// at "active" scheduled nodes; the running-job fallback short-circuits while any
+/// compute node is active), so the node stayed `is_active = true` and blocked
+/// `torc recover`. The new Step 4 sweep must now deactivate it.
+#[rstest]
+fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // Drive SlurmInterface with the fake squeue. With a scheduler_id that is not
+    // present in the fake jobs file, squeue reports the job as gone, which is
+    // exactly the post-`scancel` state we want to simulate. USER is required by
+    // SlurmInterface::new(). nextest runs each test in its own process, so these
+    // env mutations are isolated.
+    let fake_squeue = std::env::current_dir()
+        .unwrap()
+        .join("tests/scripts/fake_squeue.sh");
+    assert!(
+        fake_squeue.exists(),
+        "fake_squeue.sh not found at {:?}",
+        fake_squeue
+    );
+    unsafe {
+        std::env::set_var(
+            "TORC_FAKE_SQUEUE",
+            fake_squeue.to_string_lossy().to_string(),
+        );
+        if std::env::var("USER").is_err() && std::env::var("USERNAME").is_err() {
+            std::env::set_var("USER", "test-user");
+        }
+    }
+
+    // Create workflow and a Slurm scheduler config.
+    let workflow = create_test_workflow(config, "test_cleanup_deactivates_after_cancel");
+    let workflow_id = workflow.id.unwrap();
+    let scheduler = create_test_slurm_scheduler(config, workflow_id, "cancel_test_scheduler");
+    let scheduler_config_id = scheduler.id.unwrap();
+
+    // Scheduled compute node in "canceled" status, as `torc cancel` leaves it.
+    // The scheduler_id (Slurm job ID) is intentionally not in the fake squeue
+    // jobs file so the allocation reads as gone.
+    let scheduled_node = models::ScheduledComputeNodesModel::new(
+        workflow_id,
+        9876543, // Slurm job ID, absent from fake squeue -> reported gone
+        scheduler_config_id,
+        "slurm".to_string(),
+        "canceled".to_string(),
+    );
+    let created_scheduled =
+        apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, scheduled_node)
+            .expect("Failed to create scheduled compute node");
+    let scheduled_compute_node_id = created_scheduled.id.unwrap();
+
+    // Active compute node linked to that scheduled node, with no running jobs.
+    let mut compute_node = models::ComputeNodeModel::new(
+        workflow_id,
+        "cancel-test-host".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        8,
+        16.0,
+        0,
+        1,
+        "slurm".to_string(),
+        Some(json!({ "scheduler_id": scheduled_compute_node_id })),
+    );
+    compute_node.is_active = Some(true);
+    let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("Failed to create compute node");
+    let compute_node_id = created_node.id.unwrap();
+
+    // Precondition: the node is active before cleanup.
+    let before = apis::compute_nodes_api::get_compute_node(config, compute_node_id)
+        .expect("Failed to get compute node");
+    assert_eq!(
+        before.is_active,
+        Some(true),
+        "compute node should start active"
+    );
+
+    // Run the real cleanup path used by `torc workflows sync-status` / `torc recover`.
+    let result = torc::client::commands::orphan_detection::cleanup_orphaned_jobs(
+        config,
+        workflow_id,
+        false, // not a dry run
+    )
+    .expect("cleanup_orphaned_jobs failed");
+
+    assert_eq!(
+        result.compute_nodes_deactivated, 1,
+        "expected exactly one compute node to be deactivated"
+    );
+
+    // The node must now be inactive so `torc recover` can proceed.
+    let after = apis::compute_nodes_api::get_compute_node(config, compute_node_id)
+        .expect("Failed to get compute node after cleanup");
+    assert_eq!(
+        after.is_active,
+        Some(false),
+        "compute node should be deactivated after cleanup"
+    );
+}
+
 /// Test that list_jobs returns empty when filtering by non-existent active_compute_node_id
 #[rstest]
 fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {
