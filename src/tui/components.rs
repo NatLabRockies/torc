@@ -771,6 +771,107 @@ impl JobDetailsPopup {
     }
 }
 
+/// Popup showing the full, pretty-printed contents of a single user_data record.
+///
+/// The User Data table renders the `data` payload on a single line so it fits the
+/// column; this popup shows the same payload formatted across multiple lines so
+/// large/nested objects are readable. Scrollable for payloads taller than the popup.
+#[derive(Debug, Clone)]
+pub struct UserDataDetailsPopup {
+    pub user_data_id: i64,
+    pub name: String,
+    pub is_ephemeral: Option<bool>,
+    /// Pre-formatted, pretty-printed JSON payload (one entry per visual line).
+    pub data_pretty: String,
+    pub scroll_offset: u16,
+}
+
+impl UserDataDetailsPopup {
+    pub fn new(
+        user_data_id: i64,
+        name: String,
+        is_ephemeral: Option<bool>,
+        data: Option<&serde_json::Value>,
+    ) -> Self {
+        let data_pretty = match data {
+            Some(value) => {
+                serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+            }
+            None => "—".to_string(),
+        };
+        Self {
+            user_data_id,
+            name,
+            is_ephemeral,
+            data_pretty,
+            scroll_offset: 0,
+        }
+    }
+
+    pub fn scroll_down(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_add(1);
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+    }
+
+    pub fn render(&self, f: &mut Frame, area: Rect) {
+        let popup_width = 90.min(area.width.saturating_sub(4));
+        let popup_height = 24.min(area.height.saturating_sub(2));
+
+        let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+        let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+        let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
+        f.render_widget(Clear, popup_area);
+
+        let block = Block::default()
+            .title(format!(" User Data: {} ", self.name))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+
+        let inner = block.inner(popup_area);
+        f.render_widget(block, popup_area);
+
+        let ephemeral = match self.is_ephemeral {
+            Some(true) => "yes",
+            Some(false) => "no",
+            None => "—",
+        };
+
+        let mut lines = vec![
+            Line::from(vec![
+                Span::styled("ID: ", Style::default().fg(Color::DarkGray)),
+                Span::raw(self.user_data_id.to_string()),
+            ]),
+            Line::from(vec![
+                Span::styled("Ephemeral: ", Style::default().fg(Color::DarkGray)),
+                Span::raw(ephemeral),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Data:",
+                Style::default().fg(Color::Yellow),
+            )]),
+        ];
+        lines.extend(self.data_pretty.lines().map(|l| Line::from(l.to_string())));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            "Press q or Esc to close, ↑/↓ to scroll",
+            Style::default().fg(Color::DarkGray),
+        )]));
+
+        let paragraph = Paragraph::new(lines)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_offset, 0));
+
+        f.render_widget(paragraph, inner);
+    }
+}
+
 /// Popup showing expanded details for a single workflow. Rows are built by the
 /// caller as `(label, value)` pairs so this component stays decoupled from the
 /// workflow model. Scrollable for workflows with many configured fields.

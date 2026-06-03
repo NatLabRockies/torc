@@ -23,7 +23,7 @@ use crate::client::config::TorcConfig;
 use super::api::TorcClient;
 use super::components::{
     ConfirmationDialog, ErrorDialog, FileViewer, JobDetailsPopup, LogViewer, ProcessViewer,
-    RecoverPromptDialog, StatusMessage, WorkflowDetailsPopup,
+    RecoverPromptDialog, StatusMessage, UserDataDetailsPopup, WorkflowDetailsPopup,
 };
 use super::dag::{DagLayout, JobNode};
 
@@ -161,6 +161,7 @@ impl JobAction {
 pub enum PopupType {
     Help,
     JobDetails(JobDetailsPopup),
+    UserDataDetails(UserDataDetailsPopup),
     WorkflowDetails(WorkflowDetailsPopup),
     LogViewer(LogViewer),
     FileViewer(FileViewer),
@@ -3777,6 +3778,31 @@ impl App {
         self.files_state
             .selected()
             .and_then(|idx| self.files.get(idx))
+    }
+
+    pub fn get_selected_user_data(&self) -> Option<&UserDataModel> {
+        self.user_data_state
+            .selected()
+            .and_then(|idx| self.user_data.get(idx))
+    }
+
+    /// Open a popup showing the full, pretty-printed payload of the selected
+    /// user_data record. The table truncates the payload to one line; this shows
+    /// the whole object formatted across multiple lines.
+    pub fn show_user_data_details(&mut self) {
+        if let Some(ud) = self.get_selected_user_data() {
+            let popup = UserDataDetailsPopup::new(
+                ud.id.unwrap_or(0),
+                ud.name.clone(),
+                ud.is_ephemeral,
+                ud.data.as_ref(),
+            );
+            self.previous_focus = self.focus;
+            self.focus = Focus::Popup;
+            self.popup = Some(PopupType::UserDataDetails(popup));
+        } else {
+            self.set_status(StatusMessage::warning("No user data selected"));
+        }
     }
 
     pub fn show_file_contents(&mut self) {

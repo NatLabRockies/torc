@@ -181,6 +181,20 @@ where
                         }
                         _ => {}
                     },
+                    Some(PopupType::UserDataDetails(_)) => match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => app.close_popup(),
+                        KeyCode::Down => {
+                            if let Some(PopupType::UserDataDetails(popup)) = app.popup.as_mut() {
+                                popup.scroll_down();
+                            }
+                        }
+                        KeyCode::Up => {
+                            if let Some(PopupType::UserDataDetails(popup)) = app.popup.as_mut() {
+                                popup.scroll_up();
+                            }
+                        }
+                        _ => {}
+                    },
                     Some(PopupType::WorkflowDetails(_)) => match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => app.close_popup(),
                         KeyCode::Down => {
@@ -525,6 +539,8 @@ where
                             app.show_job_details();
                         } else if app.detail_view == DetailViewType::Files {
                             app.show_file_contents();
+                        } else if app.detail_view == DetailViewType::UserData {
+                            app.show_user_data_details();
                         }
                     }
                     KeyCode::Tab => app.next_detail_view(),

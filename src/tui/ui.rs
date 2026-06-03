@@ -167,6 +167,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             PopupType::JobDetails(details) => {
                 details.render(f, f.area());
             }
+            PopupType::UserDataDetails(details) => {
+                details.render(f, f.area());
+            }
             PopupType::WorkflowDetails(details) => {
                 details.render(f, f.area());
             }
@@ -1035,6 +1038,7 @@ fn draw_user_data_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("User Data", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
+                Span::styled(" │ Enter: details", Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::Green),
         )
