@@ -39,6 +39,7 @@ fn help_context_for(app: &App) -> HelpContext {
             DetailViewType::Summary => HelpContext::DetailSummary,
             DetailViewType::Jobs => HelpContext::DetailJobs,
             DetailViewType::Files => HelpContext::DetailFiles,
+            DetailViewType::UserData => HelpContext::DetailUserData,
             DetailViewType::Events => HelpContext::DetailEvents,
             DetailViewType::Results => HelpContext::DetailResults,
             DetailViewType::ComputeNodes => HelpContext::DetailComputeNodes,
@@ -164,6 +165,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 dialog.render(f, f.area());
             }
             PopupType::JobDetails(details) => {
+                details.render(f, f.area());
+            }
+            PopupType::WorkflowDetails(details) => {
                 details.render(f, f.area());
             }
             PopupType::LogViewer(viewer) => {
@@ -511,17 +515,12 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
     let all_types = DetailViewType::all();
     let titles: Vec<&str> = all_types.iter().map(|t| t.as_str()).collect();
 
-    let selected = match app.detail_view {
-        DetailViewType::Summary => 0,
-        DetailViewType::Jobs => 1,
-        DetailViewType::Files => 2,
-        DetailViewType::Events => 3,
-        DetailViewType::Results => 4,
-        DetailViewType::ComputeNodes => 5,
-        DetailViewType::ScheduledNodes => 6,
-        DetailViewType::SlurmStats => 7,
-        DetailViewType::Dag => 8,
-    };
+    // Derive the highlighted index from the canonical tab order so it stays
+    // correct as tabs are added or reordered.
+    let selected = all_types
+        .iter()
+        .position(|t| *t == app.detail_view)
+        .unwrap_or(0);
 
     let tabs = Tabs::new(titles)
         .block(
@@ -547,6 +546,7 @@ fn draw_detail_table(f: &mut Frame, area: Rect, app: &mut App) {
         DetailViewType::Summary => draw_summary(f, area, app),
         DetailViewType::Jobs => draw_jobs_table(f, area, app),
         DetailViewType::Files => draw_files_table(f, area, app),
+        DetailViewType::UserData => draw_user_data_table(f, area, app),
         DetailViewType::Events => draw_events_table(f, area, app),
         DetailViewType::Results => draw_results_table(f, area, app),
         DetailViewType::ComputeNodes => draw_compute_nodes_table(f, area, app),
@@ -993,6 +993,85 @@ fn draw_files_table(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_stateful_widget(table, area, &mut app.files_state);
 }
 
+fn draw_user_data_table(f: &mut Frame, area: Rect, app: &mut App) {
+    let is_focused = app.focus == Focus::Details;
+    let selected_style = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .fg(Color::Cyan);
+    let header_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+
+    let header = Row::new(vec!["ID", "Name", "Ephemeral", "Data"])
+        .style(header_style)
+        .bottom_margin(1);
+
+    let rows = app.user_data.iter().map(|ud| {
+        let id = ud.id.map(|i| i.to_string()).unwrap_or_default();
+        let name = ud.name.clone();
+        let ephemeral = match ud.is_ephemeral {
+            Some(true) => "yes".to_string(),
+            Some(false) => "no".to_string(),
+            None => String::new(),
+        };
+        // Render the JSON payload on a single line so it fits the table; the
+        // full structure is preserved server-side and visible via the CLI.
+        let data = ud.data.as_ref().map(|v| v.to_string()).unwrap_or_default();
+
+        Row::new(vec![
+            Cell::from(id),
+            Cell::from(name),
+            Cell::from(ephemeral),
+            Cell::from(data),
+        ])
+    });
+
+    let filter = filter_suffix(app, FilterTarget::Details);
+    let page = page_suffix(app.user_data_offset, app.user_data_has_more);
+    let (title, border_style) = if is_focused {
+        (
+            Line::from(vec![
+                Span::styled("◈ ", Style::default().fg(Color::Green)),
+                Span::styled("User Data", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
+            ]),
+            Style::default().fg(Color::Green),
+        )
+    } else {
+        (
+            Line::from(vec![
+                Span::styled("◈ ", Style::default().fg(Color::Cyan)),
+                Span::styled("User Data", Style::default().fg(Color::White)),
+                Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
+            ]),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(8),
+            Constraint::Length(28),
+            Constraint::Length(10),
+            Constraint::Percentage(100),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(border_style),
+    )
+    .row_highlight_style(selected_style)
+    .highlight_symbol("▸ ");
+
+    f.render_stateful_widget(table, area, &mut app.user_data_state);
+}
+
 fn draw_events_table(f: &mut Frame, area: Rect, app: &mut App) {
     let is_focused = app.focus == Focus::Details;
     let selected_style = Style::default()
@@ -1159,6 +1238,10 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("Results", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    " │ l: logs  m: peak mem  p: peak cpu",
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]),
             Style::default().fg(Color::Green),
         )

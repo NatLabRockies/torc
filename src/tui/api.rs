@@ -4,7 +4,8 @@ use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
     ComputeNodeModel, FileModel, IsCompleteResponse, JobDependencyModel, JobModel, JobStatus,
-    ResultModel, ScheduledComputeNodesModel, SlurmStatsModel, WorkflowActionModel, WorkflowModel,
+    ResultModel, ScheduledComputeNodesModel, SlurmStatsModel, UserDataModel, WorkflowActionModel,
+    WorkflowModel,
 };
 use anyhow::{Context, Result};
 
@@ -211,6 +212,31 @@ impl TorcClient {
             None,   // all_runs
         )
         .context("Failed to list results")?;
+
+        Ok((response.items, response.has_more))
+    }
+
+    /// Returns the page items plus the server's `has_more` flag for the
+    /// workflow's user_data entries.
+    pub fn list_user_data(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<(Vec<UserDataModel>, bool)> {
+        let response = apis::user_data_api::list_user_data(
+            &self.config,
+            workflow_id,
+            None,   // consumer_job_id
+            None,   // producer_job_id
+            offset, // offset
+            limit,  // limit
+            None,   // sort_by
+            None,   // reverse_sort
+            None,   // name
+            None,   // is_ephemeral
+        )
+        .context("Failed to list user data")?;
 
         Ok((response.items, response.has_more))
     }

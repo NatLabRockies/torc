@@ -2526,6 +2526,9 @@ fn handle_get(config: &Configuration, id: &Option<i64>, user: &str, format: &str
                 if let Some(run_id) = workflow.run_id {
                     println!("  Run ID: {}", run_id);
                 }
+                if let Some(submission_dir) = &workflow.submission_directory {
+                    println!("  Submission Directory: {}", submission_dir);
+                }
                 println!("  Canceled: {}", workflow.is_canceled.unwrap_or(false));
                 println!("  Archived: {}", workflow.is_archived.unwrap_or(false));
                 if let Some(defaults_map) = &workflow.slurm_defaults {

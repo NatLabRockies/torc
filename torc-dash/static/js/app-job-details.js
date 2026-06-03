@@ -69,6 +69,7 @@ Object.assign(TorcDashboard.prototype, {
                 resourceRequirements,
                 allJobs,
                 jobDependencies,
+                workflow,
             ] = await Promise.all([
                 api.getJob(jobId),
                 api.listResults(workflowId),
@@ -79,6 +80,7 @@ Object.assign(TorcDashboard.prototype, {
                 api.listResourceRequirements(workflowId),
                 api.listJobs(workflowId),
                 api.getJobsDependencies(workflowId),
+                api.getWorkflow(workflowId),
             ]);
 
             const jobResults = results.filter(r => r.job_id === jobIdNum);
@@ -133,6 +135,7 @@ Object.assign(TorcDashboard.prototype, {
                 resourceReq: jobResourceReq,
                 blockedByJobs,
                 blocksJobs,
+                submissionDirectory: workflow?.submission_directory || null,
             };
 
             this.renderJobDetailsSummary(job);
@@ -471,6 +474,20 @@ Object.assign(TorcDashboard.prototype, {
         });
     },
 
+    // Resolve an output directory for locating log files. Relative paths are
+    // joined to the workflow's submission directory (the directory the
+    // workflow was submitted from, where logs are written) so they resolve
+    // regardless of the dash server's working directory. Absolute paths
+    // (POSIX `/...` / `~...` or Windows `C:\...`) are returned unchanged.
+    resolveLogBaseDir(outputDir, submissionDir) {
+        const isAbsolute = /^(\/|~|[A-Za-z]:[\\/])/.test(outputDir);
+        if (isAbsolute || !submissionDir) {
+            return outputDir;
+        }
+        const trimmed = submissionDir.replace(/\/+$/, '');
+        return `${trimmed}/${outputDir}`;
+    },
+
     async loadJobLogContent() {
         const data = this.jobDetailsData;
         const logPathEl = document.getElementById('job-log-path');
@@ -493,10 +510,15 @@ Object.assign(TorcDashboard.prototype, {
         const outputDir = document.getElementById('job-logs-output-dir')?.value || 'torc_output';
         const isStdout = (this._jobLogTab || 'stdout') === 'stdout';
 
+        // Resolve a relative output directory against the workflow's submission
+        // directory so logs open regardless of the dash server's current
+        // directory. Absolute output dirs are used as-is.
+        const baseDir = this.resolveLogBaseDir(outputDir, data.submissionDirectory);
+
         // Construct log file path based on naming convention
         // Include attempt_id in the path (defaults to 1 if not present)
         const attemptId = result.attempt_id ?? 1;
-        const stdioBase = `${outputDir}/job_stdio/job_wf${result.workflow_id}_j${result.job_id}_r${result.run_id}_a${attemptId}`;
+        const stdioBase = `${baseDir}/job_stdio/job_wf${result.workflow_id}_j${result.job_id}_r${result.run_id}_a${attemptId}`;
         // Try the separate file (.o/.e) first, then fall back to combined (.log)
         const primaryPath = isStdout ? `${stdioBase}.o` : `${stdioBase}.e`;
         const combinedPath = `${stdioBase}.log`;

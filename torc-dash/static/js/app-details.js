@@ -791,7 +791,13 @@ Object.assign(TorcDashboard.prototype, {
         const outputDir = this.slurmLogsOutputDir || 'torc_output';
         const extension = this.currentSlurmLogTab === 'stdout' ? 'o' : 'e';
         const workflowId = this.selectedWorkflowId || 0;
-        const filePath = `${outputDir}/slurm_output_wf${workflowId}_sl${this.currentSlurmJobId}.${extension}`;
+        // Resolve a relative output dir against the workflow's submission
+        // directory so logs open regardless of the dash server's CWD.
+        const submissionDir = this.workflows?.find(
+            w => String(w.id) === String(this.selectedWorkflowId)
+        )?.submission_directory || null;
+        const baseDir = this.resolveLogBaseDir(outputDir, submissionDir);
+        const filePath = `${baseDir}/slurm_output_wf${workflowId}_sl${this.currentSlurmJobId}.${extension}`;
 
         logPath.textContent = filePath;
         logContent.classList.toggle('stderr', this.currentSlurmLogTab !== 'stdout');
