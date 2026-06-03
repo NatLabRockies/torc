@@ -39,6 +39,8 @@ pub struct OrphanCleanupResult {
     pub pending_allocations_cleaned: usize,
     /// Number of running jobs failed due to no active compute nodes
     pub running_jobs_failed: usize,
+    /// Number of compute nodes deactivated because their Slurm allocation is gone
+    pub compute_nodes_deactivated: usize,
     /// Details of each orphaned job that was failed
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub failed_job_details: Vec<OrphanedJobDetail>,
@@ -59,6 +61,7 @@ impl OrphanCleanupResult {
         self.slurm_jobs_failed > 0
             || self.pending_allocations_cleaned > 0
             || self.running_jobs_failed > 0
+            || self.compute_nodes_deactivated > 0
     }
 
     /// Total number of jobs that were failed
@@ -69,10 +72,11 @@ impl OrphanCleanupResult {
 
 /// Detect and clean up orphaned jobs from terminated Slurm allocations.
 ///
-/// This function performs three types of cleanup:
+/// This function performs four types of cleanup:
 /// 1. Fails jobs from active scheduled compute nodes whose Slurm jobs are no longer running
 /// 2. Cleans up pending scheduled compute nodes whose Slurm jobs were cancelled
 /// 3. Fails running jobs that have no active compute nodes (fallback for non-Slurm)
+/// 4. Deactivates compute nodes still marked active whose Slurm allocation is gone
 ///
 /// If `dry_run` is true, reports what would be done without making changes.
 pub fn cleanup_orphaned_jobs(
@@ -84,6 +88,7 @@ pub fn cleanup_orphaned_jobs(
         slurm_jobs_failed: 0,
         pending_allocations_cleaned: 0,
         running_jobs_failed: 0,
+        compute_nodes_deactivated: 0,
         failed_job_details: Vec::new(),
     };
 
@@ -102,6 +107,13 @@ pub fn cleanup_orphaned_jobs(
         fail_orphaned_running_jobs(config, workflow_id, dry_run)?;
     result.running_jobs_failed = running_failed;
     result.failed_job_details.extend(running_details);
+
+    // Step 4: Deactivate compute nodes still marked active whose Slurm allocation
+    // is gone. This catches nodes stranded by an ungraceful job runner exit (e.g.
+    // after `torc cancel` issues `scancel`), which Step 1 misses because it only
+    // looks at scheduled compute nodes still in "active" status.
+    result.compute_nodes_deactivated =
+        deactivate_orphaned_compute_nodes(config, workflow_id, dry_run)?;
 
     Ok(result)
 }
@@ -280,29 +292,10 @@ fn fail_orphaned_slurm_jobs(
                 }
             }
 
-            if !dry_run {
-                // Mark this compute node as inactive since its Slurm job is gone
-                let mut updated_node = compute_node.clone();
-                updated_node.is_active = Some(false);
-                match apis::compute_nodes_api::update_compute_node(
-                    config,
-                    compute_node_id,
-                    updated_node,
-                ) {
-                    Ok(_) => {
-                        debug!(
-                            "Marked compute node {} as inactive (Slurm job {} no longer running)",
-                            compute_node_id, slurm_job_id
-                        );
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to mark compute node {} as inactive: {}",
-                            compute_node_id, e
-                        );
-                    }
-                }
-            }
+            // Compute-node deactivation is handled centrally by Step 4
+            // (`deactivate_orphaned_compute_nodes`) so that every deactivation is
+            // counted in `OrphanCleanupResult::compute_nodes_deactivated`. Step 4
+            // runs after this step and sweeps the still-active node here.
         }
 
         if !dry_run {
@@ -667,6 +660,181 @@ fn fail_orphaned_running_jobs(
     Ok((failed_count, details))
 }
 
+/// Deactivate compute nodes that are still marked `is_active = true` but whose
+/// Slurm allocation is no longer running.
+///
+/// This handles compute nodes stranded by an ungraceful job runner exit: when a
+/// runner is killed by `scancel` (via `torc cancel`) or a Slurm timeout, it never
+/// reaches its own deactivation path, so the `ComputeNode` row stays active
+/// forever and blocks `torc recover`.
+///
+/// Unlike [`fail_orphaned_slurm_jobs`], this does not require the scheduled
+/// compute node to still be in "active" status (a cancel moves it to "canceled")
+/// and does not require any jobs to still be in "running" status. It walks every
+/// Slurm-type scheduled compute node regardless of status, and for those whose
+/// Slurm job is gone, deactivates the associated active compute nodes.
+///
+/// Returns the number of compute nodes that were deactivated.
+fn deactivate_orphaned_compute_nodes(
+    config: &Configuration,
+    workflow_id: i64,
+    dry_run: bool,
+) -> Result<usize, String> {
+    // Cheap early-out: nothing to do if no compute nodes are active.
+    let active_nodes = paginate_compute_nodes(
+        config,
+        workflow_id,
+        ComputeNodeListParams::new()
+            .with_is_active(true)
+            .with_limit(1),
+    )
+    .map_err(|e| format!("Failed to list active compute nodes: {}", e))?;
+    if active_nodes.is_empty() {
+        return Ok(0);
+    }
+
+    // Slurm is the source of truth. If we can't talk to it, do nothing.
+    let slurm = match SlurmInterface::new() {
+        Ok(s) => s,
+        Err(e) => {
+            debug!(
+                "Could not create SlurmInterface for compute node sweep: {}",
+                e
+            );
+            return Ok(0);
+        }
+    };
+
+    // Walk every Slurm-type scheduled compute node, regardless of status.
+    let scheduled_nodes = paginate_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        ScheduledComputeNodeListParams::new(),
+    )
+    .map_err(|e| format!("Failed to list scheduled compute nodes: {}", e))?;
+
+    let mut total_deactivated = 0;
+
+    for scheduled_node in scheduled_nodes
+        .iter()
+        .filter(|node| node.scheduler_type.to_lowercase() == "slurm")
+    {
+        let scheduled_compute_node_id = match scheduled_node.id {
+            Some(id) => id,
+            None => continue,
+        };
+        let slurm_job_id = scheduled_node.scheduler_id.to_string();
+
+        // Skip allocations that are still alive in Slurm.
+        match slurm.get_status(&slurm_job_id) {
+            Ok(info)
+                if info.status == HpcJobStatus::Running || info.status == HpcJobStatus::Queued =>
+            {
+                continue;
+            }
+            Ok(_) => {}
+            Err(e) => {
+                warn!(
+                    "Error checking Slurm status for job {}: {}; leaving compute nodes untouched",
+                    slurm_job_id, e
+                );
+                continue;
+            }
+        }
+
+        match deactivate_compute_nodes_for_scheduled_node(
+            config,
+            workflow_id,
+            scheduled_compute_node_id,
+            &slurm_job_id,
+            dry_run,
+        ) {
+            Ok(count) => total_deactivated += count,
+            Err(e) => warn!(
+                "Failed to deactivate compute nodes for scheduled compute node {}: {}",
+                scheduled_compute_node_id, e
+            ),
+        }
+    }
+
+    if total_deactivated > 0 {
+        let action = if dry_run {
+            "Would deactivate"
+        } else {
+            "Deactivated"
+        };
+        info!(
+            "{} {} orphaned compute node(s) whose Slurm allocation is gone",
+            action, total_deactivated
+        );
+    }
+
+    Ok(total_deactivated)
+}
+
+/// Mark all still-active compute nodes associated with a scheduled compute node
+/// as inactive.
+///
+/// Used by [`deactivate_orphaned_compute_nodes`] during cleanup, and by
+/// `torc cancel` after `scancel` (the job runner is killed and never deactivates
+/// itself). `slurm_job_id` is used only for logging context.
+///
+/// Returns the number of compute nodes that were deactivated.
+pub fn deactivate_compute_nodes_for_scheduled_node(
+    config: &Configuration,
+    workflow_id: i64,
+    scheduled_compute_node_id: i64,
+    slurm_job_id: &str,
+    dry_run: bool,
+) -> Result<usize, String> {
+    let compute_nodes = paginate_compute_nodes(
+        config,
+        workflow_id,
+        ComputeNodeListParams::new().with_scheduled_compute_node_id(scheduled_compute_node_id),
+    )
+    .map_err(|e| format!("Failed to list compute nodes: {}", e))?;
+
+    let mut count = 0;
+
+    for compute_node in &compute_nodes {
+        // Only touch nodes that are still marked active.
+        if compute_node.is_active != Some(true) {
+            continue;
+        }
+        let compute_node_id = match compute_node.id {
+            Some(id) => id,
+            None => continue,
+        };
+
+        if dry_run {
+            info!(
+                "[DRY RUN] Would deactivate compute node {} (Slurm job {} no longer running)",
+                compute_node_id, slurm_job_id
+            );
+            count += 1;
+            continue;
+        }
+
+        let mut updated_node = compute_node.clone();
+        updated_node.is_active = Some(false);
+        apis::compute_nodes_api::update_compute_node(config, compute_node_id, updated_node)
+            .map_err(|e| {
+                format!(
+                    "Failed to deactivate compute node {}: {}",
+                    compute_node_id, e
+                )
+            })?;
+
+        info!(
+            "Deactivated compute node {} (Slurm job {} no longer running)",
+            compute_node_id, slurm_job_id
+        );
+        count += 1;
+    }
+
+    Ok(count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -677,6 +845,7 @@ mod tests {
             slurm_jobs_failed: 0,
             pending_allocations_cleaned: 0,
             running_jobs_failed: 0,
+            compute_nodes_deactivated: 0,
             failed_job_details: Vec::new(),
         };
         assert!(!empty.any_cleaned());
@@ -685,6 +854,7 @@ mod tests {
             slurm_jobs_failed: 1,
             pending_allocations_cleaned: 0,
             running_jobs_failed: 0,
+            compute_nodes_deactivated: 0,
             failed_job_details: Vec::new(),
         };
         assert!(with_slurm.any_cleaned());
@@ -693,6 +863,7 @@ mod tests {
             slurm_jobs_failed: 0,
             pending_allocations_cleaned: 1,
             running_jobs_failed: 0,
+            compute_nodes_deactivated: 0,
             failed_job_details: Vec::new(),
         };
         assert!(with_pending.any_cleaned());
@@ -701,9 +872,19 @@ mod tests {
             slurm_jobs_failed: 0,
             pending_allocations_cleaned: 0,
             running_jobs_failed: 1,
+            compute_nodes_deactivated: 0,
             failed_job_details: Vec::new(),
         };
         assert!(with_running.any_cleaned());
+
+        let with_deactivated = OrphanCleanupResult {
+            slurm_jobs_failed: 0,
+            pending_allocations_cleaned: 0,
+            running_jobs_failed: 0,
+            compute_nodes_deactivated: 1,
+            failed_job_details: Vec::new(),
+        };
+        assert!(with_deactivated.any_cleaned());
     }
 
     #[test]
@@ -712,6 +893,7 @@ mod tests {
             slurm_jobs_failed: 3,
             pending_allocations_cleaned: 2,
             running_jobs_failed: 1,
+            compute_nodes_deactivated: 5,
             failed_job_details: Vec::new(),
         };
         assert_eq!(result.total_jobs_failed(), 4);
