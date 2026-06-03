@@ -474,20 +474,6 @@ Object.assign(TorcDashboard.prototype, {
         });
     },
 
-    // Resolve an output directory for locating log files. Relative paths are
-    // joined to the workflow's submission directory (the directory the
-    // workflow was submitted from, where logs are written) so they resolve
-    // regardless of the dash server's working directory. Absolute paths
-    // (POSIX `/...` / `~...` or Windows `C:\...`) are returned unchanged.
-    resolveLogBaseDir(outputDir, submissionDir) {
-        const isAbsolute = /^(\/|~|[A-Za-z]:[\\/])/.test(outputDir);
-        if (isAbsolute || !submissionDir) {
-            return outputDir;
-        }
-        const trimmed = submissionDir.replace(/\/+$/, '');
-        return `${trimmed}/${outputDir}`;
-    },
-
     async loadJobLogContent() {
         const data = this.jobDetailsData;
         const logPathEl = document.getElementById('job-log-path');

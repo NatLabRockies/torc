@@ -35,6 +35,28 @@ Object.assign(TorcDashboard.prototype, {
         return str.length > maxLen ? str.substring(0, maxLen) + '...' : str;
     },
 
+    // Resolve an output directory for locating log files. A relative path is
+    // joined to the workflow's submission directory (the directory the
+    // workflow was submitted from, where logs are written) so it resolves
+    // regardless of the dash server's working directory. Absolute paths --
+    // POSIX (`/...`), home (`~...`), Windows drive (`C:\...`), or UNC
+    // (`\\host\share`) -- are returned unchanged.
+    //
+    // Lives here (loaded before every consumer) rather than in a feature
+    // module so it has no implicit cross-module load-order dependency.
+    resolveLogBaseDir(outputDir, submissionDir) {
+        const isAbsolute = /^(\/|~|[A-Za-z]:[\\/]|\\\\)/.test(outputDir);
+        if (isAbsolute || !submissionDir) {
+            return outputDir;
+        }
+        // Strip trailing separators (forward or back slash) before joining so a
+        // submission directory captured on a Windows host doesn't yield a
+        // doubled/invalid separator. Forward slashes work as path separators on
+        // both POSIX and Windows, so join with `/`.
+        const trimmed = submissionDir.replace(/[\\/]+$/, '');
+        return `${trimmed}/${outputDir}`;
+    },
+
     formatDate(dateStr) {
         if (!dateStr) return '-';
         try {
