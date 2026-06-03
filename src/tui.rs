@@ -181,6 +181,20 @@ where
                         }
                         _ => {}
                     },
+                    Some(PopupType::WorkflowDetails(_)) => match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => app.close_popup(),
+                        KeyCode::Down => {
+                            if let Some(PopupType::WorkflowDetails(popup)) = app.popup.as_mut() {
+                                popup.scroll_down();
+                            }
+                        }
+                        KeyCode::Up => {
+                            if let Some(PopupType::WorkflowDetails(popup)) = app.popup.as_mut() {
+                                popup.scroll_up();
+                            }
+                        }
+                        _ => {}
+                    },
                     Some(PopupType::LogViewer(viewer)) => {
                         if viewer.is_searching {
                             match key.code {
@@ -515,6 +529,9 @@ where
                     }
                     KeyCode::Tab => app.next_detail_view(),
                     KeyCode::BackTab => app.previous_detail_view(),
+                    // Show expanded details (incl. submission directory) for the
+                    // highlighted workflow.
+                    KeyCode::Char('D') => app.show_workflow_details(),
                     // Page through the active list (Workflows / Jobs / Results /
                     // Compute Nodes) one TUI_PAGE_SIZE page at a time, on demand.
                     KeyCode::Char(']') => {
@@ -626,6 +643,9 @@ where
                     KeyCode::Char('l') if app.focus == Focus::Details => match app.detail_view {
                         DetailViewType::Jobs => {
                             app.show_job_logs();
+                        }
+                        DetailViewType::Results => {
+                            app.show_result_logs();
                         }
                         DetailViewType::ScheduledNodes => {
                             app.show_slurm_logs();

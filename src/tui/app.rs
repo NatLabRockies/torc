@@ -14,7 +14,7 @@ use crate::client::log_paths::{
 use crate::client::sse_client::SseEvent;
 use crate::models::{
     ComputeNodeModel, FileModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
-    SlurmStatsModel, WorkflowModel,
+    SlurmStatsModel, UserDataModel, WorkflowModel,
 };
 
 use crate::client::apis::configuration::{BasicAuth, TlsConfig};
@@ -23,7 +23,7 @@ use crate::client::config::TorcConfig;
 use super::api::TorcClient;
 use super::components::{
     ConfirmationDialog, ErrorDialog, FileViewer, JobDetailsPopup, LogViewer, ProcessViewer,
-    RecoverPromptDialog, StatusMessage,
+    RecoverPromptDialog, StatusMessage, WorkflowDetailsPopup,
 };
 use super::dag::{DagLayout, JobNode};
 
@@ -32,6 +32,7 @@ pub enum DetailViewType {
     Summary,
     Jobs,
     Files,
+    UserData,
     Events,
     Results,
     ComputeNodes,
@@ -160,6 +161,7 @@ impl JobAction {
 pub enum PopupType {
     Help,
     JobDetails(JobDetailsPopup),
+    WorkflowDetails(WorkflowDetailsPopup),
     LogViewer(LogViewer),
     FileViewer(FileViewer),
     ProcessViewer(ProcessViewer),
@@ -189,6 +191,7 @@ impl DetailViewType {
             Self::Summary => "◆ Summary",
             Self::Jobs => "▶ Jobs",
             Self::Files => "◫ Files",
+            Self::UserData => "◈ User Data",
             Self::Events => "⚡ Events",
             Self::Results => "✓ Results",
             Self::ComputeNodes => "▣ Compute",
@@ -203,6 +206,7 @@ impl DetailViewType {
             Self::Summary,
             Self::Jobs,
             Self::Files,
+            Self::UserData,
             Self::Events,
             Self::Results,
             Self::ComputeNodes,
@@ -216,7 +220,8 @@ impl DetailViewType {
         match self {
             Self::Summary => Self::Jobs,
             Self::Jobs => Self::Files,
-            Self::Files => Self::Events,
+            Self::Files => Self::UserData,
+            Self::UserData => Self::Events,
             Self::Events => Self::Results,
             Self::Results => Self::ComputeNodes,
             Self::ComputeNodes => Self::ScheduledNodes,
@@ -231,7 +236,8 @@ impl DetailViewType {
             Self::Summary => Self::Dag,
             Self::Jobs => Self::Summary,
             Self::Files => Self::Jobs,
-            Self::Events => Self::Files,
+            Self::UserData => Self::Files,
+            Self::Events => Self::UserData,
             Self::Results => Self::Events,
             Self::ComputeNodes => Self::Results,
             Self::ScheduledNodes => Self::ComputeNodes,
@@ -575,6 +581,13 @@ pub struct App {
     pub files: Vec<FileModel>,
     pub files_all: Vec<FileModel>,
     pub files_state: TableState,
+    pub user_data: Vec<UserDataModel>,
+    pub user_data_all: Vec<UserDataModel>,
+    pub user_data_state: TableState,
+    /// Offset of the currently-loaded User Data page.
+    pub user_data_offset: i64,
+    /// True when the last User Data fetch filled a full page.
+    pub user_data_has_more: bool,
     pub events: Vec<SseEvent>,
     pub events_all: Vec<SseEvent>,
     pub events_state: TableState,
@@ -704,6 +717,11 @@ impl App {
             files: Vec::new(),
             files_all: Vec::new(),
             files_state: TableState::default(),
+            user_data: Vec::new(),
+            user_data_all: Vec::new(),
+            user_data_state: TableState::default(),
+            user_data_offset: 0,
+            user_data_has_more: false,
             events: Vec::new(),
             events_all: Vec::new(),
             events_state: TableState::default(),
@@ -859,6 +877,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
+                    DetailViewType::UserData => (&mut self.user_data_state, self.user_data.len()),
                     DetailViewType::Summary | DetailViewType::Dag => return, // No table to navigate
                 };
                 if len > 0 {
@@ -905,6 +924,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
+                    DetailViewType::UserData => (&mut self.user_data_state, self.user_data.len()),
                     DetailViewType::Summary | DetailViewType::Dag => return, // No table to navigate
                 };
                 if len > 0 {
@@ -952,6 +972,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
+                    DetailViewType::UserData => (&mut self.user_data_state, self.user_data.len()),
                     DetailViewType::Summary | DetailViewType::Dag => return,
                 };
                 if len > 0 {
@@ -999,6 +1020,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
+                    DetailViewType::UserData => (&mut self.user_data_state, self.user_data.len()),
                     DetailViewType::Summary | DetailViewType::Dag => return,
                 };
                 if len > 0 {
@@ -1040,6 +1062,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
+                    DetailViewType::UserData => (&mut self.user_data_state, self.user_data.len()),
                     DetailViewType::Summary | DetailViewType::Dag => return,
                 };
                 if len > 0 {
@@ -1077,6 +1100,7 @@ impl App {
                     DetailViewType::SlurmStats => {
                         (&mut self.slurm_stats_state, self.slurm_stats.len())
                     }
+                    DetailViewType::UserData => (&mut self.user_data_state, self.user_data.len()),
                     DetailViewType::Summary | DetailViewType::Dag => return,
                 };
                 if len > 0 {
@@ -1147,6 +1171,20 @@ impl App {
                         self.files = self.files_all.clone();
                         if !self.files.is_empty() {
                             self.files_state.select(Some(0));
+                        }
+                    }
+                    DetailViewType::UserData => {
+                        (self.user_data_all, self.user_data_has_more) =
+                            self.client.list_user_data(
+                                workflow_id,
+                                Some(self.user_data_offset),
+                                Some(TUI_PAGE_SIZE),
+                            )?;
+                        self.user_data = self.user_data_all.clone();
+                        if self.user_data.is_empty() {
+                            self.user_data_state.select(None);
+                        } else {
+                            self.user_data_state.select(Some(0));
                         }
                     }
                     DetailViewType::Events => {
@@ -1244,6 +1282,7 @@ impl App {
         // afterward.
         let jobs_sel = self.jobs_state.selected();
         let files_sel = self.files_state.selected();
+        let user_data_sel = self.user_data_state.selected();
         let results_sel = self.results_state.selected();
         let compute_nodes_sel = self.compute_nodes_state.selected();
         let scheduled_nodes_sel = self.scheduled_nodes_state.selected();
@@ -1276,6 +1315,11 @@ impl App {
 
         restore_selection(&mut self.jobs_state, jobs_sel, self.jobs.len());
         restore_selection(&mut self.files_state, files_sel, self.files.len());
+        restore_selection(
+            &mut self.user_data_state,
+            user_data_sel,
+            self.user_data.len(),
+        );
         restore_selection(&mut self.results_state, results_sel, self.results.len());
         restore_selection(
             &mut self.compute_nodes_state,
@@ -1577,6 +1621,8 @@ impl App {
         self.results_has_more = false;
         self.compute_nodes_offset = 0;
         self.compute_nodes_has_more = false;
+        self.user_data_offset = 0;
+        self.user_data_has_more = false;
     }
 
     /// True when a next page may exist for the active paginated view.
@@ -1587,6 +1633,7 @@ impl App {
                 DetailViewType::Jobs => self.jobs_has_more,
                 DetailViewType::Results => self.results_has_more,
                 DetailViewType::ComputeNodes => self.compute_nodes_has_more,
+                DetailViewType::UserData => self.user_data_has_more,
                 _ => false,
             },
             _ => false,
@@ -1619,6 +1666,10 @@ impl App {
                     self.compute_nodes_offset += TUI_PAGE_SIZE;
                     self.reload_detail_page_preserving_filter()?;
                 }
+                DetailViewType::UserData => {
+                    self.user_data_offset += TUI_PAGE_SIZE;
+                    self.reload_detail_page_preserving_filter()?;
+                }
                 _ => {}
             },
             _ => {}
@@ -1649,6 +1700,10 @@ impl App {
                 }
                 DetailViewType::ComputeNodes if self.compute_nodes_offset > 0 => {
                     self.compute_nodes_offset = (self.compute_nodes_offset - TUI_PAGE_SIZE).max(0);
+                    self.reload_detail_page_preserving_filter()?;
+                }
+                DetailViewType::UserData if self.user_data_offset > 0 => {
+                    self.user_data_offset = (self.user_data_offset - TUI_PAGE_SIZE).max(0);
                     self.reload_detail_page_preserving_filter()?;
                 }
                 _ => {}
@@ -1914,6 +1969,7 @@ impl App {
             DetailViewType::Summary => vec![], // Summary view doesn't support filtering
             DetailViewType::Jobs => vec!["Status", "Name", "Command"],
             DetailViewType::Files => vec!["Name", "Path"],
+            DetailViewType::UserData => vec!["Name", "Data"],
             DetailViewType::Events => vec!["Event Type", "Data"],
             DetailViewType::Results => vec!["Status", "Return Code"],
             DetailViewType::ComputeNodes => vec!["Hostname", "Active"],
@@ -1992,6 +2048,15 @@ impl App {
                         return;
                     };
                     (FilterTarget::Details, "Name", file.name.clone())
+                }
+                DetailViewType::UserData => {
+                    let Some(idx) = self.user_data_state.selected() else {
+                        return;
+                    };
+                    let Some(ud) = self.user_data.get(idx) else {
+                        return;
+                    };
+                    (FilterTarget::Details, "Name", ud.name.clone())
                 }
                 _ => return,
             },
@@ -2262,6 +2327,27 @@ impl App {
                     self.slurm_stats_state.select(None);
                 }
             }
+            DetailViewType::UserData => {
+                self.user_data = self
+                    .user_data_all
+                    .iter()
+                    .filter(|ud| match column.as_str() {
+                        "Name" => ud.name.to_lowercase().contains(&value),
+                        "Data" => ud
+                            .data
+                            .as_ref()
+                            .map(|v| v.to_string().to_lowercase().contains(&value))
+                            .unwrap_or(false),
+                        _ => false,
+                    })
+                    .cloned()
+                    .collect();
+                if !self.user_data.is_empty() {
+                    self.user_data_state.select(Some(0));
+                } else {
+                    self.user_data_state.select(None);
+                }
+            }
             DetailViewType::Summary | DetailViewType::Dag => {
                 // Summary and DAG views don't support filtering
             }
@@ -2306,6 +2392,12 @@ impl App {
                 self.files = self.files_all.clone();
                 if !self.files.is_empty() {
                     self.files_state.select(Some(0));
+                }
+            }
+            DetailViewType::UserData => {
+                self.user_data = self.user_data_all.clone();
+                if !self.user_data.is_empty() {
+                    self.user_data_state.select(Some(0));
                 }
             }
             DetailViewType::Events => {
@@ -2613,6 +2705,38 @@ impl App {
         self.workflows_state
             .selected()
             .and_then(|idx| self.workflows.get(idx))
+    }
+
+    /// Open a popup with expanded details for the highlighted workflow,
+    /// including the submission directory and configuration fields that don't
+    /// fit in the Workflows table. Fetches a fresh copy so the details reflect
+    /// the current server state.
+    pub fn show_workflow_details(&mut self) {
+        let Some(workflow_id) = self
+            .get_selected_workflow()
+            .and_then(|w| w.id)
+            .or(self.selected_workflow_id)
+        else {
+            self.set_status(StatusMessage::warning("No workflow selected"));
+            return;
+        };
+
+        let workflow = match self.client.get_workflow(workflow_id) {
+            Ok(w) => w,
+            Err(e) => {
+                self.set_status(StatusMessage::error(&format!(
+                    "Could not load workflow details: {}",
+                    e
+                )));
+                return;
+            }
+        };
+
+        let rows = build_workflow_detail_rows(&workflow);
+        let popup = WorkflowDetailsPopup::new(workflow_id, workflow.name.clone(), rows);
+        self.previous_focus = self.focus;
+        self.focus = Focus::Popup;
+        self.popup = Some(PopupType::WorkflowDetails(popup));
     }
 
     pub fn request_workflow_action(&mut self, action: WorkflowAction) {
@@ -3403,6 +3527,39 @@ impl App {
 
     // === Log Viewer ===
 
+    /// Find the loaded `WorkflowModel` for the currently-selected workflow.
+    /// Used to resolve log paths against the workflow's recorded
+    /// `submission_directory` so logs open regardless of the TUI's CWD.
+    fn selected_workflow_model(&self) -> Option<&WorkflowModel> {
+        let id = self.selected_workflow_id?;
+        self.workflows
+            .iter()
+            .chain(self.workflows_all.iter())
+            .find(|w| w.id == Some(id))
+    }
+
+    /// Resolve the effective output directory for locating log files.
+    ///
+    /// Job and Slurm log files are written relative to the directory the
+    /// workflow was submitted from. When the configured `output_dir` is
+    /// relative and the workflow recorded a `submission_directory`, resolve
+    /// against it so logs open from anywhere on the filesystem -- not just
+    /// when the TUI is launched from the original submission directory. An
+    /// absolute `output_dir`, or a workflow without a recorded submission
+    /// directory (older workflows), falls back to the configured path as-is.
+    fn resolve_log_output_dir(&self) -> PathBuf {
+        if self.output_dir.is_absolute() {
+            return self.output_dir.clone();
+        }
+        if let Some(dir) = self
+            .selected_workflow_model()
+            .and_then(|w| w.submission_directory.as_deref())
+        {
+            return std::path::Path::new(dir).join(&self.output_dir);
+        }
+        self.output_dir.clone()
+    }
+
     pub fn show_job_logs(&mut self) {
         if let Some(job) = self.get_selected_job() {
             let job_id = job.id.unwrap_or(0);
@@ -3439,61 +3596,9 @@ impl App {
                 .filter(|r| r.job_id == viewer.job_id)
                 .max_by_key(|r| (r.run_id, r.attempt_id.unwrap_or(1)))
             {
-                // Construct log paths using the standard path pattern
-                let output_dir = &self.output_dir;
-
                 let attempt_id = result.attempt_id.unwrap_or(1);
-                let stdout_path = get_job_stdout_path(
-                    output_dir,
-                    workflow_id,
-                    viewer.job_id,
-                    result.run_id,
-                    attempt_id,
-                );
-                let stderr_path = get_job_stderr_path(
-                    output_dir,
-                    workflow_id,
-                    viewer.job_id,
-                    result.run_id,
-                    attempt_id,
-                );
-                let combined_path = get_job_combined_path(
-                    output_dir,
-                    workflow_id,
-                    viewer.job_id,
-                    result.run_id,
-                    attempt_id,
-                );
-
-                // Try separate .o file first, then fall back to combined .log
-                if let Ok(content) = std::fs::read_to_string(&stdout_path) {
-                    viewer.stdout_path = Some(stdout_path);
-                    viewer.stdout_content = content;
-                } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
-                    viewer.stdout_path = Some(combined_path.clone());
-                    viewer.stdout_content = content;
-                } else {
-                    viewer.stdout_path = Some(stdout_path.clone());
-                    viewer.stdout_content = format!(
-                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stdout",
-                        stdout_path
-                    );
-                }
-
-                // Try separate .e file first, then fall back to combined .log
-                if let Ok(content) = std::fs::read_to_string(&stderr_path) {
-                    viewer.stderr_path = Some(stderr_path);
-                    viewer.stderr_content = content;
-                } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
-                    viewer.stderr_path = Some(combined_path);
-                    viewer.stderr_content = content;
-                } else {
-                    viewer.stderr_path = Some(stderr_path.clone());
-                    viewer.stderr_content = format!(
-                        "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stderr",
-                        stderr_path
-                    );
-                }
+                let job_id = viewer.job_id;
+                self.populate_log_viewer(viewer, workflow_id, job_id, result.run_id, attempt_id);
             } else {
                 viewer.stdout_content =
                     "No results found for this job.\n\nThe job may not have run yet.".to_string();
@@ -3502,6 +3607,94 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Open the stdout/stderr logs for the result currently selected on the
+    /// Results tab. Reuses the Jobs-tab log-loading logic, but targets the
+    /// specific run/attempt of the selected result rather than the job's
+    /// latest attempt.
+    pub fn show_result_logs(&mut self) {
+        let Some(result) = self
+            .results_state
+            .selected()
+            .and_then(|idx| self.results.get(idx))
+            .cloned()
+        else {
+            self.set_status(StatusMessage::warning("No result selected"));
+            return;
+        };
+
+        let job_name = self
+            .jobs_all
+            .iter()
+            .find(|j| j.id == Some(result.job_id))
+            .map(|j| j.name.clone())
+            .unwrap_or_else(|| format!("Job {}", result.job_id));
+
+        let mut viewer = LogViewer::new(result.job_id, job_name);
+        self.populate_log_viewer(
+            &mut viewer,
+            result.workflow_id,
+            result.job_id,
+            result.run_id,
+            result.attempt_id.unwrap_or(1),
+        );
+
+        self.previous_focus = self.focus;
+        self.focus = Focus::Popup;
+        self.popup = Some(PopupType::LogViewer(viewer));
+    }
+
+    /// Fill a `LogViewer`'s stdout/stderr content for a specific job attempt,
+    /// trying the separate `.o`/`.e` files first and falling back to the
+    /// combined `.log`. Paths resolve against the workflow's submission
+    /// directory via `resolve_log_output_dir` so they open regardless of the
+    /// TUI's current directory. Shared by the Jobs and Results tabs.
+    fn populate_log_viewer(
+        &self,
+        viewer: &mut LogViewer,
+        workflow_id: i64,
+        job_id: i64,
+        run_id: i64,
+        attempt_id: i64,
+    ) {
+        let output_dir = self.resolve_log_output_dir();
+        let output_dir = output_dir.as_path();
+
+        let stdout_path = get_job_stdout_path(output_dir, workflow_id, job_id, run_id, attempt_id);
+        let stderr_path = get_job_stderr_path(output_dir, workflow_id, job_id, run_id, attempt_id);
+        let combined_path =
+            get_job_combined_path(output_dir, workflow_id, job_id, run_id, attempt_id);
+
+        // Try separate .o file first, then fall back to combined .log
+        if let Ok(content) = std::fs::read_to_string(&stdout_path) {
+            viewer.stdout_path = Some(stdout_path);
+            viewer.stdout_content = content;
+        } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
+            viewer.stdout_path = Some(combined_path.clone());
+            viewer.stdout_content = content;
+        } else {
+            viewer.stdout_path = Some(stdout_path.clone());
+            viewer.stdout_content = format!(
+                "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stdout",
+                stdout_path
+            );
+        }
+
+        // Try separate .e file first, then fall back to combined .log
+        if let Ok(content) = std::fs::read_to_string(&stderr_path) {
+            viewer.stderr_path = Some(stderr_path);
+            viewer.stderr_content = content;
+        } else if let Ok(content) = std::fs::read_to_string(&combined_path) {
+            viewer.stderr_path = Some(combined_path);
+            viewer.stderr_content = content;
+        } else {
+            viewer.stderr_path = Some(stderr_path.clone());
+            viewer.stderr_content = format!(
+                "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stderr",
+                stderr_path
+            );
+        }
     }
 
     // === Slurm Log Viewer ===
@@ -3545,7 +3738,8 @@ impl App {
     }
 
     fn load_slurm_logs(&self, viewer: &mut LogViewer, scheduler_id: &str) -> Result<()> {
-        let output_dir = &self.output_dir;
+        let output_dir = self.resolve_log_output_dir();
+        let output_dir = output_dir.as_path();
 
         let workflow_id = self.selected_workflow_id.unwrap_or(0);
         let stdout_path = get_slurm_stdout_path(output_dir, workflow_id, scheduler_id);
@@ -3997,6 +4191,88 @@ fn restore_selection(state: &mut TableState, prev: Option<usize>, len: usize) {
         Some(idx) if len > 0 => state.select(Some(idx.min(len - 1))),
         _ => state.select(None),
     }
+}
+
+/// Build the `(label, value)` rows shown in the Workflow Details popup. Covers
+/// the scalar fields and summarizes the larger configuration blocks so the
+/// user can see everything the Workflows table omits -- most importantly the
+/// submission directory, which is needed to locate logs and outputs.
+fn build_workflow_detail_rows(w: &WorkflowModel) -> Vec<(String, String)> {
+    let mut rows: Vec<(String, String)> = Vec::new();
+    let dash = || "—".to_string();
+
+    rows.push(("Name".to_string(), w.name.clone()));
+    rows.push(("User".to_string(), w.user.clone()));
+    if let Some(project) = &w.project {
+        rows.push(("Project".to_string(), project.clone()));
+    }
+    if let Some(desc) = &w.description {
+        rows.push(("Description".to_string(), desc.clone()));
+    }
+    rows.push((
+        "Submission Directory".to_string(),
+        w.submission_directory.clone().unwrap_or_else(dash),
+    ));
+    rows.push((
+        "Timestamp".to_string(),
+        w.timestamp
+            .as_deref()
+            .map(crate::client::utils::format_local_timestamp)
+            .unwrap_or_else(dash),
+    ));
+    rows.push((
+        "Run ID".to_string(),
+        w.run_id.map(|r| r.to_string()).unwrap_or_else(dash),
+    ));
+    rows.push((
+        "Canceled".to_string(),
+        w.is_canceled.unwrap_or(false).to_string(),
+    ));
+    rows.push((
+        "Archived".to_string(),
+        w.is_archived.unwrap_or(false).to_string(),
+    ));
+    if let Some(v) = w.use_pending_failed {
+        rows.push(("Use Pending-Failed".to_string(), v.to_string()));
+    }
+    if let Some(v) = w.enable_ro_crate {
+        rows.push(("RO-Crate Enabled".to_string(), v.to_string()));
+    }
+    if let Some(env) = &w.env
+        && !env.is_empty()
+    {
+        rows.push((
+            "Environment Variables".to_string(),
+            format!("{} set", env.len()),
+        ));
+    }
+    if let Some(metadata) = &w.metadata
+        && !metadata.is_empty()
+    {
+        rows.push((
+            "Metadata Keys".to_string(),
+            format!("{} set", metadata.len()),
+        ));
+    }
+    if let Some(defaults) = &w.slurm_defaults
+        && !defaults.is_empty()
+    {
+        rows.push((
+            "Slurm Defaults".to_string(),
+            format!("{} set", defaults.len()),
+        ));
+    }
+    if w.resource_monitor_config.is_some() {
+        rows.push(("Resource Monitor".to_string(), "configured".to_string()));
+    }
+    if w.execution_config.is_some() {
+        rows.push(("Execution Config".to_string(), "configured".to_string()));
+    }
+    if w.dynamic_jobs.is_some() {
+        rows.push(("Dynamic Jobs".to_string(), "configured".to_string()));
+    }
+
+    rows
 }
 
 /// Outcome of resolving a user-typed Jobs status filter against the known

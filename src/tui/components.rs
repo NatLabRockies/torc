@@ -474,6 +474,7 @@ pub enum HelpContext {
     DetailSummary,
     DetailJobs,
     DetailFiles,
+    DetailUserData,
     DetailEvents,
     DetailResults,
     DetailComputeNodes,
@@ -517,6 +518,7 @@ impl HelpPopup {
             Self::key_line("] / [", "Load next / previous page (on demand)"),
             Self::key_line("g / G", "Jump to top / bottom of table"),
             Self::key_line("Enter", "Load details / Confirm action"),
+            Self::key_line("D", "Show expanded workflow details"),
             Self::key_line("f", "Filter current pane (Workflows or Details)"),
             Self::key_line("=", "Filter to the selected row's value"),
             Self::key_line("c", "Clear filter on current pane"),
@@ -558,6 +560,7 @@ impl HelpPopup {
             }
             HelpContext::DetailResults => {
                 lines.extend(Self::section("Results Tab"));
+                lines.push(Self::key_line("l", "View logs"));
                 lines.push(Self::key_line(
                     "E",
                     "Sort by Runtime (cycles desc / asc / off)",
@@ -592,6 +595,14 @@ impl HelpPopup {
                 lines.push(Self::key_line("Tab", "Change filter column"));
                 lines.push(Self::key_line("Enter", "Apply filter"));
                 lines.push(Self::key_line("Esc", "Cancel filter"));
+            }
+            HelpContext::DetailUserData => {
+                lines.extend(Self::section("User Data Tab"));
+                lines.push(Self::key_line(
+                    up_down_arrows(),
+                    "Scroll through user data entries",
+                ));
+                lines.push(Self::key_line("] / [", "Load next / previous page"));
             }
             HelpContext::DetailSummary
             | HelpContext::DetailFiles
@@ -750,6 +761,81 @@ impl JobDetailsPopup {
                 Style::default().fg(Color::DarkGray),
             )]),
         ];
+
+        let paragraph = Paragraph::new(lines)
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false })
+            .scroll((self.scroll_offset, 0));
+
+        f.render_widget(paragraph, inner);
+    }
+}
+
+/// Popup showing expanded details for a single workflow. Rows are built by the
+/// caller as `(label, value)` pairs so this component stays decoupled from the
+/// workflow model. Scrollable for workflows with many configured fields.
+pub struct WorkflowDetailsPopup {
+    pub workflow_id: i64,
+    pub workflow_name: String,
+    pub rows: Vec<(String, String)>,
+    pub scroll_offset: u16,
+}
+
+impl WorkflowDetailsPopup {
+    pub fn new(workflow_id: i64, workflow_name: String, rows: Vec<(String, String)>) -> Self {
+        Self {
+            workflow_id,
+            workflow_name,
+            rows,
+            scroll_offset: 0,
+        }
+    }
+
+    pub fn scroll_down(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_add(1);
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+    }
+
+    pub fn render(&self, f: &mut Frame, area: Rect) {
+        let popup_width = 90.min(area.width.saturating_sub(4));
+        let popup_height = 24.min(area.height.saturating_sub(2));
+
+        let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+        let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+        let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
+        f.render_widget(Clear, popup_area);
+
+        let block = Block::default()
+            .title(format!(
+                " Workflow Details: {} (ID {}) ",
+                self.workflow_name, self.workflow_id
+            ))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+
+        let inner = block.inner(popup_area);
+        f.render_widget(block, popup_area);
+
+        let mut lines: Vec<Line> = self
+            .rows
+            .iter()
+            .map(|(label, value)| {
+                Line::from(vec![
+                    Span::styled(format!("{}: ", label), Style::default().fg(Color::DarkGray)),
+                    Span::raw(value.clone()),
+                ])
+            })
+            .collect();
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            "Press q or Esc to close, ↑/↓ to scroll",
+            Style::default().fg(Color::DarkGray),
+        )]));
 
         let paragraph = Paragraph::new(lines)
             .style(Style::default().fg(Color::White))

@@ -95,10 +95,18 @@ Object.assign(TorcDashboard.prototype, {
 
         try {
             // Get jobs and results for the workflow
-            const [jobs, results] = await Promise.all([
+            const [jobs, results, workflow] = await Promise.all([
                 api.listJobs(workflowId),
                 api.listResults(workflowId),
+                api.getWorkflow(workflowId),
             ]);
+
+            // Resolve a relative output dir against the workflow's submission
+            // directory so log paths open regardless of the dash server's CWD.
+            const logBaseDir = this.resolveLogBaseDir(
+                this.debugOutputDir,
+                workflow?.submission_directory || null
+            );
 
             const failedOnly = document.getElementById('debug-failed-only')?.checked;
 
@@ -110,7 +118,7 @@ Object.assign(TorcDashboard.prototype, {
                 // {output_dir}/job_stdio/job_wf{workflow_id}_j{job_id}_r{run_id}_a{attempt_id}.o (stdout)
                 // {output_dir}/job_stdio/job_wf{workflow_id}_j{job_id}_r{run_id}_a{attempt_id}.e (stderr)
                 const attemptId = r.attempt_id ?? 1;
-                const stdioBase = `${this.debugOutputDir}/job_stdio/job_wf${r.workflow_id}_j${r.job_id}_r${r.run_id}_a${attemptId}`;
+                const stdioBase = `${logBaseDir}/job_stdio/job_wf${r.workflow_id}_j${r.job_id}_r${r.run_id}_a${attemptId}`;
                 resultMap[r.job_id].push({
                     ...r,
                     stdoutPath: `${stdioBase}.o`,
