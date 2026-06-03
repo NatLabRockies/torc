@@ -72,10 +72,11 @@ impl OrphanCleanupResult {
 
 /// Detect and clean up orphaned jobs from terminated Slurm allocations.
 ///
-/// This function performs three types of cleanup:
+/// This function performs four types of cleanup:
 /// 1. Fails jobs from active scheduled compute nodes whose Slurm jobs are no longer running
 /// 2. Cleans up pending scheduled compute nodes whose Slurm jobs were cancelled
 /// 3. Fails running jobs that have no active compute nodes (fallback for non-Slurm)
+/// 4. Deactivates compute nodes still marked active whose Slurm allocation is gone
 ///
 /// If `dry_run` is true, reports what would be done without making changes.
 pub fn cleanup_orphaned_jobs(
@@ -291,29 +292,10 @@ fn fail_orphaned_slurm_jobs(
                 }
             }
 
-            if !dry_run {
-                // Mark this compute node as inactive since its Slurm job is gone
-                let mut updated_node = compute_node.clone();
-                updated_node.is_active = Some(false);
-                match apis::compute_nodes_api::update_compute_node(
-                    config,
-                    compute_node_id,
-                    updated_node,
-                ) {
-                    Ok(_) => {
-                        debug!(
-                            "Marked compute node {} as inactive (Slurm job {} no longer running)",
-                            compute_node_id, slurm_job_id
-                        );
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to mark compute node {} as inactive: {}",
-                            compute_node_id, e
-                        );
-                    }
-                }
-            }
+            // Compute-node deactivation is handled centrally by Step 4
+            // (`deactivate_orphaned_compute_nodes`) so that every deactivation is
+            // counted in `OrphanCleanupResult::compute_nodes_deactivated`. Step 4
+            // runs after this step and sweeps the still-active node here.
         }
 
         if !dry_run {

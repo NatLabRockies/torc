@@ -3,8 +3,39 @@ mod common;
 use common::{ServerProcess, create_test_workflow, start_server};
 use rstest::rstest;
 use serde_json::json;
+use serial_test::serial;
 use torc::client::apis;
 use torc::models;
+
+/// RAII guard that sets an environment variable and restores its previous value
+/// (or removes it if it was unset) on drop, so a test cannot leak env state into
+/// other tests sharing the process.
+struct EnvVarGuard {
+    key: String,
+    original: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &str, value: &str) -> Self {
+        let original = std::env::var(key).ok();
+        unsafe { std::env::set_var(key, value) };
+        Self {
+            key: key.to_string(),
+            original,
+        }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match &self.original {
+                Some(v) => std::env::set_var(&self.key, v),
+                None => std::env::remove_var(&self.key),
+            }
+        }
+    }
+}
 
 /// Helper function to create a test Slurm scheduler
 fn create_test_slurm_scheduler(
@@ -438,14 +469,15 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
 /// compute node is active), so the node stayed `is_active = true` and blocked
 /// `torc recover`. The new Step 4 sweep must now deactivate it.
 #[rstest]
+#[serial(slurm)]
 fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProcess) {
     let config = &start_server.config;
 
     // Drive SlurmInterface with the fake squeue. With a scheduler_id that is not
     // present in the fake jobs file, squeue reports the job as gone, which is
     // exactly the post-`scancel` state we want to simulate. USER is required by
-    // SlurmInterface::new(). nextest runs each test in its own process, so these
-    // env mutations are isolated.
+    // SlurmInterface::new(). The env mutations are scoped to RAII guards (restored
+    // on drop) and `#[serial(slurm)]` keeps them from racing other Slurm tests.
     let fake_squeue = std::env::current_dir()
         .unwrap()
         .join("tests/scripts/fake_squeue.sh");
@@ -454,15 +486,12 @@ fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProces
         "fake_squeue.sh not found at {:?}",
         fake_squeue
     );
-    unsafe {
-        std::env::set_var(
-            "TORC_FAKE_SQUEUE",
-            fake_squeue.to_string_lossy().to_string(),
-        );
-        if std::env::var("USER").is_err() && std::env::var("USERNAME").is_err() {
-            std::env::set_var("USER", "test-user");
-        }
-    }
+    let _squeue_guard = EnvVarGuard::set("TORC_FAKE_SQUEUE", &fake_squeue.to_string_lossy());
+    let _user_guard = if std::env::var("USER").is_err() && std::env::var("USERNAME").is_err() {
+        Some(EnvVarGuard::set("USER", "test-user"))
+    } else {
+        None
+    };
 
     // Create workflow and a Slurm scheduler config.
     let workflow = create_test_workflow(config, "test_cleanup_deactivates_after_cancel");
