@@ -1506,6 +1506,36 @@ pub fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: 
                                         node.scheduler_id
                                     );
                                 }
+
+                                // `scancel` kills the job runner ungracefully, so it never
+                                // deactivates its own compute node. Do it here, otherwise the
+                                // ComputeNode rows stay is_active=true and block `torc recover`.
+                                match super::orphan_detection::deactivate_compute_nodes_for_scheduled_node(
+                                    config,
+                                    node.workflow_id,
+                                    node_id,
+                                    &node.scheduler_id.to_string(),
+                                    false,
+                                ) {
+                                    Ok(count) => {
+                                        if count > 0 && format != "json" {
+                                            println!(
+                                                "  Deactivated {} compute node(s) for node {}",
+                                                count, node.scheduler_id
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let error_msg = format!(
+                                            "Failed to deactivate compute nodes for node {}: {}",
+                                            node.scheduler_id, e
+                                        );
+                                        errors.push(error_msg.clone());
+                                        if format != "json" {
+                                            eprintln!("  {}", error_msg);
+                                        }
+                                    }
+                                }
                             }
                         }
                         Err(e) => {
@@ -2992,6 +3022,12 @@ fn handle_sync_status(
                         result.running_jobs_failed
                     );
                 }
+                if result.compute_nodes_deactivated > 0 {
+                    println!(
+                        "  - {} compute node(s) deactivated (Slurm allocation gone)",
+                        result.compute_nodes_deactivated
+                    );
+                }
 
                 if !result.failed_job_details.is_empty() {
                     println!("\nAffected jobs:");
@@ -3011,10 +3047,12 @@ fn handle_sync_status(
                 }
 
                 if !dry_run {
-                    println!(
-                        "\nTotal: {} job(s) marked as failed",
-                        result.total_jobs_failed()
-                    );
+                    if result.total_jobs_failed() > 0 {
+                        println!(
+                            "\nTotal: {} job(s) marked as failed",
+                            result.total_jobs_failed()
+                        );
+                    }
                     println!(
                         "\nYou can now run `torc recover {}` to retry failed jobs.",
                         workflow_id
