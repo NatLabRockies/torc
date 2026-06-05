@@ -17,6 +17,10 @@ struct ComputeNodeTableRow {
     id: i64,
     #[tabled(rename = "Hostname")]
     hostname: String,
+    #[tabled(rename = "Scheduler")]
+    scheduler_type: String,
+    #[tabled(rename = "Scheduler Job ID")]
+    scheduler_job_id: String,
     #[tabled(rename = "PID")]
     pid: i64,
     #[tabled(rename = "CPUs")]
@@ -53,6 +57,8 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
         ComputeNodeTableRow {
             id: node.id.unwrap_or(-1),
             hostname: node.hostname.clone(),
+            scheduler_type: node.compute_node_type.clone(),
+            scheduler_job_id: format_scheduler_job_id(node),
             pid: node.pid,
             num_cpus: node.num_cpus,
             memory_gb: format!("{:.2}", node.memory_gb),
@@ -64,6 +70,21 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
             system_memory: format_system_memory(node),
         }
     }
+}
+
+/// Extract the external scheduler job ID from the compute node's scheduler
+/// blob for table display. Today only Slurm nodes set one (`slurm_job_id`);
+/// other/local nodes show "-". Accepts the value as a number or string.
+fn format_scheduler_job_id(node: &models::ComputeNodeModel) -> String {
+    node.scheduler
+        .as_ref()
+        .and_then(|s| s.get("slurm_job_id"))
+        .and_then(|v| {
+            v.as_i64()
+                .map(|n| n.to_string())
+                .or_else(|| v.as_str().map(|s| s.to_string()))
+        })
+        .unwrap_or_else(|| "-".to_string())
 }
 
 fn format_system_cpu(node: &models::ComputeNodeModel) -> String {
@@ -256,6 +277,27 @@ mod tests {
             "local".to_string(),
             None,
         )
+    }
+
+    #[test]
+    fn compute_node_list_row_shows_scheduler_columns() {
+        // Local node: type shown, no scheduler job ID.
+        let local = make_compute_node();
+        let local_row = ComputeNodeTableRow::from(&local);
+        assert_eq!(local_row.scheduler_type, "local");
+        assert_eq!(local_row.scheduler_job_id, "-");
+
+        // Slurm node: type shown and the Slurm job ID surfaced from the blob.
+        let mut slurm = make_compute_node();
+        slurm.compute_node_type = "slurm".to_string();
+        slurm.scheduler = Some(serde_json::json!({
+            "type": "slurm",
+            "scheduler_id": 3,
+            "slurm_job_id": 987654,
+        }));
+        let slurm_row = ComputeNodeTableRow::from(&slurm);
+        assert_eq!(slurm_row.scheduler_type, "slurm");
+        assert_eq!(slurm_row.scheduler_job_id, "987654");
     }
 
     #[test]
