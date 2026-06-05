@@ -760,6 +760,13 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<IsWorkflowCompleteResponse, ApiError>;
 
+    /// Return an aggregated status summary for the workflow.
+    async fn get_workflow_status(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetWorkflowStatusResponse, ApiError>;
+
     /// Return true if all jobs in the workflow are uninitialized or disabled.
     async fn is_workflow_uninitialized(
         &self,

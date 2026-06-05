@@ -330,6 +330,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(is_workflow_complete),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/status",
+            get(get_workflow_status),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/is_uninitialized",
             get(is_workflow_uninitialized),
         )
@@ -3730,6 +3734,25 @@ pub async fn is_workflow_complete(
 ) -> Response<Body> {
     match state.server.is_workflow_complete(id, &context).await {
         Ok(response) => is_workflow_complete_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    get,
+    tag = "workflows",
+    path = "/workflows/{id}/status",
+    operation_id = "get_workflow_status",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    responses((status = 200, body = models::WorkflowStatusResponse))
+)]
+pub async fn get_workflow_status(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state.server.get_workflow_status(id, &context).await {
+        Ok(response) => get_workflow_status_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

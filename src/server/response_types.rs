@@ -78,7 +78,8 @@ pub mod workflows {
         ArchiveWorkflowResponse, CancelWorkflowResponse, ClaimActionResponse,
         CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteWorkflowResponse,
         GetActiveTaskResponse, GetPendingActionsResponse, GetWorkflowActionsResponse,
-        GetWorkflowResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
-        ListWorkflowsResponse, ResetWorkflowStatusResponse, UpdateWorkflowResponse,
+        GetWorkflowResponse, GetWorkflowStatusResponse, IsWorkflowCompleteResponse,
+        IsWorkflowUninitializedResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
+        UpdateWorkflowResponse,
     };
 }

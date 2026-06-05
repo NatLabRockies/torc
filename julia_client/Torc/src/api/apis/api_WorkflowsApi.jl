@@ -300,6 +300,33 @@ function get_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; _
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_get_workflow_status_WorkflowsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowStatusResponse,
+)
+
+function _oacinternal_get_workflow_status(_api::WorkflowsApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_workflow_status_WorkflowsApi, "/workflows/{id}/status", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+
+Return: WorkflowStatusResponse, OpenAPI.Clients.ApiResponse
+"""
+function get_workflow_status(_api::WorkflowsApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_workflow_status(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function get_workflow_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_workflow_status(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_initialize_jobs_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Any,
     Regex("^" * replace("202", "x"=>".") * "\$") => TaskModel,
@@ -748,6 +775,7 @@ export delete_workflow
 export get_active_task_for_workflow
 export get_ready_job_requirements
 export get_workflow
+export get_workflow_status
 export initialize_jobs
 export is_workflow_complete
 export is_workflow_uninitialized

@@ -50,6 +50,7 @@ from torc.openapi_client.models.job_file_relationship_model import JobFileRelati
 from torc.openapi_client.models.job_model import JobModel
 from torc.openapi_client.models.job_monitor_config import JobMonitorConfig
 from torc.openapi_client.models.job_status import JobStatus
+from torc.openapi_client.models.job_status_counts import JobStatusCounts
 from torc.openapi_client.models.job_user_data_relationship_model import JobUserDataRelationshipModel
 from torc.openapi_client.models.jobs_model import JobsModel
 from torc.openapi_client.models.list_access_groups_response import ListAccessGroupsResponse
@@ -103,4 +104,5 @@ from torc.openapi_client.models.version_response import VersionResponse
 from torc.openapi_client.models.workflow_access_group_model import WorkflowAccessGroupModel
 from torc.openapi_client.models.workflow_action_model import WorkflowActionModel
 from torc.openapi_client.models.workflow_model import WorkflowModel
+from torc.openapi_client.models.workflow_status_response import WorkflowStatusResponse
 

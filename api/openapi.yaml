@@ -5313,6 +5313,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/status:
+    get:
+      tags:
+      - workflows
+      operationId: get_workflow_status
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStatusResponse'
 components:
   schemas:
     AccessCheckResponse:
@@ -6143,6 +6163,55 @@ components:
       - terminated
       - disabled
       - pending_failed
+    JobStatusCounts:
+      type: object
+      description: Counts of jobs grouped by status for a single workflow.
+      required:
+      - uninitialized
+      - blocked
+      - ready
+      - pending
+      - running
+      - completed
+      - failed
+      - canceled
+      - terminated
+      - disabled
+      - pending_failed
+      properties:
+        blocked:
+          type: integer
+          format: int64
+        canceled:
+          type: integer
+          format: int64
+        completed:
+          type: integer
+          format: int64
+        disabled:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        pending:
+          type: integer
+          format: int64
+        pending_failed:
+          type: integer
+          format: int64
+        ready:
+          type: integer
+          format: int64
+        running:
+          type: integer
+          format: int64
+        terminated:
+          type: integer
+          format: int64
+        uninitialized:
+          type: integer
+          format: int64
     JobUserDataRelationshipModel:
       type: object
       required:
@@ -7585,4 +7654,53 @@ components:
           - boolean
           - 'null'
         user:
+          type: string
+    WorkflowStatusResponse:
+      type: object
+      description: Aggregated status summary for a workflow, computed server-side.
+      required:
+      - workflow_id
+      - workflow_name
+      - workflow_user
+      - total_jobs
+      - jobs_by_status
+      - total_exec_time_minutes
+      - active_compute_nodes
+      - pending_scheduled_nodes
+      - active_scheduled_nodes
+      - is_complete
+      - is_canceled
+      properties:
+        active_compute_nodes:
+          type: integer
+          format: int64
+        active_scheduled_nodes:
+          type: integer
+          format: int64
+        is_canceled:
+          type: boolean
+        is_complete:
+          type: boolean
+        jobs_by_status:
+          $ref: '#/components/schemas/JobStatusCounts'
+        pending_scheduled_nodes:
+          type: integer
+          format: int64
+        total_exec_time_minutes:
+          type: number
+          format: double
+        total_jobs:
+          type: integer
+          format: int64
+        walltime_seconds:
+          type:
+          - number
+          - 'null'
+          format: double
+        workflow_id:
+          type: integer
+          format: int64
+        workflow_name:
+          type: string
+        workflow_user:
           type: string
