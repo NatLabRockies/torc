@@ -3766,12 +3766,20 @@ pub async fn get_workflow_status(
     }
 }
 
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct SlurmJobCorrelationsQuery {
+    #[param(nullable = true)]
+    pub offset: Option<i64>,
+    #[param(nullable = true)]
+    pub limit: Option<i64>,
+}
+
 #[utoipa::path(
     get,
     tag = "workflows",
     path = "/workflows/{id}/slurm_job_correlations",
     operation_id = "get_slurm_job_correlations",
-    params(("id" = i64, Path, description = "Workflow ID")),
+    params(("id" = i64, Path, description = "Workflow ID"), SlurmJobCorrelationsQuery),
     responses(
         (status = 200, body = models::SlurmJobCorrelationsResponse),
         (status = 403, body = models::ErrorResponse, description = "User does not have access"),
@@ -3782,9 +3790,14 @@ pub async fn get_workflow_status(
 pub async fn get_slurm_job_correlations(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
+    Query(query): Query<SlurmJobCorrelationsQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
-    match state.server.get_slurm_job_correlations(id, &context).await {
+    match state
+        .server
+        .get_slurm_job_correlations(id, query.offset, query.limit, &context)
+        .await
+    {
         Ok(response) => get_slurm_job_correlations_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }

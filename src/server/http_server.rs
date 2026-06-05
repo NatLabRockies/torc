@@ -2048,9 +2048,12 @@ where
     async fn get_slurm_job_correlations(
         &self,
         id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
         context: &C,
     ) -> Result<GetSlurmJobCorrelationsResponse, ApiError> {
-        self.transport_get_slurm_job_correlations(id, context).await
+        self.transport_get_slurm_job_correlations(id, offset, limit, context)
+            .await
     }
 
     async fn is_workflow_uninitialized(

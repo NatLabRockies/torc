@@ -2398,11 +2398,17 @@ pub struct SlurmJobCorrelationModel {
     pub job_name: String,
 }
 
-/// All Slurm-job-to-Torc-job correlations for a workflow, computed server-side.
+/// A page of Slurm-job-to-Torc-job correlations for a workflow, computed
+/// server-side.
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SlurmJobCorrelationsResponse {
     pub items: Vec<SlurmJobCorrelationModel>,
+    pub offset: i64,
+    pub max_limit: i64,
+    pub count: i64,
+    pub total_count: i64,
+    pub has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]

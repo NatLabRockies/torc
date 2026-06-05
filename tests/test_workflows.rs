@@ -1650,10 +1650,12 @@ fn test_get_slurm_job_correlations(start_server: &ServerProcess) {
     );
     apis::results_api::create_result(config, result).expect("create result");
 
-    let response = apis::workflows_api::get_slurm_job_correlations(config, workflow_id)
+    let response = apis::workflows_api::get_slurm_job_correlations(config, workflow_id, None, None)
         .expect("get slurm job correlations");
 
     assert_eq!(response.items.len(), 1, "expected one correlation row");
+    assert_eq!(response.total_count, 1);
+    assert!(!response.has_more);
     let item = &response.items[0];
     assert_eq!(item.slurm_job_id, "987654");
     assert_eq!(item.job_id, job_id);
@@ -1663,7 +1665,7 @@ fn test_get_slurm_job_correlations(start_server: &ServerProcess) {
 #[rstest]
 fn test_get_slurm_job_correlations_not_found(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let result = apis::workflows_api::get_slurm_job_correlations(config, 999_999);
+    let result = apis::workflows_api::get_slurm_job_correlations(config, 999_999, None, None);
     assert!(
         result.is_err(),
         "expected error for nonexistent workflow correlations"

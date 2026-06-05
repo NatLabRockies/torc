@@ -307,8 +307,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **get_slurm_job_correlations**
-> get_slurm_job_correlations(_api::WorkflowsApi, id::Int64; _mediaType=nothing) -> SlurmJobCorrelationsResponse, OpenAPI.Clients.ApiResponse <br/>
-> get_slurm_job_correlations(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ SlurmJobCorrelationsResponse }, OpenAPI.Clients.ApiResponse
+> get_slurm_job_correlations(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> SlurmJobCorrelationsResponse, OpenAPI.Clients.ApiResponse <br/>
+> get_slurm_job_correlations(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ SlurmJobCorrelationsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -318,6 +318,13 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **WorkflowsApi** | API context | 
 **id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** |  | [default to nothing]
+ **limit** | **Int64** |  | [default to nothing]
 
 ### Return type
 

@@ -2306,7 +2306,14 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_component_properties(
         &emitted,
         "SlurmJobCorrelationsResponse",
-        &["items"],
+        &[
+            "items",
+            "offset",
+            "max_limit",
+            "count",
+            "total_count",
+            "has_more",
+        ],
         &mut issues,
     );
     check_component_properties(

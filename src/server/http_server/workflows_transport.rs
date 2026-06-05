@@ -407,11 +407,20 @@ where
     pub(super) async fn transport_get_slurm_job_correlations(
         &self,
         id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
         context: &C,
     ) -> Result<GetSlurmJobCorrelationsResponse, ApiError> {
-        authorize_workflow!(self, id, context, GetSlurmJobCorrelationsResponse);
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            id,
+            context,
+            GetSlurmJobCorrelationsResponse,
+            offset,
+            limit
+        );
         self.workflows_api
-            .get_slurm_job_correlations(id, context)
+            .get_slurm_job_correlations(id, offset, limit, context)
             .await
     }
 

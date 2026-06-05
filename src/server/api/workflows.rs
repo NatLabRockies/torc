@@ -190,6 +190,8 @@ pub trait WorkflowsApi<C> {
     async fn get_slurm_job_correlations(
         &self,
         id: i64,
+        offset: i64,
+        limit: i64,
         context: &C,
     ) -> Result<GetSlurmJobCorrelationsResponse, ApiError>;
 
@@ -1452,11 +1454,15 @@ where
     async fn get_slurm_job_correlations(
         &self,
         id: i64,
+        offset: i64,
+        limit: i64,
         context: &C,
     ) -> Result<GetSlurmJobCorrelationsResponse, ApiError> {
         debug!(
-            "get_slurm_job_correlations({}) - X-Span-ID: {:?}",
+            "get_slurm_job_correlations({}, offset={}, limit={}) - X-Span-ID: {:?}",
             id,
+            offset,
+            limit,
             context.get().0.clone()
         );
 
@@ -1474,8 +1480,10 @@ where
             ));
         }
 
-        let rows = sqlx::query(
-            r#"
+        // Shared grouped query (one row per distinct (Slurm job, Torc job)).
+        // The page query orders and slices it; the count query wraps it. Each
+        // table is narrowed by its workflow_id index before joining.
+        let grouped = r#"
             SELECT
                 CAST(scn.scheduler_id AS TEXT) AS slurm_job_id,
                 j.id AS job_id,
@@ -1492,15 +1500,24 @@ where
               AND scn.scheduler_type = 'slurm'
               AND cn.compute_node_type = 'slurm'
             GROUP BY slurm_job_id, j.id, j.name
-            ORDER BY slurm_job_id, j.id
-            "#,
-        )
-        .bind(id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to correlate Slurm jobs"))?;
+        "#;
 
-        let items = rows
+        let total_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM ({grouped})"))
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to count Slurm correlations"))?;
+
+        let page_sql = format!("{grouped} ORDER BY slurm_job_id, job_id LIMIT ? OFFSET ?");
+        let rows = sqlx::query(&page_sql)
+            .bind(id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to correlate Slurm jobs"))?;
+
+        let items: Vec<models::SlurmJobCorrelationModel> = rows
             .iter()
             .map(|row| models::SlurmJobCorrelationModel {
                 slurm_job_id: row.get("slurm_job_id"),
@@ -1509,8 +1526,15 @@ where
             })
             .collect();
 
+        let response = crate::paginated_list_response!(
+            models::SlurmJobCorrelationsResponse,
+            items,
+            offset,
+            total_count
+        );
+
         Ok(GetSlurmJobCorrelationsResponse::SuccessfulResponse(
-            models::SlurmJobCorrelationsResponse { items },
+            response,
         ))
     }
 

@@ -2567,6 +2567,8 @@ class WorkflowsApi:
     def get_slurm_job_correlations(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
+        offset: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2585,6 +2587,10 @@ class WorkflowsApi:
 
         :param id: Workflow ID (required)
         :type id: int
+        :param offset:
+        :type offset: int
+        :param limit:
+        :type limit: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2609,6 +2615,8 @@ class WorkflowsApi:
 
         _param = self._get_slurm_job_correlations_serialize(
             id=id,
+            offset=offset,
+            limit=limit,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2636,6 +2644,8 @@ class WorkflowsApi:
     def get_slurm_job_correlations_with_http_info(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
+        offset: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2654,6 +2664,10 @@ class WorkflowsApi:
 
         :param id: Workflow ID (required)
         :type id: int
+        :param offset:
+        :type offset: int
+        :param limit:
+        :type limit: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2678,6 +2692,8 @@ class WorkflowsApi:
 
         _param = self._get_slurm_job_correlations_serialize(
             id=id,
+            offset=offset,
+            limit=limit,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2705,6 +2721,8 @@ class WorkflowsApi:
     def get_slurm_job_correlations_without_preload_content(
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
+        offset: Optional[StrictInt] = None,
+        limit: Optional[StrictInt] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2723,6 +2741,10 @@ class WorkflowsApi:
 
         :param id: Workflow ID (required)
         :type id: int
+        :param offset:
+        :type offset: int
+        :param limit:
+        :type limit: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2747,6 +2769,8 @@ class WorkflowsApi:
 
         _param = self._get_slurm_job_correlations_serialize(
             id=id,
+            offset=offset,
+            limit=limit,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2769,6 +2793,8 @@ class WorkflowsApi:
     def _get_slurm_job_correlations_serialize(
         self,
         id,
+        offset,
+        limit,
         _request_auth,
         _content_type,
         _headers,
@@ -2793,6 +2819,14 @@ class WorkflowsApi:
         if id is not None:
             _path_params['id'] = id
         # process the query parameters
+        if offset is not None:
+            
+            _query_params.append(('offset', offset))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter

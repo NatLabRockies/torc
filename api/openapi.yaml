@@ -5326,6 +5326,22 @@ paths:
         schema:
           type: integer
           format: int64
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
       responses:
         '200':
           description: ''
@@ -7174,14 +7190,35 @@ components:
           type: string
     SlurmJobCorrelationsResponse:
       type: object
-      description: All Slurm-job-to-Torc-job correlations for a workflow, computed server-side.
+      description: |-
+        A page of Slurm-job-to-Torc-job correlations for a workflow, computed
+        server-side.
       required:
       - items
+      - offset
+      - max_limit
+      - count
+      - total_count
+      - has_more
       properties:
+        count:
+          type: integer
+          format: int64
+        has_more:
+          type: boolean
         items:
           type: array
           items:
             $ref: '#/components/schemas/SlurmJobCorrelationModel'
+        max_limit:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        total_count:
+          type: integer
+          format: int64
     SlurmSchedulerModel:
       type: object
       required:

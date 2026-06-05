@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt
 from typing import Any, ClassVar, Dict, List
 from torc.openapi_client.models.slurm_job_correlation_model import SlurmJobCorrelationModel
 from typing import Optional, Set
@@ -25,10 +25,15 @@ from typing_extensions import Self
 
 class SlurmJobCorrelationsResponse(BaseModel):
     """
-    All Slurm-job-to-Torc-job correlations for a workflow, computed server-side.
+    A page of Slurm-job-to-Torc-job correlations for a workflow, computed server-side.
     """ # noqa: E501
+    count: StrictInt
+    has_more: StrictBool
     items: List[SlurmJobCorrelationModel]
-    __properties: ClassVar[List[str]] = ["items"]
+    max_limit: StrictInt
+    offset: StrictInt
+    total_count: StrictInt
+    __properties: ClassVar[List[str]] = ["count", "has_more", "items", "max_limit", "offset", "total_count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -88,7 +93,12 @@ class SlurmJobCorrelationsResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "items": [SlurmJobCorrelationModel.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None
+            "count": obj.get("count"),
+            "has_more": obj.get("has_more"),
+            "items": [SlurmJobCorrelationModel.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
+            "max_limit": obj.get("max_limit"),
+            "offset": obj.get("offset"),
+            "total_count": obj.get("total_count")
         })
         return _obj
 

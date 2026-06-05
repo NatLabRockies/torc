@@ -2243,24 +2243,37 @@ fn build_slurm_to_jobs_map(
     // The server correlates scheduled_compute_node -> compute_node -> result ->
     // job in a single query (covering all runs), replacing what used to be four
     // full-list fetches joined in memory here. Rows arrive grouped/sorted by
-    // (slurm_job_id, job_id), so each per-Slurm-job Vec is already deduplicated
-    // and ordered.
-    let response = match apis::workflows_api::get_slurm_job_correlations(config, workflow_id) {
-        Ok(response) => response,
-        Err(e) => {
-            warn!("Could not fetch Slurm job correlations: {}", e);
-            return slurm_to_jobs;
-        }
-    };
+    // (slurm_job_id, job_id); we page through them (server default page size)
+    // and accumulate, so each per-Slurm-job Vec stays deduplicated and ordered.
+    let mut offset = 0;
+    loop {
+        let response = match apis::workflows_api::get_slurm_job_correlations(
+            config,
+            workflow_id,
+            Some(offset),
+            None,
+        ) {
+            Ok(response) => response,
+            Err(e) => {
+                warn!("Could not fetch Slurm job correlations: {}", e);
+                return slurm_to_jobs;
+            }
+        };
 
-    for item in response.items {
-        slurm_to_jobs
-            .entry(item.slurm_job_id)
-            .or_default()
-            .push(AffectedJob {
-                job_id: item.job_id,
-                job_name: item.job_name,
-            });
+        for item in response.items {
+            slurm_to_jobs
+                .entry(item.slurm_job_id)
+                .or_default()
+                .push(AffectedJob {
+                    job_id: item.job_id,
+                    job_name: item.job_name,
+                });
+        }
+
+        if !response.has_more {
+            break;
+        }
+        offset += response.count;
     }
 
     slurm_to_jobs
