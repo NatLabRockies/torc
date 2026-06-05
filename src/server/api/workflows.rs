@@ -1475,19 +1475,9 @@ where
             context.get().0.clone()
         );
 
+        // Workflow existence/access (404/403) is already enforced by
+        // authorize_workflow! in the transport layer before this runs.
         let pool = self.context.pool.as_ref();
-
-        // 404 if the workflow does not exist.
-        let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM workflow WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to get workflow"))?;
-        if exists.is_none() {
-            return Ok(GetSlurmJobCorrelationsResponse::NotFoundErrorResponse(
-                resource_not_found_response("Workflow", id),
-            ));
-        }
 
         // Shared grouped query (one row per distinct (Slurm job, Torc job)).
         // The page query orders and slices it; the count query wraps it. Each
@@ -1570,19 +1560,9 @@ where
             context.get().0.clone()
         );
 
+        // Workflow existence/access (404/403) is already enforced by
+        // authorize_workflow! in the transport layer before this runs.
         let pool = self.context.pool.as_ref();
-
-        // 404 if the workflow does not exist.
-        let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM workflow WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to get workflow"))?;
-        if exists.is_none() {
-            return Ok(GetRunningJobsResponse::NotFoundErrorResponse(
-                resource_not_found_response("Workflow", id),
-            ));
-        }
 
         let running = models::JobStatus::Running.to_int();
 

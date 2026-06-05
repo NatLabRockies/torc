@@ -1265,7 +1265,11 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                         job_name: j.job_name.clone(),
                         compute_node: j.compute_node_name.clone(),
                         scheduler_type: j.scheduler_type.clone(),
-                        scheduler_job_id: j.scheduler_job_id.clone().unwrap_or_default(),
+                        // Match the compute-nodes listing: render absent IDs as "-".
+                        scheduler_job_id: j
+                            .scheduler_job_id
+                            .clone()
+                            .unwrap_or_else(|| "-".to_string()),
                     })
                     .collect();
 
