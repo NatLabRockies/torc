@@ -3744,7 +3744,12 @@ pub async fn is_workflow_complete(
     path = "/workflows/{id}/status",
     operation_id = "get_workflow_status",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::WorkflowStatusResponse))
+    responses(
+        (status = 200, body = models::WorkflowStatusResponse),
+        (status = 403, body = models::ErrorResponse, description = "User does not have access"),
+        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, body = models::ErrorResponse)
+    )
 )]
 pub async fn get_workflow_status(
     State(state): State<LiveRouterState>,

@@ -302,6 +302,9 @@ end
 
 const _returntypes_get_workflow_status_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowStatusResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_get_workflow_status(_api::WorkflowsApi, id::Int64; _mediaType=nothing)

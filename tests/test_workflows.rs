@@ -1557,6 +1557,31 @@ fn test_get_workflow_status_aggregates_server_side(start_server: &ServerProcess)
         (walltime - 330.0).abs() < 1.0,
         "walltime should be ~330s, got {walltime}"
     );
+
+    // Simulate a re-run: a newer result for the same job from a later run_id.
+    // workflow_result has a PK of (workflow_id, job_id), so this supersedes the
+    // earlier result there while the earlier row remains in `result` as
+    // history. Aggregation must count only the current result (via the
+    // workflow_result join), not the historical one.
+    let rerun_result = models::ResultModel::new(
+        job1.id.unwrap(),
+        workflow_id,
+        2,    // run_id (later run)
+        1,    // attempt_id
+        1,    // compute_node_id
+        0,    // return_code
+        10.0, // exec_time_minutes
+        "2024-01-02T12:00:00.000Z".to_string(),
+        models::JobStatus::Completed,
+    );
+    apis::results_api::create_result(config, rerun_result).expect("Failed to create rerun result");
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status after rerun result");
+    assert!(
+        (status.total_exec_time_minutes - 10.0).abs() < 1e-6,
+        "historical results from prior runs must be excluded; got {}",
+        status.total_exec_time_minutes
+    );
 }
 
 #[rstest]

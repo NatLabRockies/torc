@@ -5333,6 +5333,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkflowStatusResponse'
+        '403':
+          description: User does not have access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     AccessCheckResponse:

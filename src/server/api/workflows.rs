@@ -1312,19 +1312,19 @@ where
         for row in &status_rows {
             let status: i64 = row.get("status");
             let cnt: i64 = row.get("cnt");
-            match status as i32 {
-                0 => counts.uninitialized = cnt,
-                1 => counts.blocked = cnt,
-                2 => counts.ready = cnt,
-                3 => counts.pending = cnt,
-                4 => counts.running = cnt,
-                5 => counts.completed = cnt,
-                6 => counts.failed = cnt,
-                7 => counts.canceled = cnt,
-                8 => counts.terminated = cnt,
-                9 => counts.disabled = cnt,
-                10 => counts.pending_failed = cnt,
-                other => debug!("Ignoring unknown job status {} in workflow {}", other, id),
+            match models::JobStatus::from_i64(status) {
+                Ok(models::JobStatus::Uninitialized) => counts.uninitialized = cnt,
+                Ok(models::JobStatus::Blocked) => counts.blocked = cnt,
+                Ok(models::JobStatus::Ready) => counts.ready = cnt,
+                Ok(models::JobStatus::Pending) => counts.pending = cnt,
+                Ok(models::JobStatus::Running) => counts.running = cnt,
+                Ok(models::JobStatus::Completed) => counts.completed = cnt,
+                Ok(models::JobStatus::Failed) => counts.failed = cnt,
+                Ok(models::JobStatus::Canceled) => counts.canceled = cnt,
+                Ok(models::JobStatus::Terminated) => counts.terminated = cnt,
+                Ok(models::JobStatus::Disabled) => counts.disabled = cnt,
+                Ok(models::JobStatus::PendingFailed) => counts.pending_failed = cnt,
+                Err(_) => debug!("Ignoring unknown job status {} in workflow {}", status, id),
             }
         }
         let total_jobs = counts.uninitialized
@@ -1356,14 +1356,20 @@ where
         // earliest start to the latest completion. julianday() yields NULL for
         // unparseable timestamps, which MIN/MAX skip -- matching the old
         // "skip rows that fail to parse" behavior. 1 day = 1440 minutes.
+        //
+        // Join workflow_result so only current-run results are counted -- this
+        // matches the former client path, which called list_results with
+        // all_runs unset (server default false). Without the join, historical
+        // results from prior runs would inflate the totals.
         let result_row = sqlx::query(
             r#"
             SELECT
-                COALESCE(SUM(exec_time_minutes), 0.0) AS total_exec_minutes,
-                MIN(julianday(completion_time) - exec_time_minutes / 1440.0) AS min_start_jd,
-                MAX(julianday(completion_time)) AS max_end_jd
-            FROM result
-            WHERE workflow_id = ?
+                COALESCE(SUM(r.exec_time_minutes), 0.0) AS total_exec_minutes,
+                MIN(julianday(r.completion_time) - r.exec_time_minutes / 1440.0) AS min_start_jd,
+                MAX(julianday(r.completion_time)) AS max_end_jd
+            FROM result r
+            INNER JOIN workflow_result wr ON r.id = wr.result_id
+            WHERE r.workflow_id = ?
             "#,
         )
         .bind(id)
