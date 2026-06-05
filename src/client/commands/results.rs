@@ -292,11 +292,13 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                             } else {
                                 println!("Results for workflow ID {}:", selected_workflow_id);
                             }
-                            let exclude = vec![
-                                "WF ID".to_string(),
-                                "Run ID".to_string(),
-                                "Attempt".to_string(),
-                            ];
+                            // Run ID is only meaningful when results span multiple
+                            // runs; keep it hidden for the default single-run view
+                            // but show it under --all-runs so runs are distinguishable.
+                            let mut exclude = vec!["WF ID".to_string(), "Attempt".to_string()];
+                            if !*all_runs {
+                                exclude.push("Run ID".to_string());
+                            }
                             display_table_excluding(&rows, &exclude, "results");
                         }
                     }
