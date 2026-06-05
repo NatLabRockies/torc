@@ -2388,6 +2388,23 @@ pub struct WorkflowStatusResponse {
     pub is_canceled: bool,
 }
 
+/// One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
+/// Torc job, derived from scheduled_compute_node -> compute_node -> result.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlurmJobCorrelationModel {
+    pub slurm_job_id: String,
+    pub job_id: i64,
+    pub job_name: String,
+}
+
+/// All Slurm-job-to-Torc-job correlations for a workflow, computed server-side.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlurmJobCorrelationsResponse {
+    pub items: Vec<SlurmJobCorrelationModel>,
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResetJobStatusResponse {

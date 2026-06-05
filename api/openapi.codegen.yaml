@@ -5313,6 +5313,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/slurm_job_correlations:
+    get:
+      tags:
+      - workflows
+      operationId: get_slurm_job_correlations
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlurmJobCorrelationsResponse'
+        '403':
+          description: User does not have access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/status:
     get:
       tags:
@@ -7117,6 +7155,33 @@ components:
         workflow_id:
           type: integer
           format: int64
+    SlurmJobCorrelationModel:
+      type: object
+      description: |-
+        One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
+        Torc job, derived from scheduled_compute_node -> compute_node -> result.
+      required:
+      - slurm_job_id
+      - job_id
+      - job_name
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        job_name:
+          type: string
+        slurm_job_id:
+          type: string
+    SlurmJobCorrelationsResponse:
+      type: object
+      description: All Slurm-job-to-Torc-job correlations for a workflow, computed server-side.
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlurmJobCorrelationModel'
     SlurmSchedulerModel:
       type: object
       required:

@@ -404,6 +404,17 @@ where
         self.workflows_api.get_workflow_status(id, context).await
     }
 
+    pub(super) async fn transport_get_slurm_job_correlations(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetSlurmJobCorrelationsResponse, ApiError> {
+        authorize_workflow!(self, id, context, GetSlurmJobCorrelationsResponse);
+        self.workflows_api
+            .get_slurm_job_correlations(id, context)
+            .await
+    }
+
     pub(super) async fn transport_is_workflow_uninitialized(
         &self,
         id: i64,

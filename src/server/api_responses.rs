@@ -1018,6 +1018,19 @@ pub enum GetWorkflowStatusResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum GetSlurmJobCorrelationsResponse {
+    /// Successful response
+    SuccessfulResponse(models::SlurmJobCorrelationsResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum IsWorkflowUninitializedResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),

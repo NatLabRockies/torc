@@ -2043,6 +2043,16 @@ where
         self.transport_get_workflow_status(id, context).await
     }
 
+    /// Return Slurm-job-to-Torc-job correlations for the workflow.
+    #[instrument(level = "debug", skip(self, context), fields(workflow_id = id))]
+    async fn get_slurm_job_correlations(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetSlurmJobCorrelationsResponse, ApiError> {
+        self.transport_get_slurm_job_correlations(id, context).await
+    }
+
     async fn is_workflow_uninitialized(
         &self,
         id: i64,
