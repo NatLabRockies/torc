@@ -632,6 +632,7 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
             Line::from(vec![
                 Span::styled("◆ ", Style::default().fg(Color::Green)),
                 Span::styled("Summary", Style::default().fg(Color::White)),
+                Span::styled(" │ D: expand details", Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::Green),
         )
