@@ -1733,6 +1733,11 @@ fn test_get_running_jobs(start_server: &ServerProcess) {
     assert_eq!(item.compute_node_name, "node0099");
     assert_eq!(item.scheduler_type, "slurm");
     assert_eq!(item.scheduler_job_id.as_deref(), Some("555111"));
+    // start_job sets the job's start_time, surfaced here for elapsed-time display.
+    assert!(
+        item.start_time.is_some(),
+        "expected start_time to be populated"
+    );
 }
 
 #[rstest]

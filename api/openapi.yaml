@@ -7232,6 +7232,11 @@ components:
           - 'null'
         scheduler_type:
           type: string
+        start_time:
+          type:
+          - string
+          - 'null'
+          description: RFC3339 time the job started running, for computing elapsed time.
     RunningJobsResponse:
       type: object
       description: A page of currently-running jobs for a workflow, computed server-side.

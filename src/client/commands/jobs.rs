@@ -106,6 +106,8 @@ struct RunningJobTableRow {
     job_name: String,
     #[tabled(rename = "Compute Node")]
     compute_node: String,
+    #[tabled(rename = "Elapsed")]
+    elapsed: String,
     #[tabled(rename = "Scheduler")]
     scheduler_type: String,
     #[tabled(rename = "Scheduler Job ID")]
@@ -1265,6 +1267,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                         job_id: j.job_id,
                         job_name: j.job_name.clone(),
                         compute_node: j.compute_node_name.clone(),
+                        elapsed: format_elapsed(j.start_time.as_deref()),
                         scheduler_type: j.scheduler_type.clone(),
                         // Match the compute-nodes listing: render absent IDs as "-".
                         scheduler_job_id: j

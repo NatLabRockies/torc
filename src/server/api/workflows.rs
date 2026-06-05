@@ -1590,7 +1590,8 @@ where
                 j.name AS job_name,
                 cn.hostname AS compute_node_name,
                 cn.compute_node_type AS scheduler_type,
-                CAST(scn.scheduler_id AS TEXT) AS scheduler_job_id
+                CAST(scn.scheduler_id AS TEXT) AS scheduler_job_id,
+                j.start_time AS start_time
             FROM job j
             JOIN compute_node cn
                 ON cn.id = j.compute_node_id
@@ -1620,6 +1621,7 @@ where
                 compute_node_name: row.get("compute_node_name"),
                 scheduler_type: row.get("scheduler_type"),
                 scheduler_job_id: row.get("scheduler_job_id"),
+                start_time: row.get("start_time"),
             })
             .collect();
 

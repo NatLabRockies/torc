@@ -2430,6 +2430,9 @@ pub struct RunningJobModel {
     pub scheduler_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_job_id: Option<String>,
+    /// RFC3339 time the job started running, for computing elapsed time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
 }
 
 /// A page of currently-running jobs for a workflow, computed server-side.

@@ -2337,6 +2337,7 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "compute_node_name",
             "scheduler_type",
             "scheduler_job_id",
+            "start_time",
         ],
         &mut issues,
     );

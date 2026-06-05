@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -31,7 +31,8 @@ class RunningJobModel(BaseModel):
     job_name: StrictStr
     scheduler_job_id: Optional[StrictStr] = None
     scheduler_type: StrictStr
-    __properties: ClassVar[List[str]] = ["compute_node_name", "job_id", "job_name", "scheduler_job_id", "scheduler_type"]
+    start_time: Optional[StrictStr] = Field(default=None, description="RFC3339 time the job started running, for computing elapsed time.")
+    __properties: ClassVar[List[str]] = ["compute_node_name", "job_id", "job_name", "scheduler_job_id", "scheduler_type", "start_time"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -77,6 +78,11 @@ class RunningJobModel(BaseModel):
         if self.scheduler_job_id is None and "scheduler_job_id" in self.model_fields_set:
             _dict['scheduler_job_id'] = None
 
+        # set to None if start_time (nullable) is None
+        # and model_fields_set contains the field
+        if self.start_time is None and "start_time" in self.model_fields_set:
+            _dict['start_time'] = None
+
         return _dict
 
     @classmethod
@@ -93,7 +99,8 @@ class RunningJobModel(BaseModel):
             "job_id": obj.get("job_id"),
             "job_name": obj.get("job_name"),
             "scheduler_job_id": obj.get("scheduler_job_id"),
-            "scheduler_type": obj.get("scheduler_type")
+            "scheduler_type": obj.get("scheduler_type"),
+            "start_time": obj.get("start_time")
         })
         return _obj
 

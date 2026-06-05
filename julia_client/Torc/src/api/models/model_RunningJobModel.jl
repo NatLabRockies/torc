@@ -11,6 +11,7 @@ A currently-running job together with the compute node it occupies and, when the
         job_name=nothing,
         scheduler_job_id=nothing,
         scheduler_type=nothing,
+        start_time=nothing,
     )
 
     - compute_node_name::String
@@ -18,6 +19,7 @@ A currently-running job together with the compute node it occupies and, when the
     - job_name::String
     - scheduler_job_id::String
     - scheduler_type::String
+    - start_time::String : RFC3339 time the job started running, for computing elapsed time.
 """
 Base.@kwdef mutable struct RunningJobModel <: OpenAPI.APIModel
     compute_node_name::Union{Nothing, String} = nothing
@@ -25,15 +27,16 @@ Base.@kwdef mutable struct RunningJobModel <: OpenAPI.APIModel
     job_name::Union{Nothing, String} = nothing
     scheduler_job_id::Union{Nothing, String} = nothing
     scheduler_type::Union{Nothing, String} = nothing
+    start_time::Union{Nothing, String} = nothing
 
-    function RunningJobModel(compute_node_name, job_id, job_name, scheduler_job_id, scheduler_type, )
-        o = new(compute_node_name, job_id, job_name, scheduler_job_id, scheduler_type, )
+    function RunningJobModel(compute_node_name, job_id, job_name, scheduler_job_id, scheduler_type, start_time, )
+        o = new(compute_node_name, job_id, job_name, scheduler_job_id, scheduler_type, start_time, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type RunningJobModel
 
-const _property_types_RunningJobModel = Dict{Symbol,String}(Symbol("compute_node_name")=>"String", Symbol("job_id")=>"Int64", Symbol("job_name")=>"String", Symbol("scheduler_job_id")=>"String", Symbol("scheduler_type")=>"String", )
+const _property_types_RunningJobModel = Dict{Symbol,String}(Symbol("compute_node_name")=>"String", Symbol("job_id")=>"Int64", Symbol("job_name")=>"String", Symbol("scheduler_job_id")=>"String", Symbol("scheduler_type")=>"String", Symbol("start_time")=>"String", )
 OpenAPI.property_type(::Type{ RunningJobModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_RunningJobModel[name]))}
 
 function OpenAPI.check_required(o::RunningJobModel)
@@ -50,6 +53,7 @@ function OpenAPI.validate_properties(o::RunningJobModel)
     OpenAPI.validate_property(RunningJobModel, Symbol("job_name"), o.job_name)
     OpenAPI.validate_property(RunningJobModel, Symbol("scheduler_job_id"), o.scheduler_job_id)
     OpenAPI.validate_property(RunningJobModel, Symbol("scheduler_type"), o.scheduler_type)
+    OpenAPI.validate_property(RunningJobModel, Symbol("start_time"), o.start_time)
 end
 
 function OpenAPI.validate_property(::Type{ RunningJobModel }, name::Symbol, val)
@@ -58,6 +62,7 @@ function OpenAPI.validate_property(::Type{ RunningJobModel }, name::Symbol, val)
     if name === Symbol("job_id")
         OpenAPI.validate_param(name, "RunningJobModel", :format, val, "int64")
     end
+
 
 
 
