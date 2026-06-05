@@ -10,9 +10,9 @@ use sqlx::Row;
 
 use crate::server::api_responses::{
     ArchiveWorkflowResponse, CancelWorkflowResponse, CreateWorkflowResponse,
-    DeleteWorkflowResponse, GetSlurmJobCorrelationsResponse, GetWorkflowResponse,
-    GetWorkflowStatusResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
-    ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
+    DeleteWorkflowResponse, GetRunningJobsResponse, GetSlurmJobCorrelationsResponse,
+    GetWorkflowResponse, GetWorkflowStatusResponse, IsWorkflowCompleteResponse,
+    IsWorkflowUninitializedResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
     ListJobUserDataRelationshipsResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
     UpdateWorkflowResponse,
 };
@@ -194,6 +194,15 @@ pub trait WorkflowsApi<C> {
         limit: i64,
         context: &C,
     ) -> Result<GetSlurmJobCorrelationsResponse, ApiError>;
+
+    /// Return currently-running jobs with their compute node and scheduler info.
+    async fn get_running_jobs(
+        &self,
+        id: i64,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> Result<GetRunningJobsResponse, ApiError>;
 
     /// Return true if all jobs in the workflow are uninitialized or disabled.
     async fn is_workflow_uninitialized(
@@ -1536,6 +1545,112 @@ where
         Ok(GetSlurmJobCorrelationsResponse::SuccessfulResponse(
             response,
         ))
+    }
+
+    /// Return currently-running jobs with their compute node and scheduler info.
+    ///
+    /// Joins live job state (`job.compute_node_id`, set while running) to the
+    /// compute node, and LEFT JOINs the scheduled_compute_node it belongs to so
+    /// the external scheduler job ID is included when one exists. The design is
+    /// scheduler-agnostic: `scheduler_type` comes from the compute node's type
+    /// (e.g. "slurm", "local") and `scheduler_job_id` is NULL for nodes not
+    /// provisioned by a scheduler. New scheduler types flow through unchanged.
+    async fn get_running_jobs(
+        &self,
+        id: i64,
+        offset: i64,
+        limit: i64,
+        context: &C,
+    ) -> Result<GetRunningJobsResponse, ApiError> {
+        debug!(
+            "get_running_jobs({}, offset={}, limit={}) - X-Span-ID: {:?}",
+            id,
+            offset,
+            limit,
+            context.get().0.clone()
+        );
+
+        let pool = self.context.pool.as_ref();
+
+        // 404 if the workflow does not exist.
+        let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM workflow WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to get workflow"))?;
+        if exists.is_none() {
+            return Ok(GetRunningJobsResponse::NotFoundErrorResponse(
+                resource_not_found_response("Workflow", id),
+            ));
+        }
+
+        let running = models::JobStatus::Running.to_int();
+
+        let total_count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM job j
+            JOIN compute_node cn
+                ON cn.id = j.compute_node_id
+               AND cn.workflow_id = j.workflow_id
+            WHERE j.workflow_id = ?
+              AND j.status = ?
+            "#,
+        )
+        .bind(id)
+        .bind(running)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to count running jobs"))?;
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                j.id AS job_id,
+                j.name AS job_name,
+                cn.hostname AS compute_node_name,
+                cn.compute_node_type AS scheduler_type,
+                CAST(scn.scheduler_id AS TEXT) AS scheduler_job_id
+            FROM job j
+            JOIN compute_node cn
+                ON cn.id = j.compute_node_id
+               AND cn.workflow_id = j.workflow_id
+            LEFT JOIN scheduled_compute_node scn
+                ON scn.workflow_id = j.workflow_id
+               AND json_extract(cn.scheduler, '$.scheduler_id') = scn.id
+            WHERE j.workflow_id = ?
+              AND j.status = ?
+            ORDER BY j.id
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(id)
+        .bind(running)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to list running jobs"))?;
+
+        let items: Vec<models::RunningJobModel> = rows
+            .iter()
+            .map(|row| models::RunningJobModel {
+                job_id: row.get("job_id"),
+                job_name: row.get("job_name"),
+                compute_node_name: row.get("compute_node_name"),
+                scheduler_type: row.get("scheduler_type"),
+                scheduler_job_id: row.get("scheduler_job_id"),
+            })
+            .collect();
+
+        let response = crate::paginated_list_response!(
+            models::RunningJobsResponse,
+            items,
+            offset,
+            total_count
+        );
+
+        Ok(GetRunningJobsResponse::SuccessfulResponse(response))
     }
 
     /// Return true if all jobs in the workflow are uninitialized or disabled.

@@ -424,6 +424,26 @@ where
             .await
     }
 
+    pub(super) async fn transport_get_running_jobs(
+        &self,
+        id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<GetRunningJobsResponse, ApiError> {
+        let (offset, limit) = authorize_workflow_and_paginate!(
+            self,
+            id,
+            context,
+            GetRunningJobsResponse,
+            offset,
+            limit
+        );
+        self.workflows_api
+            .get_running_jobs(id, offset, limit, context)
+            .await
+    }
+
     pub(super) async fn transport_is_workflow_uninitialized(
         &self,
         id: i64,

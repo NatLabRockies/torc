@@ -87,6 +87,8 @@ from torc.openapi_client.models.resource_monitor_config import ResourceMonitorCo
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel
 from torc.openapi_client.models.result_model import ResultModel
 from torc.openapi_client.models.ro_crate_entity_model import RoCrateEntityModel
+from torc.openapi_client.models.running_job_model import RunningJobModel
+from torc.openapi_client.models.running_jobs_response import RunningJobsResponse
 from torc.openapi_client.models.scheduled_compute_nodes_model import ScheduledComputeNodesModel
 from torc.openapi_client.models.slurm_job_correlation_model import SlurmJobCorrelationModel
 from torc.openapi_client.models.slurm_job_correlations_response import SlurmJobCorrelationsResponse

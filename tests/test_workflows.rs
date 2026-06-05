@@ -1671,3 +1671,73 @@ fn test_get_slurm_job_correlations_not_found(start_server: &ServerProcess) {
         "expected error for nonexistent workflow correlations"
     );
 }
+
+#[rstest]
+fn test_get_running_jobs(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "running_jobs_workflow");
+    let workflow_id = workflow.id.unwrap();
+    let job = create_test_job(config, workflow_id, "running_job");
+    let job_id = job.id.unwrap();
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("initialize jobs");
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).expect("get workflow");
+    let run_id = workflow.run_id.unwrap_or(0);
+
+    // Slurm allocation plus a compute node that belongs to it (scheduler JSON
+    // links the node back to the scheduled compute node).
+    let scn = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
+        config,
+        models::ScheduledComputeNodesModel::new(
+            workflow_id,
+            555111,
+            1,
+            "slurm".to_string(),
+            "active".to_string(),
+        ),
+    )
+    .expect("create scheduled compute node");
+    let scn_id = scn.id.unwrap();
+    let compute_node = apis::compute_nodes_api::create_compute_node(
+        config,
+        models::ComputeNodeModel::new(
+            workflow_id,
+            "node0099".to_string(),
+            std::process::id() as i64,
+            chrono::Utc::now().to_rfc3339(),
+            8,
+            16.0,
+            0,
+            1,
+            "slurm".to_string(),
+            Some(serde_json::json!({ "scheduler_id": scn_id })),
+        ),
+    )
+    .expect("create compute node");
+    let compute_node_id = compute_node.id.unwrap();
+
+    // Move the job to Running on that node.
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1)).expect("claim job");
+    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id).expect("start job");
+
+    let response = apis::workflows_api::get_running_jobs(config, workflow_id, None, None)
+        .expect("get running jobs");
+
+    assert_eq!(response.total_count, 1);
+    assert!(!response.has_more);
+    assert_eq!(response.items.len(), 1);
+    let item = &response.items[0];
+    assert_eq!(item.job_id, job_id);
+    assert_eq!(item.job_name, "running_job");
+    assert_eq!(item.compute_node_name, "node0099");
+    assert_eq!(item.scheduler_type, "slurm");
+    assert_eq!(item.scheduler_job_id.as_deref(), Some("555111"));
+}
+
+#[rstest]
+fn test_get_running_jobs_not_found(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let result = apis::workflows_api::get_running_jobs(config, 999_999, None, None);
+    assert!(result.is_err(), "expected error for nonexistent workflow");
+}

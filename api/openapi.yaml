@@ -5313,6 +5313,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/running_jobs:
+    get:
+      tags:
+      - workflows
+      operationId: get_running_jobs
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningJobsResponse'
+        '403':
+          description: User does not have access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/slurm_job_correlations:
     get:
       tags:
@@ -7142,6 +7196,61 @@ components:
           propertyNames:
             type: string
         workflow_id:
+          type: integer
+          format: int64
+    RunningJobModel:
+      type: object
+      description: |-
+        A currently-running job together with the compute node it occupies and,
+        when the node was provisioned by a scheduler, that scheduler's job ID.
+        `scheduler_type` is generic (e.g. "slurm", "local"); `scheduler_job_id`
+        is populated only for scheduler-managed nodes (the Slurm job ID today).
+      required:
+      - job_id
+      - job_name
+      - compute_node_name
+      - scheduler_type
+      properties:
+        compute_node_name:
+          type: string
+        job_id:
+          type: integer
+          format: int64
+        job_name:
+          type: string
+        scheduler_job_id:
+          type:
+          - string
+          - 'null'
+        scheduler_type:
+          type: string
+    RunningJobsResponse:
+      type: object
+      description: A page of currently-running jobs for a workflow, computed server-side.
+      required:
+      - items
+      - offset
+      - max_limit
+      - count
+      - total_count
+      - has_more
+      properties:
+        count:
+          type: integer
+          format: int64
+        has_more:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunningJobModel'
+        max_limit:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        total_count:
           type: integer
           format: int64
     ScheduledComputeNodesModel:

@@ -98,6 +98,20 @@ struct JobFailureHandlerTableRow {
     rules_summary: String,
 }
 
+#[derive(Tabled)]
+struct RunningJobTableRow {
+    #[tabled(rename = "Job ID")]
+    job_id: i64,
+    #[tabled(rename = "Job Name")]
+    job_name: String,
+    #[tabled(rename = "Compute Node")]
+    compute_node: String,
+    #[tabled(rename = "Scheduler")]
+    scheduler_type: String,
+    #[tabled(rename = "Scheduler Job ID")]
+    scheduler_job_id: String,
+}
+
 #[derive(clap::Subcommand)]
 #[command(after_long_help = "\
 EXAMPLES:
@@ -397,6 +411,23 @@ EXAMPLES:
         /// Filter by specific job ID
         #[arg(short, long)]
         job_id: Option<i64>,
+    },
+    /// List currently-running jobs with their compute node and scheduler info
+    #[command(
+        name = "running",
+        after_long_help = "\
+EXAMPLES:
+    # List running jobs with compute node names (and Slurm job IDs, if any)
+    torc jobs running 123
+
+    # JSON output
+    torc -f json jobs running 123
+"
+    )]
+    Running {
+        /// Workflow ID to list running jobs for (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
     },
 }
 
@@ -1187,6 +1218,63 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     println!("No jobs with failure handlers found");
                 } else {
                     display_table_with_count(&rows, "jobs with failure handlers");
+                }
+            }
+        }
+        JobCommands::Running { workflow_id } => {
+            let user_name = get_env_user_name();
+            let selected_workflow_id = match workflow_id {
+                Some(id) => *id,
+                None => select_workflow_interactively(config, &user_name).unwrap_or_else(|e| {
+                    eprintln!("Error selecting workflow: {}", e);
+                    std::process::exit(1);
+                }),
+            };
+
+            // Page through the server-side endpoint, which joins running jobs to
+            // their compute node and (when scheduler-managed) the scheduler job ID.
+            let mut running: Vec<models::RunningJobModel> = Vec::new();
+            let mut offset = 0;
+            loop {
+                let response = match apis::workflows_api::get_running_jobs(
+                    config,
+                    selected_workflow_id,
+                    Some(offset),
+                    None,
+                ) {
+                    Ok(response) => response,
+                    Err(e) => {
+                        print_error("listing running jobs", &e);
+                        std::process::exit(1);
+                    }
+                };
+                running.extend(response.items);
+                if !response.has_more {
+                    break;
+                }
+                offset += response.count;
+            }
+
+            if format == "json" {
+                print_json(&running, "running jobs");
+            } else {
+                let rows: Vec<RunningJobTableRow> = running
+                    .iter()
+                    .map(|j| RunningJobTableRow {
+                        job_id: j.job_id,
+                        job_name: j.job_name.clone(),
+                        compute_node: j.compute_node_name.clone(),
+                        scheduler_type: j.scheduler_type.clone(),
+                        scheduler_job_id: j.scheduler_job_id.clone().unwrap_or_default(),
+                    })
+                    .collect();
+
+                if format == "csv" {
+                    display_csv(&rows);
+                } else if rows.is_empty() {
+                    println!("No running jobs found");
+                } else {
+                    display_table_with_count(&rows, "running jobs");
                 }
             }
         }

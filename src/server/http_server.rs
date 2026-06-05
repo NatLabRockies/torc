@@ -2056,6 +2056,19 @@ where
             .await
     }
 
+    /// Return currently-running jobs with their compute node and scheduler info.
+    #[instrument(level = "debug", skip(self, context), fields(workflow_id = id))]
+    async fn get_running_jobs(
+        &self,
+        id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<GetRunningJobsResponse, ApiError> {
+        self.transport_get_running_jobs(id, offset, limit, context)
+            .await
+    }
+
     async fn is_workflow_uninitialized(
         &self,
         id: i64,

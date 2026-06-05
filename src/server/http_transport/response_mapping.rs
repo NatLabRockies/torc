@@ -565,6 +565,11 @@ map_response!(
     SuccessfulResponse
 );
 map_response!(
+    get_running_jobs_response,
+    GetRunningJobsResponse,
+    SuccessfulResponse
+);
+map_response!(
     is_workflow_uninitialized_response,
     IsWorkflowUninitializedResponse,
     SuccessfulResponse

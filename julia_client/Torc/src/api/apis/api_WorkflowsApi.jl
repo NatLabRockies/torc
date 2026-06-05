@@ -273,6 +273,40 @@ function get_ready_job_requirements(_api::WorkflowsApi, response_stream::Channel
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_get_running_jobs_WorkflowsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => RunningJobsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_get_running_jobs(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_running_jobs_WorkflowsApi, "/workflows/{id}/running_jobs", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+- offset::Int64
+- limit::Int64
+
+Return: RunningJobsResponse, OpenAPI.Clients.ApiResponse
+"""
+function get_running_jobs(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_get_running_jobs(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function get_running_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_get_running_jobs(_api, id; offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_get_slurm_job_correlations_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmJobCorrelationsResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -811,6 +845,7 @@ export create_workflow
 export delete_workflow
 export get_active_task_for_workflow
 export get_ready_job_requirements
+export get_running_jobs
 export get_slurm_job_correlations
 export get_workflow
 export get_workflow_status

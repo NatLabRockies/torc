@@ -133,6 +133,7 @@ Class | Method
 *WorkflowsApi* | [**delete_workflow**](docs/WorkflowsApi.md#delete_workflow)<br/>**DELETE** /workflows/{id}<br/>
 *WorkflowsApi* | [**get_active_task_for_workflow**](docs/WorkflowsApi.md#get_active_task_for_workflow)<br/>**GET** /workflows/{id}/active_task<br/>
 *WorkflowsApi* | [**get_ready_job_requirements**](docs/WorkflowsApi.md#get_ready_job_requirements)<br/>**GET** /workflows/{id}/ready_job_requirements<br/>
+*WorkflowsApi* | [**get_running_jobs**](docs/WorkflowsApi.md#get_running_jobs)<br/>**GET** /workflows/{id}/running_jobs<br/>
 *WorkflowsApi* | [**get_slurm_job_correlations**](docs/WorkflowsApi.md#get_slurm_job_correlations)<br/>**GET** /workflows/{id}/slurm_job_correlations<br/>
 *WorkflowsApi* | [**get_workflow**](docs/WorkflowsApi.md#get_workflow)<br/>**GET** /workflows/{id}<br/>
 *WorkflowsApi* | [**get_workflow_status**](docs/WorkflowsApi.md#get_workflow_status)<br/>**GET** /workflows/{id}/status<br/>
@@ -228,6 +229,8 @@ Class | Method
  - [ResourceRequirementsModel](docs/ResourceRequirementsModel.md)
  - [ResultModel](docs/ResultModel.md)
  - [RoCrateEntityModel](docs/RoCrateEntityModel.md)
+ - [RunningJobModel](docs/RunningJobModel.md)
+ - [RunningJobsResponse](docs/RunningJobsResponse.md)
  - [ScheduledComputeNodesModel](docs/ScheduledComputeNodesModel.md)
  - [SlurmJobCorrelationModel](docs/SlurmJobCorrelationModel.md)
  - [SlurmJobCorrelationsResponse](docs/SlurmJobCorrelationsResponse.md)

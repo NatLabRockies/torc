@@ -2411,6 +2411,33 @@ pub struct SlurmJobCorrelationsResponse {
     pub has_more: bool,
 }
 
+/// A currently-running job together with the compute node it occupies and,
+/// when the node was provisioned by a scheduler, that scheduler's job ID.
+/// `scheduler_type` is generic (e.g. "slurm", "local"); `scheduler_job_id`
+/// is populated only for scheduler-managed nodes (the Slurm job ID today).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunningJobModel {
+    pub job_id: i64,
+    pub job_name: String,
+    pub compute_node_name: String,
+    pub scheduler_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduler_job_id: Option<String>,
+}
+
+/// A page of currently-running jobs for a workflow, computed server-side.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunningJobsResponse {
+    pub items: Vec<RunningJobModel>,
+    pub offset: i64,
+    pub max_limit: i64,
+    pub count: i64,
+    pub total_count: i64,
+    pub has_more: bool,
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResetJobStatusResponse {
