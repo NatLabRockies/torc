@@ -1324,7 +1324,9 @@ where
                 Ok(models::JobStatus::Terminated) => counts.terminated = cnt,
                 Ok(models::JobStatus::Disabled) => counts.disabled = cnt,
                 Ok(models::JobStatus::PendingFailed) => counts.pending_failed = cnt,
-                Err(_) => debug!("Ignoring unknown job status {} in workflow {}", status, id),
+                Err(_) => {
+                    debug!("Ignoring unknown job status={} workflow_id={}", status, id)
+                }
             }
         }
         let total_jobs = counts.uninitialized
@@ -1392,20 +1394,25 @@ where
         .fetch_one(pool)
         .await
         .map_err(|e| database_error_with_msg(e, "Failed to count compute nodes"))?;
-        let pending_scheduled_nodes: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM scheduled_compute_node WHERE workflow_id = ? AND status = 'pending'",
+        let mut pending_scheduled_nodes: i64 = 0;
+        let mut active_scheduled_nodes: i64 = 0;
+        let scheduled_rows = sqlx::query(
+            "SELECT status, COUNT(*) AS cnt FROM scheduled_compute_node \
+             WHERE workflow_id = ? AND status IN ('pending', 'active') GROUP BY status",
         )
         .bind(id)
-        .fetch_one(pool)
+        .fetch_all(pool)
         .await
         .map_err(|e| database_error_with_msg(e, "Failed to count scheduled compute nodes"))?;
-        let active_scheduled_nodes: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM scheduled_compute_node WHERE workflow_id = ? AND status = 'active'",
-        )
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to count scheduled compute nodes"))?;
+        for row in &scheduled_rows {
+            let status: String = row.get("status");
+            let cnt: i64 = row.get("cnt");
+            match status.as_str() {
+                "pending" => pending_scheduled_nodes = cnt,
+                "active" => active_scheduled_nodes = cnt,
+                _ => {}
+            }
+        }
 
         Ok(GetWorkflowStatusResponse::SuccessfulResponse(
             models::WorkflowStatusResponse {
