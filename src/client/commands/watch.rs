@@ -56,7 +56,6 @@ where
 {
     utils::send_with_retries(config, api_call, WAIT_FOR_HEALTHY_DATABASE_MINUTES)
 }
-use crate::client::commands::pagination::{JobListParams, paginate_jobs};
 use crate::client::hpc::common::HpcJobStatus;
 use crate::client::hpc::hpc_interface::HpcInterface;
 use crate::client::hpc::slurm_interface::SlurmInterface;
@@ -113,23 +112,33 @@ pub struct WatchArgs {
     pub walltime: Option<String>,
 }
 
-/// Get job counts by status for a workflow
+/// Get job counts by status for a workflow.
+///
+/// Delegates aggregation to the server's `get_workflow_status` endpoint (a
+/// single SQL `GROUP BY`) instead of downloading every job to count them
+/// client-side. This runs on every poll, so the cheap call matters. Keys
+/// match `format!("{:?}", JobStatus)` for backward compatibility with callers.
 fn get_job_counts(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<HashMap<String, i64>, String> {
-    let jobs = paginate_jobs(config, workflow_id, JobListParams::new())
-        .map_err(|e| format!("Failed to list jobs: {}", e))?;
-    let mut counts = HashMap::new();
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .map_err(|e| format!("Failed to get workflow status: {}", e))?;
+    let c = status.jobs_by_status;
 
-    for job in &jobs {
-        if let Some(status) = &job.status {
-            let status_str = format!("{:?}", status);
-            *counts.entry(status_str).or_insert(0) += 1;
-        }
-    }
-
-    Ok(counts)
+    Ok(HashMap::from([
+        ("Uninitialized".to_string(), c.uninitialized),
+        ("Blocked".to_string(), c.blocked),
+        ("Ready".to_string(), c.ready),
+        ("Pending".to_string(), c.pending),
+        ("Running".to_string(), c.running),
+        ("Completed".to_string(), c.completed),
+        ("Failed".to_string(), c.failed),
+        ("Canceled".to_string(), c.canceled),
+        ("Terminated".to_string(), c.terminated),
+        ("Disabled".to_string(), c.disabled),
+        ("PendingFailed".to_string(), c.pending_failed),
+    ]))
 }
 
 /// Count ready jobs that need an unplanned Slurm allocation.
