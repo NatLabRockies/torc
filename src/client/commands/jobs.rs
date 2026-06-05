@@ -1256,7 +1256,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             }
 
             if format == "json" {
-                print_json(&running, "running jobs");
+                // Wrap in {"items": [...]} for consistency with other list commands.
+                print_json_wrapped(&running, "running jobs");
             } else {
                 let rows: Vec<RunningJobTableRow> = running
                     .iter()
