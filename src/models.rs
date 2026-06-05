@@ -339,6 +339,11 @@ pub struct ResultModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_cpu_percent: Option<f64>,
     pub status: JobStatus,
+    /// Name of the job this result belongs to. Populated by the server on read
+    /// paths (list/get) as a convenience so clients need not re-fetch jobs; it
+    /// is ignored on create/update input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_name: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1890,6 +1895,7 @@ impl ResultModel {
             peak_cpu_percent: None,
             avg_cpu_percent: None,
             status,
+            job_name: None,
         }
     }
 }
@@ -2571,6 +2577,7 @@ mod tests {
             peak_cpu_percent: Some(90.0),
             avg_cpu_percent: Some(60.0),
             status: JobStatus::Completed,
+            job_name: None,
         };
         let file = FileModel {
             id: Some(1),

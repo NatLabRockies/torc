@@ -7147,6 +7147,14 @@ components:
         job_id:
           type: integer
           format: int64
+        job_name:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Name of the job this result belongs to. Populated by the server on read
+            paths (list/get) as a convenience so clients need not re-fetch jobs; it
+            is ignored on create/update input.
         peak_cpu_percent:
           type:
           - number

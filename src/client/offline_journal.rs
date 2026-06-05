@@ -248,6 +248,7 @@ mod tests {
                 peak_cpu_percent: None,
                 avg_cpu_percent: None,
                 status: JobStatus::Completed,
+                job_name: None,
             },
         }
     }

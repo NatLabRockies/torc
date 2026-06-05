@@ -12,6 +12,7 @@ Name | Type | Description | Notes
 **exec_time_minutes** | **Float64** |  | [default to nothing]
 **id** | **Int64** |  | [optional] [default to nothing]
 **job_id** | **Int64** |  | [default to nothing]
+**job_name** | **String** | Name of the job this result belongs to. Populated by the server on read paths (list/get) as a convenience so clients need not re-fetch jobs; it is ignored on create/update input. | [optional] [default to nothing]
 **peak_cpu_percent** | **Float64** |  | [optional] [default to nothing]
 **peak_memory_bytes** | **Int64** |  | [optional] [default to nothing]
 **return_code** | **Int64** |  | [default to nothing]

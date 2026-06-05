@@ -1635,6 +1635,7 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "peak_cpu_percent",
             "avg_cpu_percent",
             "status",
+            "job_name",
         ],
         &mut issues,
     );

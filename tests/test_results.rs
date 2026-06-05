@@ -63,6 +63,12 @@ fn test_results_list_command_json(start_server: &ServerProcess) {
         assert!(result.get("exec_time_minutes").is_some());
         assert!(result.get("completion_time").is_some());
         assert!(result.get("status").is_some());
+        // job_name is populated server-side (denormalized from the job).
+        let job_name = result.get("job_name").and_then(|v| v.as_str());
+        assert!(
+            matches!(job_name, Some("job1") | Some("job2")),
+            "expected server-populated job_name, got {job_name:?}"
+        );
     }
 }
 

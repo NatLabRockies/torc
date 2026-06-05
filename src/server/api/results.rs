@@ -243,15 +243,20 @@ where
             context.get().0.clone()
         );
 
-        let record = match sqlx::query!(
+        // Runtime query (not the query! macro) so the LEFT JOIN to `job` for the
+        // denormalized job_name doesn't trip compile-time nullability inference.
+        let record = match sqlx::query(
             r#"
-            SELECT id, job_id, workflow_id, run_id, attempt_id, compute_node_id, return_code, exec_time_minutes, completion_time, status,
-                   peak_memory_bytes, avg_memory_bytes, peak_cpu_percent, avg_cpu_percent
-            FROM result
-            WHERE id = $1
+            SELECT r.id, r.job_id, r.workflow_id, r.run_id, r.attempt_id, r.compute_node_id,
+                   r.return_code, r.exec_time_minutes, r.completion_time, r.status,
+                   r.peak_memory_bytes, r.avg_memory_bytes, r.peak_cpu_percent, r.avg_cpu_percent,
+                   j.name AS job_name
+            FROM result r
+            LEFT JOIN job j ON j.id = r.job_id
+            WHERE r.id = ?
             "#,
-            id
         )
+        .bind(id)
         .fetch_optional(self.context.pool.as_ref())
         .await
         {
@@ -266,23 +271,26 @@ where
             }
         };
 
-        let status = parse_job_status(record.status as i32, record.job_id)?;
+        let status_int: i64 = record.get("status");
+        let job_id: i64 = record.get("job_id");
+        let status = parse_job_status(status_int as i32, job_id)?;
 
         let result_model = models::ResultModel {
-            id: Some(record.id),
-            workflow_id: record.workflow_id,
-            job_id: record.job_id,
-            run_id: record.run_id,
-            attempt_id: Some(record.attempt_id),
-            compute_node_id: record.compute_node_id,
-            return_code: record.return_code,
-            exec_time_minutes: record.exec_time_minutes,
-            completion_time: record.completion_time,
-            peak_memory_bytes: record.peak_memory_bytes,
-            avg_memory_bytes: record.avg_memory_bytes,
-            peak_cpu_percent: record.peak_cpu_percent,
-            avg_cpu_percent: record.avg_cpu_percent,
+            id: Some(record.get("id")),
+            workflow_id: record.get("workflow_id"),
+            job_id,
+            run_id: record.get("run_id"),
+            attempt_id: Some(record.get("attempt_id")),
+            compute_node_id: record.get("compute_node_id"),
+            return_code: record.get("return_code"),
+            exec_time_minutes: record.get("exec_time_minutes"),
+            completion_time: record.get("completion_time"),
+            peak_memory_bytes: record.get("peak_memory_bytes"),
+            avg_memory_bytes: record.get("avg_memory_bytes"),
+            peak_cpu_percent: record.get("peak_cpu_percent"),
+            avg_cpu_percent: record.get("avg_cpu_percent"),
             status,
+            job_name: record.get("job_name"),
         };
 
         Ok(GetResultResponse::SuccessfulResponse(result_model))
@@ -323,17 +331,23 @@ where
             context.get().0.clone()
         );
 
-        // Build base query
-        // If all_runs is false, only return results that are in workflow_result table (current results)
+        // Build base query. `result` is always aliased `r` so the LEFT JOIN to
+        // `job` (for the denormalized job_name) and the column references stay
+        // unambiguous in both branches. When all_runs is false, restrict to the
+        // current results via workflow_result.
+        let result_columns = "r.id, r.job_id, r.workflow_id, r.run_id, r.attempt_id, r.compute_node_id, r.return_code, r.exec_time_minutes, r.completion_time, r.status, r.peak_memory_bytes, r.avg_memory_bytes, r.peak_cpu_percent, r.avg_cpu_percent, j.name AS job_name";
         let base_query = if show_all_results {
-            "SELECT id, job_id, workflow_id, run_id, attempt_id, compute_node_id, return_code, exec_time_minutes, completion_time, status, peak_memory_bytes, avg_memory_bytes, peak_cpu_percent, avg_cpu_percent FROM result".to_string()
+            format!("SELECT {result_columns} FROM result r LEFT JOIN job j ON j.id = r.job_id")
         } else {
-            "SELECT r.id, r.job_id, r.workflow_id, r.run_id, r.attempt_id, r.compute_node_id, r.return_code, r.exec_time_minutes, r.completion_time, r.status, r.peak_memory_bytes, r.avg_memory_bytes, r.peak_cpu_percent, r.avg_cpu_percent FROM result r INNER JOIN workflow_result wr ON r.id = wr.result_id".to_string()
+            format!(
+                "SELECT {result_columns} FROM result r \
+                 INNER JOIN workflow_result wr ON r.id = wr.result_id \
+                 LEFT JOIN job j ON j.id = r.job_id"
+            )
         };
 
-        // Build WHERE clause conditions
-        // Use table alias prefix when joining with workflow_result
-        let col_prefix = if show_all_results { "" } else { "r." };
+        // All columns are referenced through the `r` alias now.
+        let col_prefix = "r.";
 
         let mut where_conditions = vec![format!("{}workflow_id = ?", col_prefix)];
         let mut bind_values: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send>> =
@@ -367,12 +381,9 @@ where
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
             if RESULT_COLUMNS.contains(&col.as_str()) {
-                // If we have a join (show_all_results is false), prefix with "r." if it's a result column
-                if !show_all_results {
-                    Some(format!("r.{}", col))
-                } else {
-                    Some(col.clone())
-                }
+                // `result` is always aliased `r`, so qualify the sort column to
+                // avoid ambiguity with the joined `job` table.
+                Some(format!("r.{}", col))
             } else {
                 debug!("Invalid sort column requested: {}", col);
                 None // Fall back to default
@@ -381,10 +392,18 @@ where
             None
         };
 
-        // Build the complete query with pagination and sorting
+        // Build the complete query with pagination and sorting. The default sort
+        // column is qualified (`r.id`) for the same reason.
         let query = SqlQueryBuilder::new(base_query)
             .with_where(where_clause.clone())
-            .with_pagination_and_sorting(offset, limit, sort_by, reverse_sort, "id", RESULT_COLUMNS)
+            .with_pagination_and_sorting(
+                offset,
+                limit,
+                sort_by,
+                reverse_sort,
+                "r.id",
+                RESULT_COLUMNS,
+            )
             .build();
 
         debug!("Executing query: {}", query);
@@ -439,12 +458,15 @@ where
                 peak_cpu_percent: record.get("peak_cpu_percent"),
                 avg_cpu_percent: record.get("avg_cpu_percent"),
                 status,
+                job_name: record.get("job_name"),
             });
         }
 
-        // For proper pagination, we should get the total count without LIMIT/OFFSET
+        // For proper pagination, get the total count without LIMIT/OFFSET. The
+        // WHERE clause uses the `r.` prefix, so `result` is aliased `r` here too
+        // (the job LEFT JOIN is unnecessary for a count).
         let count_base = if show_all_results {
-            "SELECT COUNT(*) as total FROM result".to_string()
+            "SELECT COUNT(*) as total FROM result r".to_string()
         } else {
             "SELECT COUNT(*) as total FROM result r INNER JOIN workflow_result wr ON r.id = wr.result_id".to_string()
         };

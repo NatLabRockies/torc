@@ -13,6 +13,7 @@
         exec_time_minutes=nothing,
         id=nothing,
         job_id=nothing,
+        job_name=nothing,
         peak_cpu_percent=nothing,
         peak_memory_bytes=nothing,
         return_code=nothing,
@@ -29,6 +30,7 @@
     - exec_time_minutes::Float64
     - id::Int64
     - job_id::Int64
+    - job_name::String : Name of the job this result belongs to. Populated by the server on read paths (list/get) as a convenience so clients need not re-fetch jobs; it is ignored on create/update input.
     - peak_cpu_percent::Float64
     - peak_memory_bytes::Int64
     - return_code::Int64
@@ -45,6 +47,7 @@ Base.@kwdef mutable struct ResultModel <: OpenAPI.APIModel
     exec_time_minutes::Union{Nothing, Float64} = nothing
     id::Union{Nothing, Int64} = nothing
     job_id::Union{Nothing, Int64} = nothing
+    job_name::Union{Nothing, String} = nothing
     peak_cpu_percent::Union{Nothing, Float64} = nothing
     peak_memory_bytes::Union{Nothing, Int64} = nothing
     return_code::Union{Nothing, Int64} = nothing
@@ -52,14 +55,14 @@ Base.@kwdef mutable struct ResultModel <: OpenAPI.APIModel
     status = nothing # spec type: Union{ Nothing, JobStatus }
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function ResultModel(attempt_id, avg_cpu_percent, avg_memory_bytes, completion_time, compute_node_id, exec_time_minutes, id, job_id, peak_cpu_percent, peak_memory_bytes, return_code, run_id, status, workflow_id, )
-        o = new(attempt_id, avg_cpu_percent, avg_memory_bytes, completion_time, compute_node_id, exec_time_minutes, id, job_id, peak_cpu_percent, peak_memory_bytes, return_code, run_id, status, workflow_id, )
+    function ResultModel(attempt_id, avg_cpu_percent, avg_memory_bytes, completion_time, compute_node_id, exec_time_minutes, id, job_id, job_name, peak_cpu_percent, peak_memory_bytes, return_code, run_id, status, workflow_id, )
+        o = new(attempt_id, avg_cpu_percent, avg_memory_bytes, completion_time, compute_node_id, exec_time_minutes, id, job_id, job_name, peak_cpu_percent, peak_memory_bytes, return_code, run_id, status, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ResultModel
 
-const _property_types_ResultModel = Dict{Symbol,String}(Symbol("attempt_id")=>"Int64", Symbol("avg_cpu_percent")=>"Float64", Symbol("avg_memory_bytes")=>"Int64", Symbol("completion_time")=>"String", Symbol("compute_node_id")=>"Int64", Symbol("exec_time_minutes")=>"Float64", Symbol("id")=>"Int64", Symbol("job_id")=>"Int64", Symbol("peak_cpu_percent")=>"Float64", Symbol("peak_memory_bytes")=>"Int64", Symbol("return_code")=>"Int64", Symbol("run_id")=>"Int64", Symbol("status")=>"JobStatus", Symbol("workflow_id")=>"Int64", )
+const _property_types_ResultModel = Dict{Symbol,String}(Symbol("attempt_id")=>"Int64", Symbol("avg_cpu_percent")=>"Float64", Symbol("avg_memory_bytes")=>"Int64", Symbol("completion_time")=>"String", Symbol("compute_node_id")=>"Int64", Symbol("exec_time_minutes")=>"Float64", Symbol("id")=>"Int64", Symbol("job_id")=>"Int64", Symbol("job_name")=>"String", Symbol("peak_cpu_percent")=>"Float64", Symbol("peak_memory_bytes")=>"Int64", Symbol("return_code")=>"Int64", Symbol("run_id")=>"Int64", Symbol("status")=>"JobStatus", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ResultModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResultModel[name]))}
 
 function OpenAPI.check_required(o::ResultModel)
@@ -83,6 +86,7 @@ function OpenAPI.validate_properties(o::ResultModel)
     OpenAPI.validate_property(ResultModel, Symbol("exec_time_minutes"), o.exec_time_minutes)
     OpenAPI.validate_property(ResultModel, Symbol("id"), o.id)
     OpenAPI.validate_property(ResultModel, Symbol("job_id"), o.job_id)
+    OpenAPI.validate_property(ResultModel, Symbol("job_name"), o.job_name)
     OpenAPI.validate_property(ResultModel, Symbol("peak_cpu_percent"), o.peak_cpu_percent)
     OpenAPI.validate_property(ResultModel, Symbol("peak_memory_bytes"), o.peak_memory_bytes)
     OpenAPI.validate_property(ResultModel, Symbol("return_code"), o.return_code)
@@ -121,6 +125,7 @@ function OpenAPI.validate_property(::Type{ ResultModel }, name::Symbol, val)
     if name === Symbol("job_id")
         OpenAPI.validate_param(name, "ResultModel", :format, val, "int64")
     end
+
 
     if name === Symbol("peak_cpu_percent")
         OpenAPI.validate_param(name, "ResultModel", :format, val, "double")
