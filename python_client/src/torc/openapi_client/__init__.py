@@ -83,6 +83,7 @@ __all__ = [
     "JobModel",
     "JobMonitorConfig",
     "JobStatus",
+    "JobStatusCounts",
     "JobUserDataRelationshipModel",
     "JobsModel",
     "ListAccessGroupsResponse",
@@ -136,6 +137,7 @@ __all__ = [
     "WorkflowAccessGroupModel",
     "WorkflowActionModel",
     "WorkflowModel",
+    "WorkflowStatusResponse",
 ]
 
 # import apis into sdk package
@@ -208,6 +210,7 @@ from torc.openapi_client.models.job_file_relationship_model import JobFileRelati
 from torc.openapi_client.models.job_model import JobModel as JobModel
 from torc.openapi_client.models.job_monitor_config import JobMonitorConfig as JobMonitorConfig
 from torc.openapi_client.models.job_status import JobStatus as JobStatus
+from torc.openapi_client.models.job_status_counts import JobStatusCounts as JobStatusCounts
 from torc.openapi_client.models.job_user_data_relationship_model import JobUserDataRelationshipModel as JobUserDataRelationshipModel
 from torc.openapi_client.models.jobs_model import JobsModel as JobsModel
 from torc.openapi_client.models.list_access_groups_response import ListAccessGroupsResponse as ListAccessGroupsResponse
@@ -261,4 +264,5 @@ from torc.openapi_client.models.version_response import VersionResponse as Versi
 from torc.openapi_client.models.workflow_access_group_model import WorkflowAccessGroupModel as WorkflowAccessGroupModel
 from torc.openapi_client.models.workflow_action_model import WorkflowActionModel as WorkflowActionModel
 from torc.openapi_client.models.workflow_model import WorkflowModel as WorkflowModel
+from torc.openapi_client.models.workflow_status_response import WorkflowStatusResponse as WorkflowStatusResponse
 

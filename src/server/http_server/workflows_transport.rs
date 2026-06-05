@@ -395,6 +395,15 @@ where
         self.workflows_api.is_workflow_complete(id, context).await
     }
 
+    pub(super) async fn transport_get_workflow_status(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetWorkflowStatusResponse, ApiError> {
+        authorize_workflow!(self, id, context, GetWorkflowStatusResponse);
+        self.workflows_api.get_workflow_status(id, context).await
+    }
+
     pub(super) async fn transport_is_workflow_uninitialized(
         &self,
         id: i64,

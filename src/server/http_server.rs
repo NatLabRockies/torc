@@ -2033,6 +2033,16 @@ where
         self.transport_is_workflow_complete(id, context).await
     }
 
+    /// Return an aggregated status summary for the workflow.
+    #[instrument(level = "debug", skip(self, context), fields(workflow_id = id))]
+    async fn get_workflow_status(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetWorkflowStatusResponse, ApiError> {
+        self.transport_get_workflow_status(id, context).await
+    }
+
     async fn is_workflow_uninitialized(
         &self,
         id: i64,

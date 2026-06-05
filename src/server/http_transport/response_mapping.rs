@@ -555,6 +555,11 @@ map_response!(
     SuccessfulResponse
 );
 map_response!(
+    get_workflow_status_response,
+    GetWorkflowStatusResponse,
+    SuccessfulResponse
+);
+map_response!(
     is_workflow_uninitialized_response,
     IsWorkflowUninitializedResponse,
     SuccessfulResponse

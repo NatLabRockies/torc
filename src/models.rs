@@ -2352,6 +2352,42 @@ pub struct IsUninitializedResponse {
     pub is_uninitialized: bool,
 }
 
+/// Counts of jobs grouped by status for a single workflow.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobStatusCounts {
+    pub uninitialized: i64,
+    pub blocked: i64,
+    pub ready: i64,
+    pub pending: i64,
+    pub running: i64,
+    pub completed: i64,
+    pub failed: i64,
+    pub canceled: i64,
+    pub terminated: i64,
+    pub disabled: i64,
+    pub pending_failed: i64,
+}
+
+/// Aggregated status summary for a workflow, computed server-side.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowStatusResponse {
+    pub workflow_id: i64,
+    pub workflow_name: String,
+    pub workflow_user: String,
+    pub total_jobs: i64,
+    pub jobs_by_status: JobStatusCounts,
+    pub total_exec_time_minutes: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub walltime_seconds: Option<f64>,
+    pub active_compute_nodes: i64,
+    pub pending_scheduled_nodes: i64,
+    pub active_scheduled_nodes: i64,
+    pub is_complete: bool,
+    pub is_canceled: bool,
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResetJobStatusResponse {

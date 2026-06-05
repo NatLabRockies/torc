@@ -15,7 +15,6 @@ use crate::client::report_models::{
 };
 use crate::models;
 use crate::time_utils::duration_string_to_seconds;
-use chrono::{DateTime, FixedOffset};
 use std::path::Path;
 use tabled::Tabled;
 
@@ -924,6 +923,14 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
     }
 }
 
+/// Build the workflow summary report by delegating aggregation to the server.
+///
+/// The heavy lifting (counting jobs by status, summing execution time,
+/// computing walltime, and counting compute/scheduled nodes) is performed
+/// server-side via the `get_workflow_status` endpoint in a single round-trip.
+/// This function reshapes the typed response into the JSON value consumed by
+/// `generate_summary` and the MCP tools, adding the human-readable
+/// `*_formatted` presentation fields.
 pub fn build_workflow_summary_report(
     config: &Configuration,
     workflow_id: Option<i64>,
@@ -935,153 +942,39 @@ pub fn build_workflow_summary_report(
             .map_err(|e| format!("Error selecting workflow: {}", e))?,
     };
 
-    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
-        .map_err(|e| format!("Error fetching workflow: {}", e))?;
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .map_err(|e| format!("Error fetching workflow status: {}", e))?;
 
-    let completion_status = apis::workflows_api::is_workflow_complete(config, workflow_id).ok();
-
-    let active_compute_nodes = apis::compute_nodes_api::list_compute_nodes(
-        config,
-        workflow_id,
-        None,
-        Some(1),
-        None,
-        None,
-        None,
-        Some(true),
-        None,
-    )
-    .map(|response| response.total_count)
-    .unwrap_or(0);
-
-    let pending_scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,
-        Some(1),
-        None,
-        None,
-        None,
-        None,
-        Some("pending"),
-    )
-    .map(|response| response.total_count)
-    .unwrap_or(0);
-
-    let active_scheduled_nodes = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,
-        Some(1),
-        None,
-        None,
-        None,
-        None,
-        Some("active"),
-    )
-    .map(|response| response.total_count)
-    .unwrap_or(0);
-
-    let jobs = pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new())
-        .map_err(|e| format!("Error fetching jobs: {}", e))?;
-
-    let mut uninitialized_count = 0;
-    let mut blocked_count = 0;
-    let mut ready_count = 0;
-    let mut pending_count = 0;
-    let mut running_count = 0;
-    let mut completed_count = 0;
-    let mut failed_count = 0;
-    let mut canceled_count = 0;
-    let mut terminated_count = 0;
-    let mut disabled_count = 0;
-    let mut pending_failed_count = 0;
-
-    for job in &jobs {
-        match job.status {
-            Some(models::JobStatus::Uninitialized) => uninitialized_count += 1,
-            Some(models::JobStatus::Blocked) => blocked_count += 1,
-            Some(models::JobStatus::Ready) => ready_count += 1,
-            Some(models::JobStatus::Pending) => pending_count += 1,
-            Some(models::JobStatus::Running) => running_count += 1,
-            Some(models::JobStatus::Completed) => completed_count += 1,
-            Some(models::JobStatus::Failed) => failed_count += 1,
-            Some(models::JobStatus::Canceled) => canceled_count += 1,
-            Some(models::JobStatus::Terminated) => terminated_count += 1,
-            Some(models::JobStatus::Disabled) => disabled_count += 1,
-            Some(models::JobStatus::PendingFailed) => pending_failed_count += 1,
-            None => {}
-        }
-    }
-
-    let results =
-        pagination::paginate_results(config, workflow_id, pagination::ResultListParams::new())
-            .map_err(|e| format!("Error fetching results: {}", e))?;
-
-    let total_exec_time_minutes: f64 = results.iter().map(|r| r.exec_time_minutes).sum();
-
-    let walltime_seconds: Option<f64> = {
-        let mut min_start: Option<DateTime<FixedOffset>> = None;
-        let mut max_end: Option<DateTime<FixedOffset>> = None;
-
-        for result in &results {
-            if let Ok(completion_time) = DateTime::parse_from_rfc3339(&result.completion_time) {
-                let exec_duration = chrono::Duration::milliseconds(
-                    (result.exec_time_minutes * 60.0 * 1000.0) as i64,
-                );
-                let start_time = completion_time - exec_duration;
-
-                min_start = Some(match min_start {
-                    Some(current_min) if start_time < current_min => start_time,
-                    Some(current_min) => current_min,
-                    None => start_time,
-                });
-
-                max_end = Some(match max_end {
-                    Some(current_max) if completion_time > current_max => completion_time,
-                    Some(current_max) => current_max,
-                    None => completion_time,
-                });
-            }
-        }
-
-        match (min_start, max_end) {
-            (Some(start), Some(end)) => Some((end - start).num_milliseconds() as f64 / 1000.0),
-            _ => None,
-        }
-    };
+    let counts = &status.jobs_by_status;
 
     let mut report = serde_json::json!({
-        "workflow_id": workflow_id,
-        "workflow_name": workflow.name,
-        "workflow_user": workflow.user,
-        "total_jobs": jobs.len(),
+        "workflow_id": status.workflow_id,
+        "workflow_name": status.workflow_name,
+        "workflow_user": status.workflow_user,
+        "total_jobs": status.total_jobs,
         "jobs_by_status": {
-            "uninitialized": uninitialized_count,
-            "blocked": blocked_count,
-            "ready": ready_count,
-            "pending": pending_count,
-            "running": running_count,
-            "completed": completed_count,
-            "failed": failed_count,
-            "canceled": canceled_count,
-            "terminated": terminated_count,
-            "disabled": disabled_count,
-            "pending_failed": pending_failed_count,
+            "uninitialized": counts.uninitialized,
+            "blocked": counts.blocked,
+            "ready": counts.ready,
+            "pending": counts.pending,
+            "running": counts.running,
+            "completed": counts.completed,
+            "failed": counts.failed,
+            "canceled": counts.canceled,
+            "terminated": counts.terminated,
+            "disabled": counts.disabled,
+            "pending_failed": counts.pending_failed,
         },
-        "total_exec_time_minutes": total_exec_time_minutes,
-        "total_exec_time_formatted": format_duration(total_exec_time_minutes * 60.0),
-        "active_compute_nodes": active_compute_nodes,
-        "pending_scheduled_nodes": pending_scheduled_nodes,
-        "active_scheduled_nodes": active_scheduled_nodes,
+        "total_exec_time_minutes": status.total_exec_time_minutes,
+        "total_exec_time_formatted": format_duration(status.total_exec_time_minutes * 60.0),
+        "active_compute_nodes": status.active_compute_nodes,
+        "pending_scheduled_nodes": status.pending_scheduled_nodes,
+        "active_scheduled_nodes": status.active_scheduled_nodes,
+        "is_complete": status.is_complete,
+        "is_canceled": status.is_canceled,
     });
 
-    if let Some(status) = completion_status {
-        report["is_complete"] = serde_json::json!(status.is_complete);
-        report["is_canceled"] = serde_json::json!(status.is_canceled);
-    }
-
-    if let Some(walltime) = walltime_seconds {
+    if let Some(walltime) = status.walltime_seconds {
         report["walltime_seconds"] = serde_json::json!(walltime);
         report["walltime_formatted"] = serde_json::json!(format_duration(walltime));
     }

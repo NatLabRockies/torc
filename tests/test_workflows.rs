@@ -1,8 +1,9 @@
 mod common;
 
 use common::{
-    ServerProcess, create_test_workflow, create_test_workflow_advanced,
-    create_test_workflow_with_description, run_cli_with_json, start_server,
+    ServerProcess, create_test_job, create_test_result, create_test_workflow,
+    create_test_workflow_advanced, create_test_workflow_with_description, run_cli_with_json,
+    start_server,
 };
 use rstest::rstest;
 use serde_json::json;
@@ -1508,4 +1509,87 @@ fn test_workflows_list_all_users_no_auth(start_server: &ServerProcess) {
             "Without --all-users, should only return current user's workflows"
         );
     }
+}
+
+#[rstest]
+fn test_get_workflow_status_aggregates_server_side(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "status_summary_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let job1 = create_test_job(config, workflow_id, "job1");
+    let _job2 = create_test_job(config, workflow_id, "job2");
+
+    // Before any results: two jobs, none in a terminal state -> not complete.
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status");
+    assert_eq!(status.workflow_id, workflow_id);
+    assert_eq!(status.workflow_name, "status_summary_workflow");
+    assert_eq!(status.workflow_user, "test_user");
+    assert_eq!(status.total_jobs, 2);
+    let counts = &status.jobs_by_status;
+    let summed = counts.uninitialized
+        + counts.blocked
+        + counts.ready
+        + counts.pending
+        + counts.running
+        + counts.completed
+        + counts.failed
+        + counts.canceled
+        + counts.terminated
+        + counts.disabled
+        + counts.pending_failed;
+    assert_eq!(summed, 2, "status counts should sum to total_jobs");
+    assert!(!status.is_complete);
+    assert!(!status.is_canceled);
+    assert_eq!(status.total_exec_time_minutes, 0.0);
+    assert!(status.walltime_seconds.is_none());
+
+    // Add a result (exec_time_minutes = 5.5) and confirm the server-side
+    // aggregation picks it up. With a single result, walltime equals the
+    // execution duration (5.5 min = 330 s).
+    create_test_result(config, workflow_id, job1.id.unwrap());
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status after result");
+    assert!((status.total_exec_time_minutes - 5.5).abs() < 1e-6);
+    let walltime = status.walltime_seconds.expect("expected walltime");
+    assert!(
+        (walltime - 330.0).abs() < 1.0,
+        "walltime should be ~330s, got {walltime}"
+    );
+
+    // Simulate a re-run: a newer result for the same job from a later run_id.
+    // workflow_result has a PK of (workflow_id, job_id), so this supersedes the
+    // earlier result there while the earlier row remains in `result` as
+    // history. Aggregation must count only the current result (via the
+    // workflow_result join), not the historical one.
+    let rerun_result = models::ResultModel::new(
+        job1.id.unwrap(),
+        workflow_id,
+        2,    // run_id (later run)
+        1,    // attempt_id
+        1,    // compute_node_id
+        0,    // return_code
+        10.0, // exec_time_minutes
+        "2024-01-02T12:00:00.000Z".to_string(),
+        models::JobStatus::Completed,
+    );
+    apis::results_api::create_result(config, rerun_result).expect("Failed to create rerun result");
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status after rerun result");
+    assert!(
+        (status.total_exec_time_minutes - 10.0).abs() < 1e-6,
+        "historical results from prior runs must be excluded; got {}",
+        status.total_exec_time_minutes
+    );
+}
+
+#[rstest]
+fn test_get_workflow_status_not_found(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let result = apis::workflows_api::get_workflow_status(config, 999_999);
+    assert!(
+        result.is_err(),
+        "expected error for nonexistent workflow status"
+    );
 }

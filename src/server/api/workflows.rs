@@ -10,10 +10,10 @@ use sqlx::Row;
 
 use crate::server::api_responses::{
     ArchiveWorkflowResponse, CancelWorkflowResponse, CreateWorkflowResponse,
-    DeleteWorkflowResponse, GetWorkflowResponse, IsWorkflowCompleteResponse,
-    IsWorkflowUninitializedResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobUserDataRelationshipsResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
-    UpdateWorkflowResponse,
+    DeleteWorkflowResponse, GetWorkflowResponse, GetWorkflowStatusResponse,
+    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListJobDependenciesResponse,
+    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListWorkflowsResponse,
+    ResetWorkflowStatusResponse, UpdateWorkflowResponse,
 };
 
 use crate::models;
@@ -177,6 +177,13 @@ pub trait WorkflowsApi<C> {
         id: i64,
         context: &C,
     ) -> Result<IsWorkflowCompleteResponse, ApiError>;
+
+    /// Return an aggregated status summary for the workflow.
+    async fn get_workflow_status(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetWorkflowStatusResponse, ApiError>;
 
     /// Return true if all jobs in the workflow are uninitialized or disabled.
     async fn is_workflow_uninitialized(
@@ -1242,6 +1249,183 @@ where
 
         Ok(IsWorkflowCompleteResponse::SuccessfulResponse(
             models::IsCompleteResponse {
+                is_complete,
+                is_canceled,
+            },
+        ))
+    }
+
+    /// Return an aggregated status summary for the workflow.
+    async fn get_workflow_status(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetWorkflowStatusResponse, ApiError> {
+        debug!(
+            "get_workflow_status({}) - X-Span-ID: {:?}",
+            id,
+            context.get().0.clone()
+        );
+
+        let pool = self.context.pool.as_ref();
+
+        // Workflow metadata + cancellation flag. Missing row -> 404.
+        let (workflow_name, workflow_user, is_canceled): (String, String, bool) =
+            match sqlx::query("SELECT name, user, is_canceled FROM workflow WHERE id = ?")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+            {
+                Ok(Some(row)) => {
+                    let is_canceled: i64 = row.get("is_canceled");
+                    (row.get("name"), row.get("user"), is_canceled != 0)
+                }
+                Ok(None) => {
+                    return Ok(GetWorkflowStatusResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Workflow", id),
+                    ));
+                }
+                Err(e) => return Err(database_error_with_msg(e, "Failed to get workflow")),
+            };
+
+        // Job counts grouped by status (one row per distinct status).
+        let mut counts = models::JobStatusCounts {
+            uninitialized: 0,
+            blocked: 0,
+            ready: 0,
+            pending: 0,
+            running: 0,
+            completed: 0,
+            failed: 0,
+            canceled: 0,
+            terminated: 0,
+            disabled: 0,
+            pending_failed: 0,
+        };
+        let status_rows = sqlx::query(
+            "SELECT status, COUNT(*) AS cnt FROM job WHERE workflow_id = ? GROUP BY status",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to count jobs by status"))?;
+        for row in &status_rows {
+            let status: i64 = row.get("status");
+            let cnt: i64 = row.get("cnt");
+            match models::JobStatus::from_i64(status) {
+                Ok(models::JobStatus::Uninitialized) => counts.uninitialized = cnt,
+                Ok(models::JobStatus::Blocked) => counts.blocked = cnt,
+                Ok(models::JobStatus::Ready) => counts.ready = cnt,
+                Ok(models::JobStatus::Pending) => counts.pending = cnt,
+                Ok(models::JobStatus::Running) => counts.running = cnt,
+                Ok(models::JobStatus::Completed) => counts.completed = cnt,
+                Ok(models::JobStatus::Failed) => counts.failed = cnt,
+                Ok(models::JobStatus::Canceled) => counts.canceled = cnt,
+                Ok(models::JobStatus::Terminated) => counts.terminated = cnt,
+                Ok(models::JobStatus::Disabled) => counts.disabled = cnt,
+                Ok(models::JobStatus::PendingFailed) => counts.pending_failed = cnt,
+                Err(_) => {
+                    debug!("Ignoring unknown job status={} workflow_id={}", status, id)
+                }
+            }
+        }
+        let total_jobs = counts.uninitialized
+            + counts.blocked
+            + counts.ready
+            + counts.pending
+            + counts.running
+            + counts.completed
+            + counts.failed
+            + counts.canceled
+            + counts.terminated
+            + counts.disabled
+            + counts.pending_failed;
+
+        // A workflow is complete if canceled, or no jobs remain in a
+        // non-terminal state. Terminal states match `is_workflow_complete`:
+        // completed, failed, canceled, terminated, disabled. (pending_failed
+        // is non-terminal -- it awaits classification.)
+        let non_terminal = counts.uninitialized
+            + counts.blocked
+            + counts.ready
+            + counts.pending
+            + counts.running
+            + counts.pending_failed;
+        let is_complete = is_canceled || non_terminal == 0;
+
+        // Result aggregates. Walltime mirrors the former client-side math:
+        // per-result start = completion_time - exec_time, then span from the
+        // earliest start to the latest completion. julianday() yields NULL for
+        // unparseable timestamps, which MIN/MAX skip -- matching the old
+        // "skip rows that fail to parse" behavior. 1 day = 1440 minutes.
+        //
+        // Join workflow_result so only current-run results are counted -- this
+        // matches the former client path, which called list_results with
+        // all_runs unset (server default false). Without the join, historical
+        // results from prior runs would inflate the totals.
+        let result_row = sqlx::query(
+            r#"
+            SELECT
+                COALESCE(SUM(r.exec_time_minutes), 0.0) AS total_exec_minutes,
+                MIN(julianday(r.completion_time) - r.exec_time_minutes / 1440.0) AS min_start_jd,
+                MAX(julianday(r.completion_time)) AS max_end_jd
+            FROM result r
+            INNER JOIN workflow_result wr ON r.id = wr.result_id
+            WHERE r.workflow_id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to aggregate results"))?;
+        let total_exec_time_minutes: f64 = result_row.get("total_exec_minutes");
+        let min_start_jd: Option<f64> = result_row.get("min_start_jd");
+        let max_end_jd: Option<f64> = result_row.get("max_end_jd");
+        let walltime_seconds = match (min_start_jd, max_end_jd) {
+            (Some(start), Some(end)) => Some((end - start) * 86400.0),
+            _ => None,
+        };
+
+        // Active workers and scheduled (Slurm) allocations by status.
+        let active_compute_nodes: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM compute_node WHERE workflow_id = ? AND is_active = 1",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to count compute nodes"))?;
+        let mut pending_scheduled_nodes: i64 = 0;
+        let mut active_scheduled_nodes: i64 = 0;
+        let scheduled_rows = sqlx::query(
+            "SELECT status, COUNT(*) AS cnt FROM scheduled_compute_node \
+             WHERE workflow_id = ? AND status IN ('pending', 'active') GROUP BY status",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to count scheduled compute nodes"))?;
+        for row in &scheduled_rows {
+            let status: String = row.get("status");
+            let cnt: i64 = row.get("cnt");
+            match status.as_str() {
+                "pending" => pending_scheduled_nodes = cnt,
+                "active" => active_scheduled_nodes = cnt,
+                _ => {}
+            }
+        }
+
+        Ok(GetWorkflowStatusResponse::SuccessfulResponse(
+            models::WorkflowStatusResponse {
+                workflow_id: id,
+                workflow_name,
+                workflow_user,
+                total_jobs,
+                jobs_by_status: counts,
+                total_exec_time_minutes,
+                walltime_seconds,
+                active_compute_nodes,
+                pending_scheduled_nodes,
+                active_scheduled_nodes,
                 is_complete,
                 is_canceled,
             },
