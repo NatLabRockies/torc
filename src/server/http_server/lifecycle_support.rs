@@ -222,9 +222,10 @@ impl<C> Server<C> {
                       -- At least one dependency must have failed. A Failed
                       -- dependency must have a non-zero return code, but Canceled
                       -- and Terminated dependencies propagate cancellation on their
-                      -- own: they never produce a result row, so a plain JOIN on
-                      -- result would stop the cascade one level below the original
-                      -- failure. LEFT JOIN keeps them in play.
+                      -- own. Jobs canceled by this cascade have no result row (it is
+                      -- only written by complete_job), so a plain JOIN on result
+                      -- would stop the cascade one level below the original failure.
+                      -- LEFT JOIN keeps those result-less dependencies in play.
                       AND EXISTS (
                           SELECT 1
                           FROM job_depends_on jbb
