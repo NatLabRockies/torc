@@ -10,10 +10,11 @@ use sqlx::Row;
 
 use crate::server::api_responses::{
     ArchiveWorkflowResponse, CancelWorkflowResponse, CreateWorkflowResponse,
-    DeleteWorkflowResponse, GetWorkflowResponse, GetWorkflowStatusResponse,
-    IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse, ListJobDependenciesResponse,
-    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListWorkflowsResponse,
-    ResetWorkflowStatusResponse, UpdateWorkflowResponse,
+    DeleteWorkflowResponse, GetSlurmJobCorrelationsResponse, GetWorkflowResponse,
+    GetWorkflowStatusResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
+    ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
+    ListJobUserDataRelationshipsResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
+    UpdateWorkflowResponse,
 };
 
 use crate::models;
@@ -184,6 +185,13 @@ pub trait WorkflowsApi<C> {
         id: i64,
         context: &C,
     ) -> Result<GetWorkflowStatusResponse, ApiError>;
+
+    /// Return Slurm-job-to-Torc-job correlations for the workflow.
+    async fn get_slurm_job_correlations(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetSlurmJobCorrelationsResponse, ApiError>;
 
     /// Return true if all jobs in the workflow are uninitialized or disabled.
     async fn is_workflow_uninitialized(
@@ -1429,6 +1437,80 @@ where
                 is_complete,
                 is_canceled,
             },
+        ))
+    }
+
+    /// Return Slurm-job-to-Torc-job correlations for the workflow.
+    ///
+    /// Joins scheduled_compute_node (the Slurm allocation, whose `scheduler_id`
+    /// is the Slurm job ID) -> compute_node (linked via the scheduler JSON's
+    /// `scheduler_id`) -> result (`compute_node_id`) -> job. Replaces the former
+    /// client-side correlation that fetched four full lists and joined them in
+    /// memory. Covers all runs, matching the previous `all_runs=true` behavior.
+    /// Each workflow filter propagates through the join conditions so every
+    /// table is narrowed by its `workflow_id` index before the join.
+    async fn get_slurm_job_correlations(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<GetSlurmJobCorrelationsResponse, ApiError> {
+        debug!(
+            "get_slurm_job_correlations({}) - X-Span-ID: {:?}",
+            id,
+            context.get().0.clone()
+        );
+
+        let pool = self.context.pool.as_ref();
+
+        // 404 if the workflow does not exist.
+        let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM workflow WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to get workflow"))?;
+        if exists.is_none() {
+            return Ok(GetSlurmJobCorrelationsResponse::NotFoundErrorResponse(
+                resource_not_found_response("Workflow", id),
+            ));
+        }
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                CAST(scn.scheduler_id AS TEXT) AS slurm_job_id,
+                j.id AS job_id,
+                j.name AS job_name
+            FROM scheduled_compute_node scn
+            JOIN compute_node cn
+                ON cn.workflow_id = scn.workflow_id
+               AND json_extract(cn.scheduler, '$.scheduler_id') = scn.id
+            JOIN result r
+                ON r.compute_node_id = cn.id
+               AND r.workflow_id = scn.workflow_id
+            JOIN job j ON j.id = r.job_id
+            WHERE scn.workflow_id = ?
+              AND scn.scheduler_type = 'slurm'
+              AND cn.compute_node_type = 'slurm'
+            GROUP BY slurm_job_id, j.id, j.name
+            ORDER BY slurm_job_id, j.id
+            "#,
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to correlate Slurm jobs"))?;
+
+        let items = rows
+            .iter()
+            .map(|row| models::SlurmJobCorrelationModel {
+                slurm_job_id: row.get("slurm_job_id"),
+                job_id: row.get("job_id"),
+                job_name: row.get("job_name"),
+            })
+            .collect();
+
+        Ok(GetSlurmJobCorrelationsResponse::SuccessfulResponse(
+            models::SlurmJobCorrelationsResponse { items },
         ))
     }
 

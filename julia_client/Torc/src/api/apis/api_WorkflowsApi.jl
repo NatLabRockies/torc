@@ -273,6 +273,36 @@ function get_ready_job_requirements(_api::WorkflowsApi, response_stream::Channel
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_get_slurm_job_correlations_WorkflowsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => SlurmJobCorrelationsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_get_slurm_job_correlations(_api::WorkflowsApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_get_slurm_job_correlations_WorkflowsApi, "/workflows/{id}/slurm_job_correlations", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+
+Return: SlurmJobCorrelationsResponse, OpenAPI.Clients.ApiResponse
+"""
+function get_slurm_job_correlations(_api::WorkflowsApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_slurm_job_correlations(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function get_slurm_job_correlations(_api::WorkflowsApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_get_slurm_job_correlations(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_get_workflow_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowModel,
 )
@@ -777,6 +807,7 @@ export create_workflow
 export delete_workflow
 export get_active_task_for_workflow
 export get_ready_job_requirements
+export get_slurm_job_correlations
 export get_workflow
 export get_workflow_status
 export initialize_jobs

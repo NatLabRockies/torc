@@ -1593,3 +1593,79 @@ fn test_get_workflow_status_not_found(start_server: &ServerProcess) {
         "expected error for nonexistent workflow status"
     );
 }
+
+#[rstest]
+fn test_get_slurm_job_correlations(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "slurm_correlation_workflow");
+    let workflow_id = workflow.id.unwrap();
+    let job = create_test_job(config, workflow_id, "slurm_job");
+    let job_id = job.id.unwrap();
+
+    // Slurm allocation: scheduler_id is the Slurm job ID.
+    let scn = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
+        config,
+        models::ScheduledComputeNodesModel::new(
+            workflow_id,
+            987654,
+            1,
+            "slurm".to_string(),
+            "active".to_string(),
+        ),
+    )
+    .expect("create scheduled compute node");
+    let scn_id = scn.id.unwrap();
+
+    // Compute node belonging to that allocation; the scheduler JSON links it
+    // back to the scheduled compute node via scheduler_id.
+    let compute_node = apis::compute_nodes_api::create_compute_node(
+        config,
+        models::ComputeNodeModel::new(
+            workflow_id,
+            "slurm-host".to_string(),
+            std::process::id() as i64,
+            chrono::Utc::now().to_rfc3339(),
+            8,
+            16.0,
+            0,
+            1,
+            "slurm".to_string(),
+            Some(serde_json::json!({ "scheduler_id": scn_id })),
+        ),
+    )
+    .expect("create compute node");
+    let compute_node_id = compute_node.id.unwrap();
+
+    // Result links the job to that compute node, completing the chain.
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        1,
+        1,
+        compute_node_id,
+        0,
+        1.0,
+        "2024-01-01T12:00:00.000Z".to_string(),
+        models::JobStatus::Completed,
+    );
+    apis::results_api::create_result(config, result).expect("create result");
+
+    let response = apis::workflows_api::get_slurm_job_correlations(config, workflow_id)
+        .expect("get slurm job correlations");
+
+    assert_eq!(response.items.len(), 1, "expected one correlation row");
+    let item = &response.items[0];
+    assert_eq!(item.slurm_job_id, "987654");
+    assert_eq!(item.job_id, job_id);
+    assert_eq!(item.job_name, "slurm_job");
+}
+
+#[rstest]
+fn test_get_slurm_job_correlations_not_found(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let result = apis::workflows_api::get_slurm_job_correlations(config, 999_999);
+    assert!(
+        result.is_err(),
+        "expected error for nonexistent workflow correlations"
+    );
+}

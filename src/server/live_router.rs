@@ -334,6 +334,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(get_workflow_status),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/slurm_job_correlations",
+            get(get_slurm_job_correlations),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/is_uninitialized",
             get(is_workflow_uninitialized),
         )
@@ -3758,6 +3762,30 @@ pub async fn get_workflow_status(
 ) -> Response<Body> {
     match state.server.get_workflow_status(id, &context).await {
         Ok(response) => get_workflow_status_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    get,
+    tag = "workflows",
+    path = "/workflows/{id}/slurm_job_correlations",
+    operation_id = "get_slurm_job_correlations",
+    params(("id" = i64, Path, description = "Workflow ID")),
+    responses(
+        (status = 200, body = models::SlurmJobCorrelationsResponse),
+        (status = 403, body = models::ErrorResponse, description = "User does not have access"),
+        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, body = models::ErrorResponse)
+    )
+)]
+pub async fn get_slurm_job_correlations(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state.server.get_slurm_job_correlations(id, &context).await {
+        Ok(response) => get_slurm_job_correlations_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
