@@ -287,6 +287,19 @@ fn process_pagination_params(
     let processed_offset = offset.unwrap_or(0);
     let processed_limit = limit.unwrap_or(MAX_RECORD_TRANSFER_COUNT);
 
+    if processed_offset < 0 {
+        error!("Negative offset is not allowed: {}", processed_offset);
+        return Err(ApiError("offset cannot be negative".to_string()));
+    }
+
+    // Reject negative limits explicitly: SQLite treats a negative LIMIT as
+    // "no limit", which would bypass MAX_RECORD_TRANSFER_COUNT and allow
+    // unbounded responses.
+    if processed_limit < 0 {
+        error!("Negative limit is not allowed: {}", processed_limit);
+        return Err(ApiError("limit cannot be negative".to_string()));
+    }
+
     if processed_limit > MAX_RECORD_TRANSFER_COUNT {
         error!(
             "Limit exceeds maximum allowed value: {} > {}",
@@ -2665,5 +2678,40 @@ where
         if let Err(e) = self.events_api.create_event(event, context).await {
             error!("Failed to create event for {}: {:?}", action, e);
         }
+    }
+}
+
+#[cfg(test)]
+mod pagination_param_tests {
+    use super::process_pagination_params;
+    use crate::MAX_RECORD_TRANSFER_COUNT;
+
+    #[test]
+    fn defaults_and_valid_values_are_accepted() {
+        assert_eq!(
+            process_pagination_params(None, None).unwrap(),
+            (0, MAX_RECORD_TRANSFER_COUNT)
+        );
+        assert_eq!(
+            process_pagination_params(Some(5), Some(10)).unwrap(),
+            (5, 10)
+        );
+        assert_eq!(process_pagination_params(Some(0), Some(0)).unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn negative_limit_is_rejected() {
+        // SQLite would treat LIMIT -1 as unbounded; ensure it errors instead.
+        assert!(process_pagination_params(None, Some(-1)).is_err());
+    }
+
+    #[test]
+    fn negative_offset_is_rejected() {
+        assert!(process_pagination_params(Some(-1), None).is_err());
+    }
+
+    #[test]
+    fn limit_over_max_is_rejected() {
+        assert!(process_pagination_params(None, Some(MAX_RECORD_TRANSFER_COUNT + 1)).is_err());
     }
 }
