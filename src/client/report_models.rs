@@ -113,9 +113,11 @@ pub struct ResultsReport {
     pub workflow_user: String,
     pub all_runs: bool,
     pub total_results: usize,
-    /// Job result records
+    /// Job result records.
     ///
-    /// Note: This field is named `results` in JSON output (not `jobs`).
+    /// Serialized as `items` for consistency with the other list commands and
+    /// the REST API's paginated responses (which all wrap records in `items`).
+    #[serde(rename = "items")]
     pub results: Vec<JobResultRecord>,
 }
 
@@ -239,6 +241,15 @@ mod tests {
         };
 
         let json = serde_json::to_string(&report).unwrap();
+        // Records serialize under `items` (not `results`), matching other lists.
+        assert!(
+            json.contains("\"items\""),
+            "records should serialize under `items`: {json}"
+        );
+        assert!(
+            !json.contains("\"results\""),
+            "records should not use the old `results` key: {json}"
+        );
         let parsed: ResultsReport = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.workflow_id, 1);

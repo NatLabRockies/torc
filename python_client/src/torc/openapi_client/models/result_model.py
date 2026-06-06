@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from torc.openapi_client.models.job_status import JobStatus
 from typing import Optional, Set
@@ -35,13 +35,14 @@ class ResultModel(BaseModel):
     exec_time_minutes: Union[StrictFloat, StrictInt]
     id: Optional[StrictInt] = None
     job_id: StrictInt
+    job_name: Optional[StrictStr] = Field(default=None, description="Name of the job this result belongs to. Populated by the server on read paths (list/get) as a convenience so clients need not re-fetch jobs; it is ignored on create/update input.")
     peak_cpu_percent: Optional[Union[StrictFloat, StrictInt]] = None
     peak_memory_bytes: Optional[StrictInt] = None
     return_code: StrictInt
     run_id: StrictInt
     status: JobStatus
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["attempt_id", "avg_cpu_percent", "avg_memory_bytes", "completion_time", "compute_node_id", "exec_time_minutes", "id", "job_id", "peak_cpu_percent", "peak_memory_bytes", "return_code", "run_id", "status", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["attempt_id", "avg_cpu_percent", "avg_memory_bytes", "completion_time", "compute_node_id", "exec_time_minutes", "id", "job_id", "job_name", "peak_cpu_percent", "peak_memory_bytes", "return_code", "run_id", "status", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -102,6 +103,11 @@ class ResultModel(BaseModel):
         if self.id is None and "id" in self.model_fields_set:
             _dict['id'] = None
 
+        # set to None if job_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.job_name is None and "job_name" in self.model_fields_set:
+            _dict['job_name'] = None
+
         # set to None if peak_cpu_percent (nullable) is None
         # and model_fields_set contains the field
         if self.peak_cpu_percent is None and "peak_cpu_percent" in self.model_fields_set:
@@ -132,6 +138,7 @@ class ResultModel(BaseModel):
             "exec_time_minutes": obj.get("exec_time_minutes"),
             "id": obj.get("id"),
             "job_id": obj.get("job_id"),
+            "job_name": obj.get("job_name"),
             "peak_cpu_percent": obj.get("peak_cpu_percent"),
             "peak_memory_bytes": obj.get("peak_memory_bytes"),
             "return_code": obj.get("return_code"),

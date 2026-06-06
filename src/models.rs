@@ -339,6 +339,11 @@ pub struct ResultModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_cpu_percent: Option<f64>,
     pub status: JobStatus,
+    /// Name of the job this result belongs to. Populated by the server on read
+    /// paths (list/get) as a convenience so clients need not re-fetch jobs; it
+    /// is ignored on create/update input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_name: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1890,6 +1895,7 @@ impl ResultModel {
             peak_cpu_percent: None,
             avg_cpu_percent: None,
             status,
+            job_name: None,
         }
     }
 }
@@ -2388,6 +2394,59 @@ pub struct WorkflowStatusResponse {
     pub is_canceled: bool,
 }
 
+/// One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
+/// Torc job, derived from scheduled_compute_node -> compute_node -> result.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlurmJobCorrelationModel {
+    pub slurm_job_id: String,
+    pub job_id: i64,
+    pub job_name: String,
+}
+
+/// A page of Slurm-job-to-Torc-job correlations for a workflow, computed
+/// server-side.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlurmJobCorrelationsResponse {
+    pub items: Vec<SlurmJobCorrelationModel>,
+    pub offset: i64,
+    pub max_limit: i64,
+    pub count: i64,
+    pub total_count: i64,
+    pub has_more: bool,
+}
+
+/// A currently-running job together with the compute node it occupies and,
+/// when the node was provisioned by a scheduler, that scheduler's job ID.
+/// `scheduler_type` is generic (e.g. "slurm", "local"); `scheduler_job_id`
+/// is populated only for scheduler-managed nodes (the Slurm job ID today).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunningJobModel {
+    pub job_id: i64,
+    pub job_name: String,
+    pub compute_node_name: String,
+    pub scheduler_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduler_job_id: Option<String>,
+    /// RFC3339 time the job started running, for computing elapsed time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+}
+
+/// A page of currently-running jobs for a workflow, computed server-side.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunningJobsResponse {
+    pub items: Vec<RunningJobModel>,
+    pub offset: i64,
+    pub max_limit: i64,
+    pub count: i64,
+    pub total_count: i64,
+    pub has_more: bool,
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResetJobStatusResponse {
@@ -2521,6 +2580,7 @@ mod tests {
             peak_cpu_percent: Some(90.0),
             avg_cpu_percent: Some(60.0),
             status: JobStatus::Completed,
+            job_name: None,
         };
         let file = FileModel {
             id: Some(1),

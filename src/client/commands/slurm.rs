@@ -47,10 +47,10 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::hpc::create_registry_with_config_public;
 use crate::client::commands::pagination::{
-    ComputeNodeListParams, JobListParams, ResourceRequirementsListParams, ResultListParams,
-    ScheduledComputeNodeListParams, SlurmSchedulersListParams, paginate_compute_nodes,
-    paginate_jobs, paginate_resource_requirements, paginate_results,
-    paginate_scheduled_compute_nodes, paginate_slurm_schedulers,
+    JobListParams, ResourceRequirementsListParams, ResultListParams,
+    ScheduledComputeNodeListParams, SlurmSchedulersListParams, paginate_jobs,
+    paginate_resource_requirements, paginate_results, paginate_scheduled_compute_nodes,
+    paginate_slurm_schedulers,
 };
 use crate::client::commands::{
     print_error, select_workflow_interactively,
@@ -2240,131 +2240,40 @@ fn build_slurm_to_jobs_map(
 ) -> HashMap<String, Vec<AffectedJob>> {
     let mut slurm_to_jobs: HashMap<String, Vec<AffectedJob>> = HashMap::new();
 
-    // Step 1: Get all scheduled compute nodes (they have scheduler_id = Slurm job ID)
-    let scheduled_nodes = match paginate_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        ScheduledComputeNodeListParams::new(),
-    ) {
-        Ok(nodes) => nodes,
-        Err(e) => {
-            warn!(
-                "Could not fetch scheduled compute nodes for job correlation: {}",
-                e
-            );
-            return slurm_to_jobs;
-        }
-    };
-
-    // Build scn_id -> slurm_job_id map
-    let scn_to_slurm: HashMap<i64, String> = scheduled_nodes
-        .iter()
-        .filter(|scn| scn.scheduler_type == "slurm")
-        .filter_map(|scn| scn.id.map(|id| (id, scn.scheduler_id.to_string())))
-        .collect();
-
-    if scn_to_slurm.is_empty() {
-        return slurm_to_jobs;
-    }
-
-    // Step 2: Get all compute nodes and build slurm_job_id -> compute_node_ids map
-    let compute_nodes =
-        match paginate_compute_nodes(config, workflow_id, ComputeNodeListParams::new()) {
-            Ok(nodes) => nodes,
+    // The server correlates scheduled_compute_node -> compute_node -> result ->
+    // job in a single query (covering all runs), replacing what used to be four
+    // full-list fetches joined in memory here. Rows arrive grouped/sorted by
+    // (slurm_job_id, job_id); we page through them (server default page size)
+    // and accumulate, so each per-Slurm-job Vec stays deduplicated and ordered.
+    let mut offset = 0;
+    loop {
+        let response = match apis::workflows_api::get_slurm_job_correlations(
+            config,
+            workflow_id,
+            Some(offset),
+            None,
+        ) {
+            Ok(response) => response,
             Err(e) => {
-                warn!("Could not fetch compute nodes for job correlation: {}", e);
+                warn!("Could not fetch Slurm job correlations: {}", e);
                 return slurm_to_jobs;
             }
         };
 
-    // Build slurm_job_id -> Vec<compute_node_id> map using SCN relationship
-    let mut slurm_to_compute_nodes: HashMap<String, Vec<i64>> = HashMap::new();
-    for node in &compute_nodes {
-        if node.compute_node_type != "slurm" {
-            continue;
-        }
-        if let Some(scheduler) = &node.scheduler {
-            // Get the SCN ID from the scheduler JSON
-            if let Some(scn_id) = scheduler.get("scheduler_id").and_then(|v| v.as_i64()) {
-                // Look up the Slurm job ID from our SCN map
-                if let Some(slurm_job_id) = scn_to_slurm.get(&scn_id)
-                    && let Some(node_id) = node.id
-                {
-                    slurm_to_compute_nodes
-                        .entry(slurm_job_id.clone())
-                        .or_default()
-                        .push(node_id);
-                }
-            }
-        }
-    }
-
-    if slurm_to_compute_nodes.is_empty() {
-        return slurm_to_jobs;
-    }
-
-    // Step 3: Get all results and build compute_node_id -> Vec<job_id> map
-    let results = match paginate_results(
-        config,
-        workflow_id,
-        ResultListParams::new().with_all_runs(true),
-    ) {
-        Ok(results) => results,
-        Err(e) => {
-            warn!("Could not fetch results for job correlation: {}", e);
-            return slurm_to_jobs;
-        }
-    };
-
-    let mut compute_node_to_jobs: HashMap<i64, Vec<i64>> = HashMap::new();
-    for result in &results {
-        compute_node_to_jobs
-            .entry(result.compute_node_id)
-            .or_default()
-            .push(result.job_id);
-    }
-
-    // Step 4: Get all jobs and build job_id -> job_name map
-    let jobs = match paginate_jobs(config, workflow_id, JobListParams::new()) {
-        Ok(jobs) => jobs,
-        Err(e) => {
-            warn!("Could not fetch jobs for job correlation: {}", e);
-            return slurm_to_jobs;
-        }
-    };
-
-    let job_id_to_name: HashMap<i64, String> = jobs
-        .iter()
-        .filter_map(|j| j.id.map(|id| (id, j.name.clone())))
-        .collect();
-
-    // Step 5: Build the final slurm_job_id -> Vec<AffectedJob> map
-    for (slurm_id, compute_node_ids) in &slurm_to_compute_nodes {
-        let mut affected_jobs: Vec<AffectedJob> = Vec::new();
-        let mut seen_job_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
-
-        for compute_node_id in compute_node_ids {
-            if let Some(job_ids) = compute_node_to_jobs.get(compute_node_id) {
-                for job_id in job_ids {
-                    if seen_job_ids.insert(*job_id) {
-                        let job_name = job_id_to_name
-                            .get(job_id)
-                            .cloned()
-                            .unwrap_or_else(|| format!("job_{}", job_id));
-                        affected_jobs.push(AffectedJob {
-                            job_id: *job_id,
-                            job_name,
-                        });
-                    }
-                }
-            }
+        for item in response.items {
+            slurm_to_jobs
+                .entry(item.slurm_job_id)
+                .or_default()
+                .push(AffectedJob {
+                    job_id: item.job_id,
+                    job_name: item.job_name,
+                });
         }
 
-        if !affected_jobs.is_empty() {
-            // Sort by job_id for consistent output
-            affected_jobs.sort_by_key(|j| j.job_id);
-            slurm_to_jobs.insert(slurm_id.clone(), affected_jobs);
+        if !response.has_more {
+            break;
         }
+        offset += response.count;
     }
 
     slurm_to_jobs

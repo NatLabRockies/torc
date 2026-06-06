@@ -1,8 +1,8 @@
 mod common;
 
 use common::{
-    ServerProcess, create_test_job, create_test_result, create_test_workflow, run_cli_with_json,
-    start_server,
+    ServerProcess, create_test_job, create_test_result, create_test_workflow, run_cli_command,
+    run_cli_with_json, start_server,
 };
 use rstest::rstest;
 use serde_json::json;
@@ -63,6 +63,12 @@ fn test_results_list_command_json(start_server: &ServerProcess) {
         assert!(result.get("exec_time_minutes").is_some());
         assert!(result.get("completion_time").is_some());
         assert!(result.get("status").is_some());
+        // job_name is populated server-side (denormalized from the job).
+        let job_name = result.get("job_name").and_then(|v| v.as_str());
+        assert!(
+            matches!(job_name, Some("job1") | Some("job2")),
+            "expected server-populated job_name, got {job_name:?}"
+        );
     }
 }
 
@@ -1008,5 +1014,42 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
         json_output.get("items").unwrap().as_array().unwrap().len(),
         2,
         "With --all-runs should still show 2 historical results after reinitialize"
+    );
+}
+
+#[rstest]
+fn test_results_list_run_id_column_with_all_runs(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_results_run_id_column");
+    let workflow_id = workflow.id.unwrap();
+    let job = create_test_job(config, workflow_id, "job1");
+    let _result = create_test_result(config, workflow_id, job.id.unwrap());
+
+    // Default table view lists the result but hides the Run ID column.
+    let default_table = run_cli_command(
+        &["results", "list", &workflow_id.to_string()],
+        start_server,
+        None,
+    )
+    .expect("results list (default)");
+    assert!(
+        default_table.contains("job1"),
+        "default view should list the result, got:\n{default_table}"
+    );
+    assert!(
+        !default_table.contains("Run ID"),
+        "default view should not include the Run ID column, got:\n{default_table}"
+    );
+
+    // --all-runs surfaces the Run ID column so runs are distinguishable.
+    let all_runs_table = run_cli_command(
+        &["results", "list", &workflow_id.to_string(), "--all-runs"],
+        start_server,
+        None,
+    )
+    .expect("results list --all-runs");
+    assert!(
+        all_runs_table.contains("Run ID"),
+        "--all-runs should include the Run ID column, got:\n{all_runs_table}"
     );
 }

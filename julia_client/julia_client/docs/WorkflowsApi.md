@@ -13,6 +13,8 @@ Method | HTTP request | Description
 [**delete_workflow**](WorkflowsApi.md#delete_workflow) | **DELETE** /workflows/{id} | 
 [**get_active_task_for_workflow**](WorkflowsApi.md#get_active_task_for_workflow) | **GET** /workflows/{id}/active_task | 
 [**get_ready_job_requirements**](WorkflowsApi.md#get_ready_job_requirements) | **GET** /workflows/{id}/ready_job_requirements | 
+[**get_running_jobs**](WorkflowsApi.md#get_running_jobs) | **GET** /workflows/{id}/running_jobs | 
+[**get_slurm_job_correlations**](WorkflowsApi.md#get_slurm_job_correlations) | **GET** /workflows/{id}/slurm_job_correlations | 
 [**get_workflow**](WorkflowsApi.md#get_workflow) | **GET** /workflows/{id} | 
 [**get_workflow_status**](WorkflowsApi.md#get_workflow_status) | **GET** /workflows/{id}/status | 
 [**initialize_jobs**](WorkflowsApi.md#initialize_jobs) | **POST** /workflows/{id}/initialize_jobs | 
@@ -293,6 +295,76 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**GetReadyJobRequirementsResponse**](GetReadyJobRequirementsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **get_running_jobs**
+> get_running_jobs(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> RunningJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> get_running_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ RunningJobsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** |  | [default to nothing]
+ **limit** | **Int64** |  | [default to nothing]
+
+### Return type
+
+[**RunningJobsResponse**](RunningJobsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **get_slurm_job_correlations**
+> get_slurm_job_correlations(_api::WorkflowsApi, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> SlurmJobCorrelationsResponse, OpenAPI.Clients.ApiResponse <br/>
+> get_slurm_job_correlations(_api::WorkflowsApi, response_stream::Channel, id::Int64; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ SlurmJobCorrelationsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** |  | [default to nothing]
+ **limit** | **Int64** |  | [default to nothing]
+
+### Return type
+
+[**SlurmJobCorrelationsResponse**](SlurmJobCorrelationsResponse.md)
 
 ### Authorization
 

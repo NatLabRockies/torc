@@ -35,29 +35,6 @@ fn format_cpu(percent: Option<f64>) -> String {
     }
 }
 
-/// Helper function to create a map of job IDs to job names for a workflow
-fn get_job_name_map(
-    config: &Configuration,
-    workflow_id: i64,
-) -> std::collections::HashMap<i64, String> {
-    let mut job_names = std::collections::HashMap::new();
-
-    match pagination::paginate_jobs(config, workflow_id, pagination::JobListParams::new()) {
-        Ok(jobs) => {
-            for job in jobs {
-                if let Some(id) = job.id {
-                    job_names.insert(id, job.name);
-                }
-            }
-        }
-        Err(_) => {
-            // If we can't fetch jobs, just continue without names
-        }
-    }
-
-    job_names
-}
-
 #[derive(Tabled)]
 struct ResultTableRow {
     #[tabled(rename = "ID")]
@@ -180,6 +157,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                     Some(selected_workflow_id),
                     output_dir,
                     *all_runs,
+                    *failed,
                     &job_ids,
                 );
                 return;
@@ -258,17 +236,15 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                             println!("No results found for workflow ID: {}", selected_workflow_id);
                         }
                     } else {
-                        // Fetch job names for the workflow
-                        let job_names = get_job_name_map(config, selected_workflow_id);
-
                         let rows: Vec<ResultTableRow> = results
                             .iter()
                             .map(|result| ResultTableRow {
                                 id: result.id.unwrap_or(-1),
                                 job_id: result.job_id,
-                                job_name: job_names
-                                    .get(&result.job_id)
-                                    .cloned()
+                                // job_name is populated server-side on the result.
+                                job_name: result
+                                    .job_name
+                                    .clone()
                                     .unwrap_or_else(|| "-".to_string()),
                                 workflow_id: result.workflow_id,
                                 run_id: result.run_id,
@@ -292,11 +268,13 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                             } else {
                                 println!("Results for workflow ID {}:", selected_workflow_id);
                             }
-                            let exclude = vec![
-                                "WF ID".to_string(),
-                                "Run ID".to_string(),
-                                "Attempt".to_string(),
-                            ];
+                            // Run ID is only meaningful when results span multiple
+                            // runs; keep it hidden for the default single-run view
+                            // but show it under --all-runs so runs are distinguishable.
+                            let mut exclude = vec!["WF ID".to_string(), "Attempt".to_string()];
+                            if !*all_runs {
+                                exclude.push("Run ID".to_string());
+                            }
                             display_table_excluding(&rows, &exclude, "results");
                         }
                     }

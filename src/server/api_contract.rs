@@ -767,6 +767,24 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<GetWorkflowStatusResponse, ApiError>;
 
+    /// Return Slurm-job-to-Torc-job correlations for the workflow.
+    async fn get_slurm_job_correlations(
+        &self,
+        id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<GetSlurmJobCorrelationsResponse, ApiError>;
+
+    /// Return currently-running jobs with their compute node and scheduler info.
+    async fn get_running_jobs(
+        &self,
+        id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<GetRunningJobsResponse, ApiError>;
+
     /// Return true if all jobs in the workflow are uninitialized or disabled.
     async fn is_workflow_uninitialized(
         &self,

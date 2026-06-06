@@ -684,7 +684,7 @@ fn get_slurm_log_info(
     workflow_id: i64,
     output_dir: &Path,
 ) -> Result<ResultsReport, String> {
-    build_results_report(config, Some(workflow_id), output_dir, false, &[])
+    build_results_report(config, Some(workflow_id), output_dir, false, false, &[])
 }
 
 /// Correlate failed jobs with their Slurm allocation logs

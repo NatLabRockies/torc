@@ -78,8 +78,9 @@ pub use models::{
     ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
     ListResourceRequirementsResponse, ListResultsResponse, ListScheduledComputeNodesResponse,
     ListSlurmSchedulersResponse, ListUserDataResponse, ListWorkflowsResponse, LocalSchedulerModel,
-    ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel,
-    ScheduledComputeNodesModel, SlurmSchedulerModel, UserDataModel, WorkflowActionModel,
+    ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel, RunningJobModel,
+    RunningJobsResponse, ScheduledComputeNodesModel, SlurmJobCorrelationModel,
+    SlurmJobCorrelationsResponse, SlurmSchedulerModel, UserDataModel, WorkflowActionModel,
     WorkflowModel, WorkflowStatusResponse,
 };
 

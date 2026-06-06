@@ -24,7 +24,8 @@ use crate::models::{
     ListUserDataResponse, ListUserGroupMembershipsResponse, ListWorkflowsResponse,
     LocalSchedulerModel, MessageResponse, ProcessChangedJobInputsResponse, ReloadAuthResponse,
     RemoteWorkerModel, ResetJobStatusResponse, ResourceRequirementsModel, ResultModel,
-    RoCrateEntityModel, ScheduledComputeNodesModel, SlurmSchedulerModel, SlurmStatsModel,
+    RoCrateEntityModel, RunningJobModel, RunningJobsResponse, ScheduledComputeNodesModel,
+    SlurmJobCorrelationModel, SlurmJobCorrelationsResponse, SlurmSchedulerModel, SlurmStatsModel,
     SpawnJobModel, SpawnJobsRequest, SpawnJobsResponse, UserDataListModel, UserDataModel,
     UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel, WorkflowModel,
     WorkflowStatusResponse,
@@ -153,7 +154,8 @@ mod openapi_workflow_paths {
         __path_archive_workflow, __path_batch_complete_jobs, __path_cancel_workflow,
         __path_claim_jobs_based_on_resources, __path_claim_next_jobs, __path_create_workflow,
         __path_delete_workflow, __path_get_active_task_for_workflow,
-        __path_get_ready_job_requirements, __path_get_workflow, __path_get_workflow_status,
+        __path_get_ready_job_requirements, __path_get_running_jobs,
+        __path_get_slurm_job_correlations, __path_get_workflow, __path_get_workflow_status,
         __path_initialize_jobs, __path_is_workflow_complete, __path_is_workflow_uninitialized,
         __path_list_job_dependencies, __path_list_job_file_relationships, __path_list_job_ids,
         __path_list_job_user_data_relationships, __path_list_missing_user_data,
@@ -161,12 +163,12 @@ mod openapi_workflow_paths {
         __path_process_changed_job_inputs, __path_reset_job_status, __path_reset_workflow_status,
         __path_update_workflow, archive_workflow, batch_complete_jobs, cancel_workflow,
         claim_jobs_based_on_resources, claim_next_jobs, create_workflow, delete_workflow,
-        get_active_task_for_workflow, get_ready_job_requirements, get_workflow,
-        get_workflow_status, initialize_jobs, is_workflow_complete, is_workflow_uninitialized,
-        list_job_dependencies, list_job_file_relationships, list_job_ids,
-        list_job_user_data_relationships, list_missing_user_data, list_required_existing_files,
-        list_workflows, process_changed_job_inputs, reset_job_status, reset_workflow_status,
-        update_workflow,
+        get_active_task_for_workflow, get_ready_job_requirements, get_running_jobs,
+        get_slurm_job_correlations, get_workflow, get_workflow_status, initialize_jobs,
+        is_workflow_complete, is_workflow_uninitialized, list_job_dependencies,
+        list_job_file_relationships, list_job_ids, list_job_user_data_relationships,
+        list_missing_user_data, list_required_existing_files, list_workflows,
+        process_changed_job_inputs, reset_job_status, reset_workflow_status, update_workflow,
     };
 }
 
@@ -537,6 +539,8 @@ fn resolve_schema_properties<'a>(
         openapi_workflow_paths::delete_workflow,
         openapi_workflow_paths::get_workflow,
         openapi_workflow_paths::get_workflow_status,
+        openapi_workflow_paths::get_slurm_job_correlations,
+        openapi_workflow_paths::get_running_jobs,
         openapi_workflow_paths::update_workflow,
         openapi_workflow_paths::cancel_workflow,
         openapi_workflow_paths::initialize_jobs,
@@ -650,6 +654,10 @@ fn resolve_schema_properties<'a>(
         IsUninitializedResponse,
         JobStatusCounts,
         WorkflowStatusResponse,
+        SlurmJobCorrelationModel,
+        SlurmJobCorrelationsResponse,
+        RunningJobModel,
+        RunningJobsResponse,
         ResetJobStatusResponse,
         UserDataModel,
         ListUserDataResponse
@@ -1627,6 +1635,7 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "peak_cpu_percent",
             "avg_cpu_percent",
             "status",
+            "job_name",
         ],
         &mut issues,
     );
@@ -2118,6 +2127,22 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_operation_id(
         source,
         &emitted,
+        "/workflows/{id}/slurm_job_correlations",
+        "get",
+        "get_slurm_job_correlations",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
+        "/workflows/{id}/running_jobs",
+        "get",
+        "get_running_jobs",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
         "/workflows/{id}/is_uninitialized",
         "get",
         "is_workflow_uninitialized",
@@ -2281,6 +2306,51 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "active_scheduled_nodes",
             "is_complete",
             "is_canceled",
+        ],
+        &mut issues,
+    );
+    check_component_properties(
+        &emitted,
+        "SlurmJobCorrelationModel",
+        &["slurm_job_id", "job_id", "job_name"],
+        &mut issues,
+    );
+    check_component_properties(
+        &emitted,
+        "SlurmJobCorrelationsResponse",
+        &[
+            "items",
+            "offset",
+            "max_limit",
+            "count",
+            "total_count",
+            "has_more",
+        ],
+        &mut issues,
+    );
+    check_component_properties(
+        &emitted,
+        "RunningJobModel",
+        &[
+            "job_id",
+            "job_name",
+            "compute_node_name",
+            "scheduler_type",
+            "scheduler_job_id",
+            "start_time",
+        ],
+        &mut issues,
+    );
+    check_component_properties(
+        &emitted,
+        "RunningJobsResponse",
+        &[
+            "items",
+            "offset",
+            "max_limit",
+            "count",
+            "total_count",
+            "has_more",
         ],
         &mut issues,
     );
