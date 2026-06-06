@@ -481,6 +481,50 @@ fn test_reinitialize_workflow_real(start_server: &ServerProcess) {
 }
 
 #[rstest]
+fn test_recover_reset_sequence_bumps_run_id_once(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+    let (manager, workflow) =
+        create_test_workflow_manager(config.clone(), "test_recover_run_id_once");
+    let workflow_id = workflow.id.unwrap();
+
+    // Initialize and run a job so the workflow has an established run.
+    let (job_id, _run_id) = execute_workflow_with_job(
+        &config,
+        &manager,
+        workflow_id,
+        "test_job",
+        "echo 'test'",
+        None,
+    )
+    .expect("execute workflow with job");
+
+    let before = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("get workflow")
+        .run_id
+        .unwrap_or(0);
+
+    // The recover reset sequence: reset the failed jobs, then reinitialize.
+    // Together these must advance run_id by exactly 1 -- reset_failed_jobs no
+    // longer resets workflow status, so the single bump comes from
+    // reinitialize_workflow. Before the fix this bumped twice and skipped a
+    // run_id.
+    torc::client::commands::recover::reset_failed_jobs(&config, workflow_id, &[job_id])
+        .expect("reset_failed_jobs");
+    torc::client::commands::recover::reinitialize_workflow(&config, workflow_id)
+        .expect("reinitialize_workflow");
+
+    let after = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("get workflow after")
+        .run_id
+        .unwrap_or(0);
+    assert_eq!(
+        after,
+        before + 1,
+        "recover reset sequence must bump run_id exactly once"
+    );
+}
+
+#[rstest]
 fn test_get_run_id(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_get_run_id");
