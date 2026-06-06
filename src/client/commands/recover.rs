@@ -829,10 +829,12 @@ pub fn reset_failed_jobs(
 
     let job_count = job_ids.len();
 
-    apis::workflows_api::reset_workflow_status(config, workflow_id, None)
-        .map_err(|e| format!("Failed to reset workflow status: {}", e))?;
-    info!("  Reset workflow status for workflow {}", workflow_id);
-
+    // NOTE: do not reset workflow status here. `reset_workflow_status` bumps
+    // run_id, and every caller of this function follows it with
+    // `reinitialize_workflow`, which already resets workflow status (and bumps
+    // run_id) exactly once. Resetting here too bumps run_id twice per recovery,
+    // leaving a gap (e.g. a recovered job jumping from run 1 to run 3). Reset
+    // only the failed jobs so the run_id bump stays single.
     apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .map_err(|e| format!("Failed to reset failed job status: {}", e))?;
     info!("  Reset failed job status for workflow {}", workflow_id);
