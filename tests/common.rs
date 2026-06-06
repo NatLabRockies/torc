@@ -230,6 +230,17 @@ pub fn run_torc_standalone_ok(
 }
 
 fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
+    start_process_with_env(db_url, db_file, &[])
+}
+
+/// Like [`start_process`] but injects additional environment variables into the spawned
+/// `torc-server` process. Used by tests that need to enable server-side test hooks (e.g. the
+/// `TORC_TEST_INITIALIZE_JOBS_BARRIER` rendezvous for the concurrent-dedup test).
+fn start_process_with_env(
+    db_url: &str,
+    db_file: NamedTempFile,
+    extra_env: &[(&str, &str)],
+) -> ServerProcess {
     println!("Setting up database with url: {}", db_url);
     let status = Command::new("sqlx")
         .arg("--no-dotenv")
@@ -264,7 +275,8 @@ fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
             "Starting server on port {} (attempt {}/{})",
             port, attempt, SERVER_START_ATTEMPTS
         );
-        let mut child = Command::new(get_exe_path("./target/debug/torc-server"))
+        let mut command = Command::new(get_exe_path("./target/debug/torc-server"));
+        command
             .arg("run")
             .arg("--port")
             .arg(port.to_string())
@@ -273,9 +285,11 @@ fn start_process(db_url: &str, db_file: NamedTempFile) -> ServerProcess {
             .env("DATABASE_URL", db_url)
             .env("RUST_LOG", "info")
             .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .spawn()
-            .expect("failed to start server process");
+            .stderr(std::process::Stdio::inherit());
+        for (key, value) in extra_env {
+            command.env(key, value);
+        }
+        let mut child = command.spawn().expect("failed to start server process");
 
         let pid = child.id();
 
@@ -330,6 +344,19 @@ pub fn start_server() -> ServerProcess {
         process.db_file, process.port
     );
     process
+}
+
+/// Start a dedicated server instance with extra environment variables.
+///
+/// Unlike [`start_server`], this is not a `#[once]` fixture: each call spawns a fresh,
+/// isolated `torc-server` with its own database. Use it for tests that need to enable a
+/// server-side test hook (via env var) without affecting servers shared by other tests.
+pub fn start_server_with_env(extra_env: &[(&str, &str)]) -> ServerProcess {
+    let _ = env_logger::try_init();
+
+    let db_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let url = format!("sqlite:{}", db_file.path().display());
+    start_process_with_env(&url, db_file, extra_env)
 }
 
 pub fn create_test_workflow(config: &Configuration, workflow_name: &str) -> models::WorkflowModel {

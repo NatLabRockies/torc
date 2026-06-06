@@ -409,6 +409,33 @@ impl<C> Server<C> {
         chrono::Utc::now().timestamp_millis()
     }
 
+    /// Test-only synchronization hook for the concurrent `initialize_jobs` dedup test.
+    ///
+    /// When the env var `TORC_TEST_INITIALIZE_JOBS_BARRIER` is set to an integer N >= 2, the
+    /// first N `initialize_jobs` task-creation calls block here until all N have completed their
+    /// INSERT/dedup decision, then proceed together. Because a task's worker is only spawned
+    /// after `create_or_get_initialize_jobs_task` returns, holding here keeps the winning
+    /// caller's task in `queued` (active) state until the other caller's INSERT has run --
+    /// guaranteeing the partial unique index fires and the dedup path is taken deterministically,
+    /// rather than racing the first task's completion.
+    ///
+    /// This is a no-op whenever the env var is unset, which is always the case in normal
+    /// operation. A bounded timeout ensures a misconfigured N can never hang the server.
+    async fn test_initialize_jobs_rendezvous() {
+        static BARRIER: std::sync::OnceLock<Option<Arc<tokio::sync::Barrier>>> =
+            std::sync::OnceLock::new();
+        let barrier = BARRIER.get_or_init(|| {
+            std::env::var("TORC_TEST_INITIALIZE_JOBS_BARRIER")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .filter(|&n| n >= 2)
+                .map(|n| Arc::new(tokio::sync::Barrier::new(n)))
+        });
+        if let Some(barrier) = barrier {
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(30), barrier.wait()).await;
+        }
+    }
+
     /// Load the single active async task for a workflow, if any.
     pub(super) async fn get_active_task(
         &self,
@@ -506,6 +533,10 @@ impl<C> Server<C> {
 
             match insert_result {
                 Ok(result) => {
+                    // Test-only rendezvous: hold here before returning so the task stays
+                    // `queued` (its worker is not spawned until this function returns) until any
+                    // concurrent caller has run its own INSERT/dedup. No-op in normal operation.
+                    Self::test_initialize_jobs_rendezvous().await;
                     return Ok(TaskCreation::Created(models::TaskModel::new(
                         result.last_insert_rowid(),
                         workflow_id,
@@ -557,6 +588,9 @@ impl<C> Server<C> {
                         });
                     }
 
+                    // Test-only rendezvous: matches the wait on the `Created` path so both
+                    // concurrent callers leave this function together. No-op in normal operation.
+                    Self::test_initialize_jobs_rendezvous().await;
                     return Ok(TaskCreation::Existing(existing));
                 }
                 Err(e) => {

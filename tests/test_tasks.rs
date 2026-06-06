@@ -82,15 +82,22 @@ fn test_initialize_jobs_async_creates_task_and_emits_sse(start_server: &ServerPr
     }
 }
 
-#[rstest]
+#[test]
 #[serial]
-fn test_initialize_jobs_async_concurrent_requests_return_same_task(start_server: &ServerProcess) {
-    let server = start_server;
+fn test_initialize_jobs_async_concurrent_requests_return_same_task() {
+    // Dedicated server with the server-side rendezvous hook enabled: the first two concurrent
+    // `initialize_jobs` task-creation calls block inside the server until both have run their
+    // INSERT/dedup, then proceed together. This makes the dedup deterministic -- the second
+    // request's INSERT is guaranteed to see the first task still active -- instead of relying on
+    // initialization being slow enough for the requests to overlap by chance.
+    let server = common::start_server_with_env(&[("TORC_TEST_INITIALIZE_JOBS_BARRIER", "2")]);
+    let server = &server;
     let workflow = common::create_test_workflow(&server.config, "tasks-test-idempotent-workflow");
     let workflow_id = workflow.id.unwrap();
 
-    // Create enough jobs to make initialization take long enough for a concurrent request to race.
-    for i in 0..50 {
+    // A few jobs so initialization has real work to do and succeeds; the count no longer affects
+    // determinism (the server-side barrier guarantees the requests overlap).
+    for i in 0..5 {
         let job_name = format!("job_{i}");
         let _job = common::create_test_job(&server.config, workflow_id, &job_name);
     }
