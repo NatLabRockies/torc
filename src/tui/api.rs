@@ -159,7 +159,8 @@ impl TorcClient {
         Ok((response.items, response.has_more))
     }
 
-    /// List files with optional server-side Name/Path substring filters.
+    /// List files with optional server-side filters: `name` is an exact match,
+    /// `path` is a substring match.
     pub fn list_files(
         &self,
         workflow_id: i64,

@@ -40,12 +40,21 @@ Object.assign(TorcDashboard.prototype, {
         });
 
         // Access-group filter (server-side: spans all owners in the group).
-        // Reload on Enter or when the field is cleared/blurred.
+        // Reload on Enter, or when the value changes via clear/blur. Track the
+        // last applied value so pressing Enter and then blurring doesn't fire a
+        // second identical load.
         const accessGroupInput = document.getElementById('workflow-access-group');
         if (accessGroupInput) {
-            accessGroupInput.addEventListener('change', () => this.loadWorkflows());
+            let lastAppliedAccessGroup = accessGroupInput.value.trim();
+            const applyAccessGroup = () => {
+                const current = accessGroupInput.value.trim();
+                if (current === lastAppliedAccessGroup) return;
+                lastAppliedAccessGroup = current;
+                this.loadWorkflows();
+            };
+            accessGroupInput.addEventListener('change', applyAccessGroup);
             accessGroupInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') this.loadWorkflows();
+                if (e.key === 'Enter') applyAccessGroup();
             });
         }
 
