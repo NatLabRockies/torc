@@ -827,19 +827,25 @@ pub fn reset_failed_jobs(
         return Ok(0);
     }
 
-    let job_count = job_ids.len();
-
     // NOTE: do not reset workflow status here. `reset_workflow_status` bumps
     // run_id, and every caller of this function follows it with
     // `reinitialize_workflow`, which already resets workflow status (and bumps
     // run_id) exactly once. Resetting here too bumps run_id twice per recovery,
     // leaving a gap (e.g. a recovered job jumping from run 1 to run 3). Reset
     // only the failed jobs so the run_id bump stays single.
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    //
+    // `reset_job_status` resets all retryable failed jobs workflow-wide (the
+    // `job_ids` argument here only gates the no-op early return above), so use
+    // the server-reported `updated_count` for an accurate count, not job_ids.len().
+    let response = apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .map_err(|e| format!("Failed to reset failed job status: {}", e))?;
-    info!("  Reset failed job status for workflow {}", workflow_id);
+    let reset_count = response.updated_count.max(0) as usize;
+    info!(
+        "  Reset {} failed job(s) for workflow {}",
+        reset_count, workflow_id
+    );
 
-    Ok(job_count)
+    Ok(reset_count)
 }
 
 /// Reinitialize the workflow (set up dependencies and fire on_workflow_start actions)

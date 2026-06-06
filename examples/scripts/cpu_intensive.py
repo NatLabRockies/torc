@@ -120,7 +120,7 @@ if __name__ == "__main__":
     try:
         primes = main()
         print("\n✓ CPU-intensive job with multiprocessing completed successfully")
-        sys.exit(1)
+        sys.exit(0)
     except Exception as e:
         print(f"\n✗ Error: {e}", file=sys.stderr)
         import traceback
