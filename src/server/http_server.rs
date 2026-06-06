@@ -422,17 +422,37 @@ impl<C> Server<C> {
     /// This is a no-op whenever the env var is unset, which is always the case in normal
     /// operation. A bounded timeout ensures a misconfigured N can never hang the server.
     async fn test_initialize_jobs_rendezvous() {
-        static BARRIER: std::sync::OnceLock<Option<Arc<tokio::sync::Barrier>>> =
-            std::sync::OnceLock::new();
-        let barrier = BARRIER.get_or_init(|| {
+        struct Rendezvous {
+            barrier: tokio::sync::Barrier,
+            n: usize,
+            seen: std::sync::atomic::AtomicUsize,
+        }
+        static RENDEZVOUS: std::sync::OnceLock<Option<Rendezvous>> = std::sync::OnceLock::new();
+        let rendezvous = RENDEZVOUS.get_or_init(|| {
             std::env::var("TORC_TEST_INITIALIZE_JOBS_BARRIER")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
                 .filter(|&n| n >= 2)
-                .map(|n| Arc::new(tokio::sync::Barrier::new(n)))
+                .map(|n| Rendezvous {
+                    barrier: tokio::sync::Barrier::new(n),
+                    n,
+                    seen: std::sync::atomic::AtomicUsize::new(0),
+                })
         });
-        if let Some(barrier) = barrier {
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(30), barrier.wait()).await;
+        if let Some(rendezvous) = rendezvous {
+            // Only the first N callers participate in the rendezvous. `tokio::sync::Barrier` is
+            // reusable, so without this guard every subsequent group of N calls would block again
+            // (and an unmatched later call would hang for the full timeout).
+            let prev = rendezvous
+                .seen
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if prev < rendezvous.n {
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(30),
+                    rendezvous.barrier.wait(),
+                )
+                .await;
+            }
         }
     }
 
