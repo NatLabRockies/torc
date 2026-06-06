@@ -4,8 +4,8 @@ use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
     ComputeNodeModel, FileModel, IsCompleteResponse, JobDependencyModel, JobModel, JobStatus,
-    ResultModel, ScheduledComputeNodesModel, SlurmStatsModel, UserDataModel, WorkflowActionModel,
-    WorkflowModel,
+    ResultModel, RunningJobModel, ScheduledComputeNodesModel, SlurmStatsModel, UserDataModel,
+    WorkflowActionModel, WorkflowModel,
 };
 use anyhow::{Context, Result};
 
@@ -212,6 +212,21 @@ impl TorcClient {
             None,   // all_runs
         )
         .context("Failed to list results")?;
+
+        Ok((response.items, response.has_more))
+    }
+
+    /// Returns the current page of running jobs (joined server-side to their
+    /// compute node and scheduler job id) plus the `has_more` flag.
+    pub fn list_running_jobs(
+        &self,
+        workflow_id: i64,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<(Vec<RunningJobModel>, bool)> {
+        let response =
+            apis::workflows_api::get_running_jobs(&self.config, workflow_id, offset, limit)
+                .context("Failed to list running jobs")?;
 
         Ok((response.items, response.has_more))
     }

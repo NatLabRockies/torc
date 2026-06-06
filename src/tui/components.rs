@@ -473,6 +473,7 @@ pub enum HelpContext {
     Workflows,
     DetailSummary,
     DetailJobs,
+    DetailRunning,
     DetailFiles,
     DetailUserData,
     DetailEvents,
@@ -558,32 +559,34 @@ impl HelpPopup {
                 lines.push(Self::key_line("y", "Retry failed job"));
                 lines.push(Self::key_line("1 / 2 / 3", "Sort by ID / Name / Status"));
             }
+            HelpContext::DetailRunning => {
+                lines.extend(Self::section("Running Tab"));
+                lines.push(Self::key_line(
+                    "1 / 2 / 3",
+                    "Sort by Job ID / Name / Elapsed (cycles desc / asc / off)",
+                ));
+            }
             HelpContext::DetailResults => {
                 lines.extend(Self::section("Results Tab"));
                 lines.push(Self::key_line("l", "View logs"));
                 lines.push(Self::key_line(
-                    "E",
-                    "Sort by Runtime (cycles desc / asc / off)",
+                    "1 … 8",
+                    "Sort by column, left to right (every column except Status):",
                 ));
                 lines.push(Self::key_line(
-                    "m",
-                    "Sort by Peak Memory (cycles desc / asc / off)",
+                    "",
+                    "1 ID  2 Job ID  3 Name  4 Return  5 Runtime",
                 ));
                 lines.push(Self::key_line(
-                    "p",
-                    "Sort by Peak CPU % (cycles desc / asc / off)",
+                    "",
+                    "6 Completion  7 Peak Memory  8 Peak CPU %  (cycles desc / asc / off)",
                 ));
             }
             HelpContext::DetailComputeNodes => {
                 lines.extend(Self::section("Compute Nodes Tab"));
-                lines.push(Self::key_line("1 / 2", "Sort by ID / Hostname"));
                 lines.push(Self::key_line(
-                    "m",
-                    "Sort by Peak Memory (cycles desc / asc / off)",
-                ));
-                lines.push(Self::key_line(
-                    "p",
-                    "Sort by Peak CPU % (cycles desc / asc / off)",
+                    "1 / 2 / 3 / 4",
+                    "Sort by ID / Hostname / Peak CPU % / Peak Memory (cycles desc / asc / off)",
                 ));
             }
             HelpContext::DetailScheduledNodes => {
