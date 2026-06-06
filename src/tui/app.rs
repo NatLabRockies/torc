@@ -1521,24 +1521,15 @@ impl App {
                 .results
                 .sort_by_key(|r| std::cmp::Reverse(r.return_code)),
             ResultsSort::ReturnAsc => self.results.sort_by_key(|r| r.return_code),
-            ResultsSort::CompletionDesc => {
-                self.results
-                    .sort_by(|a, b| match (completion_secs(a), completion_secs(b)) {
-                        (Some(x), Some(y)) => y.cmp(&x),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => std::cmp::Ordering::Equal,
-                    });
-            }
-            ResultsSort::CompletionAsc => {
-                self.results
-                    .sort_by(|a, b| match (completion_secs(a), completion_secs(b)) {
-                        (Some(x), Some(y)) => x.cmp(&y),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => std::cmp::Ordering::Equal,
-                    });
-            }
+            // Cache the parsed timestamp per row; unparseable times sort last.
+            ResultsSort::CompletionDesc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), std::cmp::Reverse(secs.unwrap_or(0)))
+            }),
+            ResultsSort::CompletionAsc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), secs.unwrap_or(0))
+            }),
             ResultsSort::PeakMemoryDesc => {
                 self.results
                     .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
@@ -1746,26 +1737,16 @@ impl App {
             RunningSort::NameAsc => self
                 .running
                 .sort_by_cached_key(|j| j.job_name.to_lowercase()),
-            // Longest-running first: earliest start_time first. Unparseable
-            // start times sort last.
-            RunningSort::ElapsedDesc => {
-                self.running
-                    .sort_by(|a, b| match (start_secs(a), start_secs(b)) {
-                        (Some(x), Some(y)) => x.cmp(&y),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => std::cmp::Ordering::Equal,
-                    })
-            }
-            RunningSort::ElapsedAsc => {
-                self.running
-                    .sort_by(|a, b| match (start_secs(a), start_secs(b)) {
-                        (Some(x), Some(y)) => y.cmp(&x),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => std::cmp::Ordering::Equal,
-                    })
-            }
+            // Longest-running first: earliest start_time first. The parsed
+            // start time is cached per row; unparseable start times sort last.
+            RunningSort::ElapsedDesc => self.running.sort_by_cached_key(|j| {
+                let secs = start_secs(j);
+                (secs.is_none(), secs.unwrap_or(0))
+            }),
+            RunningSort::ElapsedAsc => self.running.sort_by_cached_key(|j| {
+                let secs = start_secs(j);
+                (secs.is_none(), std::cmp::Reverse(secs.unwrap_or(0)))
+            }),
         }
     }
 
