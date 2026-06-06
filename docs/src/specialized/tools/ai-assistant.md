@@ -11,7 +11,7 @@ This tutorial shows how to use AI assistants to manage Torc workflows using natu
 ## Prerequisites
 
 - Torc installed and server running
-- [Claude Code](https://claude.ai/code) or VS Code with GitHub Copilot
+- [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) or VS Code with GitHub Copilot
 
 ## What Can AI Assistants Do?
 
