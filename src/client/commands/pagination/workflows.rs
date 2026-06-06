@@ -28,6 +28,8 @@ pub struct WorkflowListParams {
     pub description: Option<String>,
     /// Filter by archived status
     pub is_archived: Option<bool>,
+    /// Filter to workflows shared with this access group (by group name)
+    pub access_group: Option<String>,
 }
 
 impl WorkflowListParams {
@@ -74,6 +76,11 @@ impl WorkflowListParams {
         self.is_archived = Some(is_archived);
         self
     }
+
+    pub fn with_access_group(mut self, access_group: String) -> Self {
+        self.access_group = Some(access_group);
+        self
+    }
 }
 
 impl PaginationParams for WorkflowListParams {
@@ -117,6 +124,7 @@ impl Paginatable for WorkflowModel {
             params.user.as_deref(),
             params.description.as_deref(),
             params.is_archived,
+            params.access_group.as_deref(),
         )?;
 
         Ok(PaginatedResponse {

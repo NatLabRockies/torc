@@ -4049,6 +4049,14 @@ paths:
           type:
           - boolean
           - 'null'
+      - name: access_group
+        in: query
+        description: Filter to workflows shared with this access group (by group name).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: ''

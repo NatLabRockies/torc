@@ -6281,6 +6281,7 @@ class WorkflowsApi:
         user: Optional[StrictStr] = None,
         description: Optional[StrictStr] = None,
         is_archived: Optional[StrictBool] = None,
+        access_group: Annotated[Optional[StrictStr], Field(description="Filter to workflows shared with this access group (by group name).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -6313,6 +6314,8 @@ class WorkflowsApi:
         :type description: str
         :param is_archived:
         :type is_archived: bool
+        :param access_group: Filter to workflows shared with this access group (by group name).
+        :type access_group: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -6344,6 +6347,7 @@ class WorkflowsApi:
             user=user,
             description=description,
             is_archived=is_archived,
+            access_group=access_group,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -6375,6 +6379,7 @@ class WorkflowsApi:
         user: Optional[StrictStr] = None,
         description: Optional[StrictStr] = None,
         is_archived: Optional[StrictBool] = None,
+        access_group: Annotated[Optional[StrictStr], Field(description="Filter to workflows shared with this access group (by group name).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -6407,6 +6412,8 @@ class WorkflowsApi:
         :type description: str
         :param is_archived:
         :type is_archived: bool
+        :param access_group: Filter to workflows shared with this access group (by group name).
+        :type access_group: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -6438,6 +6445,7 @@ class WorkflowsApi:
             user=user,
             description=description,
             is_archived=is_archived,
+            access_group=access_group,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -6469,6 +6477,7 @@ class WorkflowsApi:
         user: Optional[StrictStr] = None,
         description: Optional[StrictStr] = None,
         is_archived: Optional[StrictBool] = None,
+        access_group: Annotated[Optional[StrictStr], Field(description="Filter to workflows shared with this access group (by group name).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -6501,6 +6510,8 @@ class WorkflowsApi:
         :type description: str
         :param is_archived:
         :type is_archived: bool
+        :param access_group: Filter to workflows shared with this access group (by group name).
+        :type access_group: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -6532,6 +6543,7 @@ class WorkflowsApi:
             user=user,
             description=description,
             is_archived=is_archived,
+            access_group=access_group,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -6558,6 +6570,7 @@ class WorkflowsApi:
         user,
         description,
         is_archived,
+        access_group,
         _request_auth,
         _content_type,
         _headers,
@@ -6611,6 +6624,10 @@ class WorkflowsApi:
         if is_archived is not None:
             
             _query_params.append(('is_archived', is_archived))
+            
+        if access_group is not None:
+            
+            _query_params.append(('access_group', access_group))
             
         # process the header parameters
         # process the form parameters

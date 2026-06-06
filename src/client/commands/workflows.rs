@@ -234,8 +234,12 @@ EXAMPLES:
         #[arg(long, default_value = "false")]
         include_archived: bool,
         /// Show workflows from all users (filtered by access when authentication is enabled)
-        #[arg(long, default_value = "false")]
+        #[arg(short = 'a', long, default_value = "false")]
         all_users: bool,
+        /// Filter to workflows shared with this access group (by group name).
+        /// Shows matching workflows from all owners you can access.
+        #[arg(short = 'g', long)]
+        access_group: Option<String>,
     },
     /// Get a specific workflow by ID
     #[command(
@@ -2619,6 +2623,7 @@ fn handle_list(
     archived_only: bool,
     include_archived: bool,
     all_users: bool,
+    access_group: &Option<String>,
     format: &str,
 ) {
     // Use pagination utility to get all workflows
@@ -2630,8 +2635,16 @@ fn handle_list(
         params = params.with_limit(limit_val);
     }
 
-    // When --all-users is not set, filter by current user (default behavior)
-    if !all_users {
+    // Filtering by access group spans all owners (you see every workflow in
+    // the group you can access), so the implicit current-user filter is
+    // suppressed when --access-group is given.
+    if let Some(group) = access_group {
+        params = params.with_access_group(group.clone());
+    }
+
+    // When --all-users is not set, filter by current user (default behavior).
+    // An explicit --access-group widens to all owners in that group.
+    if !all_users && access_group.is_none() {
         params = params.with_user(user.to_string());
     }
 
@@ -3088,6 +3101,7 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             archived_only,
             include_archived,
             all_users,
+            access_group,
         } => {
             handle_list(
                 config,
@@ -3099,6 +3113,7 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 *archived_only,
                 *include_archived,
                 *all_users,
+                access_group,
                 format,
             );
         }

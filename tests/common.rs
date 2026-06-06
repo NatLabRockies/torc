@@ -1319,6 +1319,7 @@ pub fn delete_all_workflows(config: &Configuration) -> Result<(), Box<dyn std::e
         None, // user filter (no filter = all users)
         None, // description filter
         None, // is_archive filter
+        None,
     )?;
 
     let workflows = response.items;

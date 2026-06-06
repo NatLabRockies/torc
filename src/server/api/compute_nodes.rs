@@ -356,7 +356,8 @@ where
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
         if hostname.is_some() {
-            where_conditions.push("hostname = ?".to_string());
+            // Substring match so callers can filter by a hostname fragment.
+            where_conditions.push("hostname LIKE ? ESCAPE '\\'".to_string());
         }
         if is_active.is_some() {
             where_conditions.push("is_active = ?".to_string());
@@ -394,7 +395,7 @@ where
         // Execute the query
         let mut sqlx_query = sqlx::query(&query).bind(workflow_id);
         if let Some(ref h) = hostname {
-            sqlx_query = sqlx_query.bind(h);
+            sqlx_query = sqlx_query.bind(format!("%{}%", super::escape_like_pattern(h)));
         }
         if let Some(active) = is_active {
             // Convert boolean to integer for SQLite
@@ -455,7 +456,18 @@ where
                 .with_where(where_clause)
                 .build();
 
+        // Bind in the same order the WHERE clause was built (workflow_id,
+        // hostname, is_active, scheduled_compute_node_id). The previous version
+        // omitted hostname/is_active, which mis-bound the count query whenever
+        // those filters were active.
         let mut count_sqlx_query = sqlx::query(&count_query).bind(workflow_id);
+        if let Some(ref h) = hostname {
+            count_sqlx_query =
+                count_sqlx_query.bind(format!("%{}%", super::escape_like_pattern(h)));
+        }
+        if let Some(active) = is_active {
+            count_sqlx_query = count_sqlx_query.bind(if active { 1i64 } else { 0i64 });
+        }
         if let Some(scn_id) = scheduled_compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(scn_id);
         }

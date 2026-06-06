@@ -1423,6 +1423,7 @@ where
         user: Option<String>,
         description: Option<String>,
         is_archived: Option<bool>,
+        access_group: Option<String>,
         context: &C,
     ) -> Result<ListWorkflowsResponse, ApiError> {
         self.transport_list_workflows(
@@ -1434,6 +1435,7 @@ where
             user,
             description,
             is_archived,
+            access_group,
             context,
         )
         .await

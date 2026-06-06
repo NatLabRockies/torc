@@ -62,6 +62,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
         Some(&user1),
         None, // description filter
         None, // is_archived filter
+        None,
     )
     .expect("Should list workflows for user1");
 
@@ -98,6 +99,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
         Some(&user2),
         None, // description filter
         None, // is_archived filter
+        None,
     )
     .expect("Should list workflows for user2");
 
@@ -148,7 +150,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
 
     // Verify workflows were created - should have at least our 3 workflows
     let list_response_before = torc::client::apis::workflows_api::list_workflows(
-        config, None, None, None, None, None, None, None, None,
+        config, None, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows before deletion");
 
@@ -175,7 +177,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
 
     // Verify all workflows were deleted
     let list_response_after = torc::client::apis::workflows_api::list_workflows(
-        config, None, None, None, None, None, None, None, None,
+        config, None, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows after deletion");
 
@@ -195,6 +197,7 @@ fn test_delete_all_workflows(start_server: &ServerProcess) {
             None,
             None,
             Some(user),
+            None,
             None,
             None,
         )
@@ -235,7 +238,7 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
 
     // Verify workflows were created
     let list_response_before = torc::client::apis::workflows_api::list_workflows(
-        config, None, None, None, None, None, None, None, None,
+        config, None, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows before deletion test");
 
@@ -255,7 +258,7 @@ fn test_delete_all_workflows_strict_success_criteria(start_server: &ServerProces
 
     // Verify all workflows were actually deleted
     let list_response_after = torc::client::apis::workflows_api::list_workflows(
-        config, None, None, None, None, None, None, None, None,
+        config, None, None, None, None, None, None, None, None, None,
     )
     .expect("Should list workflows after successful deletion");
 

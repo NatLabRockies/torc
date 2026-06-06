@@ -8,6 +8,48 @@ use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
 
+/// Server-side file filtering: `path` matches a substring, `name` is exact.
+#[rstest]
+fn test_list_files_name_and_path_filters(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_files_filter_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    create_test_file(config, workflow_id, "alpha", "/data/inputs/alpha.csv");
+    create_test_file(config, workflow_id, "beta", "/data/outputs/beta.csv");
+
+    let list = |name: Option<&str>, path: Option<&str>| {
+        apis::files_api::list_files(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            name,
+            path,
+            None,
+        )
+        .expect("Failed to list files")
+        .items
+    };
+
+    // Path is a substring match.
+    let inputs = list(None, Some("inputs"));
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0].name, "alpha");
+
+    let csv = list(None, Some(".csv"));
+    assert_eq!(csv.len(), 2);
+
+    // Name is an exact match: a fragment matches nothing, the full name matches.
+    assert!(list(Some("alph"), None).is_empty());
+    let alpha = list(Some("alpha"), None);
+    assert_eq!(alpha.len(), 1);
+    assert_eq!(alpha[0].path, "/data/inputs/alpha.csv");
+}
+
 #[rstest]
 fn test_files_add_command_json(start_server: &ServerProcess) {
     let config = &start_server.config;

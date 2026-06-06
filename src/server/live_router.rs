@@ -465,6 +465,9 @@ pub struct WorkflowsListQuery {
     pub description: Option<String>,
     #[param(nullable = true)]
     pub is_archived: Option<bool>,
+    /// Filter to workflows shared with this access group (by group name).
+    #[param(nullable = true)]
+    pub access_group: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -3500,6 +3503,7 @@ pub async fn list_workflows(
             query.user,
             query.description,
             query.is_archived,
+            query.access_group,
             &context,
         )
         .await

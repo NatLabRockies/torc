@@ -639,6 +639,7 @@ pub trait TransportApiCore<C: Send + Sync> {
     ) -> Result<ListUserDataResponse, ApiError>;
 
     /// Retrieve all workflows.
+    #[allow(clippy::too_many_arguments)]
     async fn list_workflows(
         &self,
         offset: Option<i64>,
@@ -649,6 +650,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         user: Option<String>,
         description: Option<String>,
         is_archived: Option<bool>,
+        access_group: Option<String>,
         context: &C,
     ) -> Result<ListWorkflowsResponse, ApiError>;
 

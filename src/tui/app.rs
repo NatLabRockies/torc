@@ -921,23 +921,44 @@ impl App {
 
         let offset = Some(self.workflows_offset);
         let limit = Some(TUI_PAGE_SIZE);
-        let has_more;
-        (self.workflows_all, has_more) = if let Some(ref user) = self.user_filter {
-            self.client.list_workflows_for_user(user, offset, limit)?
-        } else {
-            self.client.list_workflows(offset, limit)?
-        };
-        self.workflows_has_more = has_more;
 
-        // Re-apply any active workflow filter against the freshly loaded data.
+        // Resolve the active Workflows filter into server-side query params.
+        // `user_filter` provides the default owner scoping (the all-users
+        // toggle). An explicit "User" filter replaces that scoping; "Access
+        // Group" spans all owners (drops the scoping) so you see the whole
+        // group, matching the CLI/Dash.
+        let (mut name, mut user, mut description, mut access_group) = (None, None, None, None);
+        let mut scope_user = self.user_filter.clone();
         if self.filter_target == FilterTarget::Workflows
-            && let Some(ref filter) = self.filter.clone()
+            && let Some(filter) = self.filter.as_ref()
         {
-            self.workflows =
-                filter_workflow_list(&self.workflows_all, &filter.column, &filter.value);
-        } else {
-            self.workflows = self.workflows_all.clone();
+            match filter.column.as_str() {
+                "Name" => name = Some(filter.value.clone()),
+                "User" => {
+                    user = Some(filter.value.clone());
+                    scope_user = None;
+                }
+                "Description" => description = Some(filter.value.clone()),
+                "Access Group" => {
+                    access_group = Some(filter.value.clone());
+                    scope_user = None;
+                }
+                _ => {}
+            }
         }
+        let user_param = user.or(scope_user);
+
+        let has_more;
+        (self.workflows_all, has_more) = self.client.list_workflows_filtered(
+            offset,
+            limit,
+            name.as_deref(),
+            user_param.as_deref(),
+            description.as_deref(),
+            access_group.as_deref(),
+        )?;
+        self.workflows_has_more = has_more;
+        self.workflows = self.workflows_all.clone();
         self.apply_workflows_sort();
 
         if let Some(id) = prev_id
@@ -1249,15 +1270,15 @@ impl App {
         {
             // When the selected workflow changes, restart every detail list at
             // its first page so we don't carry a stale offset into a workflow
-            // that may have far fewer records.
+            // that may have far fewer records, and clear any active filter.
+            // Refreshing the SAME workflow preserves the filter so server-side
+            // filters survive a reload (the per-tab reloads re-apply it).
             if self.selected_workflow_id != workflow_id_opt {
                 self.reset_detail_pagination();
+                self.filter = None;
             }
             self.selected_workflow_id = workflow_id_opt;
             if let Some(workflow_id) = workflow_id_opt {
-                // Clear any existing filter when loading new data
-                self.filter = None;
-
                 match self.detail_view {
                     DetailViewType::Summary => {
                         if self.jobs_workflow_id != Some(workflow_id) {
@@ -1309,77 +1330,34 @@ impl App {
                         }
                     }
                     DetailViewType::Files => {
-                        self.files_all = self.client.list_files(workflow_id)?;
-                        self.files = self.files_all.clone();
-                        if !self.files.is_empty() {
-                            self.files_state.select(Some(0));
-                        }
+                        // filter was cleared above, so this loads unfiltered;
+                        // server-side filtering is driven via reload_files_page.
+                        self.reload_files_page()?;
                     }
                     DetailViewType::UserData => {
-                        (self.user_data_all, self.user_data_has_more) =
-                            self.client.list_user_data(
-                                workflow_id,
-                                Some(self.user_data_offset),
-                                Some(TUI_PAGE_SIZE),
-                            )?;
-                        self.user_data = self.user_data_all.clone();
-                        if self.user_data.is_empty() {
-                            self.user_data_state.select(None);
-                        } else {
-                            self.user_data_state.select(Some(0));
-                        }
+                        self.reload_user_data_page()?;
                     }
                     DetailViewType::Events => {
                         // Start SSE connection for real-time events
                         self.start_sse_connection(workflow_id);
                     }
                     DetailViewType::Results => {
-                        (self.results_all, self.results_has_more) = self.client.list_results(
-                            workflow_id,
-                            Some(self.results_offset),
-                            Some(TUI_PAGE_SIZE),
-                        )?;
-                        // results_all now holds only one page; invalidate the
-                        // full-list cache so the Slurm Stats tab refetches the
-                        // complete set for its CPU%/runtime computations.
-                        self.results_workflow_id = None;
-                        self.results = self.results_all.clone();
-                        self.apply_results_sort();
-                        if !self.results.is_empty() {
-                            self.results_state.select(Some(0));
-                        }
+                        self.reload_results_page()?;
                     }
                     DetailViewType::ComputeNodes => {
-                        (self.compute_nodes_all, self.compute_nodes_has_more) =
-                            self.client.list_compute_nodes(
-                                workflow_id,
-                                Some(self.compute_nodes_offset),
-                                Some(TUI_PAGE_SIZE),
-                            )?;
-                        self.compute_nodes = self.compute_nodes_all.clone();
-                        self.apply_compute_nodes_sort();
-                        if !self.compute_nodes.is_empty() {
-                            self.compute_nodes_state.select(Some(0));
-                        }
+                        self.reload_compute_nodes_page()?;
                     }
                     DetailViewType::ScheduledNodes => {
-                        self.scheduled_nodes_all =
-                            self.client.list_scheduled_compute_nodes(workflow_id)?;
-                        self.scheduled_nodes = self.scheduled_nodes_all.clone();
-                        if !self.scheduled_nodes.is_empty() {
-                            self.scheduled_nodes_state.select(Some(0));
-                        }
+                        self.reload_scheduled_nodes_page()?;
                     }
                     DetailViewType::SlurmStats => {
-                        self.slurm_stats_all = self.client.list_slurm_stats(workflow_id)?;
-                        self.slurm_stats = self.slurm_stats_all.clone();
-                        if !self.slurm_stats.is_empty() {
-                            self.slurm_stats_state.select(Some(0));
-                        }
+                        self.reload_slurm_stats_page()?;
                         // Load results for CPU% computation if not already loaded
-                        // for this workflow
+                        // for this workflow (independent of the Job ID filter).
                         if self.results_workflow_id != Some(workflow_id)
-                            && let Ok((r, _)) = self.client.list_results(workflow_id, None, None)
+                            && let Ok((r, _)) =
+                                self.client
+                                    .list_results(workflow_id, None, None, None, None)
                         {
                             self.results_all = r;
                             self.results = self.results_all.clone();
@@ -1419,9 +1397,9 @@ impl App {
             return Ok(());
         }
 
-        // load_detail_data clears self.filter and reloads the full, unfiltered
-        // lists, so capture the active filter and table positions to restore
-        // afterward.
+        // Capture table positions to restore after the refetch. The active
+        // filter is preserved across load_detail_data (the selected workflow is
+        // unchanged), so the per-tab reloads re-apply it server-side.
         let jobs_sel = self.jobs_state.selected();
         let running_sel = self.running_state.selected();
         let files_sel = self.files_state.selected();
@@ -1430,31 +1408,11 @@ impl App {
         let compute_nodes_sel = self.compute_nodes_state.selected();
         let scheduled_nodes_sel = self.scheduled_nodes_state.selected();
         let slurm_stats_sel = self.slurm_stats_state.selected();
-        let prev_filter = self.filter.clone();
-        let filter_target = self.filter_target;
 
         // Invalidate caches keyed by workflow id so load_detail_data refetches.
         self.jobs_workflow_id = None;
         self.results_workflow_id = None;
         self.load_detail_data()?;
-
-        // Re-narrow freshly-loaded detail data and restore the filter flag that
-        // load_detail_data cleared. A Workflows-target filter is already
-        // re-applied (with its selection preserved) by refresh_workflows, so
-        // only its Details counterpart needs re-narrowing here.
-        if let Some(filter) = prev_filter {
-            if filter_target == FilterTarget::Details {
-                if self.detail_view == DetailViewType::Jobs {
-                    // Jobs filters server-side; re-fetch the current page with
-                    // the filter rather than narrowing the loaded page.
-                    self.filter = Some(filter.clone());
-                    self.reload_jobs_page()?;
-                } else {
-                    self.filter_active_view(FilterTarget::Details, &filter.column, &filter.value);
-                }
-            }
-            self.filter = Some(filter);
-        }
 
         restore_selection(&mut self.jobs_state, jobs_sel, self.jobs.len());
         restore_selection(&mut self.running_state, running_sel, self.running.len());
@@ -1967,15 +1925,15 @@ impl App {
                 }
                 DetailViewType::Results => {
                     self.results_offset += TUI_PAGE_SIZE;
-                    self.reload_detail_page_preserving_filter()?;
+                    self.reload_detail_page()?;
                 }
                 DetailViewType::ComputeNodes => {
                     self.compute_nodes_offset += TUI_PAGE_SIZE;
-                    self.reload_detail_page_preserving_filter()?;
+                    self.reload_detail_page()?;
                 }
                 DetailViewType::UserData => {
                     self.user_data_offset += TUI_PAGE_SIZE;
-                    self.reload_detail_page_preserving_filter()?;
+                    self.reload_detail_page()?;
                 }
                 _ => {}
             },
@@ -2007,15 +1965,15 @@ impl App {
                 }
                 DetailViewType::Results if self.results_offset > 0 => {
                     self.results_offset = (self.results_offset - TUI_PAGE_SIZE).max(0);
-                    self.reload_detail_page_preserving_filter()?;
+                    self.reload_detail_page()?;
                 }
                 DetailViewType::ComputeNodes if self.compute_nodes_offset > 0 => {
                     self.compute_nodes_offset = (self.compute_nodes_offset - TUI_PAGE_SIZE).max(0);
-                    self.reload_detail_page_preserving_filter()?;
+                    self.reload_detail_page()?;
                 }
                 DetailViewType::UserData if self.user_data_offset > 0 => {
                     self.user_data_offset = (self.user_data_offset - TUI_PAGE_SIZE).max(0);
-                    self.reload_detail_page_preserving_filter()?;
+                    self.reload_detail_page()?;
                 }
                 _ => {}
             },
@@ -2030,24 +1988,6 @@ impl App {
         } else {
             self.workflows_state.select(Some(0));
         }
-    }
-
-    /// Reload the active detail view's current page, preserving any active
-    /// client-side Details filter. `load_detail_data` clears `self.filter`, so
-    /// we capture it and re-narrow the freshly loaded page afterward. Used by
-    /// paging on the client-side-filtered views (Results, Compute Nodes); the
-    /// Jobs pane filters server-side via `reload_jobs_page` instead.
-    fn reload_detail_page_preserving_filter(&mut self) -> Result<()> {
-        let saved = self.filter.clone();
-        let saved_target = self.filter_target;
-        self.load_detail_data()?;
-        if saved_target == FilterTarget::Details
-            && let Some(f) = saved
-        {
-            self.filter = Some(f.clone());
-            self.filter_active_view(FilterTarget::Details, &f.column, &f.value);
-        }
-        Ok(())
     }
 
     /// Resolve the Jobs-pane filter (`self.filter`) into server-side query
@@ -2140,6 +2080,315 @@ impl App {
             self.jobs_state.select(None);
         } else {
             self.jobs_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    /// Returns the active Details-pane filter as `(column, value)` if one is
+    /// set, else `None`. Helper for the per-tab server-side reloads.
+    fn active_details_filter(&self) -> Option<(String, String)> {
+        if self.filter_target != FilterTarget::Details {
+            return None;
+        }
+        self.filter
+            .as_ref()
+            .map(|f| (f.column.clone(), f.value.clone()))
+    }
+
+    /// Reload the active detail tab's page from the server, applying the active
+    /// filter server-side where the column maps to a query parameter and
+    /// narrowing client-side only for columns the server cannot filter.
+    pub fn reload_detail_page(&mut self) -> Result<()> {
+        match self.detail_view {
+            DetailViewType::Jobs => self.reload_jobs_page(),
+            DetailViewType::Files => self.reload_files_page(),
+            DetailViewType::Results => self.reload_results_page(),
+            DetailViewType::ComputeNodes => self.reload_compute_nodes_page(),
+            DetailViewType::UserData => self.reload_user_data_page(),
+            DetailViewType::ScheduledNodes => self.reload_scheduled_nodes_page(),
+            DetailViewType::SlurmStats => self.reload_slurm_stats_page(),
+            // Summary, Events (SSE), and DAG have no server-filterable table.
+            _ => Ok(()),
+        }
+    }
+
+    /// Files tab: Name (exact) and Path (substring) filter server-side.
+    pub fn reload_files_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let (mut name, mut path) = (None, None);
+        if let Some((col, val)) = self.active_details_filter() {
+            match col.as_str() {
+                "Name" => name = Some(val),
+                "Path" => path = Some(val),
+                _ => {}
+            }
+        }
+        self.files_all = self
+            .client
+            .list_files(workflow_id, name.as_deref(), path.as_deref())?;
+        self.files = self.files_all.clone();
+        if self.files.is_empty() {
+            self.files_state.select(None);
+        } else {
+            self.files_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    /// Results tab: Status (exact, resolved from text) and Return Code (exact
+    /// integer) filter server-side.
+    pub fn reload_results_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let (mut status, mut return_code) = (None, None);
+        if let Some((col, val)) = self.active_details_filter() {
+            match col.as_str() {
+                "Status" => match resolve_job_status_filter(&val) {
+                    StatusFilterResolution::Matched(s) => status = Some(s),
+                    StatusFilterResolution::Unknown => {
+                        return self.empty_results_with_status(format!(
+                            "No job status matches \"{}\"",
+                            val
+                        ));
+                    }
+                    StatusFilterResolution::Ambiguous(names) => {
+                        return self.empty_results_with_status(format!(
+                            "\"{}\" is ambiguous; matches {}. Type a full status name.",
+                            val,
+                            names.join(", ")
+                        ));
+                    }
+                },
+                "Return Code" => match val.trim().parse::<i64>() {
+                    Ok(rc) => return_code = Some(rc),
+                    Err(_) => {
+                        return self.empty_results_with_status(format!(
+                            "Return code must be an integer, got \"{}\"",
+                            val
+                        ));
+                    }
+                },
+                _ => {}
+            }
+        }
+        // A full page now holds at most one (possibly filtered) page; invalidate
+        // the full-list cache so the Slurm Stats tab refetches the complete set.
+        self.results_workflow_id = None;
+        (self.results_all, self.results_has_more) = self.client.list_results(
+            workflow_id,
+            Some(self.results_offset),
+            Some(TUI_PAGE_SIZE),
+            return_code,
+            status,
+        )?;
+        self.results = self.results_all.clone();
+        self.apply_results_sort();
+        if self.results.is_empty() {
+            self.results_state.select(None);
+        } else {
+            self.results_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    /// Show zero results and surface `message` (used when a Results filter value
+    /// can't be resolved to a server query, e.g. an unknown status).
+    fn empty_results_with_status(&mut self, message: String) -> Result<()> {
+        self.results_workflow_id = None;
+        self.results_all = Vec::new();
+        self.results = Vec::new();
+        self.results_has_more = false;
+        self.results_state.select(None);
+        self.set_status(StatusMessage::error(&message));
+        Ok(())
+    }
+
+    /// Compute Nodes tab: Hostname (substring) and Active (yes/no) filter
+    /// server-side.
+    pub fn reload_compute_nodes_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let (mut hostname, mut is_active) = (None, None);
+        if let Some((col, val)) = self.active_details_filter() {
+            match col.as_str() {
+                "Hostname" => hostname = Some(val),
+                "Active" => {
+                    // Map the typed value to a bool; an unrecognized value
+                    // shows nothing rather than silently ignoring the filter.
+                    match val.trim().to_lowercase().chars().next() {
+                        Some('y') | Some('t') | Some('1') => is_active = Some(true),
+                        Some('n') | Some('f') | Some('0') => is_active = Some(false),
+                        _ => {
+                            self.compute_nodes_all = Vec::new();
+                            self.compute_nodes = Vec::new();
+                            self.compute_nodes_has_more = false;
+                            self.compute_nodes_state.select(None);
+                            self.set_status(StatusMessage::error(&format!(
+                                "Active filter must be yes/no, got \"{}\"",
+                                val
+                            )));
+                            return Ok(());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        (self.compute_nodes_all, self.compute_nodes_has_more) = self.client.list_compute_nodes(
+            workflow_id,
+            Some(self.compute_nodes_offset),
+            Some(TUI_PAGE_SIZE),
+            hostname.as_deref(),
+            is_active,
+        )?;
+        self.compute_nodes = self.compute_nodes_all.clone();
+        self.apply_compute_nodes_sort();
+        if self.compute_nodes.is_empty() {
+            self.compute_nodes_state.select(None);
+        } else {
+            self.compute_nodes_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    /// User Data tab: Name (substring) filters server-side; Data (JSON content)
+    /// has no server parameter and narrows the loaded page client-side.
+    pub fn reload_user_data_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let filter = self.active_details_filter();
+        let name = match filter.as_ref() {
+            Some((col, val)) if col == "Name" => Some(val.clone()),
+            _ => None,
+        };
+        (self.user_data_all, self.user_data_has_more) = self.client.list_user_data(
+            workflow_id,
+            Some(self.user_data_offset),
+            Some(TUI_PAGE_SIZE),
+            name.as_deref(),
+        )?;
+        // "Data" is client-only: narrow the loaded page by JSON content.
+        self.user_data = match filter.as_ref() {
+            Some((col, val)) if col == "Data" => {
+                let needle = val.to_lowercase();
+                self.user_data_all
+                    .iter()
+                    .filter(|ud| {
+                        ud.data
+                            .as_ref()
+                            .map(|v| v.to_string().to_lowercase().contains(&needle))
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect()
+            }
+            _ => self.user_data_all.clone(),
+        };
+        if self.user_data.is_empty() {
+            self.user_data_state.select(None);
+        } else {
+            self.user_data_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    /// Scheduled Nodes tab: Status (exact) filters server-side; Scheduler Type
+    /// has no server parameter and narrows client-side.
+    pub fn reload_scheduled_nodes_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let filter = self.active_details_filter();
+        let status = match filter.as_ref() {
+            Some((col, val)) if col == "Status" => Some(val.clone()),
+            _ => None,
+        };
+        self.scheduled_nodes_all = self
+            .client
+            .list_scheduled_compute_nodes(workflow_id, status.as_deref())?;
+        self.scheduled_nodes = match filter.as_ref() {
+            Some((col, val)) if col == "Scheduler Type" => {
+                let needle = val.to_lowercase();
+                self.scheduled_nodes_all
+                    .iter()
+                    .filter(|n| n.scheduler_type.to_lowercase().contains(&needle))
+                    .cloned()
+                    .collect()
+            }
+            _ => self.scheduled_nodes_all.clone(),
+        };
+        if self.scheduled_nodes.is_empty() {
+            self.scheduled_nodes_state.select(None);
+        } else {
+            self.scheduled_nodes_state.select(Some(0));
+        }
+        Ok(())
+    }
+
+    /// Slurm Stats tab: Job ID (exact integer) filters server-side; Slurm Job
+    /// and Nodes have no server parameter and narrow client-side.
+    pub fn reload_slurm_stats_page(&mut self) -> Result<()> {
+        let Some(workflow_id) = self.selected_workflow_id else {
+            return Ok(());
+        };
+        let filter = self.active_details_filter();
+        let job_id = match filter.as_ref() {
+            Some((col, val)) if col == "Job ID" => match val.trim().parse::<i64>() {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    self.slurm_stats_all = Vec::new();
+                    self.slurm_stats = Vec::new();
+                    self.slurm_stats_state.select(None);
+                    self.set_status(StatusMessage::error(&format!(
+                        "Job ID must be an integer, got \"{}\"",
+                        val
+                    )));
+                    return Ok(());
+                }
+            },
+            _ => None,
+        };
+        self.slurm_stats_all = self.client.list_slurm_stats(workflow_id, job_id)?;
+        self.slurm_stats = match filter.as_ref() {
+            Some((col, val)) if col == "Slurm Job" => {
+                let needle = val.to_lowercase();
+                self.slurm_stats_all
+                    .iter()
+                    .filter(|s| {
+                        s.slurm_job_id
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&needle)
+                    })
+                    .cloned()
+                    .collect()
+            }
+            Some((col, val)) if col == "Nodes" => {
+                let needle = val.to_lowercase();
+                self.slurm_stats_all
+                    .iter()
+                    .filter(|s| {
+                        s.node_list
+                            .as_deref()
+                            .unwrap_or("")
+                            .to_lowercase()
+                            .contains(&needle)
+                    })
+                    .cloned()
+                    .collect()
+            }
+            _ => self.slurm_stats_all.clone(),
+        };
+        if self.slurm_stats.is_empty() {
+            self.slurm_stats_state.select(None);
+        } else {
+            self.slurm_stats_state.select(Some(0));
         }
         Ok(())
     }
@@ -2274,7 +2523,7 @@ impl App {
 
     pub fn get_filter_columns(&self) -> Vec<&str> {
         if self.filter_target == FilterTarget::Workflows {
-            return vec!["Name", "User", "Description"];
+            return vec!["Name", "User", "Description", "Access Group"];
         }
         match self.detail_view {
             DetailViewType::Summary => vec![], // Summary view doesn't support filtering
@@ -2438,27 +2687,20 @@ impl App {
             return;
         }
         let column = columns[self.filter_column_index].to_string();
-        let value = self.filter_input.clone().to_lowercase();
+        // Preserve the typed case: server-side LIKE filters are case-insensitive
+        // anyway, exact matches must keep case (matching the CLI), and the
+        // remaining client-side narrows lowercase at comparison time.
+        let value = self.filter_input.clone();
 
         self.filter = Some(Filter {
             column: column.clone(),
             value: value.clone(),
         });
-        // The Jobs pane filters server-side (across the whole workflow); other
-        // views filter the loaded page client-side.
-        if target == FilterTarget::Details && self.detail_view == DetailViewType::Jobs {
-            self.jobs_offset = 0;
-            if let Err(err) = self.reload_jobs_page() {
-                self.set_status(StatusMessage::error(&format!(
-                    "Failed to filter jobs: {}",
-                    err
-                )));
-            }
-        } else if target == FilterTarget::Workflows {
-            // Workflows filtering narrows the loaded page client-side, so
-            // restart from page 1 first; otherwise filtering while on, say,
-            // page 3 would search only that page. refresh_workflows re-applies
-            // the active filter (now set above) to the freshly loaded page.
+        // All filtering is server-side (across the whole workflow/list), except
+        // a few columns with no server query parameter, which the per-tab
+        // reloads narrow on the loaded page. Restart at page 1 so filtering
+        // spans the full list rather than the page we happened to be on.
+        if target == FilterTarget::Workflows {
             self.workflows_offset = 0;
             if let Err(err) = self.refresh_workflows() {
                 self.set_status(StatusMessage::error(&format!(
@@ -2466,10 +2708,29 @@ impl App {
                     err
                 )));
             }
-        } else {
+        } else if self.detail_view == DetailViewType::Events {
+            // Events stream over SSE; filter the accumulated buffer client-side.
             self.filter_active_view(target, &column, &value);
+        } else {
+            self.reset_active_detail_offset();
+            if let Err(err) = self.reload_detail_page() {
+                self.set_status(StatusMessage::error(&format!("Failed to filter: {}", err)));
+            }
         }
         self.focus = return_focus;
+    }
+
+    /// Reset the active detail tab's pagination offset to the first page. Used
+    /// when a filter is applied or cleared so the (re)filtered query starts at
+    /// the top instead of a stale page. No-op for non-paginated tabs.
+    fn reset_active_detail_offset(&mut self) {
+        match self.detail_view {
+            DetailViewType::Jobs => self.jobs_offset = 0,
+            DetailViewType::Results => self.results_offset = 0,
+            DetailViewType::ComputeNodes => self.compute_nodes_offset = 0,
+            DetailViewType::UserData => self.user_data_offset = 0,
+            _ => {}
+        }
     }
 
     /// Narrow the visible rows of the active table (`target` plus the current
@@ -2482,7 +2743,9 @@ impl App {
         // Re-bind as owned so the verbatim match arms below can keep using
         // `column.as_str()` / `&value`.
         let column = column.to_string();
-        let value = value.to_string();
+        // Filter values are stored in the user's typed case; client-side narrows
+        // are case-insensitive, so lowercase here (each arm lowercases the field).
+        let value = value.to_lowercase();
 
         if target == FilterTarget::Workflows {
             self.workflows = filter_workflow_list(&self.workflows_all, &column, &value);
@@ -2688,64 +2951,25 @@ impl App {
             return;
         }
         match self.detail_view {
-            DetailViewType::Jobs => {
-                // Re-fetch an unfiltered first page from the server (the Jobs
-                // filter is server-side, so the loaded page may be a strict
-                // subset that can't be widened client-side).
-                self.jobs_offset = 0;
-                if let Err(err) = self.reload_jobs_page() {
-                    self.set_status(StatusMessage::error(&format!(
-                        "Failed to reload jobs: {}",
-                        err
-                    )));
-                }
-            }
-            DetailViewType::Files => {
-                self.files = self.files_all.clone();
-                if !self.files.is_empty() {
-                    self.files_state.select(Some(0));
-                }
-            }
-            DetailViewType::UserData => {
-                self.user_data = self.user_data_all.clone();
-                if !self.user_data.is_empty() {
-                    self.user_data_state.select(Some(0));
-                }
-            }
+            // Events stream over SSE and filter the in-memory buffer client-side;
+            // clearing just restores the full accumulated list.
             DetailViewType::Events => {
                 self.events = self.events_all.clone();
                 if !self.events.is_empty() {
                     self.events_state.select(Some(0));
                 }
             }
-            DetailViewType::Results => {
-                self.results = self.results_all.clone();
-                self.apply_results_sort();
-                if !self.results.is_empty() {
-                    self.results_state.select(Some(0));
-                }
-            }
-            DetailViewType::ComputeNodes => {
-                self.compute_nodes = self.compute_nodes_all.clone();
-                self.apply_compute_nodes_sort();
-                if !self.compute_nodes.is_empty() {
-                    self.compute_nodes_state.select(Some(0));
-                }
-            }
-            DetailViewType::ScheduledNodes => {
-                self.scheduled_nodes = self.scheduled_nodes_all.clone();
-                if !self.scheduled_nodes.is_empty() {
-                    self.scheduled_nodes_state.select(Some(0));
-                }
-            }
-            DetailViewType::SlurmStats => {
-                self.slurm_stats = self.slurm_stats_all.clone();
-                if !self.slurm_stats.is_empty() {
-                    self.slurm_stats_state.select(Some(0));
-                }
-            }
             DetailViewType::Summary | DetailViewType::Dag | DetailViewType::Running => {
                 // Summary, DAG, and Running views don't support filtering
+            }
+            // Every other tab filters server-side, so re-fetch an unfiltered
+            // first page (the loaded page may be a strict subset that can't be
+            // widened client-side).
+            _ => {
+                self.reset_active_detail_offset();
+                if let Err(err) = self.reload_detail_page() {
+                    self.set_status(StatusMessage::error(&format!("Failed to reload: {}", err)));
+                }
             }
         }
     }
@@ -2937,7 +3161,10 @@ impl App {
                     self.filter = None;
                 }
                 // Also refresh results
-                if let Ok((results, _)) = self.client.list_results(workflow_id, None, None) {
+                if let Ok((results, _)) =
+                    self.client
+                        .list_results(workflow_id, None, None, None, None)
+                {
                     self.results_all = results.clone();
                     self.results = results;
                     self.apply_results_sort();
@@ -3899,7 +4126,9 @@ impl App {
     fn load_job_logs(&self, viewer: &mut LogViewer) -> Result<()> {
         // Try to find log files based on job results
         if let Some(workflow_id) = self.selected_workflow_id {
-            let (results, _) = self.client.list_results(workflow_id, None, None)?;
+            let (results, _) = self
+                .client
+                .list_results(workflow_id, None, None, None, None)?;
 
             // Find the most recent result for this job
             // Sort by (run_id, attempt_id) to get the latest attempt of the latest run
@@ -4683,6 +4912,13 @@ pub fn filter_workflow_list(
                 .description
                 .as_deref()
                 .map(|d| d.to_lowercase().contains(value))
+                .unwrap_or(false),
+            // Matches if any of the workflow's access group names contains the
+            // value. access_groups is populated by the server on list reads.
+            "Access Group" => w
+                .access_groups
+                .as_ref()
+                .map(|groups| groups.iter().any(|g| g.to_lowercase().contains(value)))
                 .unwrap_or(false),
             _ => false,
         })

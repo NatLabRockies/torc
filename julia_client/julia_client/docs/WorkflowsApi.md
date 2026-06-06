@@ -721,8 +721,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_workflows**
-> list_workflows(_api::WorkflowsApi; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, _mediaType=nothing) -> ListWorkflowsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_workflows(_api::WorkflowsApi, response_stream::Channel; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, _mediaType=nothing) -> Channel{ ListWorkflowsResponse }, OpenAPI.Clients.ApiResponse
+> list_workflows(_api::WorkflowsApi; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, access_group=nothing, _mediaType=nothing) -> ListWorkflowsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_workflows(_api::WorkflowsApi, response_stream::Channel; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, access_group=nothing, _mediaType=nothing) -> Channel{ ListWorkflowsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -744,6 +744,7 @@ Name | Type | Description  | Notes
  **user** | **String** |  | [default to nothing]
  **description** | **String** |  | [default to nothing]
  **is_archived** | **Bool** |  | [default to nothing]
+ **access_group** | **String** | Filter to workflows shared with this access group (by group name). | [default to nothing]
 
 ### Return type
 

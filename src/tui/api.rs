@@ -71,43 +71,31 @@ impl TorcClient {
         self.config.base_path = base_url.to_string();
     }
 
-    pub fn list_workflows(
+    /// List workflows with server-side filters. `description` is a substring
+    /// match; `name`, `user`, and `access_group` are exact. Used by the TUI
+    /// Workflows pane so filtering spans the whole list, not just the loaded
+    /// page.
+    #[allow(clippy::too_many_arguments)]
+    pub fn list_workflows_filtered(
         &self,
         offset: Option<i64>,
         limit: Option<i64>,
+        name: Option<&str>,
+        user: Option<&str>,
+        description: Option<&str>,
+        access_group: Option<&str>,
     ) -> Result<(Vec<WorkflowModel>, bool)> {
         let response = apis::workflows_api::list_workflows(
             &self.config,
-            offset, // offset
-            limit,  // limit
-            None,   // sort_by
-            None,   // reverse_sort
-            None,   // name
-            None,   // user
-            None,   // description
-            None,   // is_archived
-        )
-        .context("Failed to list workflows")?;
-
-        Ok((response.items, response.has_more))
-    }
-
-    pub fn list_workflows_for_user(
-        &self,
-        user: &str,
-        offset: Option<i64>,
-        limit: Option<i64>,
-    ) -> Result<(Vec<WorkflowModel>, bool)> {
-        let response = apis::workflows_api::list_workflows(
-            &self.config,
-            offset,     // offset
-            limit,      // limit
-            None,       // sort_by
-            None,       // reverse_sort
-            None,       // name
-            Some(user), // user filter
-            None,       // description
-            None,       // is_archived
+            offset,       // offset
+            limit,        // limit
+            None,         // sort_by
+            None,         // reverse_sort
+            name,         // name
+            user,         // user
+            description,  // description
+            None,         // is_archived
+            access_group, // access_group
         )
         .context("Failed to list workflows")?;
 
@@ -171,7 +159,13 @@ impl TorcClient {
         Ok((response.items, response.has_more))
     }
 
-    pub fn list_files(&self, workflow_id: i64) -> Result<Vec<FileModel>> {
+    /// List files with optional server-side Name/Path substring filters.
+    pub fn list_files(
+        &self,
+        workflow_id: i64,
+        name: Option<&str>,
+        path: Option<&str>,
+    ) -> Result<Vec<FileModel>> {
         let response = apis::files_api::list_files(
             &self.config,
             workflow_id,
@@ -180,8 +174,8 @@ impl TorcClient {
             None, // limit
             None, // sort_by
             None, // reverse_sort
-            None, // name
-            None, // path
+            name, // name
+            path, // path
             None, // is_output
         )
         .context("Failed to list files")?;
@@ -196,20 +190,22 @@ impl TorcClient {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        return_code: Option<i64>,
+        status: Option<JobStatus>,
     ) -> Result<(Vec<ResultModel>, bool)> {
         let response = apis::results_api::list_results(
             &self.config,
             workflow_id,
-            None,   // job_id
-            None,   // run_id
-            None,   // return_code
-            None,   // status
-            None,   // compute_node_id
-            offset, // offset
-            limit,  // limit
-            None,   // sort_by
-            None,   // reverse_sort
-            None,   // all_runs
+            None,        // job_id
+            None,        // run_id
+            return_code, // return_code
+            status,      // status
+            None,        // compute_node_id
+            offset,      // offset
+            limit,       // limit
+            None,        // sort_by
+            None,        // reverse_sort
+            None,        // all_runs
         )
         .context("Failed to list results")?;
 
@@ -238,6 +234,7 @@ impl TorcClient {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        name: Option<&str>,
     ) -> Result<(Vec<UserDataModel>, bool)> {
         let response = apis::user_data_api::list_user_data(
             &self.config,
@@ -248,7 +245,7 @@ impl TorcClient {
             limit,  // limit
             None,   // sort_by
             None,   // reverse_sort
-            None,   // name
+            name,   // name
             None,   // is_ephemeral
         )
         .context("Failed to list user data")?;
@@ -270,35 +267,42 @@ impl TorcClient {
         Ok(response.items)
     }
 
-    pub fn list_slurm_stats(&self, workflow_id: i64) -> Result<Vec<SlurmStatsModel>> {
+    /// List Slurm stats with an optional server-side Job ID filter.
+    pub fn list_slurm_stats(
+        &self,
+        workflow_id: i64,
+        job_id: Option<i64>,
+    ) -> Result<Vec<SlurmStatsModel>> {
         let response = apis::slurm_stats_api::list_slurm_stats(
             &self.config,
             workflow_id,
-            None, // job_id
-            None, // run_id
-            None, // attempt_id
-            None, // offset
-            None, // limit
+            job_id, // job_id
+            None,   // run_id
+            None,   // attempt_id
+            None,   // offset
+            None,   // limit
         )
         .context("Failed to list Slurm stats")?;
 
         Ok(response.items)
     }
 
+    /// List scheduled compute nodes with an optional server-side Status filter.
     pub fn list_scheduled_compute_nodes(
         &self,
         workflow_id: i64,
+        status: Option<&str>,
     ) -> Result<Vec<ScheduledComputeNodesModel>> {
         let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
             &self.config,
             workflow_id,
-            None, // offset
-            None, // limit
-            None, // sort_by
-            None, // reverse_sort
-            None, // scheduler_id
-            None, // scheduler_config_id
-            None, // status
+            None,   // offset
+            None,   // limit
+            None,   // sort_by
+            None,   // reverse_sort
+            None,   // scheduler_id
+            None,   // scheduler_config_id
+            status, // status
         )
         .context("Failed to list scheduled compute nodes")?;
 
@@ -310,17 +314,19 @@ impl TorcClient {
         workflow_id: i64,
         offset: Option<i64>,
         limit: Option<i64>,
+        hostname: Option<&str>,
+        is_active: Option<bool>,
     ) -> Result<(Vec<ComputeNodeModel>, bool)> {
         let response = apis::compute_nodes_api::list_compute_nodes(
             &self.config,
             workflow_id,
-            offset, // offset
-            limit,  // limit
-            None,   // sort_by
-            None,   // reverse_sort
-            None,   // hostname
-            None,   // is_active
-            None,   // scheduled_compute_node_id
+            offset,    // offset
+            limit,     // limit
+            None,      // sort_by
+            None,      // reverse_sort
+            hostname,  // hostname
+            is_active, // is_active
+            None,      // scheduled_compute_node_id
         )
         .context("Failed to list compute nodes")?;
 
