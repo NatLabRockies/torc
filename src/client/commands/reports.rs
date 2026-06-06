@@ -590,15 +590,17 @@ pub fn generate_results_report(
     workflow_id: Option<i64>,
     output_dir: &Path,
     all_runs: bool,
+    failed: bool,
     job_ids: &[i64],
 ) {
-    let report = match build_results_report(config, workflow_id, output_dir, all_runs, job_ids) {
-        Ok(report) => report,
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    };
+    let report =
+        match build_results_report(config, workflow_id, output_dir, all_runs, failed, job_ids) {
+            Ok(report) => report,
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        };
 
     if report.total_results == 0 {
         if job_ids.is_empty() {
@@ -620,6 +622,7 @@ pub fn build_results_report(
     workflow_id: Option<i64>,
     output_dir: &Path,
     all_runs: bool,
+    failed: bool,
     job_ids: &[i64],
 ) -> Result<ResultsReport, String> {
     if !output_dir.exists() {
@@ -663,6 +666,14 @@ pub fn build_results_report(
             .into_iter()
             .filter(|r| job_ids.contains(&r.job_id))
             .collect()
+    };
+
+    // Respect --failed: keep only non-zero return codes (mirrors the non
+    // --include-logs path, which retains results where return_code != 0).
+    let results: Vec<_> = if failed {
+        results.into_iter().filter(|r| r.return_code != 0).collect()
+    } else {
+        results
     };
 
     let mut result_records: Vec<JobResultRecord> = Vec::new();

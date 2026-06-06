@@ -157,6 +157,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                     Some(selected_workflow_id),
                     output_dir,
                     *all_runs,
+                    *failed,
                     &job_ids,
                 );
                 return;
