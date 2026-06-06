@@ -1270,12 +1270,19 @@ impl App {
         {
             // When the selected workflow changes, restart every detail list at
             // its first page so we don't carry a stale offset into a workflow
-            // that may have far fewer records, and clear any active filter.
-            // Refreshing the SAME workflow preserves the filter so server-side
-            // filters survive a reload (the per-tab reloads re-apply it).
+            // that may have far fewer records, and clear any active Details
+            // filter (it is scoped to the previous workflow's tabs). A
+            // Workflows filter targets the list itself, not the detail pane, so
+            // it must survive switching the selected workflow -- otherwise the
+            // indicator clears while the list stays server-narrowed until the
+            // next refresh. Refreshing the SAME workflow preserves the filter so
+            // server-side filters survive a reload (the per-tab reloads re-apply
+            // it).
             if self.selected_workflow_id != workflow_id_opt {
                 self.reset_detail_pagination();
-                self.filter = None;
+                if self.filter_target == FilterTarget::Details {
+                    self.filter = None;
+                }
             }
             self.selected_workflow_id = workflow_id_opt;
             if let Some(workflow_id) = workflow_id_opt {
@@ -1309,9 +1316,12 @@ impl App {
                         });
                     }
                     DetailViewType::Jobs => {
-                        // self.filter was just cleared above, so this loads an
-                        // unfiltered first page. Server-side filtering is driven
-                        // through reload_jobs_page from apply_filter/paging.
+                        // Any Details filter was just cleared above, so on a
+                        // workflow switch this loads an unfiltered first page. A
+                        // surviving Workflows filter does not apply here:
+                        // reload_jobs_page/jobs_server_filter early-return unless
+                        // filter_target is Details. Server-side Jobs filtering is
+                        // driven through reload_jobs_page from apply_filter/paging.
                         self.reload_jobs_page()?;
                     }
                     DetailViewType::Running => {
