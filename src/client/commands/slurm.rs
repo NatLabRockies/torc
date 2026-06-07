@@ -1904,6 +1904,7 @@ pub fn create_node_resources(
 ///
 /// # Arguments
 /// * `resources` - ComputeNodesResources
+/// * `end_time` - Allocation end time from Slurm; persisted for walltime diagnostics
 ///
 /// # Returns
 /// A ComputeNodeModel instance populated with Slurm environment data
@@ -1913,6 +1914,7 @@ pub fn create_compute_node(
     resources: &models::ComputeNodesResources,
     hostname: &str,
     scheduler: serde_json::Value,
+    end_time: Option<chrono::DateTime<Utc>>,
 ) -> models::ComputeNodeModel {
     let pid = std::process::id() as i64;
     let mut compute_node = models::ComputeNodeModel::new(
@@ -1928,6 +1930,9 @@ pub fn create_compute_node(
         Some(scheduler),
     );
     compute_node.is_active = Some(true);
+    // Persist the allocation end time so server-side/CLI diagnostics can compute
+    // each active node's remaining walltime without querying Slurm.
+    compute_node.end_time = end_time.map(|t| t.to_rfc3339());
 
     match utils::send_with_retries(
         config,

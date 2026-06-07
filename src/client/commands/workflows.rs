@@ -32,6 +32,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36marchive\x1b[0m             Archive or unarchive workflows
   \x1b[1;36mcorrect-resources\x1b[0m   Correct resource requirements based on usage
   \x1b[1;36mcheck-resources\x1b[0m     Check for resource utilization violations
+  \x1b[1;36mdiagnose\x1b[0m            Diagnose why ready jobs aren't packing onto nodes
 
 \x1b[1;32mImport & Export:\x1b[0m
   \x1b[1;36mexport\x1b[0m           Export a workflow to JSON
@@ -506,6 +507,27 @@ EXAMPLES:
         /// Minimum over-utilization percentage to flag as violation (default: 1.0%)
         #[arg(long, default_value = "1.0")]
         min_over_utilization: f64,
+    },
+    /// Diagnose why ready jobs aren't packing onto running allocations
+    #[command(after_long_help = "\
+Detects the common, hard-to-spot case where ready jobs have free CPU/memory/GPU \
+on running allocations but won't start because their required runtime exceeds the \
+allocation's remaining walltime. Torc refuses to start such jobs (they'd be killed \
+mid-run), so node-packing silently degrades as allocations age.
+
+Runs entirely off persisted server state — no Slurm access or live runner needed.
+
+EXAMPLES:
+    # Diagnose packing for a workflow
+    torc workflows diagnose 123
+
+    # JSON output for scripting
+    torc -f json workflows diagnose 123
+")]
+    Diagnose {
+        /// Workflow ID to diagnose (optional - will prompt if not provided)
+        #[arg()]
+        workflow_id: Option<i64>,
     },
     /// Show the execution plan for a workflow specification or existing workflow
     #[command(
@@ -3233,6 +3255,9 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 *min_over_utilization,
                 format,
             );
+        }
+        WorkflowCommands::Diagnose { workflow_id } => {
+            crate::client::commands::diagnose::diagnose_packing(config, *workflow_id, format);
         }
         WorkflowCommands::ExecutionPlan { spec_or_id } => {
             handle_execution_plan(config, spec_or_id, format);

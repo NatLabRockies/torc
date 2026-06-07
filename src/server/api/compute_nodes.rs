@@ -91,6 +91,7 @@ const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "time_limit",
     "scheduler_config_id",
     "compute_node_type",
+    "end_time",
     "sample_count",
     "peak_cpu_percent",
     "avg_cpu_percent",
@@ -147,7 +148,8 @@ where
                 ,avg_cpu_percent
                 ,peak_memory_bytes
                 ,avg_memory_bytes
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                ,end_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             RETURNING id
             "#,
         )
@@ -170,6 +172,7 @@ where
         .bind(body.avg_cpu_percent)
         .bind(body.peak_memory_bytes)
         .bind(body.avg_memory_bytes)
+        .bind(&body.end_time)
         .fetch_one(self.context.pool.as_ref())
         .await
         {
@@ -241,7 +244,7 @@ where
                    num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id,
                    compute_node_type, scheduler, sample_count,
                    peak_cpu_percent, avg_cpu_percent,
-                   peak_memory_bytes, avg_memory_bytes
+                   peak_memory_bytes, avg_memory_bytes, end_time
             FROM compute_node
             WHERE id = $1
             "#,
@@ -275,6 +278,7 @@ where
             hostname: record.get("hostname"),
             pid: record.get("pid"),
             start_time: record.get("start_time"),
+            end_time: record.get("end_time"),
             duration_seconds,
             is_active: if is_active_val == 1 {
                 Some(true)
@@ -350,6 +354,7 @@ where
                 ,avg_cpu_percent
                 ,peak_memory_bytes
                 ,avg_memory_bytes
+                ,end_time
             FROM compute_node"
             .to_string();
 
@@ -428,6 +433,7 @@ where
                 hostname: record.get("hostname"),
                 pid: record.get("pid"),
                 start_time: record.get("start_time"),
+                end_time: record.get("end_time"),
                 duration_seconds,
                 is_active: if is_active_val == 1 {
                     Some(true)
@@ -556,7 +562,8 @@ where
                 ,avg_cpu_percent = COALESCE($17, avg_cpu_percent)
                 ,peak_memory_bytes = COALESCE($18, peak_memory_bytes)
                 ,avg_memory_bytes = COALESCE($19, avg_memory_bytes)
-            WHERE id = $20
+                ,end_time = COALESCE($20, end_time)
+            WHERE id = $21
             "#,
         )
         .bind(body.workflow_id)
@@ -578,6 +585,7 @@ where
         .bind(body.avg_cpu_percent)
         .bind(body.peak_memory_bytes)
         .bind(body.avg_memory_bytes)
+        .bind(body.end_time)
         .bind(id)
         .execute(self.context.pool.as_ref())
         .await

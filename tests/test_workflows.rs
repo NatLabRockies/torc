@@ -1,13 +1,14 @@
 mod common;
 
 use common::{
-    ServerProcess, create_test_job, create_test_result, create_test_workflow,
-    create_test_workflow_advanced, create_test_workflow_with_description, run_cli_with_json,
-    start_server,
+    ServerProcess, create_test_job, create_test_resource_requirements, create_test_result,
+    create_test_workflow, create_test_workflow_advanced, create_test_workflow_with_description,
+    run_cli_with_json, start_server,
 };
 use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
+use torc::client::apis::configuration::Configuration;
 use torc::models;
 
 #[rstest]
@@ -1581,6 +1582,90 @@ fn test_get_workflow_status_aggregates_server_side(start_server: &ServerProcess)
         (status.total_exec_time_minutes - 10.0).abs() < 1e-6,
         "historical results from prior runs must be excluded; got {}",
         status.total_exec_time_minutes
+    );
+}
+
+/// Register an active Slurm-style allocation that ends `days` from now.
+fn create_active_allocation(config: &Configuration, workflow_id: i64, hostname: &str, days: i64) {
+    let end_time = chrono::Utc::now() + chrono::Duration::days(days);
+    let mut node = models::ComputeNodeModel::new(
+        workflow_id,
+        hostname.to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        8,
+        16.0,
+        0,
+        1,
+        "slurm".to_string(),
+        None,
+    );
+    node.is_active = Some(true);
+    node.end_time = Some(end_time.to_rfc3339());
+    apis::compute_nodes_api::create_compute_node(config, node)
+        .expect("Failed to create active allocation");
+}
+
+#[rstest]
+fn test_get_workflow_status_runtime_blocked_signal(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "runtime_blocked_status");
+    let workflow_id = workflow.id.unwrap();
+
+    // A resource requirement that needs 3 days of runtime.
+    let rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "long_runtime",
+        1,
+        0,
+        1,
+        "1g",
+        "PT72H", // 3 days
+    );
+
+    // A no-dependency job using that requirement; initialize so it becomes ready.
+    let mut job =
+        models::JobModel::new(workflow_id, "long_job".to_string(), "echo long".to_string());
+    job.resource_requirements_id = Some(rr.id.unwrap());
+    apis::jobs_api::create_job(config, job).expect("Failed to create job");
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // No walltime-bounded allocation yet -> nothing is runtime-blocked.
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status");
+    assert_eq!(
+        status.jobs_by_status.ready, 1,
+        "job should be ready after init"
+    );
+    assert_eq!(status.runtime_blocked_ready_jobs, 0);
+    assert!(status.max_allocation_remaining_seconds.is_none());
+
+    // A 2-day allocation cannot run a 3-day job -> blocked.
+    create_active_allocation(config, workflow_id, "slurm-host-1", 2);
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status with short allocation");
+    assert_eq!(
+        status.runtime_blocked_ready_jobs, 1,
+        "the 3-day job should be runtime-blocked by the 2-day allocation"
+    );
+    assert_eq!(status.longest_ready_runtime_seconds, Some(72 * 3600));
+    let remaining = status
+        .max_allocation_remaining_seconds
+        .expect("expected remaining walltime");
+    assert!(
+        (remaining - 2 * 86400).abs() < 600,
+        "remaining should be ~2 days, got {remaining}"
+    );
+
+    // A 5-day allocation can run the 3-day job -> no longer blocked.
+    create_active_allocation(config, workflow_id, "slurm-host-2", 5);
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status with long allocation");
+    assert_eq!(
+        status.runtime_blocked_ready_jobs, 0,
+        "a 5-day allocation can run the 3-day job, so nothing is blocked"
     );
 }
 

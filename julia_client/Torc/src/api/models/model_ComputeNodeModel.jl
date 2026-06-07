@@ -9,6 +9,7 @@
         avg_memory_bytes=nothing,
         compute_node_type=nothing,
         duration_seconds=nothing,
+        end_time=nothing,
         hostname=nothing,
         id=nothing,
         is_active=nothing,
@@ -31,6 +32,7 @@
     - avg_memory_bytes::Int64
     - compute_node_type::String
     - duration_seconds::Float64
+    - end_time::String : Allocation end time (RFC3339), reported by the runner at registration. Used to compute remaining walltime for active nodes.
     - hostname::String
     - id::Int64
     - is_active::Bool
@@ -53,6 +55,7 @@ Base.@kwdef mutable struct ComputeNodeModel <: OpenAPI.APIModel
     avg_memory_bytes::Union{Nothing, Int64} = nothing
     compute_node_type::Union{Nothing, String} = nothing
     duration_seconds::Union{Nothing, Float64} = nothing
+    end_time::Union{Nothing, String} = nothing
     hostname::Union{Nothing, String} = nothing
     id::Union{Nothing, Int64} = nothing
     is_active::Union{Nothing, Bool} = nothing
@@ -70,14 +73,14 @@ Base.@kwdef mutable struct ComputeNodeModel <: OpenAPI.APIModel
     time_limit::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function ComputeNodeModel(avg_cpu_percent, avg_memory_bytes, compute_node_type, duration_seconds, hostname, id, is_active, memory_gb, num_cpus, num_gpus, num_nodes, peak_cpu_percent, peak_memory_bytes, pid, sample_count, scheduler, scheduler_config_id, start_time, time_limit, workflow_id, )
-        o = new(avg_cpu_percent, avg_memory_bytes, compute_node_type, duration_seconds, hostname, id, is_active, memory_gb, num_cpus, num_gpus, num_nodes, peak_cpu_percent, peak_memory_bytes, pid, sample_count, scheduler, scheduler_config_id, start_time, time_limit, workflow_id, )
+    function ComputeNodeModel(avg_cpu_percent, avg_memory_bytes, compute_node_type, duration_seconds, end_time, hostname, id, is_active, memory_gb, num_cpus, num_gpus, num_nodes, peak_cpu_percent, peak_memory_bytes, pid, sample_count, scheduler, scheduler_config_id, start_time, time_limit, workflow_id, )
+        o = new(avg_cpu_percent, avg_memory_bytes, compute_node_type, duration_seconds, end_time, hostname, id, is_active, memory_gb, num_cpus, num_gpus, num_nodes, peak_cpu_percent, peak_memory_bytes, pid, sample_count, scheduler, scheduler_config_id, start_time, time_limit, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ComputeNodeModel
 
-const _property_types_ComputeNodeModel = Dict{Symbol,String}(Symbol("avg_cpu_percent")=>"Float64", Symbol("avg_memory_bytes")=>"Int64", Symbol("compute_node_type")=>"String", Symbol("duration_seconds")=>"Float64", Symbol("hostname")=>"String", Symbol("id")=>"Int64", Symbol("is_active")=>"Bool", Symbol("memory_gb")=>"Float64", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("peak_cpu_percent")=>"Float64", Symbol("peak_memory_bytes")=>"Int64", Symbol("pid")=>"Int64", Symbol("sample_count")=>"Int64", Symbol("scheduler")=>"Any", Symbol("scheduler_config_id")=>"Int64", Symbol("start_time")=>"String", Symbol("time_limit")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_ComputeNodeModel = Dict{Symbol,String}(Symbol("avg_cpu_percent")=>"Float64", Symbol("avg_memory_bytes")=>"Int64", Symbol("compute_node_type")=>"String", Symbol("duration_seconds")=>"Float64", Symbol("end_time")=>"String", Symbol("hostname")=>"String", Symbol("id")=>"Int64", Symbol("is_active")=>"Bool", Symbol("memory_gb")=>"Float64", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("peak_cpu_percent")=>"Float64", Symbol("peak_memory_bytes")=>"Int64", Symbol("pid")=>"Int64", Symbol("sample_count")=>"Int64", Symbol("scheduler")=>"Any", Symbol("scheduler_config_id")=>"Int64", Symbol("start_time")=>"String", Symbol("time_limit")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ComputeNodeModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ComputeNodeModel[name]))}
 
 function OpenAPI.check_required(o::ComputeNodeModel)
@@ -98,6 +101,7 @@ function OpenAPI.validate_properties(o::ComputeNodeModel)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("avg_memory_bytes"), o.avg_memory_bytes)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("compute_node_type"), o.compute_node_type)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("duration_seconds"), o.duration_seconds)
+    OpenAPI.validate_property(ComputeNodeModel, Symbol("end_time"), o.end_time)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("hostname"), o.hostname)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("id"), o.id)
     OpenAPI.validate_property(ComputeNodeModel, Symbol("is_active"), o.is_active)
@@ -130,6 +134,7 @@ function OpenAPI.validate_property(::Type{ ComputeNodeModel }, name::Symbol, val
     if name === Symbol("duration_seconds")
         OpenAPI.validate_param(name, "ComputeNodeModel", :format, val, "double")
     end
+
 
 
     if name === Symbol("id")

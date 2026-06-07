@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from torc.openapi_client.models.job_status_counts import JobStatusCounts
 from typing import Optional, Set
@@ -32,14 +32,17 @@ class WorkflowStatusResponse(BaseModel):
     is_canceled: StrictBool
     is_complete: StrictBool
     jobs_by_status: JobStatusCounts
+    longest_ready_runtime_seconds: Optional[StrictInt] = Field(default=None, description="Longest required runtime (seconds) among ready jobs. Only populated when some ready jobs are runtime-blocked.")
+    max_allocation_remaining_seconds: Optional[StrictInt] = Field(default=None, description="Greatest remaining walltime (seconds) across active walltime-bounded allocations. None when no active allocation reports an end time.")
     pending_scheduled_nodes: StrictInt
+    runtime_blocked_ready_jobs: StrictInt = Field(description="Ready jobs whose required runtime exceeds the remaining walltime of every active allocation, so they cannot start until a fresh allocation appears. 0 when there are no walltime-bounded allocations. See `torc workflows diagnose`.")
     total_exec_time_minutes: Union[StrictFloat, StrictInt]
     total_jobs: StrictInt
     walltime_seconds: Optional[Union[StrictFloat, StrictInt]] = None
     workflow_id: StrictInt
     workflow_name: StrictStr
     workflow_user: StrictStr
-    __properties: ClassVar[List[str]] = ["active_compute_nodes", "active_scheduled_nodes", "is_canceled", "is_complete", "jobs_by_status", "pending_scheduled_nodes", "total_exec_time_minutes", "total_jobs", "walltime_seconds", "workflow_id", "workflow_name", "workflow_user"]
+    __properties: ClassVar[List[str]] = ["active_compute_nodes", "active_scheduled_nodes", "is_canceled", "is_complete", "jobs_by_status", "longest_ready_runtime_seconds", "max_allocation_remaining_seconds", "pending_scheduled_nodes", "runtime_blocked_ready_jobs", "total_exec_time_minutes", "total_jobs", "walltime_seconds", "workflow_id", "workflow_name", "workflow_user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,6 +86,16 @@ class WorkflowStatusResponse(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of jobs_by_status
         if self.jobs_by_status:
             _dict['jobs_by_status'] = self.jobs_by_status.to_dict()
+        # set to None if longest_ready_runtime_seconds (nullable) is None
+        # and model_fields_set contains the field
+        if self.longest_ready_runtime_seconds is None and "longest_ready_runtime_seconds" in self.model_fields_set:
+            _dict['longest_ready_runtime_seconds'] = None
+
+        # set to None if max_allocation_remaining_seconds (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_allocation_remaining_seconds is None and "max_allocation_remaining_seconds" in self.model_fields_set:
+            _dict['max_allocation_remaining_seconds'] = None
+
         # set to None if walltime_seconds (nullable) is None
         # and model_fields_set contains the field
         if self.walltime_seconds is None and "walltime_seconds" in self.model_fields_set:
@@ -105,7 +118,10 @@ class WorkflowStatusResponse(BaseModel):
             "is_canceled": obj.get("is_canceled"),
             "is_complete": obj.get("is_complete"),
             "jobs_by_status": JobStatusCounts.from_dict(obj["jobs_by_status"]) if obj.get("jobs_by_status") is not None else None,
+            "longest_ready_runtime_seconds": obj.get("longest_ready_runtime_seconds"),
+            "max_allocation_remaining_seconds": obj.get("max_allocation_remaining_seconds"),
             "pending_scheduled_nodes": obj.get("pending_scheduled_nodes"),
+            "runtime_blocked_ready_jobs": obj.get("runtime_blocked_ready_jobs"),
             "total_exec_time_minutes": obj.get("total_exec_time_minutes"),
             "total_jobs": obj.get("total_jobs"),
             "walltime_seconds": obj.get("walltime_seconds"),

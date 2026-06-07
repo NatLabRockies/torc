@@ -931,6 +931,33 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
         } else if completed_count == total_jobs {
             println!("✓ All jobs completed successfully!");
         }
+
+        // Runtime-blocked packing tripwire. This is a cheap, server-computed
+        // signal (no extra round trip); the full breakdown lives in
+        // `torc workflows diagnose`.
+        let runtime_blocked = report["runtime_blocked_ready_jobs"].as_u64().unwrap_or(0);
+        if runtime_blocked > 0 {
+            println!();
+            print!(
+                "⚠ {} ready job(s) runtime-blocked (need more walltime than any active allocation has left)",
+                runtime_blocked
+            );
+            if let (Some(longest), Some(remaining)) = (
+                report["longest_ready_runtime_seconds"].as_f64(),
+                report["max_allocation_remaining_seconds"].as_f64(),
+            ) {
+                print!(
+                    ": longest job {} vs {} remaining",
+                    format_duration(longest),
+                    format_duration(remaining)
+                );
+            }
+            println!();
+            println!(
+                "  Run 'torc workflows diagnose {}' for details.",
+                workflow_id
+            );
+        }
     }
 }
 
@@ -983,11 +1010,18 @@ pub fn build_workflow_summary_report(
         "active_scheduled_nodes": status.active_scheduled_nodes,
         "is_complete": status.is_complete,
         "is_canceled": status.is_canceled,
+        "runtime_blocked_ready_jobs": status.runtime_blocked_ready_jobs,
     });
 
     if let Some(walltime) = status.walltime_seconds {
         report["walltime_seconds"] = serde_json::json!(walltime);
         report["walltime_formatted"] = serde_json::json!(format_duration(walltime));
+    }
+    if let Some(longest) = status.longest_ready_runtime_seconds {
+        report["longest_ready_runtime_seconds"] = serde_json::json!(longest);
+    }
+    if let Some(max_rem) = status.max_allocation_remaining_seconds {
+        report["max_allocation_remaining_seconds"] = serde_json::json!(max_rem);
     }
 
     Ok(report)

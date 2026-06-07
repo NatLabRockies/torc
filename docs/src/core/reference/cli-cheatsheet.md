@@ -58,6 +58,7 @@
 | ------------------------------------------- | ---------------------------------------------- |
 | `torc status <id>`                          | Workflow status and job summary                |
 | `torc workflows check-resources <id>`       | Check memory/CPU/time usage                    |
+| `torc workflows diagnose <id>`              | Why ready jobs aren't packing onto nodes       |
 | `torc results list <id> --include-logs`     | Job results with log paths                     |
 | `torc recover <id>`                         | Interactive recovery wizard (default)          |
 | `torc recover <id> --no-prompts`            | Automatic recovery (no prompts, for scripting) |
