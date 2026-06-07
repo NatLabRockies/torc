@@ -82,6 +82,44 @@ Object.assign(TorcDashboard.prototype, {
         `;
     },
 
+    renderRunningJobsTable(jobs) {
+        const controls = this.renderTableControls('running');
+        const count = `<span class="table-count">${jobs.length} running job${jobs.length !== 1 ? 's' : ''}</span>`;
+
+        if (!jobs || jobs.length === 0) {
+            return `${controls}<div class="placeholder-message">No running jobs in this workflow</div>`;
+        }
+
+        return `
+            ${controls}
+            ${count}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        ${this.renderSortableHeader('Job ID', 'job_id')}
+                        ${this.renderSortableHeader('Name', 'job_name')}
+                        ${this.renderSortableHeader('Compute Node', 'compute_node_name')}
+                        ${this.renderSortableHeader('Elapsed', 'start_time')}
+                        ${this.renderSortableHeader('Scheduler', 'scheduler_type')}
+                        ${this.renderSortableHeader('Scheduler Job ID', 'scheduler_job_id')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${jobs.map(job => `
+                        <tr>
+                            <td><code>${job.job_id ?? '-'}</code></td>
+                            <td>${this.escapeHtml(job.job_name || '-')}</td>
+                            <td>${this.escapeHtml(job.compute_node_name || '-')}</td>
+                            <td><code>${this.formatElapsedSince(job.start_time)}</code></td>
+                            <td>${this.escapeHtml(job.scheduler_type || '-')}</td>
+                            <td><code>${this.escapeHtml(job.scheduler_job_id || '-')}</code></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    },
+
     renderFilesTable(files) {
         const controls = this.renderTableControls('files');
         const count = `<span class="table-count">${files.length} file${files.length !== 1 ? 's' : ''}</span>`;

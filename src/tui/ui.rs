@@ -38,6 +38,7 @@ fn help_context_for(app: &App) -> HelpContext {
         return match app.detail_view {
             DetailViewType::Summary => HelpContext::DetailSummary,
             DetailViewType::Jobs => HelpContext::DetailJobs,
+            DetailViewType::Running => HelpContext::DetailRunning,
             DetailViewType::Files => HelpContext::DetailFiles,
             DetailViewType::UserData => HelpContext::DetailUserData,
             DetailViewType::Events => HelpContext::DetailEvents,
@@ -474,7 +475,7 @@ fn draw_workflows_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    " │ Enter: load details",
+                    " │ Enter: load details  │ sort: 1 id  2 name  3 user",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
@@ -548,6 +549,7 @@ fn draw_detail_table(f: &mut Frame, area: Rect, app: &mut App) {
     match app.detail_view {
         DetailViewType::Summary => draw_summary(f, area, app),
         DetailViewType::Jobs => draw_jobs_table(f, area, app),
+        DetailViewType::Running => draw_running_table(f, area, app),
         DetailViewType::Files => draw_files_table(f, area, app),
         DetailViewType::UserData => draw_user_data_table(f, area, app),
         DetailViewType::Events => draw_events_table(f, area, app),
@@ -849,7 +851,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    " │ Enter: details  l: logs  C: cancel  t: terminate  y: retry",
+                    " │ Enter: details  l: logs  C: cancel  t: terminate  y: retry  │ sort: 1 id  2 name  3 status",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
@@ -889,6 +891,100 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
     .highlight_symbol("▸ ");
 
     f.render_stateful_widget(table, area, &mut app.jobs_state);
+}
+
+fn draw_running_table(f: &mut Frame, area: Rect, app: &mut App) {
+    let selected_style = Style::default()
+        .add_modifier(Modifier::REVERSED)
+        .fg(Color::Cyan);
+    let header_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+
+    let id_header = format!("Job ID{}", app.running_sort.job_id_indicator());
+    let name_header = format!("Name{}", app.running_sort.name_indicator());
+    let elapsed_header = format!("Elapsed{}", app.running_sort.elapsed_indicator());
+    let header = Row::new(vec![
+        id_header,
+        name_header,
+        "Node".to_string(),
+        elapsed_header,
+        "Scheduler".to_string(),
+        "Scheduler Job ID".to_string(),
+    ])
+    .style(header_style)
+    .bottom_margin(1);
+
+    let rows = app.running.iter().map(|job| {
+        let id = job.job_id.to_string();
+        let name = job.job_name.clone();
+        let node = job.compute_node_name.clone();
+        // Every row here is running by definition; freeze Elapsed against the
+        // fetch time so it doesn't tick against rows that have since finished.
+        let elapsed = format_elapsed(job.start_time.as_deref(), app.running_fetched_at);
+        let scheduler = job.scheduler_type.clone();
+        let scheduler_job_id = job
+            .scheduler_job_id
+            .clone()
+            .unwrap_or_else(|| "-".to_string());
+
+        Row::new(vec![
+            Cell::from(id),
+            Cell::from(name),
+            Cell::from(node),
+            Cell::from(elapsed),
+            Cell::from(scheduler),
+            Cell::from(scheduler_job_id),
+        ])
+    });
+
+    let page = page_suffix(app.running_offset, app.running_has_more);
+    let (title, border_style) = if app.focus == Focus::Details {
+        (
+            Line::from(vec![
+                Span::styled("▷ ", Style::default().fg(Color::Green)),
+                Span::styled("Running", Style::default().fg(Color::White)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    " │ sort: 1 id  2 name  3 elapsed",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]),
+            Style::default().fg(Color::Green),
+        )
+    } else {
+        (
+            Line::from(vec![
+                Span::styled("▷ ", Style::default().fg(Color::Cyan)),
+                Span::styled("Running", Style::default().fg(Color::White)),
+                Span::styled(page, Style::default().fg(Color::DarkGray)),
+            ]),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(8),       // Job ID
+            Constraint::Length(20),      // Name
+            Constraint::Length(18),      // Node
+            Constraint::Length(9),       // Elapsed
+            Constraint::Length(10),      // Scheduler
+            Constraint::Percentage(100), // Scheduler Job ID
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(border_style),
+    )
+    .row_highlight_style(selected_style)
+    .highlight_symbol("▸ ");
+
+    f.render_stateful_widget(table, area, &mut app.running_state);
 }
 
 /// Compute elapsed time from an RFC3339 start_time to a reference instant,
@@ -1175,16 +1271,22 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let id_header = format!("ID{}", app.results_sort.id_indicator());
+    let job_id_header = format!("Job ID{}", app.results_sort.job_id_indicator());
+    let name_header = format!("Name{}", app.results_sort.name_indicator());
+    let return_header = format!("Return{}", app.results_sort.return_indicator());
+    let runtime_header = format!("Runtime (m){}", app.results_sort.runtime_indicator());
+    let completion_header = format!("Completion Time{}", app.results_sort.completion_indicator());
     let peak_mem_header = format!("Peak Mem{}", app.results_sort.peak_memory_indicator());
     let peak_cpu_header = format!("Peak CPU %{}", app.results_sort.peak_cpu_indicator());
-    let runtime_header = format!("Runtime (m){}", app.results_sort.runtime_indicator());
     let header = Row::new(vec![
-        "ID".to_string(),
-        "Job ID".to_string(),
-        "Return".to_string(),
+        id_header,
+        job_id_header,
+        name_header,
+        return_header,
         "Status".to_string(),
         runtime_header,
-        "Completion Time".to_string(),
+        completion_header,
         peak_mem_header,
         peak_cpu_header,
     ])
@@ -1194,6 +1296,9 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
     let rows = app.results.iter().map(|result| {
         let id = result.id.map(|i| i.to_string()).unwrap_or_default();
         let job_id = result.job_id.to_string();
+        // job_name is populated by the server on read paths; fall back to "-"
+        // for any result that predates the field.
+        let name = result.job_name.clone().unwrap_or_else(|| "-".to_string());
         let return_code = result.return_code;
         let status = format!("{:?}", result.status);
 
@@ -1222,6 +1327,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         Row::new(vec![
             Cell::from(id),
             Cell::from(job_id),
+            Cell::from(name),
             Cell::from(Span::styled(
                 return_code.to_string(),
                 Style::default().fg(row_color),
@@ -1244,7 +1350,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    " │ l: logs  m: peak mem  p: peak cpu",
+                    " │ l: logs  │ sort: 1 id  2 job-id  3 name  4 return  5 runtime  6 completion  7 peak-mem  8 peak-cpu",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
@@ -1267,6 +1373,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         [
             Constraint::Length(6),  // ID
             Constraint::Length(8),  // Job ID
+            Constraint::Length(20), // Name
             Constraint::Length(7),  // Return
             Constraint::Length(12), // Status
             Constraint::Length(13), // Runtime (m) (+ optional sort indicator)
@@ -1357,6 +1464,10 @@ fn draw_compute_nodes_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("Compute Nodes", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    " │ sort: 1 id  2 host  3 cpu  4 mem",
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]),
             Style::default().fg(Color::Green),
         )

@@ -13,8 +13,8 @@ use crate::client::log_paths::{
 };
 use crate::client::sse_client::SseEvent;
 use crate::models::{
-    ComputeNodeModel, FileModel, JobModel, JobStatus, ResultModel, ScheduledComputeNodesModel,
-    SlurmStatsModel, UserDataModel, WorkflowModel,
+    ComputeNodeModel, FileModel, JobModel, JobStatus, ResultModel, RunningJobModel,
+    ScheduledComputeNodesModel, SlurmStatsModel, UserDataModel, WorkflowModel,
 };
 
 use crate::client::apis::configuration::{BasicAuth, TlsConfig};
@@ -31,6 +31,7 @@ use super::dag::{DagLayout, JobNode};
 pub enum DetailViewType {
     Summary,
     Jobs,
+    Running,
     Results,
     Files,
     UserData,
@@ -191,6 +192,7 @@ impl DetailViewType {
         match self {
             Self::Summary => "◆ Summary",
             Self::Jobs => "▶ Jobs",
+            Self::Running => "▷ Running",
             Self::Files => "◫ Files",
             Self::UserData => "◈ User Data",
             Self::Events => "⚡ Events",
@@ -206,6 +208,7 @@ impl DetailViewType {
         vec![
             Self::Summary,
             Self::Jobs,
+            Self::Running,
             Self::Results,
             Self::Files,
             Self::UserData,
@@ -220,7 +223,8 @@ impl DetailViewType {
     pub fn next(&self) -> Self {
         match self {
             Self::Summary => Self::Jobs,
-            Self::Jobs => Self::Results,
+            Self::Jobs => Self::Running,
+            Self::Running => Self::Results,
             Self::Results => Self::Files,
             Self::Files => Self::UserData,
             Self::UserData => Self::Events,
@@ -236,7 +240,8 @@ impl DetailViewType {
         match self {
             Self::Summary => Self::Dag,
             Self::Jobs => Self::Summary,
-            Self::Results => Self::Jobs,
+            Self::Running => Self::Jobs,
+            Self::Results => Self::Running,
             Self::Files => Self::Results,
             Self::UserData => Self::Files,
             Self::Events => Self::UserData,
@@ -281,16 +286,29 @@ pub const PAGE_STEP: usize = 10;
 /// page at a time; `]` / `[` move to the next / previous page.
 pub const TUI_PAGE_SIZE: i64 = 250;
 
-/// Sort state for the Results detail table.
+/// Sort state for the Results detail table. Number keys sort by column,
+/// left-to-right among the sortable columns (every column except Status):
+/// 1=ID, 2=Job ID, 3=Name, 4=Return, 5=Runtime, 6=Completion, 7=Peak Memory,
+/// 8=Peak CPU. Each cycles None → Desc → Asc → None.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultsSort {
     None,
+    IdDesc,
+    IdAsc,
+    JobIdDesc,
+    JobIdAsc,
+    NameDesc,
+    NameAsc,
+    ReturnDesc,
+    ReturnAsc,
+    RuntimeDesc,
+    RuntimeAsc,
+    CompletionDesc,
+    CompletionAsc,
     PeakMemoryDesc,
     PeakMemoryAsc,
     PeakCpuDesc,
     PeakCpuAsc,
-    RuntimeDesc,
-    RuntimeAsc,
 }
 
 /// Sort state for the Jobs detail table. Number keys 1..3 cycle a single
@@ -351,56 +369,136 @@ impl JobsSort {
     }
 }
 
+/// Sort state for the Running detail table. Number keys mirror the Jobs tab:
+/// 1 = Job ID, 2 = Name, 3 = Elapsed. Each cycles None → Desc → Asc → None.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunningSort {
+    None,
+    JobIdDesc,
+    JobIdAsc,
+    NameDesc,
+    NameAsc,
+    ElapsedDesc,
+    ElapsedAsc,
+}
+
+impl RunningSort {
+    pub fn cycle_job_id(self) -> Self {
+        match self {
+            Self::JobIdDesc => Self::JobIdAsc,
+            Self::JobIdAsc => Self::None,
+            _ => Self::JobIdDesc,
+        }
+    }
+    pub fn cycle_name(self) -> Self {
+        match self {
+            Self::NameDesc => Self::NameAsc,
+            Self::NameAsc => Self::None,
+            _ => Self::NameDesc,
+        }
+    }
+    pub fn cycle_elapsed(self) -> Self {
+        match self {
+            Self::ElapsedDesc => Self::ElapsedAsc,
+            Self::ElapsedAsc => Self::None,
+            _ => Self::ElapsedDesc,
+        }
+    }
+    pub fn job_id_indicator(self) -> &'static str {
+        match self {
+            Self::JobIdDesc => " ↓",
+            Self::JobIdAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn name_indicator(self) -> &'static str {
+        match self {
+            Self::NameDesc => " ↓",
+            Self::NameAsc => " ↑",
+            _ => "",
+        }
+    }
+    pub fn elapsed_indicator(self) -> &'static str {
+        match self {
+            Self::ElapsedDesc => " ↓",
+            Self::ElapsedAsc => " ↑",
+            _ => "",
+        }
+    }
+}
+
 impl ResultsSort {
-    /// Cycle: None → Desc → Asc → None for the Peak Memory column. If currently
-    /// sorting by another column, jump to PeakMemoryDesc.
-    pub fn cycle_peak_memory(self) -> Self {
-        match self {
-            Self::PeakMemoryDesc => Self::PeakMemoryAsc,
-            Self::PeakMemoryAsc => Self::None,
-            _ => Self::PeakMemoryDesc,
+    /// Cycle a single column None → Desc → Asc → None, jumping straight to
+    /// `desc` when currently sorting by a different column.
+    fn cycle_col(self, desc: Self, asc: Self) -> Self {
+        if self == desc {
+            asc
+        } else if self == asc {
+            Self::None
+        } else {
+            desc
         }
     }
 
-    pub fn cycle_peak_cpu(self) -> Self {
-        match self {
-            Self::PeakCpuDesc => Self::PeakCpuAsc,
-            Self::PeakCpuAsc => Self::None,
-            _ => Self::PeakCpuDesc,
+    /// Arrow indicator for a column given its Desc/Asc variants.
+    fn indicator_for(self, desc: Self, asc: Self) -> &'static str {
+        if self == desc {
+            " ↓"
+        } else if self == asc {
+            " ↑"
+        } else {
+            ""
         }
     }
 
+    pub fn cycle_id(self) -> Self {
+        self.cycle_col(Self::IdDesc, Self::IdAsc)
+    }
+    pub fn cycle_job_id(self) -> Self {
+        self.cycle_col(Self::JobIdDesc, Self::JobIdAsc)
+    }
+    pub fn cycle_name(self) -> Self {
+        self.cycle_col(Self::NameDesc, Self::NameAsc)
+    }
+    pub fn cycle_return(self) -> Self {
+        self.cycle_col(Self::ReturnDesc, Self::ReturnAsc)
+    }
     pub fn cycle_runtime(self) -> Self {
-        match self {
-            Self::RuntimeDesc => Self::RuntimeAsc,
-            Self::RuntimeAsc => Self::None,
-            _ => Self::RuntimeDesc,
-        }
+        self.cycle_col(Self::RuntimeDesc, Self::RuntimeAsc)
+    }
+    pub fn cycle_completion(self) -> Self {
+        self.cycle_col(Self::CompletionDesc, Self::CompletionAsc)
+    }
+    pub fn cycle_peak_memory(self) -> Self {
+        self.cycle_col(Self::PeakMemoryDesc, Self::PeakMemoryAsc)
+    }
+    pub fn cycle_peak_cpu(self) -> Self {
+        self.cycle_col(Self::PeakCpuDesc, Self::PeakCpuAsc)
     }
 
-    /// Returns the arrow indicator for the Peak Memory column header.
-    pub fn peak_memory_indicator(self) -> &'static str {
-        match self {
-            Self::PeakMemoryDesc => " ↓",
-            Self::PeakMemoryAsc => " ↑",
-            _ => "",
-        }
+    pub fn id_indicator(self) -> &'static str {
+        self.indicator_for(Self::IdDesc, Self::IdAsc)
     }
-
-    pub fn peak_cpu_indicator(self) -> &'static str {
-        match self {
-            Self::PeakCpuDesc => " ↓",
-            Self::PeakCpuAsc => " ↑",
-            _ => "",
-        }
+    pub fn job_id_indicator(self) -> &'static str {
+        self.indicator_for(Self::JobIdDesc, Self::JobIdAsc)
     }
-
+    pub fn name_indicator(self) -> &'static str {
+        self.indicator_for(Self::NameDesc, Self::NameAsc)
+    }
+    pub fn return_indicator(self) -> &'static str {
+        self.indicator_for(Self::ReturnDesc, Self::ReturnAsc)
+    }
     pub fn runtime_indicator(self) -> &'static str {
-        match self {
-            Self::RuntimeDesc => " ↓",
-            Self::RuntimeAsc => " ↑",
-            _ => "",
-        }
+        self.indicator_for(Self::RuntimeDesc, Self::RuntimeAsc)
+    }
+    pub fn completion_indicator(self) -> &'static str {
+        self.indicator_for(Self::CompletionDesc, Self::CompletionAsc)
+    }
+    pub fn peak_memory_indicator(self) -> &'static str {
+        self.indicator_for(Self::PeakMemoryDesc, Self::PeakMemoryAsc)
+    }
+    pub fn peak_cpu_indicator(self) -> &'static str {
+        self.indicator_for(Self::PeakCpuDesc, Self::PeakCpuAsc)
     }
 }
 
@@ -579,6 +677,19 @@ pub struct App {
     /// `Utc::now()` so it doesn't keep ticking up against stale rows whose
     /// server-side status has since moved off Running.
     pub jobs_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Running-jobs detail tab: the server-computed page of currently-running
+    /// jobs joined to their compute node (and scheduler job id, when managed).
+    pub running: Vec<RunningJobModel>,
+    pub running_all: Vec<RunningJobModel>,
+    pub running_state: TableState,
+    pub running_sort: RunningSort,
+    /// Offset of the currently-loaded Running page.
+    pub running_offset: i64,
+    /// True when the last Running fetch filled a full page.
+    pub running_has_more: bool,
+    /// Wall-clock time of the most recent `running` fetch, used as the Elapsed
+    /// reference so the column freezes between refreshes (mirrors the Jobs tab).
+    pub running_fetched_at: Option<chrono::DateTime<chrono::Utc>>,
     pub files: Vec<FileModel>,
     pub files_all: Vec<FileModel>,
     pub files_state: TableState,
@@ -715,6 +826,15 @@ impl App {
             jobs_offset: 0,
             jobs_has_more: false,
             jobs_fetched_at: None,
+            running: Vec::new(),
+            running_all: Vec::new(),
+            running_state: TableState::default(),
+            // Default to longest-running first: the most useful ordering when
+            // monitoring a live workflow.
+            running_sort: RunningSort::ElapsedDesc,
+            running_offset: 0,
+            running_has_more: false,
+            running_fetched_at: None,
             files: Vec::new(),
             files_all: Vec::new(),
             files_state: TableState::default(),
@@ -866,6 +986,7 @@ impl App {
             Focus::Details => {
                 let (state, len) = match self.detail_view {
                     DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Running => (&mut self.running_state, self.running.len()),
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
@@ -913,6 +1034,7 @@ impl App {
             Focus::Details => {
                 let (state, len) = match self.detail_view {
                     DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Running => (&mut self.running_state, self.running.len()),
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
@@ -961,6 +1083,7 @@ impl App {
             Focus::Details => {
                 let (state, len) = match self.detail_view {
                     DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Running => (&mut self.running_state, self.running.len()),
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
@@ -1009,6 +1132,7 @@ impl App {
             Focus::Details => {
                 let (state, len) = match self.detail_view {
                     DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Running => (&mut self.running_state, self.running.len()),
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
@@ -1051,6 +1175,7 @@ impl App {
             Focus::Details => {
                 let (state, len) = match self.detail_view {
                     DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Running => (&mut self.running_state, self.running.len()),
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
@@ -1089,6 +1214,7 @@ impl App {
             Focus::Details => {
                 let (state, len) = match self.detail_view {
                     DetailViewType::Jobs => (&mut self.jobs_state, self.jobs.len()),
+                    DetailViewType::Running => (&mut self.running_state, self.running.len()),
                     DetailViewType::Files => (&mut self.files_state, self.files.len()),
                     DetailViewType::Events => (&mut self.events_state, self.events.len()),
                     DetailViewType::Results => (&mut self.results_state, self.results.len()),
@@ -1166,6 +1292,21 @@ impl App {
                         // unfiltered first page. Server-side filtering is driven
                         // through reload_jobs_page from apply_filter/paging.
                         self.reload_jobs_page()?;
+                    }
+                    DetailViewType::Running => {
+                        (self.running_all, self.running_has_more) = self.client.list_running_jobs(
+                            workflow_id,
+                            Some(self.running_offset),
+                            Some(TUI_PAGE_SIZE),
+                        )?;
+                        self.running_fetched_at = Some(chrono::Utc::now());
+                        self.running = self.running_all.clone();
+                        self.apply_running_sort();
+                        if self.running.is_empty() {
+                            self.running_state.select(None);
+                        } else {
+                            self.running_state.select(Some(0));
+                        }
                     }
                     DetailViewType::Files => {
                         self.files_all = self.client.list_files(workflow_id)?;
@@ -1282,6 +1423,7 @@ impl App {
         // lists, so capture the active filter and table positions to restore
         // afterward.
         let jobs_sel = self.jobs_state.selected();
+        let running_sel = self.running_state.selected();
         let files_sel = self.files_state.selected();
         let user_data_sel = self.user_data_state.selected();
         let results_sel = self.results_state.selected();
@@ -1315,6 +1457,7 @@ impl App {
         }
 
         restore_selection(&mut self.jobs_state, jobs_sel, self.jobs.len());
+        restore_selection(&mut self.running_state, running_sel, self.running.len());
         restore_selection(&mut self.files_state, files_sel, self.files.len());
         restore_selection(
             &mut self.user_data_state,
@@ -1344,8 +1487,49 @@ impl App {
     /// missing values sort last in both directions so they don't crowd the
     /// top.
     pub fn apply_results_sort(&mut self) {
+        // RFC3339 completion_time → epoch seconds for ordering; unparseable
+        // timestamps sort last (treated as None below).
+        fn completion_secs(r: &ResultModel) -> Option<i64> {
+            chrono::DateTime::parse_from_rfc3339(&r.completion_time)
+                .ok()
+                .map(|dt| dt.timestamp())
+        }
         match self.results_sort {
             ResultsSort::None => {}
+            ResultsSort::IdDesc => self
+                .results
+                .sort_by_key(|r| (r.id.is_none(), std::cmp::Reverse(r.id.unwrap_or(i64::MIN)))),
+            ResultsSort::IdAsc => self
+                .results
+                .sort_by_key(|r| (r.id.is_none(), r.id.unwrap_or(i64::MAX))),
+            ResultsSort::JobIdDesc => self.results.sort_by_key(|r| std::cmp::Reverse(r.job_id)),
+            ResultsSort::JobIdAsc => self.results.sort_by_key(|r| r.job_id),
+            // Cache lowercased keys; rows without a job_name sort last.
+            ResultsSort::NameDesc => self.results.sort_by_cached_key(|r| {
+                (
+                    r.job_name.is_none(),
+                    std::cmp::Reverse(r.job_name.clone().unwrap_or_default().to_lowercase()),
+                )
+            }),
+            ResultsSort::NameAsc => self.results.sort_by_cached_key(|r| {
+                (
+                    r.job_name.is_none(),
+                    r.job_name.clone().unwrap_or_default().to_lowercase(),
+                )
+            }),
+            ResultsSort::ReturnDesc => self
+                .results
+                .sort_by_key(|r| std::cmp::Reverse(r.return_code)),
+            ResultsSort::ReturnAsc => self.results.sort_by_key(|r| r.return_code),
+            // Cache the parsed timestamp per row; unparseable times sort last.
+            ResultsSort::CompletionDesc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), std::cmp::Reverse(secs.unwrap_or(0)))
+            }),
+            ResultsSort::CompletionAsc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), secs.unwrap_or(0))
+            }),
             ResultsSort::PeakMemoryDesc => {
                 self.results
                     .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
@@ -1415,6 +1599,41 @@ impl App {
     pub fn cycle_results_sort_runtime(&mut self) {
         let prev_id = self.selected_result_id();
         self.results_sort = self.results_sort.cycle_runtime();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_id(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_id();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_job_id(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_job_id();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_name(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_name();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_return(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_return();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_completion(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_completion();
         self.apply_results_sort();
         self.restore_results_selection(prev_id);
     }
@@ -1493,6 +1712,86 @@ impl App {
         self.jobs_sort = self.jobs_sort.cycle_status();
         self.apply_jobs_sort();
         self.restore_jobs_selection(prev_id);
+    }
+
+    /// Sort `self.running` in-place based on `self.running_sort`. Elapsed sorts
+    /// on the parsed start_time (an earlier start means a longer elapsed time,
+    /// so ElapsedDesc puts the longest-running jobs first). Rows with a missing
+    /// or unparseable start_time sort last in both directions.
+    pub fn apply_running_sort(&mut self) {
+        // Map a start_time to seconds-since-epoch for ordering; None for rows
+        // we can't parse so they can be pushed to the end.
+        fn start_secs(j: &RunningJobModel) -> Option<i64> {
+            let s = j.start_time.as_deref()?;
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.timestamp())
+        }
+        match self.running_sort {
+            RunningSort::None => {}
+            RunningSort::JobIdDesc => self.running.sort_by_key(|j| std::cmp::Reverse(j.job_id)),
+            RunningSort::JobIdAsc => self.running.sort_by_key(|j| j.job_id),
+            RunningSort::NameDesc => self
+                .running
+                .sort_by_cached_key(|j| std::cmp::Reverse(j.job_name.to_lowercase())),
+            RunningSort::NameAsc => self
+                .running
+                .sort_by_cached_key(|j| j.job_name.to_lowercase()),
+            // Longest-running first: earliest start_time first. The parsed
+            // start time is cached per row; unparseable start times sort last.
+            RunningSort::ElapsedDesc => self.running.sort_by_cached_key(|j| {
+                let secs = start_secs(j);
+                (secs.is_none(), secs.unwrap_or(0))
+            }),
+            RunningSort::ElapsedAsc => self.running.sort_by_cached_key(|j| {
+                let secs = start_secs(j);
+                (secs.is_none(), std::cmp::Reverse(secs.unwrap_or(0)))
+            }),
+        }
+    }
+
+    pub fn cycle_running_sort_job_id(&mut self) {
+        let prev_id = self.selected_running_job_id();
+        self.running_sort = self.running_sort.cycle_job_id();
+        self.apply_running_sort();
+        self.restore_running_selection(prev_id);
+    }
+
+    pub fn cycle_running_sort_name(&mut self) {
+        let prev_id = self.selected_running_job_id();
+        self.running_sort = self.running_sort.cycle_name();
+        self.apply_running_sort();
+        self.restore_running_selection(prev_id);
+    }
+
+    pub fn cycle_running_sort_elapsed(&mut self) {
+        let prev_id = self.selected_running_job_id();
+        self.running_sort = self.running_sort.cycle_elapsed();
+        self.apply_running_sort();
+        self.restore_running_selection(prev_id);
+    }
+
+    fn selected_running_job_id(&self) -> Option<i64> {
+        self.running_state
+            .selected()
+            .and_then(|i| self.running.get(i))
+            .map(|j| j.job_id)
+    }
+
+    /// Re-select the row whose job_id matches `prev_id`, falling back to row 0
+    /// (or clearing the selection when the list is empty).
+    fn restore_running_selection(&mut self, prev_id: Option<i64>) {
+        if let Some(id) = prev_id
+            && let Some(idx) = self.running.iter().position(|j| j.job_id == id)
+        {
+            self.running_state.select(Some(idx));
+            return;
+        }
+        if self.running.is_empty() {
+            self.running_state.select(None);
+        } else {
+            self.running_state.select(Some(0));
+        }
     }
 
     /// Sort `self.workflows` in-place based on `self.workflows_sort`. Rows with
@@ -1618,6 +1917,8 @@ impl App {
     fn reset_detail_pagination(&mut self) {
         self.jobs_offset = 0;
         self.jobs_has_more = false;
+        self.running_offset = 0;
+        self.running_has_more = false;
         self.results_offset = 0;
         self.results_has_more = false;
         self.compute_nodes_offset = 0;
@@ -1632,6 +1933,7 @@ impl App {
             Focus::Workflows => self.workflows_has_more,
             Focus::Details => match self.detail_view {
                 DetailViewType::Jobs => self.jobs_has_more,
+                DetailViewType::Running => self.running_has_more,
                 DetailViewType::Results => self.results_has_more,
                 DetailViewType::ComputeNodes => self.compute_nodes_has_more,
                 DetailViewType::UserData => self.user_data_has_more,
@@ -1658,6 +1960,10 @@ impl App {
                     // server-side filter is preserved across pages.
                     self.jobs_offset += TUI_PAGE_SIZE;
                     self.reload_jobs_page()?;
+                }
+                DetailViewType::Running => {
+                    self.running_offset += TUI_PAGE_SIZE;
+                    self.load_detail_data()?;
                 }
                 DetailViewType::Results => {
                     self.results_offset += TUI_PAGE_SIZE;
@@ -1694,6 +2000,10 @@ impl App {
                 DetailViewType::Jobs if self.jobs_offset > 0 => {
                     self.jobs_offset = (self.jobs_offset - TUI_PAGE_SIZE).max(0);
                     self.reload_jobs_page()?;
+                }
+                DetailViewType::Running if self.running_offset > 0 => {
+                    self.running_offset = (self.running_offset - TUI_PAGE_SIZE).max(0);
+                    self.load_detail_data()?;
                 }
                 DetailViewType::Results if self.results_offset > 0 => {
                     self.results_offset = (self.results_offset - TUI_PAGE_SIZE).max(0);
@@ -1968,6 +2278,7 @@ impl App {
         }
         match self.detail_view {
             DetailViewType::Summary => vec![], // Summary view doesn't support filtering
+            DetailViewType::Running => vec![], // Running view doesn't support filtering
             DetailViewType::Jobs => vec!["Status", "Name", "Command"],
             DetailViewType::Files => vec!["Name", "Path"],
             DetailViewType::UserData => vec!["Name", "Data"],
@@ -2349,8 +2660,8 @@ impl App {
                     self.user_data_state.select(None);
                 }
             }
-            DetailViewType::Summary | DetailViewType::Dag => {
-                // Summary and DAG views don't support filtering
+            DetailViewType::Summary | DetailViewType::Dag | DetailViewType::Running => {
+                // Summary, DAG, and Running views don't support filtering
             }
         }
     }
@@ -2433,8 +2744,8 @@ impl App {
                     self.slurm_stats_state.select(Some(0));
                 }
             }
-            DetailViewType::Summary | DetailViewType::Dag => {
-                // Summary and DAG views don't support filtering
+            DetailViewType::Summary | DetailViewType::Dag | DetailViewType::Running => {
+                // Summary, DAG, and Running views don't support filtering
             }
         }
     }

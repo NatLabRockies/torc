@@ -680,22 +680,62 @@ where
                     {
                         app.request_job_action(JobAction::Retry);
                     }
-                    // Sort the Results table by Peak Memory / Peak CPU. Each
-                    // press cycles None → Desc → Asc → None.
-                    KeyCode::Char('m')
+                    // Sort the Results table by column index (left-to-right
+                    // among sortable columns — every column except Status):
+                    // 1=ID, 2=Job ID, 3=Name, 4=Return, 5=Runtime,
+                    // 6=Completion, 7=Peak Memory, 8=Peak CPU. Each press
+                    // cycles None → Desc → Asc → None.
+                    KeyCode::Char('1')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_id();
+                    }
+                    KeyCode::Char('2')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_job_id();
+                    }
+                    KeyCode::Char('3')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_name();
+                    }
+                    KeyCode::Char('4')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_return();
+                    }
+                    KeyCode::Char('5')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_runtime();
+                    }
+                    KeyCode::Char('6')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_completion();
+                    }
+                    KeyCode::Char('7')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::Results =>
                     {
                         app.cycle_results_sort_peak_memory();
                     }
-                    KeyCode::Char('p')
+                    KeyCode::Char('8')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::Results =>
                     {
                         app.cycle_results_sort_peak_cpu();
                     }
-                    // Sort the Compute Nodes table: 1=ID, 2=Hostname, m=Peak
-                    // Memory, p=Peak CPU. Each press cycles None → Desc → Asc.
+                    // Sort the Compute Nodes table by column index (left-to-right
+                    // among sortable columns): 1=ID, 2=Hostname, 3=Peak CPU,
+                    // 4=Peak Memory. Each press cycles None → Desc → Asc → None.
                     KeyCode::Char('1')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::ComputeNodes =>
@@ -708,17 +748,17 @@ where
                     {
                         app.cycle_compute_nodes_sort_hostname();
                     }
-                    KeyCode::Char('m')
-                        if app.focus == Focus::Details
-                            && app.detail_view == DetailViewType::ComputeNodes =>
-                    {
-                        app.cycle_compute_nodes_sort_peak_memory();
-                    }
-                    KeyCode::Char('p')
+                    KeyCode::Char('3')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::ComputeNodes =>
                     {
                         app.cycle_compute_nodes_sort_peak_cpu();
+                    }
+                    KeyCode::Char('4')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::ComputeNodes =>
+                    {
+                        app.cycle_compute_nodes_sort_peak_memory();
                     }
                     // Sort the Workflows list: 1=ID, 2=Name, 3=User.
                     KeyCode::Char('1') if app.focus == Focus::Workflows => {
@@ -729,12 +769,6 @@ where
                     }
                     KeyCode::Char('3') if app.focus == Focus::Workflows => {
                         app.cycle_workflows_sort_user();
-                    }
-                    KeyCode::Char('E')
-                        if app.focus == Focus::Details
-                            && app.detail_view == DetailViewType::Results =>
-                    {
-                        app.cycle_results_sort_runtime();
                     }
                     // Sort the Jobs table by column index 1=ID, 2=Name, 3=Status.
                     KeyCode::Char('1')
@@ -754,6 +788,26 @@ where
                             && app.detail_view == DetailViewType::Jobs =>
                     {
                         app.cycle_jobs_sort_status();
+                    }
+                    // Sort the Running table by column index 1=Job ID, 2=Name,
+                    // 3=Elapsed, mirroring the Jobs tab's number-key convention.
+                    KeyCode::Char('1')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Running =>
+                    {
+                        app.cycle_running_sort_job_id();
+                    }
+                    KeyCode::Char('2')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Running =>
+                    {
+                        app.cycle_running_sort_name();
+                    }
+                    KeyCode::Char('3')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Running =>
+                    {
+                        app.cycle_running_sort_elapsed();
                     }
                     _ => {}
                 },

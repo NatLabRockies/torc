@@ -5,12 +5,18 @@ updates:
     schedule:
       interval: weekly
     groups:
-      rust-patch-updates:
+      # Single group for patch + minor so only one PR regenerates Cargo.lock.
+      # Two separate groups produced competing PRs that flip-flopped transitive
+      # versions (e.g. windows-sys) against each other on every rebase.
+      rust-dependencies:
         update-types:
           - patch
-      rust-minor-updates:
-        update-types:
           - minor
+    ignore:
+      # Transitive-only (no direct dependency); multiple major versions coexist
+      # by design and it is cfg(windows)-gated. Let cargo's resolver pick it
+      # instead of churning the lockfile with spurious 0.61 <-> 0.52 flips.
+      - dependency-name: "windows-sys"
     # Major version bumps get individual PRs (they often have breaking changes)
     open-pull-requests-limit: 10
 

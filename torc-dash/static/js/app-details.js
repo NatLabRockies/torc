@@ -231,6 +231,12 @@ Object.assign(TorcDashboard.prototype, {
                 case 'jobs':
                     this.tableState.data = await api.listJobs(workflowId);
                     break;
+                case 'running':
+                    this.tableState.data = await api.listRunningJobs(workflowId);
+                    // Default to longest-running first (earliest start_time).
+                    this.tableState.sortColumn = 'start_time';
+                    this.tableState.sortDirection = 'asc';
+                    break;
                 case 'results':
                     const [results, resultJobs] = await Promise.all([
                         api.listResults(workflowId),
@@ -286,6 +292,9 @@ Object.assign(TorcDashboard.prototype, {
                     break;
             }
             this.tableState.filteredData = [...this.tableState.data];
+            // Honor any default sort set above (e.g. Running → longest-running
+            // first). A no-op for tabs that leave sortColumn null.
+            this.applySortAndFilter();
             this.renderCurrentTable();
         } catch (error) {
             content.innerHTML = `<div class="placeholder-message">Error loading ${subtab}: ${error.message}</div>`;
@@ -299,6 +308,9 @@ Object.assign(TorcDashboard.prototype, {
         switch (tabType) {
             case 'jobs':
                 content.innerHTML = this.renderJobsTable(filteredData);
+                break;
+            case 'running':
+                content.innerHTML = this.renderRunningJobsTable(filteredData);
                 break;
             case 'results':
                 content.innerHTML = this.renderResultsTable(filteredData, null, jobNameMap);
@@ -387,6 +399,7 @@ Object.assign(TorcDashboard.prototype, {
     getItemNameForTab(tabType) {
         const names = {
             'jobs': 'job',
+            'running': 'running job',
             'results': 'result',
             'events': 'event',
             'files': 'file',
@@ -409,6 +422,18 @@ Object.assign(TorcDashboard.prototype, {
                         <td><span class="status-badge status-${this.jobStatusSlug(job.status)}">${this.formatJobStatus(job.status)}</span></td>
                         <td><code>${this.escapeHtml(this.truncate(job.command || '-', 80))}</code></td>
                         <td><button class="btn-job-details" data-job-id="${job.id}" data-job-name="${this.escapeHtml(job.name || '')}">Details</button></td>
+                    </tr>
+                `).join('');
+
+            case 'running':
+                return items.map(job => `
+                    <tr>
+                        <td><code>${job.job_id ?? '-'}</code></td>
+                        <td>${this.escapeHtml(job.job_name || '-')}</td>
+                        <td>${this.escapeHtml(job.compute_node_name || '-')}</td>
+                        <td><code>${this.formatElapsedSince(job.start_time)}</code></td>
+                        <td>${this.escapeHtml(job.scheduler_type || '-')}</td>
+                        <td><code>${this.escapeHtml(job.scheduler_job_id || '-')}</code></td>
                     </tr>
                 `).join('');
 
@@ -607,7 +632,9 @@ Object.assign(TorcDashboard.prototype, {
 
     getFieldValue(item, field, tabType, jobNameMap) {
         const fieldMap = {
-            'job_name': () => jobNameMap[item.job_id] || '',
+            // Results carry the name via jobNameMap; running jobs carry it
+            // directly on the row. Fall back so both tabs resolve job_name.
+            'job_name': () => (jobNameMap && jobNameMap[item.job_id]) || item.job_name || '',
             'return_code': () => item.return_code,
             'exec_time': () => item.exec_time_minutes,
             'peak_mem': () => item.peak_memory_bytes,
@@ -633,6 +660,13 @@ Object.assign(TorcDashboard.prototype, {
         switch (tabType) {
             case 'jobs':
                 if (item.command) parts.push(item.command);
+                break;
+            case 'running':
+                if (item.job_id != null) parts.push(String(item.job_id));
+                if (item.job_name) parts.push(item.job_name);
+                if (item.compute_node_name) parts.push(item.compute_node_name);
+                if (item.scheduler_type) parts.push(item.scheduler_type);
+                if (item.scheduler_job_id) parts.push(item.scheduler_job_id);
                 break;
             case 'results':
                 if (item.job_id != null) parts.push(String(item.job_id));

@@ -137,6 +137,11 @@ class TorcAPI {
         return this.request(`/jobs/${jobId}/dependencies`);
     }
 
+    async listRunningJobs(workflowId, offset = 0, limit = 1000) {
+        const response = await this.request(`/workflows/${workflowId}/running_jobs?offset=${offset}&limit=${limit}`);
+        return this.extractItems(response);
+    }
+
     async getJobsDependencies(workflowId) {
         // Get all jobs with their dependencies
         const response = await this.request(`/workflows/${workflowId}/job_dependencies`);
