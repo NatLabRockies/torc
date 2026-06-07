@@ -634,9 +634,10 @@ impl ComputeNodesSort {
     }
 }
 
-/// Aggregated high-level information about a single workflow, computed from
-/// list_jobs + get_workflow + is_workflow_complete and rendered by the
-/// Summary detail view.
+/// Aggregated high-level information about a single workflow, sourced from the
+/// server-side `get_workflow_status` (job counts, completion flags, and the
+/// runtime-blocked packing signal) plus `get_workflow` for the description, and
+/// rendered by the Summary detail view.
 #[derive(Debug, Clone)]
 pub struct WorkflowSummary {
     pub workflow_id: i64,
@@ -648,6 +649,13 @@ pub struct WorkflowSummary {
     pub total_jobs: usize,
     /// Counts indexed by `JobStatus as usize` (0 = Uninitialized .. 10 = PendingFailed).
     pub counts: [usize; 11],
+    /// Ready jobs whose required runtime exceeds the remaining walltime of every
+    /// active allocation (the runtime-blocked packing tripwire). 0 when none.
+    pub runtime_blocked_ready_jobs: i64,
+    /// Longest required runtime (seconds) among ready jobs, when any are blocked.
+    pub longest_ready_runtime_seconds: Option<i64>,
+    /// Greatest remaining walltime (seconds) across active bounded allocations.
+    pub max_allocation_remaining_seconds: Option<i64>,
 }
 
 pub struct App {
@@ -905,6 +913,11 @@ impl App {
 
         // Try to load workflows, but don't fail if server is not available
         let _ = app.refresh_workflows();
+        // Populate the detail view for the initially-selected workflow so the
+        // Summary pane renders on startup instead of showing "Loading summary…"
+        // until the user presses Enter. Best-effort: a missing server or empty
+        // workflow list just leaves the placeholder in place.
+        let _ = app.load_detail_data();
 
         Ok(app)
     }
@@ -1295,31 +1308,41 @@ impl App {
             if let Some(workflow_id) = workflow_id_opt {
                 match self.detail_view {
                     DetailViewType::Summary => {
-                        if self.jobs_workflow_id != Some(workflow_id) {
-                            self.jobs_all = self.client.list_jobs(workflow_id, None, None)?;
-                            self.jobs_workflow_id = Some(workflow_id);
-                            self.jobs_fetched_at = Some(chrono::Utc::now());
-                        }
-                        self.jobs = self.jobs_all.clone();
-                        self.apply_jobs_sort();
+                        // Use the server-side aggregated status instead of pulling
+                        // every job to count client-side. This is one O(1) call and
+                        // also carries the runtime-blocked packing signal. The
+                        // description is not part of the status response, so fetch
+                        // the (cheap) workflow record for it.
+                        let status = self.client.get_workflow_status(workflow_id)?;
                         let workflow = self.client.get_workflow(workflow_id)?;
-                        let completion = self.client.is_workflow_complete(workflow_id)?;
 
-                        let mut counts = [0usize; 11];
-                        for job in &self.jobs_all {
-                            if let Some(s) = &job.status {
-                                counts[*s as usize] += 1;
-                            }
-                        }
+                        let c = &status.jobs_by_status;
+                        let counts: [usize; 11] = [
+                            c.uninitialized.max(0) as usize,
+                            c.blocked.max(0) as usize,
+                            c.ready.max(0) as usize,
+                            c.pending.max(0) as usize,
+                            c.running.max(0) as usize,
+                            c.completed.max(0) as usize,
+                            c.failed.max(0) as usize,
+                            c.canceled.max(0) as usize,
+                            c.terminated.max(0) as usize,
+                            c.disabled.max(0) as usize,
+                            c.pending_failed.max(0) as usize,
+                        ];
                         self.summary = Some(WorkflowSummary {
                             workflow_id,
-                            workflow_name: workflow.name,
-                            workflow_user: workflow.user,
+                            workflow_name: status.workflow_name,
+                            workflow_user: status.workflow_user,
                             description: workflow.description,
-                            is_complete: completion.is_complete,
-                            is_canceled: completion.is_canceled,
-                            total_jobs: self.jobs_all.len(),
+                            is_complete: status.is_complete,
+                            is_canceled: status.is_canceled,
+                            total_jobs: status.total_jobs.max(0) as usize,
                             counts,
+                            runtime_blocked_ready_jobs: status.runtime_blocked_ready_jobs,
+                            longest_ready_runtime_seconds: status.longest_ready_runtime_seconds,
+                            max_allocation_remaining_seconds: status
+                                .max_allocation_remaining_seconds,
                         });
                     }
                     DetailViewType::Jobs => {
@@ -4170,11 +4193,12 @@ impl App {
             return;
         };
 
-        let job_name = self
-            .jobs_all
-            .iter()
-            .find(|j| j.id == Some(result.job_id))
-            .map(|j| j.name.clone())
+        // The server denormalizes the job name onto every result (LEFT JOIN to
+        // job), so use it directly. It is only NULL when the job row was deleted,
+        // in which case there is nothing better to show than the id.
+        let job_name = result
+            .job_name
+            .clone()
             .unwrap_or_else(|| format!("Job {}", result.job_id));
 
         let mut viewer = LogViewer::new(result.job_id, job_name);
