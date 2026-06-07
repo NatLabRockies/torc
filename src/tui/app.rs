@@ -922,43 +922,49 @@ impl App {
         let offset = Some(self.workflows_offset);
         let limit = Some(TUI_PAGE_SIZE);
 
-        // Resolve the active Workflows filter into server-side query params.
+        // Only "Access Group" filters server-side: it requires the
+        // workflow_access_group join (absent from WorkflowModel) and spans all
+        // owners. Name/User/Description narrow the loaded page client-side --
+        // workflow counts are small (hundreds at most), so a substring,
+        // case-insensitive match is friendlier than the server's exact match.
         // `user_filter` provides the default owner scoping (the all-users
-        // toggle). An explicit "User" filter replaces that scoping; "Access
-        // Group" spans all owners (drops the scoping) so you see the whole
-        // group, matching the CLI/Dash.
-        let (mut name, mut user, mut description, mut access_group) = (None, None, None, None);
+        // toggle); Access Group drops it so the whole group is visible.
+        let mut access_group = None;
         let mut scope_user = self.user_filter.clone();
         if self.filter_target == FilterTarget::Workflows
             && let Some(filter) = self.filter.as_ref()
+            && filter.column == "Access Group"
         {
-            match filter.column.as_str() {
-                "Name" => name = Some(filter.value.clone()),
-                "User" => {
-                    user = Some(filter.value.clone());
-                    scope_user = None;
-                }
-                "Description" => description = Some(filter.value.clone()),
-                "Access Group" => {
-                    access_group = Some(filter.value.clone());
-                    scope_user = None;
-                }
-                _ => {}
-            }
+            access_group = Some(filter.value.clone());
+            scope_user = None;
         }
-        let user_param = user.or(scope_user);
 
         let has_more;
         (self.workflows_all, has_more) = self.client.list_workflows_filtered(
             offset,
             limit,
-            name.as_deref(),
-            user_param.as_deref(),
-            description.as_deref(),
+            None, // name (narrowed client-side below)
+            scope_user.as_deref(),
+            None, // description (narrowed client-side below)
             access_group.as_deref(),
         )?;
         self.workflows_has_more = has_more;
-        self.workflows = self.workflows_all.clone();
+
+        // Re-apply the active client-side workflow filter (Name/User/
+        // Description) against the freshly loaded page. Access Group already
+        // filtered server-side, so leave that result untouched.
+        if self.filter_target == FilterTarget::Workflows
+            && let Some(filter) = self.filter.clone()
+            && filter.column != "Access Group"
+        {
+            self.workflows = filter_workflow_list(
+                &self.workflows_all,
+                &filter.column,
+                &filter.value.to_lowercase(),
+            );
+        } else {
+            self.workflows = self.workflows_all.clone();
+        }
         self.apply_workflows_sort();
 
         if let Some(id) = prev_id
@@ -2720,7 +2726,7 @@ impl App {
             }
         } else if self.detail_view == DetailViewType::Events {
             // Events stream over SSE; filter the accumulated buffer client-side.
-            self.filter_active_view(target, &column, &value);
+            self.filter_active_view(&column, &value);
         } else {
             self.reset_active_detail_offset();
             if let Err(err) = self.reload_detail_page() {
@@ -2743,30 +2749,17 @@ impl App {
         }
     }
 
-    /// Narrow the visible rows of the active table (`target` plus the current
+    /// Narrow the visible rows of the active detail table (the current
     /// `detail_view`) to those matching `column`/`value`, resetting the
-    /// selection to the first match. Shared by interactive filtering
-    /// (`apply_filter`) and refresh (`reload_detail_data`), which must
-    /// re-narrow freshly-loaded data after the per-workflow caches are
-    /// invalidated. Leaves focus unchanged; callers manage focus.
-    fn filter_active_view(&mut self, target: FilterTarget, column: &str, value: &str) {
+    /// selection to the first match. Used to filter the Events stream, which
+    /// is buffered client-side. Leaves focus unchanged; callers manage focus.
+    fn filter_active_view(&mut self, column: &str, value: &str) {
         // Re-bind as owned so the verbatim match arms below can keep using
         // `column.as_str()` / `&value`.
         let column = column.to_string();
         // Filter values are stored in the user's typed case; client-side narrows
         // are case-insensitive, so lowercase here (each arm lowercases the field).
         let value = value.to_lowercase();
-
-        if target == FilterTarget::Workflows {
-            self.workflows = filter_workflow_list(&self.workflows_all, &column, &value);
-            self.apply_workflows_sort();
-            if !self.workflows.is_empty() {
-                self.workflows_state.select(Some(0));
-            } else {
-                self.workflows_state.select(None);
-            }
-            return;
-        }
 
         match self.detail_view {
             DetailViewType::Jobs => {
