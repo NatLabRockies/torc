@@ -1423,14 +1423,25 @@ where
             _ => None,
         };
 
-        // Active workers and scheduled (Slurm) allocations by status.
-        let active_compute_nodes: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM compute_node WHERE workflow_id = ? AND is_active = 1",
+        // Active workers, the greatest remaining walltime (seconds) across active
+        // allocations that report an end_time, and whether any active node is
+        // unlimited (end_time IS NULL, i.e. a local/unbounded worker). julianday()
+        // handles RFC3339 parsing/timezones; MAX ignores NULL end_times.
+        let compute_node_row = sqlx::query(
+            "SELECT COUNT(*) AS cnt, \
+             COALESCE(SUM(CASE WHEN end_time IS NULL THEN 1 ELSE 0 END), 0) AS unlimited_cnt, \
+             (MAX(julianday(end_time)) - julianday('now')) * 86400.0 AS max_remaining_s \
+             FROM compute_node WHERE workflow_id = ? AND is_active = 1",
         )
         .bind(id)
         .fetch_one(pool)
         .await
         .map_err(|e| database_error_with_msg(e, "Failed to count compute nodes"))?;
+        let active_compute_nodes: i64 = compute_node_row.get("cnt");
+        let has_unlimited_active_node: bool = compute_node_row.get::<i64, _>("unlimited_cnt") > 0;
+        let max_allocation_remaining_seconds: Option<i64> = compute_node_row
+            .get::<Option<f64>, _>("max_remaining_s")
+            .map(|s| s.max(0.0) as i64);
         let mut pending_scheduled_nodes: i64 = 0;
         let mut active_scheduled_nodes: i64 = 0;
         let scheduled_rows = sqlx::query(
@@ -1451,6 +1462,40 @@ where
             }
         }
 
+        // Runtime-blocked packing signal: ready jobs whose required runtime exceeds
+        // the most generous active allocation's remaining walltime (+ the runner's
+        // startup grace, mirroring the claim filter). One aggregate query, run only
+        // when it could be nonzero (ready jobs exist and some allocation has a
+        // walltime). Keeps `torc status` to a single round trip with O(1) payload.
+        // An unlimited active node (end_time IS NULL) can run any job -- matching
+        // the claim path where time_limit=None becomes i64::MAX -- so its presence
+        // means nothing is runtime-blocked by walltime.
+        const STARTUP_GRACE_PERIOD_SECONDS: f64 = 120.0;
+        let mut runtime_blocked_ready_jobs: i64 = 0;
+        let mut longest_ready_runtime_seconds: Option<i64> = None;
+        if counts.ready > 0
+            && !has_unlimited_active_node
+            && let Some(max_remaining) = max_allocation_remaining_seconds
+        {
+            let threshold = max_remaining as f64 + STARTUP_GRACE_PERIOD_SECONDS;
+            let blocked_row = sqlx::query(
+                "SELECT \
+                 COALESCE(SUM(CASE WHEN rr.runtime_s > ? THEN 1 ELSE 0 END), 0) AS blocked, \
+                 MAX(rr.runtime_s) AS longest \
+                 FROM job j \
+                 JOIN resource_requirements rr ON j.resource_requirements_id = rr.id \
+                 WHERE j.workflow_id = ? AND j.status = ?",
+            )
+            .bind(threshold)
+            .bind(id)
+            .bind(models::JobStatus::Ready.to_int())
+            .fetch_one(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to count runtime-blocked jobs"))?;
+            runtime_blocked_ready_jobs = blocked_row.get("blocked");
+            longest_ready_runtime_seconds = blocked_row.get::<Option<i64>, _>("longest");
+        }
+
         Ok(GetWorkflowStatusResponse::SuccessfulResponse(
             models::WorkflowStatusResponse {
                 workflow_id: id,
@@ -1465,6 +1510,9 @@ where
                 active_scheduled_nodes,
                 is_complete,
                 is_canceled,
+                runtime_blocked_ready_jobs,
+                longest_ready_runtime_seconds,
+                max_allocation_remaining_seconds,
             },
         ))
     }

@@ -114,6 +114,10 @@ pub struct ComputeNodeModel {
     pub hostname: String,
     pub pid: i64,
     pub start_time: String,
+    /// Allocation end time (RFC3339), reported by the runner at registration.
+    /// Used to compute remaining walltime for active nodes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1423,6 +1427,7 @@ impl ComputeNodeModel {
             hostname,
             pid,
             start_time,
+            end_time: None,
             duration_seconds: None,
             is_active: None,
             num_cpus,
@@ -2392,6 +2397,18 @@ pub struct WorkflowStatusResponse {
     pub active_scheduled_nodes: i64,
     pub is_complete: bool,
     pub is_canceled: bool,
+    /// Ready jobs whose required runtime exceeds the remaining walltime of every
+    /// active allocation, so they cannot start until a fresh allocation appears.
+    /// 0 when there are no walltime-bounded allocations. See `torc workflows diagnose`.
+    pub runtime_blocked_ready_jobs: i64,
+    /// Longest required runtime (seconds) among ready jobs. Only populated when
+    /// some ready jobs are runtime-blocked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longest_ready_runtime_seconds: Option<i64>,
+    /// Greatest remaining walltime (seconds) across active walltime-bounded
+    /// allocations. None when no active allocation reports an end time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_allocation_remaining_seconds: Option<i64>,
 }
 
 /// One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
@@ -2524,6 +2541,7 @@ mod tests {
             hostname: "node-a".into(),
             pid: 1234,
             start_time: "2026-03-20T12:00:00Z".into(),
+            end_time: Some("2026-03-20T13:00:00Z".into()),
             duration_seconds: Some(10.5),
             is_active: Some(true),
             num_cpus: 8,

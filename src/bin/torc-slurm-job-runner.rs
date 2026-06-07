@@ -423,8 +423,14 @@ mod unix_main {
             "slurm_node_id": node_id,
             "slurm_task_pid": task_pid,
         });
-        let compute_node =
-            create_compute_node(&config, args.workflow_id, &resources, &hostname, scheduler);
+        let compute_node = create_compute_node(
+            &config,
+            args.workflow_id,
+            &resources,
+            &hostname,
+            scheduler,
+            Some(job_end_time),
+        );
         let run_id = match utils::send_with_retries(
             &config,
             || apis::workflows_api::get_workflow(&config, args.workflow_id),

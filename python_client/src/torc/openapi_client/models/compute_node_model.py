@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -30,6 +30,7 @@ class ComputeNodeModel(BaseModel):
     avg_memory_bytes: Optional[StrictInt] = None
     compute_node_type: StrictStr
     duration_seconds: Optional[Union[StrictFloat, StrictInt]] = None
+    end_time: Optional[StrictStr] = Field(default=None, description="Allocation end time (RFC3339), reported by the runner at registration. Used to compute remaining walltime for active nodes.")
     hostname: StrictStr
     id: Optional[StrictInt] = None
     is_active: Optional[StrictBool] = None
@@ -46,7 +47,7 @@ class ComputeNodeModel(BaseModel):
     start_time: StrictStr
     time_limit: Optional[StrictStr] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "hostname", "id", "is_active", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "end_time", "hostname", "id", "is_active", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -101,6 +102,11 @@ class ComputeNodeModel(BaseModel):
         # and model_fields_set contains the field
         if self.duration_seconds is None and "duration_seconds" in self.model_fields_set:
             _dict['duration_seconds'] = None
+
+        # set to None if end_time (nullable) is None
+        # and model_fields_set contains the field
+        if self.end_time is None and "end_time" in self.model_fields_set:
+            _dict['end_time'] = None
 
         # set to None if id (nullable) is None
         # and model_fields_set contains the field
@@ -158,6 +164,7 @@ class ComputeNodeModel(BaseModel):
             "avg_memory_bytes": obj.get("avg_memory_bytes"),
             "compute_node_type": obj.get("compute_node_type"),
             "duration_seconds": obj.get("duration_seconds"),
+            "end_time": obj.get("end_time"),
             "hostname": obj.get("hostname"),
             "id": obj.get("id"),
             "is_active": obj.get("is_active"),

@@ -8,6 +8,7 @@ Name | Type | Description | Notes
 **avg_memory_bytes** | **Int64** |  | [optional] [default to nothing]
 **compute_node_type** | **String** |  | [default to nothing]
 **duration_seconds** | **Float64** |  | [optional] [default to nothing]
+**end_time** | **String** | Allocation end time (RFC3339), reported by the runner at registration. Used to compute remaining walltime for active nodes. | [optional] [default to nothing]
 **hostname** | **String** |  | [default to nothing]
 **id** | **Int64** |  | [optional] [default to nothing]
 **is_active** | **Bool** |  | [optional] [default to nothing]

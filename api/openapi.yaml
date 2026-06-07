@@ -5621,6 +5621,13 @@ components:
           - number
           - 'null'
           format: double
+        end_time:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Allocation end time (RFC3339), reported by the runner at registration.
+            Used to compute remaining walltime for active nodes.
         hostname:
           type: string
         id:
@@ -7920,6 +7927,7 @@ components:
       - active_scheduled_nodes
       - is_complete
       - is_canceled
+      - runtime_blocked_ready_jobs
       properties:
         active_compute_nodes:
           type: integer
@@ -7933,9 +7941,32 @@ components:
           type: boolean
         jobs_by_status:
           $ref: '#/components/schemas/JobStatusCounts'
+        longest_ready_runtime_seconds:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Longest required runtime (seconds) among ready jobs. Only populated when
+            some ready jobs are runtime-blocked.
+        max_allocation_remaining_seconds:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Greatest remaining walltime (seconds) across active walltime-bounded
+            allocations. None when no active allocation reports an end time.
         pending_scheduled_nodes:
           type: integer
           format: int64
+        runtime_blocked_ready_jobs:
+          type: integer
+          format: int64
+          description: |-
+            Ready jobs whose required runtime exceeds the remaining walltime of every
+            active allocation, so they cannot start until a fresh allocation appears.
+            0 when there are no walltime-bounded allocations. See `torc workflows diagnose`.
         total_exec_time_minutes:
           type: number
           format: double
