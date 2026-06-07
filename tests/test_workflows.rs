@@ -1670,6 +1670,64 @@ fn test_get_workflow_status_runtime_blocked_signal(start_server: &ServerProcess)
 }
 
 #[rstest]
+fn test_get_workflow_status_unlimited_worker_not_blocked(start_server: &ServerProcess) {
+    // Regression: a walltime-bounded allocation too short for a job must NOT count
+    // the job as runtime-blocked if an active unlimited/local worker (end_time NULL)
+    // is also present -- that worker can claim the job (time_limit=None -> i64::MAX).
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "unlimited_worker_status");
+    let workflow_id = workflow.id.unwrap();
+
+    let rr = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "long_runtime",
+        1,
+        0,
+        1,
+        "1g",
+        "PT72H", // 3 days
+    );
+    let mut job =
+        models::JobModel::new(workflow_id, "long_job".to_string(), "echo long".to_string());
+    job.resource_requirements_id = Some(rr.id.unwrap());
+    apis::jobs_api::create_job(config, job).expect("Failed to create job");
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // A 2-day allocation alone would block the 3-day job.
+    create_active_allocation(config, workflow_id, "slurm-host-1", 2);
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status with short allocation");
+    assert_eq!(status.runtime_blocked_ready_jobs, 1);
+
+    // Register an active unlimited/local worker (no end_time). Now nothing is
+    // runtime-blocked, even though the bounded allocation is still too short.
+    let mut local = models::ComputeNodeModel::new(
+        workflow_id,
+        "local-worker".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        8,
+        16.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    local.is_active = Some(true); // end_time stays None -> unlimited
+    apis::compute_nodes_api::create_compute_node(config, local)
+        .expect("Failed to create unlimited worker");
+
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .expect("Failed to get workflow status with unlimited worker");
+    assert_eq!(
+        status.runtime_blocked_ready_jobs, 0,
+        "an active unlimited worker can run the job, so nothing is runtime-blocked"
+    );
+}
+
+#[rstest]
 fn test_get_workflow_status_not_found(start_server: &ServerProcess) {
     let config = &start_server.config;
     let result = apis::workflows_api::get_workflow_status(config, 999_999);

@@ -62,6 +62,9 @@ struct PackingDiagnosis {
     allocations_with_walltime: usize,
     /// Active allocations with no walltime limit (local / unlimited).
     allocations_unlimited: usize,
+    /// True when at least one active allocation has no walltime limit
+    /// (local/unbounded worker), which means nothing is runtime-blocked.
+    has_unlimited_allocation: bool,
     ready_jobs: usize,
     /// Ready jobs whose resource requirement has a parseable runtime.
     ready_jobs_with_runtime: usize,
@@ -144,17 +147,22 @@ pub fn diagnose_packing(config: &Configuration, workflow_id: Option<i64>, format
     let mut unlimited = 0usize;
     for node in &nodes {
         match node.end_time.as_deref() {
-            Some(end_str) => match chrono::DateTime::parse_from_rfc3339(end_str) {
-                Ok(end) => {
+            // No end_time -> a local/unbounded worker that can run any job,
+            // matching the claim path where time_limit=None becomes i64::MAX.
+            None => unlimited += 1,
+            // A parseable end_time is a bounded allocation. A malformed one is
+            // ignored (mirrors the server's julianday NULL) rather than crashing
+            // or being misclassified as unlimited.
+            Some(end_str) => {
+                if let Ok(end) = chrono::DateTime::parse_from_rfc3339(end_str) {
                     let secs = (end.with_timezone(&Utc) - now).num_seconds().max(0);
                     remaining.push(secs);
                 }
-                // Unparseable end_time: treat as unknown rather than crash.
-                Err(_) => unlimited += 1,
-            },
-            None => unlimited += 1,
+            }
         }
     }
+    // An unlimited active node means nothing is runtime-blocked by walltime.
+    let has_unlimited = unlimited > 0;
 
     // Required runtime (seconds) for each ready job we can resolve.
     let ready_runtimes: Vec<i64> = ready_jobs
@@ -169,13 +177,18 @@ pub fn diagnose_packing(config: &Configuration, workflow_id: Option<i64>, format
     let longest_ready = ready_runtimes.iter().copied().max();
 
     // A job fits an allocation when runtime <= remaining + grace (matching the
-    // server's claim filter). Blocked = exceeds the most generous allocation.
-    let runtime_blocked_jobs = match max_remaining {
-        Some(max_rem) => ready_runtimes
-            .iter()
-            .filter(|&&r| r > max_rem + STARTUP_GRACE_PERIOD_SECONDS)
-            .count(),
-        None => 0,
+    // server's claim filter). Blocked = exceeds the most generous allocation. An
+    // unlimited active node can run anything, so it suppresses the signal entirely.
+    let runtime_blocked_jobs = if has_unlimited {
+        0
+    } else {
+        match max_remaining {
+            Some(max_rem) => ready_runtimes
+                .iter()
+                .filter(|&&r| r > max_rem + STARTUP_GRACE_PERIOD_SECONDS)
+                .count(),
+            None => 0,
+        }
     };
 
     let allocations_too_short_for_longest = match longest_ready {
@@ -191,6 +204,7 @@ pub fn diagnose_packing(config: &Configuration, workflow_id: Option<i64>, format
         active_allocations: nodes.len(),
         allocations_with_walltime: remaining.len(),
         allocations_unlimited: unlimited,
+        has_unlimited_allocation: has_unlimited,
         ready_jobs: ready_jobs.len(),
         ready_jobs_with_runtime: ready_runtimes.len(),
         allocation_remaining: DurationStats::from(&remaining),
@@ -260,10 +274,17 @@ fn print_human_report(d: &PackingDiagnosis) {
 
     if !d.runtime_blocked {
         println!("\u{2713} No runtime-blocked packing detected.");
-        println!(
-            "  All {} ready jobs fit within at least one active allocation's remaining walltime.",
-            d.ready_jobs_with_runtime
-        );
+        if d.has_unlimited_allocation {
+            println!(
+                "  {} active allocation(s) have no walltime limit, so any ready job can run there.",
+                d.allocations_unlimited
+            );
+        } else {
+            println!(
+                "  All {} ready jobs fit within at least one active allocation's remaining walltime.",
+                d.ready_jobs_with_runtime
+            );
+        }
         return;
     }
 
