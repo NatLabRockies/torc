@@ -3,9 +3,9 @@ use crate::client::apis::configuration::{BasicAuth, Configuration, TlsConfig};
 use crate::client::config::TorcConfig;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
-    ComputeNodeModel, FileModel, IsCompleteResponse, JobDependencyModel, JobModel, JobStatus,
-    ResultModel, RunningJobModel, ScheduledComputeNodesModel, SlurmStatsModel, UserDataModel,
-    WorkflowActionModel, WorkflowModel,
+    ComputeNodeModel, FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel,
+    RunningJobModel, ScheduledComputeNodesModel, SlurmStatsModel, UserDataModel,
+    WorkflowActionModel, WorkflowModel, WorkflowStatusResponse,
 };
 use anyhow::{Context, Result};
 
@@ -108,9 +108,11 @@ impl TorcClient {
             .context("Failed to get workflow")
     }
 
-    pub fn is_workflow_complete(&self, workflow_id: i64) -> Result<IsCompleteResponse> {
-        apis::workflows_api::is_workflow_complete(&self.config, workflow_id)
-            .context("Failed to check workflow completion")
+    /// Server-side aggregated workflow status (job counts, completion flags, and
+    /// the runtime-blocked packing signal) in a single O(1) call.
+    pub fn get_workflow_status(&self, workflow_id: i64) -> Result<WorkflowStatusResponse> {
+        apis::workflows_api::get_workflow_status(&self.config, workflow_id)
+            .context("Failed to get workflow status")
     }
 
     pub fn list_jobs(

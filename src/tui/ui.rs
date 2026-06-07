@@ -664,13 +664,21 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         return;
     };
 
-    // Vertical layout: header (3) | progress line (1) | status table (flex) | description (3)
+    // Vertical layout: header (3) | progress (1) | tripwire (0 or 2) | status
+    // table (flex) | description (3). The runtime-blocked tripwire only takes
+    // space when the condition exists.
+    let tripwire_height: u16 = if summary.runtime_blocked_ready_jobs > 0 {
+        2
+    } else {
+        0
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
             Constraint::Length(3),
             Constraint::Length(1),
+            Constraint::Length(tripwire_height),
             Constraint::Min(3),
             Constraint::Length(3),
         ])
@@ -731,6 +739,38 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
     ]);
     f.render_widget(Paragraph::new(progress_line), chunks[1]);
 
+    // --- Runtime-blocked packing tripwire (only when present) ---
+    if summary.runtime_blocked_ready_jobs > 0 {
+        let mut spans = vec![Span::styled(
+            format!(
+                "⚠ {} ready job(s) runtime-blocked",
+                summary.runtime_blocked_ready_jobs
+            ),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )];
+        if let (Some(longest), Some(remaining)) = (
+            summary.longest_ready_runtime_seconds,
+            summary.max_allocation_remaining_seconds,
+        ) {
+            spans.push(Span::styled(
+                format!(
+                    " (longest {} vs {} remaining)",
+                    format_secs_short(longest),
+                    format_secs_short(remaining)
+                ),
+                Style::default().fg(Color::Red),
+            ));
+        }
+        let tripwire = Paragraph::new(vec![
+            Line::from(spans),
+            Line::from(Span::styled(
+                "  run 'torc workflows diagnose' for details",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ]);
+        f.render_widget(tripwire, chunks[2]);
+    }
+
     // --- Per-status counts table (skip rows with count 0) ---
     let header_style = Style::default()
         .fg(Color::Yellow)
@@ -775,7 +815,7 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         ],
     )
     .header(header);
-    f.render_widget(counts_table, chunks[2]);
+    f.render_widget(counts_table, chunks[3]);
 
     // --- Description (optional) ---
     let desc_text = summary.description.as_deref().unwrap_or("—");
@@ -787,7 +827,32 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         Line::from(Span::styled(desc_text, Style::default().fg(Color::White))),
     ])
     .wrap(Wrap { trim: true });
-    f.render_widget(desc, chunks[3]);
+    f.render_widget(desc, chunks[4]);
+}
+
+/// Format a duration in seconds as a compact "3d 1h" / "45m" string for the
+/// Summary tripwire.
+fn format_secs_short(secs: i64) -> String {
+    if secs <= 0 {
+        return "0m".to_string();
+    }
+    let days = secs / 86_400;
+    let hours = (secs % 86_400) / 3_600;
+    let minutes = (secs % 3_600) / 60;
+    let mut parts: Vec<String> = Vec::new();
+    if days > 0 {
+        parts.push(format!("{}d", days));
+    }
+    if hours > 0 {
+        parts.push(format!("{}h", hours));
+    }
+    if minutes > 0 && days == 0 {
+        parts.push(format!("{}m", minutes));
+    }
+    if parts.is_empty() {
+        return "<1m".to_string();
+    }
+    parts.join(" ")
 }
 
 fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
