@@ -922,9 +922,10 @@ impl App {
         let offset = Some(self.workflows_offset);
         let limit = Some(TUI_PAGE_SIZE);
 
-        // Only "Access Group" filters server-side: it requires the
-        // workflow_access_group join (absent from WorkflowModel) and spans all
-        // owners. Name/User/Description narrow the loaded page client-side --
+        // Only "Access Group" filters server-side: it spans all owners, but the
+        // loaded page is scoped to the current user (unless all-users is on), so
+        // a client-side narrow would never surface other owners' group
+        // workflows. Name/User/Description narrow the loaded page client-side --
         // workflow counts are small (hundreds at most), so a substring,
         // case-insensitive match is friendlier than the server's exact match.
         // `user_filter` provides the default owner scoping (the all-users
@@ -2712,10 +2713,11 @@ impl App {
             column: column.clone(),
             value: value.clone(),
         });
-        // All filtering is server-side (across the whole workflow/list), except
-        // a few columns with no server query parameter, which the per-tab
-        // reloads narrow on the loaded page. Restart at page 1 so filtering
-        // spans the full list rather than the page we happened to be on.
+        // Detail panes (jobs, results, ...) filter server-side across the whole
+        // list, so restart at page 1 to filter the full list rather than the
+        // page we happened to be on. Workflows and the Events stream filter
+        // client-side on the loaded page/buffer (workflow counts are small, and
+        // Events are buffered locally).
         if target == FilterTarget::Workflows {
             self.workflows_offset = 0;
             if let Err(err) = self.refresh_workflows() {

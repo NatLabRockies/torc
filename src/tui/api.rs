@@ -71,10 +71,11 @@ impl TorcClient {
         self.config.base_path = base_url.to_string();
     }
 
-    /// List workflows with server-side filters. `description` is a substring
-    /// match; `name`, `user`, and `access_group` are exact. Used by the TUI
-    /// Workflows pane so filtering spans the whole list, not just the loaded
-    /// page.
+    /// List one page of workflows with optional server-side filters:
+    /// `description` is a substring match; `name`, `user`, and `access_group`
+    /// are exact. Returns the page plus a has-more flag. The TUI Workflows pane
+    /// uses `access_group` server-side (it spans all owners) and narrows the
+    /// other columns client-side on the loaded page.
     #[allow(clippy::too_many_arguments)]
     pub fn list_workflows_filtered(
         &self,
