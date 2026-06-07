@@ -2,7 +2,7 @@ mod common;
 
 use common::{
     AccessControlServerProcess, ServerProcess, run_cli_command_with_auth,
-    run_cli_command_with_auth_full, run_jobs_cli_command_with_auth,
+    run_cli_command_with_auth_full, run_cli_with_json, run_jobs_cli_command_with_auth,
     run_jobs_cli_command_with_auth_full, start_server, start_server_with_access_control,
 };
 use std::fs;
@@ -371,6 +371,141 @@ fn test_add_workflow_to_group(start_server: &ServerProcess) {
     assert!(association.created_at.is_some());
 }
 
+/// Listing workflows filtered by access group returns every workflow shared
+/// with that group, across owners, and excludes workflows not in the group.
+#[rstest]
+fn test_list_workflows_filtered_by_access_group(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let suffix = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let group_name = format!("filter-group-{}", suffix);
+
+    // Two workflows owned by different users, plus one left out of the group.
+    let in_a = create_workflow_with_user(config, &format!("in-a-{}", suffix), "owner-a");
+    let in_b = create_workflow_with_user(config, &format!("in-b-{}", suffix), "owner-b");
+    let _out = create_workflow_with_user(config, &format!("out-{}", suffix), "owner-a");
+
+    let group = apis::access_control_api::create_access_group(
+        config,
+        models::AccessGroupModel {
+            id: None,
+            name: group_name.clone(),
+            description: None,
+            created_at: None,
+        },
+    )
+    .expect("Failed to create access group");
+    let group_id = group.id.unwrap();
+
+    for wf in [&in_a, &in_b] {
+        apis::access_control_api::add_workflow_to_group(config, wf.id.unwrap(), group_id)
+            .expect("Failed to add workflow to group");
+    }
+
+    // Filter by the group name: both members returned regardless of owner, the
+    // non-member excluded.
+    let listed = apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(&group_name),
+    )
+    .expect("Failed to list workflows by access group");
+
+    let mut ids: Vec<i64> = listed.items.iter().filter_map(|w| w.id).collect();
+    ids.sort();
+    let mut expected = vec![in_a.id.unwrap(), in_b.id.unwrap()];
+    expected.sort();
+    assert_eq!(ids, expected);
+
+    // An unknown group name matches nothing.
+    let none = apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some("no-such-group-xyz"),
+    )
+    .expect("Failed to list workflows by access group");
+    assert!(none.items.is_empty());
+}
+
+/// `torc workflows list --access-group <name>` returns every workflow in the
+/// group regardless of owner (the CLI drops the default my-workflows scoping),
+/// and excludes workflows that aren't in the group.
+#[rstest]
+fn test_cli_workflows_list_by_access_group_spans_owners(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let suffix = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let group_name = format!("cli-group-{}", suffix);
+    let name_a = format!("cli-in-a-{}", suffix);
+    let name_b = format!("cli-in-b-{}", suffix);
+    let name_own = format!("cli-own-{}", suffix);
+
+    let in_a = create_workflow_with_user(config, &name_a, "owner-a");
+    let in_b = create_workflow_with_user(config, &name_b, "owner-b");
+    // Owned by the CLI user ("viewer") but NOT added to the group.
+    create_workflow_with_user(config, &name_own, "viewer");
+
+    let group = apis::access_control_api::create_access_group(
+        config,
+        models::AccessGroupModel {
+            id: None,
+            name: group_name.clone(),
+            description: None,
+            created_at: None,
+        },
+    )
+    .expect("Failed to create access group");
+    let group_id = group.id.unwrap();
+    for wf in [&in_a, &in_b] {
+        apis::access_control_api::add_workflow_to_group(config, wf.id.unwrap(), group_id)
+            .expect("Failed to add workflow to group");
+    }
+
+    // Run the CLI as "viewer": --access-group spans all owners, so both
+    // other-owned group workflows appear and the viewer's non-group workflow
+    // does not.
+    let args = ["workflows", "list", "--access-group", &group_name];
+    let json = run_cli_with_json(&args, start_server, Some("viewer"))
+        .expect("Failed to run workflows list --access-group");
+    let names: Vec<String> = json
+        .get("items")
+        .and_then(|w| w.as_array())
+        .expect("Expected items array")
+        .iter()
+        .map(|w| w.get("name").unwrap().as_str().unwrap().to_string())
+        .collect();
+
+    assert!(
+        names.contains(&name_a),
+        "expected {} in {:?}",
+        name_a,
+        names
+    );
+    assert!(
+        names.contains(&name_b),
+        "expected {} in {:?}",
+        name_b,
+        names
+    );
+    assert!(
+        !names.contains(&name_own),
+        "non-group workflow {} should be excluded",
+        name_own
+    );
+}
+
 #[rstest]
 fn test_list_workflow_groups(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -507,6 +642,7 @@ fn test_create_workflow_with_unknown_access_group_fails(start_server: &ServerPro
         None,
         None,
         Some("wf-unknown-access-group"),
+        None,
         None,
         None,
         None,

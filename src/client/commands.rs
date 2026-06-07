@@ -48,6 +48,7 @@ pub fn select_workflow_interactively(
         Some(user),
         None,        // description filter
         Some(false), // is_archived - exclude archived workflows
+        None,        // access_group filter
     ) {
         Ok(response) => {
             let workflows = response.items;

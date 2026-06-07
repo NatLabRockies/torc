@@ -360,6 +360,7 @@ impl WorkflowsApiImpl {
         user: Option<String>,
         description: Option<String>,
         is_archived: Option<bool>,
+        access_group: Option<String>,
         accessible_ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListWorkflowsResponse, ApiError>
@@ -367,7 +368,7 @@ impl WorkflowsApiImpl {
         C: Has<XSpanIdString> + Send + Sync,
     {
         debug!(
-            "list_workflows_filtered({}, {:?}, {:?}, {}, {:?}, {:?}, {:?}, {:?}, accessible_ids={:?}) - X-Span-ID: {:?}",
+            "list_workflows_filtered({}, {:?}, {:?}, {}, {:?}, {:?}, {:?}, {:?}, access_group={:?}, accessible_ids={:?}) - X-Span-ID: {:?}",
             offset,
             sort_by,
             reverse_sort,
@@ -376,6 +377,7 @@ impl WorkflowsApiImpl {
             user,
             description,
             is_archived,
+            access_group,
             accessible_ids.as_ref().map(|ids| ids.len()),
             context.get().0.clone()
         );
@@ -422,6 +424,16 @@ impl WorkflowsApiImpl {
 
         if description.is_some() {
             where_conditions.push("description LIKE ? ESCAPE '\\'".to_string());
+        }
+
+        // Filter to workflows shared with the named access group via the
+        // workflow_access_group join table (matched by group name).
+        if access_group.is_some() {
+            where_conditions.push(
+                "id IN (SELECT wag.workflow_id FROM workflow_access_group wag \
+                 JOIN access_group g ON wag.group_id = g.id WHERE g.name = ?)"
+                    .to_string(),
+            );
         }
 
         if let Some(archived) = is_archived {
@@ -495,6 +507,9 @@ impl WorkflowsApiImpl {
         if let Some(workflow_description) = &description {
             sqlx_query =
                 sqlx_query.bind(format!("%{}%", escape_like_pattern(workflow_description)));
+        }
+        if let Some(group) = &access_group {
+            sqlx_query = sqlx_query.bind(group);
         }
         // Bind accessible IDs
         if let Some(ref ids) = accessible_ids {
@@ -603,6 +618,9 @@ impl WorkflowsApiImpl {
         if let Some(workflow_description) = &description {
             count_sqlx_query =
                 count_sqlx_query.bind(format!("%{}%", escape_like_pattern(workflow_description)));
+        }
+        if let Some(group) = &access_group {
+            count_sqlx_query = count_sqlx_query.bind(group);
         }
         // Bind accessible IDs for count query
         if let Some(ref ids) = accessible_ids {
@@ -1711,6 +1729,7 @@ where
             user,
             description,
             is_archived,
+            None, // no access group filter
             None, // no access control filtering
             context,
         )

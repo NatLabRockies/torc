@@ -1481,6 +1481,7 @@ fn test_create_workflow_rollback_on_error(start_server: &ServerProcess) {
         Some("rollback_user"),
         None,
         None,
+        None,
     )
     .expect("Failed to list workflows");
 

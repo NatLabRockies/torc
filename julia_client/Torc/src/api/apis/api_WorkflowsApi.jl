@@ -680,7 +680,7 @@ const _returntypes_list_workflows_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListWorkflowsResponse,
 )
 
-function _oacinternal_list_workflows(_api::WorkflowsApi; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, _mediaType=nothing)
+function _oacinternal_list_workflows(_api::WorkflowsApi; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, access_group=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_workflows_WorkflowsApi, "/workflows", [])
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
@@ -690,6 +690,7 @@ function _oacinternal_list_workflows(_api::WorkflowsApi; offset=nothing, limit=n
     OpenAPI.Clients.set_param(_ctx.query, "user", user; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "description", description; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "is_archived", is_archived; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "access_group", access_group; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -704,16 +705,17 @@ end
 - user::String
 - description::String
 - is_archived::Bool
+- access_group::String
 
 Return: ListWorkflowsResponse, OpenAPI.Clients.ApiResponse
 """
-function list_workflows(_api::WorkflowsApi; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_workflows(_api; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, name=name, user=user, description=description, is_archived=is_archived, _mediaType=_mediaType)
+function list_workflows(_api::WorkflowsApi; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, access_group=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_workflows(_api; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, name=name, user=user, description=description, is_archived=is_archived, access_group=access_group, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_workflows(_api::WorkflowsApi, response_stream::Channel; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_workflows(_api; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, name=name, user=user, description=description, is_archived=is_archived, _mediaType=_mediaType)
+function list_workflows(_api::WorkflowsApi, response_stream::Channel; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, name=nothing, user=nothing, description=nothing, is_archived=nothing, access_group=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_workflows(_api; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, name=name, user=user, description=description, is_archived=is_archived, access_group=access_group, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

@@ -385,6 +385,7 @@ resource_requirements:
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list workflows");
 
@@ -581,6 +582,7 @@ resource_requirements:
         None,
         None,
         Some("restart_test_workflow"),
+        None,
         None,
         None,
         None,
@@ -967,6 +969,7 @@ resource_requirements:
         None,
         None,
         Some("reinitialize_test_workflow"),
+        None,
         None,
         None,
         None,

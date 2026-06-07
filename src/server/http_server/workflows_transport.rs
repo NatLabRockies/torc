@@ -195,6 +195,7 @@ where
         user: Option<String>,
         description: Option<String>,
         is_archived: Option<bool>,
+        access_group: Option<String>,
         context: &C,
     ) -> Result<ListWorkflowsResponse, ApiError> {
         let (offset, limit) = process_pagination_params(offset, limit)?;
@@ -228,6 +229,7 @@ where
                 user,
                 description,
                 is_archived,
+                access_group,
                 accessible_ids,
                 context,
             )

@@ -79,10 +79,13 @@ class TorcAPI {
 
     // ==================== Workflows ====================
 
-    async listWorkflows(offset = 0, limit = 100, user = null) {
+    async listWorkflows(offset = 0, limit = 100, user = null, accessGroup = null) {
         let url = `/workflows?offset=${offset}&limit=${limit}`;
         if (user) {
             url += `&user=${encodeURIComponent(user)}`;
+        }
+        if (accessGroup) {
+            url += `&access_group=${encodeURIComponent(accessGroup)}`;
         }
         const response = await this.request(url);
         return this.extractItems(response);

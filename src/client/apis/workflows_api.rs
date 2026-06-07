@@ -1597,6 +1597,7 @@ pub fn list_workflows(
     user: Option<&str>,
     description: Option<&str>,
     is_archived: Option<bool>,
+    access_group: Option<&str>,
 ) -> Result<models::ListWorkflowsResponse, Error<ListWorkflowsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_offset = offset;
@@ -1607,6 +1608,7 @@ pub fn list_workflows(
     let p_query_user = user;
     let p_query_description = description;
     let p_query_is_archived = is_archived;
+    let p_query_access_group = access_group;
 
     let uri_str = format!("{}/workflows", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -1634,6 +1636,9 @@ pub fn list_workflows(
     }
     if let Some(ref param_value) = p_query_is_archived {
         req_builder = req_builder.query(&[("is_archived", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_access_group {
+        req_builder = req_builder.query(&[("access_group", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

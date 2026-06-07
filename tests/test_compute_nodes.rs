@@ -3,6 +3,112 @@ mod common;
 use common::{ServerProcess, create_test_compute_node, create_test_workflow, start_server};
 use rstest::rstest;
 use torc::client::apis;
+use torc::models;
+
+fn create_named_compute_node(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    host: &str,
+    is_active: bool,
+) {
+    let mut node = models::ComputeNodeModel::new(
+        workflow_id,
+        host.to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        8,
+        16.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    node.is_active = Some(is_active);
+    apis::compute_nodes_api::create_compute_node(config, node)
+        .expect("Failed to create compute node");
+}
+
+/// Server-side filtering by `is_active`, including the total count (the count
+/// query previously failed to bind this parameter).
+#[rstest]
+fn test_list_compute_nodes_active_filter(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_compute_nodes_active_filter");
+    let workflow_id = workflow.id.unwrap();
+
+    create_named_compute_node(config, workflow_id, "active-host", true);
+    create_named_compute_node(config, workflow_id, "inactive-host", false);
+
+    let list = |active: bool| {
+        apis::compute_nodes_api::list_compute_nodes(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(active),
+            None,
+        )
+        .expect("Failed to list compute nodes by active state")
+    };
+
+    let active = list(true);
+    assert_eq!(active.total_count, 1);
+    assert_eq!(active.items.len(), 1);
+    assert_eq!(active.items[0].hostname, "active-host");
+
+    let inactive = list(false);
+    assert_eq!(inactive.total_count, 1);
+    assert_eq!(inactive.items.len(), 1);
+    assert_eq!(inactive.items[0].hostname, "inactive-host");
+}
+
+/// Listing compute nodes filtered by hostname matches a substring and returns a
+/// correct total count (covers the count-query bindings for the hostname param).
+#[rstest]
+fn test_list_compute_nodes_hostname_substring(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_compute_nodes_hostname_filter");
+    let workflow_id = workflow.id.unwrap();
+
+    create_named_compute_node(config, workflow_id, "node-alpha-01", true);
+    create_named_compute_node(config, workflow_id, "node-beta-02", true);
+
+    // Substring "alpha" matches only the first node.
+    let alpha = apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        Some("alpha"),
+        None,
+        None,
+    )
+    .expect("Failed to list compute nodes by hostname");
+    assert_eq!(alpha.total_count, 1);
+    assert_eq!(alpha.items.len(), 1);
+    assert_eq!(alpha.items[0].hostname, "node-alpha-01");
+
+    // Substring "node-" matches both.
+    let both = apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        Some("node-"),
+        None,
+        None,
+    )
+    .expect("Failed to list compute nodes by hostname");
+    assert_eq!(both.total_count, 2);
+    assert_eq!(both.items.len(), 2);
+}
 
 #[rstest]
 fn test_compute_node_resource_summary_round_trip(start_server: &ServerProcess) {

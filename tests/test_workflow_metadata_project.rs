@@ -352,6 +352,7 @@ fn test_list_workflows_returns_env(start_server: &ServerProcess) {
         None,
         None,
         Some(false),
+        None,
     )
     .expect("Failed to list workflows with archived filter");
 

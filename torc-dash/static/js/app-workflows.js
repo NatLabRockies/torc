@@ -39,6 +39,25 @@ Object.assign(TorcDashboard.prototype, {
             this.filterWorkflows(e.target.value);
         });
 
+        // Access-group filter (server-side: spans all owners in the group).
+        // Reload on Enter, or when the value changes via clear/blur. Track the
+        // last applied value so pressing Enter and then blurring doesn't fire a
+        // second identical load.
+        const accessGroupInput = document.getElementById('workflow-access-group');
+        if (accessGroupInput) {
+            let lastAppliedAccessGroup = accessGroupInput.value.trim();
+            const applyAccessGroup = () => {
+                const current = accessGroupInput.value.trim();
+                if (current === lastAppliedAccessGroup) return;
+                lastAppliedAccessGroup = current;
+                this.loadWorkflows();
+            };
+            accessGroupInput.addEventListener('change', applyAccessGroup);
+            accessGroupInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') applyAccessGroup();
+            });
+        }
+
         // Select all checkbox
         document.getElementById('workflows-select-all')?.addEventListener('change', (e) => {
             this.toggleSelectAllWorkflows(e.target.checked);
@@ -56,7 +75,11 @@ Object.assign(TorcDashboard.prototype, {
 
     async loadWorkflows() {
         try {
-            const workflows = await api.listWorkflows(0, 100, this.showAllUsers ? null : this.currentUser);
+            const accessGroup = document.getElementById('workflow-access-group')?.value.trim() || null;
+            // Filtering by access group spans all owners, so don't scope to the
+            // current user when a group is set.
+            const user = (this.showAllUsers || accessGroup) ? null : this.currentUser;
+            const workflows = await api.listWorkflows(0, 100, user, accessGroup);
             this.workflows = workflows || [];
             // Sort by id descending (newer workflows first)
             this.workflows.sort((a, b) => {

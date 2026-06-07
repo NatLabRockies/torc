@@ -422,10 +422,11 @@ where
             where_conditions.push(format!("{} = ?", name_column));
         }
 
-        // Add path filter if provided
+        // Add path filter if provided (substring match so callers can filter
+        // by a path fragment).
         if path.is_some() {
             let path_column = if needs_join { "f.path" } else { "path" };
-            where_conditions.push(format!("{} = ?", path_column));
+            where_conditions.push(format!("{} LIKE ? ESCAPE '\\'", path_column));
         }
 
         let where_clause = where_conditions.join(" AND ");
@@ -472,7 +473,7 @@ where
             sqlx_query = sqlx_query.bind(name_filter);
         }
         if let Some(ref path_filter) = path {
-            sqlx_query = sqlx_query.bind(path_filter);
+            sqlx_query = sqlx_query.bind(format!("%{}%", super::escape_like_pattern(path_filter)));
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -519,7 +520,8 @@ where
             count_sqlx_query = count_sqlx_query.bind(name_filter);
         }
         if let Some(ref path_filter) = path {
-            count_sqlx_query = count_sqlx_query.bind(path_filter);
+            count_sqlx_query =
+                count_sqlx_query.bind(format!("%{}%", super::escape_like_pattern(path_filter)));
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {

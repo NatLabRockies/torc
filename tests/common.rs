@@ -1312,13 +1312,14 @@ pub fn delete_all_workflows(config: &Configuration) -> Result<(), Box<dyn std::e
     // List all workflows (no user filter to get all workflows)
     let response = apis::workflows_api::list_workflows(
         config, None, // offset
+        None, // limit (use default to get all)
         None, // sort_by
         None, // reverse_sort
-        None, // limit (use default to get all)
         None, // name filter
         None, // user filter (no filter = all users)
         None, // description filter
-        None, // is_archive filter
+        None, // is_archived filter
+        None, // access_group filter
     )?;
 
     let workflows = response.items;
