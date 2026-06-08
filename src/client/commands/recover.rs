@@ -18,7 +18,7 @@ use crate::client::commands::slurm::RegenerateDryRunResult;
 use crate::client::report_models::{ResourceUtilizationReport, ResultsReport};
 use crate::client::resource_correction::{
     ResourceAdjustmentReport, ResourceCorrectionContext, ResourceCorrectionOptions,
-    apply_resource_corrections,
+    ResourceCorrectionResult, apply_resource_corrections,
 };
 use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
@@ -1341,7 +1341,11 @@ fn recover_workflow_interactive(
         dry_run: true, // always preview first in interactive mode
         no_downsize: true,
     };
-    let correction_result = apply_resource_corrections(&correction_ctx, &correction_opts)?;
+    let correction_result = if !correction_opts.include_jobs.is_empty() {
+        apply_resource_corrections(&correction_ctx, &correction_opts)?
+    } else {
+        ResourceCorrectionResult::default()
+    };
 
     // --- Show proposed changes and confirm ------------------------------------
     eprintln!("\n--- Recovery Plan ---\n");
@@ -1490,7 +1494,11 @@ fn recover_workflow_interactive(
         dry_run: false,
         no_downsize: true,
     };
-    let real_result = apply_resource_corrections(&correction_ctx, &real_opts)?;
+    let real_result = if !real_opts.include_jobs.is_empty() {
+        apply_resource_corrections(&correction_ctx, &real_opts)?
+    } else {
+        ResourceCorrectionResult::default()
+    };
 
     // Run recovery hook if applicable
     if !unknown_job_ids.is_empty()
