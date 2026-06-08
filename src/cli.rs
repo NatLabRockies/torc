@@ -22,6 +22,7 @@ use crate::client::commands::resource_requirements::ResourceRequirementsCommands
 use crate::client::commands::results::ResultCommands;
 use crate::client::commands::ro_crate::RoCrateCommands;
 use crate::client::commands::scheduled_compute_nodes::ScheduledComputeNodeCommands;
+use crate::client::commands::self_update::SelfCommands;
 use crate::client::commands::slurm::SlurmCommands;
 use crate::client::commands::tasks::TasksCommands;
 use crate::client::commands::user_data::UserDataCommands;
@@ -84,6 +85,7 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
   \x1b[1;36mtasks\x1b[0m                    Wait for async tasks
   \x1b[1;36mplot-resources\x1b[0m           Generate HTML resource plots
+  \x1b[1;36mself\x1b[0m                     Manage the local torc executable
   \x1b[1;36mcompletions\x1b[0m              Generate shell completions
   \x1b[1;36mhelp\x1b[0m                     Print help for a subcommand
 {after-help}";
@@ -1041,6 +1043,12 @@ EXAMPLES:
 "
     )]
     PlotResources(plot_resources_cmd::Args),
+    /// Manage the local torc executable
+    #[command(name = "self")]
+    SelfCommand {
+        #[command(subcommand)]
+        command: SelfCommands,
+    },
     /// Check if the server is running and accessible
     #[command(hide = true)]
     Ping,
@@ -1064,4 +1072,25 @@ EXAMPLES:
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{CommandFactory, error::ErrorKind};
+
+    use crate::cli::Cli;
+
+    #[test]
+    fn self_update_help_is_available() {
+        let error = Cli::command()
+            .try_get_matches_from_mut(["torc", "self", "update", "--help"])
+            .expect_err("help should return a clap display error");
+
+        assert_eq!(error.kind(), ErrorKind::DisplayHelp);
+        let help = error.to_string();
+        assert!(help.contains("torc self update"));
+        assert!(help.contains("TARGET_VERSION"));
+        assert!(help.contains("--token"));
+        assert!(help.contains("GITHUB_TOKEN"));
+    }
 }

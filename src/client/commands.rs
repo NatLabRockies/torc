@@ -21,6 +21,7 @@ pub mod resource_requirements;
 pub mod results;
 pub mod ro_crate;
 pub mod scheduled_compute_nodes;
+pub mod self_update;
 pub mod slurm;
 pub mod table_format;
 pub mod tasks;
