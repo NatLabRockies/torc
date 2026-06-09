@@ -24,6 +24,9 @@ use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
 use crate::models::JobStatus;
 
+/// Maximum time to wait for the server's database to become healthy when claiming actions.
+const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
+
 fn torc_command() -> Result<Command, String> {
     if let Ok(path) = std::env::var("TORC_BIN")
         && !path.trim().is_empty()
@@ -1536,6 +1539,11 @@ fn recover_workflow_interactive(
             start_one_worker_per_node,
             ..
         } => {
+            // Reinitialization above re-armed the workflow's on_workflow_start schedule_nodes
+            // action. Mark it executed before submitting so it doesn't re-fire on the first
+            // compute node and submit the action's original allocation count instead of the
+            // user's choice. (The Regenerate path does the equivalent inside handle_regenerate.)
+            mark_on_workflow_start_schedule_actions_executed(config, args.workflow_id)?;
             info!(
                 "Submitting {} allocation(s) with scheduler ID {}...",
                 num_allocations, scheduler_id
@@ -1746,6 +1754,63 @@ fn prompt_scheduler_choice(
             start_one_worker_per_node,
         });
     }
+}
+
+/// Mark the workflow's `on_workflow_start` `schedule_nodes` actions as executed.
+///
+/// `reinitialize_workflow` re-arms these actions (the server clears their `executed` flag and
+/// re-triggers them). When recovery reuses an existing scheduler and submits a user-chosen number
+/// of allocations directly via `torc slurm schedule-nodes`, a re-armed action would otherwise fire
+/// again on the first compute node that starts and submit the action's original `num_allocations`,
+/// ignoring the user's entry. Claiming the actions here marks them executed and prevents that
+/// duplicate, action-defined submission. The `regenerate` path performs the equivalent step inside
+/// `handle_regenerate`. Recovery actions (`is_recovery`) are left untouched.
+pub fn mark_on_workflow_start_schedule_actions_executed(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(), String> {
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .map_err(|e| format!("Failed to list workflow actions: {}", e))?;
+
+    for action in actions {
+        if action.trigger_type == "on_workflow_start"
+            && action.action_type == "schedule_nodes"
+            && !action.is_recovery
+            && !action.executed
+            && let Some(action_id) = action.id
+        {
+            // Delegate to the shared helper, which treats a 409 Conflict (already claimed by
+            // another process) as `Ok(false)` and surfaces any other failure as an error. We
+            // propagate that error rather than logging and continuing: if the claim genuinely
+            // fails, the action stays armed and would re-fire on a compute node, reintroducing
+            // the duplicate-allocation bug — better to stop and report it.
+            match crate::client::utils::claim_action(
+                config,
+                workflow_id,
+                action_id,
+                None, // login-node submission, no compute node
+                WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+            ) {
+                Ok(true) => {
+                    info!(
+                        "Marked on_workflow_start schedule_nodes action {} as executed to avoid duplicate allocations",
+                        action_id
+                    );
+                }
+                Ok(false) => {
+                    debug!("Action {} already claimed", action_id);
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to mark on_workflow_start schedule_nodes action {} as executed: {}",
+                        action_id, e
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Submit allocations using an existing scheduler config via `torc slurm schedule-nodes`.
