@@ -31,7 +31,9 @@ fn torc_command(config: &Configuration) -> Result<Command, String> {
     let mut cmd = if let Ok(path) = std::env::var("TORC_BIN")
         && !path.trim().is_empty()
     {
-        Command::new(path)
+        // Use the trimmed value: a TORC_BIN with surrounding whitespace passes the emptiness
+        // check above but would fail to spawn if passed verbatim.
+        Command::new(path.trim())
     } else {
         let current_exe = std::env::current_exe()
             .map_err(|e| format!("Failed to determine current torc executable: {}", e))?;
@@ -1041,7 +1043,7 @@ fn get_scheduler_dry_run(
         .collect::<Vec<_>>()
         .join(",");
 
-    let output_dir = output_dir_arg(output_dir)?;
+    let output_dir_str = output_dir_arg(output_dir)?;
     let mut cmd = torc_command(config)?;
     let output = cmd
         .args([
@@ -1054,7 +1056,7 @@ fn get_scheduler_dry_run(
             "--include-job-ids",
             &job_ids_str,
             "-o",
-            &output_dir,
+            &output_dir_str,
         ])
         .output()
         .map_err(|e| format!("Failed to run slurm regenerate --dry-run: {}", e))?;
