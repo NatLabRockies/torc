@@ -24,6 +24,9 @@ use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
 use crate::models::JobStatus;
 
+/// Maximum time to wait for the server's database to become healthy when claiming actions.
+const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
+
 fn torc_command() -> Result<Command, String> {
     if let Ok(path) = std::env::var("TORC_BIN")
         && !path.trim().is_empty()
@@ -1776,27 +1779,32 @@ pub fn mark_on_workflow_start_schedule_actions_executed(
             && !action.executed
             && let Some(action_id) = action.id
         {
-            match apis::workflow_actions_api::claim_action(
+            // Delegate to the shared helper, which treats a 409 Conflict (already claimed by
+            // another process) as `Ok(false)` and surfaces any other failure as an error. We
+            // propagate that error rather than logging and continuing: if the claim genuinely
+            // fails, the action stays armed and would re-fire on a compute node, reintroducing
+            // the duplicate-allocation bug — better to stop and report it.
+            match crate::client::utils::claim_action(
                 config,
                 workflow_id,
                 action_id,
-                crate::models::ClaimActionRequest {
-                    compute_node_id: None,
-                },
+                None, // login-node submission, no compute node
+                WAIT_FOR_HEALTHY_DATABASE_MINUTES,
             ) {
-                Ok(_) => {
+                Ok(true) => {
                     info!(
                         "Marked on_workflow_start schedule_nodes action {} as executed to avoid duplicate allocations",
                         action_id
                     );
                 }
+                Ok(false) => {
+                    debug!("Action {} already claimed", action_id);
+                }
                 Err(e) => {
-                    // 409 Conflict means another process already claimed it, which is fine.
-                    if format!("{:?}", e).contains("409") {
-                        debug!("Action {} already claimed", action_id);
-                    } else {
-                        warn!("Failed to mark action {} as executed: {:?}", action_id, e);
-                    }
+                    return Err(format!(
+                        "Failed to mark on_workflow_start schedule_nodes action {} as executed: {}",
+                        action_id, e
+                    ));
                 }
             }
         }
