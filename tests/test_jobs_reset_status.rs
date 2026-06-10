@@ -1,7 +1,8 @@
 mod common;
 
 use common::{
-    ServerProcess, create_test_compute_node, create_test_workflow, run_cli_with_json, start_server,
+    ServerProcess, create_test_compute_node, create_test_workflow, get_exe_path, run_cli_with_json,
+    start_server,
 };
 use rstest::rstest;
 use torc::client::apis;
@@ -1069,4 +1070,167 @@ fn test_reset_status_reinit_dry_run(start_server: &ServerProcess) {
         run_id_after, run_id_before,
         "run_id must not change on dry-run"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Test 12: Re-runnable without --force — a first reset leaves the workflow
+//          incomplete (uninitialized jobs), but a second invocation must still
+//          succeed because the command only requires no active workers, not
+//          workflow completeness.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_rerunnable_without_force(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_rerunnable");
+    let workflow_id = workflow.id.unwrap();
+
+    let job1 = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "job1".to_string(), "echo job1".to_string()),
+    )
+    .expect("create job1");
+    let job1_id = job1.id.unwrap();
+    let job2 = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "job2".to_string(), "echo job2".to_string()),
+    )
+    .expect("create job2");
+    let job2_id = job2.id.unwrap();
+
+    let run_id = initialize_workflow(config, &workflow);
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let cn_id = compute_node.id.unwrap();
+
+    for &id in &[job1_id, job2_id] {
+        apis::jobs_api::manage_status_change(config, id, JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("Failed to set job {} running: {}", id, e));
+        complete_job(config, id, workflow_id, cn_id, run_id, 1, JobStatus::Failed);
+    }
+
+    // First reset (workflow is complete) — no --force needed
+    let json = run_cli_with_json(
+        &["jobs", "reset-status", "--no-prompts", &job1_id.to_string()],
+        start_server,
+        None,
+    )
+    .expect("first reset-status should succeed");
+    assert_eq!(json["status"], "success");
+
+    // job1 is now uninitialized, so the workflow is no longer complete.
+    // A second invocation must STILL succeed without --force.
+    let json = run_cli_with_json(
+        &["jobs", "reset-status", "--no-prompts", &job2_id.to_string()],
+        start_server,
+        None,
+    )
+    .expect("second reset-status should succeed even though workflow is incomplete");
+    assert_eq!(json["status"], "success");
+
+    for &id in &[job1_id, job2_id] {
+        assert_eq!(
+            apis::jobs_api::get_job(config, id).unwrap().status.unwrap(),
+            JobStatus::Uninitialized,
+            "job {} should be Uninitialized",
+            id
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test 13: Warning for successfully completed jobs — resetting a Completed job
+//          succeeds but prints a stderr warning; a Failed job in the same
+//          invocation is not listed in the warning.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_completed_job_warning(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_completed_warning");
+    let workflow_id = workflow.id.unwrap();
+
+    let completed_job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "ok_job".to_string(), "echo ok".to_string()),
+    )
+    .expect("create completed job");
+    let completed_id = completed_job.id.unwrap();
+    let failed_job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "bad_job".to_string(), "false".to_string()),
+    )
+    .expect("create failed job");
+    let failed_id = failed_job.id.unwrap();
+
+    let run_id = initialize_workflow(config, &workflow);
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let cn_id = compute_node.id.unwrap();
+
+    for &id in &[completed_id, failed_id] {
+        apis::jobs_api::manage_status_change(config, id, JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("Failed to set job {} running: {}", id, e));
+    }
+    complete_job(
+        config,
+        completed_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        0,
+        JobStatus::Completed,
+    );
+    complete_job(
+        config,
+        failed_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Failed,
+    );
+
+    // Run the CLI directly so we can capture stderr alongside stdout
+    let output = std::process::Command::new(get_exe_path("./target/debug/torc"))
+        .args([
+            "--format",
+            "json",
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            &completed_id.to_string(),
+            &failed_id.to_string(),
+        ])
+        .env("TORC_API_URL", &start_server.config.base_path)
+        .output()
+        .expect("run torc CLI");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "reset-status should succeed; stderr: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains("completed successfully"),
+        "stderr should warn about completed jobs; stderr: {}",
+        stderr
+    );
+    assert!(
+        stderr.contains(&format!("job {} (ok_job)", completed_id)),
+        "warning should list the completed job; stderr: {}",
+        stderr
+    );
+    assert!(
+        !stderr.contains(&format!("job {} (bad_job)", failed_id)),
+        "warning should not list the failed job; stderr: {}",
+        stderr
+    );
+
+    // Both jobs were still reset
+    for &id in &[completed_id, failed_id] {
+        assert_eq!(
+            apis::jobs_api::get_job(config, id).unwrap().status.unwrap(),
+            JobStatus::Uninitialized,
+            "job {} should be Uninitialized",
+            id
+        );
+    }
 }

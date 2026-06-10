@@ -71,15 +71,20 @@ torc jobs reset-status 101 102 --no-prompts
 torc workflows reinit <workflow_id>
 torc run <workflow_id>
 
-# Override quiescence check (e.g. workflow still technically running)
+# Override safety checks (e.g. workers still active)
 torc jobs reset-status 101 --force
 
 # JSON output for scripting
 torc -f json jobs reset-status 101 102 --no-prompts
 ```
 
-The `--force` flag bypasses two checks: (1) the workflow quiescence check (complete/no active
-workers), and (2) the active-status guard (jobs in Running or Pending are normally rejected).
+The workflow does not need to be complete — the command can be run repeatedly (e.g. to reset
+additional jobs after an earlier reset) as long as no workers are active. If a requested job
+completed successfully, the command warns you before resetting it, since resetting discards its
+results and reruns it.
+
+The `--force` flag bypasses two checks: (1) the no-active-workers check (compute nodes and Slurm
+allocations), and (2) the active-status guard (jobs in Running or Pending are normally rejected).
 
 ## Choosing the Right Tool
 

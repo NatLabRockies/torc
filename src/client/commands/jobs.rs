@@ -463,7 +463,7 @@ EXAMPLES:
     # Reset without prompts (for scripts/CI)
     torc jobs reset-status 101 102 --no-prompts
 
-    # Override quiescence check (workflow still running)
+    # Override safety checks (workers still active)
     torc jobs reset-status 101 --force
 
     # JSON output for scripting
@@ -474,7 +474,7 @@ EXAMPLES:
         /// Job IDs to reset (must all belong to the same workflow)
         #[arg(required = true, num_args = 1..)]
         job_ids: Vec<i64>,
-        /// Skip precondition checks (workflow complete, no active workers)
+        /// Skip precondition checks (no active workers, target jobs not running)
         #[arg(long)]
         force: bool,
         /// Preview which jobs would be reset without applying changes
@@ -1594,9 +1594,12 @@ fn handle_reset_job_status(
     // -----------------------------------------------------------------------
     // 2. Preconditions
     // -----------------------------------------------------------------------
+    // The workflow does NOT need to be complete — only quiet. Requiring
+    // completeness would make this command non-rerunnable: the first reset
+    // leaves jobs uninitialized, so the workflow is no longer "complete".
     if !force {
         if let Err(msg) =
-            crate::client::commands::recover::check_workflow_quiesced(config, workflow_id)
+            crate::client::commands::recover::check_no_active_workers(config, workflow_id)
         {
             eprintln!("Error: {}", msg);
             eprintln!("Use --force to skip this check.");
@@ -1669,7 +1672,8 @@ fn handle_reset_job_status(
     downstream_jobs.sort_by_key(|j| require_job_id(j));
 
     // -----------------------------------------------------------------------
-    // 4. Warn for already-uninitialized requested jobs (no-ops)
+    // 4. Warn for already-uninitialized requested jobs (no-ops) and for jobs
+    //    that completed successfully (the user may not intend to redo them)
     // -----------------------------------------------------------------------
     for job in &unique_jobs {
         if job.status == Some(models::JobStatus::Uninitialized) {
@@ -1678,6 +1682,20 @@ fn handle_reset_job_status(
                 require_job_id(job),
                 job.name
             );
+        }
+    }
+
+    let completed_targets: Vec<&models::JobModel> = unique_jobs
+        .iter()
+        .filter(|j| j.status == Some(models::JobStatus::Completed))
+        .collect();
+    if !completed_targets.is_empty() {
+        eprintln!(
+            "Warning: the following job(s) completed successfully; resetting them discards \
+             their results and reruns them:"
+        );
+        for job in &completed_targets {
+            eprintln!("  job {} ({})", require_job_id(job), job.name);
         }
     }
 

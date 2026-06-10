@@ -460,6 +460,20 @@ pub(crate) fn check_workflow_quiesced(
         );
     }
 
+    check_no_active_workers(config, workflow_id)
+}
+
+/// Check that no workers are active on the workflow:
+/// - No active compute node workers
+/// - No pending or active scheduled compute nodes (Slurm allocations)
+///
+/// Unlike [`check_workflow_quiesced`], this does NOT require the workflow to be
+/// complete — non-terminal job statuses (uninitialized, blocked, ready) are fine
+/// as long as nothing is executing or about to execute.
+pub(crate) fn check_no_active_workers(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(), String> {
     // Check for active compute nodes
     let active_nodes = apis::compute_nodes_api::list_compute_nodes(
         config,
