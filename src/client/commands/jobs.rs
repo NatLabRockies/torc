@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -430,6 +430,50 @@ EXAMPLES:
         /// Workflow ID to list running jobs for (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
+    },
+    /// Reset specific jobs to uninitialized status for selective rerun
+    ///
+    /// Resets the given job IDs (and any completed downstream dependents) to uninitialized
+    /// so they can be rerun. All jobs must belong to the same workflow.
+    ///
+    /// After resetting, run 'torc workflows reinit <workflow_id>' to rebuild
+    /// dependency state (this bumps run_id exactly once), then 'torc run' or
+    /// 'torc submit' to execute.
+    #[command(
+        name = "reset-status",
+        after_long_help = "\
+EXAMPLES:
+    # Reset two specific jobs for rerun (preview first)
+    torc jobs reset-status 101 102 --dry-run
+
+    # Reset and rerun (full flow)
+    torc jobs reset-status 101 102
+    torc workflows reinit 42
+    torc run 42
+
+    # Reset without prompts (for scripts/CI)
+    torc jobs reset-status 101 102 --no-prompts
+
+    # Override quiescence check (workflow still running)
+    torc jobs reset-status 101 --force
+
+    # JSON output for scripting
+    torc -f json jobs reset-status 101 102
+"
+    )]
+    ResetStatus {
+        /// Job IDs to reset (must all belong to the same workflow)
+        #[arg(required = true, num_args = 1..)]
+        job_ids: Vec<i64>,
+        /// Skip precondition checks (workflow complete, no active workers)
+        #[arg(long)]
+        force: bool,
+        /// Preview which jobs would be reset without applying changes
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
     },
 }
 
@@ -1223,6 +1267,14 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             }
         }
+        JobCommands::ResetStatus {
+            job_ids,
+            force,
+            dry_run,
+            no_prompts,
+        } => {
+            handle_reset_job_status(config, job_ids, *force, *dry_run, *no_prompts, format);
+        }
         JobCommands::Running { workflow_id } => {
             let user_name = get_env_user_name();
             let selected_workflow_id = match workflow_id {
@@ -1419,6 +1471,420 @@ pub fn get_current_job_count(
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
     Ok(response.total_count)
+}
+
+// ---------------------------------------------------------------------------
+// reset-status helpers
+// ---------------------------------------------------------------------------
+
+/// A single row in the jobs-to-reset preview table.
+#[derive(Tabled)]
+struct ResetJobRow {
+    #[tabled(rename = "Job ID")]
+    id: i64,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Current Status")]
+    status: String,
+    #[tabled(rename = "Kind")]
+    kind: String,
+}
+
+/// Handler for `torc jobs reset-status`.
+///
+/// Resets the given job IDs (plus any completed downstream dependents) to
+/// `Uninitialized` so they can be rerun.  Does NOT bump the workflow `run_id` —
+/// the caller should follow up with `torc workflows reinit <id>` (which
+/// resets workflow status and bumps `run_id` exactly once).
+///
+/// # Known limitation
+/// `manage_status_change` does not clear `start_time` / `compute_node_id`; those
+/// fields are overwritten when the job next starts.  Clearing them via `update_job`
+/// is restricted and the cosmetic difference is acceptable.
+fn handle_reset_job_status(
+    config: &Configuration,
+    job_ids: &[i64],
+    force: bool,
+    dry_run: bool,
+    no_prompts: bool,
+    format: &str,
+) {
+    // -----------------------------------------------------------------------
+    // 1. Fetch and validate: all IDs must exist and belong to the same workflow
+    // -----------------------------------------------------------------------
+    let mut fetched: Vec<models::JobModel> = Vec::with_capacity(job_ids.len());
+    for &id in job_ids {
+        match apis::jobs_api::get_job(config, id) {
+            Ok(job) => fetched.push(job),
+            Err(e) => {
+                eprintln!("Error: job {} not found: {}", id, e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // De-duplicate by ID while preserving first-occurrence order
+    let mut seen_ids: HashSet<i64> = HashSet::new();
+    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
+    for job in fetched {
+        let id = job.id.unwrap_or(-1);
+        if seen_ids.insert(id) {
+            unique_jobs.push(job);
+        }
+    }
+
+    // Determine workflow from first job; reject if any job belongs elsewhere
+    let workflow_id = unique_jobs[0].workflow_id;
+    let mut mismatched: Vec<(i64, i64)> = Vec::new();
+    for job in &unique_jobs {
+        if job.workflow_id != workflow_id {
+            mismatched.push((job.id.unwrap_or(-1), job.workflow_id));
+        }
+    }
+    if !mismatched.is_empty() {
+        eprintln!(
+            "Error: all job IDs must belong to the same workflow (inferred workflow_id={} from \
+             first job), but the following jobs belong to different workflows:",
+            workflow_id
+        );
+        for (id, wf) in &mismatched {
+            eprintln!("  job {} belongs to workflow {}", id, wf);
+        }
+        eprintln!("Nothing was reset.");
+        std::process::exit(1);
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. Preconditions
+    // -----------------------------------------------------------------------
+    if !force {
+        if let Err(msg) =
+            crate::client::commands::recover::check_workflow_quiesced(config, workflow_id)
+        {
+            eprintln!("Error: {}", msg);
+            eprintln!("Use --force to skip this check.");
+            std::process::exit(1);
+        }
+
+        // Reject jobs currently in Running or Pending status
+        let active_targets: Vec<i64> = unique_jobs
+            .iter()
+            .filter(|j| {
+                matches!(
+                    j.status,
+                    Some(models::JobStatus::Running) | Some(models::JobStatus::Pending)
+                )
+            })
+            .map(|j| j.id.unwrap_or(-1))
+            .collect();
+        if !active_targets.is_empty() {
+            eprintln!(
+                "Error: the following jobs are currently Running or Pending and cannot be reset \
+                 without --force:"
+            );
+            for id in &active_targets {
+                eprintln!("  job {}", id);
+            }
+            std::process::exit(1);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. Compute downstream closure (BFS over completed dependents)
+    // -----------------------------------------------------------------------
+    // Seeds: requested jobs whose current status is a terminal/complete status.
+    // For each such job, fetch its completed direct dependents and add them to
+    // the reset set; repeat transitively.  Jobs that are already Uninitialized
+    // are included in the reset set (idempotent no-ops) so the user sees them.
+    let requested_ids: HashSet<i64> = unique_jobs.iter().map(|j| j.id.unwrap_or(-1)).collect();
+
+    // Maps job_id → (job, is_downstream_only)
+    let mut reset_set: HashMap<i64, (models::JobModel, bool)> = HashMap::new();
+    for job in &unique_jobs {
+        reset_set.insert(job.id.unwrap_or(-1), (job.clone(), false));
+    }
+
+    // BFS queue seeded from requested jobs that are in a complete state
+    let mut bfs_queue: VecDeque<i64> = unique_jobs
+        .iter()
+        .filter(|j| j.status.map(|s| s.is_complete()).unwrap_or(false))
+        .map(|j| j.id.unwrap_or(-1))
+        .collect();
+
+    while let Some(upstream_id) = bfs_queue.pop_front() {
+        // Fetch direct dependents of this upstream job
+        let params = JobListParams::new().with_upstream_job_id(upstream_id);
+        let dependents = match pagination::paginate_jobs(config, workflow_id, params) {
+            Ok(jobs) => jobs,
+            Err(e) => {
+                eprintln!(
+                    "Error: failed to list dependents of job {}: {}",
+                    upstream_id, e
+                );
+                std::process::exit(1);
+            }
+        };
+
+        for dep in dependents {
+            let dep_id = dep.id.unwrap_or(-1);
+            if reset_set.contains_key(&dep_id) {
+                continue; // already in set
+            }
+            // Only pull completed dependents into the closure
+            if dep.status.map(|s| s.is_complete()).unwrap_or(false) {
+                let is_downstream = !requested_ids.contains(&dep_id);
+                reset_set.insert(dep_id, (dep, is_downstream));
+                bfs_queue.push_back(dep_id);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. Warn for already-uninitialized requested jobs (no-ops)
+    // -----------------------------------------------------------------------
+    for job in &unique_jobs {
+        if job.status == Some(models::JobStatus::Uninitialized) {
+            eprintln!(
+                "Warning: job {} ({}) is already uninitialized — will be a no-op.",
+                job.id.unwrap_or(-1),
+                job.name
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. Build ordered reset list: downstream closure first, then requested
+    // -----------------------------------------------------------------------
+    // Separate into downstream-only vs. explicitly requested
+    let mut downstream_jobs: Vec<&models::JobModel> = reset_set
+        .values()
+        .filter(|(_, is_downstream)| *is_downstream)
+        .map(|(j, _)| j)
+        .collect();
+    downstream_jobs.sort_by_key(|j| j.id.unwrap_or(-1));
+
+    let mut explicit_jobs: Vec<&models::JobModel> = reset_set
+        .values()
+        .filter(|(_, is_downstream)| !*is_downstream)
+        .map(|(j, _)| j)
+        .collect();
+    explicit_jobs.sort_by_key(|j| j.id.unwrap_or(-1));
+
+    // Display table
+    if format != "json" {
+        let mut rows: Vec<ResetJobRow> = Vec::new();
+        for job in &downstream_jobs {
+            rows.push(ResetJobRow {
+                id: job.id.unwrap_or(-1),
+                name: job.name.clone(),
+                status: job
+                    .status
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                kind: "downstream".to_string(),
+            });
+        }
+        for job in &explicit_jobs {
+            rows.push(ResetJobRow {
+                id: job.id.unwrap_or(-1),
+                name: job.name.clone(),
+                status: job
+                    .status
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                kind: "explicit".to_string(),
+            });
+        }
+        if rows.is_empty() {
+            println!("No jobs to reset.");
+            return;
+        }
+        display_table_with_count(&rows, "jobs to reset");
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. Dry-run: stop here
+    // -----------------------------------------------------------------------
+    let all_reset_ids: Vec<i64> = {
+        let mut ids: Vec<i64> = downstream_jobs.iter().map(|j| j.id.unwrap_or(-1)).collect();
+        ids.extend(explicit_jobs.iter().map(|j| j.id.unwrap_or(-1)));
+        ids
+    };
+
+    if dry_run {
+        if format == "json" {
+            let downstream_list: Vec<serde_json::Value> = downstream_jobs
+                .iter()
+                .map(|j| {
+                    serde_json::json!({
+                        "job_id": j.id.unwrap_or(-1),
+                        "name": j.name,
+                        "status": j.status.map(|s| s.to_string()).unwrap_or_default(),
+                        "kind": "downstream",
+                    })
+                })
+                .collect();
+            let explicit_list: Vec<serde_json::Value> = explicit_jobs
+                .iter()
+                .map(|j| {
+                    serde_json::json!({
+                        "job_id": j.id.unwrap_or(-1),
+                        "name": j.name,
+                        "status": j.status.map(|s| s.to_string()).unwrap_or_default(),
+                        "kind": "explicit",
+                    })
+                })
+                .collect();
+            let mut jobs_list = downstream_list;
+            jobs_list.extend(explicit_list);
+            let response = serde_json::json!({
+                "dry_run": true,
+                "workflow_id": workflow_id,
+                "jobs": jobs_list,
+            });
+            println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        } else {
+            println!("Dry run: no changes were made.");
+        }
+        return;
+    }
+
+    if all_reset_ids.is_empty() {
+        if format == "json" {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "workflow_id": workflow_id,
+                    "reset_count": 0,
+                    "reset_job_ids": [],
+                    "failures": [],
+                    "next_steps": format!(
+                        "Run 'torc workflows reinit {}' (then 'torc run'/'torc submit') \
+                         to rerun these jobs.",
+                        workflow_id
+                    ),
+                }))
+                .unwrap()
+            );
+        } else {
+            println!("No jobs to reset.");
+        }
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. Confirmation prompt
+    // -----------------------------------------------------------------------
+    if !no_prompts && format != "json" {
+        eprintln!(
+            "\nAbout to reset {} job(s) in workflow {} to uninitialized.",
+            all_reset_ids.len(),
+            workflow_id
+        );
+        eprintln!("This is an idempotent operation and can be re-run if it partially fails.");
+        print!("Continue? (y/N): ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                if input.trim().to_lowercase() != "y" && input.trim().to_lowercase() != "yes" {
+                    eprintln!("Reset cancelled.");
+                    std::process::exit(0);
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read input: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. Apply: fetch run_id, then reset downstream first, then explicit
+    // -----------------------------------------------------------------------
+    let run_id = match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(wf) => wf.run_id.unwrap_or(1),
+        Err(e) => {
+            eprintln!("Error: failed to fetch workflow {}: {}", workflow_id, e);
+            std::process::exit(1);
+        }
+    };
+
+    // Order: downstream-closure jobs BEFORE their upstream targets so the server's
+    // own one-level reinitialize_downstream_jobs finds them already uninitialized.
+    let ordered_ids: Vec<i64> = {
+        let mut ids: Vec<i64> = downstream_jobs.iter().map(|j| j.id.unwrap_or(-1)).collect();
+        ids.extend(explicit_jobs.iter().map(|j| j.id.unwrap_or(-1)));
+        ids
+    };
+
+    let mut succeeded: Vec<i64> = Vec::new();
+    let mut failures: Vec<(i64, String)> = Vec::new();
+
+    for &id in &ordered_ids {
+        match apis::jobs_api::manage_status_change(
+            config,
+            id,
+            models::JobStatus::Uninitialized,
+            run_id,
+        ) {
+            Ok(_) => succeeded.push(id),
+            Err(e) => failures.push((id, e.to_string())),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. Output
+    // -----------------------------------------------------------------------
+    let next_steps = format!(
+        "Run 'torc workflows reinit {}' (then 'torc run'/'torc submit') to rerun these \
+         jobs.",
+        workflow_id
+    );
+
+    if format == "json" {
+        let failure_list: Vec<serde_json::Value> = failures
+            .iter()
+            .map(|(id, msg)| serde_json::json!({"job_id": id, "error": msg}))
+            .collect();
+        let status_str = if failures.is_empty() {
+            "success"
+        } else {
+            "partial_failure"
+        };
+        let response = serde_json::json!({
+            "status": status_str,
+            "workflow_id": workflow_id,
+            "reset_count": succeeded.len(),
+            "reset_job_ids": succeeded,
+            "failures": failure_list,
+            "next_steps": next_steps,
+        });
+        println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        // Exit non-zero on partial failure, matching handle_reset_status's convention
+        if !failures.is_empty() {
+            std::process::exit(1);
+        }
+    } else {
+        if !failures.is_empty() {
+            eprintln!("Error: {} job(s) could not be reset:", failures.len());
+            for (id, msg) in &failures {
+                eprintln!("  job {}: {}", id, msg);
+            }
+            eprintln!(
+                "Successfully reset {} job(s). This command is idempotent — re-run it to retry \
+                 the failed resets.",
+                succeeded.len()
+            );
+            std::process::exit(1);
+        }
+        println!(
+            "Successfully reset {} job(s) to uninitialized.",
+            succeeded.len()
+        );
+        println!("{}", next_steps);
+    }
 }
 
 /// Get existing job names to avoid duplicates

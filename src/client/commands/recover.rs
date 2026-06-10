@@ -437,18 +437,27 @@ pub fn recover_workflow(
     Ok(result)
 }
 
-/// Check that the workflow is in a valid state for recovery:
-/// - Workflow must be complete (all jobs in terminal state)
-/// - No active workers (compute nodes or scheduled compute nodes)
-fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
+/// Check that the workflow is quiesced (safe to modify job statuses):
+/// - Workflow must be complete or canceled (all jobs in terminal state)
+/// - No active compute node workers
+/// - No pending or active scheduled compute nodes (Slurm allocations)
+///
+/// Returns `Err(message)` with a neutral description of what is wrong. Callers can
+/// prepend their own action-specific prefix when surfacing the error to the user.
+pub(crate) fn check_workflow_quiesced(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(), String> {
     // Check if workflow is complete
     let is_complete = apis::workflows_api::is_workflow_complete(config, workflow_id)
         .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
 
     if !is_complete.is_complete && !is_complete.is_canceled {
-        return Err("Cannot recover: workflow is not complete. \
-             Wait for all jobs to finish or use 'torc workflows cancel' first."
-            .to_string());
+        return Err(
+            "workflow is not complete; wait for all jobs to finish or use \
+             'torc workflows cancel' first"
+                .to_string(),
+        );
     }
 
     // Check for active compute nodes
@@ -466,9 +475,9 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     .map_err(|e| format!("Failed to check for active compute nodes: {}", e))?;
 
     if !active_nodes.items.is_empty() {
-        return Err("Cannot recover: there are still active compute nodes. \
-             Wait for all workers to exit."
-            .to_string());
+        return Err(
+            "there are still active compute nodes; wait for all workers to exit".to_string(),
+        );
     }
 
     // Check for pending/active scheduled compute nodes
@@ -486,9 +495,11 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     .map_err(|e| format!("Failed to check for pending scheduled compute nodes: {}", e))?;
 
     if pending_scn.total_count > 0 {
-        return Err("Cannot recover: there are pending Slurm allocations. \
-             Wait for them to start or cancel them with 'torc slurm cancel'."
-            .to_string());
+        return Err(
+            "there are pending Slurm allocations; wait for them to start or cancel them with \
+             'torc slurm cancel'"
+                .to_string(),
+        );
     }
 
     let active_scn = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
@@ -506,11 +517,22 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
 
     if active_scn.total_count > 0 {
         return Err(
-            "Cannot recover: there are active Slurm allocations still running. \
-             Wait for all workers to exit."
+            "there are active Slurm allocations still running; wait for all workers to exit"
                 .to_string(),
         );
     }
+
+    Ok(())
+}
+
+/// Check that the workflow is in a valid state for recovery:
+/// - Workflow must be complete (all jobs in terminal state)
+/// - No active workers (compute nodes or scheduled compute nodes)
+/// - There must be at least one recoverable job
+fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
+    // Delegate quiescence checks (1–4) to the shared helper
+    check_workflow_quiesced(config, workflow_id)
+        .map_err(|msg| format!("Cannot recover: {}", msg))?;
 
     // Check that there are actually recoverable jobs. The reset path
     // (`reset_failed_jobs_only`) resets failed, terminated, canceled, and pending_failed jobs, so

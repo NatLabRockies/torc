@@ -43,6 +43,39 @@ torc workflows reset-status <workflow_id> --failed-only
 
 Then resume execution with `torc run <workflow_id>` (local) or `torc submit <workflow_id>` (Slurm).
 
+## Selective Job Reset: `torc jobs reset-status`
+
+When you need to rerun only specific jobs (not all failed ones), use `torc jobs reset-status`. This
+is useful when you know exactly which jobs need to be rerun without resetting the whole workflow.
+
+Unlike `torc workflows reset-status`, this command:
+
+- Resets only the explicitly named job IDs (plus any completed downstream dependents — because a
+  rerun job produces new outputs that completed consumers must consume again).
+- Does **not** bump the workflow `run_id` or reset workflow state — you follow up with
+  `torc workflows reinit` once, which does the run_id bump exactly once.
+- All supplied job IDs must belong to the same workflow (hard error otherwise).
+
+```bash
+# Preview what would be reset (no changes applied)
+torc jobs reset-status 101 102 --dry-run
+
+# Reset and rerun (standard flow)
+torc jobs reset-status 101 102 --no-prompts
+torc workflows reinit <workflow_id>
+torc run <workflow_id>      # local execution
+# or: torc submit <workflow_id>   # Slurm
+
+# Override quiescence check (e.g. workflow still technically running)
+torc jobs reset-status 101 --force
+
+# JSON output for scripting
+torc -f json jobs reset-status 101 102 --no-prompts
+```
+
+The `--force` flag bypasses two checks: (1) the workflow quiescence check (complete/no active
+workers), and (2) the active-status guard (jobs in Running or Pending are normally rejected).
+
 ## Choosing the Right Tool
 
 | Scenario                                                  | Use                                                                               |
@@ -51,6 +84,7 @@ Then resume execution with `torc run <workflow_id>` (local) or `torc submit <wor
 | Slurm workflow, want continuous self-healing              | `torc watch --recover`                                                            |
 | Local workflow with failures                              | `torc workflows reset-status --failed-only`                                       |
 | Want to retry without changing resource allocations       | `torc workflows reset-status --failed-only`                                       |
+| Rerun only specific known jobs                            | `torc jobs reset-status <id>...`                                                  |
 | Workflow ran fine but inputs changed                      | [Intelligent Restart](../concepts/intelligent-restart.md)                         |
 | Need AI-driven classification of unfamiliar failure modes | [AI-Assisted Recovery](../../specialized/fault-tolerance/ai-assisted-recovery.md) |
 
