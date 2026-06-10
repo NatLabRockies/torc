@@ -1504,6 +1504,18 @@ struct ResetJobRow {
 /// `manage_status_change` does not clear `start_time` / `compute_node_id`; those
 /// fields are overwritten when the job next starts.  Clearing them via `update_job`
 /// is restricted and the cosmetic difference is acceptable.
+/// The server always assigns job IDs, so a `None` here indicates a server bug;
+/// fail hard rather than propagate a sentinel value into status changes.
+fn require_job_id(job: &models::JobModel) -> i64 {
+    job.id.unwrap_or_else(|| {
+        eprintln!(
+            "Error: server returned job '{}' (workflow_id={}) without an ID",
+            job.name, job.workflow_id
+        );
+        std::process::exit(1);
+    })
+}
+
 fn handle_reset_job_status(
     config: &Configuration,
     job_ids: &[i64],
@@ -1530,7 +1542,7 @@ fn handle_reset_job_status(
     let mut seen_ids: HashSet<i64> = HashSet::new();
     let mut unique_jobs: Vec<models::JobModel> = Vec::new();
     for job in fetched {
-        let id = job.id.unwrap_or(-1);
+        let id = require_job_id(&job);
         if seen_ids.insert(id) {
             unique_jobs.push(job);
         }
@@ -1541,7 +1553,7 @@ fn handle_reset_job_status(
     let mut mismatched: Vec<(i64, i64)> = Vec::new();
     for job in &unique_jobs {
         if job.workflow_id != workflow_id {
-            mismatched.push((job.id.unwrap_or(-1), job.workflow_id));
+            mismatched.push((require_job_id(job), job.workflow_id));
         }
     }
     if !mismatched.is_empty() {
@@ -1578,7 +1590,7 @@ fn handle_reset_job_status(
                     Some(models::JobStatus::Running) | Some(models::JobStatus::Pending)
                 )
             })
-            .map(|j| j.id.unwrap_or(-1))
+            .map(require_job_id)
             .collect();
         if !active_targets.is_empty() {
             eprintln!(
@@ -1602,7 +1614,7 @@ fn handle_reset_job_status(
     // 'torc workflows reinit' (a rerun job produces new outputs, so consumers
     // must rerun too).  The closure computed here mirrors that CTE (no status
     // filter) so the user can see exactly what reinit will reset.
-    let requested_ids: HashSet<i64> = unique_jobs.iter().map(|j| j.id.unwrap_or(-1)).collect();
+    let requested_ids: HashSet<i64> = unique_jobs.iter().map(require_job_id).collect();
 
     let mut downstream_map: HashMap<i64, models::JobModel> = HashMap::new();
     let mut visited: HashSet<i64> = requested_ids.clone();
@@ -1623,7 +1635,7 @@ fn handle_reset_job_status(
         };
 
         for dep in dependents {
-            let dep_id = dep.id.unwrap_or(-1);
+            let dep_id = require_job_id(&dep);
             if visited.insert(dep_id) {
                 downstream_map.insert(dep_id, dep);
                 bfs_queue.push_back(dep_id);
@@ -1632,7 +1644,7 @@ fn handle_reset_job_status(
     }
 
     let mut downstream_jobs: Vec<&models::JobModel> = downstream_map.values().collect();
-    downstream_jobs.sort_by_key(|j| j.id.unwrap_or(-1));
+    downstream_jobs.sort_by_key(|j| require_job_id(j));
 
     // -----------------------------------------------------------------------
     // 4. Warn for already-uninitialized requested jobs (no-ops)
@@ -1641,7 +1653,7 @@ fn handle_reset_job_status(
         if job.status == Some(models::JobStatus::Uninitialized) {
             eprintln!(
                 "Warning: job {} ({}) is already uninitialized — will be a no-op.",
-                job.id.unwrap_or(-1),
+                require_job_id(job),
                 job.name
             );
         }
@@ -1651,7 +1663,7 @@ fn handle_reset_job_status(
     // 5. Display: requested jobs table + informational downstream section
     // -----------------------------------------------------------------------
     let to_row = |job: &models::JobModel| ResetJobRow {
-        id: job.id.unwrap_or(-1),
+        id: require_job_id(job),
         name: job.name.clone(),
         status: job
             .status
@@ -1660,7 +1672,7 @@ fn handle_reset_job_status(
     };
     let to_json = |job: &models::JobModel| {
         serde_json::json!({
-            "job_id": job.id.unwrap_or(-1),
+            "job_id": require_job_id(job),
             "name": job.name,
             "status": job.status.map(|s| s.to_string()).unwrap_or_default(),
         })
@@ -1756,7 +1768,7 @@ fn handle_reset_job_status(
     let mut failures: Vec<(i64, String)> = Vec::new();
 
     for job in &unique_jobs {
-        let id = job.id.unwrap_or(-1);
+        let id = require_job_id(job);
         match apis::jobs_api::manage_status_change(
             config,
             id,
@@ -1791,6 +1803,7 @@ fn handle_reset_job_status(
             "status": status_str,
             "workflow_id": workflow_id,
             "reset_count": succeeded.len(),
+            "requested_job_ids": unique_jobs.iter().map(require_job_id).collect::<Vec<_>>(),
             "reset_job_ids": succeeded,
             // Informational: these are reset by the server at reinit time,
             // not by this command.
