@@ -61,11 +61,15 @@ Unlike `torc workflows reset-status`, this command:
 # Preview what would be reset (no changes applied)
 torc jobs reset-status 101 102 --dry-run
 
-# Reset and rerun (standard flow)
-torc jobs reset-status 101 102 --no-prompts
-torc workflows reinit <workflow_id>
+# Reset and reinitialize in one step, then run
+torc jobs reset-status 101 102 --reinit
 torc run <workflow_id>      # local execution
 # or: torc submit <workflow_id>   # Slurm
+
+# Reset and rerun (manual two-step flow)
+torc jobs reset-status 101 102 --no-prompts
+torc workflows reinit <workflow_id>
+torc run <workflow_id>
 
 # Override quiescence check (e.g. workflow still technically running)
 torc jobs reset-status 101 --force

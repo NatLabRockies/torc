@@ -15,6 +15,8 @@ use crate::client::commands::{
     },
 };
 use crate::client::utils::format_local_timestamp;
+use crate::client::workflow_manager::WorkflowManager;
+use crate::config::TorcConfig;
 use crate::models;
 use tabled::Tabled;
 
@@ -440,7 +442,8 @@ EXAMPLES:
     ///
     /// After resetting, run 'torc workflows reinit <workflow_id>' to rebuild
     /// dependency state (this bumps run_id exactly once), then 'torc run' or
-    /// 'torc submit' to execute.
+    /// 'torc submit' to execute. Use --reinit to perform the reinit step automatically
+    /// in the same invocation.
     #[command(
         name = "reset-status",
         after_long_help = "\
@@ -448,7 +451,11 @@ EXAMPLES:
     # Reset two specific jobs for rerun (preview first)
     torc jobs reset-status 101 102 --dry-run
 
-    # Reset and rerun (full flow)
+    # Reset and reinitialize in one step, then run
+    torc jobs reset-status 101 102 --reinit
+    torc run 42
+
+    # Reset and rerun (manual two-step flow)
     torc jobs reset-status 101 102
     torc workflows reinit 42
     torc run 42
@@ -476,6 +483,9 @@ EXAMPLES:
         /// Skip confirmation prompt
         #[arg(long)]
         no_prompts: bool,
+        /// Reinitialize the workflow after resetting (runs 'torc workflows reinit' for you)
+        #[arg(long, alias = "reinitialize")]
+        reinit: bool,
     },
 }
 
@@ -1274,8 +1284,17 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             force,
             dry_run,
             no_prompts,
+            reinit,
         } => {
-            handle_reset_job_status(config, job_ids, *force, *dry_run, *no_prompts, format);
+            handle_reset_job_status(
+                config,
+                job_ids,
+                *force,
+                *dry_run,
+                *no_prompts,
+                *reinit,
+                format,
+            );
         }
         JobCommands::Running { workflow_id } => {
             let user_name = get_env_user_name();
@@ -1497,8 +1516,9 @@ struct ResetJobRow {
 /// `uninitialize_blocked_jobs` CTE resets every transitive dependent of an
 /// uninitialized job when the user runs `torc workflows reinit` — this command
 /// merely computes and displays that closure.  Does NOT bump the workflow
-/// `run_id` — the caller should follow up with `torc workflows reinit <id>`
-/// (which resets workflow status and bumps `run_id` exactly once).
+/// `run_id` by default — the caller should follow up with `torc workflows reinit <id>`
+/// (which resets workflow status and bumps `run_id` exactly once).  Pass
+/// `reinit = true` (or `--reinit` on the CLI) to perform that step automatically.
 ///
 /// # Known limitation
 /// `manage_status_change` does not clear `start_time` / `compute_node_id`; those
@@ -1516,12 +1536,14 @@ fn require_job_id(job: &models::JobModel) -> i64 {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_reset_job_status(
     config: &Configuration,
     job_ids: &[i64],
     force: bool,
     dry_run: bool,
     no_prompts: bool,
+    reinit: bool,
     format: &str,
 ) {
     // -----------------------------------------------------------------------
@@ -1683,12 +1705,19 @@ fn handle_reset_job_status(
         display_table_with_count(&rows, "jobs to reset");
 
         if !downstream_jobs.is_empty() {
-            println!(
-                "\nThe following downstream jobs will be reset when you run \
-                 'torc workflows reinit {}' (a rerun job produces new outputs, so its \
-                 consumers must rerun too):",
-                workflow_id
-            );
+            if reinit {
+                println!(
+                    "\nThe following downstream jobs will be reset now by the reinit step \
+                     (a rerun job produces new outputs, so its consumers must rerun too):",
+                );
+            } else {
+                println!(
+                    "\nThe following downstream jobs will be reset when you run \
+                     'torc workflows reinit {}' (a rerun job produces new outputs, so its \
+                     consumers must rerun too):",
+                    workflow_id
+                );
+            }
             let ds_rows: Vec<ResetJobRow> = downstream_jobs.iter().map(|j| to_row(j)).collect();
             display_table_with_count(&ds_rows, "downstream jobs (reset at reinit time)");
         }
@@ -1701,6 +1730,7 @@ fn handle_reset_job_status(
         if format == "json" {
             let response = serde_json::json!({
                 "dry_run": true,
+                "reinit_requested": reinit,
                 "workflow_id": workflow_id,
                 "jobs": unique_jobs.iter().map(to_json).collect::<Vec<_>>(),
                 "downstream_jobs": downstream_jobs
@@ -1711,6 +1741,9 @@ fn handle_reset_job_status(
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else {
             println!("Dry run: no changes were made.");
+            if reinit {
+                println!("Dry run: the workflow would also be reinitialized.");
+            }
         }
         return;
     }
@@ -1725,11 +1758,19 @@ fn handle_reset_job_status(
             workflow_id
         );
         if !downstream_jobs.is_empty() {
-            eprintln!(
-                "{} downstream job(s) will be reset later by 'torc workflows reinit {}'.",
-                downstream_jobs.len(),
-                workflow_id
-            );
+            if reinit {
+                eprintln!(
+                    "The workflow will be reinitialized now and {} downstream job(s) reset as \
+                     part of it.",
+                    downstream_jobs.len()
+                );
+            } else {
+                eprintln!(
+                    "{} downstream job(s) will be reset later by 'torc workflows reinit {}'.",
+                    downstream_jobs.len(),
+                    workflow_id
+                );
+            }
         }
         eprintln!("This is an idempotent operation and can be re-run if it partially fails.");
         print!("Continue? (y/N): ");
@@ -1781,20 +1822,47 @@ fn handle_reset_job_status(
     }
 
     // -----------------------------------------------------------------------
+    // 8b. Apply reinit (only when requested and all resets succeeded)
+    // -----------------------------------------------------------------------
+    let mut reinit_applied = false;
+    let mut reinit_error: Option<String> = None;
+    if reinit && failures.is_empty() {
+        match apis::workflows_api::get_workflow(config, workflow_id) {
+            Ok(workflow) => {
+                let torc_config = TorcConfig::load().unwrap_or_default();
+                let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+                match manager.reinitialize(false, false) {
+                    Ok(()) => reinit_applied = true,
+                    Err(e) => reinit_error = Some(e.to_string()),
+                }
+            }
+            Err(e) => reinit_error = Some(format!("failed to fetch workflow: {}", e)),
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // 9. Output
     // -----------------------------------------------------------------------
-    let next_steps = format!(
-        "Run 'torc workflows reinit {}' (then 'torc run'/'torc submit') to rerun these \
-         jobs.",
-        workflow_id
-    );
+    let next_steps = if reinit_applied {
+        format!(
+            "Run 'torc run {}' or 'torc submit {}' to execute.",
+            workflow_id, workflow_id
+        )
+    } else {
+        format!(
+            "Run 'torc workflows reinit {}' (then 'torc run'/'torc submit') to rerun these \
+             jobs.",
+            workflow_id
+        )
+    };
 
     if format == "json" {
         let failure_list: Vec<serde_json::Value> = failures
             .iter()
             .map(|(id, msg)| serde_json::json!({"job_id": id, "error": msg}))
             .collect();
-        let status_str = if failures.is_empty() {
+        let all_succeeded = failures.is_empty() && (!reinit || reinit_applied);
+        let status_str = if all_succeeded {
             "success"
         } else {
             "partial_failure"
@@ -1813,10 +1881,14 @@ fn handle_reset_job_status(
                 .collect::<Vec<_>>(),
             "failures": failure_list,
             "next_steps": next_steps,
+            "reinit": {
+                "requested": reinit,
+                "applied": reinit_applied,
+                "error": reinit_error,
+            },
         });
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
-        // Exit non-zero on partial failure, matching handle_reset_status's convention
-        if !failures.is_empty() {
+        if !all_succeeded {
             std::process::exit(1);
         }
     } else {
@@ -1830,12 +1902,30 @@ fn handle_reset_job_status(
                  the failed resets.",
                 succeeded.len()
             );
+            if reinit {
+                eprintln!(
+                    "Reinit was skipped because of the above failures. Re-run this command to \
+                     retry both the resets and reinit."
+                );
+            }
             std::process::exit(1);
         }
         println!(
             "Successfully reset {} job(s) to uninitialized.",
             succeeded.len()
         );
+        if let Some(ref err) = reinit_error {
+            eprintln!("Error reinitializing workflow {}: {}", workflow_id, err);
+            eprintln!(
+                "The job resets succeeded. Run 'torc workflows reinit {}' manually to complete \
+                 the reinit step.",
+                workflow_id
+            );
+            std::process::exit(1);
+        }
+        if reinit_applied {
+            println!("Reinitialized workflow {}.", workflow_id);
+        }
         println!("{}", next_steps);
     }
 }

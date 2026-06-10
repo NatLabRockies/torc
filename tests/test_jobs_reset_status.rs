@@ -174,6 +174,20 @@ fn test_reset_status_selective(start_server: &ServerProcess) {
         run_id,
         "run_id must not change on reset-status"
     );
+
+    // reinit object must be present with requested=false when flag is absent
+    assert_eq!(
+        json["reinit"]["requested"], false,
+        "reinit.requested should be false"
+    );
+    assert_eq!(
+        json["reinit"]["applied"], false,
+        "reinit.applied should be false"
+    );
+    assert!(
+        json["reinit"]["error"].is_null(),
+        "reinit.error should be null"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -799,5 +813,260 @@ fn test_reset_status_idempotent(start_server: &ServerProcess) {
             .unwrap(),
         JobStatus::Uninitialized,
         "Job should remain Uninitialized"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 9: --reinit flag end-to-end — reset + reinit in one invocation.
+//         A → B (B depends on A). Both completed. Reset B with --reinit.
+//         Assert: B uninitialized then ready after reinit, A unchanged,
+//         run_id bumped by exactly 1.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_reinit_flag_end_to_end(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_reinit_e2e");
+    let workflow_id = workflow.id.unwrap();
+
+    let job_a = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(
+            workflow_id,
+            "reinit_e2e_a".to_string(),
+            "echo a".to_string(),
+        ),
+    )
+    .expect("create a");
+    let a_id = job_a.id.unwrap();
+
+    let mut job_b_model = models::JobModel::new(
+        workflow_id,
+        "reinit_e2e_b".to_string(),
+        "echo b".to_string(),
+    );
+    job_b_model.depends_on_job_ids = Some(vec![a_id]);
+    let job_b = apis::jobs_api::create_job(config, job_b_model).expect("create b");
+    let b_id = job_b.id.unwrap();
+
+    let run_id_before = initialize_workflow(config, &workflow);
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let cn_id = compute_node.id.unwrap();
+
+    // Complete A successfully, complete B with failure
+    apis::jobs_api::manage_status_change(config, a_id, JobStatus::Running, run_id_before)
+        .expect("set a running");
+    complete_job(
+        config,
+        a_id,
+        workflow_id,
+        cn_id,
+        run_id_before,
+        0,
+        JobStatus::Completed,
+    );
+    apis::jobs_api::manage_status_change(config, b_id, JobStatus::Running, run_id_before)
+        .expect("set b running");
+    complete_job(
+        config,
+        b_id,
+        workflow_id,
+        cn_id,
+        run_id_before,
+        1,
+        JobStatus::Failed,
+    );
+
+    // Reset B with --reinit in one step (no separate reinit needed)
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--reinit",
+            &b_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --reinit should succeed");
+
+    assert_eq!(json["status"], "success", "status should be success");
+    assert_eq!(json["reinit"]["requested"], true);
+    assert_eq!(json["reinit"]["applied"], true);
+    assert!(json["reinit"]["error"].is_null());
+
+    // run_id bumped exactly once
+    let run_id_after = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    assert_eq!(
+        run_id_after,
+        run_id_before + 1,
+        "run_id should be bumped exactly once by --reinit"
+    );
+
+    // B should be Ready (A is Completed, so B's dependency is satisfied)
+    let b_after = apis::jobs_api::get_job(config, b_id).unwrap();
+    assert_eq!(
+        b_after.status.unwrap(),
+        JobStatus::Ready,
+        "B should be Ready after --reinit"
+    );
+
+    // A (upstream, completed) must NOT be reset
+    let a_after = apis::jobs_api::get_job(config, a_id).unwrap();
+    assert_eq!(
+        a_after.status.unwrap(),
+        JobStatus::Completed,
+        "A should remain Completed"
+    );
+
+    // next_steps should not mention 'workflows reinit'
+    let next_steps = json["next_steps"].as_str().unwrap_or("");
+    assert!(
+        !next_steps.contains("workflows reinit"),
+        "next_steps should not mention 'workflows reinit' when reinit was applied: {}",
+        next_steps
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 10: --reinit JSON output shape
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_reinit_json_output(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_reinit_json");
+    let workflow_id = workflow.id.unwrap();
+
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(
+            workflow_id,
+            "reinit_json_job".to_string(),
+            "echo hi".to_string(),
+        ),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+
+    let run_id_before = initialize_workflow(config, &workflow);
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let cn_id = compute_node.id.unwrap();
+
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id_before)
+        .expect("set running");
+    complete_job(
+        config,
+        job_id,
+        workflow_id,
+        cn_id,
+        run_id_before,
+        1,
+        JobStatus::Failed,
+    );
+
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--reinit",
+            &job_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --reinit --no-prompts should succeed");
+
+    assert_eq!(json["status"], "success");
+    assert_eq!(json["reinit"]["requested"], true);
+    assert_eq!(json["reinit"]["applied"], true);
+    assert!(json["reinit"]["error"].is_null());
+
+    // next_steps should not mention 'workflows reinit' since it was applied
+    let next_steps = json["next_steps"].as_str().unwrap_or("");
+    assert!(
+        !next_steps.contains("workflows reinit"),
+        "next_steps should not reference 'workflows reinit' when reinit was applied: {}",
+        next_steps
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 11: --dry-run --reinit — no changes applied, reinit_requested flag set
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_reinit_dry_run(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_reinit_dry");
+    let workflow_id = workflow.id.unwrap();
+
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(
+            workflow_id,
+            "reinit_dry_job".to_string(),
+            "echo dry".to_string(),
+        ),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+
+    let run_id_before = initialize_workflow(config, &workflow);
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let cn_id = compute_node.id.unwrap();
+
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id_before)
+        .expect("set running");
+    complete_job(
+        config,
+        job_id,
+        workflow_id,
+        cn_id,
+        run_id_before,
+        1,
+        JobStatus::Failed,
+    );
+
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--dry-run",
+            "--reinit",
+            &job_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("dry-run --reinit should succeed");
+
+    assert_eq!(json["dry_run"], true);
+    assert_eq!(json["reinit_requested"], true);
+
+    // Job status must be unchanged (dry-run made no changes)
+    assert_eq!(
+        apis::jobs_api::get_job(config, job_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Failed,
+        "Job should still be Failed after dry-run"
+    );
+
+    // run_id must be unchanged (no reinit happened)
+    let run_id_after = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    assert_eq!(
+        run_id_after, run_id_before,
+        "run_id must not change on dry-run"
     );
 }
