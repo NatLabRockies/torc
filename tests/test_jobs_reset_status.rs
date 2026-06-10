@@ -177,7 +177,14 @@ fn test_reset_status_selective(start_server: &ServerProcess) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2: Recursive downstream closure — A→B→C; reset A pulls B and C too
+// Test 2: Downstream closure via reinitialize — A→B→C all completed; reset A.
+// The command resets ONLY A. Immediately after: A is uninitialized, B is
+// uninitialized (the server's incidental one-level reset of direct
+// Completed/Failed dependents on complete→uninitialized), C is STILL
+// completed. The dry-run output lists B and C as downstream-affected. Then
+// 'workflows reinit' resets C too via the server's recursive
+// uninitialize_blocked_jobs CTE (observable afterwards as Blocked, since
+// reinit recomputes blocked/ready in the same transaction).
 // ---------------------------------------------------------------------------
 #[rstest]
 fn test_reset_status_recursive_downstream(start_server: &ServerProcess) {
@@ -274,7 +281,41 @@ fn test_reset_status_recursive_downstream(start_server: &ServerProcess) {
         JobStatus::Completed
     );
 
-    // Reset only A — the BFS closure should pull in B and C
+    // Dry-run first: the display must list B and C as downstream-affected
+    let dry = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--dry-run",
+            &a_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("dry-run should succeed");
+    assert_eq!(dry["dry_run"], true);
+    let dry_requested: Vec<i64> = dry["jobs"]
+        .as_array()
+        .expect("jobs should be an array")
+        .iter()
+        .map(|j| j["job_id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(dry_requested, vec![a_id], "only A should be requested");
+    let dry_downstream: Vec<i64> = dry["downstream_jobs"]
+        .as_array()
+        .expect("downstream_jobs should be an array")
+        .iter()
+        .map(|j| j["job_id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(
+        dry_downstream,
+        vec![b_id, c_id],
+        "B and C should be listed as downstream-affected"
+    );
+
+    // Reset only A — the command must issue status changes for A only
     let json = run_cli_with_json(
         &[
             "jobs",
@@ -290,7 +331,29 @@ fn test_reset_status_recursive_downstream(start_server: &ServerProcess) {
 
     assert_eq!(json["status"], "success");
 
-    // A, B, and C must all be Uninitialized now
+    // Only A was explicitly reset; B and C appear as informational downstream
+    let reset_ids: Vec<i64> = json["reset_job_ids"]
+        .as_array()
+        .expect("reset_job_ids should be an array")
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    assert_eq!(reset_ids, vec![a_id], "only A should have been reset");
+    let downstream_ids: Vec<i64> = json["downstream_jobs"]
+        .as_array()
+        .expect("downstream_jobs should be an array")
+        .iter()
+        .map(|j| j["job_id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(
+        downstream_ids,
+        vec![b_id, c_id],
+        "B and C should be listed as downstream-affected"
+    );
+
+    // Intermediate state: A uninitialized; B uninitialized too (the server's
+    // incidental one-level reset of direct Completed/Failed dependents on
+    // complete→uninitialized); C STILL completed.
     assert_eq!(
         apis::jobs_api::get_job(config, a_id)
             .unwrap()
@@ -305,22 +368,51 @@ fn test_reset_status_recursive_downstream(start_server: &ServerProcess) {
             .status
             .unwrap(),
         JobStatus::Uninitialized,
-        "B should be Uninitialized (downstream closure)"
+        "B should be Uninitialized (server's one-level reset of direct dependents)"
     );
     assert_eq!(
         apis::jobs_api::get_job(config, c_id)
             .unwrap()
             .status
             .unwrap(),
-        JobStatus::Uninitialized,
-        "C should be Uninitialized (transitive downstream closure)"
+        JobStatus::Completed,
+        "C should STILL be Completed until reinit"
     );
 
-    // Check that reset_job_ids includes all three
-    let reset_ids = json["reset_job_ids"]
-        .as_array()
-        .expect("reset_job_ids should be an array");
-    assert_eq!(reset_ids.len(), 3, "should have reset 3 jobs");
+    // Reinitialize: the server's recursive uninitialize_blocked_jobs CTE resets
+    // C within the same transaction, then blocked/ready are recomputed —
+    // A (no deps) becomes Ready, B and C become Blocked. C is no longer Completed.
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let updated_wf = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    let manager = WorkflowManager::new(config.clone(), torc_config, updated_wf);
+    manager
+        .reinitialize(false, false)
+        .expect("reinitialize failed");
+
+    assert_eq!(
+        apis::jobs_api::get_job(config, a_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Ready,
+        "A should be Ready after reinit"
+    );
+    assert_eq!(
+        apis::jobs_api::get_job(config, b_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Blocked,
+        "B should be Blocked after reinit (depends on A)"
+    );
+    assert_eq!(
+        apis::jobs_api::get_job(config, c_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Blocked,
+        "C should be Blocked after reinit (recursive CTE reset it from Completed)"
+    );
 }
 
 // ---------------------------------------------------------------------------

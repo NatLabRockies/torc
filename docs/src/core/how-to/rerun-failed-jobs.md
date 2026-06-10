@@ -50,8 +50,9 @@ is useful when you know exactly which jobs need to be rerun without resetting th
 
 Unlike `torc workflows reset-status`, this command:
 
-- Resets only the explicitly named job IDs (plus any completed downstream dependents — because a
-  rerun job produces new outputs that completed consumers must consume again).
+- Resets only the explicitly named job IDs. Downstream dependents are **not** reset by this command
+  — it lists them for you, and they are reset transitively when you run `torc workflows reinit` (a
+  rerun job produces new outputs that consumers must consume again).
 - Does **not** bump the workflow `run_id` or reset workflow state — you follow up with
   `torc workflows reinit` once, which does the run_id bump exactly once.
 - All supplied job IDs must belong to the same workflow (hard error otherwise).
