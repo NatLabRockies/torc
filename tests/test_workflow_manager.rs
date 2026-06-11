@@ -705,8 +705,12 @@ fn test_reset_failed_jobs_validates_workflow_and_status(start_server: &ServerPro
         "error should report 1 of 3 reset, got: {err}"
     );
     assert!(
-        err.contains(&format!("Job {foreign_id} belongs to workflow")),
+        err.contains(&format!("job {foreign_id}: belongs to workflow")),
         "error should flag the cross-workflow job, got: {err}"
+    );
+    assert!(
+        err.contains(&format!("job {ready_id}: status")) && err.contains("not recoverable"),
+        "error should flag the Ready job as a non-recoverable status skip, got: {err}"
     );
 
     // The eligible job was reset despite the other two being rejected.

@@ -927,12 +927,15 @@ pub fn reset_failed_jobs(
         JobStatus::PendingFailed,
     ];
 
-    // Attempt every reset, accumulating errors instead of bailing on the first
-    // failure. There is no server-side bulk/atomic reset endpoint, so a mid-loop
-    // early return would leave the workflow partially reset with no report of
-    // what succeeded. Collecting failures lets the caller see the full picture.
+    // Attempt every reset, accumulating the reason any job was not reset instead
+    // of bailing on the first problem. There is no server-side bulk/atomic reset
+    // endpoint, so a mid-loop early return would leave the workflow partially
+    // reset with no report of what succeeded. We collect a per-job reason for
+    // every job that was skipped (validation/status) or failed (fetch/reset) so
+    // the caller is reliably informed -- including the case where nothing was
+    // reset at all.
     let mut reset_count = 0;
-    let mut errors: Vec<String> = Vec::new();
+    let mut not_reset: Vec<String> = Vec::new();
     for &job_id in job_ids {
         // Validate the job before touching it. `manage_status_change` is not
         // workflow-scoped, so without this check a stray job_id could reset a
@@ -940,13 +943,13 @@ pub fn reset_failed_jobs(
         let job = match apis::jobs_api::get_job(config, job_id) {
             Ok(job) => job,
             Err(e) => {
-                errors.push(format!("Failed to fetch job {}: {}", job_id, e));
+                not_reset.push(format!("job {}: failed to fetch ({})", job_id, e));
                 continue;
             }
         };
         if job.workflow_id != workflow_id {
-            errors.push(format!(
-                "Job {} belongs to workflow {}, not {}; refusing to reset",
+            not_reset.push(format!(
+                "job {}: belongs to workflow {}, not {}; refusing to reset",
                 job_id, job.workflow_id, workflow_id
             ));
             continue;
@@ -954,10 +957,12 @@ pub fn reset_failed_jobs(
         match job.status {
             Some(status) if recoverable_statuses.contains(&status) => {}
             other => {
-                warn!(
-                    "Skipping reset of job {} in workflow {}: status {:?} is not recoverable",
-                    job_id, workflow_id, other
+                let reason = format!(
+                    "job {}: status {:?} is not recoverable; skipped",
+                    job_id, other
                 );
+                warn!("{} (workflow {})", reason, workflow_id);
+                not_reset.push(reason);
                 continue;
             }
         }
@@ -965,7 +970,7 @@ pub fn reset_failed_jobs(
         match apis::jobs_api::manage_status_change(config, job_id, JobStatus::Uninitialized, run_id)
         {
             Ok(_) => reset_count += 1,
-            Err(e) => errors.push(format!("Failed to reset status for job {}: {}", job_id, e)),
+            Err(e) => not_reset.push(format!("job {}: reset failed ({})", job_id, e)),
         }
     }
     info!(
@@ -973,13 +978,13 @@ pub fn reset_failed_jobs(
         reset_count, workflow_id
     );
 
-    if !errors.is_empty() {
+    if !not_reset.is_empty() {
         return Err(format!(
-            "Reset {} of {} job(s); {} failed: {}",
+            "Reset {} of {} job(s); {} skipped or failed: {}",
             reset_count,
             job_ids.len(),
-            errors.len(),
-            errors.join("; ")
+            not_reset.len(),
+            not_reset.join("; ")
         ));
     }
 
