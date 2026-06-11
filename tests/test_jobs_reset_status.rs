@@ -57,6 +57,28 @@ fn complete_job(
         .unwrap_or_else(|e| panic!("Failed to complete job {}: {}", job_id, e));
 }
 
+/// Poll until `job_id` reaches `expected`, tolerating the asynchronous unblocking
+/// task that flips a dependent from blocked -> ready after its predecessor
+/// completes. Without this, driving the dependent straight to `running` can race
+/// the unblocker and fail the server's optimistic-concurrency check with a 422.
+fn wait_for_status(config: &torc::client::Configuration, job_id: i64, expected: JobStatus) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let status = apis::jobs_api::get_job(config, job_id)
+            .expect("Failed to get job while waiting for status")
+            .status
+            .unwrap();
+        if status == expected {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "job_id={job_id} did not reach {expected:?} within timeout (last status {status:?})"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Test 1: Selective reset — only targeted jobs are reset, others unchanged
 // ---------------------------------------------------------------------------
@@ -248,6 +270,7 @@ fn test_reset_status_recursive_downstream(start_server: &ServerProcess) {
 
     // After A completes, unblocking fires and B becomes ready
     // Advance B to running and complete it
+    wait_for_status(config, b_id, JobStatus::Ready);
     apis::jobs_api::manage_status_change(config, b_id, JobStatus::Running, run_id)
         .expect("set b running");
     complete_job(
@@ -261,6 +284,7 @@ fn test_reset_status_recursive_downstream(start_server: &ServerProcess) {
     );
 
     // After B completes, C becomes ready
+    wait_for_status(config, c_id, JobStatus::Ready);
     apis::jobs_api::manage_status_change(config, c_id, JobStatus::Running, run_id)
         .expect("set c running");
     complete_job(
@@ -690,6 +714,7 @@ fn test_reset_status_end_to_end_reinit(start_server: &ServerProcess) {
         JobStatus::Completed,
     );
 
+    wait_for_status(config, b_id, JobStatus::Ready);
     apis::jobs_api::manage_status_change(config, b_id, JobStatus::Running, run_id_before)
         .expect("set b running");
     complete_job(
@@ -865,6 +890,7 @@ fn test_reset_status_reinit_flag_end_to_end(start_server: &ServerProcess) {
         0,
         JobStatus::Completed,
     );
+    wait_for_status(config, b_id, JobStatus::Ready);
     apis::jobs_api::manage_status_change(config, b_id, JobStatus::Running, run_id_before)
         .expect("set b running");
     complete_job(

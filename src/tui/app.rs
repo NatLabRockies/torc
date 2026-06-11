@@ -4122,7 +4122,7 @@ impl App {
             // didn't pick; tell them their selection is hidden. The selection
             // is left intact so clearing the filter restores it.
             self.set_status(StatusMessage::warning(
-                "Selected jobs are not in the current view; clear the filter or press '*' to reselect",
+                "Selected jobs are hidden by the filter — clear it or press '*' to reselect",
             ));
             return true;
         }
