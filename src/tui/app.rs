@@ -292,6 +292,14 @@ pub const TUI_PAGE_SIZE: i64 = 250;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultsSort {
     None,
+    IdDesc,
+    IdAsc,
+    JobIdDesc,
+    JobIdAsc,
+    ReturnDesc,
+    ReturnAsc,
+    CompletionDesc,
+    CompletionAsc,
     PeakMemoryDesc,
     PeakMemoryAsc,
     PeakCpuDesc,
@@ -359,6 +367,38 @@ impl JobsSort {
 }
 
 impl ResultsSort {
+    pub fn cycle_id(self) -> Self {
+        match self {
+            Self::IdDesc => Self::IdAsc,
+            Self::IdAsc => Self::None,
+            _ => Self::IdDesc,
+        }
+    }
+
+    pub fn cycle_job_id(self) -> Self {
+        match self {
+            Self::JobIdDesc => Self::JobIdAsc,
+            Self::JobIdAsc => Self::None,
+            _ => Self::JobIdDesc,
+        }
+    }
+
+    pub fn cycle_return(self) -> Self {
+        match self {
+            Self::ReturnDesc => Self::ReturnAsc,
+            Self::ReturnAsc => Self::None,
+            _ => Self::ReturnDesc,
+        }
+    }
+
+    pub fn cycle_completion(self) -> Self {
+        match self {
+            Self::CompletionDesc => Self::CompletionAsc,
+            Self::CompletionAsc => Self::None,
+            _ => Self::CompletionDesc,
+        }
+    }
+
     /// Cycle: None → Desc → Asc → None for the Peak Memory column. If currently
     /// sorting by another column, jump to PeakMemoryDesc.
     pub fn cycle_peak_memory(self) -> Self {
@@ -382,6 +422,38 @@ impl ResultsSort {
             Self::RuntimeDesc => Self::RuntimeAsc,
             Self::RuntimeAsc => Self::None,
             _ => Self::RuntimeDesc,
+        }
+    }
+
+    pub fn id_indicator(self) -> &'static str {
+        match self {
+            Self::IdDesc => " ↓",
+            Self::IdAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn job_id_indicator(self) -> &'static str {
+        match self {
+            Self::JobIdDesc => " ↓",
+            Self::JobIdAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn return_indicator(self) -> &'static str {
+        match self {
+            Self::ReturnDesc => " ↓",
+            Self::ReturnAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn completion_indicator(self) -> &'static str {
+        match self {
+            Self::CompletionDesc => " ↓",
+            Self::CompletionAsc => " ↑",
+            _ => "",
         }
     }
 
@@ -1358,8 +1430,36 @@ impl App {
     /// missing values sort last in both directions so they don't crowd the
     /// top.
     pub fn apply_results_sort(&mut self) {
+        // RFC3339 completion_time → epoch seconds for ordering; unparseable
+        // timestamps sort last (treated as None below).
+        fn completion_secs(r: &ResultModel) -> Option<i64> {
+            chrono::DateTime::parse_from_rfc3339(&r.completion_time)
+                .ok()
+                .map(|dt| dt.timestamp())
+        }
         match self.results_sort {
             ResultsSort::None => {}
+            ResultsSort::IdDesc => self
+                .results
+                .sort_by_key(|r| (r.id.is_none(), std::cmp::Reverse(r.id.unwrap_or(i64::MIN)))),
+            ResultsSort::IdAsc => self
+                .results
+                .sort_by_key(|r| (r.id.is_none(), r.id.unwrap_or(i64::MAX))),
+            ResultsSort::JobIdDesc => self.results.sort_by_key(|r| std::cmp::Reverse(r.job_id)),
+            ResultsSort::JobIdAsc => self.results.sort_by_key(|r| r.job_id),
+            ResultsSort::ReturnDesc => self
+                .results
+                .sort_by_key(|r| std::cmp::Reverse(r.return_code)),
+            ResultsSort::ReturnAsc => self.results.sort_by_key(|r| r.return_code),
+            // Cache the parsed timestamp per row; unparseable times sort last.
+            ResultsSort::CompletionDesc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), std::cmp::Reverse(secs.unwrap_or(0)))
+            }),
+            ResultsSort::CompletionAsc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), secs.unwrap_or(0))
+            }),
             ResultsSort::PeakMemoryDesc => {
                 self.results
                     .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
@@ -1410,6 +1510,34 @@ impl App {
                     .sort_by(|a, b| a.exec_time_minutes.total_cmp(&b.exec_time_minutes));
             }
         }
+    }
+
+    pub fn cycle_results_sort_id(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_id();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_job_id(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_job_id();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_return(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_return();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_completion(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_completion();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
     }
 
     pub fn cycle_results_sort_peak_memory(&mut self) {

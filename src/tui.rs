@@ -698,15 +698,48 @@ where
                     {
                         app.toggle_select_all_jobs();
                     }
-                    // Sort the Results table by Peak Memory / Peak CPU. Each
-                    // press cycles None → Desc → Asc → None.
-                    KeyCode::Char('m')
+                    // Sort the Results table by column index (left-to-right
+                    // among sortable columns — every column except Status):
+                    // 1=ID, 2=Job ID, 3=Return, 4=Runtime, 5=Completion,
+                    // 6=Peak Memory, 7=Peak CPU. Each press cycles
+                    // None → Desc → Asc → None.
+                    KeyCode::Char('1')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_id();
+                    }
+                    KeyCode::Char('2')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_job_id();
+                    }
+                    KeyCode::Char('3')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_return();
+                    }
+                    KeyCode::Char('4')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_runtime();
+                    }
+                    KeyCode::Char('5')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Results =>
+                    {
+                        app.cycle_results_sort_completion();
+                    }
+                    KeyCode::Char('6')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::Results =>
                     {
                         app.cycle_results_sort_peak_memory();
                     }
-                    KeyCode::Char('p')
+                    KeyCode::Char('7')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::Results =>
                     {
@@ -747,12 +780,6 @@ where
                     }
                     KeyCode::Char('3') if app.focus == Focus::Workflows => {
                         app.cycle_workflows_sort_user();
-                    }
-                    KeyCode::Char('E')
-                        if app.focus == Focus::Details
-                            && app.detail_view == DetailViewType::Results =>
-                    {
-                        app.cycle_results_sort_runtime();
                     }
                     // Sort the Jobs table by column index 1=ID, 2=Name, 3=Status.
                     KeyCode::Char('1')

@@ -1198,16 +1198,20 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let id_header = format!("ID{}", app.results_sort.id_indicator());
+    let job_id_header = format!("Job ID{}", app.results_sort.job_id_indicator());
+    let return_header = format!("Return{}", app.results_sort.return_indicator());
+    let completion_header = format!("Completion Time{}", app.results_sort.completion_indicator());
     let peak_mem_header = format!("Peak Mem{}", app.results_sort.peak_memory_indicator());
     let peak_cpu_header = format!("Peak CPU %{}", app.results_sort.peak_cpu_indicator());
     let runtime_header = format!("Runtime (m){}", app.results_sort.runtime_indicator());
     let header = Row::new(vec![
-        "ID".to_string(),
-        "Job ID".to_string(),
-        "Return".to_string(),
+        id_header,
+        job_id_header,
+        return_header,
         "Status".to_string(),
         runtime_header,
-        "Completion Time".to_string(),
+        completion_header,
         peak_mem_header,
         peak_cpu_header,
     ])
@@ -1267,7 +1271,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    " │ l: logs  m: peak mem  p: peak cpu",
+                    " │ l: logs  │ sort: 1 id  2 job id  3 return  4 runtime  5 completion  6 peak mem  7 peak cpu",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
