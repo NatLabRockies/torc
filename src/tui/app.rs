@@ -4098,9 +4098,16 @@ impl App {
     }
 
     /// Request a reset for every selected job that is currently listed.
-    /// Returns false when the selection is empty so the caller can fall back
-    /// to the single-job (cursor row) path.
+    /// Returns false only when the multi-select is empty, so the caller can
+    /// fall back to the single-job (cursor row) path. When a selection exists
+    /// but none of its jobs are listed (e.g., the filter changed), this warns
+    /// and returns true so the caller does NOT silently reset the cursor row.
     fn request_selected_jobs_reset(&mut self) -> bool {
+        // An empty selection is the only case where falling back to the
+        // cursor-row job is the intended behavior.
+        if self.selected_job_ids.is_empty() {
+            return false;
+        }
         // Intersect with the listed jobs: selections made under an earlier
         // filter may reference rows that are no longer shown, and acting on
         // invisible jobs would be surprising.
@@ -4110,7 +4117,14 @@ impl App {
             .filter(|j| j.id.is_some_and(|id| self.selected_job_ids.contains(&id)))
             .collect();
         if targets.is_empty() {
-            return false;
+            // A selection exists but none of its jobs are in the current view.
+            // Don't fall through to resetting the cursor row, which the user
+            // didn't pick; tell them their selection is hidden. The selection
+            // is left intact so clearing the filter restores it.
+            self.set_status(StatusMessage::warning(
+                "Selected jobs are not in the current view; clear the filter or press '*' to reselect",
+            ));
+            return true;
         }
 
         let completed = targets
