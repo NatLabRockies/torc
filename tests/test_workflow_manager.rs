@@ -619,6 +619,125 @@ fn test_reset_failed_jobs_only_resets_selected(start_server: &ServerProcess) {
     assert_eq!(after, run_id, "reset_failed_jobs must not bump run_id");
 }
 
+/// `reset_failed_jobs` must validate every job before resetting it: a job that
+/// belongs to a different workflow, or one that is not in a recoverable status,
+/// must be skipped. When any job is skipped or fails, the call attempts all the
+/// others and returns a combined error rather than bailing on the first problem
+/// (there is no server-side atomic bulk reset).
+#[rstest]
+fn test_reset_failed_jobs_validates_workflow_and_status(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+
+    // Two separate workflows. The target workflow gets one failed job (eligible)
+    // and one still-Ready job (ineligible status). The other workflow gets one
+    // failed job that must never be touched via the target workflow's reset.
+    let workflow = create_test_workflow(&config, "reset_validate_target");
+    let workflow_id = workflow.id.unwrap();
+    let other_workflow = create_test_workflow(&config, "reset_validate_other");
+    let other_workflow_id = other_workflow.id.unwrap();
+
+    let make_job = |wf_id: i64, name: &str| {
+        apis::jobs_api::create_job(
+            &config,
+            models::JobModel::new(wf_id, name.to_string(), format!("echo {name}")),
+        )
+        .unwrap_or_else(|e| panic!("Failed to create {name}: {e}"))
+        .id
+        .unwrap()
+    };
+    let failed_id = make_job(workflow_id, "failed_job");
+    let ready_id = make_job(workflow_id, "ready_job");
+    let foreign_id = make_job(other_workflow_id, "foreign_job");
+
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    WorkflowManager::new(config.clone(), torc_config.clone(), workflow.clone())
+        .initialize(false)
+        .expect("initialize target");
+    WorkflowManager::new(config.clone(), torc_config, other_workflow.clone())
+        .initialize(false)
+        .expect("initialize other");
+
+    let run_id = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("get workflow")
+        .run_id
+        .unwrap_or(1);
+    let other_run_id = apis::workflows_api::get_workflow(&config, other_workflow_id)
+        .expect("get other workflow")
+        .run_id
+        .unwrap_or(1);
+    let cn_id = create_test_compute_node(&config, workflow_id).id.unwrap();
+    let other_cn_id = create_test_compute_node(&config, other_workflow_id)
+        .id
+        .unwrap();
+
+    // Fail the eligible job in the target workflow and the foreign job.
+    let fail_job = |id: i64, wf_id: i64, rid: i64, cn: i64| {
+        apis::jobs_api::manage_status_change(&config, id, models::JobStatus::Running, rid)
+            .unwrap_or_else(|e| panic!("set job {id} running: {e}"));
+        let result = models::ResultModel::new(
+            id,
+            wf_id,
+            rid,
+            1,
+            cn,
+            1,
+            1.0,
+            chrono::Utc::now().to_rfc3339(),
+            models::JobStatus::Failed,
+        );
+        apis::jobs_api::complete_job(&config, id, models::JobStatus::Failed, rid, result)
+            .unwrap_or_else(|e| panic!("fail job {id}: {e}"));
+    };
+    fail_job(failed_id, workflow_id, run_id, cn_id);
+    fail_job(foreign_id, other_workflow_id, other_run_id, other_cn_id);
+    // `ready_id` is left in its initialized (Ready) state -- not recoverable.
+
+    // Ask to reset all three. Only `failed_id` is eligible; the other two must
+    // be rejected and surfaced in a combined error.
+    let result = torc::client::commands::recover::reset_failed_jobs(
+        &config,
+        workflow_id,
+        &[failed_id, ready_id, foreign_id],
+    );
+    let err = result.expect_err("expected combined error for skipped jobs");
+    assert!(
+        err.contains("Reset 1 of 3"),
+        "error should report 1 of 3 reset, got: {err}"
+    );
+    assert!(
+        err.contains(&format!("Job {foreign_id} belongs to workflow")),
+        "error should flag the cross-workflow job, got: {err}"
+    );
+
+    // The eligible job was reset despite the other two being rejected.
+    assert_eq!(
+        apis::jobs_api::get_job(&config, failed_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        models::JobStatus::Uninitialized,
+        "eligible failed job should still be reset"
+    );
+    // The non-recoverable job was left alone.
+    assert_eq!(
+        apis::jobs_api::get_job(&config, ready_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        models::JobStatus::Ready,
+        "Ready job must not be reset"
+    );
+    // The foreign workflow's job is untouched.
+    assert_eq!(
+        apis::jobs_api::get_job(&config, foreign_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        models::JobStatus::Failed,
+        "job in another workflow must not be reset"
+    );
+}
+
 #[rstest]
 fn test_get_run_id(start_server: &ServerProcess) {
     let config = start_server.config.clone();

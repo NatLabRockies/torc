@@ -904,13 +904,7 @@ pub fn reset_failed_jobs(
         return Ok(0);
     }
 
-    // Reset ONLY the selected jobs. Earlier this called
-    // `reset_job_status(failed_only=true)`, which is workflow-wide and ignored
-    // `job_ids` entirely -- so a user who chose to Skip some failures (e.g.
-    // unknown-cause jobs) had those jobs reset anyway. We instead reset each
-    // requested job individually via `manage_status_change`, exactly as the
-    // `torc jobs reset-status` command does.
-    //
+    // Reset the selected jobs.
     // NOTE: do not reset workflow status here. `reset_workflow_status` bumps
     // run_id, and every caller of this function follows it with
     // `reinitialize_workflow`, which already resets workflow status (and bumps
@@ -922,16 +916,72 @@ pub fn reset_failed_jobs(
         .run_id
         .unwrap_or(1);
 
+    // Statuses that recovery is allowed to reset. Mirrors
+    // `check_recovery_preconditions`; resetting a job in any other state (e.g. a
+    // still-running or already-completed job) would be unexpected, so we skip it
+    // and report rather than silently clobber it.
+    let recoverable_statuses = [
+        JobStatus::Failed,
+        JobStatus::Terminated,
+        JobStatus::Canceled,
+        JobStatus::PendingFailed,
+    ];
+
+    // Attempt every reset, accumulating errors instead of bailing on the first
+    // failure. There is no server-side bulk/atomic reset endpoint, so a mid-loop
+    // early return would leave the workflow partially reset with no report of
+    // what succeeded. Collecting failures lets the caller see the full picture.
     let mut reset_count = 0;
+    let mut errors: Vec<String> = Vec::new();
     for &job_id in job_ids {
-        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Uninitialized, run_id)
-            .map_err(|e| format!("Failed to reset status for job {}: {}", job_id, e))?;
-        reset_count += 1;
+        // Validate the job before touching it. `manage_status_change` is not
+        // workflow-scoped, so without this check a stray job_id could reset a
+        // job in a different workflow.
+        let job = match apis::jobs_api::get_job(config, job_id) {
+            Ok(job) => job,
+            Err(e) => {
+                errors.push(format!("Failed to fetch job {}: {}", job_id, e));
+                continue;
+            }
+        };
+        if job.workflow_id != workflow_id {
+            errors.push(format!(
+                "Job {} belongs to workflow {}, not {}; refusing to reset",
+                job_id, job.workflow_id, workflow_id
+            ));
+            continue;
+        }
+        match job.status {
+            Some(status) if recoverable_statuses.contains(&status) => {}
+            other => {
+                warn!(
+                    "Skipping reset of job {} in workflow {}: status {:?} is not recoverable",
+                    job_id, workflow_id, other
+                );
+                continue;
+            }
+        }
+
+        match apis::jobs_api::manage_status_change(config, job_id, JobStatus::Uninitialized, run_id)
+        {
+            Ok(_) => reset_count += 1,
+            Err(e) => errors.push(format!("Failed to reset status for job {}: {}", job_id, e)),
+        }
     }
     info!(
         "  Reset {} failed job(s) for workflow {}",
         reset_count, workflow_id
     );
+
+    if !errors.is_empty() {
+        return Err(format!(
+            "Reset {} of {} job(s); {} failed: {}",
+            reset_count,
+            job_ids.len(),
+            errors.len(),
+            errors.join("; ")
+        ));
+    }
 
     Ok(reset_count)
 }
