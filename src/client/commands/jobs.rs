@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -15,6 +15,8 @@ use crate::client::commands::{
     },
 };
 use crate::client::utils::format_local_timestamp;
+use crate::client::workflow_manager::WorkflowManager;
+use crate::config::TorcConfig;
 use crate::models;
 use tabled::Tabled;
 
@@ -397,6 +399,60 @@ EXAMPLES:
         /// Filter by specific job ID
         #[arg(short, long)]
         job_id: Option<i64>,
+    },
+    /// Reset specific jobs to uninitialized status for selective rerun
+    ///
+    /// Resets only the given job IDs to uninitialized so they can be rerun. All jobs
+    /// must belong to the same workflow. Downstream dependents are not reset by this
+    /// command; they are reset transitively by 'torc workflows reinit' (the command
+    /// lists them for you).
+    ///
+    /// After resetting, run 'torc workflows reinit <workflow_id>' to rebuild
+    /// dependency state (this bumps run_id exactly once), then 'torc run' or
+    /// 'torc submit' to execute. Use --reinit to perform the reinit step automatically
+    /// in the same invocation.
+    #[command(
+        name = "reset-status",
+        after_long_help = "\
+EXAMPLES:
+    # Reset two specific jobs for rerun (preview first)
+    torc jobs reset-status 101 102 --dry-run
+
+    # Reset and reinitialize in one step, then run
+    torc jobs reset-status 101 102 --reinit
+    torc run 42
+
+    # Reset and rerun (manual two-step flow)
+    torc jobs reset-status 101 102
+    torc workflows reinit 42
+    torc run 42
+
+    # Reset without prompts (for scripts/CI)
+    torc jobs reset-status 101 102 --no-prompts
+
+    # Override safety checks (workers still active)
+    torc jobs reset-status 101 --force
+
+    # JSON output for scripting
+    torc -f json jobs reset-status 101 102
+"
+    )]
+    ResetStatus {
+        /// Job IDs to reset (must all belong to the same workflow)
+        #[arg(required = true, num_args = 1..)]
+        job_ids: Vec<i64>,
+        /// Skip precondition checks (no active workers, target jobs not running)
+        #[arg(long)]
+        force: bool,
+        /// Preview which jobs would be reset without applying changes
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
+        /// Reinitialize the workflow after resetting (runs 'torc workflows reinit' for you)
+        #[arg(long, alias = "reinitialize")]
+        reinit: bool,
     },
 }
 
@@ -1190,6 +1246,23 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             }
         }
+        JobCommands::ResetStatus {
+            job_ids,
+            force,
+            dry_run,
+            no_prompts,
+            reinit,
+        } => {
+            handle_reset_job_status(
+                config,
+                job_ids,
+                *force,
+                *dry_run,
+                *no_prompts,
+                *reinit,
+                format,
+            );
+        }
     }
 }
 
@@ -1323,6 +1396,460 @@ pub fn get_current_job_count(
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
     Ok(response.total_count)
+}
+
+// ---------------------------------------------------------------------------
+// reset-status helpers
+// ---------------------------------------------------------------------------
+
+/// A single row in the jobs-to-reset preview table.
+#[derive(Tabled)]
+struct ResetJobRow {
+    #[tabled(rename = "Job ID")]
+    id: i64,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Current Status")]
+    status: String,
+}
+
+/// Handler for `torc jobs reset-status`.
+///
+/// Resets ONLY the explicitly requested job IDs to `Uninitialized` so they can be
+/// rerun.  Downstream dependents are not touched here: the server's recursive
+/// `uninitialize_blocked_jobs` CTE resets every transitive dependent of an
+/// uninitialized job when the user runs `torc workflows reinit` — this command
+/// merely computes and displays that closure.  Does NOT bump the workflow
+/// `run_id` by default — the caller should follow up with `torc workflows reinit <id>`
+/// (which resets workflow status and bumps `run_id` exactly once).  Pass
+/// `reinit = true` (or `--reinit` on the CLI) to perform that step automatically.
+///
+/// # Known limitation
+/// `manage_status_change` does not clear `start_time` / `compute_node_id`; those
+/// fields are overwritten when the job next starts.  Clearing them via `update_job`
+/// is restricted and the cosmetic difference is acceptable.
+/// The server always assigns job IDs, so a `None` here indicates a server bug;
+/// fail hard rather than propagate a sentinel value into status changes.
+fn require_job_id(job: &models::JobModel) -> i64 {
+    job.id.unwrap_or_else(|| {
+        eprintln!(
+            "Error: server returned job '{}' (workflow_id={}) without an ID",
+            job.name, job.workflow_id
+        );
+        std::process::exit(1);
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_reset_job_status(
+    config: &Configuration,
+    job_ids: &[i64],
+    force: bool,
+    dry_run: bool,
+    no_prompts: bool,
+    reinit: bool,
+    format: &str,
+) {
+    // -----------------------------------------------------------------------
+    // 1. Fetch and validate: all IDs must exist and belong to the same workflow
+    // -----------------------------------------------------------------------
+    let mut fetched: Vec<models::JobModel> = Vec::with_capacity(job_ids.len());
+    for &id in job_ids {
+        match apis::jobs_api::get_job(config, id) {
+            Ok(job) => fetched.push(job),
+            Err(e) => {
+                eprintln!("Error: job {} not found: {}", id, e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // De-duplicate by ID while preserving first-occurrence order
+    let mut seen_ids: HashSet<i64> = HashSet::new();
+    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
+    for job in fetched {
+        let id = require_job_id(&job);
+        if seen_ids.insert(id) {
+            unique_jobs.push(job);
+        }
+    }
+
+    // Determine workflow from first job; reject if any job belongs elsewhere
+    let workflow_id = unique_jobs[0].workflow_id;
+    let mut mismatched: Vec<(i64, i64)> = Vec::new();
+    for job in &unique_jobs {
+        if job.workflow_id != workflow_id {
+            mismatched.push((require_job_id(job), job.workflow_id));
+        }
+    }
+    if !mismatched.is_empty() {
+        eprintln!(
+            "Error: all job IDs must belong to the same workflow (inferred workflow_id={} from \
+             first job), but the following jobs belong to different workflows:",
+            workflow_id
+        );
+        for (id, wf) in &mismatched {
+            eprintln!("  job {} belongs to workflow {}", id, wf);
+        }
+        eprintln!("Nothing was reset.");
+        std::process::exit(1);
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. Preconditions
+    // -----------------------------------------------------------------------
+    // The workflow does NOT need to be complete — only quiet. Requiring
+    // completeness would make this command non-rerunnable: the first reset
+    // leaves jobs uninitialized, so the workflow is no longer "complete".
+    if !force {
+        if let Err(msg) =
+            crate::client::commands::recover::check_no_active_workers(config, workflow_id)
+        {
+            eprintln!("Error: {}", msg);
+            eprintln!("Use --force to skip this check.");
+            std::process::exit(1);
+        }
+
+        // Reject jobs currently in Running or Pending status
+        let active_targets: Vec<i64> = unique_jobs
+            .iter()
+            .filter(|j| {
+                matches!(
+                    j.status,
+                    Some(models::JobStatus::Running) | Some(models::JobStatus::Pending)
+                )
+            })
+            .map(require_job_id)
+            .collect();
+        if !active_targets.is_empty() {
+            eprintln!(
+                "Error: the following jobs are currently Running or Pending and cannot be reset \
+                 without --force:"
+            );
+            for id in &active_targets {
+                eprintln!("  job {}", id);
+            }
+            std::process::exit(1);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. Compute the downstream closure — READ-ONLY, for display only
+    // -----------------------------------------------------------------------
+    // For each requested job, find its transitive downstream dependents via BFS.
+    // No status-change calls are issued for these jobs: the server's recursive
+    // uninitialize_blocked_jobs CTE resets every transitive dependent of an
+    // uninitialized job — regardless of its status — when the user runs
+    // 'torc workflows reinit' (a rerun job produces new outputs, so consumers
+    // must rerun too).  The closure computed here mirrors that CTE (no status
+    // filter) so the user can see exactly what reinit will reset.
+    let requested_ids: HashSet<i64> = unique_jobs.iter().map(require_job_id).collect();
+
+    let mut downstream_map: HashMap<i64, models::JobModel> = HashMap::new();
+    let mut visited: HashSet<i64> = requested_ids.clone();
+    let mut bfs_queue: VecDeque<i64> = requested_ids.iter().copied().collect();
+
+    while let Some(upstream_id) = bfs_queue.pop_front() {
+        // Fetch direct dependents of this upstream job
+        let params = JobListParams::new().with_upstream_job_id(upstream_id);
+        let dependents = match pagination::paginate_jobs(config, workflow_id, params) {
+            Ok(jobs) => jobs,
+            Err(e) => {
+                eprintln!(
+                    "Error: failed to list dependents of job {}: {}",
+                    upstream_id, e
+                );
+                std::process::exit(1);
+            }
+        };
+
+        for dep in dependents {
+            let dep_id = require_job_id(&dep);
+            if visited.insert(dep_id) {
+                downstream_map.insert(dep_id, dep);
+                bfs_queue.push_back(dep_id);
+            }
+        }
+    }
+
+    let mut downstream_jobs: Vec<&models::JobModel> = downstream_map.values().collect();
+    downstream_jobs.sort_by_key(|j| require_job_id(j));
+
+    // -----------------------------------------------------------------------
+    // 4. Warn for already-uninitialized requested jobs (no-ops) and for jobs
+    //    that completed successfully (the user may not intend to redo them)
+    // -----------------------------------------------------------------------
+    for job in &unique_jobs {
+        if job.status == Some(models::JobStatus::Uninitialized) {
+            eprintln!(
+                "Warning: job {} ({}) is already uninitialized — will be a no-op.",
+                require_job_id(job),
+                job.name
+            );
+        }
+    }
+
+    let completed_targets: Vec<&models::JobModel> = unique_jobs
+        .iter()
+        .filter(|j| j.status == Some(models::JobStatus::Completed))
+        .collect();
+    if !completed_targets.is_empty() {
+        eprintln!(
+            "Warning: the following job(s) completed successfully; resetting them discards \
+             their results and reruns them:"
+        );
+        for job in &completed_targets {
+            eprintln!("  job {} ({})", require_job_id(job), job.name);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. Display: requested jobs table + informational downstream section
+    // -----------------------------------------------------------------------
+    let to_row = |job: &models::JobModel| ResetJobRow {
+        id: require_job_id(job),
+        name: job.name.clone(),
+        status: job
+            .status
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "unknown".to_string()),
+    };
+    let to_json = |job: &models::JobModel| {
+        serde_json::json!({
+            "job_id": require_job_id(job),
+            "name": job.name,
+            "status": job.status.map(|s| s.to_string()).unwrap_or_default(),
+        })
+    };
+
+    if format != "json" {
+        let rows: Vec<ResetJobRow> = unique_jobs.iter().map(to_row).collect();
+        display_table_with_count(&rows, "jobs to reset");
+
+        if !downstream_jobs.is_empty() {
+            if reinit {
+                println!(
+                    "\nThe following downstream jobs will be reset now by the reinit step \
+                     (a rerun job produces new outputs, so its consumers must rerun too):",
+                );
+            } else {
+                println!(
+                    "\nThe following downstream jobs will be reset when you run \
+                     'torc workflows reinit {}' (a rerun job produces new outputs, so its \
+                     consumers must rerun too):",
+                    workflow_id
+                );
+            }
+            let ds_rows: Vec<ResetJobRow> = downstream_jobs.iter().map(|j| to_row(j)).collect();
+            display_table_with_count(&ds_rows, "downstream jobs (reset at reinit time)");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. Dry-run: stop here
+    // -----------------------------------------------------------------------
+    if dry_run {
+        if format == "json" {
+            let response = serde_json::json!({
+                "dry_run": true,
+                "reinit_requested": reinit,
+                "workflow_id": workflow_id,
+                "jobs": unique_jobs.iter().map(to_json).collect::<Vec<_>>(),
+                "downstream_jobs": downstream_jobs
+                    .iter()
+                    .map(|j| to_json(j))
+                    .collect::<Vec<_>>(),
+            });
+            println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        } else {
+            println!("Dry run: no changes were made.");
+            if reinit {
+                println!("Dry run: the workflow would also be reinitialized.");
+            }
+        }
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. Confirmation prompt
+    // -----------------------------------------------------------------------
+    if !no_prompts && format != "json" {
+        eprintln!(
+            "\nAbout to reset {} job(s) in workflow {} to uninitialized.",
+            unique_jobs.len(),
+            workflow_id
+        );
+        if !downstream_jobs.is_empty() {
+            if reinit {
+                eprintln!(
+                    "The workflow will be reinitialized now and {} downstream job(s) reset as \
+                     part of it.",
+                    downstream_jobs.len()
+                );
+            } else {
+                eprintln!(
+                    "{} downstream job(s) will be reset later by 'torc workflows reinit {}'.",
+                    downstream_jobs.len(),
+                    workflow_id
+                );
+            }
+        }
+        eprintln!("This is an idempotent operation and can be re-run if it partially fails.");
+        print!("Continue? (y/N): ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                if input.trim().to_lowercase() != "y" && input.trim().to_lowercase() != "yes" {
+                    eprintln!("Reset cancelled.");
+                    std::process::exit(0);
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read input: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. Apply: fetch run_id, then reset ONLY the requested jobs
+    // -----------------------------------------------------------------------
+    let run_id = match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(wf) => wf.run_id.unwrap_or(1),
+        Err(e) => {
+            eprintln!("Error: failed to fetch workflow {}: {}", workflow_id, e);
+            std::process::exit(1);
+        }
+    };
+
+    // The server's one-level reinitialize_downstream_jobs may incidentally reset
+    // some direct Completed/Failed dependents on complete→uninitialized; that is
+    // harmless — the recursive reset at reinit time covers the rest.
+    let mut succeeded: Vec<i64> = Vec::new();
+    let mut failures: Vec<(i64, String)> = Vec::new();
+
+    for job in &unique_jobs {
+        let id = require_job_id(job);
+        match apis::jobs_api::manage_status_change(
+            config,
+            id,
+            models::JobStatus::Uninitialized,
+            run_id,
+        ) {
+            Ok(_) => succeeded.push(id),
+            Err(e) => failures.push((id, e.to_string())),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 8b. Apply reinit (only when requested and all resets succeeded)
+    // -----------------------------------------------------------------------
+    let mut reinit_applied = false;
+    let mut reinit_error: Option<String> = None;
+    if reinit && failures.is_empty() {
+        match apis::workflows_api::get_workflow(config, workflow_id) {
+            Ok(workflow) => {
+                let torc_config = TorcConfig::load().unwrap_or_default();
+                let manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+                match manager.reinitialize(false, false) {
+                    Ok(()) => reinit_applied = true,
+                    Err(e) => reinit_error = Some(e.to_string()),
+                }
+            }
+            Err(e) => reinit_error = Some(format!("failed to fetch workflow: {}", e)),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. Output
+    // -----------------------------------------------------------------------
+    let next_steps = if reinit_applied {
+        format!(
+            "Run 'torc run {}' or 'torc submit {}' to execute.",
+            workflow_id, workflow_id
+        )
+    } else {
+        format!(
+            "Run 'torc workflows reinit {}' (then 'torc run'/'torc submit') to rerun these \
+             jobs.",
+            workflow_id
+        )
+    };
+
+    if format == "json" {
+        let failure_list: Vec<serde_json::Value> = failures
+            .iter()
+            .map(|(id, msg)| serde_json::json!({"job_id": id, "error": msg}))
+            .collect();
+        let all_succeeded = failures.is_empty() && (!reinit || reinit_applied);
+        let status_str = if all_succeeded {
+            "success"
+        } else {
+            "partial_failure"
+        };
+        let response = serde_json::json!({
+            "status": status_str,
+            "workflow_id": workflow_id,
+            "reset_count": succeeded.len(),
+            "requested_job_ids": unique_jobs.iter().map(require_job_id).collect::<Vec<_>>(),
+            "reset_job_ids": succeeded,
+            // Informational: these are reset by the server at reinit time,
+            // not by this command.
+            "downstream_jobs": downstream_jobs
+                .iter()
+                .map(|j| to_json(j))
+                .collect::<Vec<_>>(),
+            "failures": failure_list,
+            "next_steps": next_steps,
+            "reinit": {
+                "requested": reinit,
+                "applied": reinit_applied,
+                "error": reinit_error,
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        if !all_succeeded {
+            std::process::exit(1);
+        }
+    } else {
+        if !failures.is_empty() {
+            eprintln!("Error: {} job(s) could not be reset:", failures.len());
+            for (id, msg) in &failures {
+                eprintln!("  job {}: {}", id, msg);
+            }
+            eprintln!(
+                "Successfully reset {} job(s). This command is idempotent — re-run it to retry \
+                 the failed resets.",
+                succeeded.len()
+            );
+            if reinit {
+                eprintln!(
+                    "Reinit was skipped because of the above failures. Re-run this command to \
+                     retry both the resets and reinit."
+                );
+            }
+            std::process::exit(1);
+        }
+        println!(
+            "Successfully reset {} job(s) to uninitialized.",
+            succeeded.len()
+        );
+        if let Some(ref err) = reinit_error {
+            eprintln!("Error reinitializing workflow {}: {}", workflow_id, err);
+            eprintln!(
+                "The job resets succeeded. Run 'torc workflows reinit {}' manually to complete \
+                 the reinit step.",
+                workflow_id
+            );
+            std::process::exit(1);
+        }
+        if reinit_applied {
+            println!("Reinitialized workflow {}.", workflow_id);
+        }
+        println!("{}", next_steps);
+    }
 }
 
 /// Get existing job names to avoid duplicates

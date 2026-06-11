@@ -145,6 +145,7 @@ pub enum JobAction {
     Cancel,
     Terminate,
     Retry,
+    ResetStatus,
 }
 
 impl JobAction {
@@ -153,6 +154,11 @@ impl JobAction {
             Self::Cancel => format!("Cancel job '{}'?", job_name),
             Self::Terminate => format!("Terminate job '{}'?", job_name),
             Self::Retry => format!("Retry job '{}'?", job_name),
+            Self::ResetStatus => format!(
+                "Reset job '{}' to uninitialized for rerun?\n\
+                 Downstream dependents are reset when the workflow is re-initialized ('I').",
+                job_name
+            ),
         }
     }
 }
@@ -184,6 +190,7 @@ pub enum PopupType {
 pub enum PendingAction {
     Workflow(WorkflowAction, i64, String), // action, workflow_id, workflow_name
     Job(JobAction, i64, String),           // action, job_id, job_name
+    JobsResetStatus(Vec<i64>),             // multi-selection reset (job_ids)
 }
 
 impl DetailViewType {
@@ -285,6 +292,14 @@ pub const TUI_PAGE_SIZE: i64 = 250;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultsSort {
     None,
+    IdDesc,
+    IdAsc,
+    JobIdDesc,
+    JobIdAsc,
+    ReturnDesc,
+    ReturnAsc,
+    CompletionDesc,
+    CompletionAsc,
     PeakMemoryDesc,
     PeakMemoryAsc,
     PeakCpuDesc,
@@ -352,6 +367,38 @@ impl JobsSort {
 }
 
 impl ResultsSort {
+    pub fn cycle_id(self) -> Self {
+        match self {
+            Self::IdDesc => Self::IdAsc,
+            Self::IdAsc => Self::None,
+            _ => Self::IdDesc,
+        }
+    }
+
+    pub fn cycle_job_id(self) -> Self {
+        match self {
+            Self::JobIdDesc => Self::JobIdAsc,
+            Self::JobIdAsc => Self::None,
+            _ => Self::JobIdDesc,
+        }
+    }
+
+    pub fn cycle_return(self) -> Self {
+        match self {
+            Self::ReturnDesc => Self::ReturnAsc,
+            Self::ReturnAsc => Self::None,
+            _ => Self::ReturnDesc,
+        }
+    }
+
+    pub fn cycle_completion(self) -> Self {
+        match self {
+            Self::CompletionDesc => Self::CompletionAsc,
+            Self::CompletionAsc => Self::None,
+            _ => Self::CompletionDesc,
+        }
+    }
+
     /// Cycle: None → Desc → Asc → None for the Peak Memory column. If currently
     /// sorting by another column, jump to PeakMemoryDesc.
     pub fn cycle_peak_memory(self) -> Self {
@@ -375,6 +422,38 @@ impl ResultsSort {
             Self::RuntimeDesc => Self::RuntimeAsc,
             Self::RuntimeAsc => Self::None,
             _ => Self::RuntimeDesc,
+        }
+    }
+
+    pub fn id_indicator(self) -> &'static str {
+        match self {
+            Self::IdDesc => " ↓",
+            Self::IdAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn job_id_indicator(self) -> &'static str {
+        match self {
+            Self::JobIdDesc => " ↓",
+            Self::JobIdAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn return_indicator(self) -> &'static str {
+        match self {
+            Self::ReturnDesc => " ↓",
+            Self::ReturnAsc => " ↑",
+            _ => "",
+        }
+    }
+
+    pub fn completion_indicator(self) -> &'static str {
+        match self {
+            Self::CompletionDesc => " ↓",
+            Self::CompletionAsc => " ↑",
+            _ => "",
         }
     }
 
@@ -570,6 +649,11 @@ pub struct App {
     pub jobs_workflow_id: Option<i64>,
     pub jobs_state: TableState,
     pub jobs_sort: JobsSort,
+    /// Job IDs marked on the Jobs tab (Space / '*') for a multi-job
+    /// reset-status. Cleared when the selected workflow changes; stale IDs
+    /// (e.g. from a row no longer listed after a filter change) are ignored
+    /// at action time by intersecting with the currently-listed jobs.
+    pub selected_job_ids: std::collections::HashSet<i64>,
     /// Offset of the currently-loaded Jobs page on the Jobs detail tab.
     pub jobs_offset: i64,
     /// True when the last Jobs-tab fetch filled a full page.
@@ -711,6 +795,7 @@ impl App {
             jobs_all: Vec::new(),
             jobs_workflow_id: None,
             jobs_state: TableState::default(),
+            selected_job_ids: std::collections::HashSet::new(),
             jobs_sort: JobsSort::None,
             jobs_offset: 0,
             jobs_has_more: false,
@@ -1126,6 +1211,7 @@ impl App {
             // that may have far fewer records.
             if self.selected_workflow_id != workflow_id_opt {
                 self.reset_detail_pagination();
+                self.selected_job_ids.clear();
             }
             self.selected_workflow_id = workflow_id_opt;
             if let Some(workflow_id) = workflow_id_opt {
@@ -1344,8 +1430,36 @@ impl App {
     /// missing values sort last in both directions so they don't crowd the
     /// top.
     pub fn apply_results_sort(&mut self) {
+        // RFC3339 completion_time → epoch seconds for ordering; unparseable
+        // timestamps sort last (treated as None below).
+        fn completion_secs(r: &ResultModel) -> Option<i64> {
+            chrono::DateTime::parse_from_rfc3339(&r.completion_time)
+                .ok()
+                .map(|dt| dt.timestamp())
+        }
         match self.results_sort {
             ResultsSort::None => {}
+            ResultsSort::IdDesc => self
+                .results
+                .sort_by_key(|r| (r.id.is_none(), std::cmp::Reverse(r.id.unwrap_or(i64::MIN)))),
+            ResultsSort::IdAsc => self
+                .results
+                .sort_by_key(|r| (r.id.is_none(), r.id.unwrap_or(i64::MAX))),
+            ResultsSort::JobIdDesc => self.results.sort_by_key(|r| std::cmp::Reverse(r.job_id)),
+            ResultsSort::JobIdAsc => self.results.sort_by_key(|r| r.job_id),
+            ResultsSort::ReturnDesc => self
+                .results
+                .sort_by_key(|r| std::cmp::Reverse(r.return_code)),
+            ResultsSort::ReturnAsc => self.results.sort_by_key(|r| r.return_code),
+            // Cache the parsed timestamp per row; unparseable times sort last.
+            ResultsSort::CompletionDesc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), std::cmp::Reverse(secs.unwrap_or(0)))
+            }),
+            ResultsSort::CompletionAsc => self.results.sort_by_cached_key(|r| {
+                let secs = completion_secs(r);
+                (secs.is_none(), secs.unwrap_or(0))
+            }),
             ResultsSort::PeakMemoryDesc => {
                 self.results
                     .sort_by(|a, b| match (a.peak_memory_bytes, b.peak_memory_bytes) {
@@ -1396,6 +1510,34 @@ impl App {
                     .sort_by(|a, b| a.exec_time_minutes.total_cmp(&b.exec_time_minutes));
             }
         }
+    }
+
+    pub fn cycle_results_sort_id(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_id();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_job_id(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_job_id();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_return(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_return();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
+    }
+
+    pub fn cycle_results_sort_completion(&mut self) {
+        let prev_id = self.selected_result_id();
+        self.results_sort = self.results_sort.cycle_completion();
+        self.apply_results_sort();
+        self.restore_results_selection(prev_id);
     }
 
     pub fn cycle_results_sort_peak_memory(&mut self) {
@@ -2795,6 +2937,12 @@ impl App {
                         self.set_status(StatusMessage::error(&format!("Action error: {}", e)));
                     }
                 }
+                PendingAction::JobsResetStatus(job_ids) => {
+                    let description = format!("{} job(s)", job_ids.len());
+                    if let Err(e) = self.reset_jobs_status_cli(&job_ids, &description) {
+                        self.set_status(StatusMessage::error(&format!("Action error: {}", e)));
+                    }
+                }
             }
         }
         Ok(())
@@ -2906,15 +3054,11 @@ impl App {
             workflow_name
         )));
 
-        let exe_path = self.get_torc_exe_path();
-        let url = self.client.get_base_url();
         let workflow_id_str = workflow_id.to_string();
 
         // First, do a dry-run check to see if there are existing output files
-        let check_output = std::process::Command::new(&exe_path)
-            .args([
-                "--url",
-                url,
+        let check_output = self
+            .torc_cli_command(&[
                 "-f",
                 "json",
                 "workflows",
@@ -3025,23 +3169,14 @@ impl App {
         workflow_name: &str,
         force: bool,
     ) -> Result<()> {
-        let exe_path = self.get_torc_exe_path();
-        let url = self.client.get_base_url();
         let workflow_id_str = workflow_id.to_string();
 
-        let mut args = vec![
-            "--url",
-            &url,
-            "workflows",
-            "init",
-            "--no-prompts",
-            &workflow_id_str,
-        ];
+        let mut args = vec!["workflows", "init", "--no-prompts", &workflow_id_str];
         if force {
             args.push("--force");
         }
 
-        let output = std::process::Command::new(&exe_path).args(&args).output();
+        let output = self.torc_cli_command(&args).output();
 
         match output {
             Ok(output) => {
@@ -3091,16 +3226,14 @@ impl App {
         workflow_name: &str,
         force: bool,
     ) -> Result<()> {
-        let exe_path = self.get_torc_exe_path();
-        let url = self.client.get_base_url();
         let workflow_id_str = workflow_id.to_string();
 
-        let mut args = vec!["--url", &url, "workflows", "reinit", &workflow_id_str];
+        let mut args = vec!["workflows", "reinit", &workflow_id_str];
         if force {
             args.push("--force");
         }
 
-        let output = std::process::Command::new(&exe_path).args(&args).output();
+        let output = self.torc_cli_command(&args).output();
 
         match output {
             Ok(output) => {
@@ -3139,15 +3272,11 @@ impl App {
 
     /// Reset workflow status using CLI command (following torc-dash pattern)
     fn reset_workflow_cli(&mut self, workflow_id: i64, workflow_name: &str) -> Result<()> {
-        let exe_path = self.get_torc_exe_path();
-        let url = self.client.get_base_url();
         let workflow_id_str = workflow_id.to_string();
 
-        // Run CLI command: torc --url <url> workflows reset-status --no-prompts <workflow_id>
-        let output = std::process::Command::new(&exe_path)
-            .args([
-                "--url",
-                url,
+        // Run CLI command: torc workflows reset-status --no-prompts <workflow_id>
+        let output = self
+            .torc_cli_command(&[
                 "workflows",
                 "reset-status",
                 "--no-prompts",
@@ -3190,6 +3319,55 @@ impl App {
         Ok(())
     }
 
+    /// Reset one or more jobs to uninitialized using the CLI command
+    /// (following the reset_workflow_cli pattern). The CLI enforces the safety
+    /// checks: no active workers and no job may be Running or Pending.
+    /// `description` is used in the success message (e.g. "Job 'x'" or
+    /// "3 job(s)").
+    fn reset_jobs_status_cli(&mut self, job_ids: &[i64], description: &str) -> Result<()> {
+        let id_strs: Vec<String> = job_ids.iter().map(|id| id.to_string()).collect();
+        let mut args: Vec<&str> = vec!["jobs", "reset-status", "--no-prompts"];
+        args.extend(id_strs.iter().map(|s| s.as_str()));
+
+        let output = self.torc_cli_command(&args).output();
+
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    self.selected_job_ids.clear();
+                    self.set_status(StatusMessage::success(&format!(
+                        "{} reset to uninitialized — press 'I' to re-initialize, then \
+                         run/submit",
+                        description
+                    )));
+                    let _ = self.load_detail_data();
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let error_msg = if !stderr.trim().is_empty() {
+                        stderr.trim().to_string()
+                    } else if !stdout.trim().is_empty() {
+                        stdout.trim().to_string()
+                    } else {
+                        "Unknown error".to_string()
+                    };
+                    self.set_status(StatusMessage::error(&format!(
+                        "Job reset failed: {}",
+                        error_msg
+                    )));
+                }
+            }
+            Err(e) => {
+                self.set_status(StatusMessage::error(&format!(
+                    "Failed to run jobs reset-status command: {}",
+                    e
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Get the path to the torc executable
     fn get_torc_exe_path(&self) -> String {
         std::env::current_exe()
@@ -3197,17 +3375,36 @@ impl App {
             .unwrap_or_else(|_| "torc".to_string())
     }
 
+    /// Build a `torc` CLI invocation that connects to the same server as the
+    /// TUI's own API client: forwards `--url` and the TLS flags, and passes
+    /// the basic-auth password via the TORC_PASSWORD environment variable so
+    /// it stays out of process listings. The username needs no forwarding —
+    /// the CLI derives it from the USER environment variable, same as the
+    /// TUI. The cookie header (TORC_COOKIE_HEADER) is already inherited
+    /// through the environment.
+    fn torc_cli_command(&self, args: &[&str]) -> std::process::Command {
+        let mut cmd = std::process::Command::new(self.get_torc_exe_path());
+        cmd.arg("--url").arg(self.client.get_base_url());
+        if let Some(ref ca_cert) = self.tls.ca_cert_path {
+            cmd.arg("--tls-ca-cert").arg(ca_cert);
+        }
+        if self.tls.insecure {
+            cmd.arg("--tls-insecure");
+        }
+        if let Some((_, Some(password))) = &self.basic_auth {
+            cmd.env("TORC_PASSWORD", password);
+        }
+        cmd.args(args);
+        cmd
+    }
+
     fn run_workflow_with_viewer(&mut self, workflow_id: i64, workflow_name: &str) -> Result<()> {
         let mut viewer = ProcessViewer::new(format!("Running: {}", workflow_name));
 
-        let exe_path = self.get_torc_exe_path();
-
-        // Build arguments - note: --url is a global option, must come before subcommand
         let workflow_id_str = workflow_id.to_string();
-        let url = self.client.get_base_url();
-        let args = vec!["--url", &url, "run", &workflow_id_str];
+        let cmd = self.torc_cli_command(&["run", &workflow_id_str]);
 
-        match viewer.start(&exe_path, &args) {
+        match viewer.start(cmd) {
             Ok(()) => {
                 self.previous_focus = self.focus;
                 self.focus = Focus::Popup;
@@ -3241,32 +3438,15 @@ impl App {
         };
         let mut viewer = ProcessViewer::new(title);
 
-        let exe_path = self.get_torc_exe_path();
-
-        // Build arguments - note: --url is a global option, must come before subcommand
         let workflow_id_str = workflow_id.to_string();
-        let url = self.client.get_base_url();
 
         let args: Vec<&str> = if recover {
-            vec![
-                "--url",
-                &url,
-                "watch",
-                &workflow_id_str,
-                "--recover",
-                "--show-job-counts",
-            ]
+            vec!["watch", &workflow_id_str, "--recover", "--show-job-counts"]
         } else {
-            vec![
-                "--url",
-                &url,
-                "watch",
-                &workflow_id_str,
-                "--show-job-counts",
-            ]
+            vec!["watch", &workflow_id_str, "--show-job-counts"]
         };
 
-        match viewer.start(&exe_path, &args) {
+        match viewer.start(self.torc_cli_command(&args)) {
             Ok(()) => {
                 self.previous_focus = self.focus;
                 self.focus = Focus::Popup;
@@ -3304,9 +3484,7 @@ impl App {
         };
         let mut viewer = ProcessViewer::new(title);
 
-        let exe_path = self.get_torc_exe_path();
         let workflow_id_str = workflow_id.to_string();
-        let url = self.client.get_base_url();
         let output_dir = self.output_dir.display().to_string();
         let mem_str = format!("{}", memory_multiplier);
         let rt_str = format!("{}", runtime_multiplier);
@@ -3314,8 +3492,6 @@ impl App {
         // --no-prompts is required because the interactive wizard would
         // try to read from stdin, which the TUI owns.
         let mut args = vec![
-            "--url",
-            &url,
             "recover",
             &workflow_id_str,
             "--output-dir",
@@ -3330,7 +3506,7 @@ impl App {
             args.push("--dry-run");
         }
 
-        match viewer.start(&exe_path, &args) {
+        match viewer.start(self.torc_cli_command(&args)) {
             Ok(()) => {
                 self.previous_focus = self.focus;
                 self.focus = Focus::Popup;
@@ -3450,17 +3626,120 @@ impl App {
             .and_then(|idx| self.jobs.get(idx))
     }
 
+    /// Toggle multi-reset selection on the job under the cursor, then advance
+    /// to the next row so repeated presses sweep down the list.
+    pub fn toggle_job_selection(&mut self) {
+        if let Some(job_id) = self.get_selected_job().and_then(|j| j.id) {
+            if !self.selected_job_ids.insert(job_id) {
+                self.selected_job_ids.remove(&job_id);
+            }
+            self.next_in_active_table();
+        } else {
+            self.set_status(StatusMessage::warning("No job selected"));
+        }
+    }
+
+    /// Select every currently-listed job (respecting the active filter), or
+    /// clear the selection if all listed jobs are already selected.
+    pub fn toggle_select_all_jobs(&mut self) {
+        let listed: Vec<i64> = self.jobs.iter().filter_map(|j| j.id).collect();
+        if listed.is_empty() {
+            self.set_status(StatusMessage::warning("No jobs listed"));
+            return;
+        }
+        if listed.iter().all(|id| self.selected_job_ids.contains(id)) {
+            self.selected_job_ids.clear();
+            self.set_status(StatusMessage::info("Selection cleared"));
+        } else {
+            self.selected_job_ids.extend(&listed);
+            self.set_status(StatusMessage::info(&format!(
+                "Selected {} listed job(s)",
+                listed.len()
+            )));
+        }
+    }
+
+    /// Request a reset for every selected job that is currently listed.
+    /// Returns false only when the multi-select is empty, so the caller can
+    /// fall back to the single-job (cursor row) path. When a selection exists
+    /// but none of its jobs are listed (e.g., the filter changed), this warns
+    /// and returns true so the caller does NOT silently reset the cursor row.
+    fn request_selected_jobs_reset(&mut self) -> bool {
+        // An empty selection is the only case where falling back to the
+        // cursor-row job is the intended behavior.
+        if self.selected_job_ids.is_empty() {
+            return false;
+        }
+        // Intersect with the listed jobs: selections made under an earlier
+        // filter may reference rows that are no longer shown, and acting on
+        // invisible jobs would be surprising.
+        let targets: Vec<&JobModel> = self
+            .jobs
+            .iter()
+            .filter(|j| j.id.is_some_and(|id| self.selected_job_ids.contains(&id)))
+            .collect();
+        if targets.is_empty() {
+            // A selection exists but none of its jobs are in the current view.
+            // Don't fall through to resetting the cursor row, which the user
+            // didn't pick; tell them their selection is hidden. The selection
+            // is left intact so clearing the filter restores it.
+            self.set_status(StatusMessage::warning(
+                "Selected jobs are not in the current view; clear the filter or press '*' to reselect",
+            ));
+            return true;
+        }
+
+        let completed = targets
+            .iter()
+            .filter(|j| j.status == Some(JobStatus::Completed))
+            .count();
+        let mut message = format!(
+            "Reset {} selected job(s) to uninitialized for rerun?\n\
+             Downstream dependents are reset when the workflow is re-initialized ('I').",
+            targets.len()
+        );
+        if completed > 0 {
+            message.push_str(&format!(
+                "\nWarning: {} of them completed successfully; resetting discards their \
+                 results and reruns them.",
+                completed
+            ));
+        }
+
+        let job_ids: Vec<i64> = targets.iter().filter_map(|j| j.id).collect();
+        self.previous_focus = self.focus;
+        self.focus = Focus::Popup;
+        self.popup = Some(PopupType::Confirmation {
+            dialog: ConfirmationDialog::new("Reset Job Statuses", &message),
+            action: PendingAction::JobsResetStatus(job_ids),
+        });
+        true
+    }
+
     pub fn request_job_action(&mut self, action: JobAction) {
+        if action == JobAction::ResetStatus && self.request_selected_jobs_reset() {
+            return;
+        }
+
         if let Some(job) = self.get_selected_job() {
             if let Some(job_id) = job.id {
                 let job_name = job.name.clone();
+                let job_status = job.status;
+                let mut message = action.confirmation_message(&job_name);
+                if action == JobAction::ResetStatus && job_status == Some(JobStatus::Completed) {
+                    message.push_str(
+                        "\nWarning: this job completed successfully; resetting discards its \
+                         results and reruns it.",
+                    );
+                }
                 let dialog = ConfirmationDialog::new(
                     match action {
                         JobAction::Cancel => "Cancel Job",
                         JobAction::Terminate => "Terminate Job",
                         JobAction::Retry => "Retry Job",
+                        JobAction::ResetStatus => "Reset Job Status",
                     },
-                    &action.confirmation_message(&job_name),
+                    &message,
                 );
 
                 self.previous_focus = self.focus;
@@ -3476,10 +3755,15 @@ impl App {
     }
 
     fn execute_job_action(&mut self, action: JobAction, job_id: i64, job_name: &str) -> Result<()> {
+        if action == JobAction::ResetStatus {
+            return self.reset_jobs_status_cli(&[job_id], &format!("Job '{}'", job_name));
+        }
+
         let result = match action {
             JobAction::Cancel => self.client.cancel_job(job_id),
             JobAction::Terminate => self.client.terminate_job(job_id),
             JobAction::Retry => self.client.retry_job(job_id),
+            JobAction::ResetStatus => unreachable!("handled above"),
         };
 
         match result {
@@ -3488,6 +3772,7 @@ impl App {
                     JobAction::Cancel => format!("Job '{}' canceled", job_name),
                     JobAction::Terminate => format!("Job '{}' terminated", job_name),
                     JobAction::Retry => format!("Job '{}' queued for retry", job_name),
+                    JobAction::ResetStatus => unreachable!("handled above"),
                 };
                 self.set_status(StatusMessage::success(&msg));
 
@@ -3982,9 +4267,10 @@ impl App {
             .unwrap_or(8080);
 
         let port_str = port.to_string();
-        let args = vec!["run", "--port", &port_str];
+        let mut cmd = std::process::Command::new(&server_path);
+        cmd.args(["run", "--port", &port_str]);
 
-        match viewer.start(&server_path, &args) {
+        match viewer.start(cmd) {
             Ok(()) => {
                 self.server_process = Some(viewer);
                 self.set_status(StatusMessage::success(&format!(
@@ -4050,15 +4336,13 @@ impl App {
         let port_str = port.to_string();
 
         // Build args with optional database path
-        let mut args = vec!["run", "--port", &port_str];
-        let db_path;
+        let mut cmd = std::process::Command::new(&server_path);
+        cmd.args(["run", "--port", &port_str]);
         if let Some(ref db) = self.standalone_database {
-            db_path = db.clone();
-            args.push("--database");
-            args.push(&db_path);
+            cmd.arg("--database").arg(db);
         }
 
-        match viewer.start(&server_path, &args) {
+        match viewer.start(cmd) {
             Ok(()) => {
                 self.server_process = Some(viewer);
             }

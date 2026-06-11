@@ -1011,7 +1011,10 @@ fn main() {
             ai_recovery,
             ai_agent,
         } => {
-            let interactive = !no_prompts && std::io::stdin().is_terminal();
+            // The interactive wizard prints prompts to stderr and reads stdin; that would block
+            // and corrupt `-f json` output, which is meant for scripting. Force non-interactive
+            // whenever JSON output is requested.
+            let interactive = !no_prompts && format != "json" && std::io::stdin().is_terminal();
             let args = RecoverArgs {
                 workflow_id: *workflow_id,
                 output_dir: output_dir.clone(),

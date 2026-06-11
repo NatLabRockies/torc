@@ -18,22 +18,57 @@ use crate::client::commands::slurm::RegenerateDryRunResult;
 use crate::client::report_models::{ResourceUtilizationReport, ResultsReport};
 use crate::client::resource_correction::{
     ResourceAdjustmentReport, ResourceCorrectionContext, ResourceCorrectionOptions,
-    apply_resource_corrections,
+    ResourceCorrectionResult, apply_resource_corrections,
 };
 use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
 use crate::models::JobStatus;
 
-fn torc_command() -> Result<Command, String> {
-    if let Ok(path) = std::env::var("TORC_BIN")
+/// Maximum time to wait for the server's database to become healthy when claiming actions.
+const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
+
+fn torc_command(config: &Configuration) -> Result<Command, String> {
+    let mut cmd = if let Ok(path) = std::env::var("TORC_BIN")
         && !path.trim().is_empty()
     {
-        return Ok(Command::new(path));
+        // Use the trimmed value: a TORC_BIN with surrounding whitespace passes the emptiness
+        // check above but would fail to spawn if passed verbatim.
+        Command::new(path.trim())
+    } else {
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("Failed to determine current torc executable: {}", e))?;
+        Command::new(current_exe)
+    };
+
+    // Forward the resolved server connection settings so the spawned `torc` talks to the same
+    // server with the same TLS/auth. The child reads these from env-mapped CLI args, and it
+    // inherits our environment — but only ambient env vars, not values the parent received via
+    // CLI flags (`--url`, `--tls-*`, `--password`) or `--standalone` (whose ephemeral URL is
+    // deliberately kept out of the environment). Setting them explicitly covers both cases.
+    cmd.env("TORC_API_URL", &config.base_path);
+    if let Some(ref ca_cert) = config.tls.ca_cert_path {
+        cmd.env("TORC_TLS_CA_CERT", ca_cert);
+    }
+    if config.tls.insecure {
+        cmd.env("TORC_TLS_INSECURE", "true");
+    }
+    if let Some(ref cookie_header) = config.cookie_header {
+        cmd.env("TORC_COOKIE_HEADER", cookie_header);
+    }
+    if let Some((_, Some(ref password))) = config.basic_auth {
+        cmd.env("TORC_PASSWORD", password);
     }
 
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("Failed to determine current torc executable: {}", e))?;
-    Ok(Command::new(current_exe))
+    Ok(cmd)
+}
+
+/// Render an output directory as a `-o` argument, erroring on non-UTF-8 paths instead of silently
+/// substituting a different directory.
+fn output_dir_arg(output_dir: &Path) -> Result<String, String> {
+    output_dir
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("Output directory path is not valid UTF-8: {:?}", output_dir))
 }
 
 /// Arguments for workflow recovery
@@ -280,7 +315,12 @@ pub fn recover_workflow(
 
             // Get the real scheduler plan using slurm regenerate --dry-run --include-job-ids
             info!("[DRY RUN] Slurm schedulers that would be created:");
-            match get_scheduler_dry_run(args.workflow_id, &args.output_dir, &result.jobs_to_retry) {
+            match get_scheduler_dry_run(
+                config,
+                args.workflow_id,
+                &args.output_dir,
+                &result.jobs_to_retry,
+            ) {
                 Ok(mut dry_run_result) => {
                     // Apply the adjusted memory/runtime values to the scheduler info.
                     // slurm regenerate reads from the database, but in dry-run mode
@@ -392,25 +432,48 @@ pub fn recover_workflow(
 
     // Step 7: Regenerate Slurm schedulers and submit
     info!("Schedulers regenerating workflow_id={}", args.workflow_id);
-    regenerate_and_submit(args.workflow_id, &args.output_dir, None, None)?;
+    regenerate_and_submit(config, args.workflow_id, &args.output_dir, None, None)?;
 
     Ok(result)
 }
 
-/// Check that the workflow is in a valid state for recovery:
-/// - Workflow must be complete (all jobs in terminal state)
-/// - No active workers (compute nodes or scheduled compute nodes)
-fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
+/// Check that the workflow is quiesced (safe to modify job statuses):
+/// - Workflow must be complete or canceled (all jobs in terminal state)
+/// - No active compute node workers
+/// - No pending or active scheduled compute nodes (Slurm allocations)
+///
+/// Returns `Err(message)` with a neutral description of what is wrong. Callers can
+/// prepend their own action-specific prefix when surfacing the error to the user.
+pub(crate) fn check_workflow_quiesced(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(), String> {
     // Check if workflow is complete
     let is_complete = apis::workflows_api::is_workflow_complete(config, workflow_id)
         .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
 
     if !is_complete.is_complete && !is_complete.is_canceled {
-        return Err("Cannot recover: workflow is not complete. \
-             Wait for all jobs to finish or use 'torc workflows cancel' first."
-            .to_string());
+        return Err(
+            "workflow is not complete; wait for all jobs to finish or use \
+             'torc workflows cancel' first"
+                .to_string(),
+        );
     }
 
+    check_no_active_workers(config, workflow_id)
+}
+
+/// Check that no workers are active on the workflow:
+/// - No active compute node workers
+/// - No pending or active scheduled compute nodes (Slurm allocations)
+///
+/// Unlike [`check_workflow_quiesced`], this does NOT require the workflow to be
+/// complete — non-terminal job statuses (uninitialized, blocked, ready) are fine
+/// as long as nothing is executing or about to execute.
+pub(crate) fn check_no_active_workers(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(), String> {
     // Check for active compute nodes
     let active_nodes = apis::compute_nodes_api::list_compute_nodes(
         config,
@@ -426,9 +489,9 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     .map_err(|e| format!("Failed to check for active compute nodes: {}", e))?;
 
     if !active_nodes.items.is_empty() {
-        return Err("Cannot recover: there are still active compute nodes. \
-             Wait for all workers to exit."
-            .to_string());
+        return Err(
+            "there are still active compute nodes; wait for all workers to exit".to_string(),
+        );
     }
 
     // Check for pending/active scheduled compute nodes
@@ -446,9 +509,11 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     .map_err(|e| format!("Failed to check for pending scheduled compute nodes: {}", e))?;
 
     if pending_scn.total_count > 0 {
-        return Err("Cannot recover: there are pending Slurm allocations. \
-             Wait for them to start or cancel them with 'torc slurm cancel'."
-            .to_string());
+        return Err(
+            "there are pending Slurm allocations; wait for them to start or cancel them with \
+             'torc slurm cancel'"
+                .to_string(),
+        );
     }
 
     let active_scn = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
@@ -466,53 +531,65 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
 
     if active_scn.total_count > 0 {
         return Err(
-            "Cannot recover: there are active Slurm allocations still running. \
-             Wait for all workers to exit."
+            "there are active Slurm allocations still running; wait for all workers to exit"
                 .to_string(),
         );
     }
 
-    // Check that there are actually failed/terminated/canceled jobs to recover
-    let failed_jobs = apis::jobs_api::list_jobs(
-        config,
-        workflow_id,
-        Some(crate::models::JobStatus::Failed), // status
-        None,                                   // needs_file_id
-        None,                                   // upstream_job_id
-        None,                                   // offset
-        Some(1),                                // limit
-        None,                                   // sort_by
-        None,                                   // reverse_sort
-        None,                                   // include_relationships
-        None,                                   // active_compute_node_id
-        None,                                   // origin_is_set
-        None,                                   // name
-        None,                                   // command
-    )
-    .map_err(|e| format!("Failed to list failed jobs: {}", e))?;
+    Ok(())
+}
 
-    let terminated_jobs = apis::jobs_api::list_jobs(
-        config,
-        workflow_id,
-        Some(crate::models::JobStatus::Terminated), // status
-        None,                                       // needs_file_id
-        None,                                       // upstream_job_id
-        None,                                       // offset
-        Some(1),                                    // limit
-        None,                                       // sort_by
-        None,                                       // reverse_sort
-        None,                                       // include_relationships
-        None,                                       // active_compute_node_id
-        None,                                       // origin_is_set
-        None,                                       // name
-        None,                                       // command
-    )
-    .map_err(|e| format!("Failed to list terminated jobs: {}", e))?;
+/// Check that the workflow is in a valid state for recovery:
+/// - Workflow must be complete (all jobs in terminal state)
+/// - No active workers (compute nodes or scheduled compute nodes)
+/// - There must be at least one recoverable job
+fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
+    // Delegate quiescence checks (1–4) to the shared helper
+    check_workflow_quiesced(config, workflow_id)
+        .map_err(|msg| format!("Cannot recover: {}", msg))?;
 
-    if failed_jobs.total_count == 0 && terminated_jobs.total_count == 0 {
-        return Err("No failed or terminated jobs to recover. \
+    // Check that there are actually recoverable jobs. The reset path
+    // (`reset_failed_jobs_only`) resets failed, terminated, canceled, and pending_failed jobs, so
+    // accept any of those here — otherwise a workflow whose jobs are only canceled or pending_failed
+    // (which passes the completeness/cancellation gate above) would be rejected even though recovery
+    // can act on it.
+    let recoverable_statuses = [
+        crate::models::JobStatus::Failed,
+        crate::models::JobStatus::Terminated,
+        crate::models::JobStatus::Canceled,
+        crate::models::JobStatus::PendingFailed,
+    ];
+    let mut has_recoverable_jobs = false;
+    for status in recoverable_statuses {
+        let jobs = apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            Some(status), // status
+            None,         // needs_file_id
+            None,         // upstream_job_id
+            None,         // offset
+            Some(1),      // limit - just need to know if any exist
+            None,         // sort_by
+            None,         // reverse_sort
+            None,         // include_relationships
+            None,         // active_compute_node_id
+            None,         // origin_is_set
+            None,         // name
+            None,         // command
+        )
+        .map_err(|e| format!("Failed to list {:?} jobs: {}", status, e))?;
+        if jobs.total_count > 0 {
+            has_recoverable_jobs = true;
+            break;
+        }
+    }
+
+    if !has_recoverable_jobs {
+        return Err(
+            "No failed, terminated, canceled, or pending_failed jobs to recover. \
              Workflow may have completed successfully."
-            .to_string());
+                .to_string(),
+        );
     }
 
     Ok(())
@@ -827,17 +904,25 @@ pub fn reset_failed_jobs(
         return Ok(0);
     }
 
-    let job_count = job_ids.len();
-
-    apis::workflows_api::reset_workflow_status(config, workflow_id, None)
-        .map_err(|e| format!("Failed to reset workflow status: {}", e))?;
-    info!("  Reset workflow status for workflow {}", workflow_id);
-
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    // NOTE: do not reset workflow status here. `reset_workflow_status` bumps
+    // run_id, and every caller of this function follows it with
+    // `reinitialize_workflow`, which already resets workflow status (and bumps
+    // run_id) exactly once. Resetting here too bumps run_id twice per recovery,
+    // leaving a gap (e.g. a recovered job jumping from run 1 to run 3). Reset
+    // only the failed jobs so the run_id bump stays single.
+    //
+    // `reset_job_status` resets all retryable failed jobs workflow-wide (the
+    // `job_ids` argument here only gates the no-op early return above), so use
+    // the server-reported `updated_count` for an accurate count, not job_ids.len().
+    let response = apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
         .map_err(|e| format!("Failed to reset failed job status: {}", e))?;
-    info!("  Reset failed job status for workflow {}", workflow_id);
+    let reset_count = response.updated_count.max(0) as usize;
+    info!(
+        "  Reset {} failed job(s) for workflow {}",
+        reset_count, workflow_id
+    );
 
-    Ok(job_count)
+    Ok(reset_count)
 }
 
 /// Reinitialize the workflow (set up dependencies and fire on_workflow_start actions)
@@ -936,6 +1021,7 @@ pub fn run_recovery_hook(
 
 /// Regenerate Slurm schedulers and submit allocations
 pub fn regenerate_and_submit(
+    config: &Configuration,
     workflow_id: i64,
     output_dir: &Path,
     partition: Option<&str>,
@@ -947,7 +1033,7 @@ pub fn regenerate_and_submit(
         workflow_id.to_string(),
         "--submit".to_string(),
         "-o".to_string(),
-        output_dir.to_str().unwrap_or("torc_output").to_string(),
+        output_dir_arg(output_dir)?,
     ];
     if let Some(p) = partition {
         args.push("--partition".to_string());
@@ -957,7 +1043,7 @@ pub fn regenerate_and_submit(
         args.push("--walltime".to_string());
         args.push(w.to_string());
     }
-    let mut cmd = torc_command()?;
+    let mut cmd = torc_command(config)?;
     let output = cmd
         .args(&args)
         .output()
@@ -981,6 +1067,7 @@ pub fn regenerate_and_submit(
 
 /// Get a dry-run preview of what schedulers would be created, including specific job IDs
 fn get_scheduler_dry_run(
+    config: &Configuration,
     workflow_id: i64,
     output_dir: &Path,
     job_ids: &[i64],
@@ -992,7 +1079,8 @@ fn get_scheduler_dry_run(
         .collect::<Vec<_>>()
         .join(",");
 
-    let mut cmd = torc_command()?;
+    let output_dir_str = output_dir_arg(output_dir)?;
+    let mut cmd = torc_command(config)?;
     let output = cmd
         .args([
             "-f",
@@ -1004,7 +1092,7 @@ fn get_scheduler_dry_run(
             "--include-job-ids",
             &job_ids_str,
             "-o",
-            output_dir.to_str().unwrap_or("torc_output"),
+            &output_dir_str,
         ])
         .output()
         .map_err(|e| format!("Failed to run slurm regenerate --dry-run: {}", e))?;
@@ -1333,7 +1421,11 @@ fn recover_workflow_interactive(
         dry_run: true, // always preview first in interactive mode
         no_downsize: true,
     };
-    let correction_result = apply_resource_corrections(&correction_ctx, &correction_opts)?;
+    let correction_result = if !correction_opts.include_jobs.is_empty() {
+        apply_resource_corrections(&correction_ctx, &correction_opts)?
+    } else {
+        ResourceCorrectionResult::default()
+    };
 
     // --- Show proposed changes and confirm ------------------------------------
     eprintln!("\n--- Recovery Plan ---\n");
@@ -1396,28 +1488,32 @@ fn recover_workflow_interactive(
 
     if args.dry_run {
         eprintln!("\n[DRY RUN] No changes applied.");
-        let slurm_dry_run =
-            match get_scheduler_dry_run(args.workflow_id, &args.output_dir, &all_jobs_to_retry) {
-                Ok(mut dr) => {
-                    dr.would_submit = true;
-                    for sched in &dr.planned_schedulers {
-                        let deps = if sched.has_dependencies {
-                            " (deferred)"
-                        } else {
-                            ""
-                        };
-                        eprintln!(
-                            "  {} - {} job(s), {} allocation(s){}",
-                            sched.name, sched.job_count, sched.num_allocations, deps
-                        );
-                    }
-                    Some(dr)
+        let slurm_dry_run = match get_scheduler_dry_run(
+            config,
+            args.workflow_id,
+            &args.output_dir,
+            &all_jobs_to_retry,
+        ) {
+            Ok(mut dr) => {
+                dr.would_submit = true;
+                for sched in &dr.planned_schedulers {
+                    let deps = if sched.has_dependencies {
+                        " (deferred)"
+                    } else {
+                        ""
+                    };
+                    eprintln!(
+                        "  {} - {} job(s), {} allocation(s){}",
+                        sched.name, sched.job_count, sched.num_allocations, deps
+                    );
                 }
-                Err(e) => {
-                    warn!("Could not get scheduler preview: {}", e);
-                    None
-                }
-            };
+                Some(dr)
+            }
+            Err(e) => {
+                warn!("Could not get scheduler preview: {}", e);
+                None
+            }
+        };
 
         return Ok(RecoveryResult {
             oom_fixed: correction_result.memory_corrections,
@@ -1482,7 +1578,11 @@ fn recover_workflow_interactive(
         dry_run: false,
         no_downsize: true,
     };
-    let real_result = apply_resource_corrections(&correction_ctx, &real_opts)?;
+    let real_result = if !real_opts.include_jobs.is_empty() {
+        apply_resource_corrections(&correction_ctx, &real_opts)?
+    } else {
+        ResourceCorrectionResult::default()
+    };
 
     // Run recovery hook if applicable
     if !unknown_job_ids.is_empty()
@@ -1508,6 +1608,7 @@ fn recover_workflow_interactive(
         } => {
             info!("Regenerating and submitting Slurm schedulers...");
             regenerate_and_submit(
+                config,
                 args.workflow_id,
                 &args.output_dir,
                 partition.as_deref(),
@@ -1520,11 +1621,17 @@ fn recover_workflow_interactive(
             start_one_worker_per_node,
             ..
         } => {
+            // Reinitialization above re-armed the workflow's on_workflow_start schedule_nodes
+            // action. Mark it executed before submitting so it doesn't re-fire on the first
+            // compute node and submit the action's original allocation count instead of the
+            // user's choice. (The Regenerate path does the equivalent inside handle_regenerate.)
+            mark_on_workflow_start_schedule_actions_executed(config, args.workflow_id)?;
             info!(
                 "Submitting {} allocation(s) with scheduler ID {}...",
                 num_allocations, scheduler_id
             );
             submit_existing_scheduler(
+                config,
                 args.workflow_id,
                 *scheduler_id,
                 *num_allocations,
@@ -1732,15 +1839,73 @@ fn prompt_scheduler_choice(
     }
 }
 
+/// Mark the workflow's `on_workflow_start` `schedule_nodes` actions as executed.
+///
+/// `reinitialize_workflow` re-arms these actions (the server clears their `executed` flag and
+/// re-triggers them). When recovery reuses an existing scheduler and submits a user-chosen number
+/// of allocations directly via `torc slurm schedule-nodes`, a re-armed action would otherwise fire
+/// again on the first compute node that starts and submit the action's original `num_allocations`,
+/// ignoring the user's entry. Claiming the actions here marks them executed and prevents that
+/// duplicate, action-defined submission. The `regenerate` path performs the equivalent step inside
+/// `handle_regenerate`. Recovery actions (`is_recovery`) are left untouched.
+pub fn mark_on_workflow_start_schedule_actions_executed(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(), String> {
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .map_err(|e| format!("Failed to list workflow actions: {}", e))?;
+
+    for action in actions {
+        if action.trigger_type == "on_workflow_start"
+            && action.action_type == "schedule_nodes"
+            && !action.is_recovery
+            && !action.executed
+            && let Some(action_id) = action.id
+        {
+            // Delegate to the shared helper, which treats a 409 Conflict (already claimed by
+            // another process) as `Ok(false)` and surfaces any other failure as an error. We
+            // propagate that error rather than logging and continuing: if the claim genuinely
+            // fails, the action stays armed and would re-fire on a compute node, reintroducing
+            // the duplicate-allocation bug — better to stop and report it.
+            match crate::client::utils::claim_action(
+                config,
+                workflow_id,
+                action_id,
+                None, // login-node submission, no compute node
+                WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+            ) {
+                Ok(true) => {
+                    info!(
+                        "Marked on_workflow_start schedule_nodes action {} as executed to avoid duplicate allocations",
+                        action_id
+                    );
+                }
+                Ok(false) => {
+                    debug!("Action {} already claimed", action_id);
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to mark on_workflow_start schedule_nodes action {} as executed: {}",
+                        action_id, e
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Submit allocations using an existing scheduler config via `torc slurm schedule-nodes`.
 fn submit_existing_scheduler(
+    config: &Configuration,
     workflow_id: i64,
     scheduler_id: i64,
     num_allocations: i32,
     start_one_worker_per_node: bool,
     output_dir: &Path,
 ) -> Result<(), String> {
-    let mut cmd = torc_command()?;
+    let mut cmd = torc_command(config)?;
     let mut args = vec![
         "slurm".to_string(),
         "schedule-nodes".to_string(),
@@ -1750,7 +1915,7 @@ fn submit_existing_scheduler(
         "--num-hpc-jobs".to_string(),
         num_allocations.to_string(),
         "-o".to_string(),
-        output_dir.to_str().unwrap_or("torc_output").to_string(),
+        output_dir_arg(output_dir)?,
     ];
     if start_one_worker_per_node {
         args.push("--start-one-worker-per-node".to_string());
@@ -1785,5 +1950,95 @@ fn truncate(s: &str, max: usize) -> String {
     } else {
         let prefix: String = s.chars().take(max - 3).collect();
         format!("{}...", prefix)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::apis::configuration::TlsConfig;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    /// Collect the env overrides explicitly set on a `Command` (not inherited parent env).
+    fn env_overrides(cmd: &Command) -> HashMap<String, String> {
+        cmd.get_envs()
+            .filter_map(|(k, v)| Some((k.to_str()?.to_string(), v?.to_str()?.to_string())))
+            .collect()
+    }
+
+    #[test]
+    fn torc_command_forwards_connection_settings() {
+        let mut config = Configuration::new();
+        config.base_path = "https://example.test:9000/torc-service/v1".to_string();
+        config.tls = TlsConfig {
+            ca_cert_path: Some(PathBuf::from("/tmp/ca.pem")),
+            insecure: false,
+        };
+        config.cookie_header = Some("session=abc".to_string());
+        config.basic_auth = Some(("alice".to_string(), Some("s3cret".to_string())));
+
+        let cmd = torc_command(&config).expect("torc_command");
+        let envs = env_overrides(&cmd);
+
+        // URL, TLS CA, cookie, and password are forwarded so the child resolves the same server
+        // even when the parent received these via CLI flags rather than the environment.
+        assert_eq!(
+            envs.get("TORC_API_URL").map(String::as_str),
+            Some("https://example.test:9000/torc-service/v1")
+        );
+        assert_eq!(
+            envs.get("TORC_TLS_CA_CERT").map(String::as_str),
+            Some("/tmp/ca.pem")
+        );
+        assert_eq!(
+            envs.get("TORC_COOKIE_HEADER").map(String::as_str),
+            Some("session=abc")
+        );
+        assert_eq!(
+            envs.get("TORC_PASSWORD").map(String::as_str),
+            Some("s3cret")
+        );
+        // insecure=false must not set the flag (clap would parse it as true).
+        assert!(!envs.contains_key("TORC_TLS_INSECURE"));
+    }
+
+    #[test]
+    fn torc_command_sets_tls_insecure_only_when_enabled() {
+        let mut config = Configuration::new();
+        config.tls = TlsConfig {
+            ca_cert_path: None,
+            insecure: true,
+        };
+
+        let cmd = torc_command(&config).expect("torc_command");
+        let envs = env_overrides(&cmd);
+
+        assert_eq!(
+            envs.get("TORC_TLS_INSECURE").map(String::as_str),
+            Some("true")
+        );
+        // Nothing else should be forwarded when not configured.
+        assert!(!envs.contains_key("TORC_TLS_CA_CERT"));
+        assert!(!envs.contains_key("TORC_PASSWORD"));
+        assert!(!envs.contains_key("TORC_COOKIE_HEADER"));
+    }
+
+    #[test]
+    fn output_dir_arg_accepts_utf8_path() {
+        assert_eq!(
+            output_dir_arg(Path::new("torc_output")).unwrap(),
+            "torc_output"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn output_dir_arg_rejects_non_utf8_path() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let bad = OsStr::from_bytes(b"out\xffput");
+        assert!(output_dir_arg(Path::new(bad)).is_err());
     }
 }

@@ -243,6 +243,12 @@ fn draw_help(f: &mut Frame, area: Rect, app: &App) {
             Span::raw(": terminate | "),
             Span::styled("y", Style::default().fg(Color::Yellow)),
             Span::raw(": retry | "),
+            Span::styled("Space", Style::default().fg(Color::Yellow)),
+            Span::raw(": select | "),
+            Span::styled("*", Style::default().fg(Color::Yellow)),
+            Span::raw(": select all | "),
+            Span::styled("U", Style::default().fg(Color::Yellow)),
+            Span::raw(": reset | "),
             Span::styled("f", Style::default().fg(Color::Yellow)),
             Span::raw(": filter | "),
             Span::styled("Tab", Style::default().fg(Color::Yellow)),
@@ -810,7 +816,13 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
     .bottom_margin(1);
 
     let rows = app.jobs.iter().map(|job| {
-        let id = job.id.map(|i| i.to_string()).unwrap_or_default();
+        let selected = job.id.is_some_and(|id| app.selected_job_ids.contains(&id));
+        let marker = if selected { "● " } else { "  " };
+        let id = format!(
+            "{}{}",
+            marker,
+            job.id.map(|i| i.to_string()).unwrap_or_default()
+        );
         let name = job.name.clone();
         let (status_str, color) = match job.status {
             Some(s) => (format!("{:?}", s), status_color(s)),
@@ -828,8 +840,13 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
         };
         let command = job.command.clone();
 
+        let id_style = if selected {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default()
+        };
         Row::new(vec![
-            Cell::from(id),
+            Cell::from(Span::styled(id, id_style)),
             Cell::from(name),
             Cell::from(Span::styled(status_str, Style::default().fg(color))),
             Cell::from(node),
@@ -840,15 +857,21 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
 
     let filter = filter_suffix(app, FilterTarget::Details);
     let page = page_suffix(app.jobs_offset, app.jobs_has_more);
+    let selection = if app.selected_job_ids.is_empty() {
+        String::new()
+    } else {
+        format!(" [{} selected]", app.selected_job_ids.len())
+    };
     let (title, border_style) = if app.focus == Focus::Details {
         (
             Line::from(vec![
                 Span::styled("▶ ", Style::default().fg(Color::Green)),
                 Span::styled("Jobs", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(selection.clone(), Style::default().fg(Color::Yellow)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    " │ Enter: details  l: logs  C: cancel  t: terminate  y: retry",
+                    " │ Enter: details  l: logs  Space: select  *: all  C: cancel  t: terminate  y: retry  U: reset  │ sort: 1 id  2 name  3 status",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),
@@ -860,6 +883,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled("▶ ", Style::default().fg(Color::Cyan)),
                 Span::styled("Jobs", Style::default().fg(Color::White)),
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
+                Span::styled(selection, Style::default().fg(Color::Yellow)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
             ]),
             Style::default().fg(Color::DarkGray),
@@ -869,7 +893,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(8),
+            Constraint::Length(10),
             Constraint::Length(20),
             Constraint::Length(15),
             Constraint::Length(6),
@@ -1174,16 +1198,20 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD);
 
+    let id_header = format!("ID{}", app.results_sort.id_indicator());
+    let job_id_header = format!("Job ID{}", app.results_sort.job_id_indicator());
+    let return_header = format!("Return{}", app.results_sort.return_indicator());
+    let completion_header = format!("Completion Time{}", app.results_sort.completion_indicator());
     let peak_mem_header = format!("Peak Mem{}", app.results_sort.peak_memory_indicator());
     let peak_cpu_header = format!("Peak CPU %{}", app.results_sort.peak_cpu_indicator());
     let runtime_header = format!("Runtime (m){}", app.results_sort.runtime_indicator());
     let header = Row::new(vec![
-        "ID".to_string(),
-        "Job ID".to_string(),
-        "Return".to_string(),
+        id_header,
+        job_id_header,
+        return_header,
         "Status".to_string(),
         runtime_header,
-        "Completion Time".to_string(),
+        completion_header,
         peak_mem_header,
         peak_cpu_header,
     ])
@@ -1243,7 +1271,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(filter, Style::default().fg(Color::Magenta)),
                 Span::styled(page, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    " │ l: logs  m: peak mem  p: peak cpu",
+                    " │ l: logs  │ sort: 1 id  2 job id  3 return  4 runtime  5 completion  6 peak mem  7 peak cpu",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]),

@@ -40,7 +40,7 @@ pub struct ResourceCorrectionOptions {
 }
 
 /// Result of applying resource corrections
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct ResourceCorrectionResult {
     pub resource_requirements_updated: usize,
     pub jobs_analyzed: usize,

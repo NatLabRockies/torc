@@ -473,6 +473,7 @@ fn poll_until_complete(
                                     unplanned_ready, auto_schedule.threshold
                                 );
                                 match regenerate_and_submit(
+                                    config,
                                     workflow_id,
                                     &auto_schedule.output_dir,
                                     auto_schedule.partition.as_deref(),
@@ -496,6 +497,7 @@ fn poll_until_complete(
                                     auto_schedule.stranded_timeout.as_secs()
                                 );
                                 match regenerate_and_submit(
+                                    config,
                                     workflow_id,
                                     &auto_schedule.output_dir,
                                     auto_schedule.partition.as_deref(),
@@ -590,6 +592,7 @@ fn poll_until_complete(
                             );
                             info!("Auto-schedule: Regenerating schedulers...");
                             match regenerate_and_submit(
+                                config,
                                 workflow_id,
                                 &auto_schedule.output_dir,
                                 auto_schedule.partition.as_deref(),
@@ -1019,6 +1022,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         // Step 5: Regenerate Slurm schedulers (this also marks old actions as executed)
         info!("Regenerating Slurm schedulers...");
         if let Err(e) = regenerate_and_submit(
+            config,
             args.workflow_id,
             &args.output_dir,
             args.partition.as_deref(),
