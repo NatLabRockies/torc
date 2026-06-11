@@ -217,12 +217,50 @@ torc workflows reset-status &lt;workflow_id&gt; --failed-only --reinitialize
 torc workflows reset-status &lt;workflow_id&gt; --failed-only
 </code></pre>
 <p>Then resume execution with <code>torc run &lt;workflow_id&gt;</code> (local) or <code>torc submit &lt;workflow_id&gt;</code> (Slurm).</p>
+<h2 id="selective-job-reset-torc-jobs-reset-status"><a class="header" href="#selective-job-reset-torc-jobs-reset-status">Selective Job Reset: <code>torc jobs reset-status</code></a></h2>
+<p>When you need to rerun only specific jobs (not all failed ones), use <code>torc jobs reset-status</code>. This
+is useful when you know exactly which jobs need to be rerun without resetting the whole workflow.</p>
+<p>Unlike <code>torc workflows reset-status</code>, this command:</p>
+<ul>
+<li>Resets only the explicitly named job IDs. Downstream dependents are <strong>not</strong> reset by this command
+— it lists them for you, and they are reset transitively when you run <code>torc workflows reinit</code> (a
+rerun job produces new outputs that consumers must consume again).</li>
+<li>Does <strong>not</strong> bump the workflow <code>run_id</code> or reset workflow state — you follow up with
+<code>torc workflows reinit</code> once, which does the run_id bump exactly once.</li>
+<li>All supplied job IDs must belong to the same workflow (hard error otherwise).</li>
+</ul>
+<pre><code class="language-bash"># Preview what would be reset (no changes applied)
+torc jobs reset-status 101 102 --dry-run
+
+# Reset and reinitialize in one step, then run
+torc jobs reset-status 101 102 --reinit
+torc run &lt;workflow_id&gt;      # local execution
+# or: torc submit &lt;workflow_id&gt;   # Slurm
+
+# Reset and rerun (manual two-step flow)
+torc jobs reset-status 101 102 --no-prompts
+torc workflows reinit &lt;workflow_id&gt;
+torc run &lt;workflow_id&gt;
+
+# Override safety checks (e.g. workers still active)
+torc jobs reset-status 101 --force
+
+# JSON output for scripting
+torc -f json jobs reset-status 101 102 --no-prompts
+</code></pre>
+<p>The workflow does not need to be complete — the command can be run repeatedly (e.g. to reset
+additional jobs after an earlier reset) as long as no workers are active. If a requested job
+completed successfully, the command warns you before resetting it, since resetting discards its
+results and reruns it.</p>
+<p>The <code>--force</code> flag bypasses two checks: (1) the no-active-workers check (compute nodes and Slurm
+allocations), and (2) the active-status guard (jobs in Running or Pending are normally rejected).</p>
 <h2 id="choosing-the-right-tool"><a class="header" href="#choosing-the-right-tool">Choosing the Right Tool</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Use</th></tr></thead><tbody>
 <tr><td>Slurm workflow with OOM/timeout failures</td><td><code>torc recover</code></td></tr>
 <tr><td>Slurm workflow, want continuous self-healing</td><td><code>torc watch --recover</code></td></tr>
 <tr><td>Local workflow with failures</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
 <tr><td>Want to retry without changing resource allocations</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
+<tr><td>Rerun only specific known jobs</td><td><code>torc jobs reset-status &lt;id&gt;...</code></td></tr>
 <tr><td>Workflow ran fine but inputs changed</td><td><a href="../concepts/intelligent-restart.html">Intelligent Restart</a></td></tr>
 <tr><td>Need AI-driven classification of unfamiliar failure modes</td><td><a href="../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a></td></tr>
 </tbody></table>
