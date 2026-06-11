@@ -27,7 +27,7 @@ torc tui
 
 - **View job details** including full command and status
 - **View job logs** (stdout/stderr) with search and navigation
-- **Cancel**, **terminate**, or **retry** individual jobs
+- **Cancel**, **terminate**, **retry**, or **reset** individual jobs
 - Color-coded job status for quick visual scanning
 
 ### Real-time Monitoring
@@ -214,11 +214,22 @@ Press `l` to view logs:
 
 From the Jobs tab, select a job and use:
 
-| Key | Action    | When to use                              |
-| --- | --------- | ---------------------------------------- |
-| `c` | Cancel    | Stop a pending or running job gracefully |
-| `t` | Terminate | Force-stop a running job                 |
-| `y` | Retry     | Re-queue a failed job                    |
+| Key     | Action     | When to use                                                                                            |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `c`     | Cancel     | Stop a pending or running job gracefully                                                               |
+| `t`     | Terminate  | Force-stop a running job                                                                               |
+| `y`     | Retry      | Re-queue a failed job                                                                                  |
+| `Space` | Select     | Toggle the current job in the multi-reset selection (and move down)                                    |
+| `*`     | Select all | Select every listed job; press again to clear the selection                                            |
+| `U`     | Reset      | Reset the selected (or current) job(s) to uninitialized for selective rerun (`torc jobs reset-status`) |
+
+To rerun a batch of jobs: filter the Jobs tab (`f`, e.g. by Failed status), press `*` to select all
+listed jobs, `Space` to deselect any you want to keep, then `U` to reset them in one operation.
+Selected jobs are marked with `●` and counted in the pane title.
+
+Resetting warns if any selected job completed successfully (its results are discarded). After
+resetting, re-initialize the workflow (`I`) so downstream dependents are reset too, then run or
+submit it.
 
 ### 8. Viewing Files
 
@@ -342,14 +353,17 @@ Switch to the DAG tab to see job dependencies:
 
 ### Job Actions (Jobs tab only)
 
-| Key     | Action           |
-| ------- | ---------------- |
-| `Enter` | View job details |
-| `l`     | View job logs    |
-| `c`     | Cancel job       |
-| `t`     | Terminate job    |
-| `y`     | Retry failed job |
-| `f`     | Filter jobs      |
+| Key     | Action                    |
+| ------- | ------------------------- |
+| `Enter` | View job details          |
+| `l`     | View job logs             |
+| `c`     | Cancel job                |
+| `t`     | Terminate job             |
+| `y`     | Retry failed job          |
+| `Space` | Toggle job selection      |
+| `*`     | Select all / clear        |
+| `U`     | Reset selected job status |
+| `f`     | Filter jobs               |
 
 ### File Actions (Files tab only)
 

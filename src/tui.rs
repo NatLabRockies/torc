@@ -680,6 +680,24 @@ where
                     {
                         app.request_job_action(JobAction::Retry);
                     }
+                    KeyCode::Char('U')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.request_job_action(JobAction::ResetStatus);
+                    }
+                    KeyCode::Char(' ')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.toggle_job_selection();
+                    }
+                    KeyCode::Char('*')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.toggle_select_all_jobs();
+                    }
                     // Sort the Results table by column index (left-to-right
                     // among sortable columns — every column except Status):
                     // 1=ID, 2=Job ID, 3=Name, 4=Return, 5=Runtime,
