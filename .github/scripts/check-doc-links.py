@@ -24,6 +24,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = REPO_ROOT / "docs"
 DOCS_SRC = DOCS_ROOT / "src"
 LOCALHOST_NAMES = ("localhost", "127.0.0.1", "::1")
+# Statuses that indicate the server is blocking automated checkers (bot detection, auth walls, or
+# rate limiting) rather than a genuinely broken link. Treat these as reachable.
+BOT_BLOCK_STATUSES = frozenset({401, 403, 429})
 
 
 @dataclass(frozen=True)
@@ -175,6 +178,8 @@ def check_external_url(url: str, timeout: int, retries: int) -> str | None:
                 with open_url(url, method, timeout):
                     return None
             except urllib.error.HTTPError as err:
+                if err.code in BOT_BLOCK_STATUSES:
+                    return None
                 last_error = f"HTTP {err.code}"
                 if method == "HEAD":
                     continue
