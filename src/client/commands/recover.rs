@@ -894,7 +894,35 @@ pub fn apply_recovery_heuristics(
     })
 }
 
-/// Reset specific failed jobs for retry (without reinitializing)
+/// Build a capped, human-readable summary of jobs that could not be reset. The
+/// full per-job list is logged separately; this keeps the returned error from
+/// ballooning when many job IDs are passed or API errors carry verbose payloads.
+fn summarize_not_reset(total: usize, reset_count: usize, not_reset: &[String]) -> String {
+    const MAX_DETAIL: usize = 5;
+    let shown = not_reset.len().min(MAX_DETAIL);
+    let mut msg = format!(
+        "Reset {} of {} job(s); {} skipped or failed: {}",
+        reset_count,
+        total,
+        not_reset.len(),
+        not_reset[..shown].join("; ")
+    );
+    if not_reset.len() > shown {
+        msg.push_str(&format!(
+            " ({} more not shown; see logs)",
+            not_reset.len() - shown
+        ));
+    }
+    msg
+}
+
+/// Reset specific failed jobs for retry (without reinitializing).
+///
+/// Best-effort: every job ID is attempted, accumulating a per-job reason for any
+/// that is skipped (wrong workflow / non-recoverable status) or fails (fetch or
+/// reset error). Returns `Ok(reset_count)` as long as at least one job was reset
+/// -- partial success is not an error -- and `Err` only when nothing could be
+/// reset. Skips and failures are always logged.
 pub fn reset_failed_jobs(
     config: &Configuration,
     workflow_id: i64,
@@ -930,10 +958,7 @@ pub fn reset_failed_jobs(
     // Attempt every reset, accumulating the reason any job was not reset instead
     // of bailing on the first problem. There is no server-side bulk/atomic reset
     // endpoint, so a mid-loop early return would leave the workflow partially
-    // reset with no report of what succeeded. We collect a per-job reason for
-    // every job that was skipped (validation/status) or failed (fetch/reset) so
-    // the caller is reliably informed -- including the case where nothing was
-    // reset at all.
+    // reset with no report of what succeeded.
     let mut reset_count = 0;
     let mut not_reset: Vec<String> = Vec::new();
     for &job_id in job_ids {
@@ -957,12 +982,10 @@ pub fn reset_failed_jobs(
         match job.status {
             Some(status) if recoverable_statuses.contains(&status) => {}
             other => {
-                let reason = format!(
+                not_reset.push(format!(
                     "job {}: status {:?} is not recoverable; skipped",
                     job_id, other
-                );
-                warn!("{} (workflow {})", reason, workflow_id);
-                not_reset.push(reason);
+                ));
                 continue;
             }
         }
@@ -979,13 +1002,22 @@ pub fn reset_failed_jobs(
     );
 
     if !not_reset.is_empty() {
-        return Err(format!(
-            "Reset {} of {} job(s); {} skipped or failed: {}",
-            reset_count,
-            job_ids.len(),
-            not_reset.len(),
-            not_reset.join("; ")
-        ));
+        // Log the full list for diagnosis regardless of outcome; the returned
+        // message is capped so a large `job_ids` (or verbose API errors) can't
+        // produce an oversized CLI error.
+        for reason in &not_reset {
+            warn!("Job not reset (workflow {}): {}", workflow_id, reason);
+        }
+
+        // Only a hard error when *nothing* was reset -- a total failure the
+        // caller should abort on. Partial success returns Ok(reset_count): the
+        // callers propagate with `?` and go on to reinitialize, so turning a
+        // partial reset into an Err would abort recovery and strand the workflow
+        // in a partially-reset state. The skips/failures are surfaced via the
+        // warnings above.
+        if reset_count == 0 {
+            return Err(summarize_not_reset(job_ids.len(), reset_count, &not_reset));
+        }
     }
 
     Ok(reset_count)

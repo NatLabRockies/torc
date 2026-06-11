@@ -621,9 +621,10 @@ fn test_reset_failed_jobs_only_resets_selected(start_server: &ServerProcess) {
 
 /// `reset_failed_jobs` must validate every job before resetting it: a job that
 /// belongs to a different workflow, or one that is not in a recoverable status,
-/// must be skipped. When any job is skipped or fails, the call attempts all the
-/// others and returns a combined error rather than bailing on the first problem
-/// (there is no server-side atomic bulk reset).
+/// must be skipped. It is best-effort -- a partial success returns
+/// `Ok(reset_count)` (so callers don't abort recovery), while a call where
+/// nothing could be reset returns `Err`. We assert primarily on the resulting
+/// job statuses and only loosely on the error text.
 #[rstest]
 fn test_reset_failed_jobs_validates_workflow_and_status(start_server: &ServerProcess) {
     let config = start_server.config.clone();
@@ -692,54 +693,57 @@ fn test_reset_failed_jobs_validates_workflow_and_status(start_server: &ServerPro
     fail_job(foreign_id, other_workflow_id, other_run_id, other_cn_id);
     // `ready_id` is left in its initialized (Ready) state -- not recoverable.
 
-    // Ask to reset all three. Only `failed_id` is eligible; the other two must
-    // be rejected and surfaced in a combined error.
-    let result = torc::client::commands::recover::reset_failed_jobs(
+    let job_status = |id: i64| {
+        apis::jobs_api::get_job(&config, id)
+            .unwrap()
+            .status
+            .unwrap()
+    };
+
+    // Partial success: ask to reset all three. Only `failed_id` is eligible; the
+    // Ready job (wrong status) and the foreign job (wrong workflow) are skipped,
+    // but the eligible job is still reset, so the call returns Ok(1).
+    let reset_count = torc::client::commands::recover::reset_failed_jobs(
         &config,
         workflow_id,
         &[failed_id, ready_id, foreign_id],
-    );
-    let err = result.expect_err("expected combined error for skipped jobs");
-    assert!(
-        err.contains("Reset 1 of 3"),
-        "error should report 1 of 3 reset, got: {err}"
-    );
-    assert!(
-        err.contains(&format!("job {foreign_id}: belongs to workflow")),
-        "error should flag the cross-workflow job, got: {err}"
-    );
-    assert!(
-        err.contains(&format!("job {ready_id}: status")) && err.contains("not recoverable"),
-        "error should flag the Ready job as a non-recoverable status skip, got: {err}"
-    );
+    )
+    .expect("partial success should not be an error");
+    assert_eq!(reset_count, 1, "only the eligible job should be reset");
 
-    // The eligible job was reset despite the other two being rejected.
+    // Behavior is verified primarily through the resulting statuses.
     assert_eq!(
-        apis::jobs_api::get_job(&config, failed_id)
-            .unwrap()
-            .status
-            .unwrap(),
+        job_status(failed_id),
         models::JobStatus::Uninitialized,
-        "eligible failed job should still be reset"
+        "eligible failed job should be reset"
     );
-    // The non-recoverable job was left alone.
     assert_eq!(
-        apis::jobs_api::get_job(&config, ready_id)
-            .unwrap()
-            .status
-            .unwrap(),
+        job_status(ready_id),
         models::JobStatus::Ready,
-        "Ready job must not be reset"
+        "Ready (non-recoverable) job must not be reset"
     );
-    // The foreign workflow's job is untouched.
     assert_eq!(
-        apis::jobs_api::get_job(&config, foreign_id)
-            .unwrap()
-            .status
-            .unwrap(),
+        job_status(foreign_id),
         models::JobStatus::Failed,
         "job in another workflow must not be reset"
     );
+
+    // Total failure: neither remaining job is eligible (Ready status / foreign
+    // workflow), so nothing is reset and the call returns Err. Check only that
+    // the error references the offending jobs, not its exact phrasing.
+    let err = torc::client::commands::recover::reset_failed_jobs(
+        &config,
+        workflow_id,
+        &[ready_id, foreign_id],
+    )
+    .expect_err("a reset where nothing succeeds should be an error");
+    assert!(
+        err.contains(&ready_id.to_string()) && err.contains(&foreign_id.to_string()),
+        "error should reference both un-reset jobs, got: {err}"
+    );
+    // Statuses remain unchanged after the failed call.
+    assert_eq!(job_status(ready_id), models::JobStatus::Ready);
+    assert_eq!(job_status(foreign_id), models::JobStatus::Failed);
 }
 
 #[rstest]
