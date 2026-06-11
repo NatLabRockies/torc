@@ -7,7 +7,7 @@ mod common;
 
 use common::{
     ServerProcess, create_diamond_workflow, create_test_compute_node, create_test_file,
-    create_test_user_data, create_test_workflow_advanced, start_server,
+    create_test_user_data, create_test_workflow, create_test_workflow_advanced, start_server,
 };
 use rstest::rstest;
 use std::fs;
@@ -522,6 +522,101 @@ fn test_recover_reset_sequence_bumps_run_id_once(start_server: &ServerProcess) {
         before + 1,
         "recover reset sequence must bump run_id exactly once"
     );
+}
+
+/// Regression test for the `torc recover` bug where choosing "Skip" for some
+/// failed jobs still reset them. `reset_failed_jobs` previously called the
+/// workflow-wide `reset_job_status(failed_only=true)`, ignoring its `job_ids`
+/// argument, so EVERY failed job was reset regardless of the user's selection.
+/// It must now reset ONLY the jobs whose IDs are passed in, leaving other
+/// failed jobs untouched.
+#[rstest]
+fn test_reset_failed_jobs_only_resets_selected(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+    let workflow = create_test_workflow(&config, "reset_failed_selective");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create three independent jobs; we will fail all three but only ask to
+    // reset two of them, mirroring the recover scenario (retry OOM, skip the
+    // unknown-cause failures).
+    let mut job_ids = Vec::new();
+    for name in ["job_a", "job_b", "job_c"] {
+        let job = apis::jobs_api::create_job(
+            &config,
+            models::JobModel::new(workflow_id, name.to_string(), format!("echo {name}")),
+        )
+        .unwrap_or_else(|e| panic!("Failed to create {name}: {e}"));
+        job_ids.push(job.id.unwrap());
+    }
+
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let manager = WorkflowManager::new(config.clone(), torc_config, workflow.clone());
+    manager.initialize(false).expect("Failed to initialize");
+    let run_id = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("get workflow")
+        .run_id
+        .unwrap_or(1);
+    let compute_node = create_test_compute_node(&config, workflow_id);
+    let cn_id = compute_node.id.unwrap();
+
+    // Drive all three to Running, then fail them.
+    for &id in &job_ids {
+        apis::jobs_api::manage_status_change(&config, id, models::JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("Failed to set job {id} running: {e}"));
+        let result = models::ResultModel::new(
+            id,
+            workflow_id,
+            run_id,
+            1, // attempt_id
+            cn_id,
+            1,   // return_code
+            1.0, // exec_time_minutes
+            chrono::Utc::now().to_rfc3339(),
+            models::JobStatus::Failed,
+        );
+        apis::jobs_api::complete_job(&config, id, models::JobStatus::Failed, run_id, result)
+            .unwrap_or_else(|e| panic!("Failed to fail job {id}: {e}"));
+    }
+
+    // Reset only the first two jobs.
+    let selected = &job_ids[0..2];
+    let reset_count =
+        torc::client::commands::recover::reset_failed_jobs(&config, workflow_id, selected)
+            .expect("reset_failed_jobs");
+
+    // The reported count must reflect exactly what was reset, not all failures.
+    assert_eq!(reset_count, 2, "only the two selected jobs should be reset");
+
+    // Selected jobs are now Uninitialized.
+    for &id in selected {
+        assert_eq!(
+            apis::jobs_api::get_job(&config, id)
+                .unwrap()
+                .status
+                .unwrap(),
+            models::JobStatus::Uninitialized,
+            "selected job {id} should be reset to Uninitialized"
+        );
+    }
+
+    // The unselected (skipped) job must remain Failed -- this is the bug fix.
+    assert_eq!(
+        apis::jobs_api::get_job(&config, job_ids[2])
+            .unwrap()
+            .status
+            .unwrap(),
+        models::JobStatus::Failed,
+        "skipped job {} must remain Failed",
+        job_ids[2]
+    );
+
+    // run_id must be unchanged: reset_failed_jobs does not bump it (only the
+    // subsequent reinitialize does).
+    let after = apis::workflows_api::get_workflow(&config, workflow_id)
+        .expect("get workflow after")
+        .run_id
+        .unwrap_or(0);
+    assert_eq!(after, run_id, "reset_failed_jobs must not bump run_id");
 }
 
 #[rstest]

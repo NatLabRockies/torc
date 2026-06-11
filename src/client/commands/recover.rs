@@ -904,19 +904,30 @@ pub fn reset_failed_jobs(
         return Ok(0);
     }
 
+    // Reset ONLY the selected jobs. Earlier this called
+    // `reset_job_status(failed_only=true)`, which is workflow-wide and ignored
+    // `job_ids` entirely -- so a user who chose to Skip some failures (e.g.
+    // unknown-cause jobs) had those jobs reset anyway. We instead reset each
+    // requested job individually via `manage_status_change`, exactly as the
+    // `torc jobs reset-status` command does.
+    //
     // NOTE: do not reset workflow status here. `reset_workflow_status` bumps
     // run_id, and every caller of this function follows it with
     // `reinitialize_workflow`, which already resets workflow status (and bumps
     // run_id) exactly once. Resetting here too bumps run_id twice per recovery,
-    // leaving a gap (e.g. a recovered job jumping from run 1 to run 3). Reset
-    // only the failed jobs so the run_id bump stays single.
-    //
-    // `reset_job_status` resets all retryable failed jobs workflow-wide (the
-    // `job_ids` argument here only gates the no-op early return above), so use
-    // the server-reported `updated_count` for an accurate count, not job_ids.len().
-    let response = apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
-        .map_err(|e| format!("Failed to reset failed job status: {}", e))?;
-    let reset_count = response.updated_count.max(0) as usize;
+    // leaving a gap (e.g. a recovered job jumping from run 1 to run 3). We pass
+    // the current run_id (no bump) so the single bump stays with reinitialize.
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Failed to fetch workflow for reset: {}", e))?
+        .run_id
+        .unwrap_or(1);
+
+    let mut reset_count = 0;
+    for &job_id in job_ids {
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Uninitialized, run_id)
+            .map_err(|e| format!("Failed to reset status for job {}: {}", job_id, e))?;
+        reset_count += 1;
+    }
     info!(
         "  Reset {} failed job(s) for workflow {}",
         reset_count, workflow_id
