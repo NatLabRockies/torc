@@ -56,8 +56,22 @@ impl ConfirmationDialog {
 
     pub fn render(&self, f: &mut Frame, area: Rect) {
         // Calculate dialog size - center in screen
-        let dialog_width = 50.min(area.width.saturating_sub(4));
-        let dialog_height = 7.min(area.height.saturating_sub(2));
+        let dialog_width = 60.min(area.width.saturating_sub(4));
+        // Estimate the wrapped height of the message so multi-line content
+        // (e.g. the multi-job reset warning) is not clipped. Wrapping is
+        // word-based, so estimate against a slightly narrower width than the
+        // real text area to err on the tall side.
+        let text_width = dialog_width.saturating_sub(6).max(1) as usize;
+        let message_lines: u16 = self
+            .message
+            .lines()
+            .map(|l| l.chars().count().div_ceil(text_width).max(1) as u16)
+            .sum();
+        // .max then .min (not clamp): on a terminal shorter than 9 rows the
+        // upper bound drops below the lower one, which would make clamp panic.
+        let dialog_height = (message_lines + 3)
+            .max(7)
+            .min(area.height.saturating_sub(2));
 
         let dialog_x = (area.width.saturating_sub(dialog_width)) / 2;
         let dialog_y = (area.height.saturating_sub(dialog_height)) / 2;
@@ -556,6 +570,18 @@ impl HelpPopup {
                 lines.push(Self::key_line("C", "Cancel job"));
                 lines.push(Self::key_line("t", "Terminate job"));
                 lines.push(Self::key_line("y", "Retry failed job"));
+                lines.push(Self::key_line(
+                    "Space",
+                    "Toggle job selection for multi-reset",
+                ));
+                lines.push(Self::key_line(
+                    "*",
+                    "Select all listed jobs / clear selection",
+                ));
+                lines.push(Self::key_line(
+                    "U",
+                    "Reset selected (or current) job(s) to uninitialized for rerun",
+                ));
                 lines.push(Self::key_line("1 / 2 / 3", "Sort by ID / Name / Status"));
             }
             HelpContext::DetailResults => {
@@ -1567,10 +1593,10 @@ impl ProcessViewer {
         }
     }
 
-    /// Start a process and capture its output
-    pub fn start(&mut self, program: &str, args: &[&str]) -> Result<(), String> {
-        let mut cmd = Command::new(program);
-        cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    /// Start a process and capture its output. Takes a prebuilt `Command` so
+    /// callers can attach connection arguments and environment variables.
+    pub fn start(&mut self, mut cmd: Command) -> Result<(), String> {
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         let mut child = cmd
             .spawn()
@@ -1604,8 +1630,16 @@ impl ProcessViewer {
         self.child = Some(child);
         self.output_receiver = Some(rx);
         self.is_running = true;
-        self.output_lines
-            .push(format!("Started: {} {}", program, args.join(" ")));
+        let args_display = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.output_lines.push(format!(
+            "Started: {} {}",
+            cmd.get_program().to_string_lossy(),
+            args_display
+        ));
         self.output_lines.push(String::new());
 
         Ok(())

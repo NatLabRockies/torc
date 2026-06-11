@@ -680,6 +680,24 @@ where
                     {
                         app.request_job_action(JobAction::Retry);
                     }
+                    KeyCode::Char('U')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.request_job_action(JobAction::ResetStatus);
+                    }
+                    KeyCode::Char(' ')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.toggle_job_selection();
+                    }
+                    KeyCode::Char('*')
+                        if app.focus == Focus::Details
+                            && app.detail_view == DetailViewType::Jobs =>
+                    {
+                        app.toggle_select_all_jobs();
+                    }
                     // Sort the Results table by Peak Memory / Peak CPU. Each
                     // press cycles None → Desc → Asc → None.
                     KeyCode::Char('m')
