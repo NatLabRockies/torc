@@ -959,6 +959,7 @@ pub fn reset_failed_jobs(
     // of bailing on the first problem. There is no server-side bulk/atomic reset
     // endpoint, so a mid-loop early return would leave the workflow partially
     // reset with no report of what succeeded.
+    // PERF: make a new API endpoint to do this in one command.
     let mut reset_count = 0;
     let mut not_reset: Vec<String> = Vec::new();
     for &job_id in job_ids {
