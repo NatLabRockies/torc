@@ -487,16 +487,45 @@ fn test_recover_reset_sequence_bumps_run_id_once(start_server: &ServerProcess) {
         create_test_workflow_manager(config.clone(), "test_recover_run_id_once");
     let workflow_id = workflow.id.unwrap();
 
-    // Initialize and run a job so the workflow has an established run.
-    let (job_id, _run_id) = execute_workflow_with_job(
+    // Initialize and run a job so the workflow has an established run, then fail
+    // it: `reset_failed_jobs` only resets jobs in a recoverable state, and the
+    // test cares about run_id bookkeeping, not how the job got to that state.
+    let job = apis::jobs_api::create_job(
         &config,
-        &manager,
-        workflow_id,
-        "test_job",
-        "echo 'test'",
-        None,
+        models::JobModel::new(
+            workflow_id,
+            "test_job".to_string(),
+            "echo 'test'".to_string(),
+        ),
     )
-    .expect("execute workflow with job");
+    .expect("create job");
+    let job_id = job.id.unwrap();
+
+    manager.initialize(false).expect("initialize");
+    let run_id = manager.get_run_id().expect("get run_id");
+    let compute_node = create_test_compute_node(&config, workflow_id);
+
+    apis::jobs_api::manage_status_change(&config, job_id, models::JobStatus::Running, run_id)
+        .expect("set job running");
+    let failed_result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1, // attempt_id
+        compute_node.id.unwrap(),
+        1,   // return_code
+        1.0, // exec_time_minutes
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Failed,
+    );
+    apis::jobs_api::complete_job(
+        &config,
+        job_id,
+        models::JobStatus::Failed,
+        run_id,
+        failed_result,
+    )
+    .expect("fail job");
 
     let before = apis::workflows_api::get_workflow(&config, workflow_id)
         .expect("get workflow")
