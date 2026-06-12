@@ -998,6 +998,13 @@ pub fn reset_failed_jobs(
         JobStatus::PendingFailed,
     ];
 
+    // Deduplicate defensively: a repeated ID would reset once and then burn an
+    // extra get_job/manage_status_change round-trip to report a misleading
+    // "status Uninitialized is not recoverable" skip for its duplicate.
+    let mut job_ids = job_ids.to_vec();
+    job_ids.sort_unstable();
+    job_ids.dedup();
+
     // Attempt every reset, accumulating the reason any job was not reset instead
     // of bailing on the first problem. There is no server-side bulk/atomic reset
     // endpoint, so a mid-loop early return would leave the workflow partially
@@ -1005,7 +1012,7 @@ pub fn reset_failed_jobs(
     // PERF: make a new API endpoint to do this in one command.
     let mut reset_count = 0;
     let mut not_reset: Vec<String> = Vec::new();
-    for &job_id in job_ids {
+    for &job_id in &job_ids {
         // Validate the job before touching it. `manage_status_change` is not
         // workflow-scoped, so without this check a stray job_id could reset a
         // job in a different workflow.
@@ -1343,7 +1350,11 @@ fn recover_workflow_interactive(
     for v in &diagnosis.resource_violations {
         if v.memory_violation {
             oom_jobs.push(v);
-        } else if v.likely_timeout {
+        } else if v.likely_timeout || v.likely_runtime_violation {
+            // likely_runtime_violation (exec > 100% of runtime) implies
+            // likely_timeout (exec > 90%) today, but check it explicitly so the
+            // wizard's classification matches the non-interactive path even if
+            // the diagnosis thresholds drift apart.
             timeout_jobs.push(v);
         } else if v.likely_cpu_violation {
             cpu_jobs.push(v);

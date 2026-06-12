@@ -581,10 +581,7 @@ fn test_reset_failed_jobs_only_resets_selected(start_server: &ServerProcess) {
     let torc_config = TorcConfig::load().unwrap_or_default();
     let manager = WorkflowManager::new(config.clone(), torc_config, workflow.clone());
     manager.initialize(false).expect("Failed to initialize");
-    let run_id = apis::workflows_api::get_workflow(&config, workflow_id)
-        .expect("get workflow")
-        .run_id
-        .unwrap_or(1);
+    let run_id = manager.get_run_id().expect("Failed to get run_id");
     let compute_node = create_test_compute_node(&config, workflow_id);
     let cn_id = compute_node.id.unwrap();
 
@@ -680,21 +677,15 @@ fn test_reset_failed_jobs_validates_workflow_and_status(start_server: &ServerPro
     let foreign_id = make_job(other_workflow_id, "foreign_job");
 
     let torc_config = TorcConfig::load().unwrap_or_default();
-    WorkflowManager::new(config.clone(), torc_config.clone(), workflow.clone())
-        .initialize(false)
-        .expect("initialize target");
-    WorkflowManager::new(config.clone(), torc_config, other_workflow.clone())
-        .initialize(false)
-        .expect("initialize other");
+    let manager = WorkflowManager::new(config.clone(), torc_config.clone(), workflow.clone());
+    manager.initialize(false).expect("initialize target");
+    let other_manager = WorkflowManager::new(config.clone(), torc_config, other_workflow.clone());
+    other_manager.initialize(false).expect("initialize other");
 
-    let run_id = apis::workflows_api::get_workflow(&config, workflow_id)
-        .expect("get workflow")
-        .run_id
-        .unwrap_or(1);
-    let other_run_id = apis::workflows_api::get_workflow(&config, other_workflow_id)
-        .expect("get other workflow")
-        .run_id
-        .unwrap_or(1);
+    let run_id = manager.get_run_id().expect("Failed to get run_id");
+    let other_run_id = other_manager
+        .get_run_id()
+        .expect("Failed to get other run_id");
     let cn_id = create_test_compute_node(&config, workflow_id).id.unwrap();
     let other_cn_id = create_test_compute_node(&config, other_workflow_id)
         .id

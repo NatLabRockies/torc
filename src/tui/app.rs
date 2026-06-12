@@ -4147,10 +4147,12 @@ impl App {
                     && j.id.is_some_and(|id| self.selected_job_ids.contains(&id))
             })
             .count();
+        let loaded_ids: std::collections::HashSet<i64> =
+            self.jobs.iter().filter_map(|j| j.id).collect();
         let all_loaded = self
             .selected_job_ids
             .iter()
-            .all(|id| self.jobs.iter().any(|j| j.id == Some(*id)));
+            .all(|id| loaded_ids.contains(id));
 
         let mut message = format!(
             "Reset {} selected job(s) to uninitialized for rerun?\n\
