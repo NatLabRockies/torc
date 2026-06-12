@@ -5,6 +5,7 @@ use common::{
 };
 use rstest::rstest;
 use torc::client::apis;
+use torc::client::commands::reports::build_resource_utilization_report;
 use torc::client::report_models::ResourceUtilizationReport;
 use torc::client::resource_correction::{
     ResourceCorrectionContext, ResourceCorrectionOptions, apply_resource_corrections,
@@ -1606,4 +1607,250 @@ fn test_downsize_adjustment_report_direction(start_server: &ServerProcess) {
     assert!(adj.memory_adjusted);
     assert!(adj.cpu_adjusted);
     assert!(adj.runtime_adjusted);
+}
+
+/// Regression test for the resource-correction half of the recover "Skip" bug
+/// (the issue PR #378 addressed). When the user selects only a subset of
+/// violating jobs to correct, `apply_resource_corrections` must touch ONLY the
+/// resource requirements of the included jobs. Jobs that were skipped must keep
+/// their original allocation.
+///
+/// Before this invariant held, `include_jobs` was effectively ignored in the
+/// wizard path (an empty list meant "all"), so skipped jobs had their resources
+/// silently bumped. This test uses two OOM jobs with SEPARATE resource
+/// requirements and includes only one, asserting the other's RR is untouched.
+#[rstest]
+fn test_correct_resources_include_jobs_skips_others(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_include_jobs_skip");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    // Two separate RRs (2g each) so a correction to one job cannot incidentally
+    // change the other's allocation.
+    let make_rr = |name: &str| {
+        let mut rr = models::ResourceRequirementsModel::new(workflow_id, name.to_string());
+        rr.memory = "2g".to_string();
+        rr.runtime = "PT1H".to_string();
+        rr.num_cpus = 1;
+        apis::resource_requirements_api::create_resource_requirements(config, rr)
+            .expect("Failed to create RR")
+            .id
+            .unwrap()
+    };
+    let rr_retry_id = make_rr("rr_retry");
+    let rr_skip_id = make_rr("rr_skip");
+
+    let job_retry_id = create_job_with_rr(config, workflow_id, "job_retry", rr_retry_id);
+    let job_skip_id = create_job_with_rr(config, workflow_id, "job_skip", rr_skip_id);
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    // Both jobs OOM (137) with peak memory 3.5GB, exceeding the 2GB limit.
+    let peak = Some(3_500_000_000);
+    claim_and_complete_jobs(
+        config,
+        workflow_id,
+        run_id,
+        compute_node_id,
+        &[
+            (job_retry_id, 137, 1.0, JobStatus::Failed, peak, None),
+            (job_skip_id, 137, 1.0, JobStatus::Failed, peak, None),
+        ],
+    );
+
+    // Build the real diagnosis (include_failed=true so OOM jobs are analyzed).
+    let diagnosis = build_resource_utilization_report(config, Some(workflow_id), None, true, 1.0)
+        .expect("Failed to build diagnosis");
+    assert_eq!(
+        diagnosis.resource_violations.len(),
+        2,
+        "both OOM jobs should be flagged as violations"
+    );
+
+    let all_results = fetch_results(config, workflow_id);
+    let all_jobs = fetch_jobs(config, workflow_id);
+    let all_rrs = fetch_resource_requirements(config, workflow_id);
+
+    let ctx = ResourceCorrectionContext {
+        config,
+        workflow_id,
+        diagnosis: &diagnosis,
+        all_results: &all_results,
+        all_jobs: &all_jobs,
+        all_resource_requirements: &all_rrs,
+    };
+    // Include ONLY the retried job — mirrors the wizard passing the selected
+    // job ids while the user skipped the other.
+    let opts = ResourceCorrectionOptions {
+        memory_multiplier: 1.2,
+        cpu_multiplier: 1.2,
+        runtime_multiplier: 1.2,
+        include_jobs: vec![job_retry_id],
+        dry_run: false,
+        no_downsize: true,
+    };
+
+    let result = apply_resource_corrections(&ctx, &opts).expect("Failed to apply corrections");
+    assert_eq!(
+        result.resource_requirements_updated, 1,
+        "exactly one RR (the retried job's) should be updated"
+    );
+
+    // The retried job's RR was bumped above 2g.
+    let rr_retry_after =
+        apis::resource_requirements_api::get_resource_requirements(config, rr_retry_id)
+            .expect("Failed to get retried RR");
+    assert_ne!(
+        rr_retry_after.memory, "2g",
+        "retried job's memory should have been corrected"
+    );
+
+    // The skipped job's RR must be untouched — this is the bug fix.
+    let rr_skip_after =
+        apis::resource_requirements_api::get_resource_requirements(config, rr_skip_id)
+            .expect("Failed to get skipped RR");
+    assert_eq!(
+        rr_skip_after.memory, "2g",
+        "skipped job's memory must remain 2g"
+    );
+}
+
+/// Regression test: a failed job whose only violation is CPU over-utilization is
+/// corrected and retried via resource adjustments, NOT classified as an
+/// unknown-cause failure. Before the fix, `apply_recovery_heuristics` classified
+/// it as unknown (it is neither OOM nor timeout), so with `retry_unknown` the
+/// job entered `jobs_to_retry` twice (once via adjustments, once via
+/// unknown_job_ids) and inflated `other_failures`/`unknown_retried`. A genuinely
+/// unknown failure (no resource data) must still be counted and retried once.
+#[rstest]
+fn test_recovery_cpu_violation_not_counted_as_unknown(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) =
+        create_and_initialize_workflow(config, "test_recover_cpu_not_unknown");
+
+    let mut cpu_job = create_test_job(config, workflow_id, "cpu_violator");
+    let mut unknown_job = create_test_job(config, workflow_id, "unknown_failure");
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    // Separate RRs so the CPU correction is scoped to the violator.
+    let mut rr_cpu = models::ResourceRequirementsModel::new(workflow_id, "cpu_rr".to_string());
+    rr_cpu.memory = "2g".to_string();
+    rr_cpu.runtime = "PT1H".to_string();
+    rr_cpu.num_cpus = 2;
+    let rr_cpu_id = apis::resource_requirements_api::create_resource_requirements(config, rr_cpu)
+        .expect("Failed to create cpu RR")
+        .id
+        .unwrap();
+    let mut rr_unk = models::ResourceRequirementsModel::new(workflow_id, "unk_rr".to_string());
+    rr_unk.memory = "2g".to_string();
+    rr_unk.runtime = "PT1H".to_string();
+    rr_unk.num_cpus = 1;
+    let rr_unk_id = apis::resource_requirements_api::create_resource_requirements(config, rr_unk)
+        .expect("Failed to create unk RR")
+        .id
+        .unwrap();
+
+    cpu_job.resource_requirements_id = Some(rr_cpu_id);
+    apis::jobs_api::update_job(config, cpu_job.id.unwrap(), cpu_job.clone())
+        .expect("Failed to update cpu job");
+    unknown_job.resource_requirements_id = Some(rr_unk_id);
+    apis::jobs_api::update_job(config, unknown_job.id.unwrap(), unknown_job.clone())
+        .expect("Failed to update unknown job");
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    let resources = models::ComputeNodesResources::new(36, 100.0, 0, 2);
+    let claimed = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+    )
+    .expect("Failed to claim jobs")
+    .jobs
+    .expect("Should return jobs");
+    assert_eq!(claimed.len(), 2);
+
+    for job in &claimed {
+        let job_id = job.id.unwrap();
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+            .expect("Failed to set job running");
+        // Both fail fast (0.5 min << 90% of 1h, so not likely_timeout) with a
+        // generic non-signal return code (not 137 OOM, not 152 SIGXCPU).
+        let mut result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            1,
+            compute_node_id,
+            1,   // generic failure
+            0.5, // exec_time_minutes
+            chrono::Utc::now().to_rfc3339(),
+            JobStatus::Failed,
+        );
+        if job.name == "cpu_violator" {
+            // 350% peak on 2 allocated CPUs (200%) -> CPU violation only.
+            result.peak_cpu_percent = Some(350.0);
+            result.peak_memory_bytes = Some(1_000_000_000); // 1GB, under the 2GB limit
+        }
+        // unknown_failure: no resource metrics at all -> genuinely unknown.
+        apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+            .expect("Failed to complete job");
+    }
+
+    let cpu_job_id = claimed
+        .iter()
+        .find(|j| j.name == "cpu_violator")
+        .and_then(|j| j.id)
+        .unwrap();
+    let unknown_job_id = claimed
+        .iter()
+        .find(|j| j.name == "unknown_failure")
+        .and_then(|j| j.id)
+        .unwrap();
+
+    let diagnosis = torc::client::commands::recover::diagnose_failures(config, workflow_id)
+        .expect("Failed to diagnose failures");
+
+    let result = torc::client::commands::recover::apply_recovery_heuristics(
+        config,
+        workflow_id,
+        &diagnosis,
+        1.2,
+        1.2,
+        true, // retry_unknown
+        std::path::Path::new("torc_output"),
+        true, // dry_run
+    )
+    .expect("Failed to apply recovery heuristics");
+
+    // The CPU violator is correctable: not an unknown failure.
+    assert_eq!(
+        result.other_failures, 1,
+        "only the job without resource data is an unknown failure"
+    );
+    assert_eq!(result.unknown_retried, 1, "one unknown job retried");
+
+    // Each job appears exactly once in jobs_to_retry (no duplicate from the
+    // CPU violator being in both adjustments and unknown_job_ids).
+    let cpu_count = result
+        .jobs_to_retry
+        .iter()
+        .filter(|&&id| id == cpu_job_id)
+        .count();
+    let unknown_count = result
+        .jobs_to_retry
+        .iter()
+        .filter(|&&id| id == unknown_job_id)
+        .count();
+    assert_eq!(cpu_count, 1, "CPU violator retried exactly once");
+    assert_eq!(unknown_count, 1, "unknown-failure job retried exactly once");
+    assert_eq!(result.jobs_to_retry.len(), 2);
 }
