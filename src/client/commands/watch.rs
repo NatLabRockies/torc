@@ -996,7 +996,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         // Check if there are any jobs to retry
         if recovery_result.jobs_to_retry.is_empty() {
             warn!(
-                "\nNo recoverable jobs found. {} job(s) failed with unknown causes.",
+                "\nNo auto-recoverable jobs found. {} job(s) failed with unknown causes.",
                 recovery_result.other_failures
             );
             warn!("Use --retry-unknown to retry jobs with unknown failure causes.");

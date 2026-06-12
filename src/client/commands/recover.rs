@@ -305,7 +305,7 @@ pub fn recover_workflow(
     // In dry_run mode, stop here
     if args.dry_run {
         if result.jobs_to_retry.is_empty() {
-            info!("[DRY RUN] No recoverable jobs found.");
+            info!("[DRY RUN] No auto-recoverable jobs found.");
         } else {
             info!(
                 "[DRY RUN] Would reset {} job(s) for retry",
@@ -406,7 +406,7 @@ pub fn recover_workflow(
     // Check if there are any jobs to retry
     if result.jobs_to_retry.is_empty() {
         let mut msg = format!(
-            "No recoverable jobs found. {} job(s) failed with unknown causes. \
+            "No auto-recoverable jobs found. {} job(s) failed with unknown causes. \
              Use --retry-unknown to retry jobs with unknown failure causes.",
             result.other_failures
         );
@@ -1047,8 +1047,10 @@ pub fn reset_failed_jobs(
             Err(e) => not_reset.push(format!("job {}: reset failed ({})", job_id, e)),
         }
     }
+    // Not "failed job(s)": the recoverable allow-list above also admits
+    // terminated, canceled, and pending_failed jobs.
     info!(
-        "  Reset {} failed job(s) for workflow {}",
+        "  Reset {} job(s) for workflow {}",
         reset_count, workflow_id
     );
 

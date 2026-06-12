@@ -1074,7 +1074,7 @@ fn main() {
                             );
                         }
                         if result.jobs_to_retry.is_empty() {
-                            println!("No recoverable jobs found.");
+                            println!("No auto-recoverable jobs found.");
                         } else {
                             println!(
                                 "Would reset {} job(s) and regenerate Slurm schedulers.",
@@ -1097,7 +1097,7 @@ fn main() {
                             );
                         }
                         if result.jobs_to_retry.is_empty() {
-                            println!("No recoverable jobs found.");
+                            println!("No auto-recoverable jobs found.");
                         } else {
                             println!(
                                 "Reset {} job(s). Slurm schedulers regenerated and submitted.",
