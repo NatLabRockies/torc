@@ -2278,6 +2278,11 @@ impl App {
         // The Jobs pane filters server-side (across the whole workflow); other
         // views filter the loaded page client-side.
         if target == FilterTarget::Details && self.detail_view == DetailViewType::Jobs {
+            // The multi-reset selection is scoped to the active filter (so a
+            // cross-page reset only touches jobs in the current view). Changing
+            // the filter changes that scope, so drop selections that may no
+            // longer match -- matching the clear on workflow change.
+            self.selected_job_ids.clear();
             self.jobs_offset = 0;
             if let Err(err) = self.reload_jobs_page() {
                 self.set_status(StatusMessage::error(&format!(
@@ -2520,6 +2525,10 @@ impl App {
         }
         match self.detail_view {
             DetailViewType::Jobs => {
+                // Clearing the filter widens the scope of the multi-reset
+                // selection, so drop it to keep the selection coherent with the
+                // visible set (mirrors the clear in apply_filter).
+                self.selected_job_ids.clear();
                 // Re-fetch an unfiltered first page from the server (the Jobs
                 // filter is server-side, so the loaded page may be a strict
                 // subset that can't be widened client-side).
@@ -3659,54 +3668,56 @@ impl App {
         }
     }
 
-    /// Request a reset for every selected job that is currently listed.
-    /// Returns false only when the multi-select is empty, so the caller can
-    /// fall back to the single-job (cursor row) path. When a selection exists
-    /// but none of its jobs are listed (e.g., the filter changed), this warns
-    /// and returns true so the caller does NOT silently reset the cursor row.
+    /// Request a reset for every selected job, including jobs selected on other
+    /// pages. Returns false only when the multi-select is empty, so the caller
+    /// can fall back to the single-job (cursor row) path.
+    ///
+    /// The selection spans all pages of the active filter: `selected_job_ids`
+    /// persists across `]`/`[` paging and is cleared whenever the workflow or
+    /// the Jobs filter changes, so every id here is a valid target even if it is
+    /// not on the currently-loaded page. The reset goes through the
+    /// `jobs reset-status` CLI, which accepts ids regardless of page.
     fn request_selected_jobs_reset(&mut self) -> bool {
         // An empty selection is the only case where falling back to the
         // cursor-row job is the intended behavior.
         if self.selected_job_ids.is_empty() {
             return false;
         }
-        // Intersect with the listed jobs: selections made under an earlier
-        // filter may reference rows that are no longer shown, and acting on
-        // invisible jobs would be surprising.
-        let targets: Vec<&JobModel> = self
+
+        let mut job_ids: Vec<i64> = self.selected_job_ids.iter().copied().collect();
+        job_ids.sort_unstable();
+
+        // The completed-job warning is best-effort: only jobs on the currently
+        // loaded page have their status in memory, so off-page completed jobs
+        // can't be counted. Hedge the wording with "at least" unless the whole
+        // selection is on the loaded page.
+        let completed = self
             .jobs
             .iter()
-            .filter(|j| j.id.is_some_and(|id| self.selected_job_ids.contains(&id)))
-            .collect();
-        if targets.is_empty() {
-            // A selection exists but none of its jobs are in the current view.
-            // Don't fall through to resetting the cursor row, which the user
-            // didn't pick; tell them their selection is hidden. The selection
-            // is left intact so clearing the filter restores it.
-            self.set_status(StatusMessage::warning(
-                "Selected jobs are not in the current view; clear the filter or press '*' to reselect",
-            ));
-            return true;
-        }
-
-        let completed = targets
-            .iter()
-            .filter(|j| j.status == Some(JobStatus::Completed))
+            .filter(|j| {
+                j.status == Some(JobStatus::Completed)
+                    && j.id.is_some_and(|id| self.selected_job_ids.contains(&id))
+            })
             .count();
+        let all_loaded = self
+            .selected_job_ids
+            .iter()
+            .all(|id| self.jobs.iter().any(|j| j.id == Some(*id)));
+
         let mut message = format!(
             "Reset {} selected job(s) to uninitialized for rerun?\n\
              Downstream dependents are reset when the workflow is re-initialized ('I').",
-            targets.len()
+            job_ids.len()
         );
         if completed > 0 {
             message.push_str(&format!(
-                "\nWarning: {} of them completed successfully; resetting discards their \
+                "\nWarning: {}{} of them completed successfully; resetting discards their \
                  results and reruns them.",
+                if all_loaded { "" } else { "at least " },
                 completed
             ));
         }
 
-        let job_ids: Vec<i64> = targets.iter().filter_map(|j| j.id).collect();
         self.previous_focus = self.focus;
         self.focus = Focus::Popup;
         self.popup = Some(PopupType::Confirmation {
