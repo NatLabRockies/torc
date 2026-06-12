@@ -1,0 +1,495 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Network Connectivity - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.34.3/docs/src/core/concepts/network-connectivity.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="network-connectivity"><a class="header" href="#network-connectivity">Network Connectivity</a></h1>
+<p>Understanding how Torc components communicate is essential for proper deployment. This page explains
+the network requirements for different scenarios.</p>
+<h2 id="component-communication"><a class="header" href="#component-communication">Component Communication</a></h2>
+<p>All Torc components communicate with the server via HTTP:</p>
+<pre class="mermaid">flowchart LR
+    subgraph clients[&quot;Clients&quot;]
+        CLI[&quot;torc CLI&quot;]
+        DASH[&quot;torc-dash&quot;]
+        TUI[&quot;torc tui&quot;]
+    end
+
+    subgraph server[&quot;Server&quot;]
+        API[&quot;torc-server&lt;br/&gt;(HTTP API)&quot;]
+    end
+
+    subgraph workers[&quot;Workers&quot;]
+        W1[&quot;Job Runner 1&quot;]
+        W2[&quot;Job Runner 2&quot;]
+    end
+
+    CLI --&gt;|&quot;HTTP&quot;| API
+    DASH --&gt;|&quot;HTTP&quot;| API
+    TUI --&gt;|&quot;HTTP&quot;| API
+    W1 --&gt;|&quot;HTTP&quot;| API
+    W2 --&gt;|&quot;HTTP&quot;| API
+
+    style API fill:#28a745,color:#fff
+</pre>
+<p><strong>Key insight:</strong> Every component that needs to interact with workflows must be able to reach the
+server's HTTP endpoint. The <code>--host</code> option on <code>torc-server</code> controls which network interfaces the
+server listens on.</p>
+<h2 id="server-bind-address---host"><a class="header" href="#server-bind-address---host">Server Bind Address (<code>--host</code>)</a></h2>
+<p>The <code>--host</code> option determines which network interfaces the server accepts connections from:</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Meaning</th><th>Use Case</th></tr></thead><tbody>
+<tr><td><code>127.0.0.1</code></td><td>Localhost only</td><td>Local development, security</td></tr>
+<tr><td><code>0.0.0.0</code></td><td>All network interfaces</td><td>Remote workers need access</td></tr>
+<tr><td><code>&lt;IP&gt;</code></td><td>Specific interface</td><td>Multi-homed hosts, HPC nodes</td></tr>
+<tr><td><code>&lt;hostname&gt;</code></td><td>Specific hostname</td><td>HPC with non-default hostnames</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="scenario-1-local-development"><a class="header" href="#scenario-1-local-development">Scenario 1: Local Development</a></h2>
+<p><strong>Setup:</strong> Everything runs on your laptop or workstation. No remote workers.</p>
+<pre class="mermaid">flowchart TB
+    subgraph computer[&quot;Your Computer&quot;]
+        CLI[&quot;torc CLI&quot;]
+        SERVER[&quot;torc-server&lt;br/&gt;(127.0.0.1:8080)&quot;]
+        RUNNER[&quot;Job Runner&quot;]
+
+        CLI --&gt;|&quot;localhost&quot;| SERVER
+        RUNNER --&gt;|&quot;localhost&quot;| SERVER
+    end
+</pre>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-bash"># Bind to localhost only (secure - not accessible from network)
+torc-server run --host 127.0.0.1 --database torc.db
+</code></pre>
+<p><strong>Why localhost?</strong> Binding to <code>127.0.0.1</code> ensures the server is only accessible from your machine.
+This is the most secure option when you don't need remote access.</p>
+<p><strong>Client connection:</strong></p>
+<pre><code class="language-bash"># Default works (localhost:8080)
+torc workflows list
+
+# Or explicit
+export TORC_API_URL="http://localhost:8080/torc-service/v1"
+</code></pre>
+<hr />
+<h2 id="scenario-2-hpc-login-node-standard"><a class="header" href="#scenario-2-hpc-login-node-standard">Scenario 2: HPC Login Node (Standard)</a></h2>
+<p><strong>Setup:</strong> Server runs on a login node. Job runners execute on compute nodes via Slurm and need to
+report results back to the server.</p>
+<pre class="mermaid">flowchart TB
+    subgraph login[&quot;Login Node (kestrel-login1)&quot;]
+        CLI[&quot;torc CLI&quot;]
+        SERVER[&quot;torc-server&lt;br/&gt;(0.0.0.0:8080)&quot;]
+    end
+
+    subgraph compute[&quot;Compute Nodes&quot;]
+        R1[&quot;Job Runner&quot;]
+        R2[&quot;Job Runner&quot;]
+    end
+
+    CLI --&gt;|&quot;localhost&quot;| SERVER
+    R1 --&gt;|&quot;network&quot;| SERVER
+    R2 --&gt;|&quot;network&quot;| SERVER
+</pre>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-bash"># Bind to all interfaces so compute nodes can reach the server
+torc-server run --host 0.0.0.0 --database torc.db
+
+# IMPORTANT: Enable authentication on shared systems
+torc-server run --host 0.0.0.0 --database torc.db \
+    --auth-file ~/.torc/htpasswd --require-auth
+</code></pre>
+<p><strong>Why 0.0.0.0?</strong> Compute nodes are separate machines that need network access to the server. Binding
+to <code>0.0.0.0</code> makes the server accessible on all network interfaces.</p>
+<p><strong>Security consideration:</strong> On HPC systems, other users on the same login node or network can
+potentially access your server. Enable authentication with <code>--auth-file</code> and <code>--require-auth</code> to
+prevent unauthorized access to your workflows.</p>
+<p><strong>Client connection (from login node):</strong></p>
+<pre><code class="language-bash">export TORC_API_URL="http://localhost:8080/torc-service/v1"
+</code></pre>
+<p><strong>Worker connection (from compute nodes):</strong> Workers automatically use the <code>TORC_API_URL</code> set when
+the Slurm job was submitted. Torc handles this automatically.</p>
+<hr />
+<h2 id="scenario-3-hpc-with-non-routable-hostname"><a class="header" href="#scenario-3-hpc-with-non-routable-hostname">Scenario 3: HPC with Non-Routable Hostname</a></h2>
+<p><strong>Problem:</strong> Some HPC systems have login nodes where the default hostname is not routable from
+compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code> must be accessed as
+<code>kl1.hsn.cm.kestrel.hpc.nrel.gov</code> from compute nodes.</p>
+<pre class="mermaid">flowchart TB
+    subgraph login[&quot;Login Node&quot;]
+        direction TB
+        note1[&quot;Hostname: kl1&lt;br/&gt;(not routable from compute)&quot;]
+        note2[&quot;Routable: kl1.hsn.cm.kestrel.hpc.nrel.gov&quot;]
+        SERVER[&quot;torc-server&quot;]
+    end
+
+    subgraph compute[&quot;Compute Nodes&quot;]
+        R1[&quot;Job Runner&quot;]
+    end
+
+    R1 --&gt;|&quot;kl1.hsn.cm.kestrel.hpc.nrel.gov:8080&quot;| SERVER
+    R1 -.-x|&quot;kl1:8080 (fails)&quot;| SERVER
+
+    style note1 fill:#dc3545,color:#fff
+    style note2 fill:#28a745,color:#fff
+</pre>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-bash"># Bind to the routable hostname
+torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
+</code></pre>
+<p><strong>How to find the routable hostname:</strong></p>
+<ol>
+<li>Check with your HPC administrators</li>
+<li>Look for high-speed network (HSN) or InfiniBand hostnames</li>
+<li>Try <code>hostname -f</code> or check <code>/etc/hosts</code></li>
+</ol>
+<p><strong>Verification:</strong> From a compute node, test connectivity:</p>
+<pre><code class="language-bash">srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nrel.gov:8080/torc-service/v1/workflows
+</code></pre>
+<hr />
+<h2 id="scenario-4-shared-server"><a class="header" href="#scenario-4-shared-server">Scenario 4: Shared Server</a></h2>
+<p><strong>Setup:</strong> A dedicated server runs <code>torc-server</code> persistently. Multiple users connect from login
+nodes and submit jobs to Slurm.</p>
+<pre class="mermaid">flowchart TB
+    subgraph shared[&quot;Shared Server (torc-server.example.com)&quot;]
+        SERVER[&quot;torc-server&lt;br/&gt;(0.0.0.0:8080)&quot;]
+        DB[(Database)]
+        SERVER --&gt; DB
+    end
+
+    subgraph login[&quot;Login Nodes&quot;]
+        U1[&quot;User 1 (torc CLI)&quot;]
+        U2[&quot;User 2 (torc-dash)&quot;]
+    end
+
+    subgraph compute[&quot;Compute Nodes&quot;]
+        R1[&quot;Job Runner&quot;]
+        R2[&quot;Job Runner&quot;]
+    end
+
+    U1 --&gt;|&quot;HTTP&quot;| SERVER
+    U2 --&gt;|&quot;HTTP&quot;| SERVER
+    R1 --&gt;|&quot;HTTP&quot;| SERVER
+    R2 --&gt;|&quot;HTTP&quot;| SERVER
+</pre>
+<p><strong>Server configuration:</strong></p>
+<pre><code class="language-bash"># On the shared server - enable auth for multi-user access
+torc-server run --host 0.0.0.0 --port 8080 \
+    --database /shared/torc/torc.db \
+    --auth-file /shared/torc/htpasswd \
+    --require-auth
+</code></pre>
+<p><strong>Client configuration (all users):</strong></p>
+<pre><code class="language-bash">export TORC_API_URL="http://torc-server.example.com:8080/torc-service/v1"
+export TORC_PASSWORD="mypassword"
+</code></pre>
+<hr />
+<h2 id="scenario-5-torc-dash-standalone-mode"><a class="header" href="#scenario-5-torc-dash-standalone-mode">Scenario 5: torc-dash Standalone Mode</a></h2>
+<p><strong>Setup:</strong> <code>torc-dash --standalone</code> automatically starts a managed <code>torc-server</code>. The
+<code>--server-host</code> option controls the server's bind address.</p>
+<pre><code class="language-bash"># Local development (server binds to 0.0.0.0 by default for external access)
+torc-dash --standalone
+
+# Restrict server to localhost only
+torc-dash --standalone --server-host 127.0.0.1
+
+# Bind to specific hostname (HPC with non-routable default hostname)
+torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+</code></pre>
+<p>The dashboard always connects to the managed server locally, but external workers will use the
+configured <code>--server-host</code> to reach the server.</p>
+<p><strong>UNIX socket mode (recommended for HPC login nodes):</strong> Use <code>--socket</code> to bind the dashboard to a
+UNIX domain socket instead of TCP. The socket file is created with owner-only permissions (0600),
+preventing other users on the login node from accessing your dashboard.</p>
+<pre><code class="language-bash"># HPC login node with UNIX socket
+torc-dash --standalone \
+  --socket /tmp/torc-dash-$USER.sock \
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+
+# Access from your local machine via SSH tunnel
+ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node
+# Then open http://localhost:8090
+</code></pre>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="connection-refused-from-compute-nodes"><a class="header" href="#connection-refused-from-compute-nodes">"Connection refused" from compute nodes</a></h3>
+<p>The server might be bound to localhost only:</p>
+<pre><code class="language-bash"># Check what the server is bound to
+netstat -tlnp | grep 8080
+
+# If showing 127.0.0.1:8080, restart with:
+torc-server run --host 0.0.0.0 ...
+</code></pre>
+<h3 id="name-not-resolved-from-compute-nodes"><a class="header" href="#name-not-resolved-from-compute-nodes">"Name not resolved" from compute nodes</a></h3>
+<p>The hostname might not be routable:</p>
+<pre><code class="language-bash"># From a compute node, test resolution
+srun --pty getent hosts &lt;login-node-hostname&gt;
+
+# Try the fully-qualified or HSN hostname instead
+torc-server run --host &lt;routable-hostname&gt; ...
+</code></pre>
+<h3 id="workers-cant-reach-server-through-firewall"><a class="header" href="#workers-cant-reach-server-through-firewall">Workers can't reach server through firewall</a></h3>
+<p>Some HPC systems have firewalls between login and compute nodes. Check with your administrators
+about allowed ports and networks.</p>
+<h3 id="port-already-in-use"><a class="header" href="#port-already-in-use">Port already in use</a></h3>
+<p>Another process is using the port:</p>
+<pre><code class="language-bash"># Find what's using the port
+lsof -i :8080
+
+# Use a different port
+torc-server run --port 8081 ...
+
+# Or use port 0 for auto-selection
+torc-server run --port 0 ...
+</code></pre>
+<hr />
+<h2 id="summary-table"><a class="header" href="#summary-table">Summary Table</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th><code>--host</code> Value</th><th>Authentication</th></tr></thead><tbody>
+<tr><td>Local development</td><td><code>127.0.0.1</code></td><td>Optional</td></tr>
+<tr><td>HPC login node</td><td><code>0.0.0.0</code></td><td>Recommended</td></tr>
+<tr><td>HPC (non-routable hostname)</td><td><code>&lt;routable-hostname&gt;</code></td><td>Recommended</td></tr>
+<tr><td>Shared server</td><td><code>0.0.0.0</code></td><td>Required</td></tr>
+<tr><td>torc-dash standalone</td><td>Via <code>--server-host</code></td><td>Depends on access</td></tr>
+</tbody></table>
+</div>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../../specialized/admin/authentication.html">Authentication</a> - Securing your server</li>
+<li><a href="../../specialized/tools/dashboard-deployment.html">Dashboard Deployment</a> - Web UI setup</li>
+<li><a href="../../getting-started/quick-start-hpc.html">Quick Start (HPC)</a> - HPC workflow tutorial</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/concepts/architecture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/concepts/workflow-definition.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/concepts/architecture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/concepts/workflow-definition.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
