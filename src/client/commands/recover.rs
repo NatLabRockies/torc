@@ -405,11 +405,16 @@ pub fn recover_workflow(
 
     // Check if there are any jobs to retry
     if result.jobs_to_retry.is_empty() {
-        return Err(format!(
+        let mut msg = format!(
             "No recoverable jobs found. {} job(s) failed with unknown causes. \
              Use --retry-unknown to retry jobs with unknown failure causes.",
             result.other_failures
-        ));
+        );
+        if let Some(hint) = canceled_jobs_hint(config, args.workflow_id) {
+            msg.push(' ');
+            msg.push_str(&hint);
+        }
+        return Err(msg);
     }
 
     // Step 5: Reset failed jobs
@@ -724,12 +729,16 @@ pub fn invoke_ai_agent(workflow_id: i64, agent: &str, output_dir: &Path) -> Resu
     }
 }
 
-/// Count jobs in pending_failed status that need AI classification
-fn count_pending_failed_jobs(config: &Configuration, workflow_id: i64) -> Result<i64, String> {
-    let pending_failed_jobs = apis::jobs_api::list_jobs(
+/// Count jobs in the given status for a workflow.
+fn count_jobs_with_status(
+    config: &Configuration,
+    workflow_id: i64,
+    status: JobStatus,
+) -> Result<i64, String> {
+    let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(JobStatus::PendingFailed),
+        Some(status),
         None,    // needs_file_id
         None,    // upstream_job_id
         None,    // offset
@@ -742,9 +751,30 @@ fn count_pending_failed_jobs(config: &Configuration, workflow_id: i64) -> Result
         None,    // name
         None,    // command
     )
-    .map_err(|e| format!("Failed to list pending_failed jobs: {}", e))?;
+    .map_err(|e| format!("Failed to list {:?} jobs: {}", status, e))?;
 
-    Ok(pending_failed_jobs.total_count)
+    Ok(jobs.total_count)
+}
+
+/// Count jobs in pending_failed status that need AI classification
+fn count_pending_failed_jobs(config: &Configuration, workflow_id: i64) -> Result<i64, String> {
+    count_jobs_with_status(config, workflow_id, JobStatus::PendingFailed)
+}
+
+/// Append a hint about canceled jobs to recovery's "nothing to retry" messaging.
+/// Canceled jobs pass `check_recovery_preconditions` (they are recoverable by
+/// `reset_failed_jobs`) but never enter `jobs_to_retry`: failure diagnosis is
+/// built from job results, and canceled jobs usually have none. Without this
+/// hint the user is told nothing can be done when a manual reset would work.
+fn canceled_jobs_hint(config: &Configuration, workflow_id: i64) -> Option<String> {
+    match count_jobs_with_status(config, workflow_id, JobStatus::Canceled) {
+        Ok(n) if n > 0 => Some(format!(
+            "{} canceled job(s) are not auto-recovered; rerun them with \
+             'torc jobs reset-status <job_ids> --reinit'.",
+            n
+        )),
+        _ => None,
+    }
 }
 
 /// Diagnose failures and return resource utilization report
@@ -840,12 +870,20 @@ pub fn apply_recovery_heuristics(
         }
     }
 
-    // Count other failures for recovery report
+    // Count other failures for recovery report. "Unknown" means no correctable
+    // violation at all: CPU/runtime violators are corrected (and retried) by
+    // apply_resource_corrections just like OOM/timeout, so classifying them as
+    // unknown here would add them to jobs_to_retry a second time via
+    // unknown_job_ids and misreport them as unknown-cause failures.
     let mut other_failures = 0;
     let mut unknown_job_ids = Vec::new();
 
     for violation in &diagnosis.resource_violations {
-        if !violation.memory_violation && !violation.likely_timeout {
+        if !violation.memory_violation
+            && !violation.likely_timeout
+            && !violation.likely_cpu_violation
+            && !violation.likely_runtime_violation
+        {
             other_failures += 1;
             if retry_unknown {
                 unknown_job_ids.push(violation.job_id);
@@ -882,6 +920,11 @@ pub fn apply_recovery_heuristics(
         jobs_to_retry.extend(&adj.job_ids);
     }
     jobs_to_retry.extend(&unknown_job_ids);
+    // A job must be reset only once even if it shows up in more than one source
+    // list (a duplicate would be skipped by reset_failed_jobs with a spurious
+    // "not recoverable" warning after the first reset succeeds).
+    jobs_to_retry.sort_unstable();
+    jobs_to_retry.dedup();
 
     Ok(RecoveryResult {
         oom_fixed,
@@ -1223,13 +1266,18 @@ fn print_truncated_names<S: AsRef<str>>(names: &[S], max: usize) {
 }
 
 /// Read a line from stdin, trimmed. Returns the default if the user presses Enter.
+/// Errors on EOF (e.g. Ctrl-D): no more input will ever arrive, so aborting beats
+/// prompt loops that re-prompt on invalid input spinning forever on empty reads.
 fn prompt_line(prompt: &str) -> Result<String, String> {
     eprint!("{}", prompt);
     io::stderr().flush().ok();
     let mut buf = String::new();
-    io::stdin()
+    let bytes_read = io::stdin()
         .read_line(&mut buf)
         .map_err(|e| format!("Failed to read input: {}", e))?;
+    if bytes_read == 0 {
+        return Err("Input stream closed (EOF); recovery cancelled".to_string());
+    }
     Ok(buf.trim().to_string())
 }
 
@@ -1283,9 +1331,13 @@ fn recover_workflow_interactive(
 
     let diagnosis = diagnose_failures(config, args.workflow_id)?;
 
-    // Categorize violations
+    // Categorize violations. CPU-only violators get their own category so they
+    // are offered the same correct-and-retry treatment as OOM/timeout (matching
+    // the non-interactive path) instead of being lumped in with unknown-cause
+    // failures and retried without a CPU correction.
     let mut oom_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
     let mut timeout_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
+    let mut cpu_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
     let mut unknown_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
 
     for v in &diagnosis.resource_violations {
@@ -1293,13 +1345,22 @@ fn recover_workflow_interactive(
             oom_jobs.push(v);
         } else if v.likely_timeout {
             timeout_jobs.push(v);
+        } else if v.likely_cpu_violation {
+            cpu_jobs.push(v);
         } else {
             unknown_jobs.push(v);
         }
     }
 
-    if oom_jobs.is_empty() && timeout_jobs.is_empty() && unknown_jobs.is_empty() {
+    if oom_jobs.is_empty()
+        && timeout_jobs.is_empty()
+        && cpu_jobs.is_empty()
+        && unknown_jobs.is_empty()
+    {
         eprintln!("No failed jobs with resource violations found.");
+        if let Some(hint) = canceled_jobs_hint(config, args.workflow_id) {
+            eprintln!("{}", hint);
+        }
         return Ok(RecoveryResult {
             oom_fixed: 0,
             timeout_fixed: 0,
@@ -1380,6 +1441,42 @@ fn recover_workflow_interactive(
         eprintln!();
     }
 
+    if !cpu_jobs.is_empty() {
+        eprintln!(
+            "CPU Over-utilization Failures ({} job{}):",
+            cpu_jobs.len(),
+            plural(cpu_jobs.len())
+        );
+        eprintln!(
+            "  {:<8} {:<30} {:<6} {:<6} Peak CPU",
+            "ID", "Name", "RC", "CPUs"
+        );
+        eprintln!(
+            "  {:<8} {:<30} {:<6} {:<6} --------",
+            "---", "----", "---", "----"
+        );
+        for v in cpu_jobs.iter().take(MAX_DISPLAY_ROWS) {
+            eprintln!(
+                "  {:<8} {:<30} {:<6} {:<6} {}",
+                v.job_id,
+                truncate(&v.job_name, 30),
+                v.return_code,
+                v.configured_cpus,
+                v.peak_cpu_percent
+                    .map(|p| format!("{:.1}%", p))
+                    .as_deref()
+                    .unwrap_or("-"),
+            );
+        }
+        if cpu_jobs.len() > MAX_DISPLAY_ROWS {
+            eprintln!(
+                "  ... and {} more CPU over-utilization failures not shown",
+                cpu_jobs.len() - MAX_DISPLAY_ROWS
+            );
+        }
+        eprintln!();
+    }
+
     if !unknown_jobs.is_empty() {
         eprintln!(
             "Unknown Failures ({} job{}):",
@@ -1414,6 +1511,7 @@ fn recover_workflow_interactive(
     let mut runtime_multiplier = args.runtime_multiplier;
     let mut include_oom = false;
     let mut include_timeout = false;
+    let mut include_cpu = false;
     let mut include_unknown = false;
 
     if !oom_jobs.is_empty() {
@@ -1458,6 +1556,23 @@ fn recover_workflow_interactive(
         }
     }
 
+    if !cpu_jobs.is_empty() {
+        let choice = prompt_choice(
+            &format!(
+                "CPU over-utilization failures ({} job{}): [R]etry with corrected CPUs / [S]kip (default: R): ",
+                cpu_jobs.len(),
+                plural(cpu_jobs.len()),
+            ),
+            &["r", "s"],
+            "r",
+        )?;
+        if choice == "r" {
+            include_cpu = true;
+        } else {
+            eprintln!("  Skipping CPU over-utilization jobs.");
+        }
+    }
+
     if !unknown_jobs.is_empty() {
         let choice = prompt_choice(
             &format!(
@@ -1482,6 +1597,9 @@ fn recover_workflow_interactive(
     }
     if include_timeout {
         correction_job_ids.extend(timeout_jobs.iter().map(|v| v.job_id));
+    }
+    if include_cpu {
+        correction_job_ids.extend(cpu_jobs.iter().map(|v| v.job_id));
     }
     // Unknown jobs get retried without resource adjustment
     let unknown_job_ids: Vec<i64> = if include_unknown {
@@ -1548,6 +1666,22 @@ fn recover_workflow_interactive(
                     adj.original_runtime.as_deref().unwrap_or("?"),
                     adj.new_runtime.as_deref().unwrap_or("?"),
                     runtime_multiplier,
+                    adj.job_names.len(),
+                    plural(adj.job_names.len()),
+                );
+                print_truncated_names(&adj.job_names, MAX_DISPLAY_ROWS);
+            }
+            if adj.cpu_adjusted {
+                eprintln!(
+                    "  CPUs: {} -> {} for {} job{}",
+                    adj.original_cpus
+                        .map(|c| c.to_string())
+                        .as_deref()
+                        .unwrap_or("?"),
+                    adj.new_cpus
+                        .map(|c| c.to_string())
+                        .as_deref()
+                        .unwrap_or("?"),
                     adj.job_names.len(),
                     plural(adj.job_names.len()),
                 );
