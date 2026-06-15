@@ -861,6 +861,22 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
             .expect("Failed to create satisfied on_jobs_complete action");
     let satisfied_id = satisfied.id.unwrap();
 
+    // Target 3: on_worker_start + schedule_nodes — fires immediately at worker startup, so it is
+    // always satisfied and must be marked executed.
+    let worker_start = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_worker_start",
+            "schedule_nodes",
+            schedule_config.clone(),
+            None,
+        ),
+    )
+    .expect("Failed to create on_worker_start action");
+    let worker_start_id = worker_start.id.unwrap();
+
     // Decoy 1: on_workflow_start + run_commands — wrong action_type, must be left alone.
     let run_cmd = apis::workflow_actions_api::create_workflow_action(
         config,
@@ -897,7 +913,7 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
         workflow_id,
         "on_workflow_start",
         "schedule_nodes",
-        schedule_config,
+        schedule_config.clone(),
         None,
     );
     recovery_body.is_recovery = true;
@@ -905,6 +921,22 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
         apis::workflow_actions_api::create_workflow_action(config, workflow_id, recovery_body)
             .expect("Failed to create recovery action");
     let recovery_id = recovery.id.unwrap();
+
+    // Decoy 4: persistent on_workflow_start + schedule_nodes — satisfied, but claiming a persistent
+    // action does not clear its armed state (the server keeps executed=0 for persistent actions),
+    // so the helper must leave it untouched (and warn) rather than falsely mark it executed.
+    let mut persistent_body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "schedule_nodes",
+        schedule_config,
+        None,
+    );
+    persistent_body.persistent = true;
+    let persistent =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, persistent_body)
+            .expect("Failed to create persistent action");
+    let persistent_id = persistent.id.unwrap();
 
     // Run the fix under test.
     torc::client::commands::recover::mark_satisfied_schedule_actions_executed(config, workflow_id)
@@ -921,6 +953,14 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
     assert!(
         find(satisfied_id).executed,
         "satisfied on_jobs_complete schedule_nodes action should be marked executed"
+    );
+    assert!(
+        find(worker_start_id).executed,
+        "on_worker_start schedule_nodes action should be marked executed"
+    );
+    assert!(
+        !find(persistent_id).executed,
+        "persistent schedule_nodes action should be left untouched (claim cannot suppress it)"
     );
     assert!(
         !find(run_cmd_id).executed,
