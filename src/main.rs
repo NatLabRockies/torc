@@ -20,7 +20,8 @@ use torc::client::commands::job_dependencies::handle_job_dependency_commands;
 use torc::client::commands::jobs::handle_job_commands;
 use torc::client::commands::logs::handle_log_commands;
 use torc::client::commands::recover::{
-    RecoverArgs, RecoveryReport, diagnose_failures, recover_workflow,
+    RecoverArgs, RecoveryExecutionMode, RecoveryReport, detect_recovery_execution_mode,
+    diagnose_failures, recover_workflow,
 };
 use torc::client::commands::remote::handle_remote_commands;
 use torc::client::commands::resource_requirements::handle_resource_requirements_commands;
@@ -1010,6 +1011,8 @@ fn main() {
             no_prompts,
             ai_recovery,
             ai_agent,
+            partition,
+            walltime,
         } => {
             // The interactive wizard prints prompts to stderr and reads stdin; that would block
             // and corrupt `-f json` output, which is meant for scripting. Force non-interactive
@@ -1026,6 +1029,8 @@ fn main() {
                 interactive,
                 ai_recovery: *ai_recovery,
                 ai_agent: ai_agent.clone(),
+                partition: partition.clone(),
+                walltime: walltime.clone(),
             };
 
             // For JSON output, get diagnosis data to include in the report
@@ -1076,10 +1081,23 @@ fn main() {
                         if result.jobs_to_retry.is_empty() {
                             println!("No auto-recoverable jobs found.");
                         } else {
-                            println!(
-                                "Would reset {} job(s) and regenerate Slurm schedulers.",
-                                result.jobs_to_retry.len()
-                            );
+                            let n = result.jobs_to_retry.len();
+                            match detect_recovery_execution_mode(&config, *workflow_id) {
+                                Ok(RecoveryExecutionMode::Slurm) => println!(
+                                    "Would reset {} job(s) and regenerate Slurm schedulers.",
+                                    n
+                                ),
+                                Ok(RecoveryExecutionMode::Remote) => println!(
+                                    "Would reset {} job(s); re-run with 'torc remote run {}'.",
+                                    n, workflow_id
+                                ),
+                                Ok(RecoveryExecutionMode::Local) => println!(
+                                    "Would reset {} job(s); re-run with 'torc run {}'.",
+                                    n, workflow_id
+                                ),
+                                // Detection failed transiently: don't claim a specific path.
+                                Err(_) => println!("Would reset {} job(s) for retry.", n),
+                            }
                         }
                         println!("\nRun without --dry-run to apply these changes.");
                     } else {
@@ -1099,10 +1117,23 @@ fn main() {
                         if result.jobs_to_retry.is_empty() {
                             println!("No auto-recoverable jobs found.");
                         } else {
-                            println!(
-                                "Reset {} job(s). Slurm schedulers regenerated and submitted.",
-                                result.jobs_to_retry.len()
-                            );
+                            let n = result.jobs_to_retry.len();
+                            // recover_workflow already printed the re-run hint for non-Slurm
+                            // modes; the summary line just reflects what was done. On a
+                            // transient detection error, fall back to a neutral summary rather
+                            // than claiming Slurm schedulers were submitted.
+                            match detect_recovery_execution_mode(&config, *workflow_id) {
+                                Ok(RecoveryExecutionMode::Slurm) => println!(
+                                    "Reset {} job(s). Slurm schedulers regenerated and submitted.",
+                                    n
+                                ),
+                                Ok(
+                                    RecoveryExecutionMode::Remote | RecoveryExecutionMode::Local,
+                                )
+                                | Err(_) => {
+                                    println!("Reset {} job(s) for retry.", n)
+                                }
+                            }
                         }
                     }
                 }

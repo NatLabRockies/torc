@@ -12,12 +12,10 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::utils;
 
-// Re-export shared recovery types and functions from the recover module
-use super::recover::{
-    RecoveryResult, apply_recovery_heuristics, diagnose_failures, regenerate_and_submit,
-    reinitialize_workflow, reset_failed_jobs, run_recovery_hook,
-};
-use crate::client::report_models::ResourceUtilizationReport;
+// Shared recovery pipeline from the recover module. `torc watch --recover` delegates the
+// entire recovery sequence to recover_workflow so both surfaces share one tested code path.
+// regenerate_and_submit is still used directly by the auto-schedule logic below.
+use super::recover::{RecoverArgs, recover_workflow, regenerate_and_submit};
 
 // Use shared orphan detection logic
 use super::orphan_detection::cleanup_orphaned_jobs;
@@ -858,7 +856,11 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                         }
                     }
                 }
-            } else {
+            } else if !needs_recovery {
+                // Only pending_failed jobs and AI recovery is off: nothing to auto-recover,
+                // so surface the manual options and stop. When needs_recovery is also true we
+                // fall through to recover_workflow, which emits the same pending_failed notice
+                // itself — printing it here too would just duplicate that message.
                 warn!(
                     "\n{} job(s) in pending_failed status (awaiting classification)",
                     pending_failed
@@ -868,10 +870,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                     "Or reset them manually: torc workflows reset-status {} --failed-only",
                     args.workflow_id
                 );
-                // Exit if only pending_failed jobs (no other failures to auto-recover)
-                if !needs_recovery {
-                    std::process::exit(1);
-                }
+                std::process::exit(1);
             }
         }
 
@@ -901,147 +900,41 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
             info!("\nAttempting automatic recovery (attempt {})", retry_count);
         }
 
-        // Step 1: Diagnose failures
-        info!("\nDiagnosing failures...");
-        let diagnosis = match diagnose_failures(config, args.workflow_id) {
-            Ok(d) => d,
-            Err(e) => {
-                warn!("Warning: Could not diagnose failures: {}", e);
-                warn!("Attempting retry without resource adjustments...");
-                ResourceUtilizationReport {
-                    workflow_id: args.workflow_id,
-                    run_id: None,
-                    total_results: 0,
-                    over_utilization_count: 0,
-                    violations: Vec::new(),
-                    within_limits: Vec::new(),
-                    resource_violations_count: 0,
-                    resource_violations: Vec::new(),
-                }
-            }
+        // Delegate the full recovery sequence (orphan cleanup, preconditions, diagnose,
+        // heuristics, recovery hook, reset, reinitialize, regenerate+submit) to the shared,
+        // well-tested recover_workflow path so watch and `torc recover` never diverge.
+        //
+        // Watch is always non-interactive and never a dry run. pending_failed/AI
+        // classification was already handled above, so ai_recovery is left off here to avoid
+        // invoking the agent twice. A --recovery-hook still implies retry-unknown inside
+        // recover_workflow (see effective_retry_unknown), matching watch's prior behavior.
+        let recover_args = RecoverArgs {
+            workflow_id: args.workflow_id,
+            output_dir: args.output_dir.clone(),
+            memory_multiplier: args.memory_multiplier,
+            runtime_multiplier: args.runtime_multiplier,
+            retry_unknown: args.retry_unknown,
+            recovery_hook: args.recovery_hook.clone(),
+            dry_run: false,
+            interactive: false,
+            ai_recovery: false,
+            ai_agent: args.ai_agent.clone(),
+            partition: args.partition.clone(),
+            walltime: args.walltime.clone(),
         };
-
-        // Step 2: Apply heuristics to adjust resources
-        info!("\nApplying recovery heuristics...");
-        // If a recovery hook is provided, treat unknown failures as retryable
-        // (the user is explicitly saying they'll handle them with their script)
-        let retry_unknown = args.retry_unknown || args.recovery_hook.is_some();
-        let recovery_result = match apply_recovery_heuristics(
-            config,
-            args.workflow_id,
-            &diagnosis,
-            args.memory_multiplier,
-            args.runtime_multiplier,
-            retry_unknown,
-            &args.output_dir,
-            false, // dry_run - always execute for watch
-        ) {
-            Ok(result) => {
-                if result.oom_fixed > 0 || result.timeout_fixed > 0 {
-                    info!(
-                        "  Applied fixes: {} OOM, {} timeout",
-                        result.oom_fixed, result.timeout_fixed
-                    );
-                }
-                if result.other_failures > 0 {
-                    if retry_unknown {
-                        if args.recovery_hook.is_some() {
-                            info!(
-                                "  {} job(s) with unknown failure cause (will run recovery hook)",
-                                result.other_failures
-                            );
-                        } else {
-                            info!(
-                                "  {} job(s) with unknown failure cause (will retry)",
-                                result.other_failures
-                            );
-                        }
-                    } else {
-                        info!(
-                            "  {} job(s) with unknown failure cause (skipped, use --retry-unknown to include)",
-                            result.other_failures
-                        );
-                    }
-                }
-                result
+        match recover_workflow(config, &recover_args) {
+            Ok(_) => {
+                info!("\nRecovery initiated. Resuming monitoring...\n");
             }
             Err(e) => {
-                warn!("Warning: Error applying heuristics: {}", e);
-                RecoveryResult {
-                    oom_fixed: 0,
-                    timeout_fixed: 0,
-                    unknown_retried: 0,
-                    other_failures: 0,
-                    jobs_to_retry: Vec::new(),
-                    adjustments: Vec::new(),
-                    slurm_dry_run: None,
-                }
-            }
-        };
-
-        // Step 2.5: Run recovery hook if there are unknown failures
-        if recovery_result.other_failures > 0
-            && let Some(ref hook_cmd) = args.recovery_hook
-        {
-            info!(
-                "\n{} job(s) with unknown failure cause - running recovery hook...",
-                recovery_result.other_failures
-            );
-            if let Err(e) = run_recovery_hook(config, args.workflow_id, hook_cmd) {
-                error!("Recovery hook failed: {}", e);
+                // recover_workflow returns Err both for hard failures and for the benign
+                // "nothing auto-recoverable" case (e.g. only unknown-cause failures without
+                // --retry-unknown). Either way watch can make no further progress, so report
+                // and exit non-zero, as the previous inline implementation did.
+                error!("Recovery failed: {}", e);
                 std::process::exit(1);
             }
         }
-
-        // Check if there are any jobs to retry
-        if recovery_result.jobs_to_retry.is_empty() {
-            warn!(
-                "\nNo auto-recoverable jobs found. {} job(s) failed with unknown causes.",
-                recovery_result.other_failures
-            );
-            warn!("Use --retry-unknown to retry jobs with unknown failure causes.");
-            warn!("Or use the Torc MCP server with your AI assistant to investigate.");
-            std::process::exit(1);
-        }
-
-        // Step 3: Reset failed jobs
-        info!(
-            "\nResetting {} job(s) for retry...",
-            recovery_result.jobs_to_retry.len()
-        );
-        match reset_failed_jobs(config, args.workflow_id, &recovery_result.jobs_to_retry) {
-            Ok(count) => {
-                info!("  Reset {} job(s)", count);
-            }
-            Err(e) => {
-                error!("Error resetting jobs: {}", e);
-                std::process::exit(1);
-            }
-        }
-
-        // Step 4: Reinitialize workflow first (before creating new allocations)
-        // Must happen before regenerate_and_submit because reset_workflow_status
-        // rejects requests when there are pending scheduled compute nodes.
-        info!("Reinitializing workflow...");
-        if let Err(e) = reinitialize_workflow(config, args.workflow_id) {
-            warn!("Error reinitializing workflow: {}", e);
-            std::process::exit(1);
-        }
-
-        // Step 5: Regenerate Slurm schedulers (this also marks old actions as executed)
-        info!("Regenerating Slurm schedulers...");
-        if let Err(e) = regenerate_and_submit(
-            config,
-            args.workflow_id,
-            &args.output_dir,
-            args.partition.as_deref(),
-            args.walltime.as_deref(),
-        ) {
-            warn!("Error regenerating schedulers: {}", e);
-            std::process::exit(1);
-        }
-
-        info!("\nRecovery initiated. Resuming monitoring...\n");
     }
 }
 
