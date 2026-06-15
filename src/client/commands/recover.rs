@@ -2485,11 +2485,13 @@ fn schedule_action_already_satisfied(action: &crate::models::WorkflowActionModel
         return false;
     }
     match action.trigger_type.as_str() {
-        // Fires as soon as the workflow starts — always immediately satisfied.
-        "on_workflow_start" => true,
+        // Fire as soon as the workflow/worker starts — always immediately satisfied. The server
+        // activates both (`trigger_count = required_triggers`) and the job runner executes them
+        // before its main loop (`execute_workflow_start_actions` / `execute_worker_start_actions`).
+        "on_workflow_start" | "on_worker_start" => true,
         // Job-gated — satisfied only if the required jobs are already in the target state.
         "on_jobs_ready" | "on_jobs_complete" => action.trigger_count >= action.required_triggers,
-        // Other triggers (e.g. on_worker_start, on_workflow_complete) are not handled here.
+        // Other triggers (e.g. on_workflow_complete, on_worker_complete) are not handled here.
         _ => false,
     }
 }
@@ -2505,6 +2507,10 @@ fn schedule_action_already_satisfied(action: &crate::models::WorkflowActionModel
 /// in a prior run. Claiming those actions here marks them executed and prevents the duplicate,
 /// action-defined submission. The `regenerate` path performs the equivalent step inside
 /// `handle_regenerate`. Recovery actions (`is_recovery`) are left untouched.
+///
+/// Persistent actions cannot be suppressed this way: the server's claim logic deliberately leaves
+/// their `executed` flag at 0 so multiple workers can each claim them, so claiming would not stop
+/// them re-firing. Those are surfaced as a warning instead.
 pub fn mark_satisfied_schedule_actions_executed(
     config: &Configuration,
     workflow_id: i64,
@@ -2513,36 +2519,53 @@ pub fn mark_satisfied_schedule_actions_executed(
         .map_err(|e| format!("Failed to list workflow actions: {}", e))?;
 
     for action in actions {
-        if schedule_action_already_satisfied(&action)
-            && let Some(action_id) = action.id
-        {
-            // Delegate to the shared helper, which treats a 409 Conflict (already claimed by
-            // another process) as `Ok(false)` and surfaces any other failure as an error. We
-            // propagate that error rather than logging and continuing: if the claim genuinely
-            // fails, the action stays armed and would re-fire on a compute node, reintroducing
-            // the duplicate-allocation bug — better to stop and report it.
-            match crate::client::utils::claim_action(
-                config,
-                workflow_id,
-                action_id,
-                None, // login-node submission, no compute node
-                WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-            ) {
-                Ok(true) => {
-                    info!(
-                        "Marked already-satisfied {} schedule_nodes action {} as executed to avoid duplicate allocations",
-                        action.trigger_type, action_id
-                    );
-                }
-                Ok(false) => {
-                    debug!("Action {} already claimed", action_id);
-                }
-                Err(e) => {
-                    return Err(format!(
-                        "Failed to mark {} schedule_nodes action {} as executed: {}",
-                        action.trigger_type, action_id, e
-                    ));
-                }
+        if !schedule_action_already_satisfied(&action) {
+            continue;
+        }
+        let Some(action_id) = action.id else {
+            continue;
+        };
+
+        // Claiming a persistent action does NOT clear its armed state — the server keeps
+        // `executed = 0` for persistent actions so multiple workers can claim them. Claiming here
+        // would log a misleading "marked executed" while the action stays armed and re-fires. We
+        // can't suppress it automatically, so warn the user to remove/disable it instead.
+        if action.persistent {
+            warn!(
+                "Persistent {} schedule_nodes action {} is already satisfied and will re-fire \
+                 after recovery, submitting its own allocations; it cannot be suppressed \
+                 automatically. Remove or disable it if you do not want those allocations.",
+                action.trigger_type, action_id
+            );
+            continue;
+        }
+
+        // Delegate to the shared helper, which treats a 409 Conflict (already claimed by another
+        // process) as `Ok(false)` and surfaces any other failure as an error. We propagate that
+        // error rather than logging and continuing: if the claim genuinely fails, the action stays
+        // armed and would re-fire on a compute node, reintroducing the duplicate-allocation bug —
+        // better to stop and report it.
+        match crate::client::utils::claim_action(
+            config,
+            workflow_id,
+            action_id,
+            None, // login-node submission, no compute node
+            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+        ) {
+            Ok(true) => {
+                info!(
+                    "Marked already-satisfied {} schedule_nodes action {} as executed to avoid duplicate allocations",
+                    action.trigger_type, action_id
+                );
+            }
+            Ok(false) => {
+                debug!("Action {} already claimed", action_id);
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Failed to mark {} schedule_nodes action {} as executed: {}",
+                    action.trigger_type, action_id, e
+                ));
             }
         }
     }
