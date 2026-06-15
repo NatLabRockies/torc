@@ -856,7 +856,11 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                         }
                     }
                 }
-            } else {
+            } else if !needs_recovery {
+                // Only pending_failed jobs and AI recovery is off: nothing to auto-recover,
+                // so surface the manual options and stop. When needs_recovery is also true we
+                // fall through to recover_workflow, which emits the same pending_failed notice
+                // itself — printing it here too would just duplicate that message.
                 warn!(
                     "\n{} job(s) in pending_failed status (awaiting classification)",
                     pending_failed
@@ -866,10 +870,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
                     "Or reset them manually: torc workflows reset-status {} --failed-only",
                     args.workflow_id
                 );
-                // Exit if only pending_failed jobs (no other failures to auto-recover)
-                if !needs_recovery {
-                    std::process::exit(1);
-                }
+                std::process::exit(1);
             }
         }
 

@@ -1686,14 +1686,16 @@ fn recover_workflow_interactive(
     }
 
     if !unknown_jobs.is_empty() {
-        // A recovery hook is meant to fix unknown failures, so default to retrying them
-        // when one is configured — consistent with effective_retry_unknown on the
-        // non-interactive path.
-        let unknown_default = if args.recovery_hook.is_some() {
-            "r"
-        } else {
-            "s"
-        };
+        // Default to retrying unknown failures when --retry-unknown was passed or a recovery
+        // hook is configured (the hook is meant to fix them). Routing through
+        // effective_retry_unknown keeps the wizard's default in lockstep with the
+        // non-interactive path instead of re-deriving the rule here.
+        let unknown_default =
+            if effective_retry_unknown(args.retry_unknown, args.recovery_hook.as_deref()) {
+                "r"
+            } else {
+                "s"
+            };
         let choice = prompt_choice(
             &format!(
                 "Unknown failures ({} job{}): [R]etry as-is / [S]kip (default: {}): ",
