@@ -145,8 +145,6 @@ pub(crate) fn effective_retry_unknown(retry_unknown: bool, recovery_hook: Option
 }
 
 /// Whether the workflow has any Slurm scheduler configured.
-///
-/// Whether the workflow has any Slurm scheduler configured.
 pub fn workflow_has_schedulers(config: &Configuration, workflow_id: i64) -> Result<bool, String> {
     let schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
         config,
@@ -251,7 +249,13 @@ fn record_recovery_event(
         "action": "recover",
         "execution_mode": exec_mode,
         "interactive": args.interactive,
+        // Both the raw flag and the value recovery actually used: a recovery hook implies
+        // retry-unknown (see effective_retry_unknown), so the raw flag alone is misleading.
         "retry_unknown": args.retry_unknown,
+        "effective_retry_unknown": effective_retry_unknown(
+            args.retry_unknown,
+            args.recovery_hook.as_deref(),
+        ),
         "recovery_hook": args.recovery_hook,
         "ai_recovery": args.ai_recovery,
         "memory_multiplier": effective_memory_multiplier,

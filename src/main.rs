@@ -1083,7 +1083,7 @@ fn main() {
                         } else {
                             let n = result.jobs_to_retry.len();
                             match detect_recovery_execution_mode(&config, *workflow_id) {
-                                Ok(RecoveryExecutionMode::Slurm) | Err(_) => println!(
+                                Ok(RecoveryExecutionMode::Slurm) => println!(
                                     "Would reset {} job(s) and regenerate Slurm schedulers.",
                                     n
                                 ),
@@ -1095,6 +1095,8 @@ fn main() {
                                     "Would reset {} job(s); re-run with 'torc run {}'.",
                                     n, workflow_id
                                 ),
+                                // Detection failed transiently: don't claim a specific path.
+                                Err(_) => println!("Would reset {} job(s) for retry.", n),
                             }
                         }
                         println!("\nRun without --dry-run to apply these changes.");
@@ -1117,15 +1119,18 @@ fn main() {
                         } else {
                             let n = result.jobs_to_retry.len();
                             // recover_workflow already printed the re-run hint for non-Slurm
-                            // modes; the summary line just reflects what was done.
+                            // modes; the summary line just reflects what was done. On a
+                            // transient detection error, fall back to a neutral summary rather
+                            // than claiming Slurm schedulers were submitted.
                             match detect_recovery_execution_mode(&config, *workflow_id) {
-                                Ok(RecoveryExecutionMode::Slurm) | Err(_) => println!(
+                                Ok(RecoveryExecutionMode::Slurm) => println!(
                                     "Reset {} job(s). Slurm schedulers regenerated and submitted.",
                                     n
                                 ),
                                 Ok(
                                     RecoveryExecutionMode::Remote | RecoveryExecutionMode::Local,
-                                ) => {
+                                )
+                                | Err(_) => {
                                     println!("Reset {} job(s) for retry.", n)
                                 }
                             }
