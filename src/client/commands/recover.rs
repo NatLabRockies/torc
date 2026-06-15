@@ -86,6 +86,12 @@ pub struct RecoverArgs {
     pub ai_recovery: bool,
     /// AI agent CLI to use for --ai-recovery (e.g., "claude")
     pub ai_agent: String,
+    /// Fixed Slurm partition for regenerated schedulers (bypasses auto-selection).
+    /// Only used by the non-interactive path; the wizard prompts for it instead.
+    pub partition: Option<String>,
+    /// Fixed Slurm walltime for regenerated schedulers (bypasses auto-calculation).
+    /// Only used by the non-interactive path; the wizard prompts for it instead.
+    pub walltime: Option<String>,
 }
 
 /// Result of applying recovery heuristics
@@ -124,6 +130,18 @@ pub struct SlurmLogInfo {
     pub slurm_job_id: Option<String>,
     pub slurm_stdout: Option<String>,
     pub slurm_stderr: Option<String>,
+}
+
+/// Whether unknown-cause failures should be retried.
+///
+/// `--retry-unknown` retries them directly. A `--recovery-hook` also implies retry-unknown:
+/// the hook exists to fix unknown failures, so the user clearly intends those jobs to be
+/// retried after it runs. Without this implication the hook would run (with real side
+/// effects) and recovery would then abort with "no auto-recoverable jobs" because the
+/// unknown jobs were never added to the retry set. Both `torc recover` and
+/// `torc watch --recover` flow through here, so the rule is applied identically.
+pub(crate) fn effective_retry_unknown(retry_unknown: bool, recovery_hook: Option<&str>) -> bool {
+    retry_unknown || recovery_hook.is_some()
 }
 
 /// Recover a Slurm workflow by:
@@ -244,6 +262,10 @@ pub fn recover_workflow(
         return recover_workflow_interactive(config, args);
     }
 
+    // A recovery hook implies the user wants unknown failures retried (see
+    // effective_retry_unknown); otherwise the hook would run and recovery would abort.
+    let retry_unknown = effective_retry_unknown(args.retry_unknown, args.recovery_hook.as_deref());
+
     // Step 2: Diagnose failures
     info!("Diagnosing failures...");
     let diagnosis = diagnose_failures(config, args.workflow_id)?;
@@ -260,7 +282,7 @@ pub fn recover_workflow(
         &diagnosis,
         args.memory_multiplier,
         args.runtime_multiplier,
-        args.retry_unknown,
+        retry_unknown,
         &args.output_dir,
         args.dry_run,
     )?;
@@ -280,7 +302,7 @@ pub fn recover_workflow(
     }
 
     if result.other_failures > 0 {
-        if args.retry_unknown {
+        if retry_unknown {
             if args.recovery_hook.is_some() {
                 info!(
                     "  {} job(s) with unknown failure cause (would run recovery hook)",
@@ -437,7 +459,13 @@ pub fn recover_workflow(
 
     // Step 7: Regenerate Slurm schedulers and submit
     info!("Schedulers regenerating workflow_id={}", args.workflow_id);
-    regenerate_and_submit(config, args.workflow_id, &args.output_dir, None, None)?;
+    regenerate_and_submit(
+        config,
+        args.workflow_id,
+        &args.output_dir,
+        args.partition.as_deref(),
+        args.walltime.as_deref(),
+    )?;
 
     Ok(result)
 }
@@ -1274,14 +1302,21 @@ fn print_truncated_names<S: AsRef<str>>(names: &[S], max: usize) {
     }
 }
 
-/// Read a line from stdin, trimmed. Returns the default if the user presses Enter.
-/// Errors on EOF (e.g. Ctrl-D): no more input will ever arrive, so aborting beats
-/// prompt loops that re-prompt on invalid input spinning forever on empty reads.
-fn prompt_line(prompt: &str) -> Result<String, String> {
-    eprint!("{}", prompt);
-    io::stderr().flush().ok();
+/// Read a line from `reader`, trimmed, writing `prompt` to `writer` first. Returns the
+/// default (empty string) if the user presses Enter. Errors on EOF (e.g. Ctrl-D): no more
+/// input will ever arrive, so aborting beats prompt loops re-prompting forever on empty reads.
+///
+/// The reader/writer are injected so the wizard's input parsing can be unit-tested; the
+/// public [`prompt_line`] wrapper binds them to stdin/stderr.
+fn prompt_line_from<R: io::BufRead, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    prompt: &str,
+) -> Result<String, String> {
+    write!(writer, "{}", prompt).ok();
+    writer.flush().ok();
     let mut buf = String::new();
-    let bytes_read = io::stdin()
+    let bytes_read = reader
         .read_line(&mut buf)
         .map_err(|e| format!("Failed to read input: {}", e))?;
     if bytes_read == 0 {
@@ -1290,11 +1325,17 @@ fn prompt_line(prompt: &str) -> Result<String, String> {
     Ok(buf.trim().to_string())
 }
 
-/// Prompt the user for a choice. `valid` lists accepted single-char answers (lowercase).
-/// Returns the default if the user presses Enter.
-fn prompt_choice(prompt: &str, valid: &[&str], default: &str) -> Result<String, String> {
+/// Prompt the user for a choice over `reader`/`writer`. `valid` lists accepted single-char
+/// answers (lowercase). Returns the default if the user presses Enter.
+fn prompt_choice_from<R: io::BufRead, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    prompt: &str,
+    valid: &[&str],
+    default: &str,
+) -> Result<String, String> {
     loop {
-        let input = prompt_line(prompt)?;
+        let input = prompt_line_from(reader, writer, prompt)?;
         let answer = if input.is_empty() {
             default.to_string()
         } else {
@@ -1303,29 +1344,101 @@ fn prompt_choice(prompt: &str, valid: &[&str], default: &str) -> Result<String, 
         if valid.contains(&answer.as_str()) {
             return Ok(answer);
         }
-        eprintln!(
+        writeln!(
+            writer,
             "  Invalid choice '{}'. Valid options: {}",
             answer,
             valid.join(", ")
-        );
+        )
+        .ok();
     }
 }
 
-/// Prompt for a floating-point multiplier with a default value.
-fn prompt_multiplier(label: &str, default: f64) -> Result<f64, String> {
+/// Prompt for a floating-point multiplier over `reader`/`writer` with a default value.
+/// Only accepts strictly positive numbers.
+fn prompt_multiplier_from<R: io::BufRead, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    label: &str,
+    default: f64,
+) -> Result<f64, String> {
     loop {
-        let input = prompt_line(&format!(
-            "  Enter {} multiplier [default: {}]: ",
-            label, default
-        ))?;
+        let input = prompt_line_from(
+            reader,
+            writer,
+            &format!("  Enter {} multiplier [default: {}]: ", label, default),
+        )?;
         if input.is_empty() {
             return Ok(default);
         }
         match input.parse::<f64>() {
             Ok(v) if v > 0.0 => return Ok(v),
-            _ => eprintln!("  Please enter a positive number."),
+            _ => writeln!(writer, "  Please enter a positive number.").ok(),
+        };
+    }
+}
+
+/// Read a line from stdin, trimmed, prompting on stderr. See [`prompt_line_from`].
+fn prompt_line(prompt: &str) -> Result<String, String> {
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+    let mut writer = io::stderr();
+    prompt_line_from(&mut reader, &mut writer, prompt)
+}
+
+/// Prompt the user for a choice on stdin/stderr. See [`prompt_choice_from`].
+fn prompt_choice(prompt: &str, valid: &[&str], default: &str) -> Result<String, String> {
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+    let mut writer = io::stderr();
+    prompt_choice_from(&mut reader, &mut writer, prompt, valid, default)
+}
+
+/// Prompt for a floating-point multiplier on stdin/stderr. See [`prompt_multiplier_from`].
+fn prompt_multiplier(label: &str, default: f64) -> Result<f64, String> {
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+    let mut writer = io::stderr();
+    prompt_multiplier_from(&mut reader, &mut writer, label, default)
+}
+
+/// Failed-job resource violations grouped by failure cause for the interactive wizard.
+struct CategorizedViolations<'a> {
+    oom: Vec<&'a crate::client::report_models::ResourceViolationInfo>,
+    timeout: Vec<&'a crate::client::report_models::ResourceViolationInfo>,
+    cpu: Vec<&'a crate::client::report_models::ResourceViolationInfo>,
+    unknown: Vec<&'a crate::client::report_models::ResourceViolationInfo>,
+}
+
+/// Categorize resource violations by failure cause. The precedence (memory, then
+/// timeout/runtime, then cpu, then unknown) and the "unknown = no flags set" definition
+/// mirror the non-interactive path's classification in [`apply_recovery_heuristics`], so
+/// both surfaces agree on which jobs are correctable vs unknown-cause. Pure (no I/O) so it
+/// can be unit-tested.
+fn categorize_violations(
+    violations: &[crate::client::report_models::ResourceViolationInfo],
+) -> CategorizedViolations<'_> {
+    let mut categorized = CategorizedViolations {
+        oom: Vec::new(),
+        timeout: Vec::new(),
+        cpu: Vec::new(),
+        unknown: Vec::new(),
+    };
+    for v in violations {
+        if v.memory_violation {
+            categorized.oom.push(v);
+        } else if v.likely_timeout || v.likely_runtime_violation {
+            // likely_runtime_violation (exec > 100% of runtime) implies likely_timeout
+            // (exec > 90%) today, but check it explicitly so the wizard's classification
+            // matches the non-interactive path even if the diagnosis thresholds drift apart.
+            categorized.timeout.push(v);
+        } else if v.likely_cpu_violation {
+            categorized.cpu.push(v);
+        } else {
+            categorized.unknown.push(v);
         }
     }
+    categorized
 }
 
 /// Interactive recovery wizard (default when stdin is a TTY). Guides the user
@@ -1344,26 +1457,12 @@ fn recover_workflow_interactive(
     // are offered the same correct-and-retry treatment as OOM/timeout (matching
     // the non-interactive path) instead of being lumped in with unknown-cause
     // failures and retried without a CPU correction.
-    let mut oom_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
-    let mut timeout_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
-    let mut cpu_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
-    let mut unknown_jobs: Vec<&crate::client::report_models::ResourceViolationInfo> = Vec::new();
-
-    for v in &diagnosis.resource_violations {
-        if v.memory_violation {
-            oom_jobs.push(v);
-        } else if v.likely_timeout || v.likely_runtime_violation {
-            // likely_runtime_violation (exec > 100% of runtime) implies
-            // likely_timeout (exec > 90%) today, but check it explicitly so the
-            // wizard's classification matches the non-interactive path even if
-            // the diagnosis thresholds drift apart.
-            timeout_jobs.push(v);
-        } else if v.likely_cpu_violation {
-            cpu_jobs.push(v);
-        } else {
-            unknown_jobs.push(v);
-        }
-    }
+    let CategorizedViolations {
+        oom: oom_jobs,
+        timeout: timeout_jobs,
+        cpu: cpu_jobs,
+        unknown: unknown_jobs,
+    } = categorize_violations(&diagnosis.resource_violations);
 
     if oom_jobs.is_empty()
         && timeout_jobs.is_empty()
@@ -1587,14 +1686,23 @@ fn recover_workflow_interactive(
     }
 
     if !unknown_jobs.is_empty() {
+        // A recovery hook is meant to fix unknown failures, so default to retrying them
+        // when one is configured — consistent with effective_retry_unknown on the
+        // non-interactive path.
+        let unknown_default = if args.recovery_hook.is_some() {
+            "r"
+        } else {
+            "s"
+        };
         let choice = prompt_choice(
             &format!(
-                "Unknown failures ({} job{}): [R]etry as-is / [S]kip (default: S): ",
+                "Unknown failures ({} job{}): [R]etry as-is / [S]kip (default: {}): ",
                 unknown_jobs.len(),
                 plural(unknown_jobs.len()),
+                unknown_default.to_uppercase(),
             ),
             &["r", "s"],
-            "s",
+            unknown_default,
         )?;
         if choice == "r" {
             include_unknown = true;
@@ -1792,14 +1900,14 @@ fn recover_workflow_interactive(
             }
         }
         SchedulerChoice::Existing {
-            scheduler_id,
-            scheduler_name,
+            source,
             num_allocations,
             start_one_worker_per_node,
         } => {
             eprintln!(
-                "\n  Scheduler: {} (ID {}), {} allocation(s)",
-                scheduler_name, scheduler_id, num_allocations
+                "\n  Scheduler: {}, {} allocation(s)",
+                source.display_label(),
+                num_allocations
             );
             if *start_one_worker_per_node {
                 eprintln!("  Start one worker per node: yes");
@@ -1862,11 +1970,15 @@ fn recover_workflow_interactive(
             )?;
         }
         SchedulerChoice::Existing {
-            scheduler_id,
+            source,
             num_allocations,
             start_one_worker_per_node,
-            ..
         } => {
+            // Now that the user has confirmed, materialize the scheduler (creating the
+            // walltime-override clone if one was deferred — see ExistingSchedulerSource).
+            let (scheduler_id, _scheduler_name) =
+                resolve_existing_scheduler_source(config, source)?;
+
             // Reinitialization above re-armed the workflow's on_workflow_start schedule_nodes
             // action. Mark it executed before submitting so it doesn't re-fire on the first
             // compute node and submit the action's original allocation count instead of the
@@ -1879,7 +1991,7 @@ fn recover_workflow_interactive(
             submit_existing_scheduler(
                 config,
                 args.workflow_id,
-                *scheduler_id,
+                scheduler_id,
                 *num_allocations,
                 *start_one_worker_per_node,
                 &args.output_dir,
@@ -1910,13 +2022,69 @@ enum SchedulerChoice {
         partition: Option<String>,
         walltime: Option<String>,
     },
-    /// Reuse an existing scheduler config
+    /// Reuse an existing scheduler config (possibly a deferred clone)
     Existing {
-        scheduler_id: i64,
-        scheduler_name: String,
+        source: ExistingSchedulerSource,
         num_allocations: i32,
         start_one_worker_per_node: bool,
     },
+}
+
+/// Where an `Existing` scheduler submission gets its scheduler config.
+///
+/// A walltime override clones the selected scheduler, but that database write is DEFERRED
+/// (see [`resolve_existing_scheduler_source`]) until after the user confirms recovery, so
+/// declining at the confirmation prompt leaves no orphaned `*_recovery` scheduler behind.
+enum ExistingSchedulerSource {
+    /// Reuse an existing scheduler config by ID.
+    Existing { id: i64, name: String },
+    /// Create a new scheduler cloned from `base` with `walltime`, after confirmation.
+    CloneWithWalltime {
+        base: Box<crate::models::SlurmSchedulerModel>,
+        walltime: String,
+    },
+}
+
+impl ExistingSchedulerSource {
+    /// Human-readable label for the confirmation prompt (before any clone is created).
+    fn display_label(&self) -> String {
+        match self {
+            ExistingSchedulerSource::Existing { id, name } => format!("{} (ID {})", name, id),
+            ExistingSchedulerSource::CloneWithWalltime { base, walltime } => format!(
+                "{}_recovery (new scheduler, walltime {})",
+                base.name.as_deref().unwrap_or("scheduler"),
+                walltime
+            ),
+        }
+    }
+}
+
+/// Resolve an [`ExistingSchedulerSource`] to a concrete `(scheduler_id, name)`, creating the
+/// cloned scheduler now if one was deferred. Called only after the user confirms recovery.
+fn resolve_existing_scheduler_source(
+    config: &Configuration,
+    source: &ExistingSchedulerSource,
+) -> Result<(i64, String), String> {
+    match source {
+        ExistingSchedulerSource::Existing { id, name } => Ok((*id, name.clone())),
+        ExistingSchedulerSource::CloneWithWalltime { base, walltime } => {
+            eprintln!("  Creating new scheduler with walltime {}...", walltime);
+            let mut new_sched = (**base).clone();
+            new_sched.id = None;
+            new_sched.walltime = walltime.clone();
+            let base_name = base.name.as_deref().unwrap_or("scheduler");
+            new_sched.name = Some(format!("{}_recovery", base_name));
+            let created = apis::slurm_schedulers_api::create_slurm_scheduler(config, new_sched)
+                .map_err(|e| format!("Failed to create scheduler: {}", e))?;
+            let new_id = created.id.ok_or("Created scheduler missing ID")?;
+            let new_name = created.name.unwrap_or_default();
+            eprintln!(
+                "  Created scheduler '{}' (ID {}) with walltime {}",
+                &new_name, new_id, &created.walltime
+            );
+            Ok((new_id, new_name))
+        }
+    }
 }
 
 /// Prompt the user to choose between auto-generating schedulers or reusing an existing one.
@@ -2012,34 +2180,24 @@ fn prompt_scheduler_choice(
             }
         };
 
-        // Prompt for walltime override
+        // Prompt for walltime override. A clone is NOT created here: we capture the intent
+        // and defer the database write to resolve_existing_scheduler_source, which runs only
+        // after the user confirms recovery (so declining leaves no orphaned scheduler).
         let walltime_input = prompt_line(&format!(
             "  Walltime [default: {}] (press Enter to keep): ",
             &scheduler.walltime
         ))?;
 
-        let (final_id, final_name) = if walltime_input.is_empty() {
-            (id, scheduler.name.clone().unwrap_or_default())
+        let source = if walltime_input.is_empty() {
+            ExistingSchedulerSource::Existing {
+                id,
+                name: scheduler.name.clone().unwrap_or_default(),
+            }
         } else {
-            // Create a new scheduler cloned from the selected one with the new walltime
-            eprintln!(
-                "  Creating new scheduler with walltime {}...",
-                &walltime_input
-            );
-            let mut new_sched = scheduler.clone();
-            new_sched.id = None;
-            new_sched.walltime = walltime_input;
-            let base_name = scheduler.name.as_deref().unwrap_or("scheduler");
-            new_sched.name = Some(format!("{}_recovery", base_name));
-            let created = apis::slurm_schedulers_api::create_slurm_scheduler(config, new_sched)
-                .map_err(|e| format!("Failed to create scheduler: {}", e))?;
-            let new_id = created.id.ok_or("Created scheduler missing ID")?;
-            let new_name = created.name.unwrap_or_default();
-            eprintln!(
-                "  Created scheduler '{}' (ID {}) with walltime {}",
-                &new_name, new_id, &created.walltime
-            );
-            (new_id, new_name)
+            ExistingSchedulerSource::CloneWithWalltime {
+                base: Box::new(scheduler.clone()),
+                walltime: walltime_input,
+            }
         };
 
         // Prompt for number of allocations
@@ -2077,8 +2235,7 @@ fn prompt_scheduler_choice(
         };
 
         return Ok(SchedulerChoice::Existing {
-            scheduler_id: final_id,
-            scheduler_name: final_name,
+            source,
             num_allocations,
             start_one_worker_per_node,
         });
@@ -2286,5 +2443,219 @@ mod tests {
 
         let bad = OsStr::from_bytes(b"out\xffput");
         assert!(output_dir_arg(Path::new(bad)).is_err());
+    }
+
+    // ---- effective_retry_unknown -----------------------------------------------------
+
+    #[test]
+    fn retry_unknown_flag_alone_enables_retry() {
+        assert!(effective_retry_unknown(true, None));
+    }
+
+    #[test]
+    fn recovery_hook_implies_retry_unknown() {
+        // The core of Bug #2: a hook must imply retry-unknown so it doesn't run then abort.
+        assert!(effective_retry_unknown(false, Some("bash fix.sh")));
+        assert!(effective_retry_unknown(true, Some("bash fix.sh")));
+    }
+
+    #[test]
+    fn no_flag_and_no_hook_means_no_retry() {
+        assert!(!effective_retry_unknown(false, None));
+    }
+
+    // ---- prompt_line_from ------------------------------------------------------------
+
+    /// Drive a prompt helper with scripted stdin, capturing what was written.
+    fn run_line(input: &str) -> (Result<String, String>, String) {
+        let mut reader = input.as_bytes();
+        let mut writer: Vec<u8> = Vec::new();
+        let result = prompt_line_from(&mut reader, &mut writer, "prompt> ");
+        (result, String::from_utf8(writer).unwrap())
+    }
+
+    #[test]
+    fn prompt_line_trims_and_returns_value() {
+        let (result, written) = run_line("  hello \n");
+        assert_eq!(result.unwrap(), "hello");
+        // The prompt itself is written to the writer (stderr in production).
+        assert!(written.contains("prompt> "));
+    }
+
+    #[test]
+    fn prompt_line_empty_input_returns_empty_string() {
+        let (result, _) = run_line("\n");
+        assert_eq!(result.unwrap(), "");
+    }
+
+    #[test]
+    fn prompt_line_eof_is_error() {
+        // No newline and no data: read_line returns 0 bytes -> EOF error, not an empty string.
+        let (result, _) = run_line("");
+        assert!(result.unwrap_err().contains("EOF"));
+    }
+
+    // ---- prompt_choice_from ----------------------------------------------------------
+
+    fn run_choice(input: &str, valid: &[&str], default: &str) -> Result<String, String> {
+        let mut reader = input.as_bytes();
+        let mut writer: Vec<u8> = Vec::new();
+        prompt_choice_from(&mut reader, &mut writer, "choose: ", valid, default)
+    }
+
+    #[test]
+    fn prompt_choice_uses_default_on_empty() {
+        assert_eq!(run_choice("\n", &["y", "n"], "n").unwrap(), "n");
+    }
+
+    #[test]
+    fn prompt_choice_is_case_insensitive() {
+        assert_eq!(run_choice("Y\n", &["y", "n"], "n").unwrap(), "y");
+    }
+
+    #[test]
+    fn prompt_choice_reprompts_until_valid() {
+        // "maybe" is rejected, then "y" is accepted.
+        let mut reader = "maybe\ny\n".as_bytes();
+        let mut writer: Vec<u8> = Vec::new();
+        let answer =
+            prompt_choice_from(&mut reader, &mut writer, "choose: ", &["y", "n"], "n").unwrap();
+        assert_eq!(answer, "y");
+        let written = String::from_utf8(writer).unwrap();
+        assert!(written.contains("Invalid choice 'maybe'"));
+    }
+
+    #[test]
+    fn prompt_choice_eof_mid_reprompt_is_error() {
+        // Invalid answer then EOF (stream closes): must error rather than loop forever.
+        assert!(run_choice("nope", &["y", "n"], "n").is_err());
+    }
+
+    // ---- prompt_multiplier_from ------------------------------------------------------
+
+    fn run_multiplier(input: &str, default: f64) -> Result<f64, String> {
+        let mut reader = input.as_bytes();
+        let mut writer: Vec<u8> = Vec::new();
+        prompt_multiplier_from(&mut reader, &mut writer, "memory", default)
+    }
+
+    #[test]
+    fn prompt_multiplier_uses_default_on_empty() {
+        assert_eq!(run_multiplier("\n", 1.5).unwrap(), 1.5);
+    }
+
+    #[test]
+    fn prompt_multiplier_accepts_positive() {
+        assert_eq!(run_multiplier("2.0\n", 1.5).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn prompt_multiplier_rejects_nonpositive_then_accepts() {
+        // Zero, negative, and non-numeric are all rejected; the loop continues to "3".
+        let answer = run_multiplier("0\n-1\nabc\n3\n", 1.5).unwrap();
+        assert_eq!(answer, 3.0);
+    }
+
+    // ---- categorize_violations -------------------------------------------------------
+
+    /// Build a violation with all flags off; callers flip the ones they need.
+    fn violation(job_id: i64) -> crate::client::report_models::ResourceViolationInfo {
+        crate::client::report_models::ResourceViolationInfo {
+            job_id,
+            job_name: format!("job_{}", job_id),
+            return_code: 1,
+            exec_time_minutes: 0.0,
+            configured_memory: "1g".to_string(),
+            configured_runtime: "PT1H".to_string(),
+            configured_cpus: 1,
+            peak_memory_bytes: None,
+            peak_memory_formatted: None,
+            memory_violation: false,
+            oom_reason: None,
+            memory_over_utilization: None,
+            likely_timeout: false,
+            timeout_reason: None,
+            runtime_utilization: None,
+            likely_cpu_violation: false,
+            peak_cpu_percent: None,
+            likely_runtime_violation: false,
+        }
+    }
+
+    #[test]
+    fn categorize_sorts_each_failure_type() {
+        let mut mem = violation(1);
+        mem.memory_violation = true;
+        let mut timeout = violation(2);
+        timeout.likely_timeout = true;
+        let mut runtime = violation(3);
+        runtime.likely_runtime_violation = true;
+        let mut cpu = violation(4);
+        cpu.likely_cpu_violation = true;
+        let unknown = violation(5);
+
+        let all = [mem, timeout, runtime, cpu, unknown];
+        let c = categorize_violations(&all);
+        assert_eq!(c.oom.iter().map(|v| v.job_id).collect::<Vec<_>>(), [1]);
+        // runtime violations join the timeout bucket.
+        assert_eq!(
+            c.timeout.iter().map(|v| v.job_id).collect::<Vec<_>>(),
+            [2, 3]
+        );
+        assert_eq!(c.cpu.iter().map(|v| v.job_id).collect::<Vec<_>>(), [4]);
+        assert_eq!(c.unknown.iter().map(|v| v.job_id).collect::<Vec<_>>(), [5]);
+    }
+
+    #[test]
+    fn categorize_precedence_memory_wins_over_other_flags() {
+        // A job flagged for memory AND cpu AND timeout is classified as OOM (memory first),
+        // so it is corrected once, not double-counted across buckets.
+        let mut v = violation(1);
+        v.memory_violation = true;
+        v.likely_timeout = true;
+        v.likely_cpu_violation = true;
+        let c = categorize_violations(std::slice::from_ref(&v));
+        assert_eq!(c.oom.len(), 1);
+        assert!(c.timeout.is_empty());
+        assert!(c.cpu.is_empty());
+        assert!(c.unknown.is_empty());
+    }
+
+    #[test]
+    fn categorize_no_flags_is_unknown() {
+        let all = [violation(9)];
+        let c = categorize_violations(&all);
+        assert_eq!(c.unknown.iter().map(|v| v.job_id).collect::<Vec<_>>(), [9]);
+        assert!(c.oom.is_empty() && c.timeout.is_empty() && c.cpu.is_empty());
+    }
+
+    #[test]
+    fn categorize_empty_input_is_all_empty() {
+        let c = categorize_violations(&[]);
+        assert!(
+            c.oom.is_empty() && c.timeout.is_empty() && c.cpu.is_empty() && c.unknown.is_empty()
+        );
+    }
+
+    // ---- summarize_not_reset ---------------------------------------------------------
+
+    #[test]
+    fn summarize_not_reset_lists_all_when_under_cap() {
+        let not_reset = vec!["job 1: nope".to_string(), "job 2: nope".to_string()];
+        let msg = summarize_not_reset(5, 3, &not_reset);
+        assert!(msg.contains("Reset 3 of 5"));
+        assert!(msg.contains("job 1: nope"));
+        assert!(msg.contains("job 2: nope"));
+        assert!(!msg.contains("more not shown"));
+    }
+
+    #[test]
+    fn summarize_not_reset_caps_detail_and_counts_remainder() {
+        let not_reset: Vec<String> = (0..8).map(|i| format!("job {}: nope", i)).collect();
+        let msg = summarize_not_reset(10, 2, &not_reset);
+        // Only the first 5 are shown; the remaining 3 are summarized.
+        assert!(msg.contains("job 4: nope"));
+        assert!(!msg.contains("job 5: nope"));
+        assert!(msg.contains("3 more not shown"));
     }
 }

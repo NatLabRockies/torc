@@ -814,6 +814,20 @@ SEE ALSO:
         ///   claude - Claude Code CLI (default)
         #[arg(long, default_value = "claude", verbatim_doc_comment)]
         ai_agent: String,
+
+        /// Fixed Slurm partition for regenerated schedulers (bypasses auto-selection)
+        ///
+        /// Only applies to non-interactive recovery (--no-prompts, JSON output, or a
+        /// non-TTY stdin). The interactive wizard prompts for the partition instead.
+        #[arg(long)]
+        partition: Option<String>,
+
+        /// Fixed Slurm walltime for regenerated schedulers (bypasses auto-calculation)
+        ///
+        /// Only applies to non-interactive recovery (--no-prompts, JSON output, or a
+        /// non-TTY stdin). The interactive wizard prompts for the walltime instead.
+        #[arg(long)]
+        walltime: Option<String>,
     },
     /// Cancel a workflow and all associated Slurm jobs
     ///

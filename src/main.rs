@@ -1010,6 +1010,8 @@ fn main() {
             no_prompts,
             ai_recovery,
             ai_agent,
+            partition,
+            walltime,
         } => {
             // The interactive wizard prints prompts to stderr and reads stdin; that would block
             // and corrupt `-f json` output, which is meant for scripting. Force non-interactive
@@ -1026,6 +1028,8 @@ fn main() {
                 interactive,
                 ai_recovery: *ai_recovery,
                 ai_agent: ai_agent.clone(),
+                partition: partition.clone(),
+                walltime: walltime.clone(),
             };
 
             // For JSON output, get diagnosis data to include in the report
