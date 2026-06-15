@@ -1,0 +1,386 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>RO-Crate Generation Design - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.37.2/docs/src/specialized/design/ro-crate.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ro-crate-generation-design"><a class="header" href="#ro-crate-generation-design">RO-Crate Generation Design</a></h1>
+<p>This page describes how Torc creates and updates automatic RO-Crate provenance entities in the
+current branch.</p>
+<h2 id="current-model"><a class="header" href="#current-model">Current Model</a></h2>
+<p>The important identity rules are:</p>
+<ul>
+<li>Workflow plan entity: one per workflow, <code>#torc-workflow</code></li>
+<li>Workflow run entity: one per run, <code>#torc-run-id-{run_id}</code></li>
+<li>Torc software entities: one per run, <code>#software-{binary_name}-run-id-{run_id}</code></li>
+<li>Job execution entities: one per job attempt, <code>#job-{job_id}-attempt-{attempt_id}</code></li>
+<li>File entities: one per file record/path, updated in place across runs</li>
+</ul>
+<p>That last point is why <code>build_file_entity()</code> does not take <code>run_id</code>. Plain file entities are not
+modeled as run-scoped records. Run-scoped provenance is attached through relationships:</p>
+<ul>
+<li>Output files link to the workflow run with <code>prov:wasAttributedTo</code></li>
+<li>Output files link to the producing job with <code>prov:wasGeneratedBy</code></li>
+<li>Job <code>CreateAction</code> entities link to the run with <code>isPartOf</code></li>
+<li>Job <code>CreateAction</code> entities link to software agents with <code>instrument</code> and <code>prov:wasAssociatedWith</code></li>
+</ul>
+<p>If <code>run_id</code> were written directly into the base file entity metadata again, it would mix a stable
+file identity with run-specific state. The current code instead keeps file identity stable and
+updates the same file entity as a file moves from "input known at initialization" to "output with
+provenance after job completion".</p>
+<p>This design is also consistent with the multi-run behavior covered by
+<code>test_auto_ro_crate_second_run_replaces_entities</code>: file entities are replaced in place, while
+software and job execution entities accumulate across runs and attempts.</p>
+<h2 id="entity-creation-flow"><a class="header" href="#entity-creation-flow">Entity Creation Flow</a></h2>
+<pre class="mermaid">flowchart TD
+    A[Workflow initialize_jobs] --&gt; B{enable_ro_crate?}
+    A --&gt; C[Server creates&lt;br/&gt;#software-torc-server-run-id-N]
+    A --&gt; D[Client attempts to create&lt;br/&gt;#software-torc-run-id-N&lt;br/&gt;and optional&lt;br/&gt;#software-torc-slurm-job-runner-run-id-N]
+
+    B --&gt;|yes| E[Server upserts input File entities&lt;br/&gt;from DB rows with st_mtime]
+    B --&gt;|yes| F[Client creates or updates&lt;br/&gt;#torc-workflow and #torc-run-id-N]
+    B --&gt;|yes| G[Client creates or updates&lt;br/&gt;input File entities]
+    B --&gt;|no| H[No automatic file provenance]
+
+    G --&gt; I[Workflow execution]
+    E --&gt; I
+    F --&gt; I
+    C --&gt; I
+    D --&gt; I
+
+    I --&gt; J[Job completes successfully]
+    J --&gt; J2{Job has output files?}
+    J2 --&gt;|yes| K[Client refreshes&lt;br/&gt;#torc-workflow and #torc-run-id-N]
+    J2 --&gt;|yes| L[Client creates&lt;br/&gt;#job-job_id-attempt-attempt_id]
+    J2 --&gt;|yes| M[Client creates or updates&lt;br/&gt;output File entity]
+    J2 --&gt;|no| P[No additional automatic&lt;br/&gt;RO-Crate entities for this job]
+
+    L --&gt; N[Job CreateAction metadata]
+    N --&gt; N1[prov:hadPlan -&gt; #torc-workflow]
+    N --&gt; N2[isPartOf -&gt; #torc-run-id-N]
+    N --&gt; N3[instrument -&gt; #software-torc-run-id-N]
+    N --&gt; N4[prov:used -&gt; input file paths]
+    N --&gt; N5[result -&gt; output file paths]
+
+    M --&gt; O[Output File metadata]
+    O --&gt; O1[prov:wasGeneratedBy -&gt; job CreateAction]
+    O --&gt; O2[prov:wasAttributedTo -&gt; #torc-run-id-N]
+    O --&gt; O3[prov:wasDerivedFrom -&gt; input file paths]
+
+    classDef init fill:#dbeafe,stroke:#1d4ed8,color:#0f172a,stroke-width:2px;
+    classDef software fill:#dcfce7,stroke:#15803d,color:#0f172a,stroke-width:2px;
+    classDef input fill:#fef3c7,stroke:#b45309,color:#0f172a,stroke-width:2px;
+    classDef run fill:#ede9fe,stroke:#6d28d9,color:#0f172a,stroke-width:2px;
+    classDef job fill:#fee2e2,stroke:#b91c1c,color:#0f172a,stroke-width:2px;
+    classDef output fill:#cffafe,stroke:#0f766e,color:#0f172a,stroke-width:2px;
+    classDef disabled fill:#e5e7eb,stroke:#4b5563,color:#111827,stroke-dasharray: 5 3;
+
+    class A,I,J init;
+    class C,D software;
+    class E,G input;
+    class F,K run;
+    class L,N,N1,N2,N3,N4,N5 job;
+    class M,O,O1,O2,O3 output;
+    class H,P disabled;
+</pre>
+<h2 id="what-gets-created"><a class="header" href="#what-gets-created">What Gets Created</a></h2>
+<h3 id="torc-binaries"><a class="header" href="#torc-binaries">Torc binaries</a></h3>
+<ul>
+<li>The server always creates <code>#software-torc-server-run-id-{run_id}</code> during <code>initialize_jobs()</code></li>
+<li>The client attempts to create run-scoped software entities for <code>torc</code> and, on Linux,
+<code>torc-slurm-job-runner</code></li>
+<li>Client-side software entities are skipped when the corresponding binary cannot be found next to
+the current executable or on <code>PATH</code></li>
+<li>These are <code>SoftwareApplication</code> plus <code>prov:SoftwareAgent</code></li>
+</ul>
+<h3 id="jobs"><a class="header" href="#jobs">Jobs</a></h3>
+<ul>
+<li>The client creates one <code>CreateAction</code> per successful job completion <strong>that has at least one output
+file</strong></li>
+<li>The entity id is <code>#job-{job_id}-attempt-{attempt_id}</code></li>
+<li>Jobs with no output files currently do not emit an automatic <code>CreateAction</code></li>
+<li>When present, the job entity is the main join point between inputs, outputs, workflow run, and
+software agents</li>
+</ul>
+<h3 id="input-files"><a class="header" href="#input-files">Input files</a></h3>
+<ul>
+<li>Input files are detected by <code>st_mtime IS NOT NULL</code></li>
+<li>During initialization, both the server and the client currently upsert the same input file entity</li>
+<li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code> by default</li>
+<li>When a <code>FileSpec</code> carries a user-supplied <code>identifier</code>, <code>create_files</code> pre-creates the entity row
+at workflow-creation time with <code>entity_id = identifier</code> and <code>metadata["@id"] = identifier</code>. The
+server's init-time upsert preserves the <code>entity_id</code> column even though it rewrites
+<code>metadata["@id"]</code> back to <code>file.path</code>. Export then uses <code>entity_id</code> as the authoritative <code>@id</code>
+(overwriting whatever ends up in <code>metadata["@id"]</code>), so the user identifier survives regardless of
+whether the client-side <code>create_ro_crate_entity_for_file</code> ran afterward — important because the
+async-init path returns before the client-side rebuild can re-write <code>metadata["@id"]</code>.</li>
+<li>Export also builds a path → entity_id map from File entities' <code>sameAs</code> and rewrites nested
+<code>{ "@id": "&lt;path&gt;" }</code> references throughout the graph, so CreateAction <code>prov:used</code> / <code>object</code> and
+output <code>prov:wasDerivedFrom</code> link to the identifier rather than the path. The entity's own <code>@id</code>
+and any <code>sameAs</code> field are deliberately not rewritten.</li>
+<li>The local path is preserved as <code>sameAs</code> on entities whose <code>@id</code> was overridden, so consumers can
+still resolve to the bytes</li>
+<li>Input file entities are expected to exist before jobs run, but the code does not rely on them
+being create-only; it is intentionally upsert-based</li>
+</ul>
+<h3 id="output-files"><a class="header" href="#output-files">Output files</a></h3>
+<ul>
+<li>Output file entities are created or replaced after a job succeeds and the file record has been
+refreshed</li>
+<li>If a file already had an entity from initialization or a prior run, the same DB row is updated
+rather than creating a new file entity for each run</li>
+<li>Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
+run-specific identity</li>
+<li>The same successful-job path also refreshes <code>#torc-workflow</code>, refreshes <code>#torc-run-id-{run_id}</code>,
+and creates the job <code>CreateAction</code>, but only when there is at least one output file to process</li>
+</ul>
+<h2 id="important-asymmetries"><a class="header" href="#important-asymmetries">Important Asymmetries</a></h2>
+<ul>
+<li>Software entities are run-scoped and accumulate across runs</li>
+<li>Job <code>CreateAction</code> entities are attempt-scoped and accumulate across attempts</li>
+<li>File entities are file-scoped and are replaced in place across runs</li>
+</ul>
+<p>These asymmetries are intentional and match <code>tests/test_auto_ro_crate.rs</code>, especially
+<code>test_auto_ro_crate_second_run_replaces_entities</code>, which expects:</p>
+<ul>
+<li>file entity count to stay stable across runs</li>
+<li>software entity count to grow across runs</li>
+<li>output file provenance to point at the newer <code>#torc-run-id-{run_id}</code></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/interfaces.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/design/api-generation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/interfaces.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/design/api-generation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
