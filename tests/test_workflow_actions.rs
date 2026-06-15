@@ -811,16 +811,18 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
 
 /// Regression test for the recover wizard re-submitting the action-defined allocation count.
 ///
-/// After reinitialization re-arms the workflow's `on_workflow_start` `schedule_nodes` action, the
-/// recover wizard's "reuse existing scheduler" path calls
-/// `mark_on_workflow_start_schedule_actions_executed` before submitting the user's chosen number of
-/// allocations. This prevents the re-armed action from firing again on the first compute node and
-/// submitting its own (original) `num_allocations`. The helper must mark exactly the matching
-/// actions executed and leave everything else untouched.
+/// After reinitialization re-arms the workflow's `schedule_nodes` actions, the recover wizard's
+/// "reuse existing scheduler" path calls `mark_satisfied_schedule_actions_executed` before
+/// submitting the user's chosen number of allocations. This prevents any *already-satisfied*
+/// re-armed action — the `on_workflow_start` action, plus job-gated actions (e.g.
+/// `on_jobs_complete`) whose gating jobs already completed in a prior run — from firing again on
+/// the first compute node and submitting its own (original) `num_allocations`. The helper must mark
+/// exactly the satisfied `schedule_nodes` actions executed and leave everything else (including
+/// job-gated actions still waiting on their jobs) untouched.
 #[rstest]
-fn test_mark_on_workflow_start_schedule_actions_executed(start_server: &ServerProcess) {
+fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let workflow = create_test_workflow(config, "mark_on_start_schedule_workflow");
+    let workflow = create_test_workflow(config, "mark_satisfied_schedule_workflow");
     let workflow_id = workflow.id.unwrap();
 
     let schedule_config = json!({
@@ -829,7 +831,7 @@ fn test_mark_on_workflow_start_schedule_actions_executed(start_server: &ServerPr
         "num_allocations": 5,
     });
 
-    // Target: on_workflow_start + schedule_nodes (non-recovery) — should be marked executed.
+    // Target 1: on_workflow_start + schedule_nodes (non-recovery) — always satisfied, marked.
     let target = apis::workflow_actions_api::create_workflow_action(
         config,
         workflow_id,
@@ -843,6 +845,21 @@ fn test_mark_on_workflow_start_schedule_actions_executed(start_server: &ServerPr
     )
     .expect("Failed to create target action");
     let target_id = target.id.unwrap();
+
+    // Target 2: on_jobs_complete + schedule_nodes whose gating jobs already completed
+    // (trigger_count >= required_triggers) — this is the reported bug; must be marked executed.
+    let mut satisfied_body = workflow_action(
+        workflow_id,
+        "on_jobs_complete",
+        "schedule_nodes",
+        schedule_config.clone(),
+        Some(vec![1]), // required_triggers becomes 1 (one gating job)
+    );
+    satisfied_body.trigger_count = 1; // already satisfied: trigger_count >= required_triggers
+    let satisfied =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, satisfied_body)
+            .expect("Failed to create satisfied on_jobs_complete action");
+    let satisfied_id = satisfied.id.unwrap();
 
     // Decoy 1: on_workflow_start + run_commands — wrong action_type, must be left alone.
     let run_cmd = apis::workflow_actions_api::create_workflow_action(
@@ -859,20 +876,21 @@ fn test_mark_on_workflow_start_schedule_actions_executed(start_server: &ServerPr
     .expect("Failed to create run_commands action");
     let run_cmd_id = run_cmd.id.unwrap();
 
-    // Decoy 2: on_jobs_ready + schedule_nodes — wrong trigger_type, must be left alone.
-    let other_trigger = apis::workflow_actions_api::create_workflow_action(
+    // Decoy 2: on_jobs_complete + schedule_nodes still waiting on its job
+    // (trigger_count < required_triggers) — left armed so it can fire legitimately in recovery.
+    let unsatisfied = apis::workflow_actions_api::create_workflow_action(
         config,
         workflow_id,
         workflow_action(
             workflow_id,
-            "on_jobs_ready",
+            "on_jobs_complete",
             "schedule_nodes",
             schedule_config.clone(),
-            None,
+            Some(vec![2]), // required_triggers=1, trigger_count defaults to 0 → unsatisfied
         ),
     )
-    .expect("Failed to create on_jobs_ready action");
-    let other_trigger_id = other_trigger.id.unwrap();
+    .expect("Failed to create unsatisfied on_jobs_complete action");
+    let unsatisfied_id = unsatisfied.id.unwrap();
 
     // Decoy 3: on_workflow_start + schedule_nodes but is_recovery=true — must be left alone.
     let mut recovery_body = workflow_action(
@@ -889,11 +907,8 @@ fn test_mark_on_workflow_start_schedule_actions_executed(start_server: &ServerPr
     let recovery_id = recovery.id.unwrap();
 
     // Run the fix under test.
-    torc::client::commands::recover::mark_on_workflow_start_schedule_actions_executed(
-        config,
-        workflow_id,
-    )
-    .expect("mark_on_workflow_start_schedule_actions_executed failed");
+    torc::client::commands::recover::mark_satisfied_schedule_actions_executed(config, workflow_id)
+        .expect("mark_satisfied_schedule_actions_executed failed");
 
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
@@ -904,12 +919,16 @@ fn test_mark_on_workflow_start_schedule_actions_executed(start_server: &ServerPr
         "on_workflow_start schedule_nodes action should be marked executed"
     );
     assert!(
+        find(satisfied_id).executed,
+        "satisfied on_jobs_complete schedule_nodes action should be marked executed"
+    );
+    assert!(
         !find(run_cmd_id).executed,
         "run_commands action should be left untouched"
     );
     assert!(
-        !find(other_trigger_id).executed,
-        "on_jobs_ready schedule_nodes action should be left untouched"
+        !find(unsatisfied_id).executed,
+        "unsatisfied on_jobs_complete schedule_nodes action should be left untouched"
     );
     assert!(
         !find(recovery_id).executed,
