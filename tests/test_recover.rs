@@ -1,9 +1,10 @@
 //! Integration tests for the `torc recover` recovery pipeline.
 //!
 //! These exercise the server-interacting recovery helpers directly against a live test
-//! server: `reset_failed_jobs` (status/ownership guards, partial success) and
+//! server: `reset_failed_jobs` (status/ownership guards, partial success),
 //! `apply_recovery_heuristics` (unknown-failure classification + retry-unknown inclusion,
-//! the mechanism behind the `--recovery-hook` implies `--retry-unknown` fix).
+//! the mechanism behind the `--recovery-hook` implies `--retry-unknown` fix), and
+//! `workflow_has_schedulers` (the local vs Slurm recovery branch).
 //!
 //! Pure decision logic (prompt parsing, violation categorization, `effective_retry_unknown`)
 //! is unit-tested in `src/client/commands/recover.rs` where no server is required.
@@ -17,7 +18,8 @@ use rstest::rstest;
 use torc::client::apis;
 use torc::client::apis::configuration::Configuration;
 use torc::client::commands::recover::{
-    apply_recovery_heuristics, diagnose_failures, reset_failed_jobs,
+    RecoveryExecutionMode, apply_recovery_heuristics, detect_recovery_execution_mode,
+    diagnose_failures, reset_failed_jobs, workflow_has_schedulers,
 };
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
@@ -345,4 +347,97 @@ fn apply_heuristics_no_failures_is_empty(start_server: &ServerProcess) {
     .expect("heuristics");
     assert_eq!(result.other_failures, 0);
     assert!(result.jobs_to_retry.is_empty());
+}
+
+// ---------------------------------------------------------------------------------------
+// workflow_has_schedulers: drives the local (no-scheduler) vs Slurm recovery branch
+// ---------------------------------------------------------------------------------------
+
+/// A workflow run locally has no Slurm schedulers; once one is created it is detected. This
+/// is the signal recover_workflow uses to skip Slurm regeneration and point the user at
+/// `torc run <id>` instead.
+#[rstest]
+fn workflow_has_schedulers_reflects_scheduler_presence(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _run_id) = init_workflow(config, "has_schedulers");
+
+    assert!(
+        !workflow_has_schedulers(config, workflow_id).expect("query schedulers"),
+        "a freshly created (locally run) workflow has no schedulers"
+    );
+
+    let scheduler = models::SlurmSchedulerModel {
+        id: None,
+        workflow_id,
+        name: Some("sched_a".to_string()),
+        account: "test_account".to_string(),
+        gres: None,
+        mem: Some("8G".to_string()),
+        nodes: 1,
+        ntasks_per_node: None,
+        partition: Some("debug".to_string()),
+        qos: None,
+        tmp: None,
+        walltime: "01:00:00".to_string(),
+        extra: None,
+    };
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("create scheduler");
+
+    assert!(
+        workflow_has_schedulers(config, workflow_id).expect("query schedulers"),
+        "after creating a scheduler the workflow is detected as a Slurm workflow"
+    );
+}
+
+/// Recovery classifies a workflow as Local, Remote, or Slurm so it picks the right re-run
+/// path. With nothing configured it is Local; registering remote workers makes it Remote; a
+/// Slurm scheduler takes precedence over remote-worker rows and makes it Slurm.
+#[rstest]
+fn detect_recovery_execution_mode_distinguishes_local_remote_slurm(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _run_id) = init_workflow(config, "exec_mode");
+
+    assert_eq!(
+        detect_recovery_execution_mode(config, workflow_id).expect("detect mode"),
+        RecoveryExecutionMode::Local,
+        "no schedulers and no remote workers => local"
+    );
+
+    // Registering remote workers (stored directly via the API, no SSH) flips it to Remote.
+    apis::remote_workers_api::create_remote_workers(
+        config,
+        workflow_id,
+        vec!["tester@host1".to_string()],
+    )
+    .expect("create remote workers");
+    assert_eq!(
+        detect_recovery_execution_mode(config, workflow_id).expect("detect mode"),
+        RecoveryExecutionMode::Remote,
+        "remote workers but no schedulers => remote"
+    );
+
+    // A Slurm scheduler takes precedence even with remote-worker rows present.
+    let scheduler = models::SlurmSchedulerModel {
+        id: None,
+        workflow_id,
+        name: Some("sched_a".to_string()),
+        account: "test_account".to_string(),
+        gres: None,
+        mem: Some("8G".to_string()),
+        nodes: 1,
+        ntasks_per_node: None,
+        partition: Some("debug".to_string()),
+        qos: None,
+        tmp: None,
+        walltime: "01:00:00".to_string(),
+        extra: None,
+    };
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("create scheduler");
+    assert_eq!(
+        detect_recovery_execution_mode(config, workflow_id).expect("detect mode"),
+        RecoveryExecutionMode::Slurm,
+        "schedulers take precedence over remote workers"
+    );
 }

@@ -144,6 +144,137 @@ pub(crate) fn effective_retry_unknown(retry_unknown: bool, recovery_hook: Option
     retry_unknown || recovery_hook.is_some()
 }
 
+/// Whether the workflow has any Slurm scheduler configured.
+///
+/// Whether the workflow has any Slurm scheduler configured.
+pub fn workflow_has_schedulers(config: &Configuration, workflow_id: i64) -> Result<bool, String> {
+    let schedulers = apis::slurm_schedulers_api::list_slurm_schedulers(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+    )
+    .map_err(|e| format!("Failed to list schedulers: {}", e))?;
+    Ok(!schedulers.items.is_empty())
+}
+
+/// How a workflow's jobs are executed, which decides how recovery re-runs them.
+///
+/// Only Slurm workflows can have their allocations regenerated and submitted by recovery.
+/// For remote and local workflows, recovery resets the jobs and the user re-runs them with
+/// the appropriate command — recovery cannot (and must not) auto-generate a Slurm scheduler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum RecoveryExecutionMode {
+    /// Slurm schedulers are configured: regenerate and submit allocations.
+    Slurm,
+    /// Remote SSH workers are registered: re-run with `torc remote run <id>`.
+    Remote,
+    /// Neither: the workflow was run locally; re-run with `torc run <id>`.
+    Local,
+}
+
+impl RecoveryExecutionMode {
+    fn is_slurm(self) -> bool {
+        self == RecoveryExecutionMode::Slurm
+    }
+
+    /// The command the user runs to re-execute the workflow after recovery resets its jobs.
+    /// `None` for Slurm, where recovery submits the allocations itself.
+    fn rerun_command(self, workflow_id: i64) -> Option<String> {
+        match self {
+            RecoveryExecutionMode::Slurm => None,
+            RecoveryExecutionMode::Remote => Some(format!("torc remote run {}", workflow_id)),
+            RecoveryExecutionMode::Local => Some(format!("torc run {}", workflow_id)),
+        }
+    }
+
+    /// One-line description of where the workflow runs, for recovery messaging.
+    fn description(self) -> &'static str {
+        match self {
+            RecoveryExecutionMode::Slurm => "Slurm schedulers",
+            RecoveryExecutionMode::Remote => "remote workers (no Slurm schedulers)",
+            RecoveryExecutionMode::Local => {
+                "no Slurm schedulers or remote workers (it was run locally)"
+            }
+        }
+    }
+
+    /// Print the post-reset "re-run it with ..." guidance (non-Slurm modes only).
+    fn print_rerun_hint(self, workflow_id: i64) {
+        if let Some(cmd) = self.rerun_command(workflow_id) {
+            eprintln!("\nThis workflow has {}.", self.description());
+            eprintln!("Re-run it with:\n  {}", cmd);
+        }
+    }
+}
+
+/// Determine how a workflow runs so recovery knows whether to submit Slurm allocations or
+/// reset-and-point the user at `torc remote run` / `torc run`. Slurm takes precedence (a
+/// workflow could have both schedulers and stale remote-worker rows).
+pub fn detect_recovery_execution_mode(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<RecoveryExecutionMode, String> {
+    if workflow_has_schedulers(config, workflow_id)? {
+        return Ok(RecoveryExecutionMode::Slurm);
+    }
+    let remote_workers = apis::remote_workers_api::list_remote_workers(config, workflow_id)
+        .map_err(|e| format!("Failed to list remote workers: {}", e))?;
+    Ok(if remote_workers.is_empty() {
+        RecoveryExecutionMode::Local
+    } else {
+        RecoveryExecutionMode::Remote
+    })
+}
+
+/// Record a best-effort audit event capturing the recovery choices and outcome so a later
+/// investigation can see what `torc recover` did and how it was driven. The event is only
+/// emitted for applied (non-dry-run) recoveries. Failures are logged and swallowed — audit
+/// logging must never break a recovery that otherwise succeeded.
+///
+/// `effective_memory_multiplier` / `effective_runtime_multiplier` are the values actually
+/// used (the interactive wizard may prompt for different values than the CLI args).
+/// `scheduler` summarizes the scheduler decision for the Slurm path (None for non-Slurm).
+fn record_recovery_event(
+    config: &Configuration,
+    args: &RecoverArgs,
+    exec_mode: RecoveryExecutionMode,
+    effective_memory_multiplier: f64,
+    effective_runtime_multiplier: f64,
+    scheduler: Option<&str>,
+    result: &RecoveryResult,
+) {
+    let data = serde_json::json!({
+        "category": "recovery",
+        "action": "recover",
+        "execution_mode": exec_mode,
+        "interactive": args.interactive,
+        "retry_unknown": args.retry_unknown,
+        "recovery_hook": args.recovery_hook,
+        "ai_recovery": args.ai_recovery,
+        "memory_multiplier": effective_memory_multiplier,
+        "runtime_multiplier": effective_runtime_multiplier,
+        "partition": args.partition,
+        "walltime": args.walltime,
+        "scheduler": scheduler,
+        "oom_fixed": result.oom_fixed,
+        "timeout_fixed": result.timeout_fixed,
+        "unknown_retried": result.unknown_retried,
+        "other_failures": result.other_failures,
+        "jobs_reset": result.jobs_to_retry.len(),
+        "jobs_to_retry": result.jobs_to_retry,
+    });
+    let event = crate::models::EventModel::new(args.workflow_id, data);
+    if let Err(e) = apis::events_api::create_event(config, event) {
+        warn!(
+            "Failed to record recovery event workflow_id={}: {}",
+            args.workflow_id, e
+        );
+    }
+}
+
 /// Recover a Slurm workflow by:
 /// 1. Cleaning up orphaned jobs (from terminated Slurm allocations)
 /// 2. Checking preconditions (workflow complete, no active workers)
@@ -324,10 +455,25 @@ pub fn recover_workflow(
         }
     }
 
+    // Determine how the workflow runs. Only Slurm workflows have their allocations
+    // regenerated/submitted by recovery; remote and local workflows are reset and re-run by
+    // the user with `torc remote run` / `torc run`.
+    let exec_mode = detect_recovery_execution_mode(config, args.workflow_id)?;
+
     // In dry_run mode, stop here
     if args.dry_run {
         if result.jobs_to_retry.is_empty() {
             info!("[DRY RUN] No auto-recoverable jobs found.");
+        } else if let Some(rerun) = exec_mode.rerun_command(args.workflow_id) {
+            info!(
+                "[DRY RUN] Would reset {} job(s) for retry",
+                result.jobs_to_retry.len()
+            );
+            info!("[DRY RUN] Would reinitialize workflow");
+            info!(
+                "[DRY RUN] This workflow has no Slurm schedulers; it would be re-run with '{}'",
+                rerun
+            );
         } else {
             info!(
                 "[DRY RUN] Would reset {} job(s) for retry",
@@ -457,15 +603,35 @@ pub fn recover_workflow(
     info!("Workflow reinitializing workflow_id={}", args.workflow_id);
     reinitialize_workflow(config, args.workflow_id)?;
 
-    // Step 7: Regenerate Slurm schedulers and submit
-    info!("Schedulers regenerating workflow_id={}", args.workflow_id);
-    regenerate_and_submit(
+    // Step 7: Regenerate Slurm schedulers and submit — unless the workflow runs remotely or
+    // locally (no schedulers), in which case the jobs are now reset and the user re-runs with
+    // `torc remote run <id>` / `torc run <id>`.
+    if exec_mode.is_slurm() {
+        info!("Schedulers regenerating workflow_id={}", args.workflow_id);
+        regenerate_and_submit(
+            config,
+            args.workflow_id,
+            &args.output_dir,
+            args.partition.as_deref(),
+            args.walltime.as_deref(),
+        )?;
+    } else {
+        info!("Recovery reset complete workflow_id={}", args.workflow_id);
+        exec_mode.print_rerun_hint(args.workflow_id);
+    }
+
+    // Audit the recovery (choices + outcome) for later debugging. Non-interactive path, so
+    // the scheduler decision is just "regenerate" when Slurm.
+    let scheduler = exec_mode.is_slurm().then_some("regenerate");
+    record_recovery_event(
         config,
-        args.workflow_id,
-        &args.output_dir,
-        args.partition.as_deref(),
-        args.walltime.as_deref(),
-    )?;
+        args,
+        exec_mode,
+        args.memory_multiplier,
+        args.runtime_multiplier,
+        scheduler,
+        &result,
+    );
 
     Ok(result)
 }
@@ -1484,6 +1650,11 @@ fn recover_workflow_interactive(
         });
     }
 
+    // Determine how the workflow runs. Non-Slurm workflows (remote or local) have no
+    // scheduler to pick, so we skip the Slurm scheduler prompts and, after resetting jobs,
+    // point the user at `torc remote run <id>` / `torc run <id>`.
+    let exec_mode = detect_recovery_execution_mode(config, args.workflow_id)?;
+
     // --- Display summary table -----------------------------------------------
     if !oom_jobs.is_empty() {
         eprintln!(
@@ -1844,30 +2015,38 @@ fn recover_workflow_interactive(
 
     if args.dry_run {
         eprintln!("\n[DRY RUN] No changes applied.");
-        let slurm_dry_run = match get_scheduler_dry_run(
-            config,
-            args.workflow_id,
-            &args.output_dir,
-            &all_jobs_to_retry,
-        ) {
-            Ok(mut dr) => {
-                dr.would_submit = true;
-                for sched in &dr.planned_schedulers {
-                    let deps = if sched.has_dependencies {
-                        " (deferred)"
-                    } else {
-                        ""
-                    };
-                    eprintln!(
-                        "  {} - {} job(s), {} allocation(s){}",
-                        sched.name, sched.job_count, sched.num_allocations, deps
-                    );
+        let slurm_dry_run = if let Some(rerun) = exec_mode.rerun_command(args.workflow_id) {
+            eprintln!(
+                "  This workflow has no Slurm schedulers; it would be re-run with '{}'.",
+                rerun
+            );
+            None
+        } else {
+            match get_scheduler_dry_run(
+                config,
+                args.workflow_id,
+                &args.output_dir,
+                &all_jobs_to_retry,
+            ) {
+                Ok(mut dr) => {
+                    dr.would_submit = true;
+                    for sched in &dr.planned_schedulers {
+                        let deps = if sched.has_dependencies {
+                            " (deferred)"
+                        } else {
+                            ""
+                        };
+                        eprintln!(
+                            "  {} - {} job(s), {} allocation(s){}",
+                            sched.name, sched.job_count, sched.num_allocations, deps
+                        );
+                    }
+                    Some(dr)
                 }
-                Some(dr)
-            }
-            Err(e) => {
-                warn!("Could not get scheduler preview: {}", e);
-                None
+                Err(e) => {
+                    warn!("Could not get scheduler preview: {}", e);
+                    None
+                }
             }
         };
 
@@ -1882,40 +2061,53 @@ fn recover_workflow_interactive(
         });
     }
 
-    // --- Scheduler selection ----------------------------------------------------
-    eprintln!("\n--- Slurm Scheduler ---\n");
+    // --- Scheduler selection (Slurm only) ---------------------------------------
+    // Non-Slurm workflows have no scheduler to pick; we skip straight to confirmation and
+    // re-run them with `torc remote run` / `torc run` after the reset.
+    let scheduler_choice = if exec_mode.is_slurm() {
+        eprintln!("\n--- Slurm Scheduler ---\n");
+        let choice = prompt_scheduler_choice(config, args)?;
 
-    let scheduler_choice = prompt_scheduler_choice(config, args)?;
-
-    // Confirm before executing
-    match &scheduler_choice {
-        SchedulerChoice::Regenerate {
-            partition,
-            walltime,
-        } => {
-            eprintln!("\n  Scheduler: auto-generate new schedulers");
-            if let Some(p) = partition {
-                eprintln!("  Partition: {}", p);
+        // Show the chosen scheduler before confirming.
+        match &choice {
+            SchedulerChoice::Regenerate {
+                partition,
+                walltime,
+            } => {
+                eprintln!("\n  Scheduler: auto-generate new schedulers");
+                if let Some(p) = partition {
+                    eprintln!("  Partition: {}", p);
+                }
+                if let Some(w) = walltime {
+                    eprintln!("  Walltime: {}", w);
+                }
             }
-            if let Some(w) = walltime {
-                eprintln!("  Walltime: {}", w);
+            SchedulerChoice::Existing {
+                source,
+                num_allocations,
+                start_one_worker_per_node,
+            } => {
+                eprintln!(
+                    "\n  Scheduler: {}, {} allocation(s)",
+                    source.display_label(),
+                    num_allocations
+                );
+                if *start_one_worker_per_node {
+                    eprintln!("  Start one worker per node: yes");
+                }
             }
         }
-        SchedulerChoice::Existing {
-            source,
-            num_allocations,
-            start_one_worker_per_node,
-        } => {
+        Some(choice)
+    } else {
+        eprintln!("\nThis workflow has {}.", exec_mode.description());
+        if let Some(rerun) = exec_mode.rerun_command(args.workflow_id) {
             eprintln!(
-                "\n  Scheduler: {}, {} allocation(s)",
-                source.display_label(),
-                num_allocations
+                "  Recovery will reset the selected job(s); re-run them with '{}'.",
+                rerun
             );
-            if *start_one_worker_per_node {
-                eprintln!("  Start one worker per node: yes");
-            }
         }
-    }
+        None
+    };
 
     let confirm = prompt_choice("\nProceed with recovery? (y/N): ", &["y", "n"], "n")?;
     if confirm != "y" {
@@ -1956,12 +2148,12 @@ fn recover_workflow_interactive(
     info!("Reinitializing workflow...");
     reinitialize_workflow(config, args.workflow_id)?;
 
-    // Submit Slurm schedulers
+    // Submit Slurm schedulers, or — for a local workflow — skip submission entirely.
     match &scheduler_choice {
-        SchedulerChoice::Regenerate {
+        Some(SchedulerChoice::Regenerate {
             partition,
             walltime,
-        } => {
+        }) => {
             info!("Regenerating and submitting Slurm schedulers...");
             regenerate_and_submit(
                 config,
@@ -1971,11 +2163,11 @@ fn recover_workflow_interactive(
                 walltime.as_deref(),
             )?;
         }
-        SchedulerChoice::Existing {
+        Some(SchedulerChoice::Existing {
             source,
             num_allocations,
             start_one_worker_per_node,
-        } => {
+        }) => {
             // Now that the user has confirmed, materialize the scheduler (creating the
             // walltime-override clone if one was deferred — see ExistingSchedulerSource).
             let (scheduler_id, _scheduler_name) =
@@ -1999,14 +2191,25 @@ fn recover_workflow_interactive(
                 &args.output_dir,
             )?;
         }
+        None => {} // Local workflow: nothing to submit; hint printed below.
     }
 
     eprintln!(
         "\nRecovery complete. {} job(s) reset for retry.",
         all_jobs_to_retry.len()
     );
+    exec_mode.print_rerun_hint(args.workflow_id);
 
-    Ok(RecoveryResult {
+    // Summarize the scheduler decision for the audit event before the choice is dropped.
+    let scheduler_summary = match &scheduler_choice {
+        Some(SchedulerChoice::Regenerate { .. }) => Some("regenerate".to_string()),
+        Some(SchedulerChoice::Existing { source, .. }) => {
+            Some(format!("existing:{}", source.display_label()))
+        }
+        None => None,
+    };
+
+    let result = RecoveryResult {
         oom_fixed: real_result.memory_corrections,
         timeout_fixed: real_result.runtime_corrections,
         unknown_retried: unknown_job_ids.len(),
@@ -2014,7 +2217,20 @@ fn recover_workflow_interactive(
         jobs_to_retry: all_jobs_to_retry,
         adjustments: real_result.adjustments,
         slurm_dry_run: None,
-    })
+    };
+
+    // Audit the recovery (choices the user made + outcome) for later debugging.
+    record_recovery_event(
+        config,
+        args,
+        exec_mode,
+        memory_multiplier,
+        runtime_multiplier,
+        scheduler_summary.as_deref(),
+        &result,
+    );
+
+    Ok(result)
 }
 
 /// User's choice for how to handle Slurm scheduler submission.
