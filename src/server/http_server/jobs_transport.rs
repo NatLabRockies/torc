@@ -1152,9 +1152,28 @@ where
     ) -> Result<ProcessChangedJobInputsResponse, ApiError> {
         authorize_workflow!(self, id, context, ProcessChangedJobInputsResponse);
         let dry_run_value = dry_run.unwrap_or(false);
-        self.jobs_api
+        let result = self
+            .jobs_api
             .process_changed_job_inputs(id, dry_run_value, context)
-            .await
+            .await?;
+        // Record only real (non-dry-run) runs; the event captures the aggregate set of
+        // reinitialized jobs for the workflow, not one event per job.
+        if !dry_run_value
+            && let ProcessChangedJobInputsResponse::SuccessfulResponse(ref response) = result
+        {
+            self.record_user_action_event(
+                id,
+                "process_changed_job_inputs",
+                serde_json::json!({
+                    "workflow_id": id,
+                    "reinitialized_count": response.reinitialized_jobs.len(),
+                    "reinitialized_jobs": response.reinitialized_jobs,
+                }),
+                context,
+            )
+            .await;
+        }
+        Ok(result)
     }
 
     pub(super) async fn transport_retry_job(

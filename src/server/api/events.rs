@@ -209,8 +209,10 @@ where
             where_conditions.push("timestamp > ?".to_string());
         }
 
-        // Note: Category filtering is not implemented in current schema
-        let _category = category; // Acknowledge the parameter to avoid unused warnings
+        // Category is stored inside the JSON `data` column, so filter on the extracted value.
+        if category.is_some() {
+            where_conditions.push("json_extract(data, '$.category') = ?".to_string());
+        }
 
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
@@ -241,6 +243,11 @@ where
         // Bind timestamp if provided (direct integer comparison)
         if let Some(ts) = after_timestamp {
             sqlx_query = sqlx_query.bind(ts);
+        }
+
+        // Bind category if provided (must follow the WHERE condition order)
+        if let Some(ref cat) = category {
+            sqlx_query = sqlx_query.bind(cat.clone());
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -279,6 +286,11 @@ where
         // Bind timestamp for count query if provided
         if let Some(ts) = after_timestamp {
             count_sqlx_query = count_sqlx_query.bind(ts);
+        }
+
+        // Bind category for count query if provided (must follow the WHERE condition order)
+        if let Some(ref cat) = category {
+            count_sqlx_query = count_sqlx_query.bind(cat.clone());
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {

@@ -736,8 +736,6 @@ fn test_events_list_with_category_filter(start_server: &ServerProcess) {
         "system",
     ];
 
-    // This test mainly verifies that the CLI accepts the new parameter without errors
-    // The actual filtering behavior depends on the backend implementation
     let json_output = run_cli_with_json(&args, start_server, None)
         .expect("Failed to run events list command with category filter");
 
@@ -746,11 +744,36 @@ fn test_events_list_with_category_filter(start_server: &ServerProcess) {
         json_output.is_object(),
         "Events list should return an object"
     );
+    let items = json_output
+        .get("items")
+        .and_then(|i| i.as_array())
+        .expect("Response should have an 'items' array");
+
+    // The category filter is applied server-side: only the two "system" events match.
+    assert_eq!(items.len(), 2, "expected exactly two 'system' events");
     assert!(
-        json_output.get("items").is_some(),
-        "Response should have 'items' field"
+        items.iter().all(|e| e
+            .get("data")
+            .and_then(|d| d.get("category"))
+            .and_then(|c| c.as_str())
+            == Some("system")),
+        "every returned event should have category 'system': {:?}",
+        items
     );
 
-    // The command should execute without error
-    // The actual filtering depends on how the backend implements category matching
+    // Filtering by the other category returns just the single "user" event.
+    let user_args = [
+        "events",
+        "list",
+        &workflow_id.to_string(),
+        "--category",
+        "user",
+    ];
+    let user_output = run_cli_with_json(&user_args, start_server, None)
+        .expect("Failed to run events list command with category filter");
+    let user_items = user_output
+        .get("items")
+        .and_then(|i| i.as_array())
+        .expect("Response should have an 'items' array");
+    assert_eq!(user_items.len(), 1, "expected exactly one 'user' event");
 }
