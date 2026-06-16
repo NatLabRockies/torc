@@ -247,7 +247,7 @@ where
 
         // Bind category if provided (must follow the WHERE condition order)
         if let Some(ref cat) = category {
-            sqlx_query = sqlx_query.bind(cat.clone());
+            sqlx_query = sqlx_query.bind(cat.as_str());
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -290,7 +290,7 @@ where
 
         // Bind category for count query if provided (must follow the WHERE condition order)
         if let Some(ref cat) = category {
-            count_sqlx_query = count_sqlx_query.bind(cat.clone());
+            count_sqlx_query = count_sqlx_query.bind(cat.as_str());
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
