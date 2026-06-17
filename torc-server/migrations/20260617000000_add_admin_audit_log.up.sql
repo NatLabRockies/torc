@@ -16,3 +16,9 @@ CREATE TABLE admin_audit_log (
   success INTEGER NOT NULL,
   error TEXT
 );
+
+-- `GET /admin/audit-log` lists entries newest-first (ORDER BY timestamp DESC,
+-- id DESC). This index backs that sort so listing/pagination stays a cheap
+-- index scan rather than a full-table sort as the log grows.
+CREATE INDEX idx_admin_audit_log_timestamp_id
+  ON admin_audit_log (timestamp DESC, id DESC);

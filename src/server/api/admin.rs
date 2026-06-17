@@ -4,11 +4,14 @@
 //! escape hatch for admins to inspect and surgically repair database state when a
 //! bug leaves a workflow stuck. It is intentionally narrow:
 //!
-//! - Reads run on a dedicated [read-only connection](execute_read_only), so any
-//!   write fails at the SQLite engine layer regardless of statement parsing.
+//! - Reads run with [`PRAGMA query_only`](execute_read_only) enabled on a pooled
+//!   connection, so any write fails at the SQLite engine layer regardless of
+//!   statement parsing.
 //! - Writes run inside a transaction with an optional dry-run (rollback) preview
 //!   and a no-WHERE guard, and every committing write is recorded in
 //!   `admin_audit_log`.
+//! - DDL (`DROP`/`ALTER`/`TRUNCATE`) and `ATTACH`/`DETACH` are rejected outright
+//!   on both paths.
 //!
 //! Raw writes bypass application invariants (the job status state machine, the
 //! background unblocking contract); callers are warned to treat this as a last
@@ -16,8 +19,8 @@
 
 use chrono::Utc;
 use serde_json::Value;
-use sqlx::sqlite::SqlitePool;
-use sqlx::{Column, ConnectOptions, Row, TypeInfo, ValueRef};
+use sqlx::sqlite::{SqliteConnection, SqlitePool};
+use sqlx::{Column, Row, TypeInfo, ValueRef};
 
 use crate::models;
 use crate::server::api::begin_immediate;
@@ -39,12 +42,19 @@ pub fn clamp_limit(limit: Option<i64>) -> usize {
 /// Enforces the statement-level guardrails that apply regardless of the
 /// read/write path:
 /// - non-empty, single statement only (no `;`-separated batches)
+/// - leading SQL comments are stripped first, so they cannot hide the real
+///   leading keyword (e.g. `-- x\nATTACH ...`)
 /// - `ATTACH`/`DETACH` are rejected (they can read/write arbitrary files even on
 ///   a read-only connection)
+/// - DDL (`DROP`/`ALTER`/`TRUNCATE`) is rejected: this is a data-repair escape
+///   hatch, and schema changes belong in migrations. `DROP TABLE` in particular
+///   would cascade-delete child rows via `ON DELETE CASCADE`.
 ///
 /// For the write path, also rejects an unqualified `UPDATE`/`DELETE` (one with no
-/// `WHERE` clause) unless `allow_full_table` is set. This is a deliberately simple
-/// guard, not a full SQL parser: a `WHERE` inside a subquery can satisfy it.
+/// `WHERE` clause) unless `allow_full_table` is set. The leading verb is detected
+/// at parenthesis depth 0, so a CTE-prefixed write (`WITH c AS (...) DELETE FROM
+/// t`) is guarded the same as a bare `DELETE`. This is still a heuristic, not a
+/// full SQL parser: a `WHERE` inside a subquery can satisfy the guard.
 ///
 /// Returns `Err(message)` describing a 422-class rejection.
 pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> Result<(), String> {
@@ -59,52 +69,157 @@ pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> 
         return Err("Only a single SQL statement is allowed".to_string());
     }
 
-    let upper = body.to_uppercase();
+    // Strip leading comments so they cannot mask the leading keyword.
+    let effective = strip_leading_comments(body);
+    if effective.is_empty() {
+        return Err("SQL statement is empty".to_string());
+    }
+
+    let upper = effective.to_uppercase();
     let first_word = upper.split_whitespace().next().unwrap_or("");
 
     if first_word == "ATTACH" || first_word == "DETACH" {
         return Err(format!("{first_word} statements are not allowed"));
     }
 
-    if is_write && !allow_full_table && (first_word == "UPDATE" || first_word == "DELETE") {
-        // Tokenize on non-identifier characters so "WHERE(" still counts.
+    // Block DDL outright. A repair escape hatch has no business changing the
+    // schema, and `DROP`/`ALTER` are especially dangerous (e.g. `DROP TABLE`
+    // cascades through `ON DELETE CASCADE`). SQLite has no `TRUNCATE`, but reject
+    // it too so the error is explicit rather than a confusing parse failure.
+    const BLOCKED_DDL: &[&str] = &["DROP", "ALTER", "TRUNCATE"];
+    if BLOCKED_DDL.contains(&first_word) {
+        return Err(format!("{first_word} (DDL) statements are not allowed"));
+    }
+
+    if is_write && !allow_full_table {
+        // Classify the statement's top-level verb at paren depth 0. A leading
+        // `WITH` (CTE) puts its definitions in parentheses, so the real verb
+        // still appears at depth 0 afterward.
+        let depth0 = depth0_keywords(&upper);
+        let is_update_or_delete = if first_word == "WITH" {
+            depth0.iter().any(|w| *w == "UPDATE" || *w == "DELETE")
+        } else {
+            first_word == "UPDATE" || first_word == "DELETE"
+        };
+        // A WHERE anywhere satisfies the guard (intentionally permissive).
         let has_where = upper
             .split(|c: char| !c.is_alphanumeric() && c != '_')
             .any(|w| w == "WHERE");
-        if !has_where {
-            return Err(format!(
-                "Refusing to run an unqualified {first_word} with no WHERE clause. \
+        if is_update_or_delete && !has_where {
+            return Err("Refusing to run an UPDATE/DELETE with no WHERE clause. \
                  Pass allow_full_table=true to override."
-            ));
+                .to_string());
         }
     }
 
     Ok(())
 }
 
-/// Execute a read-only statement on a dedicated `SQLITE_OPEN_READONLY` connection.
+/// Strip leading whitespace and SQL comments (`-- line` and `/* block */`),
+/// returning the statement starting at its first significant token. Used so a
+/// leading comment cannot hide the real leading keyword from [`validate_statement`].
+fn strip_leading_comments(sql: &str) -> &str {
+    let mut s = sql.trim_start();
+    loop {
+        if let Some(rest) = s.strip_prefix("--") {
+            match rest.find('\n') {
+                Some(i) => s = rest[i + 1..].trim_start(),
+                None => return "",
+            }
+        } else if let Some(rest) = s.strip_prefix("/*") {
+            match rest.find("*/") {
+                Some(i) => s = rest[i + 2..].trim_start(),
+                None => return "",
+            }
+        } else {
+            return s;
+        }
+    }
+}
+
+/// Collect identifier-like keywords that occur at parenthesis depth 0 in an
+/// already-uppercased statement. Tokens inside parentheses (subqueries, CTE
+/// bodies, function args) are skipped, so the caller can find the statement's
+/// top-level verb. This is a lexical heuristic and does not account for string
+/// literals containing parentheses.
+fn depth0_keywords(upper: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start: Option<usize> = None;
+    for (i, c) in upper.char_indices() {
+        let is_word = c.is_alphanumeric() || c == '_';
+        if is_word && depth == 0 {
+            start.get_or_insert(i);
+            continue;
+        }
+        if let Some(s) = start.take() {
+            out.push(&upper[s..i]);
+        }
+        match c {
+            '(' => depth += 1,
+            ')' => depth = (depth - 1).max(0),
+            _ => {}
+        }
+    }
+    if let Some(s) = start.take() {
+        out.push(&upper[s..]);
+    }
+    out
+}
+
+/// Execute a read-only statement on a pooled connection with `PRAGMA query_only`.
 ///
-/// Opening a separate read-only connection (derived from the pool's connect
-/// options) means writes are rejected by the SQLite engine itself, and the
-/// read-only state can never leak back into a pooled writer connection. Returns
-/// the result column names and up to `limit` rows of JSON-encoded cell values.
+/// `query_only = ON` makes the SQLite engine itself reject any write for the
+/// duration of the query, independent of statement parsing. We deliberately use a
+/// connection from the pool rather than opening a separate one: a fresh
+/// connection would target a *different* database for `:memory:` setups (a bare
+/// `:memory:` connection is private, and even a shared-cache in-memory database
+/// is destroyed once the pool's last connection closes). The pragma is always
+/// restored before the connection returns to the pool. Returns the result column
+/// names and up to `limit` rows of JSON-encoded cell values.
 pub async fn execute_read_only(
     pool: &SqlitePool,
     sql: &str,
     limit: usize,
 ) -> Result<(Vec<String>, Vec<Vec<Value>>), String> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(|e| format!("Failed to acquire connection: {e}"))?;
+
+    sqlx::query("PRAGMA query_only = ON")
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| format!("Failed to enter read-only mode: {e}"))?;
+
+    let result = read_rows(&mut conn, sql, limit).await;
+
+    // Always restore read-write before the connection goes back to the pool;
+    // otherwise a later writer borrowing it would silently fail.
+    if let Err(e) = sqlx::query("PRAGMA query_only = OFF")
+        .execute(&mut *conn)
+        .await
+    {
+        // Could not restore: discard the connection (detach so it is closed on
+        // drop instead of returned to the pool stuck in read-only mode).
+        drop(conn.detach());
+        return Err(format!("Failed to restore read-write mode: {e}"));
+    }
+
+    result
+}
+
+/// Stream a query's rows into JSON, capped at `limit`. Column names are taken
+/// from the first row. Borrows the connection mutably so the caller can restore
+/// connection state once the stream is dropped.
+async fn read_rows(
+    conn: &mut SqliteConnection,
+    sql: &str,
+    limit: usize,
+) -> Result<(Vec<String>, Vec<Vec<Value>>), String> {
     use futures::TryStreamExt;
 
-    let opts = pool.connect_options();
-    let mut conn = opts
-        .as_ref()
-        .clone()
-        .read_only(true)
-        .connect()
-        .await
-        .map_err(|e| format!("Failed to open read-only connection: {e}"))?;
-
-    let mut stream = sqlx::query(sql).fetch(&mut conn);
+    let mut stream = sqlx::query(sql).fetch(&mut *conn);
     let mut columns: Vec<String> = Vec::new();
     let mut rows: Vec<Vec<Value>> = Vec::new();
 
@@ -323,6 +438,73 @@ mod tests {
     fn rejects_attach_detach() {
         assert!(validate_statement("ATTACH DATABASE 'x' AS y", false, false).is_err());
         assert!(validate_statement("detach database y", false, false).is_err());
+    }
+
+    #[test]
+    fn rejects_ddl_on_both_paths() {
+        for stmt in [
+            "DROP TABLE job",
+            "drop index idx_foo",
+            "ALTER TABLE job ADD COLUMN x INTEGER",
+            "TRUNCATE TABLE job",
+        ] {
+            // Rejected regardless of the write flag or full-table override.
+            assert!(validate_statement(stmt, false, false).is_err(), "{stmt}");
+            assert!(validate_statement(stmt, true, true).is_err(), "{stmt}");
+        }
+    }
+
+    #[test]
+    fn leading_comments_do_not_hide_keyword() {
+        // Line and block comments must not mask a disallowed leading keyword.
+        assert!(validate_statement("-- harmless\nATTACH DATABASE 'x' AS y", false, false).is_err());
+        assert!(validate_statement("/* note */ DROP TABLE job", false, false).is_err());
+        // A statement that is only comments is treated as empty.
+        assert!(validate_statement("-- just a comment", false, false).is_err());
+        // Leading comments on an allowed statement are fine.
+        assert!(validate_statement("-- pick one\nSELECT 1", false, false).is_ok());
+    }
+
+    #[test]
+    fn no_where_guard_catches_cte_prefixed_writes() {
+        // CTE-prefixed UPDATE/DELETE must be guarded like a bare one.
+        assert!(
+            validate_statement(
+                "WITH c AS (SELECT id FROM job) DELETE FROM result",
+                true,
+                false
+            )
+            .is_err()
+        );
+        // A WHERE clause (even via the CTE join) satisfies the guard.
+        assert!(
+            validate_statement(
+                "WITH c AS (SELECT id FROM job) DELETE FROM result WHERE id IN (SELECT id FROM c)",
+                true,
+                false
+            )
+            .is_ok()
+        );
+        // A DELETE that only appears inside a subquery does not trip the guard
+        // for an otherwise-qualified statement.
+        assert!(
+            validate_statement(
+                "WITH c AS (SELECT id FROM job) UPDATE result SET return_code=0 WHERE id=1",
+                true,
+                false
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn depth0_keywords_skips_parenthesized_tokens() {
+        let kw = depth0_keywords("WITH C AS ( SELECT ID FROM JOB ) DELETE FROM RESULT");
+        assert!(kw.contains(&"WITH"));
+        assert!(kw.contains(&"DELETE"));
+        // SELECT/ID/JOB live inside the CTE parentheses and must be skipped.
+        assert!(!kw.contains(&"SELECT"));
+        assert!(!kw.contains(&"JOB"));
     }
 
     #[test]
