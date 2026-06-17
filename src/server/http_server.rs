@@ -1413,6 +1413,24 @@ where
         self.transport_reload_auth(context).await
     }
 
+    async fn admin_sql(
+        &self,
+        body: models::AdminSqlRequest,
+        context: &C,
+    ) -> Result<AdminSqlResponse, ApiError> {
+        self.transport_admin_sql(body, context).await
+    }
+
+    async fn list_admin_audit_log(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListAdminAuditLogResponse, ApiError> {
+        self.transport_list_admin_audit_log(offset, limit, context)
+            .await
+    }
+
     async fn list_workflows(
         &self,
         offset: Option<i64>,

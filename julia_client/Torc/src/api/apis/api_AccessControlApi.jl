@@ -68,6 +68,35 @@ function add_workflow_to_group(_api::AccessControlApi, response_stream::Channel,
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_admin_sql_AccessControlApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => AdminSqlResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_admin_sql(_api::AccessControlApi, admin_sql_request::AdminSqlRequest; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_admin_sql_AccessControlApi, "/admin/sql", [], admin_sql_request)
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- admin_sql_request::AdminSqlRequest (required)
+
+Return: AdminSqlResponse, OpenAPI.Clients.ApiResponse
+"""
+function admin_sql(_api::AccessControlApi, admin_sql_request::AdminSqlRequest; _mediaType=nothing)
+    _ctx = _oacinternal_admin_sql(_api, admin_sql_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function admin_sql(_api::AccessControlApi, response_stream::Channel, admin_sql_request::AdminSqlRequest; _mediaType=nothing)
+    _ctx = _oacinternal_admin_sql(_api, admin_sql_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_check_workflow_access_AccessControlApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => AccessCheckResponse,
 )
@@ -203,6 +232,37 @@ end
 
 function list_access_groups(_api::AccessControlApi, response_stream::Channel; offset=nothing, limit=nothing, _mediaType=nothing)
     _ctx = _oacinternal_list_access_groups(_api; offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_list_admin_audit_log_AccessControlApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ListAdminAuditLogResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_list_admin_audit_log(_api::AccessControlApi; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_admin_audit_log_AccessControlApi, "/admin/audit-log", [])
+    OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- offset::Int64
+- limit::Int64
+
+Return: ListAdminAuditLogResponse, OpenAPI.Clients.ApiResponse
+"""
+function list_admin_audit_log(_api::AccessControlApi; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_admin_audit_log(_api; offset=offset, limit=limit, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function list_admin_audit_log(_api::AccessControlApi, response_stream::Channel; offset=nothing, limit=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_admin_audit_log(_api; offset=offset, limit=limit, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -384,11 +444,13 @@ end
 
 export add_user_to_group
 export add_workflow_to_group
+export admin_sql
 export check_workflow_access
 export create_access_group
 export delete_access_group
 export get_access_group
 export list_access_groups
+export list_admin_audit_log
 export list_group_members
 export list_user_groups
 export list_workflow_groups

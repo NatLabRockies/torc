@@ -2350,6 +2350,92 @@ pub struct ReloadAuthResponse {
     pub user_count: i64,
 }
 
+/// Request body for the admin raw-SQL endpoint (`POST /admin/sql`).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdminSqlRequest {
+    /// The single SQL statement to execute.
+    pub sql: String,
+    /// Opt into the write path. When false (default) the statement runs on a
+    /// read-only connection, so any write fails at the SQLite layer.
+    #[serde(default)]
+    pub write: bool,
+    /// Permit an unqualified UPDATE/DELETE (no WHERE clause). Ignored on the
+    /// read-only path.
+    #[serde(default)]
+    pub allow_full_table: bool,
+    /// Write path only: run inside a transaction, report rows affected, then
+    /// roll back instead of committing (preview).
+    #[serde(default)]
+    pub dry_run: bool,
+    /// Maximum number of SELECT result rows to return. Defaults to and is capped
+    /// at 10,000 (the standard list cap); values above the cap are clamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+}
+
+/// Response body for the admin raw-SQL endpoint (`POST /admin/sql`).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdminSqlResponse {
+    /// Column names for SELECT results (empty for write statements).
+    pub columns: Vec<String>,
+    /// Result rows; each row is a list of JSON-encoded cell values aligned with `columns`.
+    pub rows: Vec<Vec<serde_json::Value>>,
+    /// Number of rows affected by a write statement, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows_affected: Option<i64>,
+    /// True when a write was committed to the database.
+    pub committed: bool,
+}
+
+/// One row of the admin raw-SQL audit log (`admin_audit_log`), returned by
+/// `GET /admin/audit-log` (`torc admin list-audit-log`).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdminAuditLogEntry {
+    /// Auto-increment row id.
+    pub id: i64,
+    /// User that executed the statement.
+    pub user_name: String,
+    /// Execution time in milliseconds since the Unix epoch.
+    pub timestamp: i64,
+    /// The SQL statement text.
+    pub sql_text: String,
+    /// True for write-path statements (all audited rows are writes).
+    pub is_write: bool,
+    /// True when the full-table guard was overridden for this statement.
+    pub allow_full_table: bool,
+    /// Rows affected by the statement, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows_affected: Option<i64>,
+    /// True when the write was committed to the database.
+    pub committed: bool,
+    /// True when the statement executed without error.
+    pub success: bool,
+    /// Error message captured for a failed statement, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Paginated response for `GET /admin/audit-log` (entries newest first).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListAdminAuditLogResponse {
+    /// Audit-log entries, newest first.
+    pub items: Vec<AdminAuditLogEntry>,
+    /// Offset applied to this page.
+    pub offset: i64,
+    /// Maximum page size enforced by the server.
+    pub max_limit: i64,
+    /// Number of entries returned in this page.
+    pub count: i64,
+    /// Total number of audit-log entries.
+    pub total_count: i64,
+    /// True when more entries exist beyond this page.
+    pub has_more: bool,
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IsCompleteResponse {

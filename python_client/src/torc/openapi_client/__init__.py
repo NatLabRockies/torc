@@ -49,6 +49,9 @@ __all__ = [
     "AccessCheckResponse",
     "AccessGroupModel",
     "ActiveTaskResponse",
+    "AdminAuditLogEntry",
+    "AdminSqlRequest",
+    "AdminSqlResponse",
     "ArchiveWorkflowRequest",
     "BatchCompleteJobsRequest",
     "BatchCompleteJobsResponse",
@@ -87,6 +90,7 @@ __all__ = [
     "JobUserDataRelationshipModel",
     "JobsModel",
     "ListAccessGroupsResponse",
+    "ListAdminAuditLogResponse",
     "ListComputeNodesResponse",
     "ListEventsResponse",
     "ListFailureHandlersResponse",
@@ -180,6 +184,9 @@ from torc.openapi_client.exceptions import ApiException as ApiException
 from torc.openapi_client.models.access_check_response import AccessCheckResponse as AccessCheckResponse
 from torc.openapi_client.models.access_group_model import AccessGroupModel as AccessGroupModel
 from torc.openapi_client.models.active_task_response import ActiveTaskResponse as ActiveTaskResponse
+from torc.openapi_client.models.admin_audit_log_entry import AdminAuditLogEntry as AdminAuditLogEntry
+from torc.openapi_client.models.admin_sql_request import AdminSqlRequest as AdminSqlRequest
+from torc.openapi_client.models.admin_sql_response import AdminSqlResponse as AdminSqlResponse
 from torc.openapi_client.models.archive_workflow_request import ArchiveWorkflowRequest as ArchiveWorkflowRequest
 from torc.openapi_client.models.batch_complete_jobs_request import BatchCompleteJobsRequest as BatchCompleteJobsRequest
 from torc.openapi_client.models.batch_complete_jobs_response import BatchCompleteJobsResponse as BatchCompleteJobsResponse
@@ -218,6 +225,7 @@ from torc.openapi_client.models.job_status_counts import JobStatusCounts as JobS
 from torc.openapi_client.models.job_user_data_relationship_model import JobUserDataRelationshipModel as JobUserDataRelationshipModel
 from torc.openapi_client.models.jobs_model import JobsModel as JobsModel
 from torc.openapi_client.models.list_access_groups_response import ListAccessGroupsResponse as ListAccessGroupsResponse
+from torc.openapi_client.models.list_admin_audit_log_response import ListAdminAuditLogResponse as ListAdminAuditLogResponse
 from torc.openapi_client.models.list_compute_nodes_response import ListComputeNodesResponse as ListComputeNodesResponse
 from torc.openapi_client.models.list_events_response import ListEventsResponse as ListEventsResponse
 from torc.openapi_client.models.list_failure_handlers_response import ListFailureHandlersResponse as ListFailureHandlersResponse

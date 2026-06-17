@@ -1,3 +1,4 @@
+use tabled::builder::Builder;
 use tabled::settings::location::ByColumnName;
 use tabled::settings::{Remove, Style};
 use tabled::{Table, Tabled};
@@ -187,6 +188,47 @@ pub fn display_table_excluding<T: Tabled>(
 
     println!("{}", table_str);
     println!("\nTotal: {} {}", items.len(), item_type);
+}
+
+/// Render runtime-determined columns and rows as a rounded table.
+///
+/// Unlike [`display_table`], the columns are not known at compile time (e.g. the
+/// result set of an arbitrary SQL `SELECT`), so the table is assembled from a
+/// [`Builder`]. Cell values are already stringified. Prints a short notice when
+/// there are no columns.
+pub fn display_dynamic_table(columns: &[String], rows: &[Vec<String>]) {
+    if columns.is_empty() {
+        println!("(no columns)");
+        return;
+    }
+    let mut builder = Builder::default();
+    builder.push_record(columns.iter().cloned());
+    for row in rows {
+        builder.push_record(row.iter().cloned());
+    }
+    let mut table = builder.build();
+    table.with(Style::rounded());
+    println!("{}", table);
+}
+
+/// Render runtime-determined columns and rows as RFC 4180 CSV to stdout.
+///
+/// Always emits the header row, even with no data rows. Shares the streaming and
+/// broken-pipe behavior documented on [`display_csv`].
+pub fn display_dynamic_csv(columns: &[String], rows: &[Vec<String>]) {
+    let stdout = std::io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    let result = (|| -> csv::Result<()> {
+        wtr.write_record(columns.iter().map(|c| c.as_str()))?;
+        for row in rows {
+            wtr.write_record(row.iter().map(|c| c.as_str()))?;
+        }
+        wtr.flush()?;
+        Ok(())
+    })();
+    if let Err(e) = result {
+        handle_csv_write_error(e);
+    }
 }
 
 #[cfg(test)]

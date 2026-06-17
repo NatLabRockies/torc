@@ -104,6 +104,21 @@ pub trait SystemApi<C: Send + Sync> {
 
     /// Reload the htpasswd file from disk (admin only).
     async fn reload_auth(&self, context: &C) -> Result<ReloadAuthResponse, ApiError>;
+
+    /// Execute a raw SQL statement (admin only).
+    async fn admin_sql(
+        &self,
+        body: models::AdminSqlRequest,
+        context: &C,
+    ) -> Result<AdminSqlResponse, ApiError>;
+
+    /// List recent admin raw-SQL audit-log entries (admin only).
+    async fn list_admin_audit_log(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListAdminAuditLogResponse, ApiError>;
 }
 
 /// Internal transport trait that keeps the concrete live-server method surface in one place.
@@ -1176,6 +1191,21 @@ pub trait TransportApiCore<C: Send + Sync> {
 
     /// Reload the htpasswd file from disk (admin only).
     async fn reload_auth(&self, context: &C) -> Result<ReloadAuthResponse, ApiError>;
+
+    /// Execute a raw SQL statement (admin only).
+    async fn admin_sql(
+        &self,
+        body: models::AdminSqlRequest,
+        context: &C,
+    ) -> Result<AdminSqlResponse, ApiError>;
+
+    /// List recent admin raw-SQL audit-log entries (admin only).
+    async fn list_admin_audit_log(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListAdminAuditLogResponse, ApiError>;
 }
 
 /// Transport contract for artifact-related HTTP endpoints.

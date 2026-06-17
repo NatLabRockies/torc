@@ -429,6 +429,17 @@ map_response!(
 );
 map_response!(reload_auth_response, ReloadAuthResponse, SuccessfulResponse);
 map_response!(
+    admin_sql_response,
+    AdminSqlResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
+    list_admin_audit_log_response,
+    ListAdminAuditLogResponse,
+    SuccessfulResponse
+);
+map_response!(
     update_ro_crate_entity_response,
     UpdateRoCrateEntityResponse,
     SuccessfulResponse,

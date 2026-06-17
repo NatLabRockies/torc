@@ -90,4 +90,140 @@ where
             }
         }
     }
+
+    /// Execute a raw SQL statement on behalf of an admin (admin only).
+    ///
+    /// Reads run on a read-only connection; writes run in a transaction with an
+    /// optional dry-run preview, a no-WHERE guard, and an audit-log record. See
+    /// [`crate::server::api::admin`].
+    pub(super) async fn transport_admin_sql(
+        &self,
+        body: models::AdminSqlRequest,
+        context: &C,
+    ) -> Result<AdminSqlResponse, ApiError> {
+        log_call!(debug, context, "admin_sql(write={})", body.write);
+
+        authorize_admin!(self, context, AdminSqlResponse);
+
+        use crate::server::api::admin;
+
+        if let Err(msg) = admin::validate_statement(&body.sql, body.write, body.allow_full_table) {
+            return Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
+                error_payload!("InvalidStatement", msg),
+            ));
+        }
+
+        if body.write {
+            let user = username_from_context(context);
+            match admin::execute_write(&self.pool, &body.sql, body.dry_run).await {
+                Ok(rows_affected) => {
+                    let committed = !body.dry_run;
+                    if committed {
+                        admin::record_audit(
+                            &self.pool,
+                            &user,
+                            &body.sql,
+                            body.allow_full_table,
+                            Some(rows_affected),
+                            true,
+                            true,
+                            None,
+                        )
+                        .await;
+                        info!(
+                            "admin_sql write committed by user={} rows_affected={} sql={:?}",
+                            user, rows_affected, body.sql
+                        );
+                    }
+                    let payload = models::AdminSqlResponse {
+                        columns: Vec::new(),
+                        rows: Vec::new(),
+                        rows_affected: Some(rows_affected),
+                        committed,
+                    };
+                    Ok(AdminSqlResponse::SuccessfulResponse(
+                        serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
+                    ))
+                }
+                Err(msg) => {
+                    if !body.dry_run {
+                        admin::record_audit(
+                            &self.pool,
+                            &user,
+                            &body.sql,
+                            body.allow_full_table,
+                            None,
+                            false,
+                            false,
+                            Some(&msg),
+                        )
+                        .await;
+                    }
+                    Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
+                        error_payload!("ExecutionFailed", msg),
+                    ))
+                }
+            }
+        } else {
+            let limit = admin::clamp_limit(body.limit);
+            match admin::execute_read_only(&self.pool, &body.sql, limit).await {
+                Ok((columns, rows)) => {
+                    let payload = models::AdminSqlResponse {
+                        columns,
+                        rows,
+                        rows_affected: None,
+                        committed: false,
+                    };
+                    Ok(AdminSqlResponse::SuccessfulResponse(
+                        serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
+                    ))
+                }
+                Err(msg) => Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
+                    error_payload!("QueryFailed", msg),
+                )),
+            }
+        }
+    }
+
+    /// List recent admin raw-SQL audit-log entries (admin only).
+    ///
+    /// Returns a page of `admin_audit_log` rows newest-first with the standard
+    /// pagination metadata. See [`crate::server::api::admin::list_audit_log`].
+    pub(super) async fn transport_list_admin_audit_log(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListAdminAuditLogResponse, ApiError> {
+        log_call!(debug, context, "list_admin_audit_log()");
+
+        authorize_admin!(self, context, ListAdminAuditLogResponse);
+
+        use crate::server::api::admin;
+
+        let max_limit = admin::MAX_RESULT_ROWS;
+        let offset = offset.unwrap_or(0).max(0);
+        let limit = admin::clamp_limit(limit) as i64;
+
+        match admin::list_audit_log(&self.pool, offset, limit).await {
+            Ok((items, total_count)) => {
+                let count = items.len() as i64;
+                let has_more = offset + count < total_count;
+                let payload = models::ListAdminAuditLogResponse {
+                    items,
+                    offset,
+                    max_limit,
+                    count,
+                    total_count,
+                    has_more,
+                };
+                Ok(ListAdminAuditLogResponse::SuccessfulResponse(
+                    serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
+                ))
+            }
+            Err(msg) => Ok(ListAdminAuditLogResponse::DefaultErrorResponse(
+                error_payload!("QueryFailed", msg),
+            )),
+        }
+    }
 }

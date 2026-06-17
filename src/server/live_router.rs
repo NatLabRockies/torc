@@ -298,6 +298,11 @@ pub fn app_router(state: LiveRouterState) -> Router {
             get(list_ro_crate_entities).delete(delete_ro_crate_entities),
         )
         .route("/torc-service/v1/admin/reload-auth", post(reload_auth))
+        .route("/torc-service/v1/admin/sql", post(admin_sql))
+        .route(
+            "/torc-service/v1/admin/audit-log",
+            get(list_admin_audit_log),
+        )
         .route(
             "/torc-service/v1/admin/api-events/stream",
             get(admin_api_events_stream),
@@ -571,6 +576,70 @@ pub async fn reload_auth(
 ) -> Response<Body> {
     match state.server.reload_auth(&context).await {
         Ok(response) => reload_auth_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "access_control",
+    path = "/admin/sql",
+    operation_id = "admin_sql",
+    request_body = models::AdminSqlRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::AdminSqlResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid or disallowed statement)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn admin_sql(
+    State(state): State<LiveRouterState>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::AdminSqlRequest>,
+) -> Response<Body> {
+    match state.server.admin_sql(body, &context).await {
+        Ok(response) => admin_sql_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct AdminAuditLogQuery {
+    /// Offset for pagination (0-based). Defaults to 0.
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub offset: Option<i64>,
+    /// Maximum number of entries to return. Defaults to and is capped at 10,000.
+    #[serde(default)]
+    #[param(nullable = true)]
+    pub limit: Option<i64>,
+}
+
+#[utoipa::path(
+    get,
+    tag = "access_control",
+    path = "/admin/audit-log",
+    operation_id = "list_admin_audit_log",
+    params(AdminAuditLogQuery),
+    responses(
+        (status = 200, description = "Successful response", body = models::ListAdminAuditLogResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn list_admin_audit_log(
+    State(state): State<LiveRouterState>,
+    Extension(context): Extension<EmptyContext>,
+    Query(query): Query<AdminAuditLogQuery>,
+) -> Response<Body> {
+    match state
+        .server
+        .list_admin_audit_log(query.offset, query.limit, &context)
+        .await
+    {
+        Ok(response) => list_admin_audit_log_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

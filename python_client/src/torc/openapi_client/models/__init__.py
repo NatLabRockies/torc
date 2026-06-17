@@ -16,6 +16,9 @@
 from torc.openapi_client.models.access_check_response import AccessCheckResponse
 from torc.openapi_client.models.access_group_model import AccessGroupModel
 from torc.openapi_client.models.active_task_response import ActiveTaskResponse
+from torc.openapi_client.models.admin_audit_log_entry import AdminAuditLogEntry
+from torc.openapi_client.models.admin_sql_request import AdminSqlRequest
+from torc.openapi_client.models.admin_sql_response import AdminSqlResponse
 from torc.openapi_client.models.archive_workflow_request import ArchiveWorkflowRequest
 from torc.openapi_client.models.batch_complete_jobs_request import BatchCompleteJobsRequest
 from torc.openapi_client.models.batch_complete_jobs_response import BatchCompleteJobsResponse
@@ -54,6 +57,7 @@ from torc.openapi_client.models.job_status_counts import JobStatusCounts
 from torc.openapi_client.models.job_user_data_relationship_model import JobUserDataRelationshipModel
 from torc.openapi_client.models.jobs_model import JobsModel
 from torc.openapi_client.models.list_access_groups_response import ListAccessGroupsResponse
+from torc.openapi_client.models.list_admin_audit_log_response import ListAdminAuditLogResponse
 from torc.openapi_client.models.list_compute_nodes_response import ListComputeNodesResponse
 from torc.openapi_client.models.list_events_response import ListEventsResponse
 from torc.openapi_client.models.list_failure_handlers_response import ListFailureHandlersResponse

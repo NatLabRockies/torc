@@ -23,11 +23,13 @@ Class | Method
 ------------ | -------------
 *AccessControlApi* | [**add_user_to_group**](docs/AccessControlApi.md#add_user_to_group)<br/>**POST** /access_groups/{id}/members<br/>
 *AccessControlApi* | [**add_workflow_to_group**](docs/AccessControlApi.md#add_workflow_to_group)<br/>**POST** /workflows/{id}/access_groups/{group_id}<br/>
+*AccessControlApi* | [**admin_sql**](docs/AccessControlApi.md#admin_sql)<br/>**POST** /admin/sql<br/>
 *AccessControlApi* | [**check_workflow_access**](docs/AccessControlApi.md#check_workflow_access)<br/>**GET** /access_check/{workflow_id}/{user_name}<br/>
 *AccessControlApi* | [**create_access_group**](docs/AccessControlApi.md#create_access_group)<br/>**POST** /access_groups<br/>
 *AccessControlApi* | [**delete_access_group**](docs/AccessControlApi.md#delete_access_group)<br/>**DELETE** /access_groups/{id}<br/>
 *AccessControlApi* | [**get_access_group**](docs/AccessControlApi.md#get_access_group)<br/>**GET** /access_groups/{id}<br/>
 *AccessControlApi* | [**list_access_groups**](docs/AccessControlApi.md#list_access_groups)<br/>**GET** /access_groups<br/>
+*AccessControlApi* | [**list_admin_audit_log**](docs/AccessControlApi.md#list_admin_audit_log)<br/>**GET** /admin/audit-log<br/>
 *AccessControlApi* | [**list_group_members**](docs/AccessControlApi.md#list_group_members)<br/>**GET** /access_groups/{id}/members<br/>
 *AccessControlApi* | [**list_user_groups**](docs/AccessControlApi.md#list_user_groups)<br/>**GET** /users/{user_name}/groups<br/>
 *AccessControlApi* | [**list_workflow_groups**](docs/AccessControlApi.md#list_workflow_groups)<br/>**GET** /workflows/{id}/access_groups<br/>
@@ -158,6 +160,9 @@ Class | Method
  - [AccessCheckResponse](docs/AccessCheckResponse.md)
  - [AccessGroupModel](docs/AccessGroupModel.md)
  - [ActiveTaskResponse](docs/ActiveTaskResponse.md)
+ - [AdminAuditLogEntry](docs/AdminAuditLogEntry.md)
+ - [AdminSqlRequest](docs/AdminSqlRequest.md)
+ - [AdminSqlResponse](docs/AdminSqlResponse.md)
  - [ArchiveWorkflowRequest](docs/ArchiveWorkflowRequest.md)
  - [BatchCompleteJobsRequest](docs/BatchCompleteJobsRequest.md)
  - [BatchCompleteJobsResponse](docs/BatchCompleteJobsResponse.md)
@@ -196,6 +201,7 @@ Class | Method
  - [JobUserDataRelationshipModel](docs/JobUserDataRelationshipModel.md)
  - [JobsModel](docs/JobsModel.md)
  - [ListAccessGroupsResponse](docs/ListAccessGroupsResponse.md)
+ - [ListAdminAuditLogResponse](docs/ListAdminAuditLogResponse.md)
  - [ListComputeNodesResponse](docs/ListComputeNodesResponse.md)
  - [ListEventsResponse](docs/ListEventsResponse.md)
  - [ListFailureHandlersResponse](docs/ListFailureHandlersResponse.md)
