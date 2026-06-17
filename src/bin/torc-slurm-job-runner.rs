@@ -568,20 +568,15 @@ mod unix_main {
             // waiting on unneeded queue slots. Safe to run from every finishing
             // allocation's head node: the call no-ops while runnable jobs remain,
             // `scancel` is idempotent, and the first runner to win flips the nodes
-            // to "canceled" so the others find nothing left to cancel.
-            match orphan_detection::cancel_unneeded_pending_allocations(
+            // to "canceled" so the others find nothing left to cancel. The call
+            // logs each cancellation and a summary itself, so only surface errors
+            // here.
+            if let Err(e) = orphan_detection::cancel_unneeded_pending_allocations(
                 &config,
                 args.workflow_id,
                 false,
             ) {
-                Ok(count) if count > 0 => {
-                    info!(
-                        "Canceled {} unneeded queued Slurm allocation(s) workflow_id={}",
-                        count, args.workflow_id
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => warn!("Error canceling unneeded queued allocations: {}", e),
+                warn!("Error canceling unneeded queued allocations: {}", e);
             }
         }
     }

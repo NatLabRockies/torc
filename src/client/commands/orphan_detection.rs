@@ -988,7 +988,7 @@ pub fn cancel_unneeded_pending_allocations(
             workflow_id,
             scheduled_compute_node_id,
             &slurm_job_id,
-            false,
+            dry_run,
         ) {
             warn!(
                 "Failed to deactivate compute nodes for scheduled compute node {}: {}",
