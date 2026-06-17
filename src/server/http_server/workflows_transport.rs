@@ -243,6 +243,8 @@ where
     ) -> Result<CancelWorkflowResponse, ApiError> {
         log_call!(info, context, "cancel_workflow(workflow_id={})", id);
         authorize_workflow!(self, id, context, CancelWorkflowResponse);
+        // Note: cancel_workflow already records a persistent "workflow_canceled" event inside
+        // its transaction (see workflows_api::cancel_workflow), so no event is recorded here.
         let response = self.workflows_api.cancel_workflow(id, context).await?;
         Ok(response)
     }
@@ -268,7 +270,24 @@ where
         {
             set.remove(&id);
         }
-        self.workflows_api.archive_workflow(id, body, context).await
+        let is_archived = body.is_archived;
+        let result = self
+            .workflows_api
+            .archive_workflow(id, body, context)
+            .await?;
+        if let ArchiveWorkflowResponse::SuccessfulResponse(_) = result {
+            self.record_user_action_event(
+                id,
+                "archive_workflow",
+                serde_json::json!({
+                    "workflow_id": id,
+                    "is_archived": is_archived,
+                }),
+                context,
+            )
+            .await;
+        }
+        Ok(result)
     }
 
     pub(super) async fn transport_delete_events(

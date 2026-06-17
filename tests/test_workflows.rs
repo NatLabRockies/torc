@@ -1889,3 +1889,139 @@ fn test_get_running_jobs_not_found(start_server: &ServerProcess) {
     let result = apis::workflows_api::get_running_jobs(config, 999_999, None, None);
     assert!(result.is_err(), "expected error for nonexistent workflow");
 }
+
+/// List persistent events recorded for a workflow, optionally filtered server-side by category.
+fn list_events_in_category(
+    config: &Configuration,
+    workflow_id: i64,
+    category: Option<&str>,
+) -> models::ListEventsResponse {
+    apis::events_api::list_events(config, workflow_id, None, None, None, None, category, None)
+        .expect("Failed to list events")
+}
+
+/// Collect the `action` names from a set of events.
+fn action_names(events: &[models::EventModel]) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(|e| {
+            e.data
+                .get("action")
+                .and_then(|a| a.as_str())
+                .map(String::from)
+        })
+        .collect()
+}
+
+/// Verifies that the `process_changed_job_inputs` and `archive_workflow` endpoints record
+/// persistent `user_action` audit events. A dry-run of `process_changed_job_inputs` must not
+/// record anything.
+#[rstest]
+fn test_lifecycle_actions_record_user_action_events(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "lifecycle_events_test");
+    let workflow_id = workflow.id.unwrap();
+
+    // No user_action events yet (server-side category filter).
+    assert!(
+        list_events_in_category(config, workflow_id, Some("user_action"))
+            .items
+            .is_empty()
+    );
+
+    // A dry-run of process_changed_job_inputs must NOT record an event.
+    apis::workflows_api::process_changed_job_inputs(config, workflow_id, Some(true))
+        .expect("dry-run process_changed_job_inputs failed");
+    assert!(
+        list_events_in_category(config, workflow_id, Some("user_action"))
+            .items
+            .is_empty(),
+        "dry-run should not record an event"
+    );
+
+    // A real run records a single aggregated event (not one per job).
+    apis::workflows_api::process_changed_job_inputs(config, workflow_id, Some(false))
+        .expect("process_changed_job_inputs failed");
+
+    // Archiving records an event carrying the is_archived flag.
+    apis::workflows_api::archive_workflow(
+        config,
+        workflow_id,
+        torc::models::ArchiveWorkflowRequest { is_archived: true },
+    )
+    .expect("Failed to archive workflow");
+
+    // Fetch only the user_action events via the server-side category filter.
+    let response = list_events_in_category(config, workflow_id, Some("user_action"));
+    let events = response.items;
+    let actions = action_names(&events);
+    assert!(actions.contains(&"process_changed_job_inputs".to_string()));
+    assert!(actions.contains(&"archive_workflow".to_string()));
+    // Exactly the two real actions -- the dry-run is excluded. The server-side filter and the
+    // reported total_count must agree.
+    assert_eq!(
+        actions.len(),
+        2,
+        "expected exactly two user_action events, got {:?}",
+        actions
+    );
+    assert_eq!(response.total_count, 2, "filtered total_count should be 2");
+
+    // The category filter must actually constrain results: a category with no events is empty,
+    // and an unfiltered list returns at least the two user_action events.
+    assert!(
+        list_events_in_category(config, workflow_id, Some("no_such_category"))
+            .items
+            .is_empty(),
+        "unknown category should match no events"
+    );
+    assert!(
+        list_events_in_category(config, workflow_id, None)
+            .items
+            .len()
+            >= 2,
+        "unfiltered list should include all events"
+    );
+
+    // Every returned event carries the standard category/user fields.
+    for event in &events {
+        assert_eq!(
+            event.data.get("category").and_then(|c| c.as_str()),
+            Some("user_action")
+        );
+        assert!(
+            event.data.get("user").and_then(|u| u.as_str()).is_some(),
+            "event should carry a user field: {:?}",
+            event.data
+        );
+    }
+
+    // The process_changed_job_inputs event records the aggregate reinitialized count.
+    let pcji_event = events
+        .iter()
+        .find(|e| {
+            e.data.get("action").and_then(|a| a.as_str()) == Some("process_changed_job_inputs")
+        })
+        .expect("process_changed_job_inputs event not found");
+    assert_eq!(
+        pcji_event
+            .data
+            .get("reinitialized_count")
+            .and_then(|c| c.as_i64()),
+        Some(0)
+    );
+
+    // The archive event records the is_archived flag.
+    let archive_event = events
+        .iter()
+        .find(|e| e.data.get("action").and_then(|a| a.as_str()) == Some("archive_workflow"))
+        .expect("archive_workflow event not found");
+    assert_eq!(
+        archive_event
+            .data
+            .get("is_archived")
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+}
