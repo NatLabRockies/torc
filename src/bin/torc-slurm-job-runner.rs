@@ -20,6 +20,7 @@ mod unix_main {
     use std::thread;
     use torc::client::apis;
     use torc::client::apis::configuration::{Configuration, TlsConfig};
+    use torc::client::commands::orphan_detection;
     use torc::client::commands::slurm::{create_compute_node, create_node_resources};
     use torc::client::config::TorcConfig;
     use torc::client::hpc::hpc_interface::HpcInterface;
@@ -555,10 +556,33 @@ mod unix_main {
             }
         }
 
-        if slurm_interface.is_head_node()
-            && let Some(ref node) = scheduled_compute_node
-        {
-            set_scheduled_compute_node_status(&config, node, "complete");
+        if slurm_interface.is_head_node() {
+            if let Some(ref node) = scheduled_compute_node {
+                set_scheduled_compute_node_status(&config, node, "complete");
+            }
+
+            // Issue #257: once this runner stops, any sibling Slurm allocation
+            // still sitting in the queue is unnecessary if the workflow has no
+            // runnable jobs left (all work finished inside earlier allocations).
+            // Cancel those queued allocations so the workflow finishes without
+            // waiting on unneeded queue slots. Safe to run from every finishing
+            // allocation's head node: the call no-ops while runnable jobs remain,
+            // `scancel` is idempotent, and the first runner to win flips the nodes
+            // to "canceled" so the others find nothing left to cancel.
+            match orphan_detection::cancel_unneeded_pending_allocations(
+                &config,
+                args.workflow_id,
+                false,
+            ) {
+                Ok(count) if count > 0 => {
+                    info!(
+                        "Canceled {} unneeded queued Slurm allocation(s) workflow_id={}",
+                        count, args.workflow_id
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => warn!("Error canceling unneeded queued allocations: {}", e),
+            }
         }
     }
 

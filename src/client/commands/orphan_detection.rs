@@ -835,9 +835,227 @@ pub fn deactivate_compute_nodes_for_scheduled_node(
     Ok(count)
 }
 
+/// Returns true if the workflow still has work that an allocation could run.
+///
+/// "Runnable" means jobs in Ready, Pending, or Running status. Blocked jobs are
+/// not runnable on their own: with no Ready/Pending/Running job left to complete
+/// and unblock them, a queued allocation would have nothing to do.
+fn has_runnable_jobs(counts: &models::JobStatusCounts) -> bool {
+    counts.ready > 0 || counts.pending > 0 || counts.running > 0
+}
+
+/// Cancel queued Slurm allocations that the workflow no longer needs.
+///
+/// Addresses the "many small allocations" case (issue #257): a workflow opens
+/// several Slurm allocations but finishes all of its work inside the first few,
+/// leaving the rest sitting in the Slurm queue with nothing left to run. The
+/// standard orphan cleanup never touches them because Slurm still reports them
+/// as `Queued` (i.e. valid), so they wait until they start or are canceled by
+/// hand.
+///
+/// This cancels pending allocations only when the workflow has no runnable jobs
+/// left (no Ready/Pending/Running jobs). For each pending Slurm scheduled
+/// compute node still `Queued` in Slurm it issues `scancel`, marks the scheduled
+/// compute node `canceled`, and deactivates any associated compute nodes (the
+/// same bookkeeping `torc cancel` performs). Allocations that have already
+/// started (`Running`) are left alone -- their job runner detects there is no
+/// work and exits gracefully on its own; allocations already gone from Slurm are
+/// handled by [`cleanup_dead_pending_slurm_jobs`].
+///
+/// If `dry_run` is true, reports what would be done without making changes.
+/// Returns the number of allocations canceled.
+pub fn cancel_unneeded_pending_allocations(
+    config: &Configuration,
+    workflow_id: i64,
+    dry_run: bool,
+) -> Result<usize, String> {
+    // Cheap guard: if any runnable jobs remain, queued allocations may still be
+    // needed, so bail before doing any per-allocation squeue work.
+    let status = apis::workflows_api::get_workflow_status(config, workflow_id)
+        .map_err(|e| format!("Failed to get workflow status: {}", e))?;
+    if has_runnable_jobs(&status.jobs_by_status) {
+        return Ok(0);
+    }
+
+    // Enumerate pending Slurm allocations.
+    let scheduled_nodes = paginate_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        ScheduledComputeNodeListParams::new().with_status("pending".to_string()),
+    )
+    .map_err(|e| format!("Failed to list pending scheduled compute nodes: {}", e))?;
+
+    let slurm_nodes: Vec<_> = scheduled_nodes
+        .iter()
+        .filter(|node| node.scheduler_type.to_lowercase() == "slurm")
+        .collect();
+
+    if slurm_nodes.is_empty() {
+        return Ok(0);
+    }
+
+    // Slurm is the source of truth. If we can't talk to it, do nothing.
+    let slurm = match SlurmInterface::new() {
+        Ok(s) => s,
+        Err(e) => {
+            debug!(
+                "Could not create SlurmInterface to cancel unneeded allocations: {}",
+                e
+            );
+            return Ok(0);
+        }
+    };
+
+    let mut total_canceled = 0;
+
+    for scheduled_node in slurm_nodes {
+        let slurm_job_id = scheduled_node.scheduler_id.to_string();
+        let scheduled_compute_node_id = match scheduled_node.id {
+            Some(id) => id,
+            None => continue,
+        };
+
+        // Only cancel allocations still waiting in the queue. A Running
+        // allocation already has a job runner attached that exits cleanly once
+        // it sees there is no work; a job gone from Slurm is handled elsewhere.
+        match slurm.get_status(&slurm_job_id) {
+            Ok(info) if info.status == HpcJobStatus::Queued => {}
+            Ok(_) => continue,
+            Err(e) => {
+                debug!(
+                    "Error checking Slurm status for pending job {}: {}; leaving it untouched",
+                    slurm_job_id, e
+                );
+                continue;
+            }
+        }
+
+        if dry_run {
+            info!(
+                "[DRY RUN] Would cancel unneeded queued Slurm allocation {} (no runnable jobs remain) workflow_id={}",
+                slurm_job_id, workflow_id
+            );
+            total_canceled += 1;
+            continue;
+        }
+
+        // Cancel the queued allocation in Slurm.
+        match slurm.cancel_job(&slurm_job_id) {
+            Ok(0) => {
+                info!(
+                    "Canceled unneeded queued Slurm allocation {} (no runnable jobs remain) workflow_id={}",
+                    slurm_job_id, workflow_id
+                );
+            }
+            Ok(code) => {
+                warn!(
+                    "scancel for Slurm job {} returned non-zero code {}; skipping status update",
+                    slurm_job_id, code
+                );
+                continue;
+            }
+            Err(e) => {
+                warn!("Failed to cancel Slurm job {}: {}", slurm_job_id, e);
+                continue;
+            }
+        }
+
+        // Mark the scheduled compute node canceled so the watch loop stops
+        // treating it as a live allocation.
+        if let Err(e) = apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
+            config,
+            scheduled_compute_node_id,
+            models::ScheduledComputeNodesModel::new(
+                workflow_id,
+                scheduled_node.scheduler_id,
+                scheduled_node.scheduler_config_id,
+                scheduled_node.scheduler_type.clone(),
+                "canceled".to_string(),
+            ),
+        ) {
+            warn!(
+                "Failed to update scheduled compute node {} status to canceled: {}",
+                scheduled_compute_node_id, e
+            );
+        }
+
+        // `scancel` kills any job runner ungracefully, so deactivate associated
+        // compute nodes to avoid stranding is_active=true rows (mirrors `torc
+        // cancel`). A still-queued allocation usually has none, but this keeps
+        // the bookkeeping consistent.
+        if let Err(e) = deactivate_compute_nodes_for_scheduled_node(
+            config,
+            workflow_id,
+            scheduled_compute_node_id,
+            &slurm_job_id,
+            false,
+        ) {
+            warn!(
+                "Failed to deactivate compute nodes for scheduled compute node {}: {}",
+                scheduled_compute_node_id, e
+            );
+        }
+
+        total_canceled += 1;
+    }
+
+    if total_canceled > 0 {
+        let action = if dry_run { "Would cancel" } else { "Canceled" };
+        info!(
+            "{} {} unneeded queued Slurm allocation(s) workflow_id={}",
+            action, total_canceled, workflow_id
+        );
+    }
+
+    Ok(total_canceled)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn empty_counts() -> models::JobStatusCounts {
+        models::JobStatusCounts {
+            uninitialized: 0,
+            blocked: 0,
+            ready: 0,
+            pending: 0,
+            running: 0,
+            completed: 0,
+            failed: 0,
+            canceled: 0,
+            terminated: 0,
+            disabled: 0,
+            pending_failed: 0,
+        }
+    }
+
+    #[test]
+    fn test_has_runnable_jobs() {
+        // No jobs of any status -> nothing runnable.
+        assert!(!has_runnable_jobs(&empty_counts()));
+
+        // Blocked/completed/failed jobs are not runnable on their own.
+        let mut counts = empty_counts();
+        counts.blocked = 5;
+        counts.completed = 10;
+        counts.failed = 2;
+        counts.canceled = 1;
+        assert!(!has_runnable_jobs(&counts));
+
+        // Any of Ready / Pending / Running counts as runnable.
+        let mut counts = empty_counts();
+        counts.ready = 1;
+        assert!(has_runnable_jobs(&counts));
+
+        let mut counts = empty_counts();
+        counts.pending = 1;
+        assert!(has_runnable_jobs(&counts));
+
+        let mut counts = empty_counts();
+        counts.running = 1;
+        assert!(has_runnable_jobs(&counts));
+    }
 
     #[test]
     fn test_orphan_cleanup_result_any_cleaned() {
