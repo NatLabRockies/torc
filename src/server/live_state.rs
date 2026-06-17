@@ -16,6 +16,29 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
+/// Operator-controlled availability of the admin raw-SQL endpoint
+/// (`POST /admin/sql`). Both halves default to enabled; the `torc-server`
+/// `--disable-admin-sql` / `--disable-admin-sql-writes` flags turn them off.
+/// The audit-log listing is intentionally not gated here so past activity stays
+/// reviewable even after the feature is disabled.
+#[derive(Debug, Clone, Copy)]
+pub struct AdminSqlConfig {
+    /// When false, both read and write `admin_sql` calls are rejected (403).
+    pub reads_enabled: bool,
+    /// When false, write-path `admin_sql` calls are rejected (403); reads are
+    /// unaffected. Implied false whenever `reads_enabled` is false.
+    pub writes_enabled: bool,
+}
+
+impl Default for AdminSqlConfig {
+    fn default() -> Self {
+        Self {
+            reads_enabled: true,
+            writes_enabled: true,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct LiveServerState {
     pub pool: Arc<SqlitePool>,
@@ -28,6 +51,7 @@ pub struct LiveServerState {
     pub htpasswd: SharedHtpasswd,
     pub auth_file_path: Option<String>,
     pub credential_cache: SharedCredentialCache,
+    pub admin_sql: AdminSqlConfig,
     pub access_groups_api: AccessGroupsApiImpl,
     pub compute_nodes_api: ComputeNodesApiImpl,
     pub events_api: EventsApiImpl,
@@ -52,6 +76,7 @@ impl LiveServerState {
         htpasswd: SharedHtpasswd,
         auth_file_path: Option<String>,
         credential_cache: SharedCredentialCache,
+        admin_sql: AdminSqlConfig,
     ) -> Self {
         let pool_arc = Arc::new(pool);
         let api_context = ApiContext::new(pool_arc.as_ref().clone());
@@ -69,6 +94,7 @@ impl LiveServerState {
             htpasswd,
             auth_file_path,
             credential_cache,
+            admin_sql,
             access_groups_api: AccessGroupsApiImpl::new(api_context.clone()),
             compute_nodes_api: ComputeNodesApiImpl::new(api_context.clone()),
             events_api: EventsApiImpl::new(api_context.clone()),

@@ -339,6 +339,7 @@ pub async fn create(
     #[allow(unused_variables)] tls_key: Option<String>,
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
+    admin_sql: crate::server::live_state::AdminSqlConfig,
 ) -> u16 {
     bootstrap::create_server(
         addr,
@@ -354,6 +355,7 @@ pub async fn create(
         tls_key,
         auth_file_path,
         shutdown_on_stdin_eof,
+        admin_sql,
     )
     .await
 }
@@ -387,6 +389,7 @@ impl<C> Server<C> {
         htpasswd: crate::server::auth::SharedHtpasswd,
         auth_file_path: Option<String>,
         credential_cache: crate::server::auth::SharedCredentialCache,
+        admin_sql: crate::server::live_state::AdminSqlConfig,
     ) -> Self {
         Server {
             marker: PhantomData,
@@ -396,6 +399,7 @@ impl<C> Server<C> {
                 htpasswd,
                 auth_file_path,
                 credential_cache,
+                admin_sql,
             )),
         }
     }

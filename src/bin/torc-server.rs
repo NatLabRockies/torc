@@ -103,6 +103,17 @@ struct ServerConfig {
     #[arg(long = "admin-user", env = "TORC_ADMIN_USERS")]
     admin_users: Vec<String>,
 
+    /// Disable the admin raw-SQL endpoint entirely (`torc admin sql`). The
+    /// audit-log listing (`torc admin list-audit-log`) remains available so past
+    /// activity can still be reviewed.
+    #[arg(long, default_value_t = false)]
+    disable_admin_sql: bool,
+
+    /// Disable admin raw-SQL writes (`torc admin sql --write`) while still
+    /// allowing read-only queries. Ignored when --disable-admin-sql is set.
+    #[arg(long, default_value_t = false)]
+    disable_admin_sql_writes: bool,
+
     /// Shut down gracefully when stdin reaches EOF. Used by `torc --standalone`
     /// to tie the server's lifetime to the torc client: the parent holds the
     /// write end of stdin, and when it exits by any means (including
@@ -350,6 +361,8 @@ fn handle_service_action(action: ServiceAction) -> Result<()> {
                 tls_key: config.tls_key,
                 admin_users: config.admin_users,
                 completion_check_interval_secs: config.completion_check_interval_secs,
+                disable_admin_sql: config.disable_admin_sql,
+                disable_admin_sql_writes: config.disable_admin_sql_writes,
             };
             (service::ServiceCommand::Install, user, Some(svc_config))
         }
@@ -421,6 +434,9 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .completion_check_interval_secs
             .or(Some(server_file_config.completion_check_interval_secs)),
         admin_users: cli_config.admin_users,
+        disable_admin_sql: cli_config.disable_admin_sql || server_file_config.disable_admin_sql,
+        disable_admin_sql_writes: cli_config.disable_admin_sql_writes
+            || server_file_config.disable_admin_sql_writes,
         shutdown_on_stdin_eof: cli_config.shutdown_on_stdin_eof,
     };
 
@@ -692,6 +708,19 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             info!("Admin users configured: {:?}", admin_users);
         }
 
+        // `--disable-admin-sql` turns the whole feature off (reads + writes);
+        // `--disable-admin-sql-writes` leaves reads on. The audit-log listing
+        // stays available either way.
+        let admin_sql = torc::server::live_state::AdminSqlConfig {
+            reads_enabled: !config.disable_admin_sql,
+            writes_enabled: !config.disable_admin_sql && !config.disable_admin_sql_writes,
+        };
+        if !admin_sql.reads_enabled {
+            info!("Admin raw-SQL endpoint is DISABLED (audit-log listing remains available)");
+        } else if !admin_sql.writes_enabled {
+            info!("Admin raw-SQL writes are DISABLED (read-only queries allowed)");
+        }
+
         http_server::create(
             &addr,
             config.https,
@@ -706,6 +735,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             config.tls_key,
             config.auth_file.clone(),
             config.shutdown_on_stdin_eof,
+            admin_sql,
         )
         .await;
         Ok(())

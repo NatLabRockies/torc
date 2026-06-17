@@ -105,6 +105,20 @@ where
 
         authorize_admin!(self, context, AdminSqlResponse);
 
+        // Operator opt-out: the whole feature, or just writes, can be disabled
+        // via `torc-server --disable-admin-sql[-writes]`. Audit-log listing is
+        // intentionally not gated, so past activity stays reviewable.
+        if !self.admin_sql.reads_enabled {
+            return Ok(AdminSqlResponse::ForbiddenErrorResponse(forbidden_error!(
+                "admin SQL is disabled on this server"
+            )));
+        }
+        if body.write && !self.admin_sql.writes_enabled {
+            return Ok(AdminSqlResponse::ForbiddenErrorResponse(forbidden_error!(
+                "admin SQL writes are disabled on this server"
+            )));
+        }
+
         use crate::server::api::admin;
 
         if let Err(msg) = admin::validate_statement(&body.sql, body.write, body.allow_full_table) {

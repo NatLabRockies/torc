@@ -1628,7 +1628,7 @@ fn start_process_with_access_control(
     db_file: NamedTempFile,
     htpasswd_file: NamedTempFile,
 ) -> AccessControlServerProcess {
-    start_process_with_access_control_impl(db_url, db_file, htpasswd_file, false)
+    start_process_with_access_control_impl(db_url, db_file, htpasswd_file, false, &[])
 }
 
 fn start_process_with_access_control_impl(
@@ -1636,6 +1636,7 @@ fn start_process_with_access_control_impl(
     db_file: NamedTempFile,
     htpasswd_file: NamedTempFile,
     require_auth: bool,
+    extra_args: &[&str],
 ) -> AccessControlServerProcess {
     println!("Setting up database with url: {}", db_url);
     let status = Command::new("sqlx")
@@ -1687,6 +1688,7 @@ fn start_process_with_access_control_impl(
         if require_auth {
             cmd.arg("--require-auth");
         }
+        cmd.args(extra_args);
         let mut child = cmd
             .env("DATABASE_URL", db_url)
             .env("RUST_LOG", "info")
@@ -1765,12 +1767,28 @@ pub fn start_server_with_required_auth() -> AccessControlServerProcess {
 
     let db_file = NamedTempFile::new().expect("Failed to create temporary file");
     let url = format!("sqlite:{}", db_file.path().display());
-    let process = start_process_with_access_control_impl(&url, db_file, htpasswd_file, true);
+    let process = start_process_with_access_control_impl(&url, db_file, htpasswd_file, true, &[]);
     eprint!(
         "Started server with required auth, database file {:?} on port {}",
         process.server.db_file, process.server.port
     );
     process
+}
+
+/// Start a fresh access-control + require-auth server with extra `torc-server run`
+/// arguments. Unlike [`start_server_with_required_auth`] this is **not** a
+/// `#[once]` fixture, so each call gets an isolated server — use it for tests
+/// that need server flags such as `--disable-admin-sql`. Same test users as
+/// [`start_server_with_required_auth`].
+pub fn start_server_with_required_auth_and_args(extra_args: &[&str]) -> AccessControlServerProcess {
+    let _ = env_logger::try_init();
+
+    let test_users = ["alice", "bob", "carol", "dave", "owner"];
+    let htpasswd_file = create_htpasswd_file(&test_users);
+
+    let db_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let url = format!("sqlite:{}", db_file.path().display());
+    start_process_with_access_control_impl(&url, db_file, htpasswd_file, true, extra_args)
 }
 
 /// Start a test server instance with access control enforcement enabled

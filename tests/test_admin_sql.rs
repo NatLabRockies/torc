@@ -329,3 +329,51 @@ fn audit_log_list_paginates() {
     assert_eq!(body["offset"], json!(2));
     assert_eq!(body["has_more"], json!(false));
 }
+
+#[test]
+#[serial(auth)]
+fn disable_admin_sql_blocks_reads_and_writes_but_keeps_audit_log() {
+    // Whole feature off: reads and writes are 403, but the audit-log listing
+    // stays available so past activity can still be reviewed.
+    let server = common::start_server_with_required_auth_and_args(&["--disable-admin-sql"]);
+    let base = &server.server.config.base_path;
+
+    let (status, _) = post_sql(base, "owner", json!({ "sql": "SELECT 1" }));
+    assert_eq!(status, 403, "reads should be disabled");
+
+    let (status, _) = post_sql(
+        base,
+        "owner",
+        json!({ "sql": "UPDATE result SET return_code=0 WHERE id=1", "write": true }),
+    );
+    assert_eq!(status, 403, "writes should be disabled");
+
+    let (status, body) = get_audit_log(base, "owner", "");
+    assert_eq!(
+        status, 200,
+        "audit-log listing must remain available: {body}"
+    );
+}
+
+#[test]
+#[serial(auth)]
+fn disable_admin_sql_writes_allows_reads_blocks_writes() {
+    // Writes off, reads on.
+    let server = common::start_server_with_required_auth_and_args(&["--disable-admin-sql-writes"]);
+    let base = &server.server.config.base_path;
+
+    let (status, body) = post_sql(base, "owner", json!({ "sql": "SELECT 1 AS one" }));
+    assert_eq!(status, 200, "reads should still work: {body}");
+
+    // Even a dry-run write is rejected (the CLI previews via dry-run first).
+    let (status, _) = post_sql(
+        base,
+        "owner",
+        json!({
+            "sql": "UPDATE result SET return_code=0 WHERE id=1",
+            "write": true,
+            "dry_run": true
+        }),
+    );
+    assert_eq!(status, 403, "writes should be disabled");
+}

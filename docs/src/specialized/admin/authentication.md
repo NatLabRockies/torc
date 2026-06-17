@@ -514,8 +514,10 @@ torc admin sql --write "UPDATE result SET return_code=0 WHERE id=42"
 
 - `--yes` skips the confirmation prompt.
 - An unqualified `UPDATE`/`DELETE` (no `WHERE` clause) is refused unless you pass
-  `--allow-full-table`.
-- `ATTACH`/`DETACH` and multi-statement input are always rejected.
+  `--allow-full-table`. The leading verb is detected past an optional `WITH` (CTE), so
+  `WITH ... DELETE FROM t` is guarded the same as a bare `DELETE`.
+- DDL (`DROP`/`ALTER`/`TRUNCATE`), `ATTACH`/`DETACH`, and multi-statement input are always rejected.
+  Leading comments cannot be used to hide a disallowed keyword.
 
 ### Audit log
 
@@ -526,3 +528,15 @@ survives workflow deletion. Review it with a read query:
 ```bash
 torc admin sql "SELECT user_name, timestamp, sql_text, rows_affected FROM admin_audit_log ORDER BY id DESC LIMIT 20"
 ```
+
+### Disabling the feature
+
+The raw-SQL endpoint is enabled by default. Cautious operators can turn it off at the server with
+two `torc-server run` flags (also settable in the server config file):
+
+- `--disable-admin-sql` disables the endpoint entirely; both reads and writes return `403`.
+- `--disable-admin-sql-writes` keeps read-only queries working but rejects every `--write`
+  (including the dry-run preview) with `403`.
+
+The audit-log listing (`GET /admin/audit-log`) is **not** gated by these flags, so a past trail of
+admin writes stays reviewable even after the feature is disabled.

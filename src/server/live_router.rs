@@ -5561,7 +5561,14 @@ mod live_router_tests {
 
         let htpasswd: SharedHtpasswd = Arc::new(RwLock::new(None));
         let credential_cache: SharedCredentialCache = Arc::new(RwLock::new(None));
-        Server::new(pool, false, htpasswd, None, credential_cache)
+        Server::new(
+            pool,
+            false,
+            htpasswd,
+            None,
+            credential_cache,
+            crate::server::live_state::AdminSqlConfig::default(),
+        )
     }
 
     async fn test_server_with_file_backed_schema(
@@ -5586,7 +5593,14 @@ mod live_router_tests {
         let htpasswd: SharedHtpasswd = Arc::new(RwLock::new(None));
         let credential_cache: SharedCredentialCache = Arc::new(RwLock::new(None));
         (
-            Server::new(pool, false, htpasswd, None, credential_cache),
+            Server::new(
+                pool,
+                false,
+                htpasswd,
+                None,
+                credential_cache,
+                crate::server::live_state::AdminSqlConfig::default(),
+            ),
             db_file,
         )
     }

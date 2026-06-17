@@ -333,6 +333,7 @@ pub(super) async fn create_server(
     #[allow(unused_variables)] tls_key: Option<String>,
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
+    admin_sql: crate::server::live_state::AdminSqlConfig,
 ) -> u16 {
     let addr = tokio::net::lookup_host(addr)
         .await
@@ -382,6 +383,7 @@ pub(super) async fn create_server(
         shared_htpasswd.clone(),
         auth_file_path,
         shared_credential_cache.clone(),
+        admin_sql,
     );
 
     let server_clone = server.clone();
