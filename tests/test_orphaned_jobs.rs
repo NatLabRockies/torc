@@ -654,7 +654,7 @@ fn complete_single_job(config: &torc::client::Configuration, workflow_id: i64, n
         .expect("complete job");
 }
 
-/// Issue #257: when the workflow has no runnable jobs left, a still-queued Slurm
+/// When the workflow has no runnable jobs left, a still-queued Slurm
 /// allocation is unnecessary and must be canceled (scancel + node -> "canceled").
 #[rstest]
 #[serial(slurm)]
@@ -707,6 +707,46 @@ fn test_cancel_unneeded_queued_allocation(start_server: &ServerProcess) {
         jobs.contains("CANCELLED"),
         "expected scancel to flip the fake job to CANCELLED, got: {jobs}"
     );
+
+    // Exactly one aggregate event is recorded for the batch of cancellations
+    // (not one per allocation), so users can see they are over-scheduling.
+    let events = apis::events_api::list_events(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        Some("scheduler"),
+        None,
+    )
+    .expect("list events");
+    let cancel_events: Vec<_> = events
+        .items
+        .iter()
+        .filter(|e| {
+            e.data.get("action").and_then(|a| a.as_str())
+                == Some("cancel_unneeded_pending_allocations")
+        })
+        .collect();
+    assert_eq!(
+        cancel_events.len(),
+        1,
+        "expected exactly one aggregate cancellation event, got: {:?}",
+        events.items
+    );
+    let event = cancel_events[0];
+    assert_eq!(
+        event.data.get("num_canceled").and_then(|n| n.as_i64()),
+        Some(1)
+    );
+    let ids = event
+        .data
+        .get("slurm_job_ids")
+        .and_then(|v| v.as_array())
+        .expect("slurm_job_ids array");
+    assert_eq!(ids.len(), 1);
+    assert_eq!(ids[0].as_str(), Some(slurm_job_id.to_string().as_str()));
 }
 
 /// The cancellation must NOT fire while the workflow still has runnable jobs: a

@@ -561,7 +561,7 @@ mod unix_main {
                 set_scheduled_compute_node_status(&config, node, "complete");
             }
 
-            // Issue #257: once this runner stops, any sibling Slurm allocation
+            // Once this runner stops, any sibling Slurm allocation
             // still sitting in the queue is unnecessary if the workflow has no
             // runnable jobs left (all work finished inside earlier allocations).
             // Cancel those queued allocations so the workflow finishes without

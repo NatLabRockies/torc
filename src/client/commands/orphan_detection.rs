@@ -846,7 +846,7 @@ fn has_runnable_jobs(counts: &models::JobStatusCounts) -> bool {
 
 /// Cancel queued Slurm allocations that the workflow no longer needs.
 ///
-/// Addresses the "many small allocations" case (issue #257): a workflow opens
+/// Addresses the "many small allocations" case: a workflow opens
 /// several Slurm allocations but finishes all of its work inside the first few,
 /// leaving the rest sitting in the Slurm queue with nothing left to run. The
 /// standard orphan cleanup never touches them because Slurm still reports them
@@ -907,6 +907,8 @@ pub fn cancel_unneeded_pending_allocations(
     };
 
     let mut total_canceled = 0;
+    // Slurm job IDs actually canceled, used to record a single aggregate event below.
+    let mut canceled_slurm_job_ids: Vec<String> = Vec::new();
 
     for scheduled_node in slurm_nodes {
         let slurm_job_id = scheduled_node.scheduler_id.to_string();
@@ -946,6 +948,7 @@ pub fn cancel_unneeded_pending_allocations(
                     "Canceled unneeded queued Slurm allocation {} (no runnable jobs remain) workflow_id={}",
                     slurm_job_id, workflow_id
                 );
+                canceled_slurm_job_ids.push(slurm_job_id.clone());
             }
             Ok(code) => {
                 warn!(
@@ -1005,6 +1008,30 @@ pub fn cancel_unneeded_pending_allocations(
             "{} {} unneeded queued Slurm allocation(s) workflow_id={}",
             action, total_canceled, workflow_id
         );
+    }
+
+    // Record a single aggregate event for the whole batch of cancellations (not one
+    // per allocation). This surfaces in `torc events` so users can notice they are
+    // scheduling more allocations than the workflow needs. Dry runs make no changes,
+    // so they record nothing.
+    if !canceled_slurm_job_ids.is_empty() {
+        let data = serde_json::json!({
+            "category": "scheduler",
+            "action": "cancel_unneeded_pending_allocations",
+            "message": format!(
+                "Canceled {} unneeded queued Slurm allocation(s) because no runnable jobs remained",
+                canceled_slurm_job_ids.len()
+            ),
+            "num_canceled": canceled_slurm_job_ids.len(),
+            "slurm_job_ids": canceled_slurm_job_ids,
+        });
+        let event = models::EventModel::new(workflow_id, data);
+        if let Err(e) = apis::events_api::create_event(config, event) {
+            warn!(
+                "Failed to record canceled-allocations event workflow_id={}: {}",
+                workflow_id, e
+            );
+        }
     }
 
     Ok(total_canceled)
