@@ -16632,6 +16632,28 @@ torc watch $WORKFLOW_ID --auto-schedule
 <li>After scheduling, the system waits 30 minutes before considering another auto-schedule</li>
 <li>If fewer than 5 retry jobs are waiting for 2 hours, they're scheduled anyway (stranded timeout)</li>
 </ul>
+<h2 id="canceling-unneeded-queued-allocations"><a class="header" href="#canceling-unneeded-queued-allocations">Canceling Unneeded Queued Allocations</a></h2>
+<p>The inverse of auto-scheduling: when a workflow opens several Slurm allocations but finishes all of
+its work inside the first few, the remaining allocations can sit in the Slurm queue with nothing
+left to run. Standard orphan cleanup never touches them because Slurm still reports them as <code>Queued</code>
+(i.e. still valid).</p>
+<p>This cleanup runs automatically inside the <strong>Slurm job runner</strong>, so it happens for every workflow —
+no <code>torc watch</code> required. When a job runner stops (the workflow completed, or it has no more work),
+the head node of that allocation checks whether the workflow has any <strong>runnable</strong> jobs left — jobs
+in <code>Ready</code>, <code>Pending</code>, or <code>Running</code> status. If none remain, any still-<code>Queued</code> sibling Slurm
+allocation is unnecessary, so the runner:</p>
+<ol>
+<li>confirms the allocation is still queued in Slurm,</li>
+<li>issues <code>scancel</code> to release the queue slot,</li>
+<li>marks the corresponding scheduled compute node <code>canceled</code>, and</li>
+<li>deactivates any associated compute nodes.</li>
+</ol>
+<p>Allocations that have already started (<code>Running</code>) are left alone — their own job runner detects
+there is no work and exits gracefully. The check is safe to run from every finishing allocation: it
+no-ops while runnable jobs remain, <code>scancel</code> is idempotent, and the first runner to act flips the
+queued nodes to <code>canceled</code> so the rest find nothing left to cancel. This is especially helpful for
+"many small allocations" workflows, where some allocations may still be queued after the workflow's
+useful work is exhausted.</p>
 <h2 id="choosing-the-right-command"><a class="header" href="#choosing-the-right-command">Choosing the Right Command</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Use Case</th><th>Command</th></tr></thead><tbody>
 <tr><td>Interactive recovery after failure</td><td><code>torc recover</code></td></tr>
