@@ -564,6 +564,242 @@ fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProces
     );
 }
 
+/// Path to the shared fake squeue/scancel jobs file (matches the bash scripts,
+/// which read `${TMPDIR:-/tmp}/fake_slurm_jobs.txt`).
+fn fake_jobs_file() -> std::path::PathBuf {
+    let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
+    std::path::Path::new(&tmpdir).join("fake_slurm_jobs.txt")
+}
+
+/// Register a fake Slurm job so `fake_squeue.sh` reports it with `state` (e.g.
+/// "PENDING" -> Queued) and `fake_scancel.sh` can flip it to CANCELLED.
+fn write_fake_slurm_job(slurm_job_id: i64, name: &str, state: &str) {
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(fake_jobs_file())
+        .expect("open fake jobs file");
+    // Fields: job_id|name|state|start|end|account|partition|qos (only the first
+    // three matter to get_status; the rest stay empty).
+    writeln!(f, "{}|{}|{}", slurm_job_id, name, state).expect("write fake job");
+}
+
+/// Point SlurmInterface at the fake squeue/scancel scripts and ensure USER is set.
+/// Returns guards that restore the previous environment on drop.
+fn use_fake_slurm() -> Vec<EnvVarGuard> {
+    let cwd = std::env::current_dir().unwrap();
+    let fake_squeue = cwd.join("tests/scripts/fake_squeue.sh");
+    let fake_scancel = cwd.join("tests/scripts/fake_scancel.sh");
+    assert!(fake_squeue.exists(), "missing {:?}", fake_squeue);
+    assert!(fake_scancel.exists(), "missing {:?}", fake_scancel);
+
+    let _ = std::fs::remove_file(fake_jobs_file());
+
+    let mut guards = vec![
+        EnvVarGuard::set("TORC_FAKE_SQUEUE", &fake_squeue.to_string_lossy()),
+        EnvVarGuard::set("TORC_FAKE_SCANCEL", &fake_scancel.to_string_lossy()),
+    ];
+    if std::env::var("USER").is_err() && std::env::var("USERNAME").is_err() {
+        guards.push(EnvVarGuard::set("USER", "test-user"));
+    }
+    guards
+}
+
+/// Drive one job all the way to Completed so the workflow has no runnable jobs.
+fn complete_single_job(config: &torc::client::Configuration, workflow_id: i64, name: &str) {
+    let job = models::JobModel::new(workflow_id, name.to_string(), "echo done".to_string());
+    let job_id = apis::jobs_api::create_job(config, job)
+        .expect("create job")
+        .id
+        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("initialize jobs");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("get workflow")
+        .run_id
+        .unwrap_or(0);
+
+    let compute_node = models::ComputeNodeModel::new(
+        workflow_id,
+        "test-host".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        8,
+        16.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    let compute_node_id = apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("create compute node")
+        .id
+        .unwrap();
+
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1)).expect("claim job");
+    apis::jobs_api::start_job(config, job_id, run_id, compute_node_id).expect("start job");
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        0,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(config, job_id, models::JobStatus::Completed, run_id, result)
+        .expect("complete job");
+}
+
+/// When the workflow has no runnable jobs left, a still-queued Slurm
+/// allocation is unnecessary and must be canceled (scancel + node -> "canceled").
+#[rstest]
+#[serial(slurm)]
+fn test_cancel_unneeded_queued_allocation(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let _guards = use_fake_slurm();
+
+    let workflow = create_test_workflow(config, "test_cancel_unneeded_queued");
+    let workflow_id = workflow.id.unwrap();
+    let scheduler = create_test_slurm_scheduler(config, workflow_id, "queued_alloc_scheduler");
+    let scheduler_config_id = scheduler.id.unwrap();
+
+    // All work is done: the workflow has no Ready/Pending/Running jobs.
+    complete_single_job(config, workflow_id, "finished_job");
+
+    // A sibling allocation is still sitting in the Slurm queue (status PENDING ->
+    // Queued), recorded Torc-side as a "pending" scheduled compute node.
+    let slurm_job_id = 778899;
+    write_fake_slurm_job(slurm_job_id, "queued_alloc", "PENDING");
+    let scheduled = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
+        config,
+        models::ScheduledComputeNodesModel::new(
+            workflow_id,
+            slurm_job_id,
+            scheduler_config_id,
+            "slurm".to_string(),
+            "pending".to_string(),
+        ),
+    )
+    .expect("create scheduled compute node");
+    let scheduled_id = scheduled.id.unwrap();
+
+    let canceled = torc::client::commands::orphan_detection::cancel_unneeded_pending_allocations(
+        config,
+        workflow_id,
+        false,
+    )
+    .expect("cancel_unneeded_pending_allocations failed");
+
+    assert_eq!(canceled, 1, "the queued allocation should be canceled");
+
+    // Torc-side bookkeeping: the scheduled compute node is now "canceled".
+    let after = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, scheduled_id)
+        .expect("get scheduled compute node");
+    assert_eq!(after.status, "canceled");
+
+    // scancel was actually invoked: the fake jobs file shows the job CANCELLED.
+    let jobs = std::fs::read_to_string(fake_jobs_file()).unwrap_or_default();
+    assert!(
+        jobs.contains("CANCELLED"),
+        "expected scancel to flip the fake job to CANCELLED, got: {jobs}"
+    );
+
+    // Exactly one aggregate event is recorded for the batch of cancellations
+    // (not one per allocation), so users can see they are over-scheduling.
+    let events = apis::events_api::list_events(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        Some("scheduler"),
+        None,
+    )
+    .expect("list events");
+    let cancel_events: Vec<_> = events
+        .items
+        .iter()
+        .filter(|e| {
+            e.data.get("action").and_then(|a| a.as_str())
+                == Some("cancel_unneeded_pending_allocations")
+        })
+        .collect();
+    assert_eq!(
+        cancel_events.len(),
+        1,
+        "expected exactly one aggregate cancellation event, got: {:?}",
+        events.items
+    );
+    let event = cancel_events[0];
+    assert_eq!(
+        event.data.get("num_canceled").and_then(|n| n.as_i64()),
+        Some(1)
+    );
+    let ids = event
+        .data
+        .get("slurm_job_ids")
+        .and_then(|v| v.as_array())
+        .expect("slurm_job_ids array");
+    assert_eq!(ids.len(), 1);
+    assert_eq!(ids[0].as_str(), Some(slurm_job_id.to_string().as_str()));
+}
+
+/// The cancellation must NOT fire while the workflow still has runnable jobs: a
+/// queued allocation may still be needed to run them.
+#[rstest]
+#[serial(slurm)]
+fn test_cancel_skips_when_runnable_jobs_remain(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let _guards = use_fake_slurm();
+
+    let workflow = create_test_workflow(config, "test_cancel_skips_runnable");
+    let workflow_id = workflow.id.unwrap();
+    let scheduler = create_test_slurm_scheduler(config, workflow_id, "runnable_scheduler");
+    let scheduler_config_id = scheduler.id.unwrap();
+
+    // Leave a Ready job: there IS runnable work.
+    let job = models::JobModel::new(workflow_id, "ready_job".to_string(), "echo hi".to_string());
+    apis::jobs_api::create_job(config, job).expect("create job");
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("initialize jobs");
+
+    let slurm_job_id = 112233;
+    write_fake_slurm_job(slurm_job_id, "queued_alloc", "PENDING");
+    let scheduled = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(
+        config,
+        models::ScheduledComputeNodesModel::new(
+            workflow_id,
+            slurm_job_id,
+            scheduler_config_id,
+            "slurm".to_string(),
+            "pending".to_string(),
+        ),
+    )
+    .expect("create scheduled compute node");
+    let scheduled_id = scheduled.id.unwrap();
+
+    let canceled = torc::client::commands::orphan_detection::cancel_unneeded_pending_allocations(
+        config,
+        workflow_id,
+        false,
+    )
+    .expect("cancel_unneeded_pending_allocations failed");
+
+    assert_eq!(canceled, 0, "must not cancel while runnable jobs remain");
+
+    let after = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(config, scheduled_id)
+        .expect("get scheduled compute node");
+    assert_eq!(
+        after.status, "pending",
+        "allocation should be left untouched"
+    );
+}
+
 /// Test that list_jobs returns empty when filtering by non-existent active_compute_node_id
 #[rstest]
 fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {

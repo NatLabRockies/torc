@@ -57,6 +57,11 @@ impl SlurmInterface {
         env::var("TORC_FAKE_SBATCH").unwrap_or_else(|_| "sbatch".to_string())
     }
 
+    /// Get the scancel executable path (allows for testing with fake binary)
+    fn get_scancel_exec() -> String {
+        env::var("TORC_FAKE_SCANCEL").unwrap_or_else(|_| "scancel".to_string())
+    }
+
     /// Run a command with retries for transient errors
     fn run_command_with_retries(
         &self,
@@ -100,7 +105,8 @@ impl SlurmInterface {
 
 impl HpcInterface for SlurmInterface {
     fn cancel_job(&self, job_id: &str) -> Result<i32> {
-        let output = Command::new("scancel").arg(job_id).output()?;
+        let scancel = Self::get_scancel_exec();
+        let output = Command::new(&scancel).arg(job_id).output()?;
 
         let return_code = output.status.code().unwrap_or(-1);
         if return_code != 0 {

@@ -323,6 +323,31 @@ With default settings:
 - After scheduling, the system waits 30 minutes before considering another auto-schedule
 - If fewer than 5 retry jobs are waiting for 2 hours, they're scheduled anyway (stranded timeout)
 
+## Canceling Unneeded Queued Allocations
+
+The inverse of auto-scheduling: when a workflow opens several Slurm allocations but finishes all of
+its work inside the first few, the remaining allocations can sit in the Slurm queue with nothing
+left to run. Standard orphan cleanup never touches them because Slurm still reports them as `Queued`
+(i.e. still valid).
+
+This cleanup runs automatically inside the **Slurm job runner**, so it happens for every workflow —
+no `torc watch` required. When a job runner stops (the workflow completed, or it has no more work),
+the head node of that allocation checks whether the workflow has any **runnable** jobs left — jobs
+in `Ready`, `Pending`, or `Running` status. If none remain, any still-`Queued` sibling Slurm
+allocation is unnecessary, so the runner:
+
+1. confirms the allocation is still queued in Slurm,
+2. issues `scancel` to release the queue slot,
+3. marks the corresponding scheduled compute node `canceled`, and
+4. deactivates any associated compute nodes.
+
+Allocations that have already started (`Running`) are left alone — their own job runner detects
+there is no work and exits gracefully. The check is safe to run from every finishing allocation: it
+no-ops while runnable jobs remain, `scancel` is idempotent, and the first runner to act flips the
+queued nodes to `canceled` so the rest find nothing left to cancel. This is especially helpful for
+"many small allocations" workflows, where some allocations may still be queued after the workflow's
+useful work is exhausted.
+
 ## Choosing the Right Command
 
 | Use Case                           | Command                     |
