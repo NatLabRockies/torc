@@ -611,7 +611,8 @@ pub struct AdminAuditLogQuery {
     #[serde(default)]
     #[param(nullable = true)]
     pub offset: Option<i64>,
-    /// Maximum number of entries to return. Defaults to and is capped at 10,000.
+    /// Maximum number of entries to return. Defaults to and is capped at 100,000
+    /// (the server-wide list cap); values above the cap are clamped.
     #[serde(default)]
     #[param(nullable = true)]
     pub limit: Option<i64>,

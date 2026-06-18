@@ -2220,7 +2220,7 @@ class AccessControlApi:
     def list_admin_audit_log(
         self,
         offset: Annotated[Optional[StrictInt], Field(description="Offset for pagination (0-based). Defaults to 0.")] = None,
-        limit: Annotated[Optional[StrictInt], Field(description="Maximum number of entries to return. Defaults to and is capped at 10,000.")] = None,
+        limit: Annotated[Optional[StrictInt], Field(description="Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2239,7 +2239,7 @@ class AccessControlApi:
 
         :param offset: Offset for pagination (0-based). Defaults to 0.
         :type offset: int
-        :param limit: Maximum number of entries to return. Defaults to and is capped at 10,000.
+        :param limit: Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.
         :type limit: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -2292,7 +2292,7 @@ class AccessControlApi:
     def list_admin_audit_log_with_http_info(
         self,
         offset: Annotated[Optional[StrictInt], Field(description="Offset for pagination (0-based). Defaults to 0.")] = None,
-        limit: Annotated[Optional[StrictInt], Field(description="Maximum number of entries to return. Defaults to and is capped at 10,000.")] = None,
+        limit: Annotated[Optional[StrictInt], Field(description="Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2311,7 +2311,7 @@ class AccessControlApi:
 
         :param offset: Offset for pagination (0-based). Defaults to 0.
         :type offset: int
-        :param limit: Maximum number of entries to return. Defaults to and is capped at 10,000.
+        :param limit: Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.
         :type limit: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -2364,7 +2364,7 @@ class AccessControlApi:
     def list_admin_audit_log_without_preload_content(
         self,
         offset: Annotated[Optional[StrictInt], Field(description="Offset for pagination (0-based). Defaults to 0.")] = None,
-        limit: Annotated[Optional[StrictInt], Field(description="Maximum number of entries to return. Defaults to and is capped at 10,000.")] = None,
+        limit: Annotated[Optional[StrictInt], Field(description="Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2383,7 +2383,7 @@ class AccessControlApi:
 
         :param offset: Offset for pagination (0-based). Defaults to 0.
         :type offset: int
-        :param limit: Maximum number of entries to return. Defaults to and is capped at 10,000.
+        :param limit: Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.
         :type limit: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request

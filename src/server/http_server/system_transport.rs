@@ -1,4 +1,5 @@
 use super::*;
+use crate::server::api::admin;
 use crate::server::htpasswd::HtpasswdFile;
 
 impl<C> Server<C>
@@ -119,8 +120,6 @@ where
             )));
         }
 
-        use crate::server::api::admin;
-
         if let Err(msg) = admin::validate_statement(&body.sql, body.write, body.allow_full_table) {
             return Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
                 error_payload!("InvalidStatement", msg),
@@ -206,8 +205,6 @@ where
         log_call!(debug, context, "list_admin_audit_log()");
 
         authorize_admin!(self, context, ListAdminAuditLogResponse);
-
-        use crate::server::api::admin;
 
         let max_limit = crate::MAX_RECORD_TRANSFER_COUNT;
         let offset = offset.unwrap_or(0).max(0);

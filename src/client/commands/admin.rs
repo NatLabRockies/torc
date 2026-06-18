@@ -118,7 +118,7 @@ connection; writes require --write and run inside a transaction.
 WARNING: raw writes bypass application invariants (the job status state machine,
 the background unblocking contract). A direct UPDATE/DELETE can leave the
 database in a state torc never produces. Prefer a dedicated torc command when one
-exists, and you may need to run 'torc workflows reconcile' afterward.
+exists.
 
 EXAMPLES:
     # Inspect state (read-only)

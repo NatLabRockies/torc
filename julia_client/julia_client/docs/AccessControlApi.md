@@ -271,7 +271,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **offset** | **Int64** | Offset for pagination (0-based). Defaults to 0. | [default to nothing]
- **limit** | **Int64** | Maximum number of entries to return. Defaults to and is capped at 10,000. | [default to nothing]
+ **limit** | **Int64** | Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped. | [default to nothing]
 
 ### Return type
 
