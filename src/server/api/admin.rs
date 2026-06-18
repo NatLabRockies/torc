@@ -4,7 +4,7 @@
 //! escape hatch for admins to inspect and surgically repair database state when a
 //! bug leaves a workflow stuck. It is intentionally narrow:
 //!
-//! - Reads are restricted to `SELECT`/`WITH`/`VALUES`/`EXPLAIN` and run with
+//! - Reads are restricted to `SELECT`/`WITH`/`VALUES` and run with
 //!   [`PRAGMA query_only`](execute_read_only) enabled on a pooled connection, so
 //!   any write fails at the SQLite engine layer regardless of statement parsing,
 //!   and no connection-scoped state (pragmas, transactions) can leak back to the
@@ -52,11 +52,13 @@ pub fn clamp_limit(limit: Option<i64>) -> usize {
 ///   hatch, and schema changes belong in migrations. `DROP TABLE` in particular
 ///   would cascade-delete child rows via `ON DELETE CASCADE`.
 ///
-/// For the read path (`is_write == false`), only `SELECT`/`WITH`/`VALUES`/`EXPLAIN`
-/// are allowed. Reads run on a pooled connection guarded by `PRAGMA query_only`,
+/// For the read path (`is_write == false`), only `SELECT`/`WITH`/`VALUES` are
+/// allowed. Reads run on a pooled connection guarded by `PRAGMA query_only`,
 /// which stops data writes but not connection-scoped state changes; rejecting
 /// everything else keeps a `PRAGMA foreign_keys = OFF` or a stray `BEGIN` from
 /// leaking onto the connection and corrupting later borrowers from the pool.
+/// `EXPLAIN` is excluded so an inner `ATTACH`/`DETACH`/DDL statement can't slip
+/// past the leading-keyword guards.
 ///
 /// For the write path, also rejects an unqualified `UPDATE`/`DELETE` (one with no
 /// `WHERE` clause) unless `allow_full_table` is set. The leading verb is detected
@@ -106,11 +108,13 @@ pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> 
         // changes. A leaked `PRAGMA foreign_keys = OFF` or an open `BEGIN` would
         // ride the connection back into the pool and corrupt later borrowers, so
         // restrict reads to statement forms that produce rows and touch no
-        // connection state.
-        const READ_VERBS: &[&str] = &["SELECT", "WITH", "VALUES", "EXPLAIN"];
+        // connection state. EXPLAIN is intentionally excluded: it would let a
+        // disallowed inner statement (`EXPLAIN ATTACH ...`, `EXPLAIN DROP ...`)
+        // slip past the leading-keyword guards above.
+        const READ_VERBS: &[&str] = &["SELECT", "WITH", "VALUES"];
         if !READ_VERBS.contains(&first_word) {
             return Err(format!(
-                "Only SELECT, WITH, VALUES, or EXPLAIN statements are allowed on the read path; \
+                "Only SELECT, WITH, or VALUES statements are allowed on the read path; \
                  got {first_word}. Set write=true for statements that modify data."
             ));
         }
@@ -709,7 +713,6 @@ mod tests {
             "select * from job",
             "WITH c AS (SELECT id FROM job) SELECT * FROM c",
             "VALUES (1, 2)",
-            "EXPLAIN QUERY PLAN SELECT * FROM job",
             "-- pick one\nSELECT 1",
         ] {
             assert!(validate_statement(stmt, false, false).is_ok(), "{stmt}");
@@ -730,6 +733,12 @@ mod tests {
             "ROLLBACK",
             "SAVEPOINT s",
             "-- sneaky\nPRAGMA foreign_keys = OFF",
+            // EXPLAIN is not whitelisted: it must not be usable to wrap an
+            // otherwise-blocked inner statement.
+            "EXPLAIN SELECT 1",
+            "EXPLAIN QUERY PLAN SELECT * FROM job",
+            "EXPLAIN ATTACH DATABASE 'x' AS y",
+            "EXPLAIN DROP TABLE job",
         ] {
             let err = validate_statement(stmt, false, false).unwrap_err();
             assert!(err.contains("read path"), "{stmt}: {err}");
