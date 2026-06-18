@@ -129,21 +129,15 @@ where
 
         if body.write {
             let user = username_from_context(context);
-            match admin::execute_write(&self.pool, &body.sql, body.dry_run).await {
+            let audit = admin::AuditContext {
+                user_name: &user,
+                allow_full_table: body.allow_full_table,
+            };
+            match admin::execute_write(&self.pool, &body.sql, body.dry_run, &audit).await {
                 Ok(rows_affected) => {
+                    // Committing writes are audited atomically inside execute_write.
                     let committed = !body.dry_run;
                     if committed {
-                        admin::record_audit(
-                            &self.pool,
-                            &user,
-                            &body.sql,
-                            body.allow_full_table,
-                            Some(rows_affected),
-                            true,
-                            true,
-                            None,
-                        )
-                        .await;
                         info!(
                             "admin_sql write committed by user={} rows_affected={} sql={:?}",
                             user, rows_affected, body.sql

@@ -82,8 +82,10 @@ EXAMPLES:
         name = "list-audit-log",
         after_long_help = "\
 Shows the durable audit trail of admin raw-SQL writes (`torc admin sql --write`),
-newest first. Every committing write is recorded, along with failed and aborted
-write attempts; read-only queries and dry-run previews are not audited.
+newest first. A committing write is recorded atomically with the change, and a
+write that reaches the database and fails is also recorded. Read-only queries,
+dry-run previews, and statements rejected before execution (e.g. by validation)
+are not audited.
 
 EXAMPLES:
     # Most recent entries

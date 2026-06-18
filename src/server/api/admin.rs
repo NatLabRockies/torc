@@ -25,8 +25,11 @@ use sqlx::{Column, Row, TypeInfo, ValueRef};
 use crate::models;
 use crate::server::api::begin_immediate;
 
-/// Default and hard maximum number of SELECT rows returned, matching the
-/// standard list pagination cap.
+/// Default and hard maximum number of result rows returned by the admin
+/// endpoints (`admin sql` SELECTs and the audit-log listing). This is a
+/// deliberately conservative cap for ad-hoc admin queries; it is independent of,
+/// and smaller than, the server-wide list cap [`crate::MAX_RECORD_TRANSFER_COUNT`]
+/// (100,000).
 pub const MAX_RESULT_ROWS: i64 = 10_000;
 
 /// Clamp a caller-supplied row limit into `1..=MAX_RESULT_ROWS`.
@@ -271,43 +274,86 @@ fn dedupe_columns(raw: Vec<String>) -> Vec<String> {
     out
 }
 
+/// Attribution recorded alongside a committing write in `admin_audit_log`.
+pub struct AuditContext<'a> {
+    pub user_name: &'a str,
+    pub allow_full_table: bool,
+}
+
 /// Execute a write statement inside a transaction.
 ///
 /// Uses `BEGIN IMMEDIATE` (via [`begin_immediate`]) to match the server's write
-/// convention. When `dry_run` is true the transaction is rolled back after
-/// capturing the affected-row count (preview); otherwise it is committed. Returns
-/// the number of rows affected.
-pub async fn execute_write(pool: &SqlitePool, sql: &str, dry_run: bool) -> Result<i64, String> {
+/// convention.
+///
+/// - `dry_run`: roll back after capturing the affected-row count (preview). No
+///   audit row is written.
+/// - commit: the `admin_audit_log` row is inserted **in the same transaction** as
+///   the change and they commit atomically, so a committed write always has a
+///   durable audit entry. If the audit insert fails, the whole write is rolled
+///   back and an error is returned.
+///
+/// Returns the number of rows affected. Failed statements (and failed
+/// commit-audit attempts) are not audited here; the caller records those
+/// best-effort via [`record_audit`], since no change persisted.
+pub async fn execute_write(
+    pool: &SqlitePool,
+    sql: &str,
+    dry_run: bool,
+    audit: &AuditContext<'_>,
+) -> Result<i64, String> {
     let mut tx = begin_immediate(pool)
         .await
         .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
-    match sqlx::query(sql).execute(&mut *tx).await {
-        Ok(done) => {
-            let affected = done.rows_affected() as i64;
-            if dry_run {
-                tx.rollback()
-                    .await
-                    .map_err(|e| format!("Rollback failed: {e}"))?;
-            } else {
-                tx.commit()
-                    .await
-                    .map_err(|e| format!("Commit failed: {e}"))?;
-            }
-            Ok(affected)
-        }
+    let affected = match sqlx::query(sql).execute(&mut *tx).await {
+        Ok(done) => done.rows_affected() as i64,
         Err(e) => {
             let _ = tx.rollback().await;
-            Err(format!("Statement failed: {e}"))
+            return Err(format!("Statement failed: {e}"));
         }
+    };
+
+    if dry_run {
+        tx.rollback()
+            .await
+            .map_err(|e| format!("Rollback failed: {e}"))?;
+        return Ok(affected);
     }
+
+    // Commit path: record the audit row atomically with the change so a committed
+    // write can never lack a durable audit entry.
+    if let Err(e) = insert_audit_row(
+        &mut *tx,
+        audit.user_name,
+        sql,
+        audit.allow_full_table,
+        Some(affected),
+        true,
+        true,
+        None,
+    )
+    .await
+    {
+        let _ = tx.rollback().await;
+        return Err(format!(
+            "Failed to record audit entry; write rolled back: {e}"
+        ));
+    }
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("Commit failed: {e}"))?;
+    Ok(affected)
 }
 
-/// Record one committing-write attempt in `admin_audit_log` (best effort).
+/// Record a non-committing write attempt in `admin_audit_log` (best effort).
 ///
-/// Only the write path calls this, on both success and failure. Read-only queries
-/// and dry-run previews are not audited. A failure to write the audit row is
-/// logged but does not fail the request.
+/// Used only for writes that failed before committing (the statement errored, or
+/// the atomic commit-audit was rolled back). No change persisted, so a missing
+/// audit row here cannot hide a committed change; a failure to insert is logged
+/// but does not fail the request. Committing writes are audited atomically inside
+/// [`execute_write`] instead. Read-only queries and dry-run previews are not
+/// audited.
 #[allow(clippy::too_many_arguments)]
 pub async fn record_audit(
     pool: &SqlitePool,
@@ -319,8 +365,41 @@ pub async fn record_audit(
     success: bool,
     error: Option<&str>,
 ) {
+    if let Err(e) = insert_audit_row(
+        pool,
+        user_name,
+        sql,
+        allow_full_table,
+        rows_affected,
+        committed,
+        success,
+        error,
+    )
+    .await
+    {
+        log::error!("Failed to write admin_audit_log entry: {e}");
+    }
+}
+
+/// Insert one `admin_audit_log` row using the given executor (the shared pool for
+/// best-effort failure records, or an open transaction for the atomic commit
+/// record). All audited rows are writes (`is_write = 1`).
+#[allow(clippy::too_many_arguments)]
+async fn insert_audit_row<'e, E>(
+    executor: E,
+    user_name: &str,
+    sql: &str,
+    allow_full_table: bool,
+    rows_affected: Option<i64>,
+    committed: bool,
+    success: bool,
+    error: Option<&str>,
+) -> Result<(), sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
     let now = Utc::now().timestamp_millis();
-    let result = sqlx::query(
+    sqlx::query(
         "INSERT INTO admin_audit_log \
          (user_name, timestamp, sql_text, is_write, allow_full_table, rows_affected, committed, success, error) \
          VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)",
@@ -333,12 +412,9 @@ pub async fn record_audit(
     .bind(committed as i64)
     .bind(success as i64)
     .bind(error)
-    .execute(pool)
-    .await;
-
-    if let Err(e) = result {
-        log::error!("Failed to write admin_audit_log entry: {e}");
-    }
+    .execute(executor)
+    .await
+    .map(|_| ())
 }
 
 /// Fetch a page of `admin_audit_log` rows (newest first) plus the total count.
