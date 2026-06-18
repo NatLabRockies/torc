@@ -501,7 +501,8 @@ torc -f csv  admin sql "SELECT id, status FROM job"
 torc -f json admin sql "SELECT * FROM admin_audit_log"
 ```
 
-`--limit` caps the number of returned rows (default and maximum 10,000).
+`--limit` caps the number of returned rows (default and maximum 100,000, the same as other list
+endpoints).
 
 JSON output is an array of objects under `items`, with a parallel `columns` array giving the display
 order. Column names the query repeats (e.g. an unaliased join on two `id` columns) are suffixed

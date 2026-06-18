@@ -28,7 +28,7 @@ class AdminSqlRequest(BaseModel):
     """ # noqa: E501
     allow_full_table: Optional[StrictBool] = Field(default=None, description="Permit an unqualified UPDATE/DELETE (no WHERE clause). Ignored on the read-only path.")
     dry_run: Optional[StrictBool] = Field(default=None, description="Write path only: run inside a transaction, report rows affected, then roll back instead of committing (preview).")
-    limit: Optional[StrictInt] = Field(default=None, description="Maximum number of SELECT result rows to return. Defaults to and is capped at 10,000 (the standard list cap); values above the cap are clamped.")
+    limit: Optional[StrictInt] = Field(default=None, description="Maximum number of SELECT result rows to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.")
     sql: StrictStr = Field(description="The single SQL statement to execute.")
     write: Optional[StrictBool] = Field(default=None, description="Opt into the write path. When false (default) the statement runs on a read-only connection, so any write fails at the SQLite layer.")
     __properties: ClassVar[List[str]] = ["allow_full_table", "dry_run", "limit", "sql", "write"]

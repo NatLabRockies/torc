@@ -209,7 +209,7 @@ where
 
         use crate::server::api::admin;
 
-        let max_limit = admin::MAX_RESULT_ROWS;
+        let max_limit = crate::MAX_RECORD_TRANSFER_COUNT;
         let offset = offset.unwrap_or(0).max(0);
         let limit = admin::clamp_limit(limit) as i64;
 

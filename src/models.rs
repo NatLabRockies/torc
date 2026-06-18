@@ -2369,7 +2369,7 @@ pub struct AdminSqlRequest {
     #[serde(default)]
     pub dry_run: bool,
     /// Maximum number of SELECT result rows to return. Defaults to and is capped
-    /// at 10,000 (the standard list cap); values above the cap are clamped.
+    /// at 100,000 (the server-wide list cap); values above the cap are clamped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<i64>,
 }

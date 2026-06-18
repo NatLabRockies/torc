@@ -99,7 +99,7 @@ EXAMPLES:
 "
     )]
     ListAuditLog {
-        /// Maximum number of entries to return (capped at 10,000)
+        /// Maximum number of entries to return (capped at 100,000)
         #[arg(long)]
         limit: Option<i64>,
         /// Offset for pagination (0-based)
@@ -151,7 +151,7 @@ EXAMPLES:
         /// Skip the confirmation prompt for writes
         #[arg(long, short = 'y')]
         yes: bool,
-        /// Maximum number of result rows to return (read-only; capped at 10,000)
+        /// Maximum number of result rows to return (read-only; capped at 100,000)
         #[arg(long)]
         limit: Option<i64>,
     },

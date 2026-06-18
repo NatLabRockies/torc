@@ -15,7 +15,7 @@ Request body for the admin raw-SQL endpoint (&#x60;POST /admin/sql&#x60;).
 
     - allow_full_table::Bool : Permit an unqualified UPDATE/DELETE (no WHERE clause). Ignored on the read-only path.
     - dry_run::Bool : Write path only: run inside a transaction, report rows affected, then roll back instead of committing (preview).
-    - limit::Int64 : Maximum number of SELECT result rows to return. Defaults to and is capped at 10,000 (the standard list cap); values above the cap are clamped.
+    - limit::Int64 : Maximum number of SELECT result rows to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped.
     - sql::String : The single SQL statement to execute.
     - write::Bool : Opt into the write path. When false (default) the statement runs on a read-only connection, so any write fails at the SQLite layer.
 """

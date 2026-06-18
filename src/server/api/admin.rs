@@ -22,31 +22,28 @@ use serde_json::Value;
 use sqlx::sqlite::{SqliteConnection, SqlitePool};
 use sqlx::{Column, Row, TypeInfo, ValueRef};
 
+use crate::MAX_RECORD_TRANSFER_COUNT;
 use crate::models;
 use crate::server::api::begin_immediate;
 
-/// Default and hard maximum number of result rows returned by the admin
-/// endpoints (`admin sql` SELECTs and the audit-log listing). This is a
-/// deliberately conservative cap for ad-hoc admin queries; it is independent of,
-/// and smaller than, the server-wide list cap [`crate::MAX_RECORD_TRANSFER_COUNT`]
-/// (100,000).
-pub const MAX_RESULT_ROWS: i64 = 10_000;
-
-/// Clamp a caller-supplied row limit into `1..=MAX_RESULT_ROWS`.
+/// Clamp a caller-supplied row limit into `1..=MAX_RECORD_TRANSFER_COUNT`. The
+/// admin endpoints (`admin sql` SELECTs and the audit-log listing) use the same
+/// row cap (100,000) as the standard list endpoints.
 pub fn clamp_limit(limit: Option<i64>) -> usize {
     match limit {
-        Some(n) if n > 0 => n.min(MAX_RESULT_ROWS) as usize,
-        _ => MAX_RESULT_ROWS as usize,
+        Some(n) if n > 0 => n.min(MAX_RECORD_TRANSFER_COUNT) as usize,
+        _ => MAX_RECORD_TRANSFER_COUNT as usize,
     }
 }
 
 /// Validate an admin SQL statement before execution.
 ///
 /// Enforces the statement-level guardrails that apply regardless of the
-/// read/write path:
+/// read/write path. All checks run against a copy of the statement with string
+/// literals and comments blanked out (see [`strip_strings_and_comments`]), so
+/// their contents can't fool a check (a `;`, `WHERE`, or `(` inside a string) and
+/// a leading comment can't hide the real keyword:
 /// - non-empty, single statement only (no `;`-separated batches)
-/// - leading SQL comments are stripped first, so they cannot hide the real
-///   leading keyword (e.g. `-- x\nATTACH ...`)
 /// - `ATTACH`/`DETACH` are rejected (they can read/write arbitrary files even on
 ///   a read-only connection)
 /// - DDL (`DROP`/`ALTER`/`TRUNCATE`) is rejected: this is a data-repair escape
@@ -61,25 +58,26 @@ pub fn clamp_limit(limit: Option<i64>) -> usize {
 ///
 /// Returns `Err(message)` describing a 422-class rejection.
 pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> Result<(), String> {
-    let trimmed = sql.trim();
-    if trimmed.is_empty() {
+    if sql.trim().is_empty() {
         return Err("SQL statement is empty".to_string());
     }
 
+    // Blank string literals and comments so their contents can't influence the
+    // token-based checks below, then uppercase for keyword matching.
+    let upper = strip_strings_and_comments(sql).to_uppercase();
+
     // Single statement only. Allow one optional trailing ';'.
-    let body = trimmed.strip_suffix(';').unwrap_or(trimmed);
+    let body = upper.trim();
+    let body = body.strip_suffix(';').unwrap_or(body).trim_end();
     if body.contains(';') {
         return Err("Only a single SQL statement is allowed".to_string());
     }
-
-    // Strip leading comments so they cannot mask the leading keyword.
-    let effective = strip_leading_comments(body);
-    if effective.is_empty() {
+    if body.is_empty() {
+        // Nothing left after removing comments/whitespace.
         return Err("SQL statement is empty".to_string());
     }
 
-    let upper = effective.to_uppercase();
-    let first_word = upper.split_whitespace().next().unwrap_or("");
+    let first_word = body.split_whitespace().next().unwrap_or("");
 
     if first_word == "ATTACH" || first_word == "DETACH" {
         return Err(format!("{first_word} statements are not allowed"));
@@ -98,14 +96,15 @@ pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> 
         // Classify the statement's top-level verb at paren depth 0. A leading
         // `WITH` (CTE) puts its definitions in parentheses, so the real verb
         // still appears at depth 0 afterward.
-        let depth0 = depth0_keywords(&upper);
+        let depth0 = depth0_keywords(body);
         let is_update_or_delete = if first_word == "WITH" {
             depth0.iter().any(|w| *w == "UPDATE" || *w == "DELETE")
         } else {
             first_word == "UPDATE" || first_word == "DELETE"
         };
-        // A WHERE anywhere satisfies the guard (intentionally permissive).
-        let has_where = upper
+        // A WHERE anywhere satisfies the guard (intentionally permissive). String
+        // literals were already blanked, so `SET note='WHERE'` does not count.
+        let has_where = body
             .split(|c: char| !c.is_alphanumeric() && c != '_')
             .any(|w| w == "WHERE");
         if is_update_or_delete && !has_where {
@@ -118,26 +117,70 @@ pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> 
     Ok(())
 }
 
-/// Strip leading whitespace and SQL comments (`-- line` and `/* block */`),
-/// returning the statement starting at its first significant token. Used so a
-/// leading comment cannot hide the real leading keyword from [`validate_statement`].
-fn strip_leading_comments(sql: &str) -> &str {
-    let mut s = sql.trim_start();
-    loop {
-        if let Some(rest) = s.strip_prefix("--") {
-            match rest.find('\n') {
-                Some(i) => s = rest[i + 1..].trim_start(),
-                None => return "",
+/// Return a copy of `sql` with SQL string literals (`'...'`, `"..."`, including
+/// doubled-quote escapes) and comments (`-- line`, `/* block */`) replaced by
+/// spaces. Token boundaries are preserved, so the guard checks in
+/// [`validate_statement`] see structure (`;`, `WHERE`, parentheses, the leading
+/// keyword) without being fooled by characters inside strings or comments. This
+/// is a lexer-level pass, not a full SQL parser; exotic quoting (backtick/bracket
+/// identifiers) is left as-is.
+fn strip_strings_and_comments(sql: &str) -> String {
+    let chars: Vec<char> = sql.chars().collect();
+    let mut out = String::with_capacity(sql.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        // Line comment: blank to end of line (keep the newline).
+        if c == '-' && chars.get(i + 1) == Some(&'-') {
+            while i < chars.len() && chars[i] != '\n' {
+                out.push(' ');
+                i += 1;
             }
-        } else if let Some(rest) = s.strip_prefix("/*") {
-            match rest.find("*/") {
-                Some(i) => s = rest[i + 2..].trim_start(),
-                None => return "",
-            }
-        } else {
-            return s;
+            continue;
         }
+        // Block comment: blank through the closing `*/`.
+        if c == '/' && chars.get(i + 1) == Some(&'*') {
+            out.push(' ');
+            out.push(' ');
+            i += 2;
+            while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
+                out.push(' ');
+                i += 1;
+            }
+            if i < chars.len() {
+                out.push(' ');
+                out.push(' ');
+                i += 2;
+            }
+            continue;
+        }
+        // String literal / quoted identifier: blank contents, honoring doubled
+        // quotes (`''`, `""`) as escapes.
+        if c == '\'' || c == '"' {
+            let quote = c;
+            out.push(' ');
+            i += 1;
+            while i < chars.len() {
+                if chars[i] == quote {
+                    if chars.get(i + 1) == Some(&quote) {
+                        out.push(' ');
+                        out.push(' ');
+                        i += 2;
+                        continue;
+                    }
+                    out.push(' ');
+                    i += 1;
+                    break;
+                }
+                out.push(' ');
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c);
+        i += 1;
     }
+    out
 }
 
 /// Collect identifier-like keywords that occur at parenthesis depth 0 in an
@@ -637,13 +680,49 @@ mod tests {
 
     #[test]
     fn clamp_limit_defaults_and_caps() {
-        assert_eq!(clamp_limit(None), MAX_RESULT_ROWS as usize);
-        assert_eq!(clamp_limit(Some(0)), MAX_RESULT_ROWS as usize);
-        assert_eq!(clamp_limit(Some(-5)), MAX_RESULT_ROWS as usize);
+        assert_eq!(clamp_limit(None), MAX_RECORD_TRANSFER_COUNT as usize);
+        assert_eq!(clamp_limit(Some(0)), MAX_RECORD_TRANSFER_COUNT as usize);
+        assert_eq!(clamp_limit(Some(-5)), MAX_RECORD_TRANSFER_COUNT as usize);
         assert_eq!(clamp_limit(Some(50)), 50);
         assert_eq!(
-            clamp_limit(Some(MAX_RESULT_ROWS + 100)),
-            MAX_RESULT_ROWS as usize
+            clamp_limit(Some(MAX_RECORD_TRANSFER_COUNT + 100)),
+            MAX_RECORD_TRANSFER_COUNT as usize
+        );
+    }
+
+    #[test]
+    fn where_in_string_literal_does_not_satisfy_guard() {
+        // A `WHERE` token inside a string literal is not a real WHERE clause, so an
+        // otherwise-unqualified UPDATE/DELETE is still blocked.
+        assert!(validate_statement("UPDATE t SET note = 'WHERE'", true, false).is_err());
+        assert!(
+            validate_statement("DELETE FROM t WHERE note = 'no WHERE here'", true, false).is_ok()
+        );
+        // A real WHERE alongside a string containing the word is fine.
+        assert!(
+            validate_statement("UPDATE t SET note = 'WHERE' WHERE id = 1", true, false).is_ok()
+        );
+    }
+
+    #[test]
+    fn semicolon_inside_string_or_comment_is_not_multi_statement() {
+        assert!(validate_statement("SELECT 'a;b' AS x", false, false).is_ok());
+        assert!(validate_statement("SELECT 1 /* a;b */", false, false).is_ok());
+    }
+
+    #[test]
+    fn strip_strings_and_comments_blanks_contents() {
+        let out = strip_strings_and_comments("SELECT 'x;y' -- z;\n, \"w;v\"");
+        assert!(
+            !out.contains(';'),
+            "semicolons inside string/comment survived: {out:?}"
+        );
+        assert!(out.to_uppercase().contains("SELECT"));
+        // Doubled-quote escapes don't end the literal early.
+        let out = strip_strings_and_comments("'a''b;c'");
+        assert!(
+            out.trim().is_empty(),
+            "escaped-quote string not fully blanked: {out:?}"
         );
     }
 
