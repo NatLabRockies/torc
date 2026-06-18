@@ -465,6 +465,13 @@ still giving them a faithful debugging artifact.
   the `file` table (job inputs, outputs, logs on shared filesystems) are not copied; the recipient
   analyzes metadata only unless those paths are independently shared.
 
+## Direct Database Access (Admin SQL)
+
+For inspecting server state or surgically repairing the database when a bug leaves a workflow stuck
+and no dedicated command can fix it, admins can run raw SQL through `torc admin sql` — an
+authenticated, guard-railed, audit-logged escape hatch that is safer than opening `sqlite3` on the
+server host directly. See [Admin SQL Access](./admin-sql.md).
+
 ## Complete Example: Production Deployment
 
 ```bash
