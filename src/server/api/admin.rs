@@ -4,9 +4,11 @@
 //! escape hatch for admins to inspect and surgically repair database state when a
 //! bug leaves a workflow stuck. It is intentionally narrow:
 //!
-//! - Reads run with [`PRAGMA query_only`](execute_read_only) enabled on a pooled
-//!   connection, so any write fails at the SQLite engine layer regardless of
-//!   statement parsing.
+//! - Reads are restricted to `SELECT`/`WITH`/`VALUES`/`EXPLAIN` and run with
+//!   [`PRAGMA query_only`](execute_read_only) enabled on a pooled connection, so
+//!   any write fails at the SQLite engine layer regardless of statement parsing,
+//!   and no connection-scoped state (pragmas, transactions) can leak back to the
+//!   pool.
 //! - Writes run inside a transaction with an optional dry-run (rollback) preview
 //!   and a no-WHERE guard, and every committing write is recorded in
 //!   `admin_audit_log`.
@@ -50,6 +52,12 @@ pub fn clamp_limit(limit: Option<i64>) -> usize {
 ///   hatch, and schema changes belong in migrations. `DROP TABLE` in particular
 ///   would cascade-delete child rows via `ON DELETE CASCADE`.
 ///
+/// For the read path (`is_write == false`), only `SELECT`/`WITH`/`VALUES`/`EXPLAIN`
+/// are allowed. Reads run on a pooled connection guarded by `PRAGMA query_only`,
+/// which stops data writes but not connection-scoped state changes; rejecting
+/// everything else keeps a `PRAGMA foreign_keys = OFF` or a stray `BEGIN` from
+/// leaking onto the connection and corrupting later borrowers from the pool.
+///
 /// For the write path, also rejects an unqualified `UPDATE`/`DELETE` (one with no
 /// `WHERE` clause) unless `allow_full_table` is set. The leading verb is detected
 /// at parenthesis depth 0, so a CTE-prefixed write (`WITH c AS (...) DELETE FROM
@@ -90,6 +98,22 @@ pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> 
     const BLOCKED_DDL: &[&str] = &["DROP", "ALTER", "TRUNCATE"];
     if BLOCKED_DDL.contains(&first_word) {
         return Err(format!("{first_word} (DDL) statements are not allowed"));
+    }
+
+    if !is_write {
+        // The read path runs on a pooled connection guarded only by `PRAGMA
+        // query_only`, which blocks data writes but not connection-scoped state
+        // changes. A leaked `PRAGMA foreign_keys = OFF` or an open `BEGIN` would
+        // ride the connection back into the pool and corrupt later borrowers, so
+        // restrict reads to statement forms that produce rows and touch no
+        // connection state.
+        const READ_VERBS: &[&str] = &["SELECT", "WITH", "VALUES", "EXPLAIN"];
+        if !READ_VERBS.contains(&first_word) {
+            return Err(format!(
+                "Only SELECT, WITH, VALUES, or EXPLAIN statements are allowed on the read path; \
+                 got {first_word}. Set write=true for statements that modify data."
+            ));
+        }
     }
 
     if is_write && !allow_full_table {
@@ -676,6 +700,48 @@ mod tests {
     #[test]
     fn no_where_guard_does_not_apply_to_reads() {
         assert!(validate_statement("SELECT * FROM result", false, false).is_ok());
+    }
+
+    #[test]
+    fn read_path_allows_row_producing_verbs() {
+        for stmt in [
+            "SELECT 1",
+            "select * from job",
+            "WITH c AS (SELECT id FROM job) SELECT * FROM c",
+            "VALUES (1, 2)",
+            "EXPLAIN QUERY PLAN SELECT * FROM job",
+            "-- pick one\nSELECT 1",
+        ] {
+            assert!(validate_statement(stmt, false, false).is_ok(), "{stmt}");
+        }
+    }
+
+    #[test]
+    fn read_path_rejects_connection_state_statements() {
+        // PRAGMA / transaction control could leak connection-scoped state (e.g.
+        // foreign_keys=OFF, an open transaction) back into the pool. query_only
+        // does not stop these, so validation must.
+        for stmt in [
+            "PRAGMA foreign_keys = OFF",
+            "pragma table_info(job)",
+            "BEGIN",
+            "BEGIN IMMEDIATE",
+            "COMMIT",
+            "ROLLBACK",
+            "SAVEPOINT s",
+            "-- sneaky\nPRAGMA foreign_keys = OFF",
+        ] {
+            let err = validate_statement(stmt, false, false).unwrap_err();
+            assert!(err.contains("read path"), "{stmt}: {err}");
+        }
+    }
+
+    #[test]
+    fn write_path_still_allows_non_read_verbs() {
+        // The whitelist is read-path-only; writes (INSERT/UPDATE/DELETE) and
+        // their guards are unaffected.
+        assert!(validate_statement("INSERT INTO job (id) VALUES (1)", true, false).is_ok());
+        assert!(validate_statement("DELETE FROM result WHERE id=1", true, false).is_ok());
     }
 
     #[test]
