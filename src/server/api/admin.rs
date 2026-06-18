@@ -176,12 +176,13 @@ fn depth0_keywords(upper: &str) -> Vec<&str> {
 /// `:memory:` connection is private, and even a shared-cache in-memory database
 /// is destroyed once the pool's last connection closes). The pragma is always
 /// restored before the connection returns to the pool. Returns the result column
-/// names and up to `limit` rows of JSON-encoded cell values.
+/// names (with duplicates suffixed, see [`dedupe_columns`]) and up to `limit`
+/// rows as JSON objects keyed by those column names.
 pub async fn execute_read_only(
     pool: &SqlitePool,
     sql: &str,
     limit: usize,
-) -> Result<(Vec<String>, Vec<Vec<Value>>), String> {
+) -> Result<(Vec<String>, Vec<serde_json::Map<String, Value>>), String> {
     let mut conn = pool
         .acquire()
         .await
@@ -209,19 +210,20 @@ pub async fn execute_read_only(
     result
 }
 
-/// Stream a query's rows into JSON, capped at `limit`. Column names are taken
-/// from the first row. Borrows the connection mutably so the caller can restore
-/// connection state once the stream is dropped.
+/// Stream a query's rows into JSON objects, capped at `limit`. Column names are
+/// taken from the first row and de-duplicated (see [`dedupe_columns`]); each row
+/// becomes an object keyed by those names. Borrows the connection mutably so the
+/// caller can restore connection state once the stream is dropped.
 async fn read_rows(
     conn: &mut SqliteConnection,
     sql: &str,
     limit: usize,
-) -> Result<(Vec<String>, Vec<Vec<Value>>), String> {
+) -> Result<(Vec<String>, Vec<serde_json::Map<String, Value>>), String> {
     use futures::TryStreamExt;
 
     let mut stream = sqlx::query(sql).fetch(&mut *conn);
     let mut columns: Vec<String> = Vec::new();
-    let mut rows: Vec<Vec<Value>> = Vec::new();
+    let mut items: Vec<serde_json::Map<String, Value>> = Vec::new();
 
     while let Some(row) = stream
         .try_next()
@@ -229,18 +231,44 @@ async fn read_rows(
         .map_err(|e| format!("Query failed: {e}"))?
     {
         if columns.is_empty() {
-            columns = row.columns().iter().map(|c| c.name().to_string()).collect();
+            let raw = row.columns().iter().map(|c| c.name().to_string()).collect();
+            columns = dedupe_columns(raw);
         }
-        if rows.len() >= limit {
+        if items.len() >= limit {
             break;
         }
-        let values = (0..row.columns().len())
-            .map(|i| cell_to_json(&row, i))
-            .collect();
-        rows.push(values);
+        let mut obj = serde_json::Map::with_capacity(columns.len());
+        for (i, name) in columns.iter().enumerate() {
+            obj.insert(name.clone(), cell_to_json(&row, i));
+        }
+        items.push(obj);
     }
 
-    Ok((columns, rows))
+    Ok((columns, items))
+}
+
+/// Make column names unique by suffixing collisions (`id`, `id_2`, `id_3`, ...).
+/// Arbitrary SQL (joins, `SELECT *`, `SELECT id, id`) can repeat a name, but each
+/// result row is serialized as an object keyed by these names, so duplicates would
+/// otherwise clobber each other. Result order is preserved. If a generated suffix
+/// itself collides with another column, it keeps probing for a free name.
+fn dedupe_columns(raw: Vec<String>) -> Vec<String> {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(raw.len());
+    for name in raw {
+        if seen.insert(name.clone()) {
+            out.push(name);
+            continue;
+        }
+        let mut n = 2;
+        let mut candidate = format!("{name}_{n}");
+        while !seen.insert(candidate.clone()) {
+            n += 1;
+            candidate = format!("{name}_{n}");
+        }
+        out.push(candidate);
+    }
+    out
 }
 
 /// Execute a write statement inside a transaction.
@@ -540,6 +568,19 @@ mod tests {
         assert_eq!(
             clamp_limit(Some(MAX_RESULT_ROWS + 100)),
             MAX_RESULT_ROWS as usize
+        );
+    }
+
+    #[test]
+    fn dedupe_columns_suffixes_collisions() {
+        assert_eq!(
+            dedupe_columns(vec!["id".into(), "id".into(), "name".into(), "id".into()]),
+            vec!["id", "id_2", "name", "id_3"]
+        );
+        // A generated suffix that collides with a real column keeps probing.
+        assert_eq!(
+            dedupe_columns(vec!["id".into(), "id".into(), "id_2".into()]),
+            vec!["id", "id_2", "id_2_2"]
         );
     }
 

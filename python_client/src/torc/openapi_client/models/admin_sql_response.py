@@ -26,11 +26,11 @@ class AdminSqlResponse(BaseModel):
     """
     Response body for the admin raw-SQL endpoint (`POST /admin/sql`).
     """ # noqa: E501
-    columns: List[StrictStr] = Field(description="Column names for SELECT results (empty for write statements).")
+    columns: List[StrictStr] = Field(description="Column names in result order, defining how `items` is displayed (empty for write statements). Names the query repeats are suffixed (`id`, `id_2`, ...) so each item's keys stay unique.")
     committed: StrictBool = Field(description="True when a write was committed to the database.")
-    rows: List[List[Any]] = Field(description="Result rows; each row is a list of JSON-encoded cell values aligned with `columns`.")
+    items: List[Dict[str, Any]] = Field(description="Result rows as objects keyed by `columns` (empty for write statements).")
     rows_affected: Optional[StrictInt] = Field(default=None, description="Number of rows affected by a write statement, when applicable.")
-    __properties: ClassVar[List[str]] = ["columns", "committed", "rows", "rows_affected"]
+    __properties: ClassVar[List[str]] = ["columns", "committed", "items", "rows_affected"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -90,7 +90,7 @@ class AdminSqlResponse(BaseModel):
         _obj = cls.model_validate({
             "columns": obj.get("columns"),
             "committed": obj.get("committed"),
-            "rows": obj.get("rows"),
+            "items": obj.get("items"),
             "rows_affected": obj.get("rows_affected")
         })
         return _obj

@@ -2378,10 +2378,12 @@ pub struct AdminSqlRequest {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdminSqlResponse {
-    /// Column names for SELECT results (empty for write statements).
+    /// Column names in result order, defining how `items` is displayed (empty for
+    /// write statements). Names the query repeats are suffixed (`id`, `id_2`, ...)
+    /// so each item's keys stay unique.
     pub columns: Vec<String>,
-    /// Result rows; each row is a list of JSON-encoded cell values aligned with `columns`.
-    pub rows: Vec<Vec<serde_json::Value>>,
+    /// Result rows as objects keyed by `columns` (empty for write statements).
+    pub items: Vec<serde_json::Map<String, serde_json::Value>>,
     /// Number of rows affected by a write statement, when applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rows_affected: Option<i64>,

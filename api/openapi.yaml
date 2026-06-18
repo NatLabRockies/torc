@@ -5684,23 +5684,28 @@ components:
       description: Response body for the admin raw-SQL endpoint (`POST /admin/sql`).
       required:
       - columns
-      - rows
+      - items
       - committed
       properties:
         columns:
           type: array
           items:
             type: string
-          description: Column names for SELECT results (empty for write statements).
+          description: |-
+            Column names in result order, defining how `items` is displayed (empty for
+            write statements). Names the query repeats are suffixed (`id`, `id_2`, ...)
+            so each item's keys stay unique.
         committed:
           type: boolean
           description: True when a write was committed to the database.
-        rows:
+        items:
           type: array
           items:
-            type: array
-            items: {}
-          description: Result rows; each row is a list of JSON-encoded cell values aligned with `columns`.
+            type: object
+            additionalProperties: {}
+            propertyNames:
+              type: string
+          description: Result rows as objects keyed by `columns` (empty for write statements).
         rows_affected:
           type:
           - integer

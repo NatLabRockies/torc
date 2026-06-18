@@ -8,42 +8,42 @@ Response body for the admin raw-SQL endpoint (&#x60;POST /admin/sql&#x60;).
     AdminSqlResponse(;
         columns=nothing,
         committed=nothing,
-        rows=nothing,
+        items=nothing,
         rows_affected=nothing,
     )
 
-    - columns::Vector{String} : Column names for SELECT results (empty for write statements).
+    - columns::Vector{String} : Column names in result order, defining how &#x60;items&#x60; is displayed (empty for write statements). Names the query repeats are suffixed (&#x60;id&#x60;, &#x60;id_2&#x60;, ...) so each item&#39;s keys stay unique.
     - committed::Bool : True when a write was committed to the database.
-    - rows::Vector{Vector{Any}} : Result rows; each row is a list of JSON-encoded cell values aligned with &#x60;columns&#x60;.
+    - items::Vector{Dict{String, Any}} : Result rows as objects keyed by &#x60;columns&#x60; (empty for write statements).
     - rows_affected::Int64 : Number of rows affected by a write statement, when applicable.
 """
 Base.@kwdef mutable struct AdminSqlResponse <: OpenAPI.APIModel
     columns::Union{Nothing, Vector{String}} = nothing
     committed::Union{Nothing, Bool} = nothing
-    rows::Union{Nothing, Vector{Vector{Any}}} = nothing
+    items::Union{Nothing, Vector{Dict{String, Any}}} = nothing
     rows_affected::Union{Nothing, Int64} = nothing
 
-    function AdminSqlResponse(columns, committed, rows, rows_affected, )
-        o = new(columns, committed, rows, rows_affected, )
+    function AdminSqlResponse(columns, committed, items, rows_affected, )
+        o = new(columns, committed, items, rows_affected, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type AdminSqlResponse
 
-const _property_types_AdminSqlResponse = Dict{Symbol,String}(Symbol("columns")=>"Vector{String}", Symbol("committed")=>"Bool", Symbol("rows")=>"Vector{Vector{Any}}", Symbol("rows_affected")=>"Int64", )
+const _property_types_AdminSqlResponse = Dict{Symbol,String}(Symbol("columns")=>"Vector{String}", Symbol("committed")=>"Bool", Symbol("items")=>"Vector{Dict{String, Any}}", Symbol("rows_affected")=>"Int64", )
 OpenAPI.property_type(::Type{ AdminSqlResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_AdminSqlResponse[name]))}
 
 function OpenAPI.check_required(o::AdminSqlResponse)
     o.columns === nothing && (return false)
     o.committed === nothing && (return false)
-    o.rows === nothing && (return false)
+    o.items === nothing && (return false)
     true
 end
 
 function OpenAPI.validate_properties(o::AdminSqlResponse)
     OpenAPI.validate_property(AdminSqlResponse, Symbol("columns"), o.columns)
     OpenAPI.validate_property(AdminSqlResponse, Symbol("committed"), o.committed)
-    OpenAPI.validate_property(AdminSqlResponse, Symbol("rows"), o.rows)
+    OpenAPI.validate_property(AdminSqlResponse, Symbol("items"), o.items)
     OpenAPI.validate_property(AdminSqlResponse, Symbol("rows_affected"), o.rows_affected)
 end
 

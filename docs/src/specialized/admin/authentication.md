@@ -503,6 +503,18 @@ torc -f json admin sql "SELECT * FROM admin_audit_log"
 
 `--limit` caps the number of returned rows (default and maximum 10,000).
 
+JSON output is an array of objects under `items`, with a parallel `columns` array giving the display
+order. Column names the query repeats (e.g. an unaliased join on two `id` columns) are suffixed
+(`id`, `id_2`, ...) so each object's keys stay unique:
+
+```json
+{
+  "columns": ["id", "workflow_id", "max_mem"],
+  "items": [{ "id": 2, "workflow_id": 1, "max_mem": 447610880 }],
+  "committed": false
+}
+```
+
 ### Writing
 
 Writes require `--write`. The CLI first previews how many rows the statement would affect (a dry-run

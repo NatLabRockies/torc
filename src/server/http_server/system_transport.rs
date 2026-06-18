@@ -151,7 +151,7 @@ where
                     }
                     let payload = models::AdminSqlResponse {
                         columns: Vec::new(),
-                        rows: Vec::new(),
+                        items: Vec::new(),
                         rows_affected: Some(rows_affected),
                         committed,
                     };
@@ -181,10 +181,10 @@ where
         } else {
             let limit = admin::clamp_limit(body.limit);
             match admin::execute_read_only(&self.pool, &body.sql, limit).await {
-                Ok((columns, rows)) => {
+                Ok((columns, items)) => {
                     let payload = models::AdminSqlResponse {
                         columns,
-                        rows,
+                        items,
                         rows_affected: None,
                         committed: false,
                     };

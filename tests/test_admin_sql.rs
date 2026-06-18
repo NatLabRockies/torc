@@ -66,8 +66,23 @@ fn read_only_select_returns_columns_and_rows() {
     );
     assert_eq!(status, 200, "admin SELECT should succeed: {body}");
     assert_eq!(body["columns"], json!(["seven", "greeting"]));
-    assert_eq!(body["rows"], json!([[7, "hi"]]));
+    assert_eq!(body["items"], json!([{ "seven": 7, "greeting": "hi" }]));
     assert_eq!(body["committed"], json!(false));
+}
+
+#[test]
+#[serial(auth)]
+fn duplicate_columns_are_suffixed() {
+    let server = common::start_server_with_required_auth();
+    let (status, body) = post_sql(
+        &server.config.base_path,
+        "owner",
+        json!({ "sql": "SELECT 1 AS id, 2 AS id" }),
+    );
+    assert_eq!(status, 200, "{body}");
+    // The repeated `id` is suffixed so the item keys stay unique.
+    assert_eq!(body["columns"], json!(["id", "id_2"]));
+    assert_eq!(body["items"], json!([{ "id": 1, "id_2": 2 }]));
 }
 
 #[test]
@@ -137,7 +152,7 @@ fn write_with_where_commits_and_is_audited() {
         json!({ "sql": "SELECT v FROM t_scratch WHERE id = 1" }),
     );
     assert_eq!(status, 200);
-    assert_eq!(body["rows"], json!([[0]]));
+    assert_eq!(body["items"], json!([{ "v": 0 }]));
 
     // The committing UPDATE was recorded in the durable audit log.
     let (status, body) = post_sql(
@@ -146,7 +161,11 @@ fn write_with_where_commits_and_is_audited() {
         json!({ "sql": "SELECT COUNT(*) AS n FROM admin_audit_log WHERE sql_text LIKE 'UPDATE t_scratch%'" }),
     );
     assert_eq!(status, 200);
-    assert_eq!(body["rows"][0][0], json!(1), "audit row expected: {body}");
+    assert_eq!(
+        body["items"][0]["n"],
+        json!(1),
+        "audit row expected: {body}"
+    );
 }
 
 #[test]
@@ -180,7 +199,7 @@ fn unqualified_write_blocked_unless_allowed() {
         "owner",
         json!({ "sql": "SELECT COUNT(*) FROM t_full" }),
     );
-    assert_eq!(body["rows"][0][0], json!(2));
+    assert_eq!(body["items"][0]["COUNT(*)"], json!(2));
 
     // Explicit override succeeds.
     let (status, body) = post_sql(
@@ -225,7 +244,11 @@ fn dry_run_does_not_persist() {
         "owner",
         json!({ "sql": "SELECT COUNT(*) FROM t_dry" }),
     );
-    assert_eq!(body["rows"][0][0], json!(1), "dry-run must not persist");
+    assert_eq!(
+        body["items"][0]["COUNT(*)"],
+        json!(1),
+        "dry-run must not persist"
+    );
 
     // And the dry-run statement itself was not written to the audit log (the
     // earlier committed inserts are audited, so match the dry-run text exactly).
@@ -234,7 +257,7 @@ fn dry_run_does_not_persist() {
         "owner",
         json!({ "sql": "SELECT COUNT(*) AS n FROM admin_audit_log WHERE sql_text = 'INSERT INTO t_dry (id) VALUES (2)'" }),
     );
-    assert_eq!(body["rows"][0][0], json!(0));
+    assert_eq!(body["items"][0]["n"], json!(0));
 }
 
 #[test]

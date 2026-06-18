@@ -292,10 +292,17 @@ fn render_sql_result(resp: &models::AdminSqlResponse, format: &str) {
         return;
     }
 
+    // Each item is an object keyed by column name; project it back into the
+    // server-provided column order for tabular display.
     let rows: Vec<Vec<String>> = resp
-        .rows
+        .items
         .iter()
-        .map(|row| row.iter().map(value_to_cell).collect())
+        .map(|item| {
+            resp.columns
+                .iter()
+                .map(|col| item.get(col).map(value_to_cell).unwrap_or_default())
+                .collect()
+        })
         .collect();
 
     if format == "csv" {
@@ -308,7 +315,7 @@ fn render_sql_result(resp: &models::AdminSqlResponse, format: &str) {
         return;
     }
     display_dynamic_table(&resp.columns, &rows);
-    println!("\nTotal: {} row(s)", resp.rows.len());
+    println!("\nTotal: {} row(s)", resp.items.len());
 }
 
 #[derive(Tabled)]
