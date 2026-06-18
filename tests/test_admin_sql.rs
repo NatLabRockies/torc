@@ -89,14 +89,40 @@ fn duplicate_columns_are_suffixed() {
 #[serial(auth)]
 fn read_path_rejects_writes() {
     let server = common::start_server_with_required_auth();
-    // Without write=true the statement runs on a read-only connection, so SQLite
-    // rejects the write at the engine layer.
+    // Without write=true the statement is rejected by the read-path allow list
+    // (only SELECT/WITH/VALUES run on the read path); PRAGMA query_only is the
+    // engine-level backstop behind it.
     let (status, _) = post_sql(
         &server.config.base_path,
         "owner",
         json!({ "sql": "CREATE TABLE t_should_not_exist (id INTEGER)" }),
     );
     assert_eq!(status, 422, "write on the read-only path must be rejected");
+}
+
+#[test]
+#[serial(auth)]
+fn failing_statement_is_422_not_500() {
+    // A statement that is well-formed but fails to run (unknown table) is the
+    // caller's fault, so it must surface as 422 -- not a server-side 500.
+    let server = common::start_server_with_required_auth();
+    let base = &server.config.base_path;
+
+    let (status, body) = post_sql(
+        base,
+        "owner",
+        json!({ "sql": "SELECT * FROM no_such_table_xyz" }),
+    );
+    assert_eq!(status, 422, "failing SELECT should be 422: {body}");
+    assert_eq!(body["error"]["error"], json!("QueryFailed"), "{body}");
+
+    let (status, body) = post_sql(
+        base,
+        "owner",
+        json!({ "sql": "INSERT INTO no_such_table_xyz (id) VALUES (1)", "write": true }),
+    );
+    assert_eq!(status, 422, "failing INSERT should be 422: {body}");
+    assert_eq!(body["error"]["error"], json!("ExecutionFailed"), "{body}");
 }
 
 #[test]

@@ -2,6 +2,20 @@ use super::*;
 use crate::server::api::admin;
 use crate::server::htpasswd::HtpasswdFile;
 
+/// Map an [`admin::AdminSqlError`] onto the right HTTP response: a caller SQL
+/// error becomes 422 tagged `user_kind` (e.g. `QueryFailed`/`ExecutionFailed`),
+/// while a server-side failure becomes 500 so the status reflects who can act.
+fn admin_sql_error_response(err: &admin::AdminSqlError, user_kind: &str) -> AdminSqlResponse {
+    if err.is_internal() {
+        AdminSqlResponse::DefaultErrorResponse(error_payload!("InternalError", err.message()))
+    } else {
+        AdminSqlResponse::UnprocessableContentErrorResponse(error_payload!(
+            user_kind,
+            err.message()
+        ))
+    }
+}
+
 impl<C> Server<C>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync,
@@ -152,7 +166,7 @@ where
                         serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
                     ))
                 }
-                Err(msg) => {
+                Err(err) => {
                     if !body.dry_run {
                         admin::record_audit(
                             &self.pool,
@@ -162,13 +176,11 @@ where
                             None,
                             false,
                             false,
-                            Some(&msg),
+                            Some(err.message()),
                         )
                         .await;
                     }
-                    Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
-                        error_payload!("ExecutionFailed", msg),
-                    ))
+                    Ok(admin_sql_error_response(&err, "ExecutionFailed"))
                 }
             }
         } else {
@@ -185,9 +197,7 @@ where
                         serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
                     ))
                 }
-                Err(msg) => Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
-                    error_payload!("QueryFailed", msg),
-                )),
+                Err(err) => Ok(admin_sql_error_response(&err, "QueryFailed")),
             }
         }
     }

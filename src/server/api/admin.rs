@@ -30,6 +30,37 @@ use crate::MAX_RECORD_TRANSFER_COUNT;
 use crate::models;
 use crate::server::api::begin_immediate;
 
+/// A failure from executing an admin SQL statement, tagged with who can act on it.
+///
+/// Separates a caller-fault SQL problem (parse error, constraint violation, a
+/// statement that fails when run) from a server-side/infrastructure failure
+/// (pool exhaustion, transaction begin/commit, audit-row insert, restoring
+/// connection state). The transport maps [`User`](AdminSqlError::User) to a 422
+/// and [`Internal`](AdminSqlError::Internal) to a 500 so the HTTP status reflects
+/// whether the caller or the operator needs to act.
+#[derive(Debug)]
+pub enum AdminSqlError {
+    /// The caller's SQL is at fault; surfaced as HTTP 422.
+    User(String),
+    /// A server-side failure unrelated to the statement's validity; HTTP 500.
+    Internal(String),
+}
+
+impl AdminSqlError {
+    /// The human-readable message, regardless of kind.
+    pub fn message(&self) -> &str {
+        match self {
+            AdminSqlError::User(m) | AdminSqlError::Internal(m) => m,
+        }
+    }
+
+    /// Whether this is a server-side failure (HTTP 500) rather than a caller
+    /// SQL error (HTTP 422).
+    pub fn is_internal(&self) -> bool {
+        matches!(self, AdminSqlError::Internal(_))
+    }
+}
+
 /// Clamp a caller-supplied row limit into `1..=MAX_RECORD_TRANSFER_COUNT`. The
 /// admin endpoints (`admin sql` SELECTs and the audit-log listing) use the same
 /// row cap (100,000) as the standard list endpoints.
@@ -279,22 +310,30 @@ fn depth0_keywords(upper: &str) -> Vec<&str> {
 /// restored before the connection returns to the pool. Returns the result column
 /// names (with duplicates suffixed, see [`dedupe_columns`]) and up to `limit`
 /// rows as JSON objects keyed by those column names.
+///
+/// Errors are tagged ([`AdminSqlError`]): acquiring the connection and toggling
+/// `query_only` are server-side failures ([`Internal`](AdminSqlError::Internal),
+/// 500); a statement that fails to run is the caller's fault
+/// ([`User`](AdminSqlError::User), 422).
 pub async fn execute_read_only(
     pool: &SqlitePool,
     sql: &str,
     limit: usize,
-) -> Result<(Vec<String>, Vec<serde_json::Map<String, Value>>), String> {
+) -> Result<(Vec<String>, Vec<serde_json::Map<String, Value>>), AdminSqlError> {
     let mut conn = pool
         .acquire()
         .await
-        .map_err(|e| format!("Failed to acquire connection: {e}"))?;
+        .map_err(|e| AdminSqlError::Internal(format!("Failed to acquire connection: {e}")))?;
 
     sqlx::query("PRAGMA query_only = ON")
         .execute(&mut *conn)
         .await
-        .map_err(|e| format!("Failed to enter read-only mode: {e}"))?;
+        .map_err(|e| AdminSqlError::Internal(format!("Failed to enter read-only mode: {e}")))?;
 
-    let result = read_rows(&mut conn, sql, limit).await;
+    // A failed query here is the caller's SQL at fault, not the server's.
+    let result = read_rows(&mut conn, sql, limit)
+        .await
+        .map_err(AdminSqlError::User);
 
     // Always restore read-write before the connection goes back to the pool;
     // otherwise a later writer borrowing it would silently fail.
@@ -305,7 +344,9 @@ pub async fn execute_read_only(
         // Could not restore: discard the connection (detach so it is closed on
         // drop instead of returned to the pool stuck in read-only mode).
         drop(conn.detach());
-        return Err(format!("Failed to restore read-write mode: {e}"));
+        return Err(AdminSqlError::Internal(format!(
+            "Failed to restore read-write mode: {e}"
+        )));
     }
 
     result
@@ -393,28 +434,33 @@ pub struct AuditContext<'a> {
 /// Returns the number of rows affected. Failed statements (and failed
 /// commit-audit attempts) are not audited here; the caller records those
 /// best-effort via [`record_audit`], since no change persisted.
+///
+/// Errors are tagged ([`AdminSqlError`]): a statement that fails to run is the
+/// caller's fault ([`User`](AdminSqlError::User), 422); transaction begin/commit,
+/// rollback, and the atomic audit insert are server-side failures
+/// ([`Internal`](AdminSqlError::Internal), 500).
 pub async fn execute_write(
     pool: &SqlitePool,
     sql: &str,
     dry_run: bool,
     audit: &AuditContext<'_>,
-) -> Result<i64, String> {
+) -> Result<i64, AdminSqlError> {
     let mut tx = begin_immediate(pool)
         .await
-        .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+        .map_err(|e| AdminSqlError::Internal(format!("Failed to begin transaction: {e}")))?;
 
     let affected = match sqlx::query(sql).execute(&mut *tx).await {
         Ok(done) => done.rows_affected() as i64,
         Err(e) => {
             let _ = tx.rollback().await;
-            return Err(format!("Statement failed: {e}"));
+            return Err(AdminSqlError::User(format!("Statement failed: {e}")));
         }
     };
 
     if dry_run {
         tx.rollback()
             .await
-            .map_err(|e| format!("Rollback failed: {e}"))?;
+            .map_err(|e| AdminSqlError::Internal(format!("Rollback failed: {e}")))?;
         return Ok(affected);
     }
 
@@ -433,14 +479,14 @@ pub async fn execute_write(
     .await
     {
         let _ = tx.rollback().await;
-        return Err(format!(
+        return Err(AdminSqlError::Internal(format!(
             "Failed to record audit entry; write rolled back: {e}"
-        ));
+        )));
     }
 
     tx.commit()
         .await
-        .map_err(|e| format!("Commit failed: {e}"))?;
+        .map_err(|e| AdminSqlError::Internal(format!("Commit failed: {e}")))?;
     Ok(affected)
 }
 
@@ -619,6 +665,17 @@ fn hex_encode(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_sql_error_tags_message_and_kind() {
+        let user = AdminSqlError::User("bad sql".to_string());
+        assert_eq!(user.message(), "bad sql");
+        assert!(!user.is_internal());
+
+        let internal = AdminSqlError::Internal("pool gone".to_string());
+        assert_eq!(internal.message(), "pool gone");
+        assert!(internal.is_internal());
+    }
 
     #[test]
     fn rejects_empty_statement() {
