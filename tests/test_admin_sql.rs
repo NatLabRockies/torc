@@ -274,7 +274,10 @@ fn audit_log_list_requires_admin() {
 #[test]
 #[serial(auth)]
 fn audit_log_list_returns_committed_writes_newest_first() {
-    let server = common::start_server_with_required_auth();
+    // Isolated server (not the shared `#[once]` fixture): this test asserts exact
+    // audit-row counts, which would be flaky if other tests committed admin
+    // writes against a shared DB.
+    let server = common::start_server_with_required_auth_and_args(&[]);
     let base = &server.config.base_path;
 
     // Two committing writes -> two audit rows (CREATE then INSERT).
@@ -318,7 +321,9 @@ fn audit_log_list_returns_committed_writes_newest_first() {
 #[test]
 #[serial(auth)]
 fn audit_log_list_paginates() {
-    let server = common::start_server_with_required_auth();
+    // Isolated server (not the shared `#[once]` fixture): this test asserts exact
+    // audit-row counts and pagination, which would be flaky against a shared DB.
+    let server = common::start_server_with_required_auth_and_args(&[]);
     let base = &server.config.base_path;
 
     // Three committing writes -> three audit rows.
