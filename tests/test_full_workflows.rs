@@ -1201,3 +1201,538 @@ resource_requirements:
     apis::workflows_api::delete_workflow(config, workflow_id)
         .expect("Failed to delete reinitialize_test workflow");
 }
+
+/// Test deep (5-stage) cascade cancellation on the first run and again across a restart.
+///
+/// This exercises the scenario where a job in the *earliest* stage of a long linear chain
+/// fails and every downstream stage must be canceled -- not just the immediate dependent.
+/// It then resets the failed stage and reinitializes, verifying the whole downstream chain
+/// re-blocks correctly, and finally re-runs to completion.
+///
+/// Chain: stage1 -> stage2 -> stage3 -> stage4 -> stage5 (each depends on the previous).
+///
+/// Verifies:
+/// 1. First run: stage1 fails (flag file present); stage2..stage5 are all CANCELED via the
+///    transitive cascade (cancel_on_blocking_job_failure defaults to true).
+/// 2. Only stage1 produces a result (the canceled downstream stages have none).
+/// 3. After reset-status --failed-only --reinitialize: stage1 becomes Ready and
+///    stage2..stage5 become Blocked (the cancellation is fully reversed).
+/// 4. Second run (flag removed): every stage completes with return code 0.
+#[rstest]
+fn test_deep_cascade_cancellation_and_restart(start_server: &ServerProcess) {
+    assert!(start_server.child.id() > 0);
+    let config = &start_server.config;
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path().to_path_buf();
+
+    // Flag file that makes the first stage fail while it exists.
+    let fail_flag_path = work_dir.join("should_fail.flag");
+    fs::write(&fail_flag_path, "fail").expect("Failed to write fail flag file");
+
+    // Five-stage linear chain. stage1 (the root) checks for the flag file to decide pass/fail;
+    // every later stage depends on the one before it, so a stage1 failure must cancel the rest.
+    let yaml_content = format!(
+        r#"name: deep_cascade_workflow
+user: test_user
+description: Test deep cascade cancellation across a restart
+
+jobs:
+  - name: stage1
+    command: 'if [ -f "{flag}" ]; then echo "Intentional failure"; exit 1; else echo "stage1 ok"; exit 0; fi'
+    resource_requirements: minimal
+
+  - name: stage2
+    command: echo "stage2 complete"
+    depends_on:
+      - stage1
+    resource_requirements: minimal
+
+  - name: stage3
+    command: echo "stage3 complete"
+    depends_on:
+      - stage2
+    resource_requirements: minimal
+
+  - name: stage4
+    command: echo "stage4 complete"
+    depends_on:
+      - stage3
+    resource_requirements: minimal
+
+  - name: stage5
+    command: echo "stage5 complete"
+    depends_on:
+      - stage4
+    resource_requirements: minimal
+
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1m
+    runtime: P0DT1M
+"#,
+        flag = fail_flag_path.display()
+    );
+
+    let yaml_path = work_dir.join("deep_cascade.yaml");
+    fs::write(&yaml_path, &yaml_content).expect("Failed to write YAML file");
+
+    let downstream = ["stage2", "stage3", "stage4", "stage5"];
+
+    // === First run: stage1 fails, cancellation must cascade to every downstream stage ===
+    run_jobs_cli_command(
+        &[
+            yaml_path.to_str().unwrap(),
+            "--poll-interval",
+            "0.1",
+            "--max-parallel-jobs",
+            "4",
+        ],
+        start_server,
+    )
+    .expect("First run command should succeed (workflow halts, checking job statuses)");
+
+    let workflows = apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        Some("deep_cascade_workflow"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list workflows");
+    let workflow = workflows.items.first().expect("Workflow not found");
+    let workflow_id = workflow.id.unwrap();
+
+    let job_statuses = get_job_statuses(config, workflow_id);
+
+    assert_eq!(
+        job_statuses.get("stage1").unwrap(),
+        &models::JobStatus::Failed,
+        "stage1 should be failed on the first run"
+    );
+    for name in downstream {
+        assert_eq!(
+            job_statuses.get(name).unwrap(),
+            &models::JobStatus::Canceled,
+            "{name} should be canceled via the transitive cascade from stage1"
+        );
+    }
+
+    // Only stage1 ran, so there should be exactly one result.
+    let results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list results");
+    assert_eq!(
+        results.items.len(),
+        1,
+        "Only stage1 should have a result (stage2..stage5 were canceled)"
+    );
+
+    // === Reset the failed stage and reinitialize ===
+    run_cli_command(
+        &[
+            "workflows",
+            "reset-status",
+            &workflow_id.to_string(),
+            "--failed-only",
+            "--reinitialize",
+            "--no-prompts",
+        ],
+        start_server,
+        None,
+    )
+    .expect("Failed to reset workflow status");
+
+    let job_statuses = get_job_statuses(config, workflow_id);
+
+    // The cancellation must be fully reversed: stage1 ready, every downstream stage blocked.
+    assert_eq!(
+        job_statuses.get("stage1").unwrap(),
+        &models::JobStatus::Ready,
+        "stage1 should be ready after reset"
+    );
+    for name in downstream {
+        assert_eq!(
+            job_statuses.get(name).unwrap(),
+            &models::JobStatus::Blocked,
+            "{name} should be blocked (re-armed) after reset, not left canceled"
+        );
+    }
+
+    // === Second run: stage1 succeeds, the whole chain should complete ===
+    fs::remove_file(&fail_flag_path).expect("Failed to remove flag file");
+    run_jobs_cli_command(
+        &[
+            &workflow_id.to_string(),
+            "--poll-interval",
+            "0.1",
+            "--max-parallel-jobs",
+            "4",
+        ],
+        start_server,
+    )
+    .expect("Second run should succeed");
+
+    let job_statuses = get_job_statuses(config, workflow_id);
+    for name in ["stage1", "stage2", "stage3", "stage4", "stage5"] {
+        assert_eq!(
+            job_statuses.get(name).unwrap(),
+            &models::JobStatus::Completed,
+            "{name} should be completed after the second run"
+        );
+    }
+
+    apis::workflows_api::delete_workflow(config, workflow_id)
+        .expect("Failed to delete deep_cascade workflow");
+}
+
+/// Test that cancel_on_blocking_job_failure=false lets a downstream job run despite an
+/// upstream failure (rather than being cascade-canceled).
+///
+/// This pins the opt-out semantics, which several other tests configure but never assert.
+/// The cascade-cancel pass only touches jobs with cancel_on_blocking_job_failure=1; the
+/// subsequent unblock pass then promotes any Blocked job whose dependencies are all in a
+/// terminal state (Completed, Failed, Canceled, or Terminated) to Ready. So a job that opts
+/// out of cancellation is NOT left blocked -- it runs once its failed dependency settles.
+///
+/// Chain: producer (fails) -> consumer (cancel_on_blocking_job_failure: false).
+///
+/// Verifies:
+/// 1. producer fails on the first run.
+/// 2. consumer is NOT canceled; it runs anyway and completes.
+/// 3. both jobs produce a result.
+#[rstest]
+fn test_cancel_on_blocking_job_failure_false_runs_downstream_anyway(start_server: &ServerProcess) {
+    assert!(start_server.child.id() > 0);
+    let config = &start_server.config;
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path().to_path_buf();
+
+    let yaml_content = r#"name: no_cascade_workflow
+user: test_user
+description: Test that cancel_on_blocking_job_failure=false leaves downstream blocked
+
+jobs:
+  - name: producer
+    command: 'echo "Intentional failure"; exit 1'
+    resource_requirements: minimal
+
+  - name: consumer
+    command: echo "consumer complete"
+    depends_on:
+      - producer
+    cancel_on_blocking_job_failure: false
+    resource_requirements: minimal
+
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1m
+    runtime: P0DT1M
+"#;
+
+    let yaml_path = work_dir.join("no_cascade.yaml");
+    fs::write(&yaml_path, yaml_content).expect("Failed to write YAML file");
+
+    run_jobs_cli_command(
+        &[
+            yaml_path.to_str().unwrap(),
+            "--poll-interval",
+            "0.1",
+            "--max-parallel-jobs",
+            "4",
+        ],
+        start_server,
+    )
+    .expect("Run command should succeed (workflow halts, checking job statuses)");
+
+    let workflows = apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        Some("no_cascade_workflow"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list workflows");
+    let workflow = workflows.items.first().expect("Workflow not found");
+    let workflow_id = workflow.id.unwrap();
+
+    let job_statuses = get_job_statuses(config, workflow_id);
+
+    assert_eq!(
+        job_statuses.get("producer").unwrap(),
+        &models::JobStatus::Failed,
+        "producer should be failed"
+    );
+    // Opting out of cascade cancellation means the job is not canceled. Because its only
+    // dependency has reached a terminal state (Failed), the unblock pass promotes it to Ready
+    // and it runs to completion.
+    assert_eq!(
+        job_statuses.get("consumer").unwrap(),
+        &models::JobStatus::Completed,
+        "consumer should run anyway (not be canceled) when it opts out of cascade cancellation"
+    );
+
+    // Both jobs ran, so both should have a result.
+    let results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list results");
+    assert_eq!(
+        results.items.len(),
+        2,
+        "Both producer and consumer should have a result"
+    );
+
+    apis::workflows_api::delete_workflow(config, workflow_id)
+        .expect("Failed to delete no_cascade workflow");
+}
+
+/// Test failure-cascade behavior in a fan-out / converge DAG.
+///
+/// A diamond-ish graph where one branch fails: the cascade must (a) flow through a converge
+/// node that has both a succeeding and a failing parent, (b) continue past that converge node,
+/// and (c) leave a parallel, unrelated branch completely untouched.
+///
+/// Graph (all of branch_*, independent depend on root):
+///
+/// ```text
+///                 root
+///        /          |           \
+///   branch_ok   branch_fail   independent
+///        \          /              |
+///          merge                independent_leaf
+///            |
+///          final
+/// ```
+///
+/// merge depends on [branch_ok, branch_fail]; final depends on merge. The independent branch
+/// (independent -> independent_leaf) shares only the root and must complete normally.
+///
+/// Verifies (first run):
+/// 1. root, branch_ok, independent, independent_leaf all complete.
+/// 2. branch_fail fails.
+/// 3. merge is canceled (a converge node with one failed parent).
+/// 4. final is canceled (cascade continues past the converge node).
+/// 5. The unrelated independent_leaf is NOT canceled -- the cascade does not bleed across
+///    branches.
+#[rstest]
+fn test_fanout_converge_failure_cascade(start_server: &ServerProcess) {
+    assert!(start_server.child.id() > 0);
+    let config = &start_server.config;
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path().to_path_buf();
+
+    let yaml_content = r#"name: fanout_converge_workflow
+user: test_user
+description: Test failure cascade through a fan-out / converge DAG
+
+jobs:
+  - name: root
+    command: echo "root complete"
+    resource_requirements: minimal
+
+  - name: branch_ok
+    command: echo "branch_ok complete"
+    depends_on:
+      - root
+    resource_requirements: minimal
+
+  - name: branch_fail
+    command: 'echo "Intentional failure"; exit 1'
+    depends_on:
+      - root
+    resource_requirements: minimal
+
+  - name: independent
+    command: echo "independent complete"
+    depends_on:
+      - root
+    resource_requirements: minimal
+
+  - name: independent_leaf
+    command: echo "independent_leaf complete"
+    depends_on:
+      - independent
+    resource_requirements: minimal
+
+  - name: merge
+    command: echo "merge complete"
+    depends_on:
+      - branch_ok
+      - branch_fail
+    resource_requirements: minimal
+
+  - name: final
+    command: echo "final complete"
+    depends_on:
+      - merge
+    resource_requirements: minimal
+
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1m
+    runtime: P0DT1M
+"#;
+
+    let yaml_path = work_dir.join("fanout_converge.yaml");
+    fs::write(&yaml_path, yaml_content).expect("Failed to write YAML file");
+
+    run_jobs_cli_command(
+        &[
+            yaml_path.to_str().unwrap(),
+            "--poll-interval",
+            "0.1",
+            "--max-parallel-jobs",
+            "4",
+        ],
+        start_server,
+    )
+    .expect("Run command should succeed (workflow halts, checking job statuses)");
+
+    let workflows = apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        Some("fanout_converge_workflow"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list workflows");
+    let workflow = workflows.items.first().expect("Workflow not found");
+    let workflow_id = workflow.id.unwrap();
+
+    let job_statuses = get_job_statuses(config, workflow_id);
+
+    // The succeeding side of the graph -- including the unrelated independent branch -- completes.
+    for name in ["root", "branch_ok", "independent", "independent_leaf"] {
+        assert_eq!(
+            job_statuses.get(name).unwrap(),
+            &models::JobStatus::Completed,
+            "{name} should be completed"
+        );
+    }
+
+    assert_eq!(
+        job_statuses.get("branch_fail").unwrap(),
+        &models::JobStatus::Failed,
+        "branch_fail should be failed"
+    );
+
+    // The converge node has one succeeding and one failing parent -> canceled.
+    assert_eq!(
+        job_statuses.get("merge").unwrap(),
+        &models::JobStatus::Canceled,
+        "merge should be canceled: one of its parents (branch_fail) failed"
+    );
+
+    // Cascade continues past the converge node.
+    assert_eq!(
+        job_statuses.get("final").unwrap(),
+        &models::JobStatus::Canceled,
+        "final should be canceled: the cascade propagates past the converge node"
+    );
+
+    // Sanity check on results: only the five jobs that actually ran have a result row;
+    // merge and final were canceled.
+    let results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list results");
+    assert_eq!(
+        results.items.len(),
+        5,
+        "Five jobs ran (root, branch_ok, branch_fail, independent, independent_leaf); \
+         merge and final were canceled"
+    );
+
+    apis::workflows_api::delete_workflow(config, workflow_id)
+        .expect("Failed to delete fanout_converge workflow");
+}
+
+/// Helper: fetch all jobs for a workflow and return a name -> status map.
+fn get_job_statuses(
+    config: &apis::configuration::Configuration,
+    workflow_id: i64,
+) -> HashMap<String, models::JobStatus> {
+    let jobs = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // active_compute_node_id
+        None, // origin_is_set
+        None, // name
+        None, // command
+    )
+    .expect("Failed to list jobs");
+
+    jobs.items
+        .iter()
+        .map(|j| (j.name.clone(), j.status.unwrap()))
+        .collect()
+}
