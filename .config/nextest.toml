@@ -46,6 +46,19 @@ test-group = 'serial-workflows'
 filter = 'binary_id(torc::test_completion_reversal) | binary_id(torc::test_claim_next_jobs) | binary_id(torc::test_claim_jobs_based_on_resources) | binary_id(torc::test_orphaned_jobs) | binary_id(torc::test_scheduled_compute_nodes) | binary_id(torc::test_create_node_resources) | binary_id(torc::test_list_required_existing_files) | binary_id(torc::test_correct_resources) | binary_id(torc::test_remote_workers) | binary_id(torc::test_ai_assisted_recovery)'
 test-group = 'serial-compute'
 
+# Race-condition tests: reserve the entire test runner so the machine is as idle
+# as possible while they run. Each spawns many OS threads to provoke genuine
+# claim/complete contention; if other test binaries steal CPU, the OS can
+# serialize those threads and mask a race (a false negative). The serial-compute
+# group's max-threads=1 only stops *other compute tests* from running alongside
+# — it does NOT keep the rest of the nextest run off the machine.
+# threads-required = "num-test-threads" makes nextest run each of these alone.
+# (Only the internally-multithreaded tests need this; the deterministic
+# test_two_runners_complete_same_job_rejected does not depend on timing.)
+[[profile.default.overrides]]
+filter = 'test(=test_concurrent_claim_and_complete) | test(=test_prepare_next_jobs_concurrent_allocation) | test(=test_prepare_next_jobs_concurrent_small_batches)'
+threads-required = 'num-test-threads'
+
 # Auth and access control tests
 [[profile.default.overrides]]
 filter = 'binary_id(torc::test_access_groups) | binary_id(torc::test_reload_auth) | binary_id(torc::test_htpasswd) | binary_id(torc::test_tls) | binary_id(torc::test_sse_events) | binary_id(torc::test_command_utils)'
