@@ -1463,7 +1463,7 @@ pub fn handle_cancel(
         };
 
         println!("\nWarning: You are about to cancel the following workflow:");
-        println!("  ID: {}", workflow.id.unwrap_or(-1));
+        println!("  ID: {}", selected_workflow_id);
         println!("  Name: {}", workflow.name);
         println!("  User: {}", workflow.user);
         if let Some(desc) = &workflow.description {

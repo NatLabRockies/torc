@@ -409,10 +409,16 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                     count, workflow_id
                 );
                 print!("Are you sure? (y/N): ");
-                io::stdout().flush().unwrap();
+                if let Err(e) = io::stdout().flush() {
+                    eprintln!("Failed to write prompt: {}", e);
+                    std::process::exit(1);
+                }
 
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                if let Err(e) = io::stdin().read_line(&mut input) {
+                    eprintln!("Failed to read input: {}", e);
+                    std::process::exit(1);
+                }
 
                 if !input.trim().eq_ignore_ascii_case("y") {
                     println!("Deletion cancelled");
