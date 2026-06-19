@@ -1439,13 +1439,59 @@ fn handle_correct_resources(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn handle_cancel(config: &Configuration, workflow_id: &Option<i64>, format: &str) {
+pub fn handle_cancel(
+    config: &Configuration,
+    workflow_id: &Option<i64>,
+    no_prompts: bool,
+    format: &str,
+) {
     let user_name = get_env_user_name();
 
     let selected_workflow_id = match workflow_id {
         Some(id) => *id,
         None => select_workflow_interactively(config, &user_name).unwrap(),
     };
+
+    // Unless skipping prompts, show what will be canceled and ask for confirmation
+    if !no_prompts && format != "json" {
+        let workflow = match apis::workflows_api::get_workflow(config, selected_workflow_id) {
+            Ok(wf) => wf,
+            Err(e) => {
+                print_error("getting workflow", &e);
+                std::process::exit(1);
+            }
+        };
+
+        println!("\nWarning: You are about to cancel the following workflow:");
+        println!("  ID: {}", workflow.id.unwrap_or(-1));
+        println!("  Name: {}", workflow.name);
+        println!("  User: {}", workflow.user);
+        if let Some(desc) = &workflow.description {
+            println!("  Description: {}", desc);
+        }
+        println!("\nThis will cancel running jobs and any associated Slurm allocations.");
+        println!("Workflow state is preserved and can be resumed after reinitialization.");
+        print!("\nAre you sure you want to cancel this workflow? (y/N): ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                let response = input.trim().to_lowercase();
+                if response != "y" && response != "yes" {
+                    println!(
+                        "Cancellation aborted for workflow {}.",
+                        selected_workflow_id
+                    );
+                    return;
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read input: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
     match apis::workflows_api::cancel_workflow(config, selected_workflow_id) {
         Ok(_) => {

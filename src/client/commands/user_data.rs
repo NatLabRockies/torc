@@ -1,5 +1,6 @@
 use clap::Subcommand;
 use serde_json;
+use std::io::{self, Write};
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
@@ -120,6 +121,9 @@ EXAMPLES:
     DeleteAll {
         /// Workflow ID
         workflow_id: i64,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
     },
     /// List missing user data for a workflow
     ListMissing {
@@ -370,7 +374,52 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                 }
             }
         }
-        UserDataCommands::DeleteAll { workflow_id } => {
+        UserDataCommands::DeleteAll {
+            workflow_id,
+            no_prompts,
+        } => {
+            // Show how many records will be deleted and confirm before proceeding
+            if !no_prompts && format != "json" {
+                let count = match apis::user_data_api::list_user_data(
+                    config,
+                    *workflow_id,
+                    None,    // consumer_job_id
+                    None,    // producer_job_id
+                    Some(0), // offset
+                    Some(1), // limit (we just need the total count)
+                    None,    // sort_by
+                    None,    // reverse_sort
+                    None,    // name
+                    None,    // is_ephemeral
+                ) {
+                    Ok(response) => response.total_count,
+                    Err(e) => {
+                        print_error("counting user data", &e);
+                        std::process::exit(1);
+                    }
+                };
+
+                if count == 0 {
+                    println!("No user data found for workflow ID: {}", workflow_id);
+                    return;
+                }
+
+                println!(
+                    "About to delete {} user data record(s) from workflow ID: {}",
+                    count, workflow_id
+                );
+                print!("Are you sure? (y/N): ");
+                io::stdout().flush().unwrap();
+
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).unwrap();
+
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    println!("Deletion cancelled");
+                    return;
+                }
+            }
+
             match apis::user_data_api::delete_all_user_data(config, *workflow_id) {
                 Ok(response) => {
                     if format == "json" {

@@ -363,12 +363,18 @@ EXAMPLES:
 EXAMPLES:
     # Delete all jobs from a workflow
     torc jobs delete-all 123
+
+    # Delete all jobs without confirmation (use with caution)
+    torc jobs delete-all --no-prompts 123
 "
     )]
     DeleteAll {
         /// Workflow ID to delete all jobs from (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
     },
     /// List jobs with their resource requirements
     #[command(
@@ -925,7 +931,10 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             }
         }
-        JobCommands::DeleteAll { workflow_id } => {
+        JobCommands::DeleteAll {
+            workflow_id,
+            no_prompts,
+        } => {
             let user_name = get_env_user_name();
             let selected_workflow_id = match workflow_id {
                 Some(id) => *id,
@@ -965,7 +974,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
 
                     // Confirm deletion
-                    if format != "json" {
+                    if !no_prompts && format != "json" {
                         println!(
                             "About to delete {} job(s) from workflow ID: {}",
                             job_count, selected_workflow_id

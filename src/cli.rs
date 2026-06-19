@@ -842,12 +842,18 @@ EXAMPLES:
 
     # Get JSON status of cancellation
     torc -f json cancel 123
+
+    # Cancel without confirmation (use with caution)
+    torc cancel --no-prompts 123
 "
     )]
     Cancel {
         /// ID of the workflow to cancel (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        no_prompts: bool,
     },
     /// Show workflow status and job summary
     ///
@@ -882,7 +888,7 @@ EXAMPLES:
     torc delete 123 456 789
 
     # Delete without confirmation (use with caution)
-    torc delete --force 123
+    torc delete --no-prompts 123
 "
     )]
     Delete {
@@ -890,8 +896,8 @@ EXAMPLES:
         #[arg(required = true)]
         workflow_ids: Vec<i64>,
         /// Skip confirmation prompt
-        #[arg(long)]
-        force: bool,
+        #[arg(long, alias = "force")]
+        no_prompts: bool,
     },
     /// Interactive terminal UI for managing workflows
     #[command(

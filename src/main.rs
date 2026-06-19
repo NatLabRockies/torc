@@ -1155,20 +1155,23 @@ fn main() {
                 }
             }
         }
-        Commands::Cancel { workflow_id } => {
-            handle_cancel(&config, workflow_id, &format);
+        Commands::Cancel {
+            workflow_id,
+            no_prompts,
+        } => {
+            handle_cancel(&config, workflow_id, *no_prompts, &format);
         }
         Commands::Status { workflow_id } => {
             torc::client::commands::reports::generate_summary(&config, *workflow_id, &format);
         }
         Commands::Delete {
             workflow_ids,
-            force,
+            no_prompts,
         } => {
             torc::client::commands::workflows::handle_delete(
                 &config,
                 workflow_ids,
-                *force,
+                *no_prompts,
                 &format,
             );
         }
