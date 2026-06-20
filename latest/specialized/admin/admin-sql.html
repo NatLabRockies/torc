@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>TLS/HTTPS Configuration - Torc Documentation</title>
+        <title>Admin SQL Access - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/admin/tls-configuration.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/admin/admin-sql.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,136 +184,75 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="tlshttps-configuration"><a class="header" href="#tlshttps-configuration">TLS/HTTPS Configuration</a></h1>
-<p>When the Torc server uses HTTPS — either directly or behind a reverse proxy with an internal CA —
-clients need to know which CA certificate to trust. This page shows how to configure that.</p>
-<h2 id="quick-setup"><a class="header" href="#quick-setup">Quick Setup</a></h2>
-<p>Most HPC users only need to do this once.</p>
-<h3 id="step-1-get-the-ca-certificate"><a class="header" href="#step-1-get-the-ca-certificate">Step 1: Get the CA Certificate</a></h3>
-<p>Ask your system administrator for the PEM-encoded CA certificate file used by the Torc server. It
-typically lives on a shared filesystem, e.g., <code>/shared/certs/corporate-ca.pem</code>.</p>
-<h3 id="step-2-generate-a-config-file"><a class="header" href="#step-2-generate-a-config-file">Step 2: Generate a Config File</a></h3>
-<pre><code class="language-bash">torc config init --user
-</code></pre>
-<p>This creates <code>~/.config/torc/config.toml</code> with all available settings and defaults.</p>
-<h3 id="step-3-edit-the-config-file"><a class="header" href="#step-3-edit-the-config-file">Step 3: Edit the Config File</a></h3>
-<p>Open <code>~/.config/torc/config.toml</code> and set the server URL and CA certificate path:</p>
-<pre><code class="language-toml">[client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
-
-[client.tls]
-ca_cert = "/shared/certs/corporate-ca.pem"
-</code></pre>
-<h3 id="step-4-verify"><a class="header" href="#step-4-verify">Step 4: Verify</a></h3>
-<pre><code class="language-bash">torc workflows list
-</code></pre>
-<p>If the connection succeeds, you're done. All Torc components — CLI, TUI, job runners, MCP server,
-and dashboard — use these settings automatically.</p>
-<h2 id="slurm--hpc"><a class="header" href="#slurm--hpc">Slurm / HPC</a></h2>
-<p>When you submit a workflow with <code>torc slurm generate</code> + <code>torc submit</code>, TLS settings from your config
-file (or CLI flags) are automatically propagated as CLI flags on the <code>torc-slurm-job-runner</code> command
-that runs on compute nodes. No extra environment variable setup is needed.</p>
-<p>The only requirement is that the CA certificate file must be on a <strong>shared filesystem</strong> accessible
-from all compute nodes.</p>
-<pre><code class="language-bash"># Your config file handles TLS — just submit as normal
-torc slurm generate --account myproject workflow.yaml | torc submit -
-</code></pre>
-<h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
-<h3 id="cli-flags"><a class="header" href="#cli-flags">CLI Flags</a></h3>
-<p>You can override config file settings on any command:</p>
-<pre><code class="language-bash">torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
-     --tls-ca-cert /path/to/ca.pem \
-     workflows list
-</code></pre>
-<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
-<pre><code class="language-bash">export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
-export TORC_TLS_CA_CERT=/path/to/ca.pem
-
-torc workflows list
-</code></pre>
-<h3 id="priority-order"><a class="header" href="#priority-order">Priority Order</a></h3>
-<p>Settings are resolved from highest to lowest priority:</p>
-<ol>
-<li>CLI flags (<code>--tls-ca-cert</code>, <code>--tls-insecure</code>)</li>
-<li>Environment variables (<code>TORC_TLS_CA_CERT</code>, <code>TORC_TLS_INSECURE</code>)</li>
-<li>Project config (<code>./torc.toml</code>)</li>
-<li>User config (<code>~/.config/torc/config.toml</code>)</li>
-<li>System config (<code>/etc/torc/config.toml</code>)</li>
-<li>Built-in defaults</li>
-</ol>
-<h3 id="insecure-mode-development-only"><a class="header" href="#insecure-mode-development-only">Insecure Mode (Development Only)</a></h3>
-<p>For local development with self-signed certificates, you can skip verification:</p>
-<pre><code class="language-bash">torc --url https://localhost:8443/torc-service/v1 \
-     --tls-insecure \
-     workflows list
-</code></pre>
+                        <h1 id="admin-sql-access-database-escape-hatch"><a class="header" href="#admin-sql-access-database-escape-hatch">Admin SQL Access (Database Escape Hatch)</a></h1>
+<p><code>torc admin sql</code> lets an admin run a raw SQL statement against the server database. It is a
+controlled, audit-logged escape hatch for inspecting state and surgically repairing the database
+when a bug or edge case leaves a workflow stuck and no dedicated command can fix it. It is
+admin-only (requires <code>--admin-user</code> on the server) and is safer than opening <code>sqlite3</code> on the server
+host directly, because it is authenticated, guard-railed, and audited.</p>
 <blockquote>
-<p><strong>Warning:</strong> Never use <code>--tls-insecure</code> in production. It disables all certificate verification,
-making connections vulnerable to man-in-the-middle attacks.</p>
+<p><strong>Warning:</strong> Raw writes bypass application invariants (the job status state machine, the
+background unblocking contract). A direct <code>UPDATE</code>/<code>DELETE</code> can leave the database in a state Torc
+never produces. Prefer a dedicated <code>torc</code> command when one exists, and treat raw SQL as a last
+resort.</p>
 </blockquote>
-<h3 id="programmatic-access-rust"><a class="header" href="#programmatic-access-rust">Programmatic Access (Rust)</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use std::path::PathBuf;
-use torc::client::apis::configuration::{Configuration, TlsConfig};
-
-let tls = TlsConfig {
-    ca_cert_path: Some(PathBuf::from("/path/to/ca.pem")),
-    insecure: false,
-};
-let mut config = Configuration::with_tls(tls);
-config.base_path =
-    "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
-<span class="boring">}</span></code></pre></pre>
-<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
-<h3 id="certificate-verify-failed-or-unable-to-get-local-issuer-certificate"><a class="header" href="#certificate-verify-failed-or-unable-to-get-local-issuer-certificate">"certificate verify failed" or "unable to get local issuer certificate"</a></h3>
-<p>The client cannot verify the server's certificate chain. Provide the CA certificate:</p>
-<pre><code class="language-bash">torc --tls-ca-cert /path/to/ca.pem workflows list
+<h2 id="reading-default"><a class="header" href="#reading-default">Reading (default)</a></h2>
+<p>Without <code>--write</code>, the statement runs on a <strong>read-only</strong> connection, so any write is rejected by
+SQLite itself. Results honor the global <code>-f/--format</code> option (<code>table</code>, <code>csv</code>, or <code>json</code>):</p>
+<pre><code class="language-bash">torc admin sql "SELECT id, status FROM job LIMIT 5"
+torc -f csv  admin sql "SELECT id, status FROM job"
+torc -f json admin sql "SELECT * FROM admin_audit_log"
 </code></pre>
-<p>If you don't have the CA certificate, ask your system administrator. Common locations:</p>
-<pre><code class="language-bash"># RHEL / CentOS / Fedora
-ls /etc/pki/tls/certs/
-
-# Ubuntu / Debian
-ls /etc/ssl/certs/
+<p><code>--limit</code> caps the number of returned rows (default and maximum 100,000, the same as other list
+endpoints).</p>
+<p>JSON output is an array of objects under <code>items</code>, with a parallel <code>columns</code> array giving the display
+order. Column names the query repeats (e.g. an unaliased join on two <code>id</code> columns) are suffixed
+(<code>id</code>, <code>id_2</code>, ...) so each object's keys stay unique:</p>
+<pre><code class="language-json">{
+  "columns": ["id", "workflow_id", "max_mem"],
+  "items": [{ "id": 2, "workflow_id": 1, "max_mem": 447610880 }],
+  "committed": false
+}
 </code></pre>
-<h3 id="connection-refused-with-https-url"><a class="header" href="#connection-refused-with-https-url">Connection Refused with HTTPS URL</a></h3>
-<p>Verify the server is actually listening on HTTPS. If the server runs HTTP behind a reverse proxy,
-check that the proxy is configured and the URL is correct.</p>
-<h3 id="tls-not-working-on-compute-nodes"><a class="header" href="#tls-not-working-on-compute-nodes">TLS Not Working on Compute Nodes</a></h3>
-<ol>
-<li>Confirm the CA certificate path is on a shared filesystem visible to compute nodes</li>
-<li>Check that your config file or CLI flags are set before submitting the workflow</li>
-</ol>
-<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>CLI Flag</th><th>Environment Variable</th><th>Config Key</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>--tls-ca-cert &lt;PATH&gt;</code></td><td><code>TORC_TLS_CA_CERT</code></td><td><code>client.tls.ca_cert</code></td><td>PEM-encoded CA certificate path</td></tr>
-<tr><td><code>--tls-insecure</code></td><td><code>TORC_TLS_INSECURE</code></td><td><code>client.tls.insecure</code></td><td>Skip certificate verification</td></tr>
-<tr><td><code>--url &lt;URL&gt;</code></td><td><code>TORC_API_URL</code></td><td><code>client.api_url</code></td><td>Torc server URL</td></tr>
-</tbody></table>
-</div>
-<h3 id="certificate-requirements"><a class="header" href="#certificate-requirements">Certificate Requirements</a></h3>
+<h2 id="writing"><a class="header" href="#writing">Writing</a></h2>
+<p>Writes require <code>--write</code>. The CLI first previews how many rows the statement would affect (a dry-run
+that rolls back), prompts for confirmation, then commits:</p>
+<pre><code class="language-bash">torc admin sql --write "UPDATE result SET return_code=0 WHERE id=42"
+</code></pre>
 <ul>
-<li><strong>Format:</strong> PEM-encoded (Base64 ASCII, begins with <code>-----BEGIN CERTIFICATE-----</code>)</li>
-<li><strong>Type:</strong> CA certificate (not the server's leaf certificate)</li>
+<li><code>--yes</code> skips the confirmation prompt.</li>
+<li>An unqualified <code>UPDATE</code>/<code>DELETE</code> (no <code>WHERE</code> clause) is refused unless you pass
+<code>--allow-full-table</code>. The leading verb is detected past an optional <code>WITH</code> (CTE), so
+<code>WITH ... DELETE FROM t</code> is guarded the same as a bare <code>DELETE</code>.</li>
+<li>DDL (<code>DROP</code>/<code>ALTER</code>/<code>TRUNCATE</code>), <code>ATTACH</code>/<code>DETACH</code>, and multi-statement input are always rejected.
+Leading comments cannot be used to hide a disallowed keyword.</li>
 </ul>
-<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<h2 id="audit-log"><a class="header" href="#audit-log">Audit log</a></h2>
+<p>Every committing write is recorded in the durable <code>admin_audit_log</code> table (user, timestamp,
+statement, rows affected, success). This table has no foreign key to <code>workflow</code>, so the audit trail
+survives workflow deletion. Review it with a read query:</p>
+<pre><code class="language-bash">torc admin sql "SELECT user_name, timestamp, sql_text, rows_affected FROM admin_audit_log ORDER BY id DESC LIMIT 20"
+</code></pre>
+<h2 id="disabling-the-feature"><a class="header" href="#disabling-the-feature">Disabling the feature</a></h2>
+<p>The raw-SQL endpoint is enabled by default. Cautious operators can turn it off at the server with
+two <code>torc-server run</code> flags (also settable in the server config file):</p>
 <ul>
-<li><a href="./authentication.html">Authentication</a> — Setting up user authentication</li>
-<li><a href="./security.html">Security Reference</a> — Security best practices and threat model</li>
-<li><a href="./server-deployment.html">Server Deployment</a> — Deploying the Torc server</li>
-<li><a href="../../core/reference/configuration.html">Configuration Reference</a> — All configuration options</li>
+<li><code>--disable-admin-sql</code> disables the endpoint entirely; both reads and writes return <code>403</code>.</li>
+<li><code>--disable-admin-sql-writes</code> keeps read-only queries working but rejects every <code>--write</code>
+(including the dry-run preview) with <code>403</code>.</li>
 </ul>
+<p>The audit-log listing (<code>GET /admin/audit-log</code>) is <strong>not</strong> gated by these flags, so a past trail of
+admin writes stays reviewable even after the feature is disabled.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../specialized/admin/admin-sql.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../specialized/admin/authentication.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../specialized/admin/access-groups.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../specialized/admin/tls-configuration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -323,11 +262,11 @@ check that the proxy is configured and the URL is correct.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../specialized/admin/admin-sql.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../specialized/admin/authentication.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../specialized/admin/access-groups.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../specialized/admin/tls-configuration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

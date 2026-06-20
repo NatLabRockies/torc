@@ -18044,6 +18044,7 @@ recover failed jobs</li>
 <li><a href="specialized/admin/./server-deployment.html">Server Deployment</a> - Deploying the Torc server</li>
 <li><a href="specialized/admin/./configuration-files.html">Configuration Files</a> - Server configuration</li>
 <li><a href="specialized/admin/./authentication.html">Authentication</a> - User authentication setup</li>
+<li><a href="specialized/admin/./admin-sql.html">Admin SQL Access</a> - Audit-logged raw-SQL escape hatch for database surgery</li>
 <li><a href="specialized/admin/./tls-configuration.html">TLS/HTTPS Configuration</a> - Client-side TLS and custom CA certificates</li>
 <li><a href="specialized/admin/./access-groups.html">Access Groups</a> - Managing user permissions</li>
 <li><a href="specialized/admin/./access-groups-tutorial.html">Team-Based Access Control Tutorial</a> - Setting up team access</li>
@@ -18406,6 +18407,11 @@ an admin.</li>
 the <code>file</code> table (job inputs, outputs, logs on shared filesystems) are not copied; the recipient
 analyzes metadata only unless those paths are independently shared.</li>
 </ul>
+<h2 id="direct-database-access-admin-sql"><a class="header" href="#direct-database-access-admin-sql">Direct Database Access (Admin SQL)</a></h2>
+<p>For inspecting server state or surgically repairing the database when a bug leaves a workflow stuck
+and no dedicated command can fix it, admins can run raw SQL through <code>torc admin sql</code> — an
+authenticated, guard-railed, audit-logged escape hatch that is safer than opening <code>sqlite3</code> on the
+server host directly. See <a href="specialized/admin/./admin-sql.html">Admin SQL Access</a>.</p>
 <h2 id="complete-example-production-deployment"><a class="header" href="#complete-example-production-deployment">Complete Example: Production Deployment</a></h2>
 <pre><code class="language-bash">#!/bin/bash
 # Production deployment script
@@ -19215,6 +19221,65 @@ kubectl exec torc-server -- torc admin reload-auth
 <li>Or use a configuration management tool to sync htpasswd files</li>
 <li>After updating the htpasswd file, call <code>torc admin reload-auth</code> on each server instance</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="admin-sql-access-database-escape-hatch"><a class="header" href="#admin-sql-access-database-escape-hatch">Admin SQL Access (Database Escape Hatch)</a></h1>
+<p><code>torc admin sql</code> lets an admin run a raw SQL statement against the server database. It is a
+controlled, audit-logged escape hatch for inspecting state and surgically repairing the database
+when a bug or edge case leaves a workflow stuck and no dedicated command can fix it. It is
+admin-only (requires <code>--admin-user</code> on the server) and is safer than opening <code>sqlite3</code> on the server
+host directly, because it is authenticated, guard-railed, and audited.</p>
+<blockquote>
+<p><strong>Warning:</strong> Raw writes bypass application invariants (the job status state machine, the
+background unblocking contract). A direct <code>UPDATE</code>/<code>DELETE</code> can leave the database in a state Torc
+never produces. Prefer a dedicated <code>torc</code> command when one exists, and treat raw SQL as a last
+resort.</p>
+</blockquote>
+<h2 id="reading-default"><a class="header" href="#reading-default">Reading (default)</a></h2>
+<p>Without <code>--write</code>, the statement runs on a <strong>read-only</strong> connection, so any write is rejected by
+SQLite itself. Results honor the global <code>-f/--format</code> option (<code>table</code>, <code>csv</code>, or <code>json</code>):</p>
+<pre><code class="language-bash">torc admin sql "SELECT id, status FROM job LIMIT 5"
+torc -f csv  admin sql "SELECT id, status FROM job"
+torc -f json admin sql "SELECT * FROM admin_audit_log"
+</code></pre>
+<p><code>--limit</code> caps the number of returned rows (default and maximum 100,000, the same as other list
+endpoints).</p>
+<p>JSON output is an array of objects under <code>items</code>, with a parallel <code>columns</code> array giving the display
+order. Column names the query repeats (e.g. an unaliased join on two <code>id</code> columns) are suffixed
+(<code>id</code>, <code>id_2</code>, ...) so each object's keys stay unique:</p>
+<pre><code class="language-json">{
+  "columns": ["id", "workflow_id", "max_mem"],
+  "items": [{ "id": 2, "workflow_id": 1, "max_mem": 447610880 }],
+  "committed": false
+}
+</code></pre>
+<h2 id="writing"><a class="header" href="#writing">Writing</a></h2>
+<p>Writes require <code>--write</code>. The CLI first previews how many rows the statement would affect (a dry-run
+that rolls back), prompts for confirmation, then commits:</p>
+<pre><code class="language-bash">torc admin sql --write "UPDATE result SET return_code=0 WHERE id=42"
+</code></pre>
+<ul>
+<li><code>--yes</code> skips the confirmation prompt.</li>
+<li>An unqualified <code>UPDATE</code>/<code>DELETE</code> (no <code>WHERE</code> clause) is refused unless you pass
+<code>--allow-full-table</code>. The leading verb is detected past an optional <code>WITH</code> (CTE), so
+<code>WITH ... DELETE FROM t</code> is guarded the same as a bare <code>DELETE</code>.</li>
+<li>DDL (<code>DROP</code>/<code>ALTER</code>/<code>TRUNCATE</code>), <code>ATTACH</code>/<code>DETACH</code>, and multi-statement input are always rejected.
+Leading comments cannot be used to hide a disallowed keyword.</li>
+</ul>
+<h2 id="audit-log"><a class="header" href="#audit-log">Audit log</a></h2>
+<p>Every committing write is recorded in the durable <code>admin_audit_log</code> table (user, timestamp,
+statement, rows affected, success). This table has no foreign key to <code>workflow</code>, so the audit trail
+survives workflow deletion. Review it with a read query:</p>
+<pre><code class="language-bash">torc admin sql "SELECT user_name, timestamp, sql_text, rows_affected FROM admin_audit_log ORDER BY id DESC LIMIT 20"
+</code></pre>
+<h2 id="disabling-the-feature"><a class="header" href="#disabling-the-feature">Disabling the feature</a></h2>
+<p>The raw-SQL endpoint is enabled by default. Cautious operators can turn it off at the server with
+two <code>torc-server run</code> flags (also settable in the server config file):</p>
+<ul>
+<li><code>--disable-admin-sql</code> disables the endpoint entirely; both reads and writes return <code>403</code>.</li>
+<li><code>--disable-admin-sql-writes</code> keeps read-only queries working but rejects every <code>--write</code>
+(including the dry-run preview) with <code>403</code>.</li>
+</ul>
+<p>The audit-log listing (<code>GET /admin/audit-log</code>) is <strong>not</strong> gated by these flags, so a past trail of
+admin writes stays reviewable even after the feature is disabled.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tlshttps-configuration"><a class="header" href="#tlshttps-configuration">TLS/HTTPS Configuration</a></h1>
 <p>When the Torc server uses HTTPS — either directly or behind a reverse proxy with an internal CA —
 clients need to know which CA certificate to trust. This page shows how to configure that.</p>
