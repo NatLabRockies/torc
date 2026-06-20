@@ -922,10 +922,20 @@ impl WorkflowActionsApiImpl {
                     );
                 }
                 Err(e) => {
+                    // Propagate rather than log-and-continue: a swallowed failure here would
+                    // leave the workflow partially reset (some actions still executed, some with a
+                    // stale trigger_count) while the caller believes reinitialize succeeded. The
+                    // recompute is idempotent, so a failed reinit can be safely retried. This
+                    // matches the DELETE/SELECT steps above and the executed-clear in the previous
+                    // implementation.
                     error!(
                         "Failed to update action {} during reinitialize: {}",
                         action_id, e
                     );
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to update workflow action during reinitialize",
+                    ));
                 }
             }
         }
