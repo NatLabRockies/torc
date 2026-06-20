@@ -210,6 +210,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserGroupMembershipModel'
+  /admin/audit-log:
+    get:
+      tags:
+      - access_control
+      operationId: list_admin_audit_log
+      parameters:
+      - name: offset
+        in: query
+        description: Offset for pagination (0-based). Defaults to 0.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: limit
+        in: query
+        description: |-
+          Maximum number of entries to return. Defaults to and is capped at 100,000
+          (the server-wide list cap); values above the cap are clamped.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAdminAuditLogResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /admin/reload-auth:
     post:
       tags:
@@ -222,6 +267,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReloadAuthResponse'
+  /admin/sql:
+    post:
+      tags:
+      - access_control
+      operationId: admin_sql
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminSqlRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSqlResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (invalid or disallowed statement)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /bulk_files:
     post:
       tags:
@@ -5516,6 +5597,123 @@ components:
       properties:
         task:
           $ref: '#/components/schemas/TaskModel'
+    AdminAuditLogEntry:
+      type: object
+      description: |-
+        One row of the admin raw-SQL audit log (`admin_audit_log`), returned by
+        `GET /admin/audit-log` (`torc admin list-audit-log`).
+      required:
+      - id
+      - user_name
+      - timestamp
+      - sql_text
+      - is_write
+      - allow_full_table
+      - committed
+      - success
+      properties:
+        allow_full_table:
+          type: boolean
+          description: True when the full-table guard was overridden for this statement.
+        committed:
+          type: boolean
+          description: True when the write was committed to the database.
+        error:
+          type:
+          - string
+          - 'null'
+          description: Error message captured for a failed statement, when applicable.
+        id:
+          type: integer
+          format: int64
+          description: Auto-increment row id.
+        is_write:
+          type: boolean
+          description: True for write-path statements (all audited rows are writes).
+        rows_affected:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Rows affected by the statement, when known.
+        sql_text:
+          type: string
+          description: The SQL statement text.
+        success:
+          type: boolean
+          description: True when the statement executed without error.
+        timestamp:
+          type: integer
+          format: int64
+          description: Execution time in milliseconds since the Unix epoch.
+        user_name:
+          type: string
+          description: User that executed the statement.
+    AdminSqlRequest:
+      type: object
+      description: Request body for the admin raw-SQL endpoint (`POST /admin/sql`).
+      required:
+      - sql
+      properties:
+        allow_full_table:
+          type: boolean
+          description: |-
+            Permit an unqualified UPDATE/DELETE (no WHERE clause). Ignored on the
+            read-only path.
+        dry_run:
+          type: boolean
+          description: |-
+            Write path only: run inside a transaction, report rows affected, then
+            roll back instead of committing (preview).
+        limit:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Maximum number of SELECT result rows to return. Defaults to and is capped
+            at 100,000 (the server-wide list cap); values above the cap are clamped.
+        sql:
+          type: string
+          description: The single SQL statement to execute.
+        write:
+          type: boolean
+          description: |-
+            Opt into the write path. When false (default) the statement runs on a
+            read-only connection, so any write fails at the SQLite layer.
+    AdminSqlResponse:
+      type: object
+      description: Response body for the admin raw-SQL endpoint (`POST /admin/sql`).
+      required:
+      - columns
+      - items
+      - committed
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+          description: |-
+            Column names in result order, defining how `items` is displayed (empty for
+            write statements). Names the query repeats are suffixed (`id`, `id_2`, ...)
+            so each item's keys stay unique.
+        committed:
+          type: boolean
+          description: True when a write was committed to the database.
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+            propertyNames:
+              type: string
+          description: Result rows as objects keyed by `columns` (empty for write statements).
+        rows_affected:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Number of rows affected by a write statement, when applicable.
     ArchiveWorkflowRequest:
       type: object
       description: |-
@@ -6419,6 +6617,41 @@ components:
         total_count:
           type: integer
           format: int64
+    ListAdminAuditLogResponse:
+      type: object
+      description: Paginated response for `GET /admin/audit-log` (entries newest first).
+      required:
+      - items
+      - offset
+      - max_limit
+      - count
+      - total_count
+      - has_more
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Number of entries returned in this page.
+        has_more:
+          type: boolean
+          description: True when more entries exist beyond this page.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAuditLogEntry'
+          description: Audit-log entries, newest first.
+        max_limit:
+          type: integer
+          format: int64
+          description: Maximum page size enforced by the server.
+        offset:
+          type: integer
+          format: int64
+          description: Offset applied to this page.
+        total_count:
+          type: integer
+          format: int64
+          description: Total number of audit-log entries.
     ListComputeNodesResponse:
       type: object
       required:

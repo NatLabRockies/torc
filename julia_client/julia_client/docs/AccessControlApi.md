@@ -6,11 +6,13 @@ Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**add_user_to_group**](AccessControlApi.md#add_user_to_group) | **POST** /access_groups/{id}/members | 
 [**add_workflow_to_group**](AccessControlApi.md#add_workflow_to_group) | **POST** /workflows/{id}/access_groups/{group_id} | 
+[**admin_sql**](AccessControlApi.md#admin_sql) | **POST** /admin/sql | 
 [**check_workflow_access**](AccessControlApi.md#check_workflow_access) | **GET** /access_check/{workflow_id}/{user_name} | 
 [**create_access_group**](AccessControlApi.md#create_access_group) | **POST** /access_groups | 
 [**delete_access_group**](AccessControlApi.md#delete_access_group) | **DELETE** /access_groups/{id} | 
 [**get_access_group**](AccessControlApi.md#get_access_group) | **GET** /access_groups/{id} | 
 [**list_access_groups**](AccessControlApi.md#list_access_groups) | **GET** /access_groups | 
+[**list_admin_audit_log**](AccessControlApi.md#list_admin_audit_log) | **GET** /admin/audit-log | 
 [**list_group_members**](AccessControlApi.md#list_group_members) | **GET** /access_groups/{id}/members | 
 [**list_user_groups**](AccessControlApi.md#list_user_groups) | **GET** /users/{user_name}/groups | 
 [**list_workflow_groups**](AccessControlApi.md#list_workflow_groups) | **GET** /workflows/{id}/access_groups | 
@@ -73,6 +75,34 @@ No authorization required
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **admin_sql**
+> admin_sql(_api::AccessControlApi, admin_sql_request::AdminSqlRequest; _mediaType=nothing) -> AdminSqlResponse, OpenAPI.Clients.ApiResponse <br/>
+> admin_sql(_api::AccessControlApi, response_stream::Channel, admin_sql_request::AdminSqlRequest; _mediaType=nothing) -> Channel{ AdminSqlResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **AccessControlApi** | API context | 
+**admin_sql_request** | [**AdminSqlRequest**](AdminSqlRequest.md) |  |
+
+### Return type
+
+[**AdminSqlResponse**](AdminSqlResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -212,6 +242,40 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ListAccessGroupsResponse**](ListAccessGroupsResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **list_admin_audit_log**
+> list_admin_audit_log(_api::AccessControlApi; offset=nothing, limit=nothing, _mediaType=nothing) -> ListAdminAuditLogResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_admin_audit_log(_api::AccessControlApi, response_stream::Channel; offset=nothing, limit=nothing, _mediaType=nothing) -> Channel{ ListAdminAuditLogResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **AccessControlApi** | API context | 
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **offset** | **Int64** | Offset for pagination (0-based). Defaults to 0. | [default to nothing]
+ **limit** | **Int64** | Maximum number of entries to return. Defaults to and is capped at 100,000 (the server-wide list cap); values above the cap are clamped. | [default to nothing]
+
+### Return type
+
+[**ListAdminAuditLogResponse**](ListAdminAuditLogResponse.md)
 
 ### Authorization
 

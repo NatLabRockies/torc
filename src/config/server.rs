@@ -54,6 +54,14 @@ pub struct ServerConfig {
     /// List of admin users (members of the system admin group)
     /// These users can create and manage access groups
     pub admin_users: Vec<String>,
+
+    /// Disable the admin raw-SQL endpoint entirely (`torc admin sql`).
+    /// The audit-log listing remains available.
+    pub disable_admin_sql: bool,
+
+    /// Disable admin raw-SQL writes (`torc admin sql --write`) while still
+    /// allowing read-only queries. Ignored when `disable_admin_sql` is set.
+    pub disable_admin_sql_writes: bool,
 }
 
 impl Default for ServerConfig {
@@ -74,6 +82,8 @@ impl Default for ServerConfig {
             completion_check_interval_secs: 30.0,
             logging: ServerLoggingConfig::default(),
             admin_users: Vec::new(),
+            disable_admin_sql: false,
+            disable_admin_sql_writes: false,
         }
     }
 }

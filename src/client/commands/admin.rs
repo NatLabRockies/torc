@@ -9,6 +9,12 @@ use crate::client::apis::configuration::{
     CLIENT_USER_HEADER, Configuration, client_user_header_value,
 };
 use crate::client::commands::print_error;
+use crate::client::commands::table_format::{
+    display_csv, display_dynamic_csv, display_dynamic_table, display_table,
+};
+use crate::client::utils::format_local_timestamp_epoch;
+use crate::models;
+use tabled::Tabled;
 
 #[derive(Subcommand)]
 pub enum AdminCommands {
@@ -70,6 +76,85 @@ EXAMPLES:
         #[arg(long, default_value_t = 60)]
         interval: u64,
     },
+
+    /// List recent admin raw-SQL audit-log entries (admin only)
+    #[command(
+        name = "list-audit-log",
+        after_long_help = "\
+Shows the durable audit trail of admin raw-SQL writes (`torc admin sql --write`),
+newest first. A committing write is recorded atomically with the change, and a
+write that reaches the database and fails is also recorded. Read-only queries,
+dry-run previews, and statements rejected before execution (e.g. by validation)
+are not audited.
+
+EXAMPLES:
+    # Most recent entries
+    torc admin list-audit-log
+
+    # Page through older entries
+    torc admin list-audit-log --limit 20 --offset 20
+
+    # JSON output (includes pagination metadata), e.g. for jq
+    torc -f json admin list-audit-log
+"
+    )]
+    ListAuditLog {
+        /// Maximum number of entries to return (capped at 100,000)
+        #[arg(long)]
+        limit: Option<i64>,
+        /// Offset for pagination (0-based)
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
+    },
+
+    /// Run a raw SQL statement against the server database (admin only)
+    #[command(
+        name = "sql",
+        after_long_help = "\
+A controlled, audit-logged escape hatch for inspecting and surgically repairing
+database state when a bug leaves a workflow stuck. Reads run on a read-only
+connection; writes require --write and run inside a transaction.
+
+WARNING: raw writes bypass application invariants (the job status state machine,
+the background unblocking contract). A direct UPDATE/DELETE can leave the
+database in a state torc never produces. Prefer a dedicated torc command when one
+exists.
+
+EXAMPLES:
+    # Inspect state (read-only)
+    torc admin sql \"SELECT id, status FROM job LIMIT 5\"
+
+    # CSV / JSON output for scripting
+    torc -f csv admin sql \"SELECT id, status FROM job\"
+    torc -f json admin sql \"SELECT * FROM admin_audit_log\"
+
+    # Apply a fix (previews affected rows, then prompts before committing)
+    torc admin sql --write \"UPDATE result SET return_code=0 WHERE id=42\"
+
+    # Skip the confirmation prompt
+    torc admin sql --write --yes \"UPDATE result SET return_code=0 WHERE id=42\"
+
+    # A full-table write must be explicitly allowed
+    torc admin sql --write --allow-full-table \"DELETE FROM slurm_stats\"
+"
+    )]
+    Sql {
+        /// The SQL statement to execute (a single statement)
+        statement: String,
+        /// Execute a write statement. Without this flag the statement runs
+        /// read-only and any write is rejected by SQLite.
+        #[arg(long)]
+        write: bool,
+        /// Allow an UPDATE/DELETE with no WHERE clause (full-table write)
+        #[arg(long)]
+        allow_full_table: bool,
+        /// Skip the confirmation prompt for writes
+        #[arg(long, short = 'y')]
+        yes: bool,
+        /// Maximum number of result rows to return (read-only; capped at 100,000)
+        #[arg(long)]
+        limit: Option<i64>,
+    },
 }
 
 pub fn handle_admin_commands(config: &Configuration, command: &AdminCommands, format: &str) {
@@ -93,6 +178,252 @@ pub fn handle_admin_commands(config: &Configuration, command: &AdminCommands, fo
         AdminCommands::ApiStats { window, interval } => {
             show_api_stats(config, *window, *interval, format);
         }
+        AdminCommands::ListAuditLog { limit, offset } => {
+            list_audit_log(config, *limit, *offset, format);
+        }
+        AdminCommands::Sql {
+            statement,
+            write,
+            allow_full_table,
+            yes,
+            limit,
+        } => {
+            handle_admin_sql(
+                config,
+                statement,
+                *write,
+                *allow_full_table,
+                *yes,
+                *limit,
+                format,
+            );
+        }
+    }
+}
+
+fn handle_admin_sql(
+    config: &Configuration,
+    statement: &str,
+    write: bool,
+    allow_full_table: bool,
+    yes: bool,
+    limit: Option<i64>,
+    format: &str,
+) {
+    if write {
+        // Preview: run the statement in a transaction that is rolled back, so we
+        // can report how many rows would change before committing anything.
+        let preview = models::AdminSqlRequest {
+            sql: statement.to_string(),
+            write: true,
+            allow_full_table,
+            dry_run: true,
+            limit: None,
+        };
+        let preview = match apis::access_control_api::admin_sql(config, preview) {
+            Ok(resp) => resp,
+            Err(e) => {
+                print_error("previewing SQL statement", &e);
+                std::process::exit(1);
+            }
+        };
+
+        if !yes {
+            let affected = preview.rows_affected.unwrap_or(0);
+            eprintln!("Statement: {statement}");
+            eprintln!("This write will affect {affected} row(s).");
+            eprint!("Proceed? [y/N] ");
+            use std::io::Write;
+            let _ = std::io::stderr().flush();
+            let mut input = String::new();
+            if std::io::stdin().read_line(&mut input).is_err() {
+                eprintln!("Aborted.");
+                std::process::exit(1);
+            }
+            let answer = input.trim().to_lowercase();
+            if answer != "y" && answer != "yes" {
+                eprintln!("Aborted.");
+                return;
+            }
+        }
+
+        let commit = models::AdminSqlRequest {
+            sql: statement.to_string(),
+            write: true,
+            allow_full_table,
+            dry_run: false,
+            limit: None,
+        };
+        match apis::access_control_api::admin_sql(config, commit) {
+            Ok(resp) => {
+                if format == "json" {
+                    println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+                } else {
+                    println!(
+                        "Committed. {} row(s) affected.",
+                        resp.rows_affected.unwrap_or(0)
+                    );
+                }
+            }
+            Err(e) => {
+                print_error("executing SQL statement", &e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        let request = models::AdminSqlRequest {
+            sql: statement.to_string(),
+            write: false,
+            allow_full_table: false,
+            dry_run: false,
+            limit,
+        };
+        match apis::access_control_api::admin_sql(config, request) {
+            Ok(resp) => render_sql_result(&resp, format),
+            Err(e) => {
+                print_error("executing SQL statement", &e);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+fn render_sql_result(resp: &models::AdminSqlResponse, format: &str) {
+    if format == "json" {
+        println!("{}", serde_json::to_string_pretty(resp).unwrap_or_default());
+        return;
+    }
+
+    // Each item is an object keyed by column name; project it back into the
+    // server-provided column order for tabular display.
+    let rows: Vec<Vec<String>> = resp
+        .items
+        .iter()
+        .map(|item| {
+            resp.columns
+                .iter()
+                .map(|col| item.get(col).map(value_to_cell).unwrap_or_default())
+                .collect()
+        })
+        .collect();
+
+    if format == "csv" {
+        display_dynamic_csv(&resp.columns, &rows);
+        return;
+    }
+
+    if resp.columns.is_empty() {
+        println!("(no rows)");
+        return;
+    }
+    display_dynamic_table(&resp.columns, &rows);
+    println!("\nTotal: {} row(s)", resp.items.len());
+}
+
+#[derive(Tabled)]
+struct AuditLogTableRow {
+    #[tabled(rename = "ID")]
+    id: i64,
+    #[tabled(rename = "Time")]
+    time: String,
+    #[tabled(rename = "User")]
+    user: String,
+    #[tabled(rename = "Committed")]
+    committed: String,
+    #[tabled(rename = "Success")]
+    success: String,
+    #[tabled(rename = "Full Table")]
+    full_table: String,
+    #[tabled(rename = "Rows")]
+    rows_affected: String,
+    #[tabled(rename = "SQL")]
+    sql: String,
+    #[tabled(rename = "Error")]
+    error: String,
+}
+
+fn yes_no(value: bool) -> String {
+    if value { "yes" } else { "no" }.to_string()
+}
+
+fn list_audit_log(config: &Configuration, limit: Option<i64>, offset: i64, format: &str) {
+    let response = match apis::access_control_api::list_admin_audit_log(config, Some(offset), limit)
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            print_error("listing admin audit log", &e);
+            std::process::exit(1);
+        }
+    };
+
+    // JSON output carries the full response, including pagination metadata.
+    if format == "json" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&response).unwrap_or_default()
+        );
+        return;
+    }
+
+    // Timestamps render the same way as `torc results list` (local time,
+    // HUMAN_TIMESTAMP_FORMAT); the audit log stores epoch milliseconds.
+    let rows: Vec<AuditLogTableRow> = response
+        .items
+        .iter()
+        .map(|entry| AuditLogTableRow {
+            id: entry.id,
+            time: format_local_timestamp_epoch(entry.timestamp as f64 / 1000.0),
+            user: entry.user_name.clone(),
+            committed: yes_no(entry.committed),
+            success: yes_no(entry.success),
+            full_table: yes_no(entry.allow_full_table),
+            rows_affected: entry
+                .rows_affected
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            sql: entry.sql_text.clone(),
+            error: entry.error.clone().unwrap_or_default(),
+        })
+        .collect();
+
+    if format == "csv" {
+        display_csv(&rows);
+        return;
+    }
+
+    if rows.is_empty() {
+        println!("(no audit-log entries)");
+        return;
+    }
+    display_table(&rows);
+    println!(
+        "\nShowing {} of {} entr{} (offset {})",
+        response.count,
+        response.total_count,
+        if response.total_count == 1 {
+            "y"
+        } else {
+            "ies"
+        },
+        response.offset
+    );
+    if response.has_more {
+        println!(
+            "More available: --offset {} to continue.",
+            response.offset + response.count
+        );
+    }
+}
+
+/// Render one JSON cell value as a plain table/CSV cell: strings unquoted, null
+/// as empty, scalars stringified, and arrays/objects as compact JSON.
+fn value_to_cell(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        other => other.to_string(),
     }
 }
 

@@ -373,6 +373,7 @@ impl PaginationInfo {
 
 // Re-export submodules
 pub mod access_groups;
+pub mod admin;
 pub mod compute_nodes;
 pub mod events;
 pub mod failure_handlers;

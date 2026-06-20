@@ -1,5 +1,20 @@
 use super::*;
+use crate::server::api::admin;
 use crate::server::htpasswd::HtpasswdFile;
+
+/// Map an [`admin::AdminSqlError`] onto the right HTTP response: a caller SQL
+/// error becomes 422 tagged `user_kind` (e.g. `QueryFailed`/`ExecutionFailed`),
+/// while a server-side failure becomes 500 so the status reflects who can act.
+fn admin_sql_error_response(err: &admin::AdminSqlError, user_kind: &str) -> AdminSqlResponse {
+    if err.is_internal() {
+        AdminSqlResponse::DefaultErrorResponse(error_payload!("InternalError", err.message()))
+    } else {
+        AdminSqlResponse::UnprocessableContentErrorResponse(error_payload!(
+            user_kind,
+            err.message()
+        ))
+    }
+}
 
 impl<C> Server<C>
 where
@@ -88,6 +103,142 @@ where
                     format!("Failed to reload htpasswd file: {}", e)
                 )))
             }
+        }
+    }
+
+    /// Execute a raw SQL statement on behalf of an admin (admin only).
+    ///
+    /// Reads run on a read-only connection; writes run in a transaction with an
+    /// optional dry-run preview, a no-WHERE guard, and an audit-log record. See
+    /// [`crate::server::api::admin`].
+    pub(super) async fn transport_admin_sql(
+        &self,
+        body: models::AdminSqlRequest,
+        context: &C,
+    ) -> Result<AdminSqlResponse, ApiError> {
+        log_call!(debug, context, "admin_sql(write={})", body.write);
+
+        authorize_admin!(self, context, AdminSqlResponse);
+
+        // Operator opt-out: the whole feature, or just writes, can be disabled
+        // via `torc-server --disable-admin-sql[-writes]`. Audit-log listing is
+        // intentionally not gated, so past activity stays reviewable.
+        if !self.admin_sql.reads_enabled {
+            return Ok(AdminSqlResponse::ForbiddenErrorResponse(forbidden_error!(
+                "admin SQL is disabled on this server"
+            )));
+        }
+        if body.write && !self.admin_sql.writes_enabled {
+            return Ok(AdminSqlResponse::ForbiddenErrorResponse(forbidden_error!(
+                "admin SQL writes are disabled on this server"
+            )));
+        }
+
+        if let Err(msg) = admin::validate_statement(&body.sql, body.write, body.allow_full_table) {
+            return Ok(AdminSqlResponse::UnprocessableContentErrorResponse(
+                error_payload!("InvalidStatement", msg),
+            ));
+        }
+
+        if body.write {
+            let user = username_from_context(context);
+            let audit = admin::AuditContext {
+                user_name: &user,
+                allow_full_table: body.allow_full_table,
+            };
+            match admin::execute_write(&self.pool, &body.sql, body.dry_run, &audit).await {
+                Ok(rows_affected) => {
+                    // Committing writes are audited atomically inside execute_write.
+                    let committed = !body.dry_run;
+                    if committed {
+                        info!(
+                            "admin_sql write committed by user={} rows_affected={} sql={:?}",
+                            user, rows_affected, body.sql
+                        );
+                    }
+                    let payload = models::AdminSqlResponse {
+                        columns: Vec::new(),
+                        items: Vec::new(),
+                        rows_affected: Some(rows_affected),
+                        committed,
+                    };
+                    Ok(AdminSqlResponse::SuccessfulResponse(
+                        serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
+                    ))
+                }
+                Err(err) => {
+                    if !body.dry_run {
+                        admin::record_audit(
+                            &self.pool,
+                            &user,
+                            &body.sql,
+                            body.allow_full_table,
+                            None,
+                            false,
+                            false,
+                            Some(err.message()),
+                        )
+                        .await;
+                    }
+                    Ok(admin_sql_error_response(&err, "ExecutionFailed"))
+                }
+            }
+        } else {
+            let limit = admin::clamp_limit(body.limit);
+            match admin::execute_read_only(&self.pool, &body.sql, limit).await {
+                Ok((columns, items)) => {
+                    let payload = models::AdminSqlResponse {
+                        columns,
+                        items,
+                        rows_affected: None,
+                        committed: false,
+                    };
+                    Ok(AdminSqlResponse::SuccessfulResponse(
+                        serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
+                    ))
+                }
+                Err(err) => Ok(admin_sql_error_response(&err, "QueryFailed")),
+            }
+        }
+    }
+
+    /// List recent admin raw-SQL audit-log entries (admin only).
+    ///
+    /// Returns a page of `admin_audit_log` rows newest-first with the standard
+    /// pagination metadata. See [`crate::server::api::admin::list_audit_log`].
+    pub(super) async fn transport_list_admin_audit_log(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListAdminAuditLogResponse, ApiError> {
+        log_call!(debug, context, "list_admin_audit_log()");
+
+        authorize_admin!(self, context, ListAdminAuditLogResponse);
+
+        let max_limit = crate::MAX_RECORD_TRANSFER_COUNT;
+        let offset = offset.unwrap_or(0).max(0);
+        let limit = admin::clamp_limit(limit) as i64;
+
+        match admin::list_audit_log(&self.pool, offset, limit).await {
+            Ok((items, total_count)) => {
+                let count = items.len() as i64;
+                let has_more = offset + count < total_count;
+                let payload = models::ListAdminAuditLogResponse {
+                    items,
+                    offset,
+                    max_limit,
+                    count,
+                    total_count,
+                    has_more,
+                };
+                Ok(ListAdminAuditLogResponse::SuccessfulResponse(
+                    serde_json::to_value(payload).map_err(|e| ApiError(e.to_string()))?,
+                ))
+            }
+            Err(msg) => Ok(ListAdminAuditLogResponse::DefaultErrorResponse(
+                error_payload!("QueryFailed", msg),
+            )),
         }
     }
 }

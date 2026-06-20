@@ -40,6 +40,8 @@ pub struct ServiceConfig {
     pub tls_key: Option<String>,
     pub admin_users: Vec<String>,
     pub completion_check_interval_secs: Option<f64>,
+    pub disable_admin_sql: bool,
+    pub disable_admin_sql_writes: bool,
 }
 
 impl ServiceConfig {
@@ -70,6 +72,8 @@ impl ServiceConfig {
             tls_key: None,
             admin_users: Vec::new(),
             completion_check_interval_secs: None, // Will use DEFAULT_SERVICE_INTERVAL_SECS
+            disable_admin_sql: false,
+            disable_admin_sql_writes: false,
         }
     }
 
@@ -97,6 +101,8 @@ impl ServiceConfig {
             tls_key: None,
             admin_users: Vec::new(),
             completion_check_interval_secs: None, // Will use DEFAULT_SERVICE_INTERVAL_SECS
+            disable_admin_sql: false,
+            disable_admin_sql_writes: false,
         }
     }
 
@@ -154,6 +160,9 @@ impl ServiceConfig {
                 || defaults.enforce_access_control,
             json_logs: user_config.json_logs || defaults.json_logs,
             https: user_config.https || defaults.https,
+            disable_admin_sql: user_config.disable_admin_sql || defaults.disable_admin_sql,
+            disable_admin_sql_writes: user_config.disable_admin_sql_writes
+                || defaults.disable_admin_sql_writes,
             // Vec fields: use user config if non-empty
             admin_users: if user_config.admin_users.is_empty() {
                 defaults.admin_users
@@ -279,6 +288,14 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
     for admin_user in &config.admin_users {
         args.push("--admin-user".into());
         args.push(admin_user.into());
+    }
+
+    if config.disable_admin_sql {
+        args.push("--disable-admin-sql".into());
+    }
+
+    if config.disable_admin_sql_writes {
+        args.push("--disable-admin-sql-writes".into());
     }
 
     let interval = config

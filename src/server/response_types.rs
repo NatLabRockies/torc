@@ -69,7 +69,8 @@ pub mod scheduling {
 
 pub mod system {
     pub use crate::server::api_responses::{
-        GetTaskResponse, GetVersionResponse, PingResponse, ReloadAuthResponse,
+        AdminSqlResponse, GetTaskResponse, GetVersionResponse, ListAdminAuditLogResponse,
+        PingResponse, ReloadAuthResponse,
     };
 }
 

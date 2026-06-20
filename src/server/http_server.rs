@@ -339,6 +339,7 @@ pub async fn create(
     #[allow(unused_variables)] tls_key: Option<String>,
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
+    admin_sql: crate::server::live_state::AdminSqlConfig,
 ) -> u16 {
     bootstrap::create_server(
         addr,
@@ -354,6 +355,7 @@ pub async fn create(
         tls_key,
         auth_file_path,
         shutdown_on_stdin_eof,
+        admin_sql,
     )
     .await
 }
@@ -387,6 +389,7 @@ impl<C> Server<C> {
         htpasswd: crate::server::auth::SharedHtpasswd,
         auth_file_path: Option<String>,
         credential_cache: crate::server::auth::SharedCredentialCache,
+        admin_sql: crate::server::live_state::AdminSqlConfig,
     ) -> Self {
         Server {
             marker: PhantomData,
@@ -396,6 +399,7 @@ impl<C> Server<C> {
                 htpasswd,
                 auth_file_path,
                 credential_cache,
+                admin_sql,
             )),
         }
     }
@@ -1411,6 +1415,24 @@ where
 
     async fn reload_auth(&self, context: &C) -> Result<ReloadAuthResponse, ApiError> {
         self.transport_reload_auth(context).await
+    }
+
+    async fn admin_sql(
+        &self,
+        body: models::AdminSqlRequest,
+        context: &C,
+    ) -> Result<AdminSqlResponse, ApiError> {
+        self.transport_admin_sql(body, context).await
+    }
+
+    async fn list_admin_audit_log(
+        &self,
+        offset: Option<i64>,
+        limit: Option<i64>,
+        context: &C,
+    ) -> Result<ListAdminAuditLogResponse, ApiError> {
+        self.transport_list_admin_audit_log(offset, limit, context)
+            .await
     }
 
     async fn list_workflows(
