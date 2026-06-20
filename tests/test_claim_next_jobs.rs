@@ -2,12 +2,15 @@ mod common;
 
 use common::{
     ServerProcess, create_custom_resources_workflow, create_many_jobs_workflow,
-    create_minimal_resources_workflow, start_server,
+    create_minimal_resources_workflow, create_test_compute_node, create_test_resource_requirements,
+    start_server,
 };
 use rstest::rstest;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 use torc::client::apis;
 use torc::models;
 
@@ -797,5 +800,352 @@ fn test_claim_next_jobs_returns_invocation_script(start_server: &ServerProcess) 
         returned_job.invocation_script,
         Some(invocation_script),
         "invocation_script should be returned by claim_next_jobs"
+    );
+}
+
+/// Create a workflow whose jobs form `num_chains` independent linear dependency
+/// chains, each `chain_depth` jobs long. After initialization, only the head of
+/// each chain is `Ready`; every downstream job is `Blocked` until its single
+/// predecessor completes. Returns `(workflow_id, total_job_count, run_id)`.
+///
+/// This shape forces the concurrent claim/complete test to interleave all three
+/// server code paths: claiming `Ready` jobs (`BEGIN IMMEDIATE` write lock),
+/// completing jobs, and the background unblock task promoting `Blocked` jobs to
+/// `Ready` as their predecessors finish.
+fn create_job_chains_workflow(
+    config: &torc::client::apis::configuration::Configuration,
+    num_chains: usize,
+    chain_depth: usize,
+) -> (i64, usize, i64) {
+    let workflow = models::WorkflowModel::new(
+        format!("chains_{num_chains}x{chain_depth}"),
+        "test_user".to_string(),
+    );
+    let created_workflow =
+        apis::workflows_api::create_workflow(config, workflow).expect("Failed to add workflow");
+    let workflow_id = created_workflow.id.unwrap();
+
+    let resource_req = create_test_resource_requirements(
+        config,
+        workflow_id,
+        "chain_jobs",
+        1,
+        0,
+        1,
+        "1g",
+        "P0DT1H",
+    );
+    let resource_id = resource_req.id.unwrap();
+
+    for chain in 0..num_chains {
+        let mut prev_id: Option<i64> = None;
+        for depth in 0..chain_depth {
+            let mut job = models::JobModel::new(
+                workflow_id,
+                format!("job_c{chain}_d{depth}"),
+                format!("echo 'chain {chain} depth {depth}'"),
+            );
+            job.resource_requirements_id = Some(resource_id);
+            if let Some(prev) = prev_id {
+                job.depends_on_job_ids = Some(vec![prev]);
+            }
+            let created =
+                apis::jobs_api::create_job(config, job).expect("Failed to create chain job");
+            prev_id = created.id;
+        }
+    }
+
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    // Completion validates the provided run_id against the workflow's current
+    // run_id, so capture whatever the workflow reports rather than assuming 1.
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("Failed to get workflow")
+        .run_id
+        .unwrap_or(0);
+
+    (workflow_id, num_chains * chain_depth, run_id)
+}
+
+/// Stress the realistic steady state: multiple runners concurrently claim jobs
+/// AND complete jobs against the same workflow, while completions cascade through
+/// dependency chains via the background unblock task.
+///
+/// This is the scenario `test_prepare_next_jobs_concurrent_allocation` does not
+/// cover (it only claims, never completes) and `test_batch_complete_jobs_*` does
+/// not cover (single caller, no concurrency). It asserts the two safety
+/// properties that must hold no matter how claims, completions, and unblocks
+/// interleave:
+///   1. No job is ever claimed by more than one runner (no double-allocation).
+///   2. No job is ever completed more than once (no double-completion).
+/// and the liveness property that the workflow fully drains: every job in every
+/// chain ends `Completed`, proving the background unblock task promoted each
+/// `Blocked` job exactly once under contention.
+#[rstest]
+fn test_concurrent_claim_and_complete(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let num_runners = std::cmp::max(
+        4,
+        thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4),
+    );
+
+    // 20 chains x 5 deep = 100 jobs. Only 20 heads are Ready initially; the rest
+    // must be unblocked by the background task as predecessors complete.
+    let num_chains = 20;
+    let chain_depth = 5;
+    let (workflow_id, total_jobs, run_id) =
+        create_job_chains_workflow(config, num_chains, chain_depth);
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    // Shared trackers. `claimed` maps job_id -> runner that claimed it (panics on
+    // a second claim). `completed` records every job_id completed (panics on a
+    // second completion). `completed_count` lets runners know when to stop.
+    let claimed: Arc<Mutex<HashMap<i64, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+    let completed: Arc<Mutex<HashMap<i64, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+    let completed_count = Arc::new(AtomicUsize::new(0));
+
+    let mut handles = vec![];
+    for runner_id in 0..num_runners {
+        let config = config.clone();
+        let claimed = Arc::clone(&claimed);
+        let completed = Arc::clone(&completed);
+        let completed_count = Arc::clone(&completed_count);
+
+        let handle = thread::spawn(move || {
+            // Generous wall-clock guard so a real bug fails the test instead of
+            // hanging CI. 100 jobs unblocking at ~0.1s granularity drains well
+            // under this bound.
+            let deadline = Instant::now() + Duration::from_secs(60);
+
+            while completed_count.load(Ordering::SeqCst) < total_jobs {
+                assert!(
+                    Instant::now() < deadline,
+                    "runner {runner_id} timed out: only {}/{total_jobs} jobs completed",
+                    completed_count.load(Ordering::SeqCst)
+                );
+
+                let response = apis::workflows_api::claim_next_jobs(&config, workflow_id, Some(4))
+                    .unwrap_or_else(|e| panic!("runner {runner_id} claim failed: {e}"));
+                let jobs = response.jobs.unwrap_or_default();
+
+                if jobs.is_empty() {
+                    // Nothing claimable right now: downstream jobs may still be
+                    // Blocked awaiting the background unblock task. Back off and
+                    // retry until the workflow drains.
+                    thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+
+                for job in jobs {
+                    let job_id = job.id.expect("claimed job must have an id");
+
+                    // Property 1: a job must never be claimed twice.
+                    {
+                        let mut map = claimed.lock().unwrap();
+                        if let Some(other) = map.insert(job_id, runner_id) {
+                            panic!(
+                                "DOUBLE-ALLOCATION: job {job_id} claimed by runner {other} and runner {runner_id}"
+                            );
+                        }
+                    }
+
+                    let result = models::ResultModel::new(
+                        job_id,
+                        workflow_id,
+                        run_id,
+                        1, // attempt_id
+                        compute_node_id,
+                        0,   // return_code (success)
+                        0.1, // exec_time_minutes
+                        chrono::Utc::now().to_rfc3339(),
+                        models::JobStatus::Completed,
+                    );
+
+                    apis::jobs_api::complete_job(
+                        &config,
+                        job_id,
+                        models::JobStatus::Completed,
+                        run_id,
+                        result,
+                    )
+                    .unwrap_or_else(|e| {
+                        panic!("runner {runner_id} failed to complete job {job_id}: {e}")
+                    });
+
+                    // Property 2: a job must never be completed twice.
+                    {
+                        let mut map = completed.lock().unwrap();
+                        if let Some(other) = map.insert(job_id, runner_id) {
+                            panic!(
+                                "DOUBLE-COMPLETION: job {job_id} completed by runner {other} and runner {runner_id}"
+                            );
+                        }
+                    }
+                    completed_count.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().expect("runner thread panicked");
+    }
+
+    // Every job was claimed exactly once and completed exactly once.
+    let claimed = claimed.lock().unwrap();
+    let completed = completed.lock().unwrap();
+    assert_eq!(
+        claimed.len(),
+        total_jobs,
+        "expected all {total_jobs} jobs claimed exactly once, got {}",
+        claimed.len()
+    );
+    assert_eq!(
+        completed.len(),
+        total_jobs,
+        "expected all {total_jobs} jobs completed exactly once, got {}",
+        completed.len()
+    );
+
+    // Liveness: the workflow fully drained. Every job ends Completed, which can
+    // only happen if the background unblock task promoted each Blocked job to
+    // Ready exactly once despite concurrent claims and completions.
+    let final_completed = apis::jobs_api::list_jobs(
+        &config.clone(),
+        workflow_id,
+        Some(models::JobStatus::Completed),
+        None,
+        None,
+        None,
+        Some(total_jobs as i64),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("list_jobs failed");
+    assert_eq!(
+        final_completed.items.len(),
+        total_jobs,
+        "expected all {total_jobs} jobs to end Completed, found {}",
+        final_completed.items.len()
+    );
+}
+
+/// Two runners attempt to complete the SAME job. The normal claim-based flow
+/// makes this unreachable — `claim_next_jobs` hands each job to exactly one
+/// runner under a `BEGIN IMMEDIATE` write lock — so this test sets the scenario
+/// up directly by completing one job twice.
+///
+/// The invariant under test: a job can be completed only once. The first
+/// completion succeeds; the second is rejected (HTTP 422 "already complete")
+/// rather than silently double-recording, and no duplicate result row is
+/// written.
+#[rstest]
+fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    // A single Ready job (1 chain x 1 deep). The helper returns the workflow's
+    // current run_id, which completion validates against.
+    let (workflow_id, total_jobs, run_id) = create_job_chains_workflow(config, 1, 1);
+    assert_eq!(total_jobs, 1);
+
+    let compute_node = create_test_compute_node(config, workflow_id);
+    let compute_node_id = compute_node.id.unwrap();
+
+    let job_id = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("list_jobs")
+    .items
+    .first()
+    .and_then(|j| j.id)
+    .expect("workflow should have exactly one job");
+
+    // Each "runner" submits its own result for the same job.
+    let make_result = || {
+        models::ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            1, // attempt_id
+            compute_node_id,
+            0,   // return_code (success)
+            0.1, // exec_time_minutes
+            chrono::Utc::now().to_rfc3339(),
+            models::JobStatus::Completed,
+        )
+    };
+
+    // Runner A completes the job successfully.
+    let first = apis::jobs_api::complete_job(
+        config,
+        job_id,
+        models::JobStatus::Completed,
+        run_id,
+        make_result(),
+    )
+    .expect("first completion should succeed");
+    assert_eq!(first.status, Some(models::JobStatus::Completed));
+
+    // Runner B tries to complete the same, already-completed job. It must be
+    // rejected, not accepted as a second completion.
+    let second = apis::jobs_api::complete_job(
+        config,
+        job_id,
+        models::JobStatus::Completed,
+        run_id,
+        make_result(),
+    );
+    let err = second.expect_err("second completion of the same job must be rejected");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("already complete"),
+        "expected an 'already complete' rejection, got: {msg}"
+    );
+
+    // The rejected completion must not have recorded a second result row.
+    let results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        Some(job_id),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("list_results");
+    assert_eq!(
+        results.count, 1,
+        "exactly one result should be recorded for a job completed once, found {}",
+        results.count
     );
 }
