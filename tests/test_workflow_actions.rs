@@ -3,13 +3,13 @@ mod common;
 use std::thread;
 use std::time::Duration;
 
-use common::{ServerProcess, create_test_workflow, start_server};
+use common::{ServerProcess, create_test_workflow, run_cli_with_json, start_server};
 use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
 use torc::client::workflow_manager::WorkflowManager;
 use torc::config::TorcConfig;
-use torc::models::{ClaimActionRequest, JobModel, WorkflowActionModel};
+use torc::models::{ClaimActionRequest, JobModel, JobStatus, ResultModel, WorkflowActionModel};
 
 /// Helper function to create a test job
 fn create_test_job(
@@ -973,5 +973,1064 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
     assert!(
         !find(recovery_id).executed,
         "recovery schedule_nodes action should be left untouched"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Regression tests for `reset_actions_for_reinitialize` not re-arming an
+// already-satisfied job-gated `schedule_nodes` action.
+//
+// Bug: `torc workflows reinit` (and every other reinitialize entry point) cleared
+// `executed` on all actions. An `on_jobs_complete` schedule_nodes action whose
+// gating job stays complete therefore became pending again, and `torc slurm
+// schedule-nodes` — which has no suppression of its own — let the next worker fire
+// it, re-scheduling the original node count. These tests exercise the server-side
+// reinitialize path (via `WorkflowManager::reinitialize`) directly.
+// ---------------------------------------------------------------------------
+
+/// `action_config` for a Slurm schedule_nodes action. `scheduler_id` is a placeholder; these tests
+/// never execute the action (no worker), they only assert its post-reinitialize armed state.
+fn schedule_nodes_config() -> serde_json::Value {
+    json!({ "scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 3 })
+}
+
+/// Drive a job Running -> terminal `status` with `return_code`, recording a result on
+/// `compute_node_id` — the same sequence a worker performs when it finishes a job.
+fn run_job_to_status(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    job_id: i64,
+    run_id: i64,
+    compute_node_id: i64,
+    return_code: i64,
+    status: JobStatus,
+) {
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("Failed to set job to running");
+    let result = ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1, // attempt_id
+        compute_node_id,
+        return_code,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        status,
+    );
+    apis::jobs_api::complete_job(config, job_id, status, run_id, result)
+        .expect("Failed to complete job");
+}
+
+/// Poll `get_pending_actions` until at least one action is pending; panic after 10s.
+fn wait_for_pending_action(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+) -> Vec<WorkflowActionModel> {
+    let start = std::time::Instant::now();
+    loop {
+        let pending = apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+            .expect("Failed to get pending actions");
+        if !pending.is_empty() {
+            return pending;
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "Timed out waiting for an action to become pending"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Fetch a single action by id.
+fn fetch_action(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+) -> WorkflowActionModel {
+    apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions")
+        .into_iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action not found")
+}
+
+/// True if `action_id` is in the workflow's current pending set.
+fn action_is_pending(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+) -> bool {
+    apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+        .expect("Failed to get pending actions")
+        .iter()
+        .any(|a| a.id == Some(action_id))
+}
+
+/// PRIMARY regression test (the reported bug): an `on_jobs_complete` schedule_nodes action whose
+/// gating job stays complete across a *subset* re-run must NOT be re-armed — otherwise it re-fires
+/// and submits a duplicate allocation when a worker starts.
+#[rstest]
+fn test_satisfied_schedule_action_not_rearmed_on_reinitialize(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_satisfied_schedule_not_rearmed");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // gate "copy-lock-file" (root) -> "work1" depends on it.
+    let gate = create_test_job(config, workflow_id, "copy-lock-file").expect("create gate");
+    let gate_id = gate.id.unwrap();
+    let mut work1 = JobModel::new(workflow_id, "work1".to_string(), "echo work1".to_string());
+    work1.depends_on_job_ids = Some(vec![gate_id]);
+    work1.cancel_on_blocking_job_failure = Some(false);
+    let work1_id = apis::jobs_api::create_job(config, work1)
+        .expect("create work1")
+        .id
+        .unwrap();
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(vec![gate_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run 1: gate completes -> action becomes pending -> claim it (simulates it firing 3 nodes).
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_id,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "action should be executed after claiming"
+    );
+
+    // work1 fails, then we re-run only the failed job: reset failed jobs + reinitialize.
+    run_job_to_status(
+        config,
+        workflow_id,
+        work1_id,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Failed,
+    );
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+        .expect("reset failed jobs");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    // The gate was never reset.
+    assert_eq!(
+        apis::jobs_api::get_job(config, gate_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "gate should still be Completed"
+    );
+
+    // THE FIX: the already-satisfied schedule_nodes action keeps executed=1 and is not pending.
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "satisfied schedule_nodes action must stay executed after reinitialize (it must not re-fire)"
+    );
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "suppressed schedule_nodes action must not be pending after reinitialize"
+    );
+}
+
+/// Complement to the primary test: when the gating job IS reset (a *full* re-run), the schedule_nodes
+/// action must be re-armed and fire again once the gate completes. Guards against over-suppression.
+#[rstest]
+fn test_schedule_action_rearmed_when_gate_job_reset(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_schedule_rearmed_on_gate_reset");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let gate_id = create_test_job(config, workflow_id, "copy-lock-file")
+        .expect("create gate")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(vec![gate_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run 1: gate completes, action fires (claimed).
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_id,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    // Full re-run: reset the GATE job itself (like `torc jobs reset-status <gate>`), then reinitialize.
+    apis::jobs_api::manage_status_change(config, gate_id, JobStatus::Uninitialized, run_id)
+        .expect("reset gate");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    assert_ne!(
+        apis::jobs_api::get_job(config, gate_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "gate should have been reset"
+    );
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "action must be re-armed when its gate job was reset (full re-run)"
+    );
+
+    // It fires again once the gate completes in the new run.
+    let run_id2 = manager.get_run_id().expect("run_id2");
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_id,
+        run_id2,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    let pending = wait_for_pending_action(config, workflow_id);
+    assert!(
+        pending.iter().any(|a| a.id == Some(action_id)),
+        "re-armed action should become pending again after the gate completes"
+    );
+}
+
+/// Scope check: the fix is limited to `schedule_nodes`. A satisfied `run_commands` action retains
+/// its prior behavior and is still re-armed on reinitialize.
+#[rstest]
+fn test_run_commands_action_still_rearmed_on_reinitialize(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_run_commands_rearmed");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let gate_id = create_test_job(config, workflow_id, "copy-lock-file")
+        .expect("create gate")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "run_commands",
+            json!({ "commands": ["echo hi"] }),
+            Some(vec![gate_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_id,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "run_commands actions are out of scope for the fix and must still be re-armed on reinitialize"
+    );
+}
+
+/// Scope check: `on_workflow_start` has no gating jobs, so a subset re-run is indistinguishable from
+/// a full restart. Such schedule_nodes actions are left to re-arm (recover/regenerate suppress them
+/// explicitly when the user takes over allocation).
+#[rstest]
+fn test_workflow_start_schedule_action_still_rearmed_on_reinitialize(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_workflow_start_rearmed");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // At least one job so the workflow can be (re)initialized.
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // on_workflow_start actions are activated at initialize, so the action is immediately pending.
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "on_workflow_start schedule_nodes actions are out of scope for the fix and must still be re-armed"
+    );
+}
+
+/// Threshold check: a multi-job-gated schedule_nodes action is only suppressed when ALL gating jobs
+/// remain satisfied. Resetting one of two gate jobs drops trigger_count below required_triggers, so
+/// the action must be re-armed.
+#[rstest]
+fn test_schedule_action_rearmed_when_one_of_multiple_gate_jobs_reset(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_partial_gate_rearmed");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let gate_a = create_test_job(config, workflow_id, "gate_a")
+        .expect("create gate_a")
+        .id
+        .unwrap();
+    let gate_b = create_test_job(config, workflow_id, "gate_b")
+        .expect("create gate_b")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(vec![gate_a, gate_b]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+    // The create response echoes the request body; required_triggers is computed server-side, so
+    // read it back from the persisted row.
+    assert_eq!(
+        fetch_action(config, workflow_id, action_id).required_triggers,
+        2,
+        "two gating jobs => required_triggers should be 2"
+    );
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Both gates complete -> action fires (claimed).
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_a,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_b,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    // Reset only ONE gate job -> partial satisfaction.
+    apis::jobs_api::manage_status_change(config, gate_b, JobStatus::Uninitialized, run_id)
+        .expect("reset gate_b");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    let after = fetch_action(config, workflow_id, action_id);
+    assert!(
+        !after.executed,
+        "action must be re-armed when only some gating jobs remain satisfied (trigger_count < required_triggers)"
+    );
+    assert!(
+        after.trigger_count < after.required_triggers,
+        "trigger_count ({}) should be below required_triggers ({}) after one gate was reset",
+        after.trigger_count,
+        after.required_triggers
+    );
+}
+
+/// A satisfied schedule_nodes action that NEVER fired (executed=false) must remain fireable after
+/// reinitialize — "keep" preserves the flag, it does not force executed=1.
+#[rstest]
+fn test_never_fired_satisfied_schedule_action_stays_fireable_after_reinitialize(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_never_fired_stays_fireable");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let gate_id = create_test_job(config, workflow_id, "copy-lock-file")
+        .expect("create gate")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(vec![gate_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Gate completes so the action becomes pending, but it is deliberately NEVER claimed.
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_id,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "action was never claimed"
+    );
+
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    let after = fetch_action(config, workflow_id, action_id);
+    assert!(
+        !after.executed,
+        "never-fired satisfied action must remain executed=false (still able to fire) after reinitialize"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "never-fired satisfied action should remain pending after reinitialize"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Multi-stage matrix: a 4-stage pipeline (stage1 -> stage2 -> stage3 -> stage4)
+// where each stage has its own `schedule_nodes` action gated on that stage's
+// completion (`on_jobs_complete[stage_k]`, num_allocations = k). Resetting stage
+// K and reinitializing must leave the actions for stages 1..K-1 executed (their
+// jobs stayed terminal) and re-arm the actions for stages K..4 (stage K is reset
+// and K+1..4 cascade-reset). Verified across all three reinitialize entry points.
+//
+// "Firing" an action in a test = claim it AND insert its `num_allocations`
+// scheduled_compute_node rows (a faithful stand-in for a worker running
+// schedule_slurm_nodes; there is no Slurm in tests). The rows are created
+// `complete` so they don't block a later reinitialize. The *count* of rows is
+// driven entirely by which actions torc leaves pending, so it still verifies the
+// re-arm decision under test.
+// ---------------------------------------------------------------------------
+
+/// Build a 4-stage linear pipeline: `stage1 -> stage2 -> stage3 -> stage4`, with one
+/// `schedule_nodes` action per stage gated on that stage's completion
+/// (`on_jobs_complete[stage_k]`, `num_allocations = k`). `cancel_on_blocking_job_failure=false`
+/// so a failed stage leaves its downstream Blocked rather than Canceled. Returns
+/// `(stage_job_ids, action_ids)` (both indexed 0..3 for stages 1..4). Does not initialize.
+fn build_four_stage_chain(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+) -> ([i64; 4], [i64; 4]) {
+    let mut stage_ids = [0i64; 4];
+    let mut prev: Option<i64> = None;
+    for (k, slot) in stage_ids.iter_mut().enumerate() {
+        let mut job = JobModel::new(
+            workflow_id,
+            format!("stage{}", k + 1),
+            format!("echo stage{}", k + 1),
+        );
+        if let Some(p) = prev {
+            job.depends_on_job_ids = Some(vec![p]);
+        }
+        job.cancel_on_blocking_job_failure = Some(false);
+        let id = apis::jobs_api::create_job(config, job)
+            .expect("create stage job")
+            .id
+            .unwrap();
+        *slot = id;
+        prev = Some(id);
+    }
+
+    let mut action_ids = [0i64; 4];
+    for (k, slot) in action_ids.iter_mut().enumerate() {
+        let cfg = json!({
+            "scheduler_type": "slurm",
+            "scheduler_id": 1,
+            "num_allocations": (k as i64) + 1,
+        });
+        let action = apis::workflow_actions_api::create_workflow_action(
+            config,
+            workflow_id,
+            workflow_action(
+                workflow_id,
+                "on_jobs_complete",
+                "schedule_nodes",
+                cfg,
+                Some(vec![stage_ids[k]]),
+            ),
+        )
+        .expect("create stage action");
+        *slot = action.id.unwrap();
+    }
+    (stage_ids, action_ids)
+}
+
+/// Poll until `job_id` reaches `expected` (tolerating the async unblock task), or panic after 10s.
+fn wait_for_job_status(config: &torc::client::Configuration, job_id: i64, expected: JobStatus) {
+    let start = std::time::Instant::now();
+    loop {
+        let status = apis::jobs_api::get_job(config, job_id)
+            .expect("get job")
+            .status
+            .unwrap();
+        if status == expected {
+            return;
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "job {job_id} did not reach {expected:?} in time (last {status:?})"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Poll until `action_id` specifically is pending, or panic after 10s.
+fn wait_for_specific_action_pending(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+) {
+    let start = std::time::Instant::now();
+    loop {
+        if action_is_pending(config, workflow_id, action_id) {
+            return;
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "action {action_id} did not become pending in time"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Drive a stage Ready -> Running -> terminal `status`.
+fn drive_stage(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    stage_id: i64,
+    run_id: i64,
+    compute_node_id: i64,
+    status: JobStatus,
+) {
+    wait_for_job_status(config, stage_id, JobStatus::Ready);
+    let return_code = if status == JobStatus::Completed { 0 } else { 1 };
+    run_job_to_status(
+        config,
+        workflow_id,
+        stage_id,
+        run_id,
+        compute_node_id,
+        return_code,
+        status,
+    );
+}
+
+/// "Fire" a schedule_nodes action: claim it and insert its `num_allocations` scheduled_compute_node
+/// rows (status `complete`, so they don't block a later reinitialize).
+fn fire_schedule_action(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+    num_allocations: i64,
+    compute_node_id: i64,
+) {
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    for i in 0..num_allocations {
+        let scn = torc::models::ScheduledComputeNodesModel::new(
+            workflow_id,
+            action_id * 1000 + i, // synthetic, unique-ish Slurm job id
+            1,                    // scheduler_config_id (no FK; arbitrary)
+            "slurm".to_string(),
+            "complete".to_string(),
+        );
+        apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, scn)
+            .expect("create scheduled_compute_node");
+    }
+}
+
+/// Count scheduled_compute_node rows for a workflow.
+fn count_scheduled_compute_nodes(config: &torc::client::Configuration, workflow_id: i64) -> usize {
+    apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("list scheduled_compute_nodes")
+    .items
+    .len()
+}
+
+/// Run the nominal pass on an initialized 4-stage workflow: complete every stage and fire its
+/// action. Asserts all four actions are executed and exactly 10 (1+2+3+4) nodes were scheduled.
+fn run_nominal_four_stages(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    stage_ids: &[i64; 4],
+    action_ids: &[i64; 4],
+    run_id: i64,
+    compute_node_id: i64,
+) {
+    for k in 0..4 {
+        drive_stage(
+            config,
+            workflow_id,
+            stage_ids[k],
+            run_id,
+            compute_node_id,
+            JobStatus::Completed,
+        );
+        wait_for_specific_action_pending(config, workflow_id, action_ids[k]);
+        fire_schedule_action(
+            config,
+            workflow_id,
+            action_ids[k],
+            (k as i64) + 1,
+            compute_node_id,
+        );
+    }
+    for (k, &action_id) in action_ids.iter().enumerate() {
+        assert!(
+            fetch_action(config, workflow_id, action_id).executed,
+            "A{} should be executed after the nominal run",
+            k + 1
+        );
+    }
+    assert_eq!(
+        count_scheduled_compute_nodes(config, workflow_id),
+        10,
+        "nominal run should schedule 10 nodes (1+2+3+4)"
+    );
+}
+
+/// Assert the per-action state after resetting stage `reset_stage` (1-based): actions for stages
+/// 1..reset_stage-1 stay executed (kept) and are not pending; actions for stages reset_stage..4 are
+/// re-armed (executed=false).
+fn assert_stage_action_states(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_ids: &[i64; 4],
+    reset_stage: usize,
+) {
+    for (k, &action_id) in action_ids.iter().enumerate() {
+        let action = fetch_action(config, workflow_id, action_id);
+        if k + 1 < reset_stage {
+            assert!(
+                action.executed,
+                "A{} (before reset stage {}) must stay executed (kept)",
+                k + 1,
+                reset_stage
+            );
+            assert!(
+                !action_is_pending(config, workflow_id, action_id),
+                "A{} (kept) must not be pending after reinitialize",
+                k + 1
+            );
+        } else {
+            assert!(
+                !action.executed,
+                "A{} (reset stage {} or later) must be re-armed (executed=false)",
+                k + 1,
+                reset_stage
+            );
+        }
+    }
+}
+
+/// PRIMARY 4-stage matrix via the `torc workflows reinit` path (`WorkflowManager::reinitialize`,
+/// which is exactly what the CLI invokes). reset_stage=0 is the nominal-only case. Verifies both the
+/// per-action executed/pending state and the total scheduled-compute-node count after re-running.
+#[rstest]
+#[case::nominal(0)]
+#[case::reset_stage1(1)]
+#[case::reset_stage2(2)]
+#[case::reset_stage3(3)]
+#[case::reset_stage4(4)]
+fn test_four_stage_reinit_keeps_prior_schedule_actions(
+    start_server: &ServerProcess,
+    #[case] reset_stage: usize,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, &format!("four_stage_reinit_{reset_stage}"));
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let (stage_ids, action_ids) = build_four_stage_chain(config, workflow_id);
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    run_nominal_four_stages(
+        config,
+        workflow_id,
+        &stage_ids,
+        &action_ids,
+        run_id,
+        compute_node_id,
+    );
+
+    if reset_stage == 0 {
+        return; // nominal-only assertions already made
+    }
+
+    // Reset the chosen stage, then reinitialize (the cascade re-arms it and all later stages).
+    apis::jobs_api::manage_status_change(
+        config,
+        stage_ids[reset_stage - 1],
+        JobStatus::Uninitialized,
+        run_id,
+    )
+    .expect("reset stage");
+    manager.reinitialize(true, false).expect("reinitialize");
+    let run_id2 = manager.get_run_id().expect("run_id2");
+
+    assert_stage_action_states(config, workflow_id, &action_ids, reset_stage);
+    // Reinitialize itself must not schedule anything: still the original 10 nodes.
+    assert_eq!(
+        count_scheduled_compute_nodes(config, workflow_id),
+        10,
+        "reinitialize must not schedule new nodes on its own"
+    );
+
+    // Re-run stages reset_stage..4; only their (re-armed) actions fire and schedule nodes.
+    for k in (reset_stage - 1)..4 {
+        drive_stage(
+            config,
+            workflow_id,
+            stage_ids[k],
+            run_id2,
+            compute_node_id,
+            JobStatus::Completed,
+        );
+        wait_for_specific_action_pending(config, workflow_id, action_ids[k]);
+        fire_schedule_action(
+            config,
+            workflow_id,
+            action_ids[k],
+            (k as i64) + 1,
+            compute_node_id,
+        );
+    }
+
+    let new_nodes: usize = (reset_stage..=4).sum();
+    assert_eq!(
+        count_scheduled_compute_nodes(config, workflow_id),
+        10 + new_nodes,
+        "after resetting stage {reset_stage}, only stages {reset_stage}..4 should reschedule ({new_nodes} new nodes)"
+    );
+}
+
+/// Same matrix via the real `torc jobs reset-status <stageK> --reinit` CLI (spawns the binary).
+/// Verifies the bundled reset+reinit command produces the same action states, and that it schedules
+/// nothing on its own (node count unchanged from the nominal run).
+#[rstest]
+#[case::reset_stage1(1)]
+#[case::reset_stage2(2)]
+#[case::reset_stage3(3)]
+#[case::reset_stage4(4)]
+fn test_four_stage_reset_status_reinit_cli_keeps_prior_schedule_actions(
+    start_server: &ServerProcess,
+    #[case] reset_stage: usize,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, &format!("four_stage_resetstatus_{reset_stage}"));
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let (stage_ids, action_ids) = build_four_stage_chain(config, workflow_id);
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    run_nominal_four_stages(
+        config,
+        workflow_id,
+        &stage_ids,
+        &action_ids,
+        run_id,
+        compute_node_id,
+    );
+
+    // Reset + reinit via the actual CLI command.
+    run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--reinit",
+            &stage_ids[reset_stage - 1].to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("jobs reset-status --reinit should succeed");
+
+    assert_stage_action_states(config, workflow_id, &action_ids, reset_stage);
+    assert_eq!(
+        count_scheduled_compute_nodes(config, workflow_id),
+        10,
+        "reset-status --reinit must not schedule new nodes on its own"
+    );
+}
+
+/// Same matrix via `torc recover`'s action-handling steps: `reset_failed_jobs` + `reinitialize_workflow`
+/// + `mark_satisfied_schedule_actions_executed`. Recover only resets FAILED jobs, so here stages
+/// 1..K-1 complete (and fire), stage K fails (Failed is terminal, so its action also fires), and
+/// stages K+1..4 never run. After recover, stages 1..K-1 stay executed and stage K..4 are
+/// executed=false — and crucially `mark_satisfied` must NOT re-suppress the re-armed stage-K action.
+#[rstest]
+#[case::reset_stage1(1)]
+#[case::reset_stage2(2)]
+#[case::reset_stage3(3)]
+#[case::reset_stage4(4)]
+fn test_four_stage_recover_keeps_prior_schedule_actions(
+    start_server: &ServerProcess,
+    #[case] reset_stage: usize,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, &format!("four_stage_recover_{reset_stage}"));
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    let (stage_ids, action_ids) = build_four_stage_chain(config, workflow_id);
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+    let k0 = reset_stage - 1;
+
+    // Stages before the failing one complete and fire their actions.
+    for k in 0..k0 {
+        drive_stage(
+            config,
+            workflow_id,
+            stage_ids[k],
+            run_id,
+            compute_node_id,
+            JobStatus::Completed,
+        );
+        wait_for_specific_action_pending(config, workflow_id, action_ids[k]);
+        fire_schedule_action(
+            config,
+            workflow_id,
+            action_ids[k],
+            (k as i64) + 1,
+            compute_node_id,
+        );
+    }
+    // Stage K fails; its on_jobs_complete action still fires (Failed is terminal).
+    drive_stage(
+        config,
+        workflow_id,
+        stage_ids[k0],
+        run_id,
+        compute_node_id,
+        JobStatus::Failed,
+    );
+    wait_for_specific_action_pending(config, workflow_id, action_ids[k0]);
+    fire_schedule_action(
+        config,
+        workflow_id,
+        action_ids[k0],
+        (k0 as i64) + 1,
+        compute_node_id,
+    );
+
+    // Pre-recover sanity: stages 1..K fired (executed); K+1..4 never fired.
+    for (k, &action_id) in action_ids.iter().enumerate() {
+        assert_eq!(
+            fetch_action(config, workflow_id, action_id).executed,
+            k <= k0,
+            "pre-recover: A{} executed state",
+            k + 1
+        );
+    }
+    let scn_before = count_scheduled_compute_nodes(config, workflow_id);
+
+    // Recover's action-relevant steps (the Slurm submit is environment-specific and out of scope).
+    torc::client::commands::recover::reset_failed_jobs(config, workflow_id, &[stage_ids[k0]])
+        .expect("reset_failed_jobs");
+    torc::client::commands::recover::reinitialize_workflow(config, workflow_id)
+        .expect("reinitialize_workflow");
+    torc::client::commands::recover::mark_satisfied_schedule_actions_executed(config, workflow_id)
+        .expect("mark_satisfied_schedule_actions_executed");
+
+    assert_stage_action_states(config, workflow_id, &action_ids, reset_stage);
+    assert_eq!(
+        count_scheduled_compute_nodes(config, workflow_id),
+        scn_before,
+        "recover (reinit + mark_satisfied) must not schedule new nodes on its own"
     );
 }

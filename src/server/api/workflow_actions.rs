@@ -773,11 +773,33 @@ impl WorkflowActionsApiImpl {
     }
 
     /// Reset workflow actions for reinitialization.
-    /// This first deletes any recovery actions (created by `torc slurm regenerate`),
-    /// then resets executed flags and pre-computes trigger_count based on current job states.
-    /// For on_jobs_ready and on_jobs_complete actions, trigger_count is set to the number of jobs
-    /// already in a satisfied state (e.g., Completed jobs count toward on_jobs_ready).
-    /// For other action types, trigger_count is reset to 0.
+    ///
+    /// This first deletes any recovery actions (created by `torc slurm regenerate`), then, for each
+    /// remaining (non-recovery) action, recomputes `trigger_count` from current job states and
+    /// re-arms it (clears `executed`/`executed_by`) so it can fire again on the new run. For
+    /// on_jobs_ready and on_jobs_complete actions, trigger_count is set to the number of jobs
+    /// already in a satisfied state (e.g., Completed jobs count toward on_jobs_ready). For other
+    /// action types, trigger_count is reset to 0.
+    ///
+    /// Exception — already-satisfied job-gated `schedule_nodes` actions are NOT re-armed. A
+    /// `schedule_nodes` action gated on jobs that are still in their satisfied state after the
+    /// reinitialize (`trigger_count >= required_triggers`) already scheduled its allocation for
+    /// those completed jobs. Clearing `executed` would make it fire a second time and submit a
+    /// duplicate allocation the moment a worker starts — the bug behind "reset one job + reinit +
+    /// `slurm schedule-nodes` re-schedules the original node count". Such actions keep their
+    /// `executed` flag (firing once already-satisfied or staying fireable if never fired) so no
+    /// reinitialize entry point (`reinit`, `recover`, `regenerate`, `watch`) can resurrect them.
+    ///
+    /// Scope, and why each clause matters:
+    /// - `schedule_nodes` only — the duplicate-allocation hazard is specific to it, and this mirrors
+    ///   the client-side `schedule_action_already_satisfied` guard. `run_commands` keeps its prior
+    ///   re-arm behavior.
+    /// - job-gated triggers only — `trigger_count >= required_triggers` distinguishes a *subset*
+    ///   re-run (gating jobs still terminal → still satisfied → suppress) from a *full* re-run
+    ///   (gating jobs were reset → not satisfied → re-arm so it fires again when they complete).
+    ///   `on_workflow_start`/`on_worker_start` have no gating jobs, so a subset re-run is
+    ///   indistinguishable from a full restart; those are left to re-arm and are suppressed
+    ///   explicitly by the recover/regenerate paths when the user takes over allocation.
     pub async fn reset_actions_for_reinitialize(&self, workflow_id: i64) -> Result<(), ApiError> {
         debug!(
             "reset_actions_for_reinitialize(workflow_id={})",
@@ -807,28 +829,11 @@ impl WorkflowActionsApiImpl {
             }
         }
 
-        // Reset executed flags for all remaining (non-recovery) actions
-        match sqlx::query(
-            "UPDATE workflow_action SET executed = 0, executed_by = NULL WHERE workflow_id = ?",
-        )
-        .bind(workflow_id)
-        .execute(self.context.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!(
-                    "Reset executed flags for all actions in workflow {}",
-                    workflow_id
-                );
-            }
-            Err(e) => {
-                return Err(database_error_with_msg(e, "Failed to reset executed flags"));
-            }
-        }
-
-        // Get all actions for this workflow
+        // Get all remaining (non-recovery) actions. We decide per-action whether to re-arm, so
+        // (unlike the previous implementation) there is no blanket "clear executed" step: an
+        // already-satisfied job-gated schedule_nodes action must keep its executed flag.
         let actions = match sqlx::query(
-            "SELECT id, trigger_type, job_ids FROM workflow_action WHERE workflow_id = ?",
+            "SELECT id, trigger_type, action_type, job_ids, required_triggers FROM workflow_action WHERE workflow_id = ?",
         )
         .bind(workflow_id)
         .fetch_all(self.context.pool.as_ref())
@@ -846,7 +851,9 @@ impl WorkflowActionsApiImpl {
         for action_row in actions {
             let action_id: i64 = action_row.get("id");
             let trigger_type: String = action_row.get("trigger_type");
+            let action_type: String = action_row.get("action_type");
             let job_ids_str: Option<String> = action_row.get("job_ids");
+            let required_triggers: i64 = action_row.get("required_triggers");
 
             // For on_jobs_ready and on_jobs_complete, compute trigger_count based on current job states
             let trigger_count = match trigger_type.as_str() {
@@ -877,22 +884,46 @@ impl WorkflowActionsApiImpl {
                 _ => 0,
             };
 
-            // Update the trigger_count for this action
-            match sqlx::query("UPDATE workflow_action SET trigger_count = ? WHERE id = ?")
+            // An already-satisfied job-gated schedule_nodes action keeps its executed flag so the
+            // reinitialize cannot resurrect it and re-submit its allocation. See the function doc
+            // comment for the full rationale and scope. Every other action is re-armed (executed
+            // cleared) so it can fire again on the new run.
+            let keep_executed = action_type == "schedule_nodes"
+                && matches!(trigger_type.as_str(), "on_jobs_ready" | "on_jobs_complete")
+                && trigger_count >= required_triggers;
+
+            let result = if keep_executed {
+                // Leave executed/executed_by intact; only refresh trigger_count.
+                sqlx::query("UPDATE workflow_action SET trigger_count = ? WHERE id = ?")
+                    .bind(trigger_count)
+                    .bind(action_id)
+                    .execute(self.context.pool.as_ref())
+                    .await
+            } else {
+                sqlx::query(
+                    "UPDATE workflow_action SET executed = 0, executed_by = NULL, trigger_count = ? WHERE id = ?",
+                )
                 .bind(trigger_count)
                 .bind(action_id)
                 .execute(self.context.pool.as_ref())
                 .await
-            {
+            };
+
+            match result {
                 Ok(_) => {
                     debug!(
-                        "Set trigger_count to {} for action {} (trigger_type={}) in workflow {}",
-                        trigger_count, action_id, trigger_type, workflow_id
+                        "Reinit action {} (trigger_type={}, action_type={}) in workflow {}: trigger_count={}, kept_executed={}",
+                        action_id,
+                        trigger_type,
+                        action_type,
+                        workflow_id,
+                        trigger_count,
+                        keep_executed
                     );
                 }
                 Err(e) => {
                     error!(
-                        "Failed to set trigger_count for action {}: {}",
+                        "Failed to update action {} during reinitialize: {}",
                         action_id, e
                     );
                 }
