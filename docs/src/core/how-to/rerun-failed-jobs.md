@@ -48,18 +48,36 @@ Then resume execution with `torc run <workflow_id>` (local) or `torc submit <wor
 When you need to rerun only specific jobs (not all failed ones), use `torc jobs reset-status`. This
 is useful when you know exactly which jobs need to be rerun without resetting the whole workflow.
 
+Jobs are selected one of three mutually exclusive ways:
+
+- **By job ID** — list explicit IDs (they must all belong to the same workflow).
+- **By status** — `--status` reset every job currently in one of the given statuses. The value is
+  repeatable / comma-separated (e.g. `--status terminated,canceled,failed`).
+- **By return code** — `--return-code` resets every job whose **latest** result exited with the
+  given code.
+
+The `--status` and `--return-code` modes operate on a whole workflow, selected with `--workflow-id`
+(you are prompted to choose one if it is omitted). If a filter matches no jobs, the command exits
+non-zero with an error — this catches a mistaken assumption (e.g. expecting failed jobs when there
+are none) in scripts and CI.
+
 Unlike `torc workflows reset-status`, this command:
 
-- Resets only the explicitly named job IDs. Downstream dependents are **not** reset by this command
-  — it lists them for you, and they are reset transitively when you run `torc workflows reinit` (a
-  rerun job produces new outputs that consumers must consume again).
+- Resets only the selected jobs. Downstream dependents are **not** reset by this command — it lists
+  them for you, and they are reset transitively when you run `torc workflows reinit` (a rerun job
+  produces new outputs that consumers must consume again).
 - Does **not** bump the workflow `run_id` or reset workflow state — you follow up with
   `torc workflows reinit` once, which does the run_id bump exactly once.
-- All supplied job IDs must belong to the same workflow (hard error otherwise).
 
 ```bash
 # Preview what would be reset (no changes applied)
 torc jobs reset-status 101 102 --dry-run
+
+# Reset every terminated, canceled, or failed job in a workflow
+torc jobs reset-status --status terminated,canceled,failed --workflow-id <workflow_id>
+
+# Reset all jobs whose latest result exited with return code 42
+torc jobs reset-status --return-code 42 --workflow-id <workflow_id>
 
 # Reset and reinitialize in one step, then run
 torc jobs reset-status 101 102 --reinit
@@ -79,7 +97,7 @@ torc -f json jobs reset-status 101 102 --no-prompts
 ```
 
 The workflow does not need to be complete — the command can be run repeatedly (e.g. to reset
-additional jobs after an earlier reset) as long as no workers are active. If a requested job
+additional jobs after an earlier reset) as long as no workers are active. If a selected job
 completed successfully, the command warns you before resetting it, since resetting discards its
 results and reruns it.
 
@@ -95,6 +113,7 @@ allocations), and (2) the active-status guard (jobs in Running or Pending are no
 | Local workflow with failures                              | `torc workflows reset-status --failed-only`                                       |
 | Want to retry without changing resource allocations       | `torc workflows reset-status --failed-only`                                       |
 | Rerun only specific known jobs                            | `torc jobs reset-status <id>...`                                                  |
+| Rerun every job in a given status (or return code)        | `torc jobs reset-status --status <s>` / `--return-code <n>`                       |
 | Workflow ran fine but inputs changed                      | [Intelligent Restart](../concepts/intelligent-restart.md)                         |
 | Need AI-driven classification of unfamiliar failure modes | [AI-Assisted Recovery](../../specialized/fault-tolerance/ai-assisted-recovery.md) |
 

@@ -1260,3 +1260,687 @@ fn test_reset_status_completed_job_warning(start_server: &ServerProcess) {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Test 14: Select by --status — reset every job in a given status, leaving
+//          jobs in other statuses untouched.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_by_status_filter(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_by_status");
+    let workflow_id = workflow.id.unwrap();
+
+    let failed1 = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "failed1".to_string(), "false".to_string()),
+    )
+    .expect("create failed1");
+    let failed1_id = failed1.id.unwrap();
+    let failed2 = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "failed2".to_string(), "false".to_string()),
+    )
+    .expect("create failed2");
+    let failed2_id = failed2.id.unwrap();
+    let completed = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "ok".to_string(), "echo ok".to_string()),
+    )
+    .expect("create completed");
+    let completed_id = completed.id.unwrap();
+
+    let run_id = initialize_workflow(config, &workflow);
+    let cn_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    for &id in &[failed1_id, failed2_id, completed_id] {
+        apis::jobs_api::manage_status_change(config, id, JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("set {} running: {}", id, e));
+    }
+    complete_job(
+        config,
+        failed1_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Failed,
+    );
+    complete_job(
+        config,
+        failed2_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Failed,
+    );
+    complete_job(
+        config,
+        completed_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        0,
+        JobStatus::Completed,
+    );
+
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--status",
+            "failed",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --status should succeed");
+
+    assert_eq!(json["status"], "success");
+    assert_eq!(json["workflow_id"], workflow_id);
+    let reset_ids: Vec<i64> = json["reset_job_ids"]
+        .as_array()
+        .expect("reset_job_ids array")
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    assert_eq!(reset_ids.len(), 2, "exactly the two failed jobs reset");
+    assert!(reset_ids.contains(&failed1_id) && reset_ids.contains(&failed2_id));
+
+    for &id in &[failed1_id, failed2_id] {
+        assert_eq!(
+            apis::jobs_api::get_job(config, id).unwrap().status.unwrap(),
+            JobStatus::Uninitialized,
+            "failed job {} should be Uninitialized",
+            id
+        );
+    }
+    assert_eq!(
+        apis::jobs_api::get_job(config, completed_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "completed job should be untouched"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 15: Select by multiple --status values (comma-separated) — union of
+//          all matching statuses is reset.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_by_multiple_statuses(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_by_multi_status");
+    let workflow_id = workflow.id.unwrap();
+
+    let failed = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "f".to_string(), "false".to_string()),
+    )
+    .expect("create failed");
+    let failed_id = failed.id.unwrap();
+    let terminated = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "t".to_string(), "sleep 1".to_string()),
+    )
+    .expect("create terminated");
+    let terminated_id = terminated.id.unwrap();
+    let completed = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "c".to_string(), "echo c".to_string()),
+    )
+    .expect("create completed");
+    let completed_id = completed.id.unwrap();
+
+    let run_id = initialize_workflow(config, &workflow);
+    let cn_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    for &id in &[failed_id, terminated_id, completed_id] {
+        apis::jobs_api::manage_status_change(config, id, JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("set {} running: {}", id, e));
+    }
+    complete_job(
+        config,
+        failed_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Failed,
+    );
+    complete_job(
+        config,
+        terminated_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Terminated,
+    );
+    complete_job(
+        config,
+        completed_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        0,
+        JobStatus::Completed,
+    );
+
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--status",
+            "failed,terminated",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --status failed,terminated should succeed");
+
+    assert_eq!(json["status"], "success");
+    let reset_ids: Vec<i64> = json["reset_job_ids"]
+        .as_array()
+        .expect("reset_job_ids array")
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    assert_eq!(reset_ids.len(), 2);
+    assert!(reset_ids.contains(&failed_id) && reset_ids.contains(&terminated_id));
+    assert_eq!(
+        apis::jobs_api::get_job(config, completed_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "completed job should be untouched"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 16: Select by --return-code — reset jobs whose latest result has the
+//          given return code.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_by_return_code(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_by_return_code");
+    let workflow_id = workflow.id.unwrap();
+
+    let rc42_a = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "rc42a".to_string(), "false".to_string()),
+    )
+    .expect("create rc42a");
+    let rc42_a_id = rc42_a.id.unwrap();
+    let rc42_b = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "rc42b".to_string(), "false".to_string()),
+    )
+    .expect("create rc42b");
+    let rc42_b_id = rc42_b.id.unwrap();
+    let rc0 = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "rc0".to_string(), "echo ok".to_string()),
+    )
+    .expect("create rc0");
+    let rc0_id = rc0.id.unwrap();
+
+    let run_id = initialize_workflow(config, &workflow);
+    let cn_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    for &id in &[rc42_a_id, rc42_b_id, rc0_id] {
+        apis::jobs_api::manage_status_change(config, id, JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("set {} running: {}", id, e));
+    }
+    complete_job(
+        config,
+        rc42_a_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        42,
+        JobStatus::Failed,
+    );
+    complete_job(
+        config,
+        rc42_b_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        42,
+        JobStatus::Failed,
+    );
+    complete_job(
+        config,
+        rc0_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        0,
+        JobStatus::Completed,
+    );
+
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--return-code",
+            "42",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --return-code should succeed");
+
+    assert_eq!(json["status"], "success");
+    let reset_ids: Vec<i64> = json["reset_job_ids"]
+        .as_array()
+        .expect("reset_job_ids array")
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    assert_eq!(reset_ids.len(), 2, "both return-code-42 jobs reset");
+    assert!(reset_ids.contains(&rc42_a_id) && reset_ids.contains(&rc42_b_id));
+    for &id in &[rc42_a_id, rc42_b_id] {
+        assert_eq!(
+            apis::jobs_api::get_job(config, id).unwrap().status.unwrap(),
+            JobStatus::Uninitialized,
+            "rc42 job {} should be Uninitialized",
+            id
+        );
+    }
+    assert_eq!(
+        apis::jobs_api::get_job(config, rc0_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "return-code-0 job should be untouched"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 17: Filter modes that match nothing fail with a non-zero exit (the
+//          caller expected matching jobs and none were found), and reset nothing.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_filter_no_match(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_no_match");
+    let workflow_id = workflow.id.unwrap();
+
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "j".to_string(), "echo j".to_string()),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+    initialize_workflow(config, &workflow);
+
+    let result = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--status",
+            "terminated",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    );
+    assert!(
+        result.is_err(),
+        "reset-status with no matches should fail with a non-zero exit"
+    );
+
+    // The non-matching job must be untouched.
+    assert_eq!(
+        apis::jobs_api::get_job(config, job_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Ready,
+        "job should remain Ready (nothing reset)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 18: Selection modes are mutually exclusive — combining job IDs with
+//          --status is a usage error (enforced by clap).
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_modes_mutually_exclusive(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_mutex");
+    let workflow_id = workflow.id.unwrap();
+
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "j".to_string(), "echo j".to_string()),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+    initialize_workflow(config, &workflow);
+
+    let result = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            &job_id.to_string(),
+            "--status",
+            "failed",
+        ],
+        start_server,
+        None,
+    );
+    assert!(
+        result.is_err(),
+        "combining job IDs with --status should be rejected"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 19: Invalid --status value → clear error, nothing reset.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_invalid_status_value(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_bad_status");
+    let workflow_id = workflow.id.unwrap();
+    initialize_workflow(config, &workflow);
+
+    let result = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--status",
+            "bogus",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    );
+    assert!(result.is_err(), "invalid status should be rejected");
+}
+
+// ---------------------------------------------------------------------------
+// Test 20: --return-code matches only the LATEST result per job. A job that
+//          failed with rc=42 and was then rerun to success (rc=0) must NOT be
+//          matched by `--return-code 42`, but MUST be matched by
+//          `--return-code 0`.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_return_code_uses_latest_result(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_rc_latest");
+    let workflow_id = workflow.id.unwrap();
+
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "reran".to_string(), "echo x".to_string()),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+
+    // Run 1: fail with return code 42.
+    let run_id1 = initialize_workflow(config, &workflow);
+    let cn_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id1)
+        .expect("set running (run 1)");
+    complete_job(
+        config,
+        job_id,
+        workflow_id,
+        cn_id,
+        run_id1,
+        42,
+        JobStatus::Failed,
+    );
+
+    // Reset the job and reinitialize to bump run_id, mimicking a real rerun.
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Uninitialized, run_id1)
+        .expect("reset to uninitialized");
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let updated_wf = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    let manager = WorkflowManager::new(config.clone(), torc_config, updated_wf);
+    manager.reinitialize(false, false).expect("reinitialize");
+    let run_id2 = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    assert_eq!(run_id2, run_id1 + 1, "run_id should be bumped once");
+
+    // Run 2: succeed with return code 0 (now the latest result).
+    wait_for_status(config, job_id, JobStatus::Ready);
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id2)
+        .expect("set running (run 2)");
+    complete_job(
+        config,
+        job_id,
+        workflow_id,
+        cn_id,
+        run_id2,
+        0,
+        JobStatus::Completed,
+    );
+
+    // --return-code 42 must NOT match: the stale failure is not the latest result.
+    let json_42 = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--return-code",
+            "42",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --return-code 42 should succeed (no match)");
+    assert_eq!(json_42["status"], "success");
+    assert_eq!(
+        json_42["reset_count"], 0,
+        "stale rc=42 from a previous run must not match"
+    );
+    assert_eq!(
+        apis::jobs_api::get_job(config, job_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "job should be untouched by the non-matching return code"
+    );
+
+    // --return-code 0 must match the latest (successful) result.
+    let json_0 = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--force",
+            "--return-code",
+            "0",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("reset-status --return-code 0 should succeed");
+    let reset_ids: Vec<i64> = json_0["reset_job_ids"]
+        .as_array()
+        .expect("reset_job_ids array")
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    assert_eq!(reset_ids, vec![job_id], "latest rc=0 should match");
+    assert_eq!(
+        apis::jobs_api::get_job(config, job_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Uninitialized,
+        "job should be reset when its latest result matches"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 21: --status may be passed as repeated flags (not just comma-separated);
+//          the union of matching jobs is reset.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_repeated_status_flag(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_repeated_flag");
+    let workflow_id = workflow.id.unwrap();
+
+    let failed = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "f".to_string(), "false".to_string()),
+    )
+    .expect("create failed");
+    let failed_id = failed.id.unwrap();
+    let terminated = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "t".to_string(), "sleep 1".to_string()),
+    )
+    .expect("create terminated");
+    let terminated_id = terminated.id.unwrap();
+
+    let run_id = initialize_workflow(config, &workflow);
+    let cn_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    for &id in &[failed_id, terminated_id] {
+        apis::jobs_api::manage_status_change(config, id, JobStatus::Running, run_id)
+            .unwrap_or_else(|e| panic!("set {} running: {}", id, e));
+    }
+    complete_job(
+        config,
+        failed_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Failed,
+    );
+    complete_job(
+        config,
+        terminated_id,
+        workflow_id,
+        cn_id,
+        run_id,
+        1,
+        JobStatus::Terminated,
+    );
+
+    let json = run_cli_with_json(
+        &[
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--status",
+            "failed",
+            "--status",
+            "terminated",
+            "--workflow-id",
+            &workflow_id.to_string(),
+        ],
+        start_server,
+        None,
+    )
+    .expect("repeated --status flags should succeed");
+
+    assert_eq!(json["status"], "success");
+    let reset_ids: Vec<i64> = json["reset_job_ids"]
+        .as_array()
+        .expect("reset_job_ids array")
+        .iter()
+        .map(|v| v.as_i64().unwrap())
+        .collect();
+    assert_eq!(reset_ids.len(), 2);
+    assert!(reset_ids.contains(&failed_id) && reset_ids.contains(&terminated_id));
+}
+
+// ---------------------------------------------------------------------------
+// Test 22: Remaining mutually-exclusive selection-mode combinations are all
+//          rejected by clap: --status + --return-code, job IDs + --return-code,
+//          and job IDs + --workflow-id.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_other_mutex_combinations(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_other_mutex");
+    let workflow_id = workflow.id.unwrap();
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "j".to_string(), "echo j".to_string()),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+    initialize_workflow(config, &workflow);
+    let wf = workflow_id.to_string();
+    let jid = job_id.to_string();
+
+    let cases: &[Vec<&str>] = &[
+        // --status + --return-code
+        vec![
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            "--status",
+            "failed",
+            "--return-code",
+            "1",
+            "--workflow-id",
+            &wf,
+        ],
+        // job IDs + --return-code
+        vec![
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            &jid,
+            "--return-code",
+            "1",
+        ],
+        // job IDs + --workflow-id
+        vec![
+            "jobs",
+            "reset-status",
+            "--no-prompts",
+            &jid,
+            "--workflow-id",
+            &wf,
+        ],
+    ];
+
+    for args in cases {
+        let result = run_cli_with_json(args, start_server, None);
+        assert!(
+            result.is_err(),
+            "mutually exclusive combination should be rejected: {:?}",
+            args
+        );
+    }
+}
