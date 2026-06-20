@@ -51,7 +51,7 @@ is useful when you know exactly which jobs need to be rerun without resetting th
 Jobs are selected one of three mutually exclusive ways:
 
 - **By job ID** — list explicit IDs (they must all belong to the same workflow).
-- **By status** — `--status` reset every job currently in one of the given statuses. The value is
+- **By status** — `--status` resets every job currently in one of the given statuses. The value is
   repeatable / comma-separated (e.g. `--status terminated,canceled,failed`).
 - **By return code** — `--return-code` resets every job whose **latest** result exited with the
   given code.

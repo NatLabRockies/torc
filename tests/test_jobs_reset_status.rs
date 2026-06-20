@@ -1743,8 +1743,9 @@ fn test_reset_status_return_code_uses_latest_result(start_server: &ServerProcess
         JobStatus::Completed,
     );
 
-    // --return-code 42 must NOT match: the stale failure is not the latest result.
-    let json_42 = run_cli_with_json(
+    // --return-code 42 must NOT match: the stale failure is not the latest
+    // result. A filter that matches nothing exits non-zero.
+    let result_42 = run_cli_with_json(
         &[
             "jobs",
             "reset-status",
@@ -1757,12 +1758,10 @@ fn test_reset_status_return_code_uses_latest_result(start_server: &ServerProcess
         ],
         start_server,
         None,
-    )
-    .expect("reset-status --return-code 42 should succeed (no match)");
-    assert_eq!(json_42["status"], "success");
-    assert_eq!(
-        json_42["reset_count"], 0,
-        "stale rc=42 from a previous run must not match"
+    );
+    assert!(
+        result_42.is_err(),
+        "stale rc=42 from a previous run must not match (no-match should fail)"
     );
     assert_eq!(
         apis::jobs_api::get_job(config, job_id)
