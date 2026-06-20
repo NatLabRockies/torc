@@ -220,17 +220,34 @@ torc workflows reset-status &lt;workflow_id&gt; --failed-only
 <h2 id="selective-job-reset-torc-jobs-reset-status"><a class="header" href="#selective-job-reset-torc-jobs-reset-status">Selective Job Reset: <code>torc jobs reset-status</code></a></h2>
 <p>When you need to rerun only specific jobs (not all failed ones), use <code>torc jobs reset-status</code>. This
 is useful when you know exactly which jobs need to be rerun without resetting the whole workflow.</p>
+<p>Jobs are selected one of three mutually exclusive ways:</p>
+<ul>
+<li><strong>By job ID</strong> — list explicit IDs (they must all belong to the same workflow).</li>
+<li><strong>By status</strong> — <code>--status</code> resets every job currently in one of the given statuses. The value is
+repeatable / comma-separated (e.g. <code>--status terminated,canceled,failed</code>).</li>
+<li><strong>By return code</strong> — <code>--return-code</code> resets every job whose <strong>latest</strong> result exited with the
+given code.</li>
+</ul>
+<p>The <code>--status</code> and <code>--return-code</code> modes operate on a whole workflow, selected with <code>--workflow-id</code>
+(you are prompted to choose one if it is omitted). If a filter matches no jobs, the command exits
+non-zero with an error — this catches a mistaken assumption (e.g. expecting failed jobs when there
+are none) in scripts and CI.</p>
 <p>Unlike <code>torc workflows reset-status</code>, this command:</p>
 <ul>
-<li>Resets only the explicitly named job IDs. Downstream dependents are <strong>not</strong> reset by this command
-— it lists them for you, and they are reset transitively when you run <code>torc workflows reinit</code> (a
-rerun job produces new outputs that consumers must consume again).</li>
+<li>Resets only the selected jobs. Downstream dependents are <strong>not</strong> reset by this command — it lists
+them for you, and they are reset transitively when you run <code>torc workflows reinit</code> (a rerun job
+produces new outputs that consumers must consume again).</li>
 <li>Does <strong>not</strong> bump the workflow <code>run_id</code> or reset workflow state — you follow up with
 <code>torc workflows reinit</code> once, which does the run_id bump exactly once.</li>
-<li>All supplied job IDs must belong to the same workflow (hard error otherwise).</li>
 </ul>
 <pre><code class="language-bash"># Preview what would be reset (no changes applied)
 torc jobs reset-status 101 102 --dry-run
+
+# Reset every terminated, canceled, or failed job in a workflow
+torc jobs reset-status --status terminated,canceled,failed --workflow-id &lt;workflow_id&gt;
+
+# Reset all jobs whose latest result exited with return code 42
+torc jobs reset-status --return-code 42 --workflow-id &lt;workflow_id&gt;
 
 # Reset and reinitialize in one step, then run
 torc jobs reset-status 101 102 --reinit
@@ -249,7 +266,7 @@ torc jobs reset-status 101 --force
 torc -f json jobs reset-status 101 102 --no-prompts
 </code></pre>
 <p>The workflow does not need to be complete — the command can be run repeatedly (e.g. to reset
-additional jobs after an earlier reset) as long as no workers are active. If a requested job
+additional jobs after an earlier reset) as long as no workers are active. If a selected job
 completed successfully, the command warns you before resetting it, since resetting discards its
 results and reruns it.</p>
 <p>The <code>--force</code> flag bypasses two checks: (1) the no-active-workers check (compute nodes and Slurm
@@ -261,6 +278,7 @@ allocations), and (2) the active-status guard (jobs in Running or Pending are no
 <tr><td>Local workflow with failures</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
 <tr><td>Want to retry without changing resource allocations</td><td><code>torc workflows reset-status --failed-only</code></td></tr>
 <tr><td>Rerun only specific known jobs</td><td><code>torc jobs reset-status &lt;id&gt;...</code></td></tr>
+<tr><td>Rerun every job in a given status (or return code)</td><td><code>torc jobs reset-status --status &lt;s&gt;</code> / <code>--return-code &lt;n&gt;</code></td></tr>
 <tr><td>Workflow ran fine but inputs changed</td><td><a href="../concepts/intelligent-restart.html">Intelligent Restart</a></td></tr>
 <tr><td>Need AI-driven classification of unfamiliar failure modes</td><td><a href="../../specialized/fault-tolerance/ai-assisted-recovery.html">AI-Assisted Recovery</a></td></tr>
 </tbody></table>
