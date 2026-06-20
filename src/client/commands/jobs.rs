@@ -8,7 +8,7 @@ use crate::client::apis::configuration::Configuration;
 use crate::client::commands::get_env_user_name;
 use crate::client::commands::{
     output::{print_if_json, print_json, print_json_wrapped},
-    pagination::{self, JobListParams},
+    pagination::{self, JobListParams, ResultListParams},
     print_error, select_workflow_interactively,
     table_format::{
         display_csv, display_csv_excluding, display_table_excluding, display_table_with_count,
@@ -439,12 +439,16 @@ EXAMPLES:
         #[arg()]
         workflow_id: Option<i64>,
     },
-    /// Reset specific jobs to uninitialized status for selective rerun
+    /// Reset jobs to uninitialized status for selective rerun
     ///
-    /// Resets only the given job IDs to uninitialized so they can be rerun. All jobs
-    /// must belong to the same workflow. Downstream dependents are not reset by this
-    /// command; they are reset transitively by 'torc workflows reinit' (the command
-    /// lists them for you).
+    /// Selects jobs one of three mutually exclusive ways: by explicit job IDs, by
+    /// current status (--status, repeatable), or by the return code of each job's
+    /// latest result (--return-code). The status/return-code modes target a whole
+    /// workflow, chosen with --workflow-id (or interactively when omitted). Matched
+    /// jobs are reset to uninitialized so they can be rerun.
+    ///
+    /// Downstream dependents are not reset by this command; they are reset
+    /// transitively by 'torc workflows reinit' (the command lists them for you).
     ///
     /// After resetting, run 'torc workflows reinit <workflow_id>' to rebuild
     /// dependency state (this bumps run_id exactly once), then 'torc run' or
@@ -456,6 +460,12 @@ EXAMPLES:
 EXAMPLES:
     # Reset two specific jobs for rerun (preview first)
     torc jobs reset-status 101 102 --dry-run
+
+    # Reset every terminated, canceled, or failed job in a workflow
+    torc jobs reset-status --status terminated,canceled,failed --workflow-id 42
+
+    # Reset all jobs whose latest result exited with return code 42
+    torc jobs reset-status --return-code 42 --workflow-id 42
 
     # Reset and reinitialize in one step, then run
     torc jobs reset-status 101 102 --reinit
@@ -477,9 +487,23 @@ EXAMPLES:
 "
     )]
     ResetStatus {
-        /// Job IDs to reset (must all belong to the same workflow)
-        #[arg(required = true, num_args = 1..)]
+        /// Job IDs to reset (must all belong to the same workflow).
+        /// Mutually exclusive with --status and --return-code.
+        #[arg(num_args = 1.., conflicts_with_all = ["status", "return_code", "workflow_id"])]
         job_ids: Vec<i64>,
+        /// Reset all jobs currently in one of these statuses (repeatable or
+        /// comma-separated, e.g. --status terminated,canceled,failed). Requires a
+        /// workflow (see --workflow-id).
+        #[arg(long, value_delimiter = ',', conflicts_with = "return_code")]
+        status: Vec<String>,
+        /// Reset all jobs whose latest result has this return code. Requires a
+        /// workflow (see --workflow-id).
+        #[arg(long)]
+        return_code: Option<i64>,
+        /// Workflow to target when using --status/--return-code (selected
+        /// interactively when omitted)
+        #[arg(long)]
+        workflow_id: Option<i64>,
         /// Skip precondition checks (no active workers, target jobs not running)
         #[arg(long)]
         force: bool,
@@ -1296,6 +1320,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
         }
         JobCommands::ResetStatus {
             job_ids,
+            status,
+            return_code,
+            workflow_id,
             force,
             dry_run,
             no_prompts,
@@ -1304,6 +1331,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             handle_reset_job_status(
                 config,
                 job_ids,
+                status,
+                *return_code,
+                *workflow_id,
                 *force,
                 *dry_run,
                 *no_prompts,
@@ -1551,19 +1581,12 @@ fn require_job_id(job: &models::JobModel) -> i64 {
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn handle_reset_job_status(
+/// Resolve explicit job IDs into JobModels, validating that they exist and all
+/// belong to the same workflow. Exits the process on any error.
+fn resolve_reset_targets_by_ids(
     config: &Configuration,
     job_ids: &[i64],
-    force: bool,
-    dry_run: bool,
-    no_prompts: bool,
-    reinit: bool,
-    format: &str,
-) {
-    // -----------------------------------------------------------------------
-    // 1. Fetch and validate: all IDs must exist and belong to the same workflow
-    // -----------------------------------------------------------------------
+) -> (i64, Vec<models::JobModel>) {
     let mut fetched: Vec<models::JobModel> = Vec::with_capacity(job_ids.len());
     for &id in job_ids {
         match apis::jobs_api::get_job(config, id) {
@@ -1603,6 +1626,185 @@ fn handle_reset_job_status(
             eprintln!("  job {} belongs to workflow {}", id, wf);
         }
         eprintln!("Nothing was reset.");
+        std::process::exit(1);
+    }
+
+    (workflow_id, unique_jobs)
+}
+
+/// Resolve all jobs in `workflow_id` whose current status is one of
+/// `status_filters` (parsed, de-duplicated). Exits the process on any error.
+fn resolve_reset_targets_by_status(
+    config: &Configuration,
+    workflow_id: i64,
+    status_filters: &[String],
+) -> Vec<models::JobModel> {
+    // Parse and de-duplicate the requested statuses.
+    let mut statuses: Vec<models::JobStatus> = Vec::new();
+    let mut seen_status: HashSet<String> = HashSet::new();
+    for raw in status_filters {
+        let normalized = raw.trim().to_lowercase();
+        if normalized.is_empty() {
+            continue;
+        }
+        match normalized.parse::<models::JobStatus>() {
+            Ok(status) => {
+                if seen_status.insert(normalized) {
+                    statuses.push(status);
+                }
+            }
+            Err(_) => {
+                eprintln!(
+                    "Error: invalid status '{}'. Valid values are: uninitialized, blocked, \
+                     ready, pending, running, completed, failed, canceled, terminated, disabled, \
+                     pending_failed.",
+                    raw.trim()
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let mut seen_ids: HashSet<i64> = HashSet::new();
+    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
+    for status in statuses {
+        let params = JobListParams::new().with_status(status);
+        let jobs = match pagination::paginate_jobs(config, workflow_id, params) {
+            Ok(jobs) => jobs,
+            Err(e) => {
+                eprintln!("Error: failed to list {} jobs: {}", status, e);
+                std::process::exit(1);
+            }
+        };
+        for job in jobs {
+            let id = require_job_id(&job);
+            if seen_ids.insert(id) {
+                unique_jobs.push(job);
+            }
+        }
+    }
+    unique_jobs
+}
+
+/// Resolve all jobs in `workflow_id` whose latest result has the given
+/// `return_code`. Exits the process on any error.
+fn resolve_reset_targets_by_return_code(
+    config: &Configuration,
+    workflow_id: i64,
+    return_code: i64,
+) -> Vec<models::JobModel> {
+    // Default all_runs=false → server returns only the latest result per job.
+    let params = ResultListParams::new().with_return_code(return_code);
+    let results = match pagination::paginate_results(config, workflow_id, params) {
+        Ok(results) => results,
+        Err(e) => {
+            eprintln!(
+                "Error: failed to list results with return code {}: {}",
+                return_code, e
+            );
+            std::process::exit(1);
+        }
+    };
+
+    // Fetch the current JobModel for each matched job (results carry job_id but
+    // not the live job state the rest of the reset flow needs).
+    let mut seen_ids: HashSet<i64> = HashSet::new();
+    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
+    for result in results {
+        if !seen_ids.insert(result.job_id) {
+            continue;
+        }
+        match apis::jobs_api::get_job(config, result.job_id) {
+            Ok(job) => unique_jobs.push(job),
+            Err(e) => {
+                eprintln!("Error: job {} not found: {}", result.job_id, e);
+                std::process::exit(1);
+            }
+        }
+    }
+    unique_jobs
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_reset_job_status(
+    config: &Configuration,
+    job_ids: &[i64],
+    status_filters: &[String],
+    return_code: Option<i64>,
+    workflow_id_arg: Option<i64>,
+    force: bool,
+    dry_run: bool,
+    no_prompts: bool,
+    reinit: bool,
+    format: &str,
+) {
+    // -----------------------------------------------------------------------
+    // 1. Resolve the target jobs and their workflow.
+    //
+    // Exactly one selection mode is used: explicit job IDs, --status, or
+    // --return-code. clap's conflicts_with enforces that the modes are not
+    // combined; here we only need to ensure at least one was supplied.
+    // -----------------------------------------------------------------------
+    let by_ids = !job_ids.is_empty();
+    let by_status = !status_filters.is_empty();
+    let by_return_code = return_code.is_some();
+    if !by_ids && !by_status && !by_return_code {
+        eprintln!(
+            "Error: nothing selected. Pass job IDs, --status, or --return-code. \
+             See 'torc jobs reset-status --help'."
+        );
+        std::process::exit(1);
+    }
+
+    let (workflow_id, unique_jobs): (i64, Vec<models::JobModel>) = if by_ids {
+        resolve_reset_targets_by_ids(config, job_ids)
+    } else {
+        // Filter modes target a whole workflow, chosen explicitly or interactively.
+        let workflow_id = match workflow_id_arg {
+            Some(id) => id,
+            None => {
+                let user_name = get_env_user_name();
+                match select_workflow_interactively(config, &user_name) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        eprintln!("Error selecting workflow: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        };
+        let jobs = if by_status {
+            resolve_reset_targets_by_status(config, workflow_id, status_filters)
+        } else {
+            resolve_reset_targets_by_return_code(config, workflow_id, return_code.unwrap())
+        };
+        (workflow_id, jobs)
+    };
+
+    // A filter that matches nothing is treated as a failure: the caller asked to
+    // reset jobs in a particular state and none were found, which usually signals
+    // a mistaken assumption (and lets scripts/CI detect it via the exit code).
+    if unique_jobs.is_empty() {
+        let selection = if by_status {
+            format!("status in [{}]", status_filters.join(", "))
+        } else {
+            format!("return code {}", return_code.unwrap())
+        };
+        if format == "json" {
+            let response = serde_json::json!({
+                "status": "error",
+                "workflow_id": workflow_id,
+                "reset_count": 0,
+                "reset_job_ids": [],
+                "error": format!("No jobs in workflow {} match {}.", workflow_id, selection),
+            });
+            println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        } else {
+            eprintln!(
+                "Error: no jobs in workflow {} match {}. Nothing to reset.",
+                workflow_id, selection
+            );
+        }
         std::process::exit(1);
     }
 

@@ -1431,7 +1431,7 @@ fn test_cancel_on_blocking_job_failure_false_runs_downstream_anyway(start_server
 
     let yaml_content = r#"name: no_cascade_workflow
 user: test_user
-description: Test that cancel_on_blocking_job_failure=false leaves downstream blocked
+description: Test that cancel_on_blocking_job_failure=false runs downstream anyway after an upstream failure
 
 jobs:
   - name: producer
