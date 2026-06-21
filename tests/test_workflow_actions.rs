@@ -3153,3 +3153,68 @@ fn test_submit_pending_set_after_subset_reinit_is_only_reset_classes(start_serve
         "regular action should remain executed (kept) after the subset reinit"
     );
 }
+
+// ===========================================================================
+// Full init (`torc workflows init`, only_uninitialized = false) is a clean slate: it resets every
+// job and re-arms EVERY action, including on_workflow_start. This contrasts with a partial
+// reinitialize (only_uninitialized = true), which keeps a satisfied on_workflow_start action
+// (test_workflow_start_schedule_action_kept_on_reinitialize).
+// ===========================================================================
+
+/// A full initialize re-arms an already-fired on_workflow_start action (clean slate), so re-running
+/// `torc workflows init` on a workflow that already ran does not leave its start actions stranded.
+#[rstest]
+fn test_full_init_rearms_workflow_start_action(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "full_init_rearms_workflow_start");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    // First init: on_workflow_start is pending; claim it (fired).
+    manager.initialize(true).expect("initialize");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    // Full init again (what `torc workflows init` does: reset all jobs + initialize). This is a
+    // clean slate, so the on_workflow_start action is re-armed (unlike a partial reinitialize, which
+    // keeps it).
+    manager.initialize(true).expect("re-initialize (full)");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "full init must re-arm on_workflow_start (clean slate)"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "re-armed on_workflow_start should be pending again after a full init"
+    );
+}
