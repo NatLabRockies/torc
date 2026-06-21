@@ -23408,9 +23408,10 @@ resource management throughout workflow execution.</p>
 <h2 id="trigger-types-1"><a class="header" href="#trigger-types-1">Trigger Types</a></h2>
 <h3 id="workflow-lifecycle-triggers"><a class="header" href="#workflow-lifecycle-triggers">Workflow Lifecycle Triggers</a></h3>
 <h4 id="on_workflow_start"><a class="header" href="#on_workflow_start"><code>on_workflow_start</code></a></h4>
-<p>Executes once when the workflow is initialized.</p>
-<p><strong>When it fires</strong>: During <code>initialize_jobs</code> after jobs are transitioned from uninitialized to
-ready/blocked states.</p>
+<p>Executes once, at the workflow's first initialization.</p>
+<p><strong>When it fires</strong>: During the first <code>initialize_jobs</code>, after jobs are transitioned from
+uninitialized to ready/blocked states. It does <strong>not</strong> fire again on reinitialize — a reinit is not
+a new start (see <a href="specialized/design/workflow-actions.html#workflow-reinitialization">Workflow Reinitialization</a>).</p>
 <p><strong>Typical use cases</strong>:</p>
 <ul>
 <li>Scheduling Slurm allocations</li>
@@ -23637,29 +23638,86 @@ initialization</li>
 <li><strong>Concurrent Workers</strong>: Multiple workers can execute different actions simultaneously</li>
 </ol>
 <h3 id="workflow-reinitialization"><a class="header" href="#workflow-reinitialization">Workflow Reinitialization</a></h3>
-<p>When a workflow is reinitialized (e.g., after resetting failed jobs), actions are reset to allow
-them to trigger again:</p>
-<ol>
-<li><strong>Executed flags are cleared</strong>: All actions can be claimed and executed again</li>
-<li><strong>Trigger counts are recalculated</strong>: For <code>on_jobs_ready</code> and <code>on_jobs_complete</code> actions, the
-trigger count is set based on current job states</li>
-</ol>
-<p><strong>Example scenario</strong>:</p>
+<p>Every reinitialize entry point — <code>torc workflows reinit</code>, <code>torc jobs reset-status --reinit</code>,
+<code>torc recover</code>, and the Slurm <code>regenerate</code>/<code>watch</code> paths — funnels through the single server routine
+<code>reset_actions_for_reinitialize</code>, which runs as part of <code>initialize_jobs</code>. For each action it
+recomputes <code>trigger_count</code> from the current job states and then decides whether to <strong>re-arm</strong> the
+action (clear <code>executed</code>/<code>executed_by</code> so it can fire again on the new run) or <strong>keep it executed</strong>
+(leave it suppressed).</p>
+<p>The decision follows one rule, independent of <code>action_type</code>:</p>
+<blockquote>
+<p>Re-arm an action <strong>iff its triggering condition will genuinely re-occur in the new run.</strong></p>
+</blockquote>
+<p>A user who reinitializes after resetting a <em>subset</em> of jobs expects only those jobs to re-run.
+Actions tied to events that are not happening again must not re-fire — a re-fired action re-submits
+its Slurm allocation (<code>schedule_nodes</code>) or re-runs its commands (<code>run_commands</code>), and that duplicate
+side effect is the bug. This is why the decision is <strong>not</strong> specific to <code>schedule_nodes</code>: the hazard
+is "duplicate side effect," not "duplicate allocation."</p>
+<h4 id="re-arm-decision"><a class="header" href="#re-arm-decision">Re-arm decision</a></h4>
+<pre class="mermaid">flowchart TD
+    start([For each non-recovery action&lt;br/&gt;during reinitialize]) --&gt; recompute[Recompute trigger_count&lt;br/&gt;from current job states]
+    recompute --&gt; trig{Trigger type?}
+
+    trig -- on_workflow_start --&gt; keep
+    trig -- &quot;on_workflow_complete&lt;br/&gt;on_worker_start / on_worker_complete&quot; --&gt; rearm
+    trig -- &quot;on_jobs_ready /&lt;br/&gt;on_jobs_complete&quot; --&gt; terminal{All gating jobs still&lt;br/&gt;in a terminal state?&lt;br/&gt;completed / failed /&lt;br/&gt;canceled / terminated}
+
+    terminal -- &quot;Yes — subset re-run&lt;br/&gt;(gates untouched,&lt;br/&gt;event already happened)&quot; --&gt; keep
+    terminal -- &quot;No — full re-run&lt;br/&gt;(a gate was reset,&lt;br/&gt;now ready/blocked)&quot; --&gt; rearm
+
+    rearm[Re-arm:&lt;br/&gt;executed = 0, executed_by = NULL&lt;br/&gt;action can fire again]
+    keep[Keep executed:&lt;br/&gt;action stays suppressed&lt;br/&gt;no duplicate side effect]
+
+    rearm --&gt; done([Write trigger_count])
+    keep --&gt; done
+
+    style keep fill:#d4edda,stroke:#28a745,color:#155724
+    style rearm fill:#fff3cd,stroke:#ffc107,color:#856404
+    style terminal fill:#cce5ff,stroke:#004085,color:#004085
+</pre>
+<p>Per trigger:</p>
 <ul>
-<li>job1 and job2 are independent jobs</li>
-<li>postprocess_job depends on both job1 and job2</li>
-<li>An <code>on_jobs_ready</code> action triggers when postprocess_job becomes ready</li>
+<li><strong><code>on_workflow_start</code> → keep.</strong> The workflow starts exactly once in its lifetime; a reinitialize
+is not a new start. This is what stops plain <code>reinit</code> / <code>reset-status --reinit</code> from re-running
+start-time setup or re-submitting the original node count. (A never-fired action keeps
+<code>executed = 0</code> and still fires, so a first real initialize is unaffected.)</li>
+<li><strong><code>on_jobs_ready</code> / <code>on_jobs_complete</code> → keep iff the gating jobs are still all terminal.</strong> That
+is the <em>subset</em> re-run (the gates were untouched, so the event already happened and is not
+recurring). Re-arm when any gate was reset — the <em>full</em> re-run, where that job will run again and
+its action should fire again with it.</li>
+<li><strong><code>on_workflow_complete</code>, <code>on_worker_start</code>, <code>on_worker_complete</code> → re-arm.</strong> These recur every
+run (the workflow will complete again; new workers start), so they should fire again.</li>
 </ul>
-<p>After first run completes:</p>
+<p><strong>Why "terminal state" and not <code>trigger_count</code>.</strong> The job-gated test measures the gating jobs with
+the <code>on_jobs_complete</code> notion (terminal jobs only), <em>not</em> the action's own <code>trigger_count</code>. For an
+<code>on_jobs_ready</code> action a reset gate returns to <code>Ready</code>, and <code>Ready</code> already satisfies
+<code>on_jobs_ready</code>, so <code>trigger_count</code> cannot distinguish a freshly-reset gate from one that already
+completed. Using it would wrongly suppress the action on a full re-run and stall the workflow. The
+terminal-state count drops as soon as a gate is reset, which is exactly the signal that the action
+must fire again.</p>
+<p><strong>Example — subset re-run vs. full re-run</strong>:</p>
+<ul>
+<li><code>gate_job</code> runs first; an <code>on_jobs_complete</code> action (a <code>schedule_nodes</code> allocation or a
+<code>run_commands</code> archive step) fires when it completes. A later <code>work_job</code> depends on <code>gate_job</code>.</li>
+</ul>
+<p><em>Subset re-run</em> (the common reschedule-the-failure case):</p>
 <ol>
-<li>job1 fails, job2 succeeds</li>
-<li>User resets failed jobs and reinitializes</li>
-<li>job2 is already Completed, so it counts toward the trigger count</li>
-<li>When job1 completes in the second run, postprocess_job becomes ready</li>
-<li>The action triggers again because the trigger count reaches the required threshold</li>
+<li><code>gate_job</code> completes (action fires); <code>work_job</code> later fails.</li>
+<li>User resets only the failed job and reinitializes. <code>gate_job</code> stays <code>Completed</code> (terminal).</li>
+<li>The action is <strong>kept executed</strong> — it is not re-armed, so no duplicate allocation/command runs
+when a worker starts.</li>
 </ol>
-<p>This ensures actions properly re-trigger after workflow reinitialization, even when some jobs remain
-in their completed state.</p>
+<p><em>Full re-run</em> (the gate itself is re-run):</p>
+<ol>
+<li>Same first run as above.</li>
+<li>User resets <code>gate_job</code> itself and reinitializes. <code>gate_job</code> returns to a non-terminal state.</li>
+<li>The action is <strong>re-armed</strong>, so when <code>gate_job</code> completes again in the new run it fires again.</li>
+</ol>
+<p>With multiple gating jobs, the action is only kept executed when <strong>all</strong> of them remain terminal;
+resetting any one of them re-arms it.</p>
+<p>The client-side <code>recover</code>/<code>regenerate</code> guards (<code>mark_satisfied_schedule_actions_executed</code>) remain as
+defense in depth, but the server is now the single point that prevents reinit from resurrecting an
+already-satisfied action, so all entry points are covered uniformly.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
 <li><strong>No Action Dependencies</strong>: Actions cannot depend on other actions completing</li>
