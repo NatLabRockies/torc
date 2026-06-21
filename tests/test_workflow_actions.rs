@@ -3525,3 +3525,147 @@ fn test_full_init_rearms_workflow_start_action(start_server: &ServerProcess) {
         "re-armed on_workflow_start should be pending again after a full init"
     );
 }
+
+// ===========================================================================
+// `torc slurm schedule-nodes` pending-action handling
+// (handle_pending_schedule_actions): a worker started by schedule-nodes would claim the workflow's
+// own pending schedule_nodes actions and submit their allocations on top of the manual request.
+// --suppress-actions marks them executed; --no-prompts (non-interactive) proceeds and lets them
+// fire. These call the helper directly (no Slurm submission / sbatch needed).
+// ===========================================================================
+
+/// Create a workflow with one job and a pending `on_workflow_start` `schedule_nodes` action
+/// (pending right after initialize). Returns (workflow_id, action_id).
+fn workflow_with_pending_schedule_action(
+    config: &torc::client::Configuration,
+    name: &str,
+) -> (i64, i64) {
+    let workflow = create_test_workflow(config, name);
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action_id = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            None,
+        ),
+    )
+    .expect("create action")
+    .id
+    .unwrap();
+    manager.initialize(true).expect("initialize");
+    wait_for_pending_action(config, workflow_id);
+    (workflow_id, action_id)
+}
+
+/// `--suppress-actions`: a pending `schedule_nodes` action is marked executed so the worker started
+/// by `schedule-nodes` will not re-fire it.
+#[rstest]
+fn test_schedule_nodes_suppress_actions_marks_pending_executed(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, action_id) =
+        workflow_with_pending_schedule_action(config, "schedule_nodes_suppress");
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "precondition: action is pending (not executed)"
+    );
+
+    torc::client::commands::slurm::handle_pending_schedule_actions(
+        config,
+        workflow_id,
+        1,
+        /* suppress_actions */ true,
+        /* no_prompts */ false,
+    )
+    .expect("handle_pending_schedule_actions");
+
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "--suppress-actions must mark the pending schedule_nodes action executed"
+    );
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "suppressed action must no longer be pending"
+    );
+}
+
+/// `--no-prompts` (non-interactive, no `--suppress-actions`): proceed and leave the action armed so
+/// it still fires (historical behavior).
+#[rstest]
+fn test_schedule_nodes_no_prompts_proceeds_without_suppressing(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, action_id) =
+        workflow_with_pending_schedule_action(config, "schedule_nodes_no_prompts");
+
+    torc::client::commands::slurm::handle_pending_schedule_actions(
+        config,
+        workflow_id,
+        1,
+        /* suppress_actions */ false,
+        /* no_prompts */ true,
+    )
+    .expect("handle_pending_schedule_actions");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "--no-prompts without --suppress-actions must leave the action armed (proceed)"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "un-suppressed action must remain pending so the worker still fires it"
+    );
+}
+
+/// The helper only targets `schedule_nodes` actions: a pending `run_commands` action is left armed
+/// even with `--suppress-actions` (it does not submit Slurm allocations, so it is not the hazard).
+#[rstest]
+fn test_schedule_nodes_suppress_ignores_run_commands(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "schedule_nodes_ignores_run_commands");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action_id = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            json!({ "commands": ["echo hi"] }),
+            None,
+        ),
+    )
+    .expect("create action")
+    .id
+    .unwrap();
+    manager.initialize(true).expect("initialize");
+    wait_for_pending_action(config, workflow_id);
+
+    torc::client::commands::slurm::handle_pending_schedule_actions(
+        config,
+        workflow_id,
+        1,
+        /* suppress_actions */ true,
+        /* no_prompts */ false,
+    )
+    .expect("handle_pending_schedule_actions");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "run_commands action must not be suppressed (only schedule_nodes is the hazard)"
+    );
+}
