@@ -16,8 +16,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// When using `--group-by partition`, if a partition has both deferred (jobs with dependencies)
 /// and non-deferred (jobs without dependencies) groups, and their combined allocation count
-/// is at or below this threshold, they are merged into a single scheduler whose `on_jobs_ready`
-/// action is gated on the merged job set. This reduces the number of Slurm job submissions.
+/// is at or below this threshold, they are merged into a single scheduler. The scheduler serves
+/// both groups' jobs, but its `on_jobs_ready` action is gated on the non-deferred (root) jobs only
+/// (`gate_job_names`) so it fires at workflow start; gating on the dependent jobs too would never
+/// become pending (they are not Ready until the root jobs run). This reduces the number of Slurm
+/// job submissions.
 ///
 /// When both groups exist, each needs at least 1 allocation, so the minimum total is 2.
 /// A threshold of 2 means we merge when exactly 2 allocations are needed (the minimum case).
