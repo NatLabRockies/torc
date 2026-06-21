@@ -1691,10 +1691,12 @@ pub fn handle_pending_schedule_actions(
     let total: i64 = firable
         .iter()
         .map(|a| {
+            // Missing num_allocations defaults to 1 at execution time (see workflow_manager.rs /
+            // job_runner.rs); count it the same here so the warning doesn't understate the total.
             a.action_config
                 .get("num_allocations")
                 .and_then(|v| v.as_i64())
-                .unwrap_or(0)
+                .unwrap_or(1)
         })
         .sum();
 
@@ -1744,10 +1746,22 @@ pub fn handle_pending_schedule_actions(
             config,
             workflow_id,
         )?;
+        // Persistent actions intentionally cannot be suppressed (mark_satisfied_... leaves them
+        // armed so multiple workers can claim them); don't count them as suppressed, and tell the
+        // user they will still re-fire.
+        let persistent_count = firable.iter().filter(|a| a.persistent).count();
+        let suppressed = count - persistent_count;
         eprintln!(
             "Suppressed {} pending schedule_nodes action(s) so the worker(s) started here will not re-fire them.",
-            count
+            suppressed
         );
+        if persistent_count > 0 {
+            eprintln!(
+                "  Note: {} persistent action(s) cannot be suppressed and will still re-fire, \
+                 submitting their own allocations. Remove or disable them to avoid duplicates.",
+                persistent_count
+            );
+        }
     }
     Ok(())
 }

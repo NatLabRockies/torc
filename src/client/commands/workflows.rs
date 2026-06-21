@@ -1122,13 +1122,15 @@ fn handle_list_actions(
 
                         // For schedule_nodes actions, surface num_allocations (how many Slurm
                         // allocations this action submits when it fires); blank for other types.
+                        // A missing value defaults to 1 at execution time (see workflow_manager.rs /
+                        // job_runner.rs), so show that effective default rather than a misleading "?".
                         let allocations = if action.action_type == "schedule_nodes" {
                             action
                                 .action_config
                                 .get("num_allocations")
                                 .and_then(|v| v.as_i64())
-                                .map(|n| n.to_string())
-                                .unwrap_or_else(|| "?".to_string())
+                                .unwrap_or(1)
+                                .to_string()
                         } else {
                             "-".to_string()
                         };
