@@ -1343,8 +1343,11 @@ fn test_on_jobs_ready_schedule_action_rearmed_when_gate_job_reset(start_server: 
         "gate should have been reset"
     );
 
-    // ...so the schedule_nodes action MUST be re-armed to allocate nodes for the re-run. Under the
-    // current code it stays executed=1 (Ready counts as satisfied for on_jobs_ready), so this fails.
+    // ...so the schedule_nodes action MUST be re-armed to allocate nodes for the re-run. Keeping
+    // executed off the on_jobs_complete (terminal-only) notion is what makes this work: the reset
+    // gate is now Ready, not terminal, so keep-executed is false and the action re-arms. (A
+    // trigger_count-based heuristic would wrongly keep executed=1, since Ready satisfies
+    // on_jobs_ready, and this assert would fail.)
     assert!(
         !fetch_action(config, workflow_id, action_id).executed,
         "on_jobs_ready schedule_nodes action must be re-armed when its gate job was reset (full re-run); \
@@ -1459,10 +1462,111 @@ fn test_on_jobs_ready_satisfied_schedule_action_not_rearmed_on_subset_reinitiali
     );
 }
 
-/// Scope check: the fix is limited to `schedule_nodes`. A satisfied `run_commands` action retains
-/// its prior behavior and is still re-armed on reinitialize.
+/// The keep-vs-re-arm decision is action-type-agnostic: a job-gated `run_commands` action whose
+/// gating job stays terminal across a *subset* re-run must NOT be re-armed, exactly like
+/// `schedule_nodes`. Re-running it would repeat its side effect (an archive, an upload, a
+/// notification) for a phase that did not re-run.
 #[rstest]
-fn test_run_commands_action_still_rearmed_on_reinitialize(start_server: &ServerProcess) {
+fn test_run_commands_action_suppressed_on_subset_reinitialize(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_run_commands_suppressed");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // gate "copy-lock-file" (root) -> "work1" depends on it. Only work1 is reset below.
+    let gate = create_test_job(config, workflow_id, "copy-lock-file").expect("create gate");
+    let gate_id = gate.id.unwrap();
+    let mut work1 = JobModel::new(workflow_id, "work1".to_string(), "echo work1".to_string());
+    work1.depends_on_job_ids = Some(vec![gate_id]);
+    work1.cancel_on_blocking_job_failure = Some(false);
+    let work1_id = apis::jobs_api::create_job(config, work1)
+        .expect("create work1")
+        .id
+        .unwrap();
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "run_commands",
+            json!({ "commands": ["echo hi"] }),
+            Some(vec![gate_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run 1: gate completes -> action fires (claimed); work1 then fails.
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_id,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    wait_for_job_status(config, work1_id, JobStatus::Ready);
+    run_job_to_status(
+        config,
+        workflow_id,
+        work1_id,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Failed,
+    );
+
+    // Subset re-run: reset only the failed job, then reinitialize. The gate stays Completed.
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+        .expect("reset failed jobs");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    assert_eq!(
+        apis::jobs_api::get_job(config, gate_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Completed,
+        "gate should still be Completed (only the downstream job was reset)"
+    );
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "run_commands action whose gate stayed terminal must stay executed (no duplicate side effect)"
+    );
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "suppressed run_commands action must not be pending after a subset reinitialize"
+    );
+}
+
+/// Complement to the suppression test: when the gating job IS reset (a *full* re-run), the
+/// `run_commands` action must be re-armed and run again once the gate completes — the phase is
+/// genuinely re-running, so its post-action should re-run too.
+#[rstest]
+fn test_run_commands_action_rearmed_when_gate_job_reset(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow = create_test_workflow(config, "reinit_run_commands_rearmed");
     let workflow_id = workflow.id.unwrap();
@@ -1515,21 +1619,25 @@ fn test_run_commands_action_still_rearmed_on_reinitialize(start_server: &ServerP
     .expect("claim action");
     assert!(fetch_action(config, workflow_id, action_id).executed);
 
+    // Full re-run: reset the GATE job itself, then reinitialize.
+    apis::jobs_api::manage_status_change(config, gate_id, JobStatus::Uninitialized, run_id)
+        .expect("reset gate");
     manager.reinitialize(true, false).expect("reinitialize");
 
     assert!(
         !fetch_action(config, workflow_id, action_id).executed,
-        "run_commands actions are out of scope for the fix and must still be re-armed on reinitialize"
+        "run_commands action must be re-armed when its gate job was reset (full re-run)"
     );
 }
 
-/// Scope check: `on_workflow_start` has no gating jobs, so a subset re-run is indistinguishable from
-/// a full restart. Such schedule_nodes actions are left to re-arm (recover/regenerate suppress them
-/// explicitly when the user takes over allocation).
+/// `on_workflow_start` actions fire exactly once in a workflow's lifetime — a reinitialize is not a
+/// new start — so they are KEPT executed (suppressed) on reinitialize, regardless of action_type.
+/// This is what stops plain `reinit` from re-submitting the original node count. (`schedule_nodes`
+/// variant.)
 #[rstest]
-fn test_workflow_start_schedule_action_still_rearmed_on_reinitialize(start_server: &ServerProcess) {
+fn test_workflow_start_schedule_action_kept_on_reinitialize(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let workflow = create_test_workflow(config, "reinit_workflow_start_rearmed");
+    let workflow = create_test_workflow(config, "reinit_workflow_start_kept");
     let workflow_id = workflow.id.unwrap();
     let manager = WorkflowManager::new(
         config.clone(),
@@ -1572,8 +1680,112 @@ fn test_workflow_start_schedule_action_still_rearmed_on_reinitialize(start_serve
     manager.reinitialize(true, false).expect("reinitialize");
 
     assert!(
-        !fetch_action(config, workflow_id, action_id).executed,
-        "on_workflow_start schedule_nodes actions are out of scope for the fix and must still be re-armed"
+        fetch_action(config, workflow_id, action_id).executed,
+        "on_workflow_start schedule_nodes action must stay executed on reinitialize (a reinit is not a new start)"
+    );
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "suppressed on_workflow_start action must not be pending after reinitialize"
+    );
+}
+
+/// `on_workflow_start` `run_commands` is kept on reinitialize too — start-time setup (mkdir, copy
+/// data, notifications) must not re-run just because the workflow was reinitialized.
+#[rstest]
+fn test_workflow_start_run_commands_kept_on_reinitialize(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_workflow_start_run_commands_kept");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            json!({ "commands": ["echo hi"] }),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "on_workflow_start run_commands action must stay executed on reinitialize"
+    );
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "suppressed on_workflow_start run_commands action must not be pending after reinitialize"
+    );
+}
+
+/// "Keep" preserves the flag, it does not force `executed = 1`: an `on_workflow_start` action that
+/// never fired (e.g. created on a workflow that has not been initialized yet) stays fireable across a
+/// reinitialize, so a first real initialize still runs it.
+#[rstest]
+fn test_never_fired_workflow_start_action_stays_fireable_after_reinitialize(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_workflow_start_never_fired");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    // Reinitialize WITHOUT a prior initialize/claim: the action has never fired (executed = 0).
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    let after = fetch_action(config, workflow_id, action_id);
+    assert!(
+        !after.executed,
+        "never-fired on_workflow_start action must remain executed=false (still able to fire)"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "never-fired on_workflow_start action should be pending after (re)initialize"
     );
 }
 
@@ -1670,6 +1882,122 @@ fn test_schedule_action_rearmed_when_one_of_multiple_gate_jobs_reset(start_serve
         "trigger_count ({}) should be below required_triggers ({}) after one gate was reset",
         after.trigger_count,
         after.required_triggers
+    );
+}
+
+/// on_jobs_ready variant of `test_schedule_action_rearmed_when_one_of_multiple_gate_jobs_reset`, and
+/// the sharpest guard against keying keep-executed off `trigger_count`.
+///
+/// Two root gate jobs, `required_triggers = 2`. Both run to Completed and the action fires. Reset
+/// ONE gate (it returns to `Ready`) and reinitialize. The wrinkle unique to on_jobs_ready: after the
+/// reset, the action's `trigger_count` is recomputed with the on_jobs_ready notion, under which BOTH
+/// `Completed` and `Ready` count — so `trigger_count == required_triggers == 2`. A heuristic that
+/// suppressed when `trigger_count >= required_triggers` would therefore wrongly keep this action
+/// executed and stall the re-run.
+///
+/// The fix instead measures keep-executed with the terminal-only on_jobs_complete notion: only ONE
+/// gate is terminal (`already_ran_count = 1 < 2`), so the action is re-armed. This test asserts the
+/// action re-arms EVEN THOUGH `trigger_count >= required_triggers`, which only holds against the
+/// terminal-count implementation.
+#[rstest]
+fn test_on_jobs_ready_schedule_action_rearmed_when_one_of_multiple_gate_jobs_reset(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_on_jobs_ready_partial_gate_rearmed");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Two root gates: after (re)initialize both land in Ready, which satisfies on_jobs_ready.
+    let gate_a = create_test_job(config, workflow_id, "gate_a")
+        .expect("create gate_a")
+        .id
+        .unwrap();
+    let gate_b = create_test_job(config, workflow_id, "gate_b")
+        .expect("create gate_b")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(vec![gate_a, gate_b]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+    assert_eq!(
+        fetch_action(config, workflow_id, action_id).required_triggers,
+        2,
+        "two gating jobs => required_triggers should be 2"
+    );
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run 1: both gates Ready at init -> action pending -> claim it (fires allocation).
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    // Both gates run to Completed (terminal).
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_a,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    run_job_to_status(
+        config,
+        workflow_id,
+        gate_b,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Completed,
+    );
+
+    // Reset only ONE gate -> it returns to Ready, the other stays Completed.
+    apis::jobs_api::manage_status_change(config, gate_b, JobStatus::Uninitialized, run_id)
+        .expect("reset gate_b");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    let after = fetch_action(config, workflow_id, action_id);
+    // The on_jobs_ready trigger_count counts both the Completed and the reset-now-Ready gate, so it
+    // is back at the threshold -- a trigger_count heuristic would suppress here.
+    assert_eq!(
+        after.trigger_count, after.required_triggers,
+        "on_jobs_ready trigger_count should be back at the threshold (Ready + Completed both count)"
+    );
+    // But only one gate actually ran to terminal, so the action must re-arm.
+    assert!(
+        !after.executed,
+        "on_jobs_ready schedule_nodes action must re-arm when a gate was reset, even though \
+         trigger_count >= required_triggers (only the terminal-job count must gate suppression)"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "re-armed on_jobs_ready action should be pending again"
     );
 }
 
