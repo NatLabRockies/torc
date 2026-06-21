@@ -319,29 +319,82 @@ Refer to this
 
 ### Workflow Reinitialization
 
-When a workflow is reinitialized (e.g., after resetting failed jobs), actions are reset to allow
-them to trigger again:
+Every reinitialize entry point — `torc workflows reinit`, `torc jobs reset-status --reinit`,
+`torc recover`, and the Slurm `regenerate`/`watch` paths — funnels through the single server routine
+`reset_actions_for_reinitialize`, which runs as part of `initialize_jobs`. For each action it
+recomputes `trigger_count` from the current job states and then decides whether to **re-arm** the
+action (clear `executed`/`executed_by` so it can fire again on the new run) or **keep it executed**
+(leave it suppressed).
 
-1. **Executed flags are cleared**: All actions can be claimed and executed again
-2. **Trigger counts are recalculated**: For `on_jobs_ready` and `on_jobs_complete` actions, the
-   trigger count is set based on current job states
+The default is to re-arm. The one exception is a job-gated `schedule_nodes` action whose gating jobs
+**already ran to a terminal state**: it already submitted its allocation for those jobs, so
+re-arming it would make it fire a second time and submit a duplicate allocation the moment a worker
+starts. Such actions keep their `executed` flag.
 
-**Example scenario**:
+#### Re-arm decision
 
-- job1 and job2 are independent jobs
-- postprocess_job depends on both job1 and job2
-- An `on_jobs_ready` action triggers when postprocess_job becomes ready
+```mermaid
+flowchart TD
+    start([For each non-recovery action<br/>during reinitialize]) --> recompute[Recompute trigger_count<br/>from current job states]
+    recompute --> sched{action_type ==<br/>schedule_nodes?}
 
-After first run completes:
+    sched -- No<br/>e.g. run_commands --> rearm
+    sched -- Yes --> gated{Job-gated trigger?<br/>on_jobs_ready /<br/>on_jobs_complete}
 
-1. job1 fails, job2 succeeds
-2. User resets failed jobs and reinitializes
-3. job2 is already Completed, so it counts toward the trigger count
-4. When job1 completes in the second run, postprocess_job becomes ready
-5. The action triggers again because the trigger count reaches the required threshold
+    gated -- No<br/>on_workflow_start /<br/>on_worker_start --> rearm
+    gated -- Yes --> terminal{All gating jobs still<br/>in a terminal state?<br/>completed / failed /<br/>canceled / terminated}
 
-This ensures actions properly re-trigger after workflow reinitialization, even when some jobs remain
-in their completed state.
+    terminal -- "Yes — subset re-run<br/>(gates untouched,<br/>allocation already consumed)" --> keep
+    terminal -- "No — full re-run<br/>(a gate was reset,<br/>now ready/blocked)" --> rearm
+
+    rearm[Re-arm:<br/>executed = 0, executed_by = NULL<br/>action can fire again]
+    keep[Keep executed:<br/>action stays suppressed<br/>no duplicate allocation]
+
+    rearm --> done([Write trigger_count])
+    keep --> done
+
+    style keep fill:#d4edda,stroke:#28a745,color:#155724
+    style rearm fill:#fff3cd,stroke:#ffc107,color:#856404
+    style terminal fill:#cce5ff,stroke:#004085,color:#004085
+```
+
+**Why "terminal state" and not `trigger_count`.** The keep-or-re-arm test measures the gating jobs
+with the `on_jobs_complete` notion (terminal jobs only), _not_ the action's own `trigger_count`. For
+an `on_jobs_ready` action a reset gate returns to `Ready`, and `Ready` already satisfies
+`on_jobs_ready`, so `trigger_count` cannot distinguish a freshly-reset gate from one that already
+completed. Using it would wrongly suppress the action on a full re-run and stall the workflow (no
+allocation requested). The terminal-state count drops as soon as a gate is reset, which is exactly
+the signal that the allocation must be requested again.
+
+**Scope.** The suppression is limited to `schedule_nodes` (the only action with a
+duplicate-allocation hazard, mirroring the client-side `schedule_action_already_satisfied` guard)
+and to job-gated triggers (only these have gating jobs whose terminal state can be measured).
+`on_workflow_start`/`on_worker_start` have no gating jobs, so a subset re-run is indistinguishable
+from a full restart; those are always re-armed here and are suppressed explicitly by the
+recover/regenerate paths when the user takes over allocation. `run_commands` actions keep their
+prior re-arm-always behavior.
+
+**Example — subset re-run vs. full re-run**:
+
+- `gate_job` runs first; an `on_jobs_complete` `schedule_nodes` action allocates nodes when it
+  completes. A later `work_job` depends on `gate_job`.
+
+_Subset re-run_ (the common reschedule-the-failure case):
+
+1. `gate_job` completes (action fires, allocation submitted); `work_job` later fails.
+2. User resets only the failed job and reinitializes. `gate_job` stays `Completed` (terminal).
+3. The action is **kept executed** — it is not re-armed, so no duplicate allocation is submitted
+   when a worker starts.
+
+_Full re-run_ (the gate itself is re-run):
+
+1. Same first run as above.
+2. User resets `gate_job` itself and reinitializes. `gate_job` returns to a non-terminal state.
+3. The action is **re-armed**, so when `gate_job` completes again in the new run it fires and
+   requests a fresh allocation.
+
+With multiple gating jobs, the action is only kept executed when **all** of them remain terminal;
+resetting any one of them re-arms it.
 
 ## Limitations
 
