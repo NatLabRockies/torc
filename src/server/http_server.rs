@@ -945,7 +945,11 @@ impl<C> Server<C> {
             id
         );
 
-        // Reset workflow actions for reinitialization
+        // Reset workflow actions for reinitialization. Propagate on failure: a partial reset (some
+        // actions still executed, some with a stale trigger_count) must not be reported to the
+        // caller as a successful (re)initialize -- that is exactly the inconsistency the per-action
+        // error propagation in reset_actions_for_reinitialize guards against. The recompute is
+        // idempotent, so a failed (re)initialize can be safely retried.
         if let Err(e) = self
             .workflow_actions_api
             .reset_actions_for_reinitialize(id)
@@ -955,6 +959,7 @@ impl<C> Server<C> {
                 "Failed to reset workflow actions for workflow {}: {}",
                 id, e
             );
+            return Err(e);
         }
 
         // Activate on_workflow_start actions (workflow has started with initialization)
