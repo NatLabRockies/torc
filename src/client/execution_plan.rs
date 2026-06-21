@@ -104,9 +104,10 @@ impl ExecutionPlan {
                     start_allocations.push(alloc);
                 }
             }
+            let root_job_set: HashSet<&String> = root_jobs.iter().collect();
             let non_root_jobs: Vec<String> = graph
                 .job_names()
-                .filter(|j| !root_jobs.contains(*j))
+                .filter(|j| !root_job_set.contains(*j))
                 .cloned()
                 .collect();
             let matches_non_root = graph.matching_actions(&non_root_jobs, actions);
