@@ -1408,6 +1408,17 @@ where
             .await
     }
 
+    async fn update_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        updates: serde_json::Value,
+        context: &C,
+    ) -> Result<UpdateWorkflowActionResponse, ApiError> {
+        self.transport_update_workflow_action(workflow_id, action_id, updates, context)
+            .await
+    }
+
     /// Return the version of the service.
     async fn get_version(&self, context: &C) -> Result<GetVersionResponse, ApiError> {
         self.transport_get_version(context).await
