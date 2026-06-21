@@ -27,11 +27,13 @@ actions:
 
 #### `on_workflow_start`
 
-Executes once, at the workflow's first initialization.
+Executes when the workflow is initialized from the top.
 
-**When it fires**: During the first `initialize_jobs`, after jobs are transitioned from
-uninitialized to ready/blocked states. It does **not** fire again on reinitialize — a reinit is not
-a new start (see [Workflow Reinitialization](#workflow-reinitialization)).
+**When it fires**: During a full `initialize_jobs` (the first initialize, or `torc workflows init`,
+which resets every job), after jobs are transitioned from uninitialized to ready/blocked states. It
+does **not** fire again on a _partial_ reinitialize (`torc workflows reinit`,
+`torc jobs reset-status --reinit`, `recover`) — a partial reinit is not a new start (see
+[Workflow Reinitialization](#workflow-reinitialization)).
 
 **Typical use cases**:
 
@@ -376,12 +378,19 @@ flowchart TD
     style terminal fill:#cce5ff,stroke:#004085,color:#004085
 ```
 
-Per trigger:
+The keep logic below applies to a **partial** reinitialize (`reinit`, `reset-status --reinit`,
+`recover`, `regenerate`, `watch`). A **full** initialize — `torc workflows init`, which first resets
+every job — is a clean slate and re-arms **every** action, including `on_workflow_start`; otherwise
+re-running `workflows init` on a workflow that already ran would leave its start actions suppressed
+forever. (The server distinguishes the two by `only_uninitialized`: `false` = full, `true` =
+partial.)
 
-- **`on_workflow_start` → keep.** The workflow starts exactly once in its lifetime; a reinitialize
-  is not a new start. This is what stops plain `reinit` / `reset-status --reinit` from re-running
-  start-time setup or re-submitting the original node count. (A never-fired action keeps
-  `executed = 0` and still fires, so a first real initialize is unaffected.)
+Per trigger (partial reinitialize):
+
+- **`on_workflow_start` → keep.** A partial reinit is not a new start, so this stops plain `reinit`
+  / `reset-status --reinit` from re-running start-time setup or re-submitting the original node
+  count. (A never-fired action keeps `executed = 0` and still fires, so a first real initialize is
+  unaffected; a full `workflows init` re-arms it as noted above.)
 - **`on_jobs_ready` / `on_jobs_complete` → keep iff the gating jobs are still all terminal.** That
   is the _subset_ re-run (the gates were untouched, so the event already happened and is not
   recurring). Re-arm when any gate was reset — the _full_ re-run, where that job will run again and
@@ -418,9 +427,17 @@ _Full re-run_ (the gate itself is re-run):
 With multiple gating jobs, the action is only kept executed when **all** of them remain terminal;
 resetting any one of them re-arms it.
 
-The client-side `recover`/`regenerate` guards (`mark_satisfied_schedule_actions_executed`) remain as
-defense in depth, but the server is now the single point that prevents reinit from resurrecting an
-already-satisfied action, so all entry points are covered uniformly.
+The `recover`/`regenerate` paths keep their own `mark_satisfied_schedule_actions_executed` guard,
+and it is **load-bearing, not just redundant**: those paths take over allocation themselves (they
+submit the user's chosen count, or regenerate recovery actions and submit). After they reset the
+failed jobs and reinitialize, the server _correctly_ re-arms those jobs' `on_jobs_ready` actions
+(right for plain `reinit`, where they should fire), but the reset gate is now `Ready`, so the action
+is satisfied and would fire on the first worker and submit a second allocation. `mark_satisfied`
+marks those satisfied actions executed so recover's own submission is not duplicated. The server
+cannot do this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit,
+the action should fire." For the `on_workflow_start` and already-terminal-gated cases the guard is
+now a no-op (the server already keeps those executed, and `mark_satisfied` skips already-executed
+actions); the reset-`on_jobs_ready` case is the one it still handles.
 
 ### Re-running a Slurm workflow
 
