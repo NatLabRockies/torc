@@ -62,6 +62,10 @@ examples/
   actions
 - **`workflow_actions_simple_slurm`** - Multi-stage workflow with automated Slurm node scheduling
   per stage
+- **`workflow_actions_multi_class_slurm`** (YAML) - Three job classes (regular, big-memory, GPU),
+  each scheduled on its own partition via an `on_jobs_ready` action, plus a postprocess job. Shows
+  the re-run-safe pattern: reset a subset of jobs + `--reinit`, then `torc submit` re-schedules only
+  those classes
 - **`workflow_actions_data_pipeline`** - Data pipeline with automated resource management
 - **`workflow_actions_ml_training`** - ML training with dynamic GPU allocation using on_jobs_ready
   actions
