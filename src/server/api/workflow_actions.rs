@@ -6,8 +6,8 @@ use log::{debug, error, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    ClaimActionResponse, CreateWorkflowActionResponse, GetPendingActionsResponse,
-    GetWorkflowActionsResponse, UpdateWorkflowActionResponse,
+    ClaimActionResponse, CreateWorkflowActionResponse, DeleteWorkflowActionResponse,
+    GetPendingActionsResponse, GetWorkflowActionsResponse, UpdateWorkflowActionResponse,
 };
 
 use crate::models;
@@ -162,6 +162,14 @@ pub trait WorkflowActionsApi<C> {
         updates: serde_json::Value,
         context: &C,
     ) -> Result<UpdateWorkflowActionResponse, ApiError>;
+
+    /// Delete a single workflow action
+    async fn delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError>;
 }
 
 /// Implementation of workflow actions API for the server
@@ -707,6 +715,53 @@ where
         };
 
         Ok(UpdateWorkflowActionResponse::SuccessfulResponse(updated))
+    }
+
+    /// Delete a single workflow action
+    async fn delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError> {
+        debug!(
+            "delete_workflow_action(workflow_id={}, action_id={}) - X-Span-ID: {:?}",
+            workflow_id,
+            action_id,
+            context.get().0.clone()
+        );
+
+        // Scope the delete to the workflow so an action_id from another workflow
+        // cannot be removed (and so a mismatch reports not-found rather than 0 rows).
+        let result =
+            match sqlx::query("DELETE FROM workflow_action WHERE id = ? AND workflow_id = ?")
+                .bind(action_id)
+                .bind(workflow_id)
+                .execute(self.context.pool.as_ref())
+                .await
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to delete workflow action",
+                    ));
+                }
+            };
+
+        if result.rows_affected() == 0 {
+            return Ok(DeleteWorkflowActionResponse::NotFoundErrorResponse(
+                resource_not_found_response("Action", action_id),
+            ));
+        }
+
+        info!(
+            "Deleted workflow action workflow_id={} action_id={}",
+            workflow_id, action_id
+        );
+        Ok(DeleteWorkflowActionResponse::SuccessfulResponse(
+            serde_json::json!({"message": "Workflow action deleted successfully"}),
+        ))
     }
 }
 

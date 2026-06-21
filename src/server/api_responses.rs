@@ -438,6 +438,19 @@ pub enum UpdateWorkflowActionResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum DeleteWorkflowActionResponse {
+    /// Successful response
+    SuccessfulResponse(serde_json::Value),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum DeleteComputeNodesResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),

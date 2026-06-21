@@ -1424,6 +1424,16 @@ where
             .await
     }
 
+    async fn delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError> {
+        self.transport_delete_workflow_action(workflow_id, action_id, context)
+            .await
+    }
+
     /// Return the version of the service.
     async fn get_version(&self, context: &C) -> Result<GetVersionResponse, ApiError> {
         self.transport_get_version(context).await

@@ -77,11 +77,11 @@ pub mod system {
 pub mod workflows {
     pub use crate::server::api_responses::{
         ArchiveWorkflowResponse, CancelWorkflowResponse, ClaimActionResponse,
-        CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteWorkflowResponse,
-        GetActiveTaskResponse, GetPendingActionsResponse, GetRunningJobsResponse,
-        GetSlurmJobCorrelationsResponse, GetWorkflowActionsResponse, GetWorkflowResponse,
-        GetWorkflowStatusResponse, IsWorkflowCompleteResponse, IsWorkflowUninitializedResponse,
-        ListWorkflowsResponse, ResetWorkflowStatusResponse, UpdateWorkflowActionResponse,
-        UpdateWorkflowResponse,
+        CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteWorkflowActionResponse,
+        DeleteWorkflowResponse, GetActiveTaskResponse, GetPendingActionsResponse,
+        GetRunningJobsResponse, GetSlurmJobCorrelationsResponse, GetWorkflowActionsResponse,
+        GetWorkflowResponse, GetWorkflowStatusResponse, IsWorkflowCompleteResponse,
+        IsWorkflowUninitializedResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
+        UpdateWorkflowActionResponse, UpdateWorkflowResponse,
     };
 }

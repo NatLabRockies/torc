@@ -532,6 +532,11 @@ map_response!(
     UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
+    delete_workflow_action_response,
+    DeleteWorkflowActionResponse,
+    SuccessfulResponse
+);
+map_response!(
     cancel_workflow_response,
     CancelWorkflowResponse,
     SuccessfulResponse

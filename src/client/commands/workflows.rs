@@ -27,6 +27,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mexecution-plan\x1b[0m   Show execution plan
   \x1b[1;36mlist-actions\x1b[0m     List workflow actions
   \x1b[1;36mupdate-action\x1b[0m    Edit a workflow action's configuration
+  \x1b[1;36mdelete-action\x1b[0m    Delete a workflow action
 
 \x1b[1;32mWorkflow Maintenance:\x1b[0m
   \x1b[1;36mupdate\x1b[0m              Update workflow properties
@@ -618,6 +619,32 @@ SUPPORTED FIELDS (schedule_nodes):
         /// Raw JSON object of fields to merge (typed flags above take precedence)
         #[arg(long)]
         json: Option<String>,
+    },
+    /// Delete a workflow action
+    ///
+    /// Permanently removes a single action from a workflow. Run
+    /// 'torc workflows list-actions <workflow_id>' to find action IDs.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Delete action 45 from workflow 123
+    torc workflows delete-action 123 45
+
+    # Skip the confirmation prompt (e.g. in scripts)
+    torc workflows delete-action 123 45 --no-prompts
+"
+    )]
+    DeleteAction {
+        /// ID of the workflow that owns the action
+        #[arg()]
+        workflow_id: i64,
+        /// ID of the action to delete (see 'workflows list-actions')
+        #[arg()]
+        action_id: i64,
+        /// Do not prompt for confirmation before deleting
+        #[arg(long)]
+        no_prompts: bool,
     },
     /// Check if a workflow is complete
     #[command(
@@ -1295,6 +1322,79 @@ fn handle_update_action(
         }
         Err(e) => {
             print_error("updating workflow action", &e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Permanently delete a single workflow action. Prompts for confirmation unless
+/// `no_prompts` is set or output is JSON.
+fn handle_delete_action(
+    config: &Configuration,
+    workflow_id: i64,
+    action_id: i64,
+    no_prompts: bool,
+    format: &str,
+) {
+    // Show what will be deleted and confirm (unless suppressed).
+    if !no_prompts && format != "json" {
+        match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
+            Ok(actions) => match actions.iter().find(|a| a.id == Some(action_id)) {
+                Some(action) => {
+                    println!("\nWarning: You are about to delete the following action:");
+                    println!("  ID: {}", action_id);
+                    println!("  Trigger: {}", action.trigger_type);
+                    println!("  Action: {}", action.action_type);
+                    println!("\nThis action cannot be undone.");
+                    print!("\nAre you sure you want to delete this action? (y/N): ");
+                    io::stdout().flush().unwrap();
+
+                    let mut input = String::new();
+                    if io::stdin().read_line(&mut input).is_err() {
+                        eprintln!("Failed to read input");
+                        std::process::exit(1);
+                    }
+                    let response = input.trim().to_lowercase();
+                    if response != "y" && response != "yes" {
+                        println!("Deletion cancelled for action {}.", action_id);
+                        return;
+                    }
+                }
+                None => {
+                    eprintln!(
+                        "Error: action {} was not found in workflow {}.",
+                        action_id, workflow_id
+                    );
+                    std::process::exit(1);
+                }
+            },
+            Err(e) => {
+                print_error("getting workflow actions", &e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    match apis::workflow_actions_api::delete_workflow_action(config, workflow_id, action_id) {
+        Ok(_) => {
+            if format == "json" {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "deleted": true,
+                        "workflow_id": workflow_id,
+                        "action_id": action_id,
+                    })
+                );
+            } else {
+                println!(
+                    "Deleted action {} from workflow {}.",
+                    action_id, workflow_id
+                );
+            }
+        }
+        Err(e) => {
+            print_error("deleting workflow action", &e);
             std::process::exit(1);
         }
     }
@@ -3525,6 +3625,13 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
                 json,
                 format,
             );
+        }
+        WorkflowCommands::DeleteAction {
+            workflow_id,
+            action_id,
+            no_prompts,
+        } => {
+            handle_delete_action(config, *workflow_id, *action_id, *no_prompts, format);
         }
         WorkflowCommands::IsComplete { id } => {
             handle_is_complete(config, *id, format);

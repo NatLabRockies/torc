@@ -124,6 +124,7 @@ Class | Method
 *UserDataApi* | [**update_user_data**](docs/UserDataApi.md#update_user_data)<br/>**PUT** /user_data/{id}<br/>
 *WorkflowActionsApi* | [**claim_action**](docs/WorkflowActionsApi.md#claim_action)<br/>**POST** /workflows/{id}/actions/{action_id}/claim<br/>
 *WorkflowActionsApi* | [**create_workflow_action**](docs/WorkflowActionsApi.md#create_workflow_action)<br/>**POST** /workflows/{id}/actions<br/>
+*WorkflowActionsApi* | [**delete_workflow_action**](docs/WorkflowActionsApi.md#delete_workflow_action)<br/>**DELETE** /workflows/{id}/actions/{action_id}<br/>
 *WorkflowActionsApi* | [**get_pending_actions**](docs/WorkflowActionsApi.md#get_pending_actions)<br/>**GET** /workflows/{id}/actions/pending<br/>
 *WorkflowActionsApi* | [**get_workflow_actions**](docs/WorkflowActionsApi.md#get_workflow_actions)<br/>**GET** /workflows/{id}/actions<br/>
 *WorkflowActionsApi* | [**update_workflow_action**](docs/WorkflowActionsApi.md#update_workflow_action)<br/>**PUT** /workflows/{id}/actions/{action_id}<br/>

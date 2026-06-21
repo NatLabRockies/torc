@@ -976,6 +976,102 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
     );
 }
 
+#[rstest]
+fn test_delete_workflow_action_success(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_delete_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create two actions so we can confirm only the targeted one is removed.
+    let keep = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            json!({ "commands": ["echo keep"] }),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let target = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let target_id = target.id.expect("action should have an id");
+
+    apis::workflow_actions_api::delete_workflow_action(config, workflow_id, target_id)
+        .expect("Failed to delete workflow action");
+
+    // Only the targeted action is gone.
+    let remaining = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    assert!(remaining.iter().all(|a| a.id != Some(target_id)));
+    assert!(remaining.iter().any(|a| a.id == keep.id));
+}
+
+#[rstest]
+fn test_delete_workflow_action_not_found(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_delete_not_found_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let result = apis::workflow_actions_api::delete_workflow_action(config, workflow_id, 999_999);
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 404);
+        }
+        other => panic!("Expected 404 ResponseError, got {:?}", other),
+    }
+}
+
+#[rstest]
+fn test_delete_workflow_action_wrong_workflow(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_a = create_test_workflow(config, "action_delete_wf_a");
+    let workflow_a_id = workflow_a.id.unwrap();
+    let workflow_b = create_test_workflow(config, "action_delete_wf_b");
+    let workflow_b_id = workflow_b.id.unwrap();
+
+    let created = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_a_id,
+        workflow_action(
+            workflow_a_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let action_id = created.id.expect("action should have an id");
+
+    // Deleting via the wrong workflow must not remove it.
+    let result =
+        apis::workflow_actions_api::delete_workflow_action(config, workflow_b_id, action_id);
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 404);
+        }
+        other => panic!("Expected 404 ResponseError, got {:?}", other),
+    }
+
+    // The action still exists under workflow A.
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_a_id)
+        .expect("Failed to get workflow actions");
+    assert!(fetched.iter().any(|a| a.id == Some(action_id)));
+}
+
 // ---------------------------------------------------------------------------
 // Regression tests for `reset_actions_for_reinitialize` not re-arming an
 // already-satisfied job-gated `schedule_nodes` action.

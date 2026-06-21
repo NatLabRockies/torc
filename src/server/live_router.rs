@@ -200,7 +200,7 @@ pub fn app_router(state: LiveRouterState) -> Router {
         )
         .route(
             "/torc-service/v1/workflows/{id}/actions/{action_id}",
-            put(update_workflow_action),
+            put(update_workflow_action).delete(delete_workflow_action),
         )
         .route(
             "/torc-service/v1/workflows/{id}/actions/pending",
@@ -3577,6 +3577,32 @@ pub async fn update_workflow_action(
         .await
     {
         Ok(response) => update_workflow_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    delete,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}",
+    operation_id = "delete_workflow_action",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    responses((status = 200, body = serde_json::Value))
+)]
+pub async fn delete_workflow_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .delete_workflow_action(workflow_id, action_id, &context)
+        .await
+    {
+        Ok(response) => delete_workflow_action_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
