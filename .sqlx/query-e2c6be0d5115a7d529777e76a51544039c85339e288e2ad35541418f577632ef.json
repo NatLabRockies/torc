@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            WITH RECURSIVE jobs_to_uninitialize(job_id) AS (\n                SELECT id FROM job\n                WHERE workflow_id = $1 AND status = $2\n                UNION\n                SELECT jbb.job_id\n                FROM job_depends_on jbb\n                JOIN jobs_to_uninitialize jtu ON jbb.depends_on_job_id = jtu.job_id\n                WHERE jbb.workflow_id = $1\n            )\n            UPDATE job\n            SET status = $2, start_time = NULL, compute_node_id = NULL\n            WHERE workflow_id = $1\n            AND id IN (SELECT job_id FROM jobs_to_uninitialize)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e2c6be0d5115a7d529777e76a51544039c85339e288e2ad35541418f577632ef"
+}

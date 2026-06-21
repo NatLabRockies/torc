@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE job\n            SET status = $1, start_time = NULL, compute_node_id = NULL\n            WHERE workflow_id = $2\n            AND status NOT IN ($3, $4, $5, $6, $7, $8)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "258917bff60a2b290a85dab7617af17fe40c03aebb6e57afbbca1644dc2b0d89"
+}
