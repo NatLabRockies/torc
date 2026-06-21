@@ -2404,6 +2404,34 @@ fn test_slurm_generate_auto_merge_small_allocations() {
         "Merged root-job scheduler should use on_jobs_ready trigger"
     );
 
+    // Deadlock guard: the merged action must be gated on the ROOT job(s) only ("build"), not the
+    // dependent jobs that were merged into the same scheduler ("join"/"job_*"). An on_jobs_ready
+    // action only becomes pending once ALL its gating jobs are Ready, so gating on a dependent job
+    // would never fire at workflow start (the dependent jobs need this allocation to run) -> the
+    // root jobs would never be scheduled.
+    let action_jobs: Vec<&str> = action
+        .get("jobs")
+        .and_then(|j| j.as_array())
+        .expect("merged action should specify gating jobs")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        action_jobs.contains(&"build"),
+        "merged action must be gated on the root job 'build', got {:?}",
+        action_jobs
+    );
+    assert!(
+        !action_jobs.contains(&"join"),
+        "merged action must NOT be gated on the dependent job 'join' (would deadlock at start), got {:?}",
+        action_jobs
+    );
+    assert!(
+        !action_jobs.iter().any(|j| j.starts_with("job_")),
+        "merged action must NOT be gated on dependent 'job_*' jobs (would deadlock at start), got {:?}",
+        action_jobs
+    );
+
     // Verify all jobs are assigned to the same scheduler
     // Note: slurm generate returns the spec before parameter expansion,
     // so we have 3 job specs (build, job_{i}, join), not 12 expanded jobs
