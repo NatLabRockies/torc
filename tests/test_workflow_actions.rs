@@ -2882,3 +2882,99 @@ fn test_reinit_workflow_start_kept_matrix(
         "{action_type}/{entry:?}: suppressed on_workflow_start action must not be pending after reinit"
     );
 }
+
+/// DECISION TABLE (`on_workflow_complete`): always RE-ARMED on reinitialize (the workflow will
+/// complete again at the end of the re-run), for both action types, across all three reinit entry
+/// points — and the re-armed action actually fires again when the workflow next completes. This
+/// guards the catch-all `_ => false` arm. The single job is driven to Failed (a terminal state, so
+/// the workflow counts as complete and the action fires) which also leaves it as the sole Failed job
+/// for the uniform reset+reinit helper.
+#[rstest]
+#[case::sched_reinit("schedule_nodes", ReinitEntry::Reinit)]
+#[case::sched_cli("schedule_nodes", ReinitEntry::Cli)]
+#[case::sched_recover("schedule_nodes", ReinitEntry::Recover)]
+#[case::cmd_reinit("run_commands", ReinitEntry::Reinit)]
+#[case::cmd_cli("run_commands", ReinitEntry::Cli)]
+#[case::cmd_recover("run_commands", ReinitEntry::Recover)]
+fn test_reinit_workflow_complete_rearmed_matrix(
+    start_server: &ServerProcess,
+    #[case] action_type: &str,
+    #[case] entry: ReinitEntry,
+) {
+    let config = &start_server.config;
+    let name = format!("matrix_wc_{action_type}_{entry:?}").to_lowercase();
+    let workflow = create_test_workflow(config, &name);
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Single job; failing it makes the workflow complete (Failed is terminal) and gives the helper a
+    // sole Failed job to reset.
+    let job_id = create_test_job(config, workflow_id, "j1")
+        .expect("create job")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_complete",
+            action_type,
+            action_config_for(action_type),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run the job to Failed -> workflow is complete -> on_workflow_complete fires; claim it.
+    run_job_to_status(
+        config,
+        workflow_id,
+        job_id,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Failed,
+    );
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    reset_and_reinit_via(entry, config, start_server, &manager, workflow_id, job_id);
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "{action_type}/{entry:?}: on_workflow_complete action must be re-armed on reinit"
+    );
+
+    // Prove the re-arm is effective: completing the job again completes the workflow and re-fires it.
+    let run_id2 = manager.get_run_id().expect("run_id2");
+    wait_for_job_status(config, job_id, JobStatus::Ready);
+    run_job_to_status(
+        config,
+        workflow_id,
+        job_id,
+        run_id2,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
+    wait_for_specific_action_pending(config, workflow_id, action_id);
+}
