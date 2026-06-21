@@ -3362,3 +3362,109 @@ fn test_schedule_nodes_suppress_ignores_run_commands(start_server: &ServerProces
         "run_commands action must not be suppressed (only schedule_nodes is the hazard)"
     );
 }
+
+/// On the first run (`run_id <= 1`) the submit review is a no-op: there is nothing to reconcile, so
+/// it returns no overrides without inspecting or mutating any action.
+#[rstest]
+fn test_review_submit_pending_actions_first_run_is_noop(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "review_submit_first_run");
+    let workflow_id = workflow.id.unwrap();
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            json!({"scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 2}),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    let overrides = torc::client::commands::slurm::review_submit_pending_actions(
+        config,
+        workflow_id,
+        1, // first run
+        false,
+    )
+    .expect("review");
+
+    assert!(
+        overrides.is_empty(),
+        "first-run review must not produce allocation overrides"
+    );
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "first-run review must not suppress any action"
+    );
+}
+
+/// On a re-submission (`run_id > 1`) the review must NEVER suppress or change anything when run
+/// non-interactively (the test harness has a non-TTY stdin, which the helper treats like
+/// `--no-prompts`): it prints what will happen and proceeds with the configured counts. This guards
+/// the safe default — the interactive disable/override path is opt-in only.
+#[rstest]
+fn test_review_submit_pending_actions_noninteractive_does_not_suppress(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "review_submit_noninteractive");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Root job gated by an on_jobs_ready schedule_nodes action; after initialize the root job is
+    // Ready, so the action becomes pending (the "submit now" group).
+    let job_id = create_test_job(config, workflow_id, "root")
+        .expect("create root")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({"scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 3}),
+            Some(vec![job_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    wait_for_pending_action(config, workflow_id);
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "action should be pending after initialize"
+    );
+
+    let overrides = torc::client::commands::slurm::review_submit_pending_actions(
+        config,
+        workflow_id,
+        2, // re-submission
+        false,
+    )
+    .expect("review");
+
+    assert!(
+        overrides.is_empty(),
+        "non-interactive review must not override allocation counts"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "non-interactive review must leave the pending action pending (not suppressed)"
+    );
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "non-interactive review must not mark the action executed"
+    );
+}
