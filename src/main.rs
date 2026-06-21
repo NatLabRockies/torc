@@ -800,6 +800,7 @@ fn main() {
             output_dir,
             poll_interval,
             claim_backoff_max_secs,
+            no_prompts,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Resolve the spec source once (handles `-` reading from stdin) so the
@@ -935,6 +936,27 @@ fn main() {
             // Submit the workflow
             match apis::workflows_api::get_workflow(&config, workflow_id) {
                 Ok(workflow) => {
+                    // On a re-submission (run_id > 1) the reinitialize re-arm logic can leave
+                    // schedule_nodes actions pending that submit would fire, possibly with a
+                    // different allocation count than the user now wants. Show what submit will
+                    // submit now (and what is deferred to later stages) and let the user disable
+                    // actions or change their per-submission allocation count. Disabled actions are
+                    // suppressed in here; the returned map carries per-action allocation overrides
+                    // for this submission only.
+                    let run_id = workflow.run_id.unwrap_or(1);
+                    let allocation_overrides =
+                        match torc::client::commands::slurm::review_submit_pending_actions(
+                            &config,
+                            workflow_id,
+                            run_id,
+                            *no_prompts,
+                        ) {
+                            Ok(overrides) => overrides,
+                            Err(e) => {
+                                eprintln!("Error reviewing pending schedule_nodes actions: {}", e);
+                                std::process::exit(1);
+                            }
+                        };
                     let torc_config = TorcConfig::load().unwrap_or_default();
                     let workflow_manager =
                         WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -944,6 +966,7 @@ fn main() {
                         output_dir,
                         *poll_interval,
                         *claim_backoff_max_secs,
+                        &allocation_overrides,
                     ) {
                         Ok(()) => {
                             print_workflow_message(

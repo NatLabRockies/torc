@@ -1766,6 +1766,343 @@ pub fn handle_pending_schedule_actions(
     Ok(())
 }
 
+/// Effective allocation count for a `schedule_nodes` action: the per-submission override if the
+/// user set one, else the action's configured count (missing defaults to 1, matching
+/// workflow_manager / job_runner / list-actions).
+fn action_alloc_count(action: &models::WorkflowActionModel, overrides: &HashMap<i64, i32>) -> i64 {
+    if let Some(id) = action.id
+        && let Some(count) = overrides.get(&id)
+    {
+        return *count as i64;
+    }
+    action
+        .action_config
+        .get("num_allocations")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1)
+}
+
+/// Human-readable label for the gating jobs of an action (`job_ids` resolved to names where known),
+/// truncated so a wide fan-out stays on one line.
+fn gate_label(action: &models::WorkflowActionModel, job_names: &HashMap<i64, String>) -> String {
+    let Some(ids) = action.job_ids.as_ref().filter(|ids| !ids.is_empty()) else {
+        return "(all jobs)".to_string();
+    };
+    let shown: Vec<String> = ids
+        .iter()
+        .take(3)
+        .map(|id| {
+            job_names
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| format!("job {}", id))
+        })
+        .collect();
+    if ids.len() > shown.len() {
+        format!("{}, +{} more", shown.join(", "), ids.len() - shown.len())
+    } else {
+        shown.join(", ")
+    }
+}
+
+/// Scheduler label for an action: its name when resolvable from `scheduler_id`, else `id=<n>`.
+fn scheduler_label(
+    action: &models::WorkflowActionModel,
+    scheduler_names: &HashMap<i64, String>,
+) -> String {
+    match action
+        .action_config
+        .get("scheduler_id")
+        .and_then(|v| v.as_i64())
+    {
+        Some(id) => scheduler_names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| format!("id={}", id)),
+        None => "-".to_string(),
+    }
+}
+
+/// Print the "submit now" group (the actions submit fires immediately), reflecting the user's
+/// in-progress disable/override choices, and the running total of allocations.
+fn render_now_group(
+    now: &[models::WorkflowActionModel],
+    disabled: &std::collections::HashSet<i64>,
+    overrides: &HashMap<i64, i32>,
+    scheduler_names: &HashMap<i64, String>,
+    job_names: &HashMap<i64, String>,
+) {
+    eprintln!("Will submit now ({} action(s)):", now.len());
+    if now.is_empty() {
+        eprintln!("  (none)");
+    }
+    let mut total = 0i64;
+    for a in now {
+        let id = a.id.unwrap_or(-1);
+        if disabled.contains(&id) {
+            eprintln!(
+                "  [disabled] id={:<4} {:<16} {}",
+                id,
+                a.trigger_type,
+                scheduler_label(a, scheduler_names),
+            );
+            continue;
+        }
+        let allocs = action_alloc_count(a, overrides);
+        total += allocs;
+        let changed = if a.id.is_some_and(|id| overrides.contains_key(&id)) {
+            " (changed)"
+        } else {
+            ""
+        };
+        eprintln!(
+            "  id={:<4} {:<16} sched={:<16} allocations={}{:<10} gates: {}",
+            id,
+            a.trigger_type,
+            scheduler_label(a, scheduler_names),
+            allocs,
+            changed,
+            gate_label(a, job_names),
+        );
+    }
+    eprintln!("  → {} Slurm allocation(s) will be submitted now.", total);
+}
+
+/// Review the `schedule_nodes` actions `torc submit` will fire, on a re-submission, and let the user
+/// adjust them before submitting.
+///
+/// On the first run (`run_id <= 1`) there is nothing to reconcile -- the pending actions are exactly
+/// what the spec declared -- so this returns an empty override map without prompting.
+///
+/// On a re-submission the reinitialize re-arm logic (see `reset_actions_for_reinitialize`) can leave
+/// `schedule_nodes` actions pending whose allocation counts no longer match what the user wants this
+/// run. Scoped to the slurm `schedule_nodes` actions submit itself fires from the login node, this
+/// prints two groups:
+///
+/// - **Will submit now**: pending (`trigger_count >= required_triggers`) actions submit fires
+///   immediately. The user can disable one (suppressed via claim, so it submits nothing) or override
+///   its allocation count for this submission only.
+/// - **Will submit later**: deferred actions (gates not yet satisfied) that running workers fire as
+///   later stages complete. Listed for visibility; not adjustable here.
+///
+/// Returns a map of action id -> allocation count to apply for this submission (empty unless the
+/// user changed something; never persisted to `action_config`). Disabled actions are claimed in here
+/// so they are absent from the pending set `start()` later reads. `--no-prompts` or a non-TTY stdin
+/// prints the summary and proceeds with the configured counts. Returns `Err` on API failure;
+/// cancellation exits the process.
+pub fn review_submit_pending_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    no_prompts: bool,
+) -> Result<HashMap<i64, i32>, String> {
+    use std::collections::HashSet;
+    use std::io::{IsTerminal, Write};
+
+    let mut overrides: HashMap<i64, i32> = HashMap::new();
+
+    // First run: the pending actions are exactly what the spec declared; nothing to reconcile.
+    if run_id <= 1 {
+        return Ok(overrides);
+    }
+
+    // Only slurm schedule_nodes actions that have not executed and are not recovery actions are
+    // candidates -- those are exactly what submit fires from the login node.
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .map_err(|e| format!("could not list workflow actions: {}", e))?;
+    let (now, later): (Vec<_>, Vec<_>) = actions
+        .into_iter()
+        .filter(|a| {
+            a.action_type == "schedule_nodes"
+                && !a.is_recovery
+                && !a.executed
+                && a.action_config
+                    .get("scheduler_type")
+                    .and_then(|v| v.as_str())
+                    == Some("slurm")
+        })
+        // "now" = pending (gates satisfied); "later" = deferred (gates not yet satisfied).
+        .partition(|a| a.trigger_count >= a.required_triggers);
+
+    if now.is_empty() && later.is_empty() {
+        return Ok(overrides);
+    }
+
+    // Best-effort name resolution for display; fall back to ids on any error.
+    let scheduler_names: HashMap<i64, String> =
+        match apis::slurm_schedulers_api::list_slurm_schedulers(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+        ) {
+            Ok(resp) => resp
+                .items
+                .into_iter()
+                .filter_map(|s| Some((s.id?, s.name?)))
+                .collect(),
+            Err(_) => HashMap::new(),
+        };
+    let job_names: HashMap<i64, String> = match apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ) {
+        Ok(resp) => resp
+            .items
+            .into_iter()
+            .filter_map(|j| j.id.map(|id| (id, j.name)))
+            .collect(),
+        Err(_) => HashMap::new(),
+    };
+
+    eprintln!();
+    eprintln!(
+        "Workflow {} (run #{}) — re-submission. Review what `torc submit` will schedule:",
+        workflow_id, run_id
+    );
+
+    let mut disabled: HashSet<i64> = HashSet::new();
+    render_now_group(&now, &disabled, &overrides, &scheduler_names, &job_names);
+
+    // Deferred actions: informational only.
+    if !later.is_empty() {
+        eprintln!(
+            "Will submit later ({} action(s), fired by workers as their gating jobs become ready/complete):",
+            later.len()
+        );
+        for a in &later {
+            eprintln!(
+                "  id={:<4} {:<16} sched={:<16} allocations={:<4} gates: {}",
+                a.id.unwrap_or(-1),
+                a.trigger_type,
+                scheduler_label(a, &scheduler_names),
+                action_alloc_count(a, &overrides),
+                gate_label(a, &job_names),
+            );
+        }
+        eprintln!(
+            "  (these run from compute nodes with their configured counts; not adjustable here)"
+        );
+    }
+
+    // A non-interactive run prints the summary and proceeds with configured counts.
+    if no_prompts || !std::io::stdin().is_terminal() {
+        eprintln!(
+            "Proceeding with the configured allocation counts (--no-prompts or non-interactive stdin)."
+        );
+        return Ok(overrides);
+    }
+
+    // Index now-actions by id for validation and persistent-flag lookups.
+    let now_by_id: HashMap<i64, &models::WorkflowActionModel> =
+        now.iter().filter_map(|a| a.id.map(|id| (id, a))).collect();
+
+    loop {
+        eprint!(
+            "Options: [p]roceed, [d]isable <id>, [n]um <id> <count> (0 = disable), [c]ancel\n> "
+        );
+        let _ = std::io::stderr().flush();
+        let mut input = String::new();
+        let bytes = std::io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("failed to read input: {}", e))?;
+        if bytes == 0 {
+            // EOF (e.g. Ctrl-D): treat as cancel rather than looping forever.
+            eprintln!("\nCancelled (EOF). No allocations submitted.");
+            std::process::exit(0);
+        }
+        let tokens: Vec<&str> = input.split_whitespace().collect();
+        match tokens.first().map(|t| t.to_lowercase()).as_deref() {
+            // Require an explicit "p" to proceed; a bare Enter re-prompts so a stray keypress can't
+            // submit allocations.
+            None => continue,
+            Some("p") | Some("proceed") => break,
+            Some("c") | Some("cancel") | Some("q") => {
+                eprintln!("Cancelled. No allocations submitted.");
+                std::process::exit(0);
+            }
+            Some("d") | Some("disable") => {
+                match tokens.get(1).and_then(|s| s.parse::<i64>().ok()) {
+                    Some(id) if now_by_id.contains_key(&id) => {
+                        disabled.insert(id);
+                        overrides.remove(&id);
+                        eprintln!("Action {} disabled — it will submit nothing this run.", id);
+                        render_now_group(&now, &disabled, &overrides, &scheduler_names, &job_names);
+                    }
+                    _ => eprintln!(
+                        "  Usage: d <id>, where <id> is one of the 'will submit now' actions."
+                    ),
+                }
+            }
+            Some("n") | Some("num") | Some("allocations") => {
+                match (
+                    tokens.get(1).and_then(|s| s.parse::<i64>().ok()),
+                    tokens.get(2).and_then(|s| s.parse::<i32>().ok()),
+                ) {
+                    (Some(id), Some(count)) if now_by_id.contains_key(&id) && count >= 0 => {
+                        if count == 0 {
+                            disabled.insert(id);
+                            overrides.remove(&id);
+                            eprintln!("Action {} set to 0 allocations — disabled this run.", id);
+                        } else {
+                            disabled.remove(&id);
+                            overrides.insert(id, count);
+                            eprintln!(
+                                "Action {} will submit {} allocation(s) this submission.",
+                                id, count
+                            );
+                        }
+                        render_now_group(&now, &disabled, &overrides, &scheduler_names, &job_names);
+                    }
+                    _ => eprintln!(
+                        "  Usage: n <id> <count>, where <id> is a 'will submit now' action and <count> >= 0."
+                    ),
+                }
+            }
+            _ => eprintln!("  Unrecognized input. Use p / d <id> / n <id> <count> / c."),
+        }
+    }
+
+    // Apply disables now (only on proceed, so a cancel leaves the workflow untouched). Claiming
+    // marks the action executed so the workers started by this submission do not fire it either.
+    for id in &disabled {
+        let action = now_by_id.get(id);
+        if action.is_some_and(|a| a.persistent) {
+            eprintln!(
+                "  Note: action {} is persistent and cannot be disabled by suppression; it will \
+                 still re-fire from a worker. Remove or disable it in the spec to avoid that.",
+                id
+            );
+            continue;
+        }
+        match crate::client::utils::claim_action(config, workflow_id, *id, None, 20) {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(format!(
+                    "failed to disable (claim) action {}: {}; aborting so it does not fire unexpectedly",
+                    id, e
+                ));
+            }
+        }
+    }
+
+    Ok(overrides)
+}
+
 /// Result indicating success or failure
 #[allow(clippy::too_many_arguments)]
 pub fn schedule_slurm_nodes(

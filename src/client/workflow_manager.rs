@@ -208,6 +208,14 @@ impl WorkflowManager {
     }
 
     /// Start the workflow: initialize if needed and schedule nodes for on_workflow_start actions
+    ///
+    /// `allocation_overrides` maps an action id to the number of Slurm allocations to submit for
+    /// that action **on this invocation only** (it is not persisted to the action's config). It is
+    /// populated by the interactive submit review (see `slurm::review_submit_pending_actions`) so a
+    /// user re-submitting a workflow can right-size what `sbatch` requests without editing the
+    /// action. Actions the user chose to disable are already suppressed (claimed) before `start` is
+    /// called, so they do not appear in the pending set here; an empty map means "fire every pending
+    /// action with its configured count".
     pub fn start(
         &self,
         force: bool,
@@ -215,6 +223,7 @@ impl WorkflowManager {
         output_dir: &str,
         poll_interval_override: Option<i32>,
         claim_backoff_max_secs_override: Option<f64>,
+        allocation_overrides: &std::collections::HashMap<i64, i32>,
     ) -> Result<(), TorcError> {
         // Check if workflow is uninitialized
         match apis::workflows_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
@@ -320,10 +329,15 @@ impl WorkflowManager {
                         .get("start_one_worker_per_node")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    let num_allocations = action_config
-                        .get("num_allocations")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(1) as i32;
+                    // Use the per-submission override from the interactive review if the user set
+                    // one for this action; otherwise fall back to the action's configured count
+                    // (missing defaults to 1, matching job_runner / list-actions display).
+                    let num_allocations = allocation_overrides.get(&action_id).copied().unwrap_or(
+                        action_config
+                            .get("num_allocations")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(1) as i32,
+                    );
                     let max_parallel_jobs = max_parallel_jobs_override.or_else(|| {
                         action_config
                             .get("max_parallel_jobs")
@@ -348,8 +362,8 @@ impl WorkflowManager {
                     ) {
                         Ok(()) => {
                             info!(
-                                "Successfully scheduled {} Slurm allocation(s) for on_workflow_start",
-                                num_allocations
+                                "Successfully scheduled {} Slurm allocation(s) for {} action {}",
+                                num_allocations, action.trigger_type, action_id
                             );
                         }
                         Err(err) => {
