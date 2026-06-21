@@ -781,25 +781,32 @@ impl WorkflowActionsApiImpl {
     /// already in a satisfied state (e.g., Completed jobs count toward on_jobs_ready). For other
     /// action types, trigger_count is reset to 0.
     ///
-    /// Exception — already-satisfied job-gated `schedule_nodes` actions are NOT re-armed. A
-    /// `schedule_nodes` action gated on jobs that are still in their satisfied state after the
-    /// reinitialize (`trigger_count >= required_triggers`) already scheduled its allocation for
-    /// those completed jobs. Clearing `executed` would make it fire a second time and submit a
-    /// duplicate allocation the moment a worker starts — the bug behind "reset one job + reinit +
-    /// `slurm schedule-nodes` re-schedules the original node count". Such actions keep their
-    /// `executed` flag (firing once already-satisfied or staying fireable if never fired) so no
-    /// reinitialize entry point (`reinit`, `recover`, `regenerate`, `watch`) can resurrect them.
+    /// Exception — a job-gated `schedule_nodes` action whose gating jobs already ran to a terminal
+    /// state is NOT re-armed. Such an action already scheduled its allocation for those jobs;
+    /// clearing `executed` would make it fire a second time and submit a duplicate allocation the
+    /// moment a worker starts — the bug behind "reset one job + reinit + `slurm schedule-nodes`
+    /// re-schedules the original node count". Such actions keep their `executed` flag (firing once
+    /// already-satisfied or staying fireable if never fired) so no reinitialize entry point
+    /// (`reinit`, `recover`, `regenerate`, `watch`) can resurrect them.
+    ///
+    /// "Already ran" is measured with the on_jobs_complete notion (terminal jobs only:
+    /// completed/failed/canceled/terminated), NOT the action's own `trigger_count`. That is what
+    /// distinguishes a *subset* re-run (the gating jobs were left untouched, stay terminal →
+    /// suppress) from a *full* re-run (the gating jobs were reset → no longer terminal → re-arm so
+    /// the action allocates again). It must not reuse `trigger_count`: for an `on_jobs_ready` action
+    /// a reset gate returns to `Ready`, and `Ready` satisfies `on_jobs_ready`, so `trigger_count`
+    /// cannot tell a freshly-reset gate from one that already completed — using it would wrongly
+    /// suppress the action on a full re-run and stall the workflow (no allocation requested).
     ///
     /// Scope, and why each clause matters:
     /// - `schedule_nodes` only — the duplicate-allocation hazard is specific to it, and this mirrors
     ///   the client-side `schedule_action_already_satisfied` guard. `run_commands` keeps its prior
     ///   re-arm behavior.
-    /// - job-gated triggers only — `trigger_count >= required_triggers` distinguishes a *subset*
-    ///   re-run (gating jobs still terminal → still satisfied → suppress) from a *full* re-run
-    ///   (gating jobs were reset → not satisfied → re-arm so it fires again when they complete).
-    ///   `on_workflow_start`/`on_worker_start` have no gating jobs, so a subset re-run is
-    ///   indistinguishable from a full restart; those are left to re-arm and are suppressed
-    ///   explicitly by the recover/regenerate paths when the user takes over allocation.
+    /// - job-gated triggers only (`on_jobs_ready`/`on_jobs_complete`) — only these have gating jobs
+    ///   whose terminal state can be measured. `on_workflow_start`/`on_worker_start` have no gating
+    ///   jobs, so a subset re-run is indistinguishable from a full restart; those are left to re-arm
+    ///   and are suppressed explicitly by the recover/regenerate paths when the user takes over
+    ///   allocation.
     pub async fn reset_actions_for_reinitialize(&self, workflow_id: i64) -> Result<(), ApiError> {
         debug!(
             "reset_actions_for_reinitialize(workflow_id={})",
@@ -855,42 +862,54 @@ impl WorkflowActionsApiImpl {
             let job_ids_str: Option<String> = action_row.get("job_ids");
             let required_triggers: i64 = action_row.get("required_triggers");
 
-            // For on_jobs_ready and on_jobs_complete, compute trigger_count based on current job states
-            let trigger_count = match trigger_type.as_str() {
-                "on_jobs_ready" | "on_jobs_complete" => {
-                    if let Some(job_ids_str) = job_ids_str {
-                        let job_ids: Vec<i64> = match serde_json::from_str(&job_ids_str) {
-                            Ok(ids) => ids,
-                            Err(e) => {
-                                error!(
-                                    "Failed to parse job_ids JSON '{}' for action {}: {}",
-                                    job_ids_str, action_id, e
-                                );
-                                vec![]
-                            }
-                        };
+            let is_job_gated =
+                matches!(trigger_type.as_str(), "on_jobs_ready" | "on_jobs_complete");
 
-                        if job_ids.is_empty() {
-                            0
-                        } else {
-                            self.count_jobs_in_satisfied_state(workflow_id, &job_ids, &trigger_type)
-                                .await?
-                        }
-                    } else {
-                        0
-                    }
-                }
-                // For other trigger types (on_workflow_start, etc.), reset to 0
-                _ => 0,
+            // Parse the gating job_ids once (job-gated triggers only).
+            let job_ids: Vec<i64> = match job_ids_str.as_deref() {
+                Some(s) if is_job_gated => serde_json::from_str(s).unwrap_or_else(|e| {
+                    error!(
+                        "Failed to parse job_ids JSON '{}' for action {}: {}",
+                        s, action_id, e
+                    );
+                    vec![]
+                }),
+                // Other trigger types (on_workflow_start, etc.) have no gating jobs.
+                _ => vec![],
+            };
+
+            // trigger_count drives whether the action becomes pending again on the new run. For
+            // on_jobs_ready a Ready gate counts; for on_jobs_complete only terminal gates count.
+            let trigger_count = if is_job_gated && !job_ids.is_empty() {
+                self.count_jobs_in_satisfied_state(workflow_id, &job_ids, &trigger_type)
+                    .await?
+            } else {
+                0
             };
 
             // An already-satisfied job-gated schedule_nodes action keeps its executed flag so the
             // reinitialize cannot resurrect it and re-submit its allocation. See the function doc
             // comment for the full rationale and scope. Every other action is re-armed (executed
             // cleared) so it can fire again on the new run.
-            let keep_executed = action_type == "schedule_nodes"
-                && matches!(trigger_type.as_str(), "on_jobs_ready" | "on_jobs_complete")
-                && trigger_count >= required_triggers;
+            //
+            // "Already satisfied" here means the gating jobs already ran to a *terminal* state
+            // (allocation consumed) — the on_jobs_complete notion, NOT trigger_count. Reusing
+            // trigger_count would wrongly suppress on_jobs_ready actions on a full re-run, because a
+            // reset gate returns to Ready and Ready satisfies on_jobs_ready.
+            let keep_executed = if action_type == "schedule_nodes" && is_job_gated {
+                let already_ran_count = if trigger_type == "on_jobs_complete" {
+                    // on_jobs_complete's satisfied state already IS terminal-only.
+                    trigger_count
+                } else if !job_ids.is_empty() {
+                    self.count_jobs_in_satisfied_state(workflow_id, &job_ids, "on_jobs_complete")
+                        .await?
+                } else {
+                    0
+                };
+                already_ran_count >= required_triggers
+            } else {
+                false
+            };
 
             let result = if keep_executed {
                 // Leave executed/executed_by intact; only refresh trigger_count.
