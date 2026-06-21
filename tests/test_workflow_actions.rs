@@ -1263,21 +1263,22 @@ fn test_schedule_action_rearmed_when_gate_job_reset(start_server: &ServerProcess
     );
 }
 
-/// REGRESSION (on_jobs_ready variant of `test_schedule_action_rearmed_when_gate_job_reset`).
+/// Guard (on_jobs_ready variant of `test_schedule_action_rearmed_when_gate_job_reset`).
 ///
 /// `on_jobs_ready` is the dominant trigger for `schedule_nodes` in the deferred-scheduling examples
-/// (see `examples/subgraphs/`). The `keep_executed` heuristic uses `trigger_count >= required_triggers`
-/// to tell a *subset* re-run (gate untouched) from a *full* re-run (gate reset). That premise only
-/// holds for `on_jobs_complete`: a reset gate leaves the terminal state, so its count drops.
+/// (see `examples/subgraphs/`), so its re-arm behavior on a full re-run matters in practice.
 ///
-/// For `on_jobs_ready` it does NOT hold. `count_jobs_in_satisfied_state` counts `Ready` as satisfied,
+/// This guards against keying the keep-executed decision off the action's own `trigger_count`. That
+/// would be wrong for `on_jobs_ready`: `count_jobs_in_satisfied_state` counts `Ready` as satisfied,
 /// and `reset_actions_for_reinitialize` runs AFTER `initialize_jobs` has already returned the reset
-/// gate to `Ready`. So a *full* re-run of the gate still yields `trigger_count >= required_triggers`,
-/// `keep_executed` stays true, and the action that already fired in the prior run is never re-armed —
-/// no allocation is requested for the re-run and the gate sits `Ready` forever.
+/// gate to `Ready`. A *full* re-run of the gate would then still yield
+/// `trigger_count >= required_triggers`, the action that already fired would never be re-armed, no
+/// allocation would be requested, and the gate would sit `Ready` forever.
 ///
-/// This asserts the CORRECT behavior (re-arm on a full re-run, exactly like the on_jobs_complete
-/// sibling test). It FAILS against the current implementation, demonstrating the regression.
+/// `reset_actions_for_reinitialize` instead measures keep-executed with the terminal-only
+/// `on_jobs_complete` notion, so a reset (now `Ready`, not terminal) gate correctly re-arms. This
+/// asserts that correct behavior (re-arm on a full re-run, exactly like the on_jobs_complete sibling
+/// test). It would fail against a `trigger_count`-based heuristic.
 #[rstest]
 fn test_on_jobs_ready_schedule_action_rearmed_when_gate_job_reset(start_server: &ServerProcess) {
     let config = &start_server.config;
