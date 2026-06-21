@@ -429,6 +429,22 @@ For example, with separate job classes each on their own partition (see
 resetting only the GPU and big-memory jobs re-schedules only the GPU and big-memory allocations; the
 regular-job allocations are left alone.
 
+> **Important — `submit` does not right-size the re-run.** `torc submit` re-fires each pending
+> action with the `num_allocations` from its spec, **verbatim**. The granularity of a re-run is
+> therefore the granularity of your actions:
+>
+> - With **per-stage / per-class** actions (as above), resetting a subset re-arms only the matching
+>   actions, so `submit` schedules only those — the common, efficient case.
+> - With a **single large fan-in** action (e.g. one `on_jobs_ready` action gating 100k jobs with
+>   `num_allocations: 500`), resetting _any_ subset re-arms that one action, and `submit` submits
+>   its full `num_allocations` (500) — even if only 100 jobs need to re-run. The jobs still run (the
+>   surplus workers find no claimable work and idle out), but it badly over-allocates.
+>
+> For a right-sized partial re-run of a large fan-in stage, use
+> [`torc recover`](../fault-tolerance/automatic-recovery.md) instead: it regenerates
+> `schedule_nodes` actions sized to the jobs that are actually pending (and suppresses the spec's
+> full-size action), so it allocates for the 100 jobs rather than the whole stage.
+
 > **Note:** `torc submit` is one-shot — it submits the currently-pending allocations and returns.
 > For an unattended multi-stage re-run, follow it with `torc watch` so that if every worker exits
 > (e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up. For a

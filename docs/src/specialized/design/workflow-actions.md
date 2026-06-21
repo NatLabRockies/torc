@@ -465,6 +465,14 @@ returns. For an unattended multi-stage re-run, follow it with `torc watch` so th
 exits (e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up
 (`torc watch --auto-schedule`).
 
+`submit` re-fires each action's `num_allocations` **verbatim** — it does not right-size the re-run.
+So the re-run granularity is the action granularity: per-stage/per-class actions reschedule only the
+affected subset, but a single large fan-in action (e.g. one `on_jobs_ready` gating 100k jobs with
+`num_allocations: 500`) re-arms as a whole when any subset is reset, and `submit` re-submits its
+full count even if only a handful of jobs need to re-run. For a right-sized partial re-run of such a
+stage, use `torc recover`, which regenerates `schedule_nodes` actions sized to the actually-pending
+jobs (and suppresses the spec's full-size action via `mark_satisfied_schedule_actions_executed`).
+
 ## Limitations
 
 1. **No Action Dependencies**: Actions cannot depend on other actions completing
