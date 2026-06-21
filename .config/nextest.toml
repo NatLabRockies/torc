@@ -20,6 +20,11 @@ serial-auth = { max-threads = 1 }
 serial-jobs = { max-threads = 1 }
 serial-ro-crate = { max-threads = 1 }
 serial-compute = { max-threads = 1 }
+# test_workflow_actions shares a single server (a #[once] fixture) across ~60 tests, several of
+# which spawn the torc CLI and issue many sequential HTTP calls. At full parallelism that saturates
+# the shared server's SQLite connection pool and a few tests hang to the slow-timeout. Bound this
+# binary to a few concurrent tests (empirically stable) instead of fully serializing it.
+workflow-actions = { max-threads = 4 }
 
 # Slurm mock tests
 [[profile.default.overrides]]
@@ -68,3 +73,9 @@ test-group = 'serial-auth'
 [[profile.default.overrides]]
 filter = 'binary_id(torc::test_auto_ro_crate) | binary_id(torc::test_ro_crate) | binary_id(torc::test_ro_crate_dataset)'
 test-group = 'serial-ro-crate'
+
+# Workflow action tests share one server across many CLI-spawning tests; bound concurrency
+# (see the workflow-actions test-group note above).
+[[profile.default.overrides]]
+filter = 'binary_id(torc::test_workflow_actions)'
+test-group = 'workflow-actions'

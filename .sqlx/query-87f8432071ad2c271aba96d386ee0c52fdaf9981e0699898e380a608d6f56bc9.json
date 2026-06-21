@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "87f8432071ad2c271aba96d386ee0c52fdaf9981e0699898e380a608d6f56bc9"
+}
