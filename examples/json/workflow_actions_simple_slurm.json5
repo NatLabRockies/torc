@@ -76,7 +76,6 @@
     {
       // Tied to the setup job via on_jobs_ready (not on_workflow_start) so the allocation is
       // re-run-safe: resetting setup + reinitializing re-schedules it on the next `torc submit`.
-      // setup is a root job, so this fires at init just like on_workflow_start would.
       "trigger_type": "on_jobs_ready",
       "action_type": "schedule_nodes",
       "jobs": ["setup"],

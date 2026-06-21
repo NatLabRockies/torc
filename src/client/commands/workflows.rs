@@ -141,6 +141,8 @@ struct WorkflowActionTableRow {
     trigger_type: String,
     #[tabled(rename = "Action")]
     action_type: String,
+    #[tabled(rename = "Allocations")]
+    allocations: String,
     #[tabled(rename = "Progress")]
     progress: String,
     #[tabled(rename = "Status")]
@@ -1067,10 +1069,24 @@ fn handle_list_actions(
                             _ => "(all jobs)".to_string(),
                         };
 
+                        // For schedule_nodes actions, surface num_allocations (how many Slurm
+                        // allocations this action submits when it fires); blank for other types.
+                        let allocations = if action.action_type == "schedule_nodes" {
+                            action
+                                .action_config
+                                .get("num_allocations")
+                                .and_then(|v| v.as_i64())
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "?".to_string())
+                        } else {
+                            "-".to_string()
+                        };
+
                         WorkflowActionTableRow {
                             id: action.id.unwrap_or(-1),
                             trigger_type: action.trigger_type.clone(),
                             action_type: action.action_type.clone(),
+                            allocations,
                             progress,
                             status,
                             executed_at: action.executed_at.as_deref().unwrap_or("-").to_string(),

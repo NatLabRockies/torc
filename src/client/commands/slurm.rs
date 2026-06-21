@@ -1705,6 +1705,10 @@ pub fn handle_pending_schedule_actions(
              you requested.",
             count, total, requested_allocations
         );
+        eprintln!(
+            "  See them with: torc workflows list-actions {}",
+            workflow_id
+        );
     };
 
     let do_suppress = if suppress_actions {
