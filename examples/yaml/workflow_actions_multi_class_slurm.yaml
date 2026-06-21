@@ -1,0 +1,127 @@
+name: "Multi-Class Slurm Workflow"
+description: >
+  Three classes of jobs that each need a different Slurm partition, plus a single
+  postprocess job that depends on all of them. Each class is scheduled by its own
+  on_jobs_ready schedule_nodes action.
+
+  Why on_jobs_ready (not on_workflow_start): tying each allocation to the jobs it
+  runs makes selective re-runs work. If a later problem means only some classes
+  must re-run, reset just those jobs and reinitialize, then submit again:
+
+      torc jobs reset-status <gpu/bigmem job ids> --reinit
+      torc submit <workflow_id>
+
+  reinitialize re-arms only the actions whose jobs were reset, so `torc submit`
+  re-schedules exactly those classes. Untouched classes stay suppressed (no
+  duplicate allocations), and the postprocess action fires later, from a running
+  worker, once its dependencies complete. (For an unattended multi-stage re-run,
+  follow `submit` with `torc watch`.)
+
+# 10 jobs per class via parameter expansion (regular_01..10, bigmem_01..10, gpu_01..10).
+jobs:
+  # Regular CPU jobs: two per compute node (each requests half the node's CPUs).
+  - name: "regular_{i:02d}"
+    command: "echo 'regular work {i}' && sleep 5"
+    resource_requirements: "regular"
+    parameters:
+      i: "1:10"
+
+  # Big-memory jobs: one per node on a high-memory partition.
+  - name: "bigmem_{i:02d}"
+    command: "echo 'big-memory work {i}' && sleep 5"
+    resource_requirements: "bigmem"
+    parameters:
+      i: "1:10"
+
+  # GPU jobs: one per node on a GPU partition.
+  - name: "gpu_{i:02d}"
+    command: "echo 'gpu work {i}' && sleep 5"
+    resource_requirements: "gpu"
+    parameters:
+      i: "1:10"
+
+  # Aggregates results from every class once all of them complete.
+  - name: "postprocess"
+    command: "echo 'aggregate results' && sleep 2"
+    resource_requirements: "regular"
+    depends_on_regexes:
+      - "regular_.*"
+      - "bigmem_.*"
+      - "gpu_.*"
+
+resource_requirements:
+  # Half a 36-CPU node, so two regular jobs pack onto one node.
+  - name: "regular"
+    num_cpus: 18
+    num_gpus: 0
+    num_nodes: 1
+    memory: "32g"
+    runtime: "PT30M"
+
+  - name: "bigmem"
+    num_cpus: 36
+    num_gpus: 0
+    num_nodes: 1
+    memory: "360g"
+    runtime: "PT1H"
+
+  - name: "gpu"
+    num_cpus: 16
+    num_gpus: 2
+    num_nodes: 1
+    memory: "64g"
+    runtime: "PT1H"
+
+slurm_schedulers:
+  - name: "regular_scheduler"
+    account: "demo_project"
+    nodes: 1
+    walltime: "00:30:00"
+
+  - name: "bigmem_scheduler"
+    account: "demo_project"
+    nodes: 1
+    walltime: "01:00:00"
+
+  - name: "gpu_scheduler"
+    account: "demo_project"
+    nodes: 1
+    walltime: "01:00:00"
+
+  - name: "postprocess_scheduler"
+    account: "demo_project"
+    nodes: 1
+    walltime: "00:30:00"
+
+actions:
+  # One allocation per pair of regular jobs (10 jobs, 2 per node => 5 allocations).
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    job_name_regexes: ["regular_.*"]
+    scheduler: "regular_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 5
+
+  # One allocation per big-memory job.
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    job_name_regexes: ["bigmem_.*"]
+    scheduler: "bigmem_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 10
+
+  # One allocation per GPU job.
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    job_name_regexes: ["gpu_.*"]
+    scheduler: "gpu_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 10
+
+  # Single allocation for postprocess once all classes complete.
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    jobs: ["postprocess"]
+    scheduler: "postprocess_scheduler"
+    scheduler_type: "slurm"
+    num_allocations: 1

@@ -104,19 +104,27 @@ Each job gets its own Slurm scheduler configuration based on its resource requir
 
 ### 2. Staged Resource Allocation
 
-Torc analyzes job dependencies and creates **staged workflow actions**:
+Torc analyzes job dependencies and creates **staged workflow actions**. Every scheduler is tied to
+the jobs it runs via an `on_jobs_ready` action:
 
-- **Jobs without dependencies** trigger `on_workflow_start` — resources are allocated immediately
-- **Jobs with dependencies** trigger `on_jobs_ready` — resources are allocated only when the job
-  becomes ready to run
+- **Jobs without dependencies** — `on_jobs_ready` gated on those (root) jobs. They are ready as soon
+  as the workflow is initialized, so their resources are allocated immediately, just as the workflow
+  starts.
+- **Jobs with dependencies** — `on_jobs_ready` gated on those jobs, so resources are allocated only
+  when the jobs become ready to run.
 
 This prevents wasting allocation time on resources that aren't needed yet. For example, in the
 workflow above:
 
-- `preprocess` resources are allocated at workflow start
+- `preprocess` resources are allocated at workflow start (it is a root job)
 - `train_model` resources are allocated when `preprocess` completes
 - `evaluate` resources are allocated when `train_model` completes
 - `generate_report` resources are allocated when `evaluate` completes
+
+Tying every scheduler to its jobs (rather than scheduling root jobs with `on_workflow_start`) also
+makes re-runs work: if you reset a subset of jobs and reinitialize, only those jobs' actions are
+re-armed, so a follow-up `torc submit` re-schedules exactly the jobs being re-run. See
+[Re-running part of a workflow](#re-running-part-of-a-workflow) below.
 
 ### 3. Walltime Calculation
 
@@ -370,8 +378,9 @@ slurm_schedulers:
   # ... more schedulers ...
 
 actions:
-  - trigger_type: on_workflow_start
+  - trigger_type: on_jobs_ready
     action_type: schedule_nodes
+    jobs: [preprocess]
     scheduler: preprocess_scheduler
     scheduler_type: slurm
     num_allocations: 1
@@ -386,11 +395,51 @@ actions:
   # ... more actions ...
 ```
 
+Every scheduler is gated on the jobs it runs with `on_jobs_ready` — including root jobs like
+`preprocess`, which are ready at workflow start. This is what makes a re-run reschedule only the
+affected jobs.
+
 Save the output to inspect or modify before submission:
 
 ```bash
 torc slurm generate --account myproject workflow.yaml -o workflow_with_schedulers.yaml
 ```
+
+## Re-running part of a workflow
+
+Because every scheduler is tied to its jobs with `on_jobs_ready`, you can re-run a subset of a
+finished (or partially failed) workflow and have only the affected allocations re-submitted:
+
+```bash
+# Reset the jobs you want to re-run (downstream jobs reset automatically), then reinitialize:
+torc jobs reset-status <id1> <id2> ... --reinit
+
+# Re-submit: only the reset jobs' allocations are scheduled.
+torc submit <workflow_id>
+```
+
+How it works: `reinitialize` re-arms only the actions whose jobs were reset; actions for untouched
+jobs stay suppressed (so they are not re-scheduled and do not submit duplicate allocations).
+`torc submit` then fires every pending `schedule_nodes` action — which is exactly the reset jobs'
+actions. Downstream actions whose jobs aren't ready yet are fired later by a running worker, as
+their dependencies complete.
+
+For example, with separate job classes each on their own partition (see
+[`examples/yaml/workflow_actions_multi_class_slurm.yaml`](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_multi_class_slurm.yaml)),
+resetting only the GPU and big-memory jobs re-schedules only the GPU and big-memory allocations; the
+regular-job allocations are left alone.
+
+> **Note:** `torc submit` is one-shot — it submits the currently-pending allocations and returns.
+> For an unattended multi-stage re-run, follow it with `torc watch` so that if every worker exits
+> (e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up. For a
+> guided re-run that also sizes allocations from prior runs, use
+> [`torc recover`](../fault-tolerance/automatic-recovery.md).
+
+> **Tip:** This is why auto-generated and recommended specs use `on_jobs_ready` (tied to jobs)
+> rather than `on_workflow_start` for `schedule_nodes`. An `on_workflow_start` action is kept (not
+> re-armed) on reinitialize and `torc submit` cannot re-fire it, so a reset root job would have no
+> allocation. `on_workflow_start` `schedule_nodes` is still fine for a single allocation that serves
+> the whole workflow, but such an allocation isn't selectively re-run-safe.
 
 ## Torc Server Considerations
 
