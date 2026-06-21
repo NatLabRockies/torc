@@ -3049,6 +3049,51 @@ fn test_validate_spec_complete_workflow() {
     );
 }
 
+/// A spec whose only schedule_nodes action is `on_jobs_ready` (no on_workflow_start) is still
+/// submittable: `torc submit` fires every pending Slurm schedule_nodes action regardless of trigger,
+/// so `has_schedule_nodes_action` must report true.
+#[test]
+fn test_validate_spec_on_jobs_ready_schedule_action_is_submittable() {
+    let workflow_data = serde_json::json!({
+        "name": "on_jobs_ready_only",
+        "jobs": [
+            {"name": "root1", "command": "echo root", "resource_requirements": "small"}
+        ],
+        "resource_requirements": [
+            {"name": "small", "num_cpus": 1, "num_nodes": 1, "memory": "1g"}
+        ],
+        "slurm_schedulers": [
+            {"name": "sched", "account": "test", "nodes": 1, "walltime": "01:00:00"}
+        ],
+        "actions": [
+            {
+                "trigger_type": "on_jobs_ready",
+                "action_type": "schedule_nodes",
+                "jobs": ["root1"],
+                "scheduler": "sched",
+                "scheduler_type": "slurm"
+            }
+        ]
+    });
+
+    let temp_file = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        serde_json::to_string_pretty(&workflow_data).unwrap(),
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+    assert!(result.valid, "Expected validation to pass");
+    assert!(
+        result.summary.has_schedule_nodes_action,
+        "on_jobs_ready schedule_nodes action must count as submittable"
+    );
+}
+
 /// Test that validate_spec detects duplicate job names
 #[test]
 fn test_validate_spec_duplicate_job_names() {
@@ -4021,11 +4066,9 @@ fn test_subgraph_workflow_generated_actions_have_correct_triggers() {
         .filter_map(|a| a.scheduler.clone().map(|s| (s, a.trigger_type.clone())))
         .collect();
 
-    // Verify each job has the correct trigger type based on dependencies
-    // prep_a, prep_b: no dependencies -> on_workflow_start
-    // work_*: depend on prep_* outputs -> on_jobs_ready
-    // post_*: depend on work_* outputs -> on_jobs_ready
-    // final: depends on post_* outputs -> on_jobs_ready
+    // Every generated scheduler is tied to its jobs via on_jobs_ready, including no-dependency root
+    // jobs (prep_a, prep_b) -- they are Ready at init, so on_jobs_ready fires at start, and the
+    // action is re-run-safe (resetting the jobs re-arms it).
     for job in &spec.jobs {
         let sched = job
             .scheduler
@@ -4035,16 +4078,10 @@ fn test_subgraph_workflow_generated_actions_have_correct_triggers() {
             .get(sched)
             .unwrap_or_else(|| panic!("Scheduler {} should have action", sched));
 
-        let expected_trigger = if job.name == "prep_a" || job.name == "prep_b" {
-            "on_workflow_start"
-        } else {
-            "on_jobs_ready"
-        };
-
         assert_eq!(
-            trigger, expected_trigger,
-            "job name='{}' scheduler='{}' should have trigger='{}', got trigger='{}'",
-            job.name, sched, expected_trigger, trigger
+            trigger, "on_jobs_ready",
+            "job name='{}' scheduler='{}' should have trigger='on_jobs_ready', got trigger='{}'",
+            job.name, sched, trigger
         );
     }
 

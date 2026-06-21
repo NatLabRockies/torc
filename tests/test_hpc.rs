@@ -385,12 +385,13 @@ fn test_generate_schedulers_basic() {
     let actions = spec.actions.as_ref().unwrap();
     assert_eq!(actions.len(), 2);
 
-    // Jobs without dependencies use on_workflow_start
+    // Every scheduler is tied to its jobs via on_jobs_ready (root jobs are Ready at init), so
+    // generated workflows are re-run-safe.
     let small_action = actions
         .iter()
         .find(|a| a.scheduler.as_deref() == Some("small_scheduler"))
         .unwrap();
-    assert_eq!(small_action.trigger_type, "on_workflow_start");
+    assert_eq!(small_action.trigger_type, "on_jobs_ready");
     assert_eq!(small_action.action_type, "schedule_nodes");
 
     // Jobs with dependencies use on_jobs_ready
@@ -1199,12 +1200,12 @@ fn test_generate_schedulers_per_resource_requirement() {
         Some("small_deferred_scheduler")
     ); // finalize (has deps)
 
-    // Jobs without dependencies use on_workflow_start
+    // Every scheduler is tied to its jobs via on_jobs_ready (root jobs are Ready at init).
     let small_action = actions
         .iter()
         .find(|a| a.scheduler.as_deref() == Some("small_scheduler"))
         .unwrap();
-    assert_eq!(small_action.trigger_type, "on_workflow_start");
+    assert_eq!(small_action.trigger_type, "on_jobs_ready");
 
     // Jobs with dependencies use on_jobs_ready
     let medium_action = actions
@@ -1424,7 +1425,7 @@ fn test_generate_schedulers_stage_aware_for_dependent_jobs() {
         .iter()
         .find(|a| a.scheduler.as_deref() == Some("small_scheduler"))
         .unwrap();
-    assert_eq!(job1_action.trigger_type, "on_workflow_start");
+    assert_eq!(job1_action.trigger_type, "on_jobs_ready");
 
     let job2_action = actions
         .iter()

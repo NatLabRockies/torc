@@ -828,7 +828,8 @@ fn main() {
                     eprintln!("Error: Cannot submit workflow");
                     eprintln!();
                     eprintln!(
-                        "The spec does not define an on_workflow_start action with schedule_nodes."
+                        "The spec does not define a schedule_nodes action (on_workflow_start, \
+                         on_jobs_ready, or on_jobs_complete)."
                     );
                     eprintln!("To submit to Slurm, either:");
                     eprintln!();
@@ -894,20 +895,26 @@ fn main() {
                 }
             };
 
-            // Check if workflow has schedule_nodes actions (for existing workflows)
+            // Check if workflow has schedule_nodes actions (for existing workflows). submit fires
+            // every pending Slurm schedule_nodes action regardless of trigger type, so any of
+            // on_workflow_start / on_jobs_ready / on_jobs_complete makes the workflow submittable.
             if !is_spec_file(workflow_spec_or_id) {
                 match apis::workflow_actions_api::get_workflow_actions(&config, workflow_id) {
                     Ok(actions) => {
                         let has_schedule_nodes = actions.iter().any(|action| {
-                            action.trigger_type == "on_workflow_start"
-                                && action.action_type == "schedule_nodes"
+                            action.action_type == "schedule_nodes"
+                                && matches!(
+                                    action.trigger_type.as_str(),
+                                    "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+                                )
                         });
 
                         if !has_schedule_nodes {
                             eprintln!("Error: Cannot submit workflow {}", workflow_id);
                             eprintln!();
                             eprintln!(
-                                "The workflow does not define an on_workflow_start action with schedule_nodes."
+                                "The workflow has no schedule_nodes action (on_workflow_start, \
+                                 on_jobs_ready, or on_jobs_complete)."
                             );
                             eprintln!(
                                 "To submit to a scheduler, the workflow must have an action configured."

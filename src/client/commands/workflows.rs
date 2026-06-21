@@ -2879,12 +2879,10 @@ pub fn handle_create(
 
             if summary.has_schedule_nodes_action {
                 println!(
-                    "Submission: Ready for scheduler submission (has on_workflow_start schedule_nodes action)"
+                    "Submission: Ready for scheduler submission (has a schedule_nodes action)"
                 );
             } else {
-                println!(
-                    "Submission: Local execution only (no on_workflow_start schedule_nodes action)"
-                );
+                println!("Submission: Local execution only (no schedule_nodes action)");
             }
             println!();
 
