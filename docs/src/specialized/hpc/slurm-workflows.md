@@ -457,6 +457,43 @@ regular-job allocations are left alone.
 > allocation. `on_workflow_start` `schedule_nodes` is still fine for a single allocation that serves
 > the whole workflow, but such an allocation isn't selectively re-run-safe.
 
+### Manually scheduling a re-run with `torc slurm schedule-nodes`
+
+If you want to provide the compute yourself instead of letting `submit` fire the actions — for
+example "run my 10 reset jobs on 1 node" — use `torc slurm schedule-nodes`:
+
+```bash
+torc jobs reset-status <id1> ... <id10> --reinit
+torc slurm schedule-nodes -n1 <workflow_id>
+```
+
+A worker started this way still claims the workflow's own **pending** `schedule_nodes` actions and
+submits their allocations. So if the reinit left a coarse action re-armed (e.g. an `on_jobs_ready`
+action gating the whole stage), that worker would fire its full `num_allocations` on top of the one
+you requested. To prevent surprises, `schedule-nodes` checks for pending `schedule_nodes` actions
+and **prompts** you to suppress them, proceed (let them fire), or cancel. For non-interactive use:
+
+- `--suppress-actions` — mark the pending actions executed first, so only your `-n` request is
+  submitted.
+- `--no-prompts` — skip the prompt and proceed (let the actions fire); the historical behavior.
+
+(`torc recover` does the suppression automatically and additionally right-sizes the allocation to
+the pending jobs, so it is usually the better tool for a partial re-run.)
+
+### Choosing a stage's scheduler trigger: upstream vs. the stage's own jobs
+
+For `schedule_nodes`, **what you gate the action on** determines how subset re-runs behave:
+
+- **Gate on the stage's own jobs** (`on_jobs_ready[<this stage's jobs>]`) — resetting any of them
+  re-arms the action, so `submit` re-schedules them automatically. Best for **per-class /
+  per-stage** actions where auto re-run at the action's `num_allocations` is what you want.
+- **Gate on the upstream job** whose completion unlocks the stage (`on_jobs_complete[<upstream>]`) —
+  resetting the stage's own jobs leaves the upstream terminal, so the action stays **suppressed**
+  and does not re-fire. Best for a **large fan-in stage** you expect to re-run in subsets: the
+  coarse action won't over-allocate, and you provide the compute with `torc slurm schedule-nodes` or
+  `torc recover`. The trade-off is that reinit won't auto-reschedule the reset jobs — which for a
+  coarse stage is what you want anyway.
+
 ## Torc Server Considerations
 
 The Torc server must be accessible to compute nodes. Options include:

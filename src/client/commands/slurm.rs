@@ -439,6 +439,20 @@ EXAMPLES:
         /// Scheduler config ID (ignored if --auto is set)
         #[arg(long)]
         scheduler_config_id: Option<i64>,
+        /// Mark the workflow's already-pending `schedule_nodes` actions executed before submitting,
+        /// so the worker(s) started here do not also fire them and submit their own allocations.
+        ///
+        /// Use this when manually scheduling a re-run (e.g. after `jobs reset-status --reinit`):
+        /// without it, a pending action re-armed by the reinit is claimed by the new worker and
+        /// submits its full `num_allocations` on top of what you requested. `torc recover` does this
+        /// suppression automatically (and right-sizes the allocation). Implies a non-interactive
+        /// "suppress" answer, so no prompt is shown.
+        #[arg(long, default_value = "false")]
+        suppress_actions: bool,
+        /// Do not prompt about pending `schedule_nodes` actions; proceed and let the worker(s) fire
+        /// them (unless `--suppress-actions` is also given). Use for non-interactive/scripted runs.
+        #[arg(long, default_value = "false")]
+        no_prompts: bool,
     },
     /// Parse Slurm log files for known error messages
     #[command(
@@ -1318,6 +1332,8 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             poll_interval,
             claim_backoff_max_secs,
             scheduler_config_id,
+            suppress_actions,
+            no_prompts,
         } => {
             let user_name = get_env_user_name();
             let wf_id = workflow_id.unwrap_or_else(|| {
@@ -1388,6 +1404,23 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     std::process::exit(1);
                 })
             });
+
+            // A worker started here claims the workflow's own pending schedule_nodes actions and
+            // submits their allocations. After `jobs reset-status --reinit`, a re-armed action can be
+            // pending again, so it would fire its full num_allocations on top of what is requested
+            // here. Detect that and let the user decide: suppress those actions, proceed anyway, or
+            // cancel. `--suppress-actions` answers "suppress"; `--no-prompts` (or a non-interactive
+            // stdin) answers "proceed" unless `--suppress-actions` is set.
+            if let Err(e) = handle_pending_schedule_actions(
+                config,
+                wf_id,
+                *num_hpc_jobs,
+                *suppress_actions,
+                *no_prompts,
+            ) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
 
             // Use poll_interval from CLI arg, or fall back to config file value
             let torc_config = TorcConfig::load().unwrap_or_default();
@@ -1619,6 +1652,100 @@ where
     E: std::fmt::Display,
 {
     result.map_err(|err| Box::new(RetryApiError(err.to_string())) as Box<dyn std::error::Error>)
+}
+
+/// Handle the workflow's own pending `schedule_nodes` actions before a manual `schedule-nodes`
+/// submission.
+///
+/// A worker started by `schedule-nodes` claims pending `on_jobs_ready`/`on_jobs_complete`
+/// `schedule_nodes` actions and submits their allocations. After `jobs reset-status --reinit` a
+/// re-armed action can be pending again, so it would fire its full `num_allocations` on top of what
+/// the user asked for here. This surfaces that:
+///
+/// - `suppress_actions` → mark those actions executed (so they don't fire), no prompt.
+/// - non-interactive (`no_prompts`, or stdin is not a TTY) → warn and proceed (let them fire), the
+///   historical behavior; pass `--suppress-actions` to prevent it.
+/// - interactive → prompt the user to suppress / proceed / cancel.
+///
+/// Returns `Err` if the pending-actions check or the suppression fails; cancellation exits the
+/// process.
+pub fn handle_pending_schedule_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    requested_allocations: i32,
+    suppress_actions: bool,
+    no_prompts: bool,
+) -> Result<(), String> {
+    use std::io::{IsTerminal, Write};
+
+    let pending = apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+        .map_err(|e| format!("could not check for pending schedule_nodes actions: {}", e))?;
+    let firable: Vec<_> = pending
+        .into_iter()
+        .filter(|a| a.action_type == "schedule_nodes" && !a.is_recovery)
+        .collect();
+    if firable.is_empty() {
+        return Ok(());
+    }
+    let count = firable.len();
+    let total: i64 = firable
+        .iter()
+        .map(|a| {
+            a.action_config
+                .get("num_allocations")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+        })
+        .sum();
+
+    let warn = || {
+        eprintln!(
+            "Warning: {} pending schedule_nodes action(s) (~{} allocation(s) total) will be claimed \
+             by the worker(s) this command starts and submit their own allocations, on top of the {} \
+             you requested.",
+            count, total, requested_allocations
+        );
+    };
+
+    let do_suppress = if suppress_actions {
+        true
+    } else if no_prompts || !std::io::stdin().is_terminal() {
+        // Non-interactive: warn and proceed (let the actions fire) — the historical behavior.
+        warn();
+        eprintln!("  Proceeding without suppressing; pass --suppress-actions to prevent this.");
+        false
+    } else {
+        // Interactive: let the user choose.
+        warn();
+        eprint!(
+            "Suppress these actions ([s]), proceed and let them fire ([p]), or cancel ([c])? [s/p/c]: "
+        );
+        let _ = std::io::stderr().flush();
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("failed to read input: {}", e))?;
+        match input.trim().to_lowercase().as_str() {
+            "s" | "suppress" => true,
+            "p" | "proceed" => false,
+            _ => {
+                eprintln!("Cancelled.");
+                std::process::exit(0);
+            }
+        }
+    };
+
+    if do_suppress {
+        crate::client::commands::recover::mark_satisfied_schedule_actions_executed(
+            config,
+            workflow_id,
+        )?;
+        eprintln!(
+            "Suppressed {} pending schedule_nodes action(s) so the worker(s) started here will not re-fire them.",
+            count
+        );
+    }
+    Ok(())
 }
 
 /// Result indicating success or failure
