@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// When using `--group-by partition`, if a partition has both deferred (jobs with dependencies)
 /// and non-deferred (jobs without dependencies) groups, and their combined allocation count
-/// is at or below this threshold, they are merged into a single scheduler with an
-/// `on_workflow_start` trigger. This reduces the number of Slurm job submissions.
+/// is at or below this threshold, they are merged into a single scheduler whose `on_jobs_ready`
+/// action is gated on the merged job set. This reduces the number of Slurm job submissions.
 ///
 /// When both groups exist, each needs at least 1 allocation, so the minimum total is 2.
 /// A threshold of 2 means we merge when exactly 2 allocations are needed (the minimum case).
@@ -523,21 +523,19 @@ fn process_scheduler_group<RR: ResourceRequirements>(
 
     // Create action if requested
     let action = if add_actions {
-        // For jobs with dependencies, we need to specify which jobs trigger the action.
-        // Use job_names (exact names) instead of job_name_patterns (regexes) because
-        // after parameter expansion, each job has an exact name and using regexes
-        // with individual exact-match patterns is wasteful and confusing.
-        let (trigger_type, job_names, job_name_patterns) = if group.has_dependencies {
-            ("on_jobs_ready", Some(group.job_names.clone()), None)
-        } else {
-            ("on_workflow_start", None, None)
-        };
-
+        // Tie every generated scheduler to its jobs via on_jobs_ready, including no-dependency
+        // (root) jobs. Root jobs are Ready right after initialize, so on_jobs_ready[root_jobs]
+        // fires at the same moment on_workflow_start would, but it is re-run-safe: resetting those
+        // jobs and reinitializing re-arms the action (the gate is no longer terminal), so a
+        // subsequent `torc submit` re-schedules exactly them. on_workflow_start is kept (suppressed)
+        // on reinit and submit cannot re-fire it, which strands the job. We use job_names (exact
+        // names) rather than job_name_patterns (regexes) because after parameter expansion each job
+        // has an exact name.
         Some(PlannedAction {
-            trigger_type: trigger_type.to_string(),
+            trigger_type: "on_jobs_ready".to_string(),
             scheduler_name: scheduler_name.clone(),
-            job_names,
-            job_name_patterns,
+            job_names: Some(group.job_names.clone()),
+            job_name_patterns: None,
             num_allocations,
             is_recovery,
         })
@@ -769,7 +767,7 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
         // Merge if total allocations are small enough that a single scheduler makes sense.
         // Note: When both groups exist, each needs at least 1 allocation, so total >= 2.
         if total_allocs <= MERGE_THRESHOLD {
-            // Merge deferred into non-deferred (so we use on_workflow_start)
+            // Merge deferred into non-deferred (a single on_jobs_ready action gated on all of them)
             let deferred = partition_groups.remove(&deferred_key).unwrap();
             let non_deferred = partition_groups.get_mut(&non_deferred_key).unwrap();
 
@@ -930,19 +928,15 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
 
         plan.schedulers.push(scheduler);
 
-        // Create action if requested
+        // Create action if requested. Tie every scheduler to its jobs via on_jobs_ready, including
+        // no-dependency (root) jobs (Ready at init), so generated workflows are re-run-safe -- see
+        // the matching note in plan_scheduler_action().
         if add_actions {
-            let (trigger_type, job_names, job_name_patterns) = if pg.has_dependencies {
-                ("on_jobs_ready", Some(pg.job_names.clone()), None)
-            } else {
-                ("on_workflow_start", None, None)
-            };
-
             plan.actions.push(PlannedAction {
-                trigger_type: trigger_type.to_string(),
+                trigger_type: "on_jobs_ready".to_string(),
                 scheduler_name,
-                job_names,
-                job_name_patterns,
+                job_names: Some(pg.job_names.clone()),
+                job_name_patterns: None,
                 num_allocations,
                 is_recovery,
             });

@@ -177,7 +177,8 @@ pub struct ValidationSummary {
     pub slurm_scheduler_count: usize,
     /// Number of workflow actions that would be created
     pub action_count: usize,
-    /// Whether the workflow has on_workflow_start schedule_nodes action
+    /// Whether the workflow has a schedule_nodes action that `torc submit` can fire
+    /// (on_workflow_start, on_jobs_ready, or on_jobs_complete)
     pub has_schedule_nodes_action: bool,
     /// List of job names that would be created
     pub job_names: Vec<String>,
@@ -2510,12 +2511,19 @@ impl WorkflowSpec {
         }
     }
 
-    /// Check if the workflow spec has an on_workflow_start action with schedule_nodes
-    /// Returns true if such an action exists, false otherwise
+    /// Check if the workflow spec has a `schedule_nodes` action that `torc submit` can act on.
+    ///
+    /// `submit` fires every pending Slurm `schedule_nodes` action regardless of trigger type
+    /// (on_workflow_start to bootstrap, on_jobs_ready/on_jobs_complete for job-gated scheduling and
+    /// re-runs), so any of those qualifies a spec as submittable. Returns false otherwise.
     pub fn has_schedule_nodes_action(&self) -> bool {
         if let Some(ref actions) = self.actions {
             actions.iter().any(|action| {
-                action.trigger_type == "on_workflow_start" && action.action_type == "schedule_nodes"
+                action.action_type == "schedule_nodes"
+                    && matches!(
+                        action.trigger_type.as_str(),
+                        "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+                    )
             })
         } else {
             false

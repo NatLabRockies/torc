@@ -89,13 +89,21 @@ impl ExecutionPlan {
         // Event 0: Workflow start - root jobs become ready
         let root_jobs: Vec<String> = graph.roots().iter().map(|s| s.to_string()).collect();
 
-        // Find on_workflow_start scheduler allocations
+        // Find scheduler allocations that fire at workflow start: on_workflow_start actions, plus
+        // on_jobs_ready actions gated on root jobs (root jobs are Ready immediately after init, so
+        // their schedulers are submitted at submit time). The scheduler generator now ties root-job
+        // schedulers to on_jobs_ready[root_jobs] for re-run safety, so both must appear here.
         let mut start_allocations = Vec::new();
         if let Some(ref actions) = spec.actions {
             for action in actions {
                 if action.trigger_type == "on_workflow_start"
                     && let Some(alloc) = build_scheduler_allocation(spec, action)?
                 {
+                    start_allocations.push(alloc);
+                }
+            }
+            for action in graph.matching_actions(&root_jobs, actions) {
+                if let Some(alloc) = build_scheduler_allocation(spec, action)? {
                     start_allocations.push(alloc);
                 }
             }
@@ -277,7 +285,9 @@ impl ExecutionPlan {
             })
             .collect();
 
-        // Find on_workflow_start scheduler allocations
+        // Find scheduler allocations that fire at workflow start: on_workflow_start actions, plus
+        // on_jobs_ready actions gated on root jobs (Ready at init). The scheduler generator now ties
+        // root-job schedulers to on_jobs_ready[root_jobs] for re-run safety, so both appear here.
         let mut start_allocations = Vec::new();
         for action in actions {
             if action.trigger_type == "on_workflow_start"
@@ -285,6 +295,25 @@ impl ExecutionPlan {
                     build_scheduler_allocation_from_db_action(action, jobs, &scheduler_id_to_name)?
             {
                 start_allocations.push(alloc);
+            }
+        }
+        let root_job_ids: HashSet<i64> = root_jobs
+            .iter()
+            .filter_map(|n| job_name_to_id.get(n).copied())
+            .collect();
+        for action in actions {
+            if action.trigger_type == "on_jobs_ready" {
+                let empty_vec = vec![];
+                let action_job_ids = action.job_ids.as_ref().unwrap_or(&empty_vec);
+                if action_job_ids.iter().any(|id| root_job_ids.contains(id))
+                    && let Some(alloc) = build_scheduler_allocation_from_db_action(
+                        action,
+                        jobs,
+                        &scheduler_id_to_name,
+                    )?
+                {
+                    start_allocations.push(alloc);
+                }
             }
         }
 

@@ -3285,3 +3285,178 @@ fn test_reinit_workflow_complete_rearmed_matrix(
     );
     wait_for_specific_action_pending(config, workflow_id, action_id);
 }
+
+// ===========================================================================
+// `torc submit` supports on_jobs_ready scheduling: after a subset re-run, the set of pending
+// schedule_nodes actions that submit fires (across on_workflow_start / on_jobs_ready /
+// on_jobs_complete) must be exactly the reset classes. This is the selection that lets
+// `reset-status <ids> --reinit` + `submit` re-schedule only the jobs being re-run.
+// ===========================================================================
+
+/// True if `action_id` is in the set of pending schedule_nodes actions that `WorkflowManager::start`
+/// (i.e. `torc submit`) would fire: pending actions across the three schedule-capable trigger types.
+fn action_in_submit_pending_set(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+) -> bool {
+    apis::workflow_actions_api::get_pending_actions(
+        config,
+        workflow_id,
+        Some(vec![
+            "on_workflow_start".to_string(),
+            "on_jobs_ready".to_string(),
+            "on_jobs_complete".to_string(),
+        ]),
+    )
+    .expect("get_pending_actions")
+    .iter()
+    .any(|a| a.id == Some(action_id))
+}
+
+/// The reported scenario: per-class `on_jobs_ready` schedule_nodes actions (regular / bigmem / gpu),
+/// plus a postprocess job depending on all three with its own action. Run once, then reset only the
+/// gpu + bigmem jobs and reinitialize. The submit pending-set must then be EXACTLY {gpu, bigmem}:
+/// regular stays suppressed (its jobs are still terminal), and postprocess is not pending (its job is
+/// Blocked). So `torc submit` re-schedules only the gpu + bigmem allocations.
+#[rstest]
+fn test_submit_pending_set_after_subset_reinit_is_only_reset_classes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "submit_on_jobs_ready_subset");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Three root job classes + a postprocess job gated on all of them.
+    let regular = create_test_job(config, workflow_id, "regular1")
+        .expect("create regular")
+        .id
+        .unwrap();
+    let bigmem = create_test_job(config, workflow_id, "bigmem1")
+        .expect("create bigmem")
+        .id
+        .unwrap();
+    let gpu = create_test_job(config, workflow_id, "gpu1")
+        .expect("create gpu")
+        .id
+        .unwrap();
+    let mut post = JobModel::new(
+        workflow_id,
+        "postprocess".to_string(),
+        "echo post".to_string(),
+    );
+    post.depends_on_job_ids = Some(vec![regular, bigmem, gpu]);
+    post.cancel_on_blocking_job_failure = Some(false);
+    let post_id = apis::jobs_api::create_job(config, post)
+        .expect("create postprocess")
+        .id
+        .unwrap();
+
+    // One on_jobs_ready schedule_nodes action per class + one for postprocess.
+    let mk_action = |trigger_jobs: Vec<i64>| {
+        apis::workflow_actions_api::create_workflow_action(
+            config,
+            workflow_id,
+            workflow_action(
+                workflow_id,
+                "on_jobs_ready",
+                "schedule_nodes",
+                schedule_nodes_config(),
+                Some(trigger_jobs),
+            ),
+        )
+        .expect("create action")
+        .id
+        .unwrap()
+    };
+    let reg_action = mk_action(vec![regular]);
+    let big_action = mk_action(vec![bigmem]);
+    let gpu_action = mk_action(vec![gpu]);
+    let post_action = mk_action(vec![post_id]);
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run 1: the three roots are Ready at init, so their actions are pending. Claim each (fired),
+    // then complete the jobs so postprocess becomes ready; claim its action and run postprocess.
+    for (job, action) in [
+        (regular, reg_action),
+        (bigmem, big_action),
+        (gpu, gpu_action),
+    ] {
+        wait_for_specific_action_pending(config, workflow_id, action);
+        apis::workflow_actions_api::claim_action(
+            config,
+            workflow_id,
+            action,
+            ClaimActionRequest {
+                compute_node_id: Some(compute_node_id),
+            },
+        )
+        .expect("claim class action");
+        run_job_to_status(
+            config,
+            workflow_id,
+            job,
+            run_id,
+            compute_node_id,
+            0,
+            JobStatus::Completed,
+        );
+    }
+    wait_for_job_status(config, post_id, JobStatus::Ready);
+    wait_for_specific_action_pending(config, workflow_id, post_action);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        post_action,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim postprocess action");
+    run_job_to_status(
+        config,
+        workflow_id,
+        post_id,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Failed,
+    );
+
+    // Subset re-run: reset only gpu + bigmem (postprocess cascade-resets since it depends on them),
+    // then reinitialize. regular is left untouched.
+    apis::jobs_api::manage_status_change(config, gpu, JobStatus::Uninitialized, run_id)
+        .expect("reset gpu");
+    apis::jobs_api::manage_status_change(config, bigmem, JobStatus::Uninitialized, run_id)
+        .expect("reset bigmem");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    // The submit pending-set must be exactly {gpu, bigmem}.
+    assert!(
+        action_in_submit_pending_set(config, workflow_id, gpu_action),
+        "gpu action must be pending (gpu was reset and is Ready) so submit re-schedules it"
+    );
+    assert!(
+        action_in_submit_pending_set(config, workflow_id, big_action),
+        "bigmem action must be pending (bigmem was reset and is Ready) so submit re-schedules it"
+    );
+    assert!(
+        !action_in_submit_pending_set(config, workflow_id, reg_action),
+        "regular action must NOT be pending (its jobs stayed terminal) so submit does not re-schedule it"
+    );
+    assert!(
+        !action_in_submit_pending_set(config, workflow_id, post_action),
+        "postprocess action must NOT be pending yet (postprocess is Blocked); a running worker fires it later"
+    );
+    // regular's action stays executed (kept), confirming it was suppressed rather than just unready.
+    assert!(
+        fetch_action(config, workflow_id, reg_action).executed,
+        "regular action should remain executed (kept) after the subset reinit"
+    );
+}

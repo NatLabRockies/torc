@@ -2391,7 +2391,8 @@ fn test_slurm_generate_auto_merge_small_allocations() {
         serde_json::to_string_pretty(&actions).unwrap()
     );
 
-    // Verify the action uses on_workflow_start (not on_jobs_ready)
+    // The merged scheduler covers root jobs, which are Ready at init; it is tied to those jobs via
+    // on_jobs_ready (re-run-safe) rather than on_workflow_start.
     let action = &actions[0];
     let trigger_type = action
         .get("trigger_type")
@@ -2399,8 +2400,8 @@ fn test_slurm_generate_auto_merge_small_allocations() {
         .expect("Expected trigger_type");
 
     assert_eq!(
-        trigger_type, "on_workflow_start",
-        "Merged scheduler should use on_workflow_start trigger (not on_jobs_ready)"
+        trigger_type, "on_jobs_ready",
+        "Merged root-job scheduler should use on_jobs_ready trigger"
     );
 
     // Verify all jobs are assigned to the same scheduler
@@ -2550,19 +2551,17 @@ fn test_slurm_generate_no_merge_large_allocations() {
         serde_json::to_string_pretty(&actions).unwrap()
     );
 
-    // Verify we have both on_workflow_start and on_jobs_ready triggers
+    // Both schedulers are tied to their jobs via on_jobs_ready (root jobs are Ready at init, deferred
+    // jobs when their dependencies complete), so generated workflows are re-run-safe.
     let trigger_types: Vec<&str> = actions
         .iter()
         .filter_map(|a| a.get("trigger_type").and_then(|t| t.as_str()))
         .collect();
 
     assert!(
-        trigger_types.contains(&"on_workflow_start"),
-        "Should have on_workflow_start action"
-    );
-    assert!(
-        trigger_types.contains(&"on_jobs_ready"),
-        "Should have on_jobs_ready action for deferred jobs"
+        trigger_types.iter().all(|t| *t == "on_jobs_ready"),
+        "All generated actions should use on_jobs_ready, got {:?}",
+        trigger_types
     );
 
     // Temp file is automatically cleaned up when workflow_file goes out of scope
