@@ -61,9 +61,13 @@ slurm_schedulers:
     walltime: "00:30:00"
 
 actions:
-  # Allocate resources for setup stage
-  - trigger_type: "on_workflow_start"
+  # Allocate resources for the setup stage. Tied to the setup job via on_jobs_ready (rather than
+  # on_workflow_start) so the allocation is re-run-safe: resetting setup and reinitializing re-arms
+  # this action, and the next `torc submit` re-schedules it. (setup is a root job, so on_jobs_ready
+  # fires at init, exactly like on_workflow_start would.)
+  - trigger_type: "on_jobs_ready"
     action_type: "schedule_nodes"
+    jobs: ["setup"]
     scheduler: "setup_scheduler"
     scheduler_type: "slurm"
     num_allocations: 1

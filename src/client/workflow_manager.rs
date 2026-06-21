@@ -239,13 +239,29 @@ impl WorkflowManager {
             }
         }
 
-        // Get pending on_workflow_start actions
-        // Note: We don't create a compute node for the submission host (login node)
-        // since it's not actually running jobs - it just submits to the scheduler
+        // Get every pending schedule_nodes-capable action, regardless of trigger type. "Pending"
+        // already means "armed and due now" (trigger_count >= required_triggers, executed = 0), and
+        // reinitialize's keep/re-arm logic guarantees that set is exactly what should be scheduled:
+        //
+        // - Initial run: only on_workflow_start (and any on_jobs_ready gated on root jobs that are
+        //   ready at init) are pending, so this bootstraps the first allocations.
+        // - Re-run (reset a subset of jobs + reinit): the reset jobs' job-gated actions re-arm and
+        //   become pending while untouched stages stay suppressed, so submit re-schedules exactly
+        //   the affected classes. This is what lets `reset-status <ids> --reinit` + `submit`
+        //   re-submit only the jobs being re-run.
+        //
+        // Note: We don't create a compute node for the submission host (login node) since it's not
+        // actually running jobs - it just submits to the scheduler. Downstream job-gated actions
+        // whose gates are not yet ready stay pending-less here and are fired later by running
+        // workers (see job_runner::check_and_execute_actions).
         let actions = match apis::workflow_actions_api::get_pending_actions(
             &self.config,
             self.workflow_id,
-            Some(vec!["on_workflow_start".to_string()]),
+            Some(vec![
+                "on_workflow_start".to_string(),
+                "on_jobs_ready".to_string(),
+                "on_jobs_complete".to_string(),
+            ]),
         ) {
             Ok(actions) => actions,
             Err(err) => {
@@ -292,8 +308,8 @@ impl WorkflowManager {
 
                     // Successfully claimed, now execute
                     info!(
-                        "Scheduling Slurm nodes for on_workflow_start action {}",
-                        action_id
+                        "Scheduling Slurm nodes for {} action {}",
+                        action.trigger_type, action_id
                     );
 
                     let scheduler_id = action_config
