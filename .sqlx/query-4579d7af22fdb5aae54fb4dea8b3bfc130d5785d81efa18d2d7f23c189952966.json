@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL WHERE id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "4579d7af22fdb5aae54fb4dea8b3bfc130d5785d81efa18d2d7f23c189952966"
+}
