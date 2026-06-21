@@ -553,6 +553,13 @@ struct PartitionGroup {
     job_count: usize,
     job_names: Vec<String>,
     job_name_patterns: Vec<String>,
+    /// Jobs to gate the generated `on_jobs_ready` action on, when that differs from `job_names`.
+    /// Set only when a deferred group is merged into a non-deferred one: the scheduler then serves
+    /// both root and dependent jobs (`job_names`), but the action must be gated on the *root* jobs
+    /// only so it fires at workflow start. Gating on the whole merged set would never become pending
+    /// (dependent jobs aren't Ready until the root jobs run, which need this allocation) — a deadlock.
+    /// `None` means gate on `job_names` (the group is uniform: all root, or all the same level).
+    gate_job_names: Option<Vec<String>>,
     /// All RR names in this group (for naming the scheduler)
     rr_names: Vec<String>,
     /// Maximum memory in MB across all RRs
@@ -677,6 +684,7 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
                 job_count: 0,
                 job_names: Vec::new(),
                 job_name_patterns: Vec::new(),
+                gate_job_names: None,
                 rr_names: Vec::new(),
                 max_memory_mb: 0,
                 max_runtime_secs: 0,
@@ -767,10 +775,14 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
         // Merge if total allocations are small enough that a single scheduler makes sense.
         // Note: When both groups exist, each needs at least 1 allocation, so total >= 2.
         if total_allocs <= MERGE_THRESHOLD {
-            // Merge deferred into non-deferred (a single on_jobs_ready action gated on all of them)
+            // Merge deferred into non-deferred. The scheduler then serves both groups' jobs, but its
+            // on_jobs_ready action must stay gated on the *root* (non-deferred) jobs only, so it
+            // fires at workflow start. Capture those root job names before extending job_names with
+            // the dependent jobs; gating on the full merged set would deadlock (see gate_job_names).
             let deferred = partition_groups.remove(&deferred_key).unwrap();
             let non_deferred = partition_groups.get_mut(&non_deferred_key).unwrap();
 
+            non_deferred.gate_job_names = Some(non_deferred.job_names.clone());
             non_deferred.job_count += deferred.job_count;
             non_deferred.job_names.extend(deferred.job_names);
             non_deferred
@@ -930,12 +942,18 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
 
         // Create action if requested. Tie every scheduler to its jobs via on_jobs_ready, including
         // no-dependency (root) jobs (Ready at init), so generated workflows are re-run-safe -- see
-        // the matching note in plan_scheduler_action().
+        // the matching note in plan_scheduler_action(). For a merged group, gate on the root jobs
+        // only (gate_job_names) so the action can fire at start; gating on the dependent jobs too
+        // would never become pending.
         if add_actions {
+            let gate = pg
+                .gate_job_names
+                .clone()
+                .unwrap_or_else(|| pg.job_names.clone());
             plan.actions.push(PlannedAction {
                 trigger_type: "on_jobs_ready".to_string(),
                 scheduler_name,
-                job_names: Some(pg.job_names.clone()),
+                job_names: Some(gate),
                 job_name_patterns: None,
                 num_allocations,
                 is_recovery,

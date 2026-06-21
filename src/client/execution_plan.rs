@@ -90,9 +90,11 @@ impl ExecutionPlan {
         let root_jobs: Vec<String> = graph.roots().iter().map(|s| s.to_string()).collect();
 
         // Find scheduler allocations that fire at workflow start: on_workflow_start actions, plus
-        // on_jobs_ready actions gated on root jobs (root jobs are Ready immediately after init, so
-        // their schedulers are submitted at submit time). The scheduler generator now ties root-job
-        // schedulers to on_jobs_ready[root_jobs] for re-run safety, so both must appear here.
+        // on_jobs_ready actions gated ENTIRELY on root jobs (root jobs are Ready immediately after
+        // init, so their schedulers are submitted at submit time). The scheduler generator now ties
+        // root-job schedulers to on_jobs_ready[root_jobs] for re-run safety, so both must appear
+        // here. An action that also gates on a non-root job only becomes pending once that job is
+        // Ready (required_triggers counts every gating job), so it fires at a later event, not start.
         let mut start_allocations = Vec::new();
         if let Some(ref actions) = spec.actions {
             for action in actions {
@@ -102,7 +104,17 @@ impl ExecutionPlan {
                     start_allocations.push(alloc);
                 }
             }
+            let non_root_jobs: Vec<String> = graph
+                .job_names()
+                .filter(|j| !root_jobs.contains(*j))
+                .cloned()
+                .collect();
+            let matches_non_root = graph.matching_actions(&non_root_jobs, actions);
             for action in graph.matching_actions(&root_jobs, actions) {
+                // Skip actions that also gate on a non-root job; they fire at a later event.
+                if matches_non_root.iter().any(|a| std::ptr::eq(*a, action)) {
+                    continue;
+                }
                 if let Some(alloc) = build_scheduler_allocation(spec, action)? {
                     start_allocations.push(alloc);
                 }
@@ -286,8 +298,10 @@ impl ExecutionPlan {
             .collect();
 
         // Find scheduler allocations that fire at workflow start: on_workflow_start actions, plus
-        // on_jobs_ready actions gated on root jobs (Ready at init). The scheduler generator now ties
-        // root-job schedulers to on_jobs_ready[root_jobs] for re-run safety, so both appear here.
+        // on_jobs_ready actions gated ENTIRELY on root jobs (Ready at init). The scheduler generator
+        // now ties root-job schedulers to on_jobs_ready[root_jobs] for re-run safety, so both appear
+        // here. An action gating on any non-root job becomes pending only when that job is Ready
+        // (required_triggers counts every gating job), so it fires at a later event, not start.
         let mut start_allocations = Vec::new();
         for action in actions {
             if action.trigger_type == "on_workflow_start"
@@ -305,7 +319,8 @@ impl ExecutionPlan {
             if action.trigger_type == "on_jobs_ready" {
                 let empty_vec = vec![];
                 let action_job_ids = action.job_ids.as_ref().unwrap_or(&empty_vec);
-                if action_job_ids.iter().any(|id| root_job_ids.contains(id))
+                if !action_job_ids.is_empty()
+                    && action_job_ids.iter().all(|id| root_job_ids.contains(id))
                     && let Some(alloc) = build_scheduler_allocation_from_db_action(
                         action,
                         jobs,
