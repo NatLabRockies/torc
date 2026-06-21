@@ -423,6 +423,21 @@ pub enum ClaimActionResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum UpdateWorkflowActionResponse {
+    /// Successful response
+    SuccessfulResponse(models::WorkflowActionModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum DeleteComputeNodesResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),

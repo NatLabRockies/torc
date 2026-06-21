@@ -3468,3 +3468,310 @@ fn test_review_submit_pending_actions_noninteractive_does_not_suppress(
         "non-interactive review must not mark the action executed"
     );
 }
+
+#[rstest]
+fn test_update_workflow_action_partial_merge(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_merge_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    // Create a schedule_nodes action with several fields
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        json!({
+            "scheduler_type": "slurm",
+            "scheduler_id": 1,
+            "num_allocations": 2,
+            "start_one_worker_per_node": false,
+        }),
+        None,
+    );
+    let created =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
+            .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    // Partially update: only num_allocations and max_parallel_jobs
+    let updated = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(json!({ "num_allocations": 8, "max_parallel_jobs": 16 })),
+    )
+    .expect("Failed to update workflow action");
+
+    let cfg = updated
+        .action_config
+        .as_object()
+        .expect("action_config should be an object");
+
+    // Updated fields
+    assert_eq!(cfg.get("num_allocations").and_then(|v| v.as_i64()), Some(8));
+    assert_eq!(
+        cfg.get("max_parallel_jobs").and_then(|v| v.as_i64()),
+        Some(16)
+    );
+    // Untouched fields are preserved
+    assert_eq!(
+        cfg.get("scheduler_type").and_then(|v| v.as_str()),
+        Some("slurm")
+    );
+    assert_eq!(cfg.get("scheduler_id").and_then(|v| v.as_i64()), Some(1));
+    assert_eq!(
+        cfg.get("start_one_worker_per_node")
+            .and_then(|v| v.as_bool()),
+        Some(false)
+    );
+
+    // The change is persisted
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let action = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist");
+    assert_eq!(
+        action
+            .action_config
+            .get("num_allocations")
+            .and_then(|v| v.as_i64()),
+        Some(8)
+    );
+}
+
+#[rstest]
+fn test_update_workflow_action_invalid_field_rejected(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_invalid_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+        None,
+    );
+    let created =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
+            .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    // An unsupported field is rejected with a 422
+    let result = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(json!({ "bogus_field": 5 })),
+    );
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 422);
+        }
+        other => panic!("Expected 422 ResponseError, got {:?}", other),
+    }
+
+    // A wrongly-typed value is rejected with a 422
+    let result = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(json!({ "num_allocations": "lots" })),
+    );
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 422);
+        }
+        other => panic!("Expected 422 ResponseError, got {:?}", other),
+    }
+}
+
+#[rstest]
+fn test_update_workflow_action_not_found(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_not_found_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let result = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        999_999,
+        Some(json!({ "num_allocations": 2 })),
+    );
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 404);
+        }
+        other => panic!("Expected 404 ResponseError, got {:?}", other),
+    }
+}
+
+/// An action that exists but belongs to a different workflow must not be updatable
+/// through another workflow's id. The lookup filters on both id AND workflow_id, so
+/// this should be a 404 rather than a cross-workflow edit.
+#[rstest]
+fn test_update_workflow_action_wrong_workflow(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_a = create_test_workflow(config, "action_update_wf_a");
+    let workflow_a_id = workflow_a.id.unwrap();
+    let workflow_b = create_test_workflow(config, "action_update_wf_b");
+    let workflow_b_id = workflow_b.id.unwrap();
+
+    let action_body = workflow_action(
+        workflow_a_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+        None,
+    );
+    let created =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_a_id, action_body)
+            .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    // The action id is valid, but not under workflow B.
+    let result = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_b_id,
+        action_id,
+        Some(json!({ "num_allocations": 2 })),
+    );
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 404);
+        }
+        other => panic!("Expected 404 ResponseError, got {:?}", other),
+    }
+
+    // And the action under workflow A is untouched.
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_a_id)
+        .expect("Failed to get workflow actions");
+    let action = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist");
+    assert!(action.action_config.get("num_allocations").is_none());
+}
+
+/// An empty merge body or a non-object merge body are both rejected with a 422.
+#[rstest]
+fn test_update_workflow_action_empty_and_non_object_body(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_bad_body_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+        None,
+    );
+    let created =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
+            .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    // Empty object: nothing to merge.
+    let result = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(json!({})),
+    );
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 422);
+        }
+        other => panic!("Expected 422 ResponseError for empty body, got {:?}", other),
+    }
+
+    // Non-object body (a JSON array) is not a valid set of fields to merge.
+    let result = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(json!([1, 2, 3])),
+    );
+    match result {
+        Err(torc::client::apis::Error::ResponseError(ref response_content)) => {
+            assert_eq!(response_content.status, 422);
+        }
+        other => panic!(
+            "Expected 422 ResponseError for non-object body, got {:?}",
+            other
+        ),
+    }
+}
+
+/// Updating an on_jobs_ready action's config must only touch action_config; the
+/// job gating metadata (job_ids, required_triggers) and execution bookkeeping must
+/// survive the partial merge untouched.
+#[rstest]
+fn test_update_workflow_action_preserves_job_metadata(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_job_metadata_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let job1 = create_test_job(config, workflow_id, "train_a").expect("Failed to create job 1");
+    let job2 = create_test_job(config, workflow_id, "train_b").expect("Failed to create job 2");
+    let job_ids = vec![job1.id.unwrap(), job2.id.unwrap()];
+
+    // An on_jobs_ready action gated on two jobs: required_triggers is derived as 2.
+    let action_body = workflow_action(
+        workflow_id,
+        "on_jobs_ready",
+        "schedule_nodes",
+        json!({
+            "scheduler_type": "slurm",
+            "scheduler_id": 1,
+            "num_allocations": 2,
+        }),
+        Some(job_ids.clone()),
+    );
+    let created =
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, action_body)
+            .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+    // Note: the create response echoes the request body; the server-derived
+    // required_triggers (2, one per gating job) is asserted below against the
+    // values the update and fresh-read paths return from the database.
+
+    let updated = apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(json!({ "num_allocations": 8 })),
+    )
+    .expect("Failed to update workflow action");
+
+    // The config change applied...
+    assert_eq!(
+        updated
+            .action_config
+            .get("num_allocations")
+            .and_then(|v| v.as_i64()),
+        Some(8)
+    );
+    // ...but the gating metadata and bookkeeping are unchanged.
+    assert_eq!(updated.trigger_type, "on_jobs_ready");
+    assert_eq!(updated.required_triggers, 2);
+    assert!(!updated.executed);
+    let updated_ids = updated.job_ids.expect("job_ids should be preserved");
+    assert!(updated_ids.contains(&job1.id.unwrap()));
+    assert!(updated_ids.contains(&job2.id.unwrap()));
+
+    // Confirm the same is true on a fresh read from the server.
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let action = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist");
+    assert_eq!(action.required_triggers, 2);
+    let stored_ids = action.job_ids.clone().expect("job_ids should be preserved");
+    assert!(stored_ids.contains(&job1.id.unwrap()));
+    assert!(stored_ids.contains(&job2.id.unwrap()));
+}

@@ -26,6 +26,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mget\x1b[0m              Get a specific workflow
   \x1b[1;36mexecution-plan\x1b[0m   Show execution plan
   \x1b[1;36mlist-actions\x1b[0m     List workflow actions
+  \x1b[1;36mupdate-action\x1b[0m    Edit a workflow action's configuration
 
 \x1b[1;32mWorkflow Maintenance:\x1b[0m
   \x1b[1;36mupdate\x1b[0m              Update workflow properties
@@ -567,6 +568,56 @@ EXAMPLES:
         /// ID of the workflow to show actions for (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
+    },
+    /// Edit the configuration of a workflow action (currently schedule_nodes only)
+    ///
+    /// Updates are applied as a partial merge: only the fields you provide are
+    /// changed, everything else in the action's configuration is preserved. Run
+    /// 'torc workflows list-actions <workflow_id>' to find action IDs.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Change how many node allocations a schedule_nodes action requests
+    torc workflows update-action 123 45 --num-allocations 4
+
+    # Update several fields at once
+    torc workflows update-action 123 45 \\
+        --scheduler-id 2 --max-parallel-jobs 8 --start-one-worker-per-node true
+
+    # Pass arbitrary fields as a JSON object (merged on top of typed flags)
+    torc workflows update-action 123 45 --json '{\"num_allocations\": 10}'
+
+SUPPORTED FIELDS (schedule_nodes):
+    scheduler_id (int), scheduler_type (string), num_allocations (int),
+    start_one_worker_per_node (bool), max_parallel_jobs (int)
+"
+    )]
+    UpdateAction {
+        /// ID of the workflow that owns the action
+        #[arg()]
+        workflow_id: i64,
+        /// ID of the action to update (see 'workflows list-actions')
+        #[arg()]
+        action_id: i64,
+        /// Set the scheduler_id field
+        #[arg(long)]
+        scheduler_id: Option<i64>,
+        /// Set the scheduler_type field
+        #[arg(long)]
+        scheduler_type: Option<String>,
+        /// Set the num_allocations field
+        #[arg(long)]
+        num_allocations: Option<i64>,
+        /// Set the start_one_worker_per_node field
+        #[arg(long)]
+        start_one_worker_per_node: Option<bool>,
+        /// Set the max_parallel_jobs field
+        #[arg(long)]
+        max_parallel_jobs: Option<i64>,
+        /// Raw JSON object of fields to merge (typed flags above take precedence)
+        #[arg(long)]
+        json: Option<String>,
     },
     /// Check if a workflow is complete
     #[command(
@@ -1119,6 +1170,131 @@ fn handle_list_actions(
         }
         Err(e) => {
             print_error("getting workflow actions", &e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Edit the configuration of a workflow action. Currently only `schedule_nodes`
+/// actions are supported. The update is a partial merge: only the provided fields
+/// are changed.
+#[allow(clippy::too_many_arguments)]
+fn handle_update_action(
+    config: &Configuration,
+    workflow_id: i64,
+    action_id: i64,
+    scheduler_id: Option<i64>,
+    scheduler_type: &Option<String>,
+    num_allocations: Option<i64>,
+    start_one_worker_per_node: Option<bool>,
+    max_parallel_jobs: Option<i64>,
+    json: &Option<String>,
+    format: &str,
+) {
+    // Build the set of fields to merge, starting from the optional raw JSON object
+    // and then layering the typed flags on top (so flags win on conflicts).
+    let mut updates = serde_json::Map::new();
+
+    if let Some(raw) = json {
+        match serde_json::from_str::<serde_json::Value>(raw) {
+            Ok(serde_json::Value::Object(map)) => {
+                for (key, value) in map {
+                    updates.insert(key, value);
+                }
+            }
+            Ok(_) => {
+                eprintln!(
+                    "Error: --json must be a JSON object (e.g. '{{\"num_allocations\": 4}}')"
+                );
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("Error parsing --json: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(value) = scheduler_id {
+        updates.insert("scheduler_id".to_string(), value.into());
+    }
+    if let Some(value) = scheduler_type {
+        updates.insert(
+            "scheduler_type".to_string(),
+            serde_json::Value::String(value.clone()),
+        );
+    }
+    if let Some(value) = num_allocations {
+        updates.insert("num_allocations".to_string(), value.into());
+    }
+    if let Some(value) = start_one_worker_per_node {
+        updates.insert("start_one_worker_per_node".to_string(), value.into());
+    }
+    if let Some(value) = max_parallel_jobs {
+        updates.insert("max_parallel_jobs".to_string(), value.into());
+    }
+
+    if updates.is_empty() {
+        eprintln!(
+            "Error: no fields to update. Provide at least one of --scheduler-id, \
+             --scheduler-type, --num-allocations, --start-one-worker-per-node, \
+             --max-parallel-jobs, or --json."
+        );
+        std::process::exit(1);
+    }
+
+    // Pre-flight check so we can give a clearer error than the server's validation
+    // when the target action exists but is not a schedule_nodes action.
+    match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
+        Ok(actions) => match actions.iter().find(|a| a.id == Some(action_id)) {
+            Some(action) if action.action_type != "schedule_nodes" => {
+                eprintln!(
+                    "Error: 'workflows update-action' currently only supports schedule_nodes \
+                     actions, but action {} is a '{}' action.",
+                    action_id, action.action_type
+                );
+                std::process::exit(1);
+            }
+            Some(_) => {}
+            None => {
+                eprintln!(
+                    "Error: action {} was not found in workflow {}.",
+                    action_id, workflow_id
+                );
+                std::process::exit(1);
+            }
+        },
+        Err(e) => {
+            print_error("getting workflow actions", &e);
+            std::process::exit(1);
+        }
+    }
+
+    match apis::workflow_actions_api::update_workflow_action(
+        config,
+        workflow_id,
+        action_id,
+        Some(serde_json::Value::Object(updates)),
+    ) {
+        Ok(action) => {
+            if format == "json" {
+                match serde_json::to_string_pretty(&action) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        eprintln!("Error serializing action to JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                println!("Updated action {} in workflow {}.", action_id, workflow_id);
+                match serde_json::to_string_pretty(&action.action_config) {
+                    Ok(json) => println!("New action_config:\n{}", json),
+                    Err(_) => println!("New action_config: {}", action.action_config),
+                }
+            }
+        }
+        Err(e) => {
+            print_error("updating workflow action", &e);
             std::process::exit(1);
         }
     }
@@ -3326,6 +3502,29 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
         }
         WorkflowCommands::ListActions { workflow_id } => {
             handle_list_actions(config, workflow_id, &current_user, format);
+        }
+        WorkflowCommands::UpdateAction {
+            workflow_id,
+            action_id,
+            scheduler_id,
+            scheduler_type,
+            num_allocations,
+            start_one_worker_per_node,
+            max_parallel_jobs,
+            json,
+        } => {
+            handle_update_action(
+                config,
+                *workflow_id,
+                *action_id,
+                *scheduler_id,
+                scheduler_type,
+                *num_allocations,
+                *start_one_worker_per_node,
+                *max_parallel_jobs,
+                json,
+                format,
+            );
         }
         WorkflowCommands::IsComplete { id } => {
             handle_is_complete(config, *id, format);
