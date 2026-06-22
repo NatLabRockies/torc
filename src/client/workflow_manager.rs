@@ -17,6 +17,24 @@ pub struct InitializationCheck {
     pub existing_output_files: Vec<String>,
 }
 
+/// Summary of what `WorkflowManager::start` actually did, so the caller can distinguish a real
+/// submission from a no-op. A zero-allocation outcome is not a benign "deferred" state: deferred
+/// `on_jobs_ready`/`on_jobs_complete` actions are only ever fired by running workers, and a worker
+/// only exists because an allocation launched it. So if a submit invocation launches no
+/// allocations, nothing downstream will ever fire it either — the caller should report that as an
+/// error rather than printing success.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StartOutcome {
+    /// Total Slurm allocations actually submitted across every fired schedule_nodes action.
+    pub allocations_submitted: i32,
+    /// Number of slurm schedule_nodes actions that were pending and due at submit time (counted
+    /// before claim/dedup). Used to explain a zero-allocation outcome: zero here means nothing was
+    /// due (already running/complete, or misconfigured with no bootstrap action); non-zero means
+    /// actions were due but produced no allocations (claimed by a concurrent submitter, or their
+    /// counts were overridden to 0).
+    pub slurm_actions_seen: usize,
+}
+
 pub struct WorkflowManager {
     config: Configuration,
     torc_config: TorcConfig,
@@ -208,6 +226,14 @@ impl WorkflowManager {
     }
 
     /// Start the workflow: initialize if needed and schedule nodes for on_workflow_start actions
+    ///
+    /// `allocation_overrides` maps an action id to the number of Slurm allocations to submit for
+    /// that action **on this invocation only** (it is not persisted to the action's config). It is
+    /// populated by the interactive submit review (see `slurm::review_submit_pending_actions`) so a
+    /// user re-submitting a workflow can right-size what `sbatch` requests without editing the
+    /// action. Actions the user chose to disable are already suppressed (claimed) before `start` is
+    /// called, so they do not appear in the pending set here; an empty map means "fire every pending
+    /// action with its configured count".
     pub fn start(
         &self,
         force: bool,
@@ -215,7 +241,8 @@ impl WorkflowManager {
         output_dir: &str,
         poll_interval_override: Option<i32>,
         claim_backoff_max_secs_override: Option<f64>,
-    ) -> Result<(), TorcError> {
+        allocation_overrides: &std::collections::HashMap<i64, i32>,
+    ) -> Result<StartOutcome, TorcError> {
         // Check if workflow is uninitialized
         match apis::workflows_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
             Ok(response) => {
@@ -239,13 +266,29 @@ impl WorkflowManager {
             }
         }
 
-        // Get pending on_workflow_start actions
-        // Note: We don't create a compute node for the submission host (login node)
-        // since it's not actually running jobs - it just submits to the scheduler
+        // Get every pending schedule_nodes-capable action, regardless of trigger type. "Pending"
+        // already means "armed and due now" (trigger_count >= required_triggers, executed = 0), and
+        // reinitialize's keep/re-arm logic guarantees that set is exactly what should be scheduled:
+        //
+        // - Initial run: only on_workflow_start (and any on_jobs_ready gated on root jobs that are
+        //   ready at init) are pending, so this bootstraps the first allocations.
+        // - Re-run (reset a subset of jobs + reinit): the reset jobs' job-gated actions re-arm and
+        //   become pending while untouched stages stay suppressed, so submit re-schedules exactly
+        //   the affected classes. This is what lets `reset-status <ids> --reinit` + `submit`
+        //   re-submit only the jobs being re-run.
+        //
+        // Note: We don't create a compute node for the submission host (login node) since it's not
+        // actually running jobs - it just submits to the scheduler. Downstream job-gated actions
+        // whose gates are not yet ready stay pending-less here and are fired later by running
+        // workers (see job_runner::check_and_execute_actions).
         let actions = match apis::workflow_actions_api::get_pending_actions(
             &self.config,
             self.workflow_id,
-            Some(vec!["on_workflow_start".to_string()]),
+            Some(vec![
+                "on_workflow_start".to_string(),
+                "on_jobs_ready".to_string(),
+                "on_jobs_complete".to_string(),
+            ]),
         ) {
             Ok(actions) => actions,
             Err(err) => {
@@ -255,6 +298,7 @@ impl WorkflowManager {
         };
 
         // Filter for schedule_nodes actions
+        let mut outcome = StartOutcome::default();
         for action in actions {
             let action_type = &action.action_type;
             let action_id = action.id.unwrap_or(0);
@@ -270,6 +314,7 @@ impl WorkflowManager {
 
                 // Only claim the action if we can execute it (scheduler_type == "slurm")
                 if scheduler_type == "slurm" {
+                    outcome.slurm_actions_seen += 1;
                     // Claim the action atomically (no compute_node_id since we're on login node)
                     let claimed = match crate::client::utils::claim_action(
                         &self.config,
@@ -292,8 +337,8 @@ impl WorkflowManager {
 
                     // Successfully claimed, now execute
                     info!(
-                        "Scheduling Slurm nodes for on_workflow_start action {}",
-                        action_id
+                        "Scheduling Slurm nodes for {} action {}",
+                        action.trigger_type, action_id
                     );
 
                     let scheduler_id = action_config
@@ -304,10 +349,15 @@ impl WorkflowManager {
                         .get("start_one_worker_per_node")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-                    let num_allocations = action_config
-                        .get("num_allocations")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(1) as i32;
+                    // Use the per-submission override from the interactive review if the user set
+                    // one for this action; otherwise fall back to the action's configured count
+                    // (missing defaults to 1, matching job_runner / list-actions display).
+                    let num_allocations = allocation_overrides.get(&action_id).copied().unwrap_or(
+                        action_config
+                            .get("num_allocations")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(1) as i32,
+                    );
                     let max_parallel_jobs = max_parallel_jobs_override.or_else(|| {
                         action_config
                             .get("max_parallel_jobs")
@@ -331,9 +381,10 @@ impl WorkflowManager {
                         claim_backoff_max_secs_override,
                     ) {
                         Ok(()) => {
+                            outcome.allocations_submitted += num_allocations.max(0);
                             info!(
-                                "Successfully scheduled {} Slurm allocation(s) for on_workflow_start",
-                                num_allocations
+                                "Successfully scheduled {} Slurm allocation(s) for {} action {}",
+                                num_allocations, action.trigger_type, action_id
                             );
                         }
                         Err(err) => {
@@ -356,7 +407,7 @@ impl WorkflowManager {
             }
         }
 
-        Ok(())
+        Ok(outcome)
     }
 
     /// Reinitialize the workflow. Resets workflow status (which also bumps

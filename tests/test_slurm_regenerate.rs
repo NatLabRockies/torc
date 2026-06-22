@@ -782,3 +782,66 @@ fn test_regenerate_json_output_structure(start_server: &ServerProcess) {
     assert!(json.get("warnings").unwrap().is_array());
     assert!(json.get("submitted").unwrap().is_boolean());
 }
+
+/// Regenerate must create the recovery `on_jobs_ready` action for ready-now jobs in the **Pending**
+/// state (trigger_count >= required_triggers), not Waiting.
+///
+/// This is the linchpin of routing recovery scheduling through actions: `torc submit` (and
+/// `regenerate --submit`) only fire actions that are already pending, so a ready-now recovery action
+/// born Waiting (trigger_count 0) would never fire — the bug where `recover` had to schedule the
+/// allocation directly *and* leave behind a perpetually-Waiting action. Here the gate jobs are all
+/// Ready at creation time, so the action must be armed.
+#[rstest]
+fn test_regenerate_ready_jobs_create_pending_recovery_action(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let job_configs: Vec<(String, models::JobStatus)> = (0..5)
+        .map(|i| (format!("job_{}", i), models::JobStatus::Ready))
+        .collect();
+
+    let (workflow_id, _job_ids) =
+        create_workflow_with_job_states(config, "test_regenerate_pending_action", &job_configs);
+
+    let args = [
+        "slurm",
+        "regenerate",
+        &workflow_id.to_string(),
+        "--account",
+        "test_account",
+        "--profile",
+        "kestrel",
+    ];
+    let result = run_cli_with_json(&args, start_server, None);
+    assert!(result.is_ok(), "Regenerate command failed: {:?}", result);
+
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to fetch workflow actions");
+
+    let recovery_actions: Vec<&models::WorkflowActionModel> = actions
+        .iter()
+        .filter(|a| {
+            a.action_type == "schedule_nodes" && a.is_recovery && a.trigger_type == "on_jobs_ready"
+        })
+        .collect();
+
+    assert!(
+        !recovery_actions.is_empty(),
+        "regenerate should create at least one on_jobs_ready recovery action"
+    );
+
+    // Every ready-now recovery action must be armed (Pending), and required_triggers must reflect
+    // the gated job count (the server sets it to job_ids.len()).
+    for action in &recovery_actions {
+        assert!(
+            action.required_triggers > 0,
+            "required_triggers should equal the gated job count, got {}",
+            action.required_triggers
+        );
+        assert!(
+            action.trigger_count >= action.required_triggers,
+            "ready-now recovery action must be Pending: trigger_count ({}) >= required_triggers ({})",
+            action.trigger_count,
+            action.required_triggers
+        );
+    }
+}

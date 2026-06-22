@@ -61,10 +61,12 @@ job "finalize" {
 
 // Actions
 
-// Allocate resources for setup stage
+// Allocate resources for the setup stage. Tied to the setup job via on_jobs_ready (not
+// on_workflow_start) so the allocation is re-run-safe; setup is a root job, so it fires at init.
 action {
-    trigger_type "on_workflow_start"
+    trigger_type "on_jobs_ready"
     action_type "schedule_nodes"
+    job "setup"
     scheduler "setup_scheduler"
     scheduler_type "slurm"
     num_allocations 1

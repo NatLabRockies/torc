@@ -196,8 +196,9 @@ slurm_schedulers:
 # ACTIONS - Schedule compute nodes when jobs become ready
 # ==============================================================================
 actions:
-  # Stage 1: Triggered at workflow start
-  - trigger_type: on_workflow_start
+  # Stage 1: prep jobs are roots (Ready at init). Tied to them via on_jobs_ready (not
+  # on_workflow_start) so resetting prep + reinitializing re-schedules on the next `torc submit`.
+  - trigger_type: on_jobs_ready
     action_type: schedule_nodes
     scheduler: prep_sched
     scheduler_type: slurm

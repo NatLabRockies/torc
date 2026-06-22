@@ -177,7 +177,8 @@ pub struct ValidationSummary {
     pub slurm_scheduler_count: usize,
     /// Number of workflow actions that would be created
     pub action_count: usize,
-    /// Whether the workflow has on_workflow_start schedule_nodes action
+    /// Whether the workflow has a schedule_nodes action that `torc submit` can fire
+    /// (on_workflow_start, on_jobs_ready, or on_jobs_complete)
     pub has_schedule_nodes_action: bool,
     /// List of job names that would be created
     pub job_names: Vec<String>,
@@ -1986,10 +1987,57 @@ impl WorkflowSpec {
         clone.validate_file_identifiers()
     }
 
+    /// Recognized workflow action trigger types.
+    ///
+    /// Kept in sync with the server's `check_and_trigger_actions` dispatch
+    /// (`src/server/api/workflow_actions.rs`). An unknown trigger type silently never
+    /// fires, so we reject it at creation rather than producing a confusing
+    /// "0 allocations" failure at submit time.
+    const VALID_TRIGGER_TYPES: &'static [&'static str] = &[
+        "on_workflow_start",
+        "on_workflow_complete",
+        "on_worker_start",
+        "on_worker_complete",
+        "on_jobs_ready",
+        "on_jobs_complete",
+    ];
+
     /// Validate workflow actions
     pub fn validate_actions(&self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref actions) = self.actions {
             for action in actions {
+                // Reject unknown trigger types (e.g. a typo'd `on_ready_jobs`), which would
+                // otherwise be stored silently and never fire.
+                if !Self::VALID_TRIGGER_TYPES.contains(&action.trigger_type.as_str()) {
+                    return Err(format!(
+                        "action has unknown trigger_type '{}'; valid trigger types are: {}",
+                        action.trigger_type,
+                        Self::VALID_TRIGGER_TYPES.join(", ")
+                    )
+                    .into());
+                }
+
+                // Job-gated triggers must name at least one job (exact names or regexes);
+                // without any, the action can never become due.
+                if matches!(
+                    action.trigger_type.as_str(),
+                    "on_jobs_ready" | "on_jobs_complete"
+                ) {
+                    let has_jobs = action.jobs.as_ref().is_some_and(|j| !j.is_empty());
+                    let has_regexes = action
+                        .job_name_regexes
+                        .as_ref()
+                        .is_some_and(|r| !r.is_empty());
+                    if !has_jobs && !has_regexes {
+                        return Err(format!(
+                            "action with trigger_type '{}' must specify at least one job via \
+                             'jobs' or 'job_name_regexes'",
+                            action.trigger_type
+                        )
+                        .into());
+                    }
+                }
+
                 // Validate schedule_nodes actions
                 if action.action_type == "schedule_nodes" {
                     // Ensure scheduler_type is provided
@@ -2510,12 +2558,19 @@ impl WorkflowSpec {
         }
     }
 
-    /// Check if the workflow spec has an on_workflow_start action with schedule_nodes
-    /// Returns true if such an action exists, false otherwise
+    /// Check if the workflow spec has a `schedule_nodes` action that `torc submit` can act on.
+    ///
+    /// `submit` fires every pending Slurm `schedule_nodes` action regardless of trigger type
+    /// (on_workflow_start to bootstrap, on_jobs_ready/on_jobs_complete for job-gated scheduling and
+    /// re-runs), so any of those qualifies a spec as submittable. Returns false otherwise.
     pub fn has_schedule_nodes_action(&self) -> bool {
         if let Some(ref actions) = self.actions {
             actions.iter().any(|action| {
-                action.trigger_type == "on_workflow_start" && action.action_type == "schedule_nodes"
+                action.action_type == "schedule_nodes"
+                    && matches!(
+                        action.trigger_type.as_str(),
+                        "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+                    )
             })
         } else {
             false
@@ -9149,5 +9204,88 @@ jobs:
             .expect("KDL variables_demo should expand");
         assert_eq!(spec.jobs.len(), 6);
         assert_variables_demo_substituted(&spec);
+    }
+
+    /// Build a minimal spec carrying a single action, for `validate_actions` tests.
+    fn spec_with_action(action: WorkflowActionSpec) -> WorkflowSpec {
+        let mut spec = WorkflowSpec::new(
+            "wf".to_string(),
+            "user".to_string(),
+            None,
+            vec![JobSpec::new("job1".to_string(), "exit 0".to_string())],
+        );
+        spec.actions = Some(vec![action]);
+        spec
+    }
+
+    /// Build a `run_commands` action with the given trigger and optional gating jobs.
+    fn run_commands_action(trigger_type: &str, jobs: Option<Vec<String>>) -> WorkflowActionSpec {
+        WorkflowActionSpec {
+            trigger_type: trigger_type.to_string(),
+            action_type: "run_commands".to_string(),
+            jobs,
+            job_name_regexes: None,
+            commands: Some(vec!["echo hi".to_string()]),
+            scheduler: None,
+            scheduler_type: None,
+            num_allocations: None,
+            start_one_worker_per_node: None,
+            max_parallel_jobs: None,
+            persistent: None,
+        }
+    }
+
+    #[test]
+    fn test_validate_actions_rejects_unknown_trigger_type() {
+        // `on_ready_jobs` is a transposed typo of `on_jobs_ready`.
+        let spec = spec_with_action(run_commands_action("on_ready_jobs", None));
+        let err = spec
+            .validate_actions()
+            .expect_err("unknown trigger should fail");
+        let msg = err.to_string();
+        assert!(msg.contains("unknown trigger_type"), "got: {msg}");
+        assert!(msg.contains("on_ready_jobs"), "got: {msg}");
+    }
+
+    #[test]
+    fn test_validate_actions_accepts_known_trigger_types() {
+        for trigger in WorkflowSpec::VALID_TRIGGER_TYPES {
+            // Job-gated triggers need a job; supply one unconditionally.
+            let spec =
+                spec_with_action(run_commands_action(trigger, Some(vec!["job1".to_string()])));
+            spec.validate_actions()
+                .unwrap_or_else(|e| panic!("trigger '{trigger}' should be valid: {e}"));
+        }
+    }
+
+    #[test]
+    fn test_validate_actions_rejects_job_gated_trigger_without_jobs() {
+        for trigger in ["on_jobs_ready", "on_jobs_complete"] {
+            let spec = spec_with_action(run_commands_action(trigger, None));
+            let err = spec
+                .validate_actions()
+                .expect_err("job-gated trigger without jobs should fail");
+            let msg = err.to_string();
+            assert!(msg.contains("must specify at least one job"), "got: {msg}");
+        }
+    }
+
+    #[test]
+    fn test_validate_actions_accepts_job_gated_trigger_with_regexes() {
+        let mut action = run_commands_action("on_jobs_ready", None);
+        action.job_name_regexes = Some(vec!["^job.*$".to_string()]);
+        let spec = spec_with_action(action);
+        spec.validate_actions()
+            .expect("regex-gated on_jobs_ready should be valid");
+    }
+
+    #[test]
+    fn test_validate_actions_rejects_job_gated_trigger_with_empty_jobs() {
+        // An explicitly-empty `jobs` list is as useless as omitting it.
+        let spec = spec_with_action(run_commands_action("on_jobs_complete", Some(vec![])));
+        let err = spec
+            .validate_actions()
+            .expect_err("empty jobs list should fail");
+        assert!(err.to_string().contains("must specify at least one job"));
     }
 }

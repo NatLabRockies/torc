@@ -487,6 +487,14 @@ Defines conditional actions triggered by workflow or job state changes.
 | `max_parallel_jobs`         | integer  | none       | For `schedule_nodes`: maximum parallel jobs                                                               |
 | `persistent`                | boolean  | false      | Whether the action persists and can be claimed by multiple workers                                        |
 
+For `schedule_nodes`, prefer `on_jobs_ready` (gated on the jobs the allocation runs) over
+`on_workflow_start`, even for root jobs — root jobs are ready at init, so the action still fires at
+the start, but tying it to the jobs makes a selective re-run
+(`torc jobs reset-status <ids> --reinit` then `torc submit`) re-schedule only the reset jobs.
+`on_workflow_start` `schedule_nodes` is kept on reinitialize and `torc submit` cannot re-fire it.
+See
+[Re-running part of a workflow](../../specialized/hpc/slurm-workflows.md#re-running-part-of-a-workflow).
+
 ## ResourceMonitorConfig
 
 Configuration for resource usage monitoring.

@@ -800,6 +800,7 @@ fn main() {
             output_dir,
             poll_interval,
             claim_backoff_max_secs,
+            no_prompts,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Resolve the spec source once (handles `-` reading from stdin) so the
@@ -828,7 +829,8 @@ fn main() {
                     eprintln!("Error: Cannot submit workflow");
                     eprintln!();
                     eprintln!(
-                        "The spec does not define an on_workflow_start action with schedule_nodes."
+                        "The spec does not define a schedule_nodes action (on_workflow_start, \
+                         on_jobs_ready, or on_jobs_complete)."
                     );
                     eprintln!("To submit to Slurm, either:");
                     eprintln!();
@@ -894,20 +896,26 @@ fn main() {
                 }
             };
 
-            // Check if workflow has schedule_nodes actions (for existing workflows)
+            // Check if workflow has schedule_nodes actions (for existing workflows). submit fires
+            // every pending Slurm schedule_nodes action regardless of trigger type, so any of
+            // on_workflow_start / on_jobs_ready / on_jobs_complete makes the workflow submittable.
             if !is_spec_file(workflow_spec_or_id) {
                 match apis::workflow_actions_api::get_workflow_actions(&config, workflow_id) {
                     Ok(actions) => {
                         let has_schedule_nodes = actions.iter().any(|action| {
-                            action.trigger_type == "on_workflow_start"
-                                && action.action_type == "schedule_nodes"
+                            action.action_type == "schedule_nodes"
+                                && matches!(
+                                    action.trigger_type.as_str(),
+                                    "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+                                )
                         });
 
                         if !has_schedule_nodes {
                             eprintln!("Error: Cannot submit workflow {}", workflow_id);
                             eprintln!();
                             eprintln!(
-                                "The workflow does not define an on_workflow_start action with schedule_nodes."
+                                "The workflow has no schedule_nodes action (on_workflow_start, \
+                                 on_jobs_ready, or on_jobs_complete)."
                             );
                             eprintln!(
                                 "To submit to a scheduler, the workflow must have an action configured."
@@ -928,6 +936,27 @@ fn main() {
             // Submit the workflow
             match apis::workflows_api::get_workflow(&config, workflow_id) {
                 Ok(workflow) => {
+                    // On a re-submission (run_id > 1) the reinitialize re-arm logic can leave
+                    // schedule_nodes actions pending that submit would fire, possibly with a
+                    // different allocation count than the user now wants. Show what submit will
+                    // submit now (and what is deferred to later stages) and let the user disable
+                    // actions or change their per-submission allocation count. Disabled actions are
+                    // suppressed in here; the returned map carries per-action allocation overrides
+                    // for this submission only.
+                    let run_id = workflow.run_id.unwrap_or(1);
+                    let allocation_overrides =
+                        match torc::client::commands::slurm::review_submit_pending_actions(
+                            &config,
+                            workflow_id,
+                            run_id,
+                            *no_prompts,
+                        ) {
+                            Ok(overrides) => overrides,
+                            Err(e) => {
+                                eprintln!("Error reviewing pending schedule_nodes actions: {}", e);
+                                std::process::exit(1);
+                            }
+                        };
                     let torc_config = TorcConfig::load().unwrap_or_default();
                     let workflow_manager =
                         WorkflowManager::new(config.clone(), torc_config, workflow);
@@ -937,13 +966,46 @@ fn main() {
                         output_dir,
                         *poll_interval,
                         *claim_backoff_max_secs,
+                        &allocation_overrides,
                     ) {
-                        Ok(()) => {
+                        Ok(outcome) if outcome.allocations_submitted > 0 => {
                             print_workflow_message(
                                 &format,
                                 workflow_id,
-                                &format!("Successfully submitted workflow {}", workflow_id),
+                                &format!(
+                                    "Successfully submitted workflow {} ({} allocation(s))",
+                                    workflow_id, outcome.allocations_submitted
+                                ),
                             );
+                        }
+                        Ok(outcome) => {
+                            // Zero allocations submitted is not a benign "deferred" state: deferred
+                            // job-gated actions are only fired by running workers, and a worker
+                            // only exists because an allocation launched it. So nothing downstream
+                            // will fire what this submit declined to launch — report it as an error.
+                            eprintln!(
+                                "Error: submit launched 0 allocations for workflow {}",
+                                workflow_id
+                            );
+                            eprintln!();
+                            if outcome.slurm_actions_seen > 0 {
+                                eprintln!(
+                                    "{} pending slurm schedule_nodes action(s) were due but produced \
+                                     no allocations. They may have been claimed by a concurrent \
+                                     submitter, or their allocation counts were set to 0.",
+                                    outcome.slurm_actions_seen
+                                );
+                            } else {
+                                eprintln!(
+                                    "No slurm schedule_nodes actions were due. The workflow may \
+                                     already be running or complete, or it has no on_workflow_start \
+                                     / on_jobs_ready action to bootstrap the first allocation."
+                                );
+                                eprintln!();
+                                eprintln!("Check status with:");
+                                eprintln!("  torc workflows status {}", workflow_id);
+                            }
+                            std::process::exit(1);
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);

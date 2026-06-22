@@ -16,8 +16,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// When using `--group-by partition`, if a partition has both deferred (jobs with dependencies)
 /// and non-deferred (jobs without dependencies) groups, and their combined allocation count
-/// is at or below this threshold, they are merged into a single scheduler with an
-/// `on_workflow_start` trigger. This reduces the number of Slurm job submissions.
+/// is at or below this threshold, they are merged into a single scheduler. The scheduler serves
+/// both groups' jobs, but its `on_jobs_ready` action is gated on the non-deferred (root) jobs only
+/// (`gate_job_names`) so it fires at workflow start; gating on the dependent jobs too would never
+/// become pending (they are not Ready until the root jobs run). This reduces the number of Slurm
+/// job submissions.
 ///
 /// When both groups exist, each needs at least 1 allocation, so the minimum total is 2.
 /// A threshold of 2 means we merge when exactly 2 allocations are needed (the minimum case).
@@ -523,21 +526,19 @@ fn process_scheduler_group<RR: ResourceRequirements>(
 
     // Create action if requested
     let action = if add_actions {
-        // For jobs with dependencies, we need to specify which jobs trigger the action.
-        // Use job_names (exact names) instead of job_name_patterns (regexes) because
-        // after parameter expansion, each job has an exact name and using regexes
-        // with individual exact-match patterns is wasteful and confusing.
-        let (trigger_type, job_names, job_name_patterns) = if group.has_dependencies {
-            ("on_jobs_ready", Some(group.job_names.clone()), None)
-        } else {
-            ("on_workflow_start", None, None)
-        };
-
+        // Tie every generated scheduler to its jobs via on_jobs_ready, including no-dependency
+        // (root) jobs. Root jobs are Ready right after initialize, so on_jobs_ready[root_jobs]
+        // fires at the same moment on_workflow_start would, but it is re-run-safe: resetting those
+        // jobs and reinitializing re-arms the action (the gate is no longer terminal), so a
+        // subsequent `torc submit` re-schedules exactly them. on_workflow_start is kept (suppressed)
+        // on reinit and submit cannot re-fire it, which strands the job. We use job_names (exact
+        // names) rather than job_name_patterns (regexes) because after parameter expansion each job
+        // has an exact name.
         Some(PlannedAction {
-            trigger_type: trigger_type.to_string(),
+            trigger_type: "on_jobs_ready".to_string(),
             scheduler_name: scheduler_name.clone(),
-            job_names,
-            job_name_patterns,
+            job_names: Some(group.job_names.clone()),
+            job_name_patterns: None,
             num_allocations,
             is_recovery,
         })
@@ -555,6 +556,13 @@ struct PartitionGroup {
     job_count: usize,
     job_names: Vec<String>,
     job_name_patterns: Vec<String>,
+    /// Jobs to gate the generated `on_jobs_ready` action on, when that differs from `job_names`.
+    /// Set only when a deferred group is merged into a non-deferred one: the scheduler then serves
+    /// both root and dependent jobs (`job_names`), but the action must be gated on the *root* jobs
+    /// only so it fires at workflow start. Gating on the whole merged set would never become pending
+    /// (dependent jobs aren't Ready until the root jobs run, which need this allocation) — a deadlock.
+    /// `None` means gate on `job_names` (the group is uniform: all root, or all the same level).
+    gate_job_names: Option<Vec<String>>,
     /// All RR names in this group (for naming the scheduler)
     rr_names: Vec<String>,
     /// Maximum memory in MB across all RRs
@@ -679,6 +687,7 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
                 job_count: 0,
                 job_names: Vec::new(),
                 job_name_patterns: Vec::new(),
+                gate_job_names: None,
                 rr_names: Vec::new(),
                 max_memory_mb: 0,
                 max_runtime_secs: 0,
@@ -769,10 +778,14 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
         // Merge if total allocations are small enough that a single scheduler makes sense.
         // Note: When both groups exist, each needs at least 1 allocation, so total >= 2.
         if total_allocs <= MERGE_THRESHOLD {
-            // Merge deferred into non-deferred (so we use on_workflow_start)
+            // Merge deferred into non-deferred. The scheduler then serves both groups' jobs, but its
+            // on_jobs_ready action must stay gated on the *root* (non-deferred) jobs only, so it
+            // fires at workflow start. Capture those root job names before extending job_names with
+            // the dependent jobs; gating on the full merged set would deadlock (see gate_job_names).
             let deferred = partition_groups.remove(&deferred_key).unwrap();
             let non_deferred = partition_groups.get_mut(&non_deferred_key).unwrap();
 
+            non_deferred.gate_job_names = Some(non_deferred.job_names.clone());
             non_deferred.job_count += deferred.job_count;
             non_deferred.job_names.extend(deferred.job_names);
             non_deferred
@@ -930,19 +943,21 @@ fn generate_plan_grouped_by_partition<RR: ResourceRequirements>(
 
         plan.schedulers.push(scheduler);
 
-        // Create action if requested
+        // Create action if requested. Tie every scheduler to its jobs via on_jobs_ready, including
+        // no-dependency (root) jobs (Ready at init), so generated workflows are re-run-safe -- see
+        // the matching note in plan_scheduler_action(). For a merged group, gate on the root jobs
+        // only (gate_job_names) so the action can fire at start; gating on the dependent jobs too
+        // would never become pending.
         if add_actions {
-            let (trigger_type, job_names, job_name_patterns) = if pg.has_dependencies {
-                ("on_jobs_ready", Some(pg.job_names.clone()), None)
-            } else {
-                ("on_workflow_start", None, None)
-            };
-
+            let gate = pg
+                .gate_job_names
+                .clone()
+                .unwrap_or_else(|| pg.job_names.clone());
             plan.actions.push(PlannedAction {
-                trigger_type: trigger_type.to_string(),
+                trigger_type: "on_jobs_ready".to_string(),
                 scheduler_name,
-                job_names,
-                job_name_patterns,
+                job_names: Some(gate),
+                job_name_patterns: None,
                 num_allocations,
                 is_recovery,
             });

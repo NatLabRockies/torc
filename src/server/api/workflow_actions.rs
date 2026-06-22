@@ -803,14 +803,21 @@ impl WorkflowActionsApiImpl {
     /// - `on_workflow_complete`, `on_worker_start`, `on_worker_complete` → **re-arm**. These recur
     ///   every run (the workflow will complete again; new workers start), so they should fire again.
     ///
-    /// This keep-on-`on_workflow_start` behavior makes the server the single point that prevents
-    /// reinit from resurrecting already-satisfied actions, so every entry point (`reinit`,
-    /// `reset-status --reinit`, `recover`, `regenerate`, `watch`) is covered; the client-side
-    /// recover/regenerate guards remain as defense in depth.
-    pub async fn reset_actions_for_reinitialize(&self, workflow_id: i64) -> Result<(), ApiError> {
+    /// The keep logic above applies only to a **partial** reinitialize (`only_uninitialized = true`:
+    /// `reinit`, `reset-status --reinit`, `recover`, `regenerate`, `watch`), which is the case that
+    /// must not resurrect already-satisfied actions. A **full** initialize (`only_uninitialized =
+    /// false`, i.e. `torc workflows init`, which first resets every job to uninitialized) is a clean
+    /// slate: every action is re-armed, including `on_workflow_start`. Otherwise re-running
+    /// `workflows init` on a workflow that already ran would leave its `on_workflow_start` actions
+    /// suppressed forever.
+    pub async fn reset_actions_for_reinitialize(
+        &self,
+        workflow_id: i64,
+        only_uninitialized: bool,
+    ) -> Result<(), ApiError> {
         debug!(
-            "reset_actions_for_reinitialize(workflow_id={})",
-            workflow_id
+            "reset_actions_for_reinitialize(workflow_id={}, only_uninitialized={})",
+            workflow_id, only_uninitialized
         );
 
         // First, delete all recovery actions (ephemeral actions created during recovery)
@@ -892,40 +899,46 @@ impl WorkflowActionsApiImpl {
             // iff its triggering condition will genuinely re-occur in the new run. "Keep" only
             // preserves the flag -- a never-fired action keeps `executed = 0` and stays fireable. See
             // the function doc comment for the full rationale and the per-trigger reasoning.
-            let keep_executed = match trigger_type.as_str() {
-                // The workflow starts exactly once in its lifetime; a reinitialize is NOT a new
-                // start. Keep on_workflow_start actions suppressed so reinit never re-runs start-time
-                // setup (run_commands) or re-submits start-time allocations (schedule_nodes).
-                "on_workflow_start" => true,
+            //
+            // A full initialize (only_uninitialized = false, e.g. `torc workflows init`) is a clean
+            // slate: it reset every job, so re-arm every action (never keep). The per-trigger keep
+            // logic below applies only to a partial reinitialize.
+            let keep_executed = only_uninitialized
+                && match trigger_type.as_str() {
+                    // The workflow starts exactly once per run-from-the-top; a *partial* reinitialize
+                    // is NOT a new start. Keep on_workflow_start actions suppressed so reinit never
+                    // re-runs start-time setup (run_commands) or re-submits start-time allocations
+                    // (schedule_nodes).
+                    "on_workflow_start" => true,
 
-                // Job-gated: the condition re-occurs iff the gating jobs will run again, i.e. they
-                // are no longer all in a terminal state. Measured with the terminal-state
-                // (on_jobs_complete) notion for BOTH triggers, NOT trigger_count: a reset
-                // on_jobs_ready gate returns to Ready, and Ready would spuriously satisfy
-                // on_jobs_ready and wrongly keep the action suppressed on a full re-run. This is
-                // action-type-agnostic on purpose -- the hazard is a duplicate side effect (a
-                // re-submitted allocation, a re-run command), not anything specific to
-                // schedule_nodes.
-                "on_jobs_ready" | "on_jobs_complete" => {
-                    if job_ids.is_empty() {
-                        false
-                    } else {
-                        let already_ran = self
-                            .count_jobs_in_satisfied_state(
-                                workflow_id,
-                                &job_ids,
-                                "on_jobs_complete",
-                            )
-                            .await?;
-                        already_ran >= required_triggers
+                    // Job-gated: the condition re-occurs iff the gating jobs will run again, i.e. they
+                    // are no longer all in a terminal state. Measured with the terminal-state
+                    // (on_jobs_complete) notion for BOTH triggers, NOT trigger_count: a reset
+                    // on_jobs_ready gate returns to Ready, and Ready would spuriously satisfy
+                    // on_jobs_ready and wrongly keep the action suppressed on a full re-run. This is
+                    // action-type-agnostic on purpose -- the hazard is a duplicate side effect (a
+                    // re-submitted allocation, a re-run command), not anything specific to
+                    // schedule_nodes.
+                    "on_jobs_ready" | "on_jobs_complete" => {
+                        if job_ids.is_empty() {
+                            false
+                        } else {
+                            let already_ran = self
+                                .count_jobs_in_satisfied_state(
+                                    workflow_id,
+                                    &job_ids,
+                                    "on_jobs_complete",
+                                )
+                                .await?;
+                            already_ran >= required_triggers
+                        }
                     }
-                }
 
-                // on_workflow_complete (the workflow will complete again once the re-run finishes)
-                // and on_worker_start / on_worker_complete (new workers run in the new run) genuinely
-                // recur each run, so they are always re-armed.
-                _ => false,
-            };
+                    // on_workflow_complete (the workflow will complete again once the re-run finishes)
+                    // and on_worker_start / on_worker_complete (new workers run in the new run)
+                    // genuinely recur each run, so they are always re-armed.
+                    _ => false,
+                };
 
             let result = if keep_executed {
                 // Leave executed/executed_by intact; only refresh trigger_count.

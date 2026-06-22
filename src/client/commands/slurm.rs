@@ -439,6 +439,20 @@ EXAMPLES:
         /// Scheduler config ID (ignored if --auto is set)
         #[arg(long)]
         scheduler_config_id: Option<i64>,
+        /// Mark the workflow's already-pending `schedule_nodes` actions executed before submitting,
+        /// so the worker(s) started here do not also fire them and submit their own allocations.
+        ///
+        /// Use this when manually scheduling a re-run (e.g. after `jobs reset-status --reinit`):
+        /// without it, a pending action re-armed by the reinit is claimed by the new worker and
+        /// submits its full `num_allocations` on top of what you requested. `torc recover` does this
+        /// suppression automatically (and right-sizes the allocation). Implies a non-interactive
+        /// "suppress" answer, so no prompt is shown.
+        #[arg(long, default_value = "false")]
+        suppress_actions: bool,
+        /// Do not prompt about pending `schedule_nodes` actions; proceed and let the worker(s) fire
+        /// them (unless `--suppress-actions` is also given). Use for non-interactive/scripted runs.
+        #[arg(long, default_value = "false")]
+        no_prompts: bool,
     },
     /// Parse Slurm log files for known error messages
     #[command(
@@ -1318,6 +1332,8 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             poll_interval,
             claim_backoff_max_secs,
             scheduler_config_id,
+            suppress_actions,
+            no_prompts,
         } => {
             let user_name = get_env_user_name();
             let wf_id = workflow_id.unwrap_or_else(|| {
@@ -1388,6 +1404,23 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     std::process::exit(1);
                 })
             });
+
+            // A worker started here claims the workflow's own pending schedule_nodes actions and
+            // submits their allocations. After `jobs reset-status --reinit`, a re-armed action can be
+            // pending again, so it would fire its full num_allocations on top of what is requested
+            // here. Detect that and let the user decide: suppress those actions, proceed anyway, or
+            // cancel. `--suppress-actions` answers "suppress"; `--no-prompts` (or a non-interactive
+            // stdin) answers "proceed" unless `--suppress-actions` is set.
+            if let Err(e) = handle_pending_schedule_actions(
+                config,
+                wf_id,
+                *num_hpc_jobs,
+                *suppress_actions,
+                *no_prompts,
+            ) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
 
             // Use poll_interval from CLI arg, or fall back to config file value
             let torc_config = TorcConfig::load().unwrap_or_default();
@@ -1619,6 +1652,474 @@ where
     E: std::fmt::Display,
 {
     result.map_err(|err| Box::new(RetryApiError(err.to_string())) as Box<dyn std::error::Error>)
+}
+
+/// Handle the workflow's own pending `schedule_nodes` actions before a manual `schedule-nodes`
+/// submission.
+///
+/// A worker started by `schedule-nodes` claims pending `on_jobs_ready`/`on_jobs_complete`
+/// `schedule_nodes` actions and submits their allocations. After `jobs reset-status --reinit` a
+/// re-armed action can be pending again, so it would fire its full `num_allocations` on top of what
+/// the user asked for here. This surfaces that:
+///
+/// - `suppress_actions` → mark those actions executed (so they don't fire), no prompt.
+/// - non-interactive (`no_prompts`, or stdin is not a TTY) → warn and proceed (let them fire), the
+///   historical behavior; pass `--suppress-actions` to prevent it.
+/// - interactive → prompt the user to suppress / proceed / cancel.
+///
+/// Returns `Err` if the pending-actions check or the suppression fails; cancellation exits the
+/// process.
+pub fn handle_pending_schedule_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    requested_allocations: i32,
+    suppress_actions: bool,
+    no_prompts: bool,
+) -> Result<(), String> {
+    use std::io::{IsTerminal, Write};
+
+    let pending = apis::workflow_actions_api::get_pending_actions(config, workflow_id, None)
+        .map_err(|e| format!("could not check for pending schedule_nodes actions: {}", e))?;
+    let firable: Vec<_> = pending
+        .into_iter()
+        .filter(|a| a.action_type == "schedule_nodes" && !a.is_recovery)
+        .collect();
+    if firable.is_empty() {
+        return Ok(());
+    }
+    let count = firable.len();
+    let total: i64 = firable
+        .iter()
+        .map(|a| {
+            // Missing num_allocations defaults to 1 at execution time (see workflow_manager.rs /
+            // job_runner.rs); count it the same here so the warning doesn't understate the total.
+            a.action_config
+                .get("num_allocations")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1)
+        })
+        .sum();
+
+    let warn = || {
+        eprintln!(
+            "Warning: {} pending schedule_nodes action(s) (~{} allocation(s) total) will be claimed \
+             by the worker(s) this command starts and submit their own allocations, on top of the {} \
+             you requested.",
+            count, total, requested_allocations
+        );
+        eprintln!(
+            "  See them with: torc workflows list-actions {}",
+            workflow_id
+        );
+    };
+
+    let do_suppress = if suppress_actions {
+        true
+    } else if no_prompts || !std::io::stdin().is_terminal() {
+        // Non-interactive: warn and proceed (let the actions fire) — the historical behavior.
+        warn();
+        eprintln!("  Proceeding without suppressing; pass --suppress-actions to prevent this.");
+        false
+    } else {
+        // Interactive: let the user choose.
+        warn();
+        eprint!(
+            "Suppress these actions ([s]), proceed and let them fire ([p]), or cancel ([c])? [s/p/c]: "
+        );
+        let _ = std::io::stderr().flush();
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("failed to read input: {}", e))?;
+        match input.trim().to_lowercase().as_str() {
+            "s" | "suppress" => true,
+            "p" | "proceed" => false,
+            _ => {
+                eprintln!("Cancelled.");
+                std::process::exit(0);
+            }
+        }
+    };
+
+    if do_suppress {
+        crate::client::commands::recover::mark_satisfied_schedule_actions_executed(
+            config,
+            workflow_id,
+        )?;
+        // Persistent actions intentionally cannot be suppressed (mark_satisfied_... leaves them
+        // armed so multiple workers can claim them); don't count them as suppressed, and tell the
+        // user they will still re-fire.
+        let persistent_count = firable.iter().filter(|a| a.persistent).count();
+        let suppressed = count - persistent_count;
+        eprintln!(
+            "Suppressed {} pending schedule_nodes action(s) so the worker(s) started here will not re-fire them.",
+            suppressed
+        );
+        if persistent_count > 0 {
+            eprintln!(
+                "  Note: {} persistent action(s) cannot be suppressed and will still re-fire, \
+                 submitting their own allocations. Remove or disable them to avoid duplicates.",
+                persistent_count
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Effective allocation count for a `schedule_nodes` action: the per-submission override if the
+/// user set one, else the action's configured count (missing defaults to 1, matching
+/// workflow_manager / job_runner / list-actions).
+fn action_alloc_count(action: &models::WorkflowActionModel, overrides: &HashMap<i64, i32>) -> i64 {
+    if let Some(id) = action.id
+        && let Some(count) = overrides.get(&id)
+    {
+        return *count as i64;
+    }
+    action
+        .action_config
+        .get("num_allocations")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1)
+}
+
+/// Human-readable label for the gating jobs of an action (`job_ids` resolved to names where known),
+/// truncated so a wide fan-out stays on one line.
+fn gate_label(action: &models::WorkflowActionModel, job_names: &HashMap<i64, String>) -> String {
+    let Some(ids) = action.job_ids.as_ref().filter(|ids| !ids.is_empty()) else {
+        return "(all jobs)".to_string();
+    };
+    let shown: Vec<String> = ids
+        .iter()
+        .take(3)
+        .map(|id| {
+            job_names
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| format!("job {}", id))
+        })
+        .collect();
+    if ids.len() > shown.len() {
+        format!("{}, +{} more", shown.join(", "), ids.len() - shown.len())
+    } else {
+        shown.join(", ")
+    }
+}
+
+/// Scheduler label for an action: its name when resolvable from `scheduler_id`, else `id=<n>`.
+fn scheduler_label(
+    action: &models::WorkflowActionModel,
+    scheduler_names: &HashMap<i64, String>,
+) -> String {
+    match action
+        .action_config
+        .get("scheduler_id")
+        .and_then(|v| v.as_i64())
+    {
+        Some(id) => scheduler_names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| format!("id={}", id)),
+        None => "-".to_string(),
+    }
+}
+
+/// Print the "submit now" group (the actions submit fires immediately), reflecting the user's
+/// in-progress disable/override choices, and the running total of allocations.
+fn render_now_group(
+    now: &[models::WorkflowActionModel],
+    disabled: &std::collections::HashSet<i64>,
+    overrides: &HashMap<i64, i32>,
+    scheduler_names: &HashMap<i64, String>,
+    job_names: &HashMap<i64, String>,
+) {
+    eprintln!("Will submit now ({} action(s)):", now.len());
+    if now.is_empty() {
+        eprintln!("  (none)");
+    }
+    let mut total = 0i64;
+    for a in now {
+        let id = a.id.unwrap_or(-1);
+        if disabled.contains(&id) {
+            eprintln!(
+                "  [disabled] id={:<4} {:<16} {}",
+                id,
+                a.trigger_type,
+                scheduler_label(a, scheduler_names),
+            );
+            continue;
+        }
+        let allocs = action_alloc_count(a, overrides);
+        total += allocs;
+        let changed = if a.id.is_some_and(|id| overrides.contains_key(&id)) {
+            " (changed)"
+        } else {
+            ""
+        };
+        eprintln!(
+            "  id={:<4} {:<16} sched={:<16} allocations={}{:<10} gates: {}",
+            id,
+            a.trigger_type,
+            scheduler_label(a, scheduler_names),
+            allocs,
+            changed,
+            gate_label(a, job_names),
+        );
+    }
+    eprintln!("  → {} Slurm allocation(s) will be submitted now.", total);
+}
+
+/// Review the `schedule_nodes` actions `torc submit` will fire, on a re-submission, and let the user
+/// adjust them before submitting.
+///
+/// On the first run (`run_id <= 1`) there is nothing to reconcile -- the pending actions are exactly
+/// what the spec declared -- so this returns an empty override map without prompting.
+///
+/// On a re-submission the reinitialize re-arm logic (see `reset_actions_for_reinitialize`) can leave
+/// `schedule_nodes` actions pending whose allocation counts no longer match what the user wants this
+/// run. Scoped to the slurm `schedule_nodes` actions submit itself fires from the login node, this
+/// prints two groups:
+///
+/// - **Will submit now**: pending (`trigger_count >= required_triggers`) actions submit fires
+///   immediately. The user can disable one (suppressed via claim, so it submits nothing) or override
+///   its allocation count for this submission only.
+/// - **Will submit later**: deferred actions (gates not yet satisfied) that running workers fire as
+///   later stages complete. Listed for visibility; not adjustable here.
+///
+/// Returns a map of action id -> allocation count to apply for this submission (empty unless the
+/// user changed something; never persisted to `action_config`). Disabled actions are claimed in here
+/// so they are absent from the pending set `start()` later reads. `--no-prompts` or a non-TTY stdin
+/// prints the summary and proceeds with the configured counts. Returns `Err` on API failure;
+/// cancellation exits the process.
+pub fn review_submit_pending_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    run_id: i64,
+    no_prompts: bool,
+) -> Result<HashMap<i64, i32>, String> {
+    use std::collections::HashSet;
+    use std::io::{IsTerminal, Write};
+
+    let mut overrides: HashMap<i64, i32> = HashMap::new();
+
+    // First run: the pending actions are exactly what the spec declared; nothing to reconcile.
+    if run_id <= 1 {
+        return Ok(overrides);
+    }
+
+    // Only slurm schedule_nodes actions that have not executed and are not recovery actions are
+    // candidates -- those are exactly what submit fires from the login node.
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .map_err(|e| format!("could not list workflow actions: {}", e))?;
+    let (now, later): (Vec<_>, Vec<_>) = actions
+        .into_iter()
+        .filter(|a| {
+            a.action_type == "schedule_nodes"
+                && !a.is_recovery
+                && !a.executed
+                // Restrict to the trigger types `start()` actually fires from the login node (see
+                // its get_pending_actions call). A schedule_nodes action with another trigger type
+                // (e.g. on_worker_start) is never fired by submit, so listing it here -- and letting
+                // the user disable/override it -- would be misleading.
+                && matches!(
+                    a.trigger_type.as_str(),
+                    "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+                )
+                && a.action_config
+                    .get("scheduler_type")
+                    .and_then(|v| v.as_str())
+                    == Some("slurm")
+        })
+        // "now" = pending (gates satisfied); "later" = deferred (gates not yet satisfied).
+        .partition(|a| a.trigger_count >= a.required_triggers);
+
+    if now.is_empty() && later.is_empty() {
+        return Ok(overrides);
+    }
+
+    // Best-effort name resolution for display; fall back to ids on any error.
+    let scheduler_names: HashMap<i64, String> =
+        match apis::slurm_schedulers_api::list_slurm_schedulers(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+        ) {
+            Ok(resp) => resp
+                .items
+                .into_iter()
+                .filter_map(|s| Some((s.id?, s.name?)))
+                .collect(),
+            Err(_) => HashMap::new(),
+        };
+    let job_names: HashMap<i64, String> = match apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ) {
+        Ok(resp) => resp
+            .items
+            .into_iter()
+            .filter_map(|j| j.id.map(|id| (id, j.name)))
+            .collect(),
+        Err(_) => HashMap::new(),
+    };
+
+    eprintln!();
+    eprintln!(
+        "Workflow {} (run #{}) — re-submission. Review what `torc submit` will schedule:",
+        workflow_id, run_id
+    );
+
+    let mut disabled: HashSet<i64> = HashSet::new();
+    render_now_group(&now, &disabled, &overrides, &scheduler_names, &job_names);
+
+    // Deferred actions: informational only.
+    if !later.is_empty() {
+        eprintln!(
+            "Will submit later ({} action(s), fired by workers as their gating jobs become ready/complete):",
+            later.len()
+        );
+        for a in &later {
+            eprintln!(
+                "  id={:<4} {:<16} sched={:<16} allocations={:<4} gates: {}",
+                a.id.unwrap_or(-1),
+                a.trigger_type,
+                scheduler_label(a, &scheduler_names),
+                action_alloc_count(a, &overrides),
+                gate_label(a, &job_names),
+            );
+        }
+        eprintln!(
+            "  (these run from compute nodes with their configured counts; not adjustable here)"
+        );
+    }
+
+    // A non-interactive run prints the summary and proceeds with configured counts.
+    if no_prompts || !std::io::stdin().is_terminal() {
+        eprintln!(
+            "Proceeding with the configured allocation counts (--no-prompts or non-interactive stdin)."
+        );
+        return Ok(overrides);
+    }
+
+    // Index now-actions by id for validation and persistent-flag lookups.
+    let now_by_id: HashMap<i64, &models::WorkflowActionModel> =
+        now.iter().filter_map(|a| a.id.map(|id| (id, a))).collect();
+
+    loop {
+        eprint!(
+            "Options: [p]roceed, [d]isable <id>, [n]um <id> <count> (0 = disable), [c]ancel\n> "
+        );
+        let _ = std::io::stderr().flush();
+        let mut input = String::new();
+        let bytes = std::io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("failed to read input: {}", e))?;
+        if bytes == 0 {
+            // EOF (e.g. Ctrl-D): treat as cancel rather than looping forever.
+            eprintln!("\nCancelled (EOF). No allocations submitted.");
+            std::process::exit(0);
+        }
+        let tokens: Vec<&str> = input.split_whitespace().collect();
+        match tokens.first().map(|t| t.to_lowercase()).as_deref() {
+            // Require an explicit "p" to proceed; a bare Enter re-prompts so a stray keypress can't
+            // submit allocations.
+            None => continue,
+            Some("p") | Some("proceed") => break,
+            Some("c") | Some("cancel") | Some("q") => {
+                eprintln!("Cancelled. No allocations submitted.");
+                std::process::exit(0);
+            }
+            Some("d") | Some("disable") => {
+                match tokens.get(1).and_then(|s| s.parse::<i64>().ok()) {
+                    Some(id) if now_by_id.contains_key(&id) => {
+                        disabled.insert(id);
+                        overrides.remove(&id);
+                        eprintln!("Action {} disabled — it will submit nothing this run.", id);
+                        render_now_group(&now, &disabled, &overrides, &scheduler_names, &job_names);
+                    }
+                    _ => eprintln!(
+                        "  Usage: d <id>, where <id> is one of the 'will submit now' actions."
+                    ),
+                }
+            }
+            Some("n") | Some("num") | Some("allocations") => {
+                match (
+                    tokens.get(1).and_then(|s| s.parse::<i64>().ok()),
+                    tokens.get(2).and_then(|s| s.parse::<i32>().ok()),
+                ) {
+                    (Some(id), Some(count)) if now_by_id.contains_key(&id) && count >= 0 => {
+                        if count == 0 {
+                            disabled.insert(id);
+                            overrides.remove(&id);
+                            eprintln!("Action {} set to 0 allocations — disabled this run.", id);
+                        } else {
+                            disabled.remove(&id);
+                            overrides.insert(id, count);
+                            eprintln!(
+                                "Action {} will submit {} allocation(s) this submission.",
+                                id, count
+                            );
+                        }
+                        render_now_group(&now, &disabled, &overrides, &scheduler_names, &job_names);
+                    }
+                    _ => eprintln!(
+                        "  Usage: n <id> <count>, where <id> is a 'will submit now' action and <count> >= 0."
+                    ),
+                }
+            }
+            _ => eprintln!("  Unrecognized input. Use p / d <id> / n <id> <count> / c."),
+        }
+    }
+
+    // Apply disables now (only on proceed, so a cancel leaves the workflow untouched). Claiming
+    // marks the action executed so the workers started by this submission do not fire it either.
+    for id in &disabled {
+        let action = now_by_id.get(id);
+        if action.is_some_and(|a| a.persistent) {
+            eprintln!(
+                "  Note: action {} is persistent and cannot be disabled by suppression; it will \
+                 still re-fire from a worker. Remove or disable it in the spec to avoid that.",
+                id
+            );
+            continue;
+        }
+        match crate::client::utils::claim_action(config, workflow_id, *id, None, 20) {
+            // Claimed by us -> suppressed as intended.
+            Ok(true) => {}
+            // claim_action returns Ok(false) on a 409: the action was already claimed by a
+            // concurrent submitter or a worker, who will fire it. We could not disable it, so warn
+            // instead of silently reporting it disabled.
+            Ok(false) => {
+                eprintln!(
+                    "  Warning: could not disable action {} -- it was already claimed by another \
+                     submitter or worker and may still fire.",
+                    id
+                );
+            }
+            Err(e) => {
+                return Err(format!(
+                    "failed to disable (claim) action {}: {}; aborting so it does not fire unexpectedly",
+                    id, e
+                ));
+            }
+        }
+    }
+
+    Ok(overrides)
 }
 
 /// Result indicating success or failure
@@ -4417,6 +4918,43 @@ pub struct SchedulerInfo {
     pub has_dependencies: bool,
 }
 
+/// Fire every pending `schedule_nodes` action for the workflow via `WorkflowManager::start` --
+/// the same path `torc submit` uses -- and return the number of Slurm allocations submitted.
+///
+/// `handle_regenerate --submit` calls this instead of scheduling allocations directly, so recovery
+/// schedules nodes exclusively through actions. The workflow is already initialized at this point,
+/// so `start` skips initialization and only claims/executes the pending (ready-now) recovery
+/// actions; deferred recovery actions remain Waiting for a worker to fire later.
+fn fire_pending_schedule_nodes_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    output_dir: &Path,
+    poll_interval: Option<i32>,
+) -> Result<i64, String> {
+    let workflow = utils::send_with_retries(
+        config,
+        || apis::workflows_api::get_workflow(config, workflow_id),
+        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+    )
+    .map_err(|e| format!("Failed to fetch workflow {}: {}", workflow_id, e))?;
+
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+
+    let outcome = workflow_manager
+        .start(
+            false, // force
+            None,  // max_parallel_jobs_override
+            output_dir.to_str().unwrap_or("torc_output"),
+            poll_interval,
+            None, // claim_backoff_max_secs_override
+            &std::collections::HashMap::new(),
+        )
+        .map_err(|e| format!("Failed to fire schedule_nodes actions: {}", e))?;
+
+    Ok(outcome.allocations_submitted as i64)
+}
+
 /// Handle the regenerate command - regenerates Slurm schedulers for pending jobs
 #[allow(clippy::too_many_arguments, clippy::result_large_err)]
 fn handle_regenerate(
@@ -4439,7 +4977,6 @@ fn handle_regenerate(
 ) {
     // Load HPC config and registry
     let torc_config = TorcConfig::load().unwrap_or_default();
-    let effective_poll_interval = poll_interval.unwrap_or(torc_config.client.slurm.poll_interval);
     let registry = create_registry_with_config_public(&torc_config.client.hpc);
 
     // Get the HPC profile
@@ -4893,7 +5430,17 @@ fn handle_regenerate(
         }
     }
 
-    // Create recovery actions for deferred groups (from planned actions with is_recovery=true)
+    // Map each created scheduler to whether its jobs still depend on unfinished work. A ready-now
+    // scheduler (no pending dependencies) gets a Pending recovery action that the submit path below
+    // fires immediately; a deferred scheduler gets a Waiting action that a running worker fires once
+    // the gate jobs complete.
+    let scheduler_has_deps: HashMap<&str, bool> = schedulers_created
+        .iter()
+        .map(|s| (s.name.as_str(), s.has_dependencies))
+        .collect();
+
+    // Create recovery actions tying each generated scheduler to its jobs (one per generated
+    // scheduler, from planned actions with is_recovery=true).
     for action in &plan.actions {
         if !action.is_recovery {
             continue; // Skip non-recovery actions
@@ -4940,6 +5487,20 @@ fn handle_regenerate(
             "num_allocations": action.num_allocations,
         });
 
+        let has_dependencies = scheduler_has_deps
+            .get(action.scheduler_name.as_str())
+            .copied()
+            .unwrap_or(false);
+        // A ready-now action's gate jobs are all satisfied (Ready) right now, so arm it to Pending:
+        // trigger_count == required_triggers, which the server sets to job_ids.len() for job-gated
+        // triggers. A deferred action stays Waiting (0) until its gate jobs complete and a worker
+        // fires it.
+        let trigger_count = if has_dependencies {
+            0
+        } else {
+            job_ids.len() as i64
+        };
+
         let action_body = models::WorkflowActionModel {
             id: None,
             workflow_id,
@@ -4947,7 +5508,7 @@ fn handle_regenerate(
             action_type: "schedule_nodes".to_string(),
             action_config,
             job_ids: Some(job_ids.clone()),
-            trigger_count: 0,
+            trigger_count,
             required_triggers: 1,
             executed: false,
             executed_at: None,
@@ -4999,45 +5560,32 @@ fn handle_regenerate(
             std::process::exit(1);
         }
 
+        // Deferred schedulers (jobs still gated on unfinished dependencies) keep their on_jobs_ready
+        // recovery action in the Waiting state; a running worker fires it once the gate jobs
+        // complete. Only report them here -- there is nothing to submit yet.
         for scheduler_info in &schedulers_created {
-            // Skip schedulers for jobs with dependencies - they will be submitted
-            // when their on_jobs_ready action fires
             if scheduler_info.has_dependencies {
                 println!(
-                    "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action",
+                    "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action when dependencies complete",
                     scheduler_info.name, scheduler_info.num_allocations
                 );
                 allocations_deferred += scheduler_info.num_allocations;
-                continue;
             }
+        }
 
-            match schedule_slurm_nodes(
-                config,
-                workflow_id,
-                scheduler_info.id,
-                scheduler_info.num_allocations as i32,
-                false, // start_one_worker_per_node
-                "",
-                output_dir.to_str().unwrap_or("torc_output"),
-                effective_poll_interval,
-                None,  // max_parallel_jobs
-                false, // keep_submission_scripts
-                None,  // claim_backoff_max_secs (rely on runner-side config)
-            ) {
-                Ok(()) => {
-                    println!(
-                        "  Submitted {} allocation(s) for scheduler '{}'",
-                        scheduler_info.num_allocations, scheduler_info.name
-                    );
-                    allocations_submitted += scheduler_info.num_allocations;
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Error submitting allocations for scheduler '{}': {}",
-                        scheduler_info.name, e
-                    );
-                    std::process::exit(1);
-                }
+        // Submit the ready-now allocations through the SAME path `torc submit` uses: fire every
+        // pending schedule_nodes action. The recovery actions for ready-now schedulers were created
+        // Pending above, so this claims and executes them (marking each Executed). We deliberately do
+        // NOT call schedule_slurm_nodes directly here: scheduling exclusively through actions keeps
+        // action state honest -- no action is left in a perpetual Waiting state after its allocation
+        // was already submitted out-of-band -- and routes all scheduling through one code path.
+        match fire_pending_schedule_nodes_actions(config, workflow_id, output_dir, poll_interval) {
+            Ok(submitted_count) => {
+                allocations_submitted = submitted_count;
+            }
+            Err(e) => {
+                eprintln!("Error submitting allocations: {}", e);
+                std::process::exit(1);
             }
         }
         submitted = true;

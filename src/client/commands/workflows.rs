@@ -141,6 +141,8 @@ struct WorkflowActionTableRow {
     trigger_type: String,
     #[tabled(rename = "Action")]
     action_type: String,
+    #[tabled(rename = "Allocations")]
+    allocations: String,
     #[tabled(rename = "Progress")]
     progress: String,
     #[tabled(rename = "Status")]
@@ -1067,10 +1069,26 @@ fn handle_list_actions(
                             _ => "(all jobs)".to_string(),
                         };
 
+                        // For schedule_nodes actions, surface num_allocations (how many Slurm
+                        // allocations this action submits when it fires); blank for other types.
+                        // A missing value defaults to 1 at execution time (see workflow_manager.rs /
+                        // job_runner.rs), so show that effective default rather than a misleading "?".
+                        let allocations = if action.action_type == "schedule_nodes" {
+                            action
+                                .action_config
+                                .get("num_allocations")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(1)
+                                .to_string()
+                        } else {
+                            "-".to_string()
+                        };
+
                         WorkflowActionTableRow {
                             id: action.id.unwrap_or(-1),
                             trigger_type: action.trigger_type.clone(),
                             action_type: action.action_type.clone(),
+                            allocations,
                             progress,
                             status,
                             executed_at: action.executed_at.as_deref().unwrap_or("-").to_string(),
@@ -2925,12 +2943,10 @@ pub fn handle_create(
 
             if summary.has_schedule_nodes_action {
                 println!(
-                    "Submission: Ready for scheduler submission (has on_workflow_start schedule_nodes action)"
+                    "Submission: Ready for scheduler submission (has a schedule_nodes action)"
                 );
             } else {
-                println!(
-                    "Submission: Local execution only (no on_workflow_start schedule_nodes action)"
-                );
+                println!("Submission: Local execution only (no schedule_nodes action)");
             }
             println!();
 

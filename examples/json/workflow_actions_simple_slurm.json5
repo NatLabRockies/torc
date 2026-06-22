@@ -74,8 +74,11 @@
   // Workflow actions
   "actions": [
     {
-      "trigger_type": "on_workflow_start",
+      // Tied to the setup job via on_jobs_ready (not on_workflow_start) so the allocation is
+      // re-run-safe: resetting setup + reinitializing re-schedules it on the next `torc submit`.
+      "trigger_type": "on_jobs_ready",
       "action_type": "schedule_nodes",
+      "jobs": ["setup"],
       "scheduler": "setup_scheduler",
       "scheduler_type": "slurm",
       "num_allocations": 1

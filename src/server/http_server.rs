@@ -956,7 +956,7 @@ impl<C> Server<C> {
         // idempotent, so a failed (re)initialize can be safely retried.
         if let Err(e) = self
             .workflow_actions_api
-            .reset_actions_for_reinitialize(id)
+            .reset_actions_for_reinitialize(id, only_uninit)
             .await
         {
             error!(

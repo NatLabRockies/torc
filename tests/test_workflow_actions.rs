@@ -2978,3 +2978,493 @@ fn test_reinit_workflow_complete_rearmed_matrix(
     );
     wait_for_specific_action_pending(config, workflow_id, action_id);
 }
+
+// ===========================================================================
+// `torc submit` supports on_jobs_ready scheduling: after a subset re-run, the set of pending
+// schedule_nodes actions that submit fires (across on_workflow_start / on_jobs_ready /
+// on_jobs_complete) must be exactly the reset classes. This is the selection that lets
+// `reset-status <ids> --reinit` + `submit` re-schedule only the jobs being re-run.
+// ===========================================================================
+
+/// True if `action_id` is in the set of pending schedule_nodes actions that `WorkflowManager::start`
+/// (i.e. `torc submit`) would fire: pending actions across the three schedule-capable trigger types.
+fn action_in_submit_pending_set(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+) -> bool {
+    apis::workflow_actions_api::get_pending_actions(
+        config,
+        workflow_id,
+        Some(vec![
+            "on_workflow_start".to_string(),
+            "on_jobs_ready".to_string(),
+            "on_jobs_complete".to_string(),
+        ]),
+    )
+    .expect("get_pending_actions")
+    .iter()
+    .any(|a| a.id == Some(action_id))
+}
+
+/// The reported scenario: per-class `on_jobs_ready` schedule_nodes actions (regular / bigmem / gpu),
+/// plus a postprocess job depending on all three with its own action. Run once, then reset only the
+/// gpu + bigmem jobs and reinitialize. The submit pending-set must then be EXACTLY {gpu, bigmem}:
+/// regular stays suppressed (its jobs are still terminal), and postprocess is not pending (its job is
+/// Blocked). So `torc submit` re-schedules only the gpu + bigmem allocations.
+#[rstest]
+fn test_submit_pending_set_after_subset_reinit_is_only_reset_classes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "submit_on_jobs_ready_subset");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Three root job classes + a postprocess job gated on all of them.
+    let regular = create_test_job(config, workflow_id, "regular1")
+        .expect("create regular")
+        .id
+        .unwrap();
+    let bigmem = create_test_job(config, workflow_id, "bigmem1")
+        .expect("create bigmem")
+        .id
+        .unwrap();
+    let gpu = create_test_job(config, workflow_id, "gpu1")
+        .expect("create gpu")
+        .id
+        .unwrap();
+    let mut post = JobModel::new(
+        workflow_id,
+        "postprocess".to_string(),
+        "echo post".to_string(),
+    );
+    post.depends_on_job_ids = Some(vec![regular, bigmem, gpu]);
+    post.cancel_on_blocking_job_failure = Some(false);
+    let post_id = apis::jobs_api::create_job(config, post)
+        .expect("create postprocess")
+        .id
+        .unwrap();
+
+    // One on_jobs_ready schedule_nodes action per class + one for postprocess.
+    let mk_action = |trigger_jobs: Vec<i64>| {
+        apis::workflow_actions_api::create_workflow_action(
+            config,
+            workflow_id,
+            workflow_action(
+                workflow_id,
+                "on_jobs_ready",
+                "schedule_nodes",
+                schedule_nodes_config(),
+                Some(trigger_jobs),
+            ),
+        )
+        .expect("create action")
+        .id
+        .unwrap()
+    };
+    let reg_action = mk_action(vec![regular]);
+    let big_action = mk_action(vec![bigmem]);
+    let gpu_action = mk_action(vec![gpu]);
+    let post_action = mk_action(vec![post_id]);
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    // Run 1: the three roots are Ready at init, so their actions are pending. Claim each (fired),
+    // then complete the jobs so postprocess becomes ready; claim its action and run postprocess.
+    for (job, action) in [
+        (regular, reg_action),
+        (bigmem, big_action),
+        (gpu, gpu_action),
+    ] {
+        wait_for_specific_action_pending(config, workflow_id, action);
+        apis::workflow_actions_api::claim_action(
+            config,
+            workflow_id,
+            action,
+            ClaimActionRequest {
+                compute_node_id: Some(compute_node_id),
+            },
+        )
+        .expect("claim class action");
+        run_job_to_status(
+            config,
+            workflow_id,
+            job,
+            run_id,
+            compute_node_id,
+            0,
+            JobStatus::Completed,
+        );
+    }
+    wait_for_job_status(config, post_id, JobStatus::Ready);
+    wait_for_specific_action_pending(config, workflow_id, post_action);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        post_action,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim postprocess action");
+    run_job_to_status(
+        config,
+        workflow_id,
+        post_id,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Failed,
+    );
+
+    // Subset re-run: reset only gpu + bigmem (postprocess cascade-resets since it depends on them),
+    // then reinitialize. regular is left untouched.
+    apis::jobs_api::manage_status_change(config, gpu, JobStatus::Uninitialized, run_id)
+        .expect("reset gpu");
+    apis::jobs_api::manage_status_change(config, bigmem, JobStatus::Uninitialized, run_id)
+        .expect("reset bigmem");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    // The submit pending-set must be exactly {gpu, bigmem}.
+    assert!(
+        action_in_submit_pending_set(config, workflow_id, gpu_action),
+        "gpu action must be pending (gpu was reset and is Ready) so submit re-schedules it"
+    );
+    assert!(
+        action_in_submit_pending_set(config, workflow_id, big_action),
+        "bigmem action must be pending (bigmem was reset and is Ready) so submit re-schedules it"
+    );
+    assert!(
+        !action_in_submit_pending_set(config, workflow_id, reg_action),
+        "regular action must NOT be pending (its jobs stayed terminal) so submit does not re-schedule it"
+    );
+    assert!(
+        !action_in_submit_pending_set(config, workflow_id, post_action),
+        "postprocess action must NOT be pending yet (postprocess is Blocked); a running worker fires it later"
+    );
+    // regular's action stays executed (kept), confirming it was suppressed rather than just unready.
+    assert!(
+        fetch_action(config, workflow_id, reg_action).executed,
+        "regular action should remain executed (kept) after the subset reinit"
+    );
+}
+
+// ===========================================================================
+// Full init (`torc workflows init`, only_uninitialized = false) is a clean slate: it resets every
+// job and re-arms EVERY action, including on_workflow_start. This contrasts with a partial
+// reinitialize (only_uninitialized = true), which keeps a satisfied on_workflow_start action
+// (test_workflow_start_schedule_action_kept_on_reinitialize).
+// ===========================================================================
+
+/// A full initialize re-arms an already-fired on_workflow_start action (clean slate), so re-running
+/// `torc workflows init` on a workflow that already ran does not leave its start actions stranded.
+#[rstest]
+fn test_full_init_rearms_workflow_start_action(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "full_init_rearms_workflow_start");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    // First init: on_workflow_start is pending; claim it (fired).
+    manager.initialize(true).expect("initialize");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+    assert!(fetch_action(config, workflow_id, action_id).executed);
+
+    // Full init again (what `torc workflows init` does: reset all jobs + initialize). This is a
+    // clean slate, so the on_workflow_start action is re-armed (unlike a partial reinitialize, which
+    // keeps it).
+    manager.initialize(true).expect("re-initialize (full)");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "full init must re-arm on_workflow_start (clean slate)"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "re-armed on_workflow_start should be pending again after a full init"
+    );
+}
+
+// ===========================================================================
+// `torc slurm schedule-nodes` pending-action handling
+// (handle_pending_schedule_actions): a worker started by schedule-nodes would claim the workflow's
+// own pending schedule_nodes actions and submit their allocations on top of the manual request.
+// --suppress-actions marks them executed; --no-prompts (non-interactive) proceeds and lets them
+// fire. These call the helper directly (no Slurm submission / sbatch needed).
+// ===========================================================================
+
+/// Create a workflow with one job and a pending `on_workflow_start` `schedule_nodes` action
+/// (pending right after initialize). Returns (workflow_id, action_id).
+fn workflow_with_pending_schedule_action(
+    config: &torc::client::Configuration,
+    name: &str,
+) -> (i64, i64) {
+    let workflow = create_test_workflow(config, name);
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action_id = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            None,
+        ),
+    )
+    .expect("create action")
+    .id
+    .unwrap();
+    manager.initialize(true).expect("initialize");
+    wait_for_pending_action(config, workflow_id);
+    (workflow_id, action_id)
+}
+
+/// `--suppress-actions`: a pending `schedule_nodes` action is marked executed so the worker started
+/// by `schedule-nodes` will not re-fire it.
+#[rstest]
+fn test_schedule_nodes_suppress_actions_marks_pending_executed(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, action_id) =
+        workflow_with_pending_schedule_action(config, "schedule_nodes_suppress");
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "precondition: action is pending (not executed)"
+    );
+
+    torc::client::commands::slurm::handle_pending_schedule_actions(
+        config,
+        workflow_id,
+        1,
+        /* suppress_actions */ true,
+        /* no_prompts */ false,
+    )
+    .expect("handle_pending_schedule_actions");
+
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "--suppress-actions must mark the pending schedule_nodes action executed"
+    );
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "suppressed action must no longer be pending"
+    );
+}
+
+/// `--no-prompts` (non-interactive, no `--suppress-actions`): proceed and leave the action armed so
+/// it still fires (historical behavior).
+#[rstest]
+fn test_schedule_nodes_no_prompts_proceeds_without_suppressing(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, action_id) =
+        workflow_with_pending_schedule_action(config, "schedule_nodes_no_prompts");
+
+    torc::client::commands::slurm::handle_pending_schedule_actions(
+        config,
+        workflow_id,
+        1,
+        /* suppress_actions */ false,
+        /* no_prompts */ true,
+    )
+    .expect("handle_pending_schedule_actions");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "--no-prompts without --suppress-actions must leave the action armed (proceed)"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "un-suppressed action must remain pending so the worker still fires it"
+    );
+}
+
+/// The helper only targets `schedule_nodes` actions: a pending `run_commands` action is left armed
+/// even with `--suppress-actions` (it does not submit Slurm allocations, so it is not the hazard).
+#[rstest]
+fn test_schedule_nodes_suppress_ignores_run_commands(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "schedule_nodes_ignores_run_commands");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+    create_test_job(config, workflow_id, "j1").expect("create job");
+    let action_id = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            json!({ "commands": ["echo hi"] }),
+            None,
+        ),
+    )
+    .expect("create action")
+    .id
+    .unwrap();
+    manager.initialize(true).expect("initialize");
+    wait_for_pending_action(config, workflow_id);
+
+    torc::client::commands::slurm::handle_pending_schedule_actions(
+        config,
+        workflow_id,
+        1,
+        /* suppress_actions */ true,
+        /* no_prompts */ false,
+    )
+    .expect("handle_pending_schedule_actions");
+
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "run_commands action must not be suppressed (only schedule_nodes is the hazard)"
+    );
+}
+
+/// On the first run (`run_id <= 1`) the submit review is a no-op: there is nothing to reconcile, so
+/// it returns no overrides without inspecting or mutating any action.
+#[rstest]
+fn test_review_submit_pending_actions_first_run_is_noop(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "review_submit_first_run");
+    let workflow_id = workflow.id.unwrap();
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "schedule_nodes",
+            json!({"scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 2}),
+            None,
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    let overrides = torc::client::commands::slurm::review_submit_pending_actions(
+        config,
+        workflow_id,
+        1, // first run
+        false,
+    )
+    .expect("review");
+
+    assert!(
+        overrides.is_empty(),
+        "first-run review must not produce allocation overrides"
+    );
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "first-run review must not suppress any action"
+    );
+}
+
+/// On a re-submission (`run_id > 1`) the review must NEVER suppress or change anything when run
+/// non-interactively (the test harness has a non-TTY stdin, which the helper treats like
+/// `--no-prompts`): it prints what will happen and proceeds with the configured counts. This guards
+/// the safe default — the interactive disable/override path is opt-in only.
+#[rstest]
+fn test_review_submit_pending_actions_noninteractive_does_not_suppress(
+    start_server: &ServerProcess,
+) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "review_submit_noninteractive");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Root job gated by an on_jobs_ready schedule_nodes action; after initialize the root job is
+    // Ready, so the action becomes pending (the "submit now" group).
+    let job_id = create_test_job(config, workflow_id, "root")
+        .expect("create root")
+        .id
+        .unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({"scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 3}),
+            Some(vec![job_id]),
+        ),
+    )
+    .expect("create action");
+    let action_id = action.id.unwrap();
+
+    manager.initialize(true).expect("initialize");
+    wait_for_pending_action(config, workflow_id);
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "action should be pending after initialize"
+    );
+
+    let overrides = torc::client::commands::slurm::review_submit_pending_actions(
+        config,
+        workflow_id,
+        2, // re-submission
+        false,
+    )
+    .expect("review");
+
+    assert!(
+        overrides.is_empty(),
+        "non-interactive review must not override allocation counts"
+    );
+    assert!(
+        action_is_pending(config, workflow_id, action_id),
+        "non-interactive review must leave the pending action pending (not suppressed)"
+    );
+    assert!(
+        !fetch_action(config, workflow_id, action_id).executed,
+        "non-interactive review must not mark the action executed"
+    );
+}

@@ -88,12 +88,20 @@ actions:
 
 ### Action Trigger Types
 
-| Trigger                | Description                            |
-| ---------------------- | -------------------------------------- |
-| `on_workflow_start`    | Fires when workflow is submitted       |
-| `on_jobs_ready`        | Fires when specified jobs become ready |
-| `on_jobs_complete`     | Fires when specified jobs complete     |
-| `on_workflow_complete` | Fires when all jobs complete           |
+| Trigger                | Description                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `on_workflow_start`    | Fires at the workflow's first init, and again on a full re-init (`torc workflows init`); a partial reinit keeps it suppressed |
+| `on_jobs_ready`        | Fires when specified jobs become ready                                                                                        |
+| `on_jobs_complete`     | Fires when specified jobs complete                                                                                            |
+| `on_workflow_complete` | Fires when all jobs complete                                                                                                  |
+
+> **Recommended for `schedule_nodes`: use `on_jobs_ready` gated on the jobs the allocation runs**,
+> even for root jobs (which are ready at init, so it still fires at the start). This ties each
+> allocation to its jobs, so a selective re-run (`torc jobs reset-status <ids> --reinit` then
+> `torc submit`) re-schedules only the reset jobs. An `on_workflow_start` `schedule_nodes` action is
+> kept (not re-armed) on reinitialize and `torc submit` cannot re-fire it, so a reset job would have
+> no allocation. `on_workflow_start` is still fine for a single allocation serving the whole
+> workflow.
 
 ### Assigning Jobs to Schedulers
 

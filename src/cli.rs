@@ -462,6 +462,11 @@ EXAMPLES:
         /// generated Slurm submission scripts as `--claim-backoff-max-secs`.
         #[arg(long, value_parser = crate::client::utils::parse_finite_non_negative_secs)]
         claim_backoff_max_secs: Option<f64>,
+        /// Do not prompt to review pending schedule_nodes actions on a re-submission; proceed and
+        /// fire them with their configured allocation counts. Use for non-interactive/scripted runs.
+        /// A non-TTY stdin implies this automatically.
+        #[arg(long, default_value = "false")]
+        no_prompts: bool,
     },
     /// Watch a workflow and automatically recover from failures
     ///
