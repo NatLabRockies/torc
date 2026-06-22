@@ -53,9 +53,9 @@ listed below.
 
 ```
 /scratch/dthom/torc/
-├── 0.37.2/
+├── 0.38.0/
 ├── ...
-└── latest -> 0.37.2  (symlink to current version)
+└── latest -> 0.38.0  (symlink to current version)
 ```
 
 > **Recommended**: Use the `latest` directory. Torc maintains backwards compatibility, so you'll
