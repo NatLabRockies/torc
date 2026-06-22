@@ -1916,6 +1916,14 @@ pub fn review_submit_pending_actions(
             a.action_type == "schedule_nodes"
                 && !a.is_recovery
                 && !a.executed
+                // Restrict to the trigger types `start()` actually fires from the login node (see
+                // its get_pending_actions call). A schedule_nodes action with another trigger type
+                // (e.g. on_worker_start) is never fired by submit, so listing it here -- and letting
+                // the user disable/override it -- would be misleading.
+                && matches!(
+                    a.trigger_type.as_str(),
+                    "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+                )
                 && a.action_config
                     .get("scheduler_type")
                     .and_then(|v| v.as_str())
@@ -2090,7 +2098,18 @@ pub fn review_submit_pending_actions(
             continue;
         }
         match crate::client::utils::claim_action(config, workflow_id, *id, None, 20) {
-            Ok(_) => {}
+            // Claimed by us -> suppressed as intended.
+            Ok(true) => {}
+            // claim_action returns Ok(false) on a 409: the action was already claimed by a
+            // concurrent submitter or a worker, who will fire it. We could not disable it, so warn
+            // instead of silently reporting it disabled.
+            Ok(false) => {
+                eprintln!(
+                    "  Warning: could not disable action {} -- it was already claimed by another \
+                     submitter or worker and may still fire.",
+                    id
+                );
+            }
             Err(e) => {
                 return Err(format!(
                     "failed to disable (claim) action {}: {}; aborting so it does not fire unexpectedly",

@@ -88,12 +88,12 @@ actions:
 
 ### Action Trigger Types
 
-| Trigger                | Description                             |
-| ---------------------- | --------------------------------------- |
-| `on_workflow_start`    | Fires once at the workflow's first init |
-| `on_jobs_ready`        | Fires when specified jobs become ready  |
-| `on_jobs_complete`     | Fires when specified jobs complete      |
-| `on_workflow_complete` | Fires when all jobs complete            |
+| Trigger                | Description                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `on_workflow_start`    | Fires at the workflow's first init, and again on a full re-init (`torc workflows init`); a partial reinit keeps it suppressed |
+| `on_jobs_ready`        | Fires when specified jobs become ready                                                                                        |
+| `on_jobs_complete`     | Fires when specified jobs complete                                                                                            |
+| `on_workflow_complete` | Fires when all jobs complete                                                                                                  |
 
 > **Recommended for `schedule_nodes`: use `on_jobs_ready` gated on the jobs the allocation runs**,
 > even for root jobs (which are ready at init, so it still fires at the start). This ties each
