@@ -976,6 +976,274 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
     );
 }
 
+/// The `torc workflows update-action` CLI maps individual typed flags
+/// (`--num-allocations`, `--max-parallel-jobs`, `--start-one-worker-per-node`,
+/// ...) into the merge body. Updated fields change; untouched fields survive.
+#[rstest]
+fn test_update_action_cli_typed_flags(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_cli_flags_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let created = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({
+                "scheduler_type": "slurm",
+                "scheduler_id": 1,
+                "num_allocations": 2,
+                "start_one_worker_per_node": false,
+            }),
+            None,
+        ),
+    )
+    .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = action_id.to_string();
+    let args = [
+        "workflows",
+        "update-action",
+        &wid,
+        &aid,
+        "--num-allocations",
+        "8",
+        "--max-parallel-jobs",
+        "16",
+        "--start-one-worker-per-node",
+        "true",
+    ];
+    run_cli_with_json(&args, start_server, None).expect("update-action CLI command failed");
+
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let cfg = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist")
+        .action_config
+        .as_object()
+        .expect("action_config should be an object");
+
+    // Updated fields reflect the typed flags.
+    assert_eq!(cfg.get("num_allocations").and_then(|v| v.as_i64()), Some(8));
+    assert_eq!(
+        cfg.get("max_parallel_jobs").and_then(|v| v.as_i64()),
+        Some(16)
+    );
+    assert_eq!(
+        cfg.get("start_one_worker_per_node")
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    // Fields not named by a flag are preserved.
+    assert_eq!(
+        cfg.get("scheduler_type").and_then(|v| v.as_str()),
+        Some("slurm")
+    );
+    assert_eq!(cfg.get("scheduler_id").and_then(|v| v.as_i64()), Some(1));
+}
+
+/// The CLI also accepts a raw `--json` object as the merge body.
+#[rstest]
+fn test_update_action_cli_json_payload(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_cli_json_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let created = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 2 }),
+            None,
+        ),
+    )
+    .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = action_id.to_string();
+    let args = [
+        "workflows",
+        "update-action",
+        &wid,
+        &aid,
+        "--json",
+        r#"{"num_allocations": 8, "max_parallel_jobs": 32}"#,
+    ];
+    run_cli_with_json(&args, start_server, None).expect("update-action CLI command failed");
+
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let cfg = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist")
+        .action_config
+        .as_object()
+        .expect("action_config should be an object");
+
+    assert_eq!(cfg.get("num_allocations").and_then(|v| v.as_i64()), Some(8));
+    assert_eq!(
+        cfg.get("max_parallel_jobs").and_then(|v| v.as_i64()),
+        Some(32)
+    );
+    // Untouched field preserved.
+    assert_eq!(cfg.get("scheduler_id").and_then(|v| v.as_i64()), Some(1));
+}
+
+/// When a typed flag and a `--json` key set the same field, the typed flag wins.
+#[rstest]
+fn test_update_action_cli_flags_override_json(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_cli_precedence_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let created = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 2 }),
+            None,
+        ),
+    )
+    .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = action_id.to_string();
+    // --json and --num-allocations both set num_allocations; the flag must win.
+    // The json-only field (max_parallel_jobs) is still applied.
+    let args = [
+        "workflows",
+        "update-action",
+        &wid,
+        &aid,
+        "--json",
+        r#"{"num_allocations": 2, "max_parallel_jobs": 64}"#,
+        "--num-allocations",
+        "9",
+    ];
+    run_cli_with_json(&args, start_server, None).expect("update-action CLI command failed");
+
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let cfg = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist")
+        .action_config
+        .as_object()
+        .expect("action_config should be an object");
+
+    assert_eq!(
+        cfg.get("num_allocations").and_then(|v| v.as_i64()),
+        Some(9),
+        "typed flag should take precedence over --json on conflict"
+    );
+    assert_eq!(
+        cfg.get("max_parallel_jobs").and_then(|v| v.as_i64()),
+        Some(64),
+        "json-only field should still be applied"
+    );
+}
+
+/// Invoking update-action with neither typed flags nor `--json` is an error.
+#[rstest]
+fn test_update_action_cli_no_fields_errors(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_cli_nofields_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let created = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+            None,
+        ),
+    )
+    .expect("Failed to create schedule_nodes action");
+    let action_id = created.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = action_id.to_string();
+    let args = ["workflows", "update-action", &wid, &aid];
+    let err = run_cli_with_json(&args, start_server, None)
+        .expect_err("update-action with no fields should fail");
+    assert!(
+        err.to_string().contains("no fields to update"),
+        "unexpected error: {}",
+        err
+    );
+}
+
+/// update-action only supports schedule_nodes actions; targeting another action
+/// type fails fast with a clear message and does not mutate the action.
+#[rstest]
+fn test_update_action_cli_rejects_non_schedule_nodes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_update_cli_wrongtype_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let created = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            json!({ "commands": ["echo hello"] }),
+            None,
+        ),
+    )
+    .expect("Failed to create run_commands action");
+    let action_id = created.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = action_id.to_string();
+    let args = [
+        "workflows",
+        "update-action",
+        &wid,
+        &aid,
+        "--num-allocations",
+        "4",
+    ];
+    let err = run_cli_with_json(&args, start_server, None)
+        .expect_err("update-action on a run_commands action should fail");
+    assert!(
+        err.to_string().contains("only supports schedule_nodes"),
+        "unexpected error: {}",
+        err
+    );
+
+    // The action is unchanged.
+    let fetched = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let action = fetched
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action should still exist");
+    assert_eq!(action.action_type, "run_commands");
+    assert!(action.action_config.get("num_allocations").is_none());
+}
+
 #[rstest]
 fn test_delete_workflow_action_success(start_server: &ServerProcess) {
     let config = &start_server.config;
