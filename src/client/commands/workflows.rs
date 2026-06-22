@@ -586,7 +586,7 @@ EXAMPLES:
     torc workflows update-action 123 45 \\
         --scheduler-id 2 --max-parallel-jobs 8 --start-one-worker-per-node true
 
-    # Pass arbitrary fields as a JSON object (merged on top of typed flags)
+    # Pass arbitrary fields as a JSON object (typed flags above win on conflicts)
     torc workflows update-action 123 45 --json '{\"num_allocations\": 10}'
 
 SUPPORTED FIELDS (schedule_nodes):
@@ -1378,14 +1378,18 @@ fn handle_delete_action(
     match apis::workflow_actions_api::delete_workflow_action(config, workflow_id, action_id) {
         Ok(_) => {
             if format == "json" {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "deleted": true,
-                        "workflow_id": workflow_id,
-                        "action_id": action_id,
-                    })
-                );
+                let payload = serde_json::json!({
+                    "deleted": true,
+                    "workflow_id": workflow_id,
+                    "action_id": action_id,
+                });
+                match serde_json::to_string_pretty(&payload) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        eprintln!("Error serializing result to JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                }
             } else {
                 println!(
                     "Deleted action {} from workflow {}.",

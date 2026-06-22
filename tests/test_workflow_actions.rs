@@ -3,7 +3,9 @@ mod common;
 use std::thread;
 use std::time::Duration;
 
-use common::{ServerProcess, create_test_workflow, run_cli_with_json, start_server};
+use common::{
+    ServerProcess, create_test_workflow, run_cli_command, run_cli_with_json, start_server,
+};
 use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
@@ -1242,6 +1244,96 @@ fn test_update_action_cli_rejects_non_schedule_nodes(start_server: &ServerProces
         .expect("action should still exist");
     assert_eq!(action.action_type, "run_commands");
     assert!(action.action_config.get("num_allocations").is_none());
+}
+
+/// The `torc workflows delete-action` CLI in JSON mode is non-interactive (the
+/// confirmation prompt is skipped). It reports the deletion and removes only the
+/// targeted action.
+#[rstest]
+fn test_delete_action_cli_json_mode(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_delete_cli_json_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let keep = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_start",
+            "run_commands",
+            json!({ "commands": ["echo keep"] }),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let target = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let target_id = target.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = target_id.to_string();
+    let args = ["workflows", "delete-action", &wid, &aid];
+    let out =
+        run_cli_with_json(&args, start_server, None).expect("delete-action CLI command failed");
+
+    assert_eq!(out.get("deleted").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        out.get("action_id").and_then(|v| v.as_i64()),
+        Some(target_id)
+    );
+
+    let remaining = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    assert!(remaining.iter().all(|a| a.id != Some(target_id)));
+    assert!(remaining.iter().any(|a| a.id == keep.id));
+}
+
+/// The `--no-prompts` flag deletes without an interactive confirmation in table mode.
+#[rstest]
+fn test_delete_action_cli_no_prompts(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "action_delete_cli_noprompts_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let target = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            json!({ "scheduler_type": "slurm", "scheduler_id": 1 }),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let target_id = target.id.expect("action should have an id");
+
+    let wid = workflow_id.to_string();
+    let aid = target_id.to_string();
+    let args = ["workflows", "delete-action", &wid, &aid, "--no-prompts"];
+    let stdout =
+        run_cli_command(&args, start_server, None).expect("delete-action --no-prompts CLI failed");
+    assert!(
+        stdout.contains(&format!("Deleted action {}", target_id)),
+        "unexpected output: {}",
+        stdout
+    );
+
+    let remaining = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    assert!(remaining.iter().all(|a| a.id != Some(target_id)));
 }
 
 #[rstest]

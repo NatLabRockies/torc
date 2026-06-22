@@ -159,6 +159,10 @@ end
 
 const _returntypes_update_workflow_action_WorkflowActionsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowActionModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_update_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64, body::Any; _mediaType=nothing)

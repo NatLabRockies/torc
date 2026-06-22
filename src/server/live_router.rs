@@ -3563,7 +3563,13 @@ pub async fn claim_action(
         ("action_id" = i64, Path, description = "Action ID")
     ),
     request_body = serde_json::Value,
-    responses((status = 200, body = models::WorkflowActionModel))
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn update_workflow_action(
     State(state): State<LiveRouterState>,

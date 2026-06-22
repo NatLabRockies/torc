@@ -647,8 +647,21 @@ where
 
         let action_type: String = row.get("action_type");
         let existing_config_str: String = row.get("action_config");
-        let mut merged: serde_json::Value = serde_json::from_str(&existing_config_str)
-            .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
+        // Fail loudly on a malformed stored config rather than silently treating it as
+        // an empty object -- that would drop every existing field on the merge.
+        let mut merged: serde_json::Value = match serde_json::from_str(&existing_config_str) {
+            Ok(value) => value,
+            Err(e) => {
+                return Ok(
+                    UpdateWorkflowActionResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "stored action_config is not valid JSON: {}",
+                            e
+                        )),
+                    ),
+                );
+            }
+        };
 
         // Merge update fields on top of existing config
         match merged.as_object_mut() {
