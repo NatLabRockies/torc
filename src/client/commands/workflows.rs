@@ -1350,8 +1350,8 @@ fn handle_delete_action(
                     io::stdout().flush().unwrap();
 
                     let mut input = String::new();
-                    if io::stdin().read_line(&mut input).is_err() {
-                        eprintln!("Failed to read input");
+                    if let Err(e) = io::stdin().read_line(&mut input) {
+                        eprintln!("Failed to read input: {}", e);
                         std::process::exit(1);
                     }
                     let response = input.trim().to_lowercase();

@@ -70,7 +70,10 @@ function create_workflow_action(_api::WorkflowActionsApi, response_stream::Chann
 end
 
 const _returntypes_delete_workflow_action_WorkflowActionsApi = Dict{Regex,Type}(
-    Regex("^" * replace("200", "x"=>".") * "\$") => Any,
+    Regex("^" * replace("200", "x"=>".") * "\$") => MessageResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
@@ -86,7 +89,7 @@ end
 - id::Int64 (required)
 - action_id::Int64 (required)
 
-Return: Any, OpenAPI.Clients.ApiResponse
+Return: MessageResponse, OpenAPI.Clients.ApiResponse
 """
 function delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
     _ctx = _oacinternal_delete_workflow_action(_api, id, action_id; _mediaType=_mediaType)

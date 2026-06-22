@@ -21,6 +21,7 @@ from typing import Any, List, Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.claim_action_request import ClaimActionRequest
 from torc.openapi_client.models.claim_action_response import ClaimActionResponse
+from torc.openapi_client.models.message_response import MessageResponse
 from torc.openapi_client.models.workflow_action_model import WorkflowActionModel
 
 from torc.openapi_client.api_client import ApiClient, RequestSerialized
@@ -643,7 +644,7 @@ class WorkflowActionsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> object:
+    ) -> MessageResponse:
         """delete_workflow_action
 
 
@@ -683,7 +684,10 @@ class WorkflowActionsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "object",
+            '200': "MessageResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -713,7 +717,7 @@ class WorkflowActionsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[object]:
+    ) -> ApiResponse[MessageResponse]:
         """delete_workflow_action
 
 
@@ -753,7 +757,10 @@ class WorkflowActionsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "object",
+            '200': "MessageResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -823,7 +830,10 @@ class WorkflowActionsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "object",
+            '200': "MessageResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

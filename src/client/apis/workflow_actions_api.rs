@@ -32,6 +32,9 @@ pub enum CreateWorkflowActionError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeleteWorkflowActionError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -185,7 +188,7 @@ pub fn delete_workflow_action(
     configuration: &configuration::Configuration,
     id: i64,
     action_id: i64,
-) -> Result<serde_json::Value, Error<DeleteWorkflowActionError>> {
+) -> Result<models::MessageResponse, Error<DeleteWorkflowActionError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
     let p_path_action_id = action_id;
@@ -222,12 +225,12 @@ pub fn delete_workflow_action(
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
             ContentType::Text => {
                 return Err(Error::from(serde_json::Error::custom(
-                    "Received `text/plain` content type response that cannot be converted to `serde_json::Value`",
+                    "Received `text/plain` content type response that cannot be converted to `models::MessageResponse`",
                 )));
             }
             ContentType::Unsupported(unknown_type) => {
                 return Err(Error::from(serde_json::Error::custom(format!(
-                    "Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`"
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::MessageResponse`"
                 ))));
             }
         }

@@ -4494,10 +4494,29 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/actions/{action_id}/claim:
     post:
       tags:

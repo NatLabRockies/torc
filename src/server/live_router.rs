@@ -3590,7 +3590,12 @@ pub async fn update_workflow_action(
         ("id" = i64, Path, description = "Workflow ID"),
         ("action_id" = i64, Path, description = "Action ID")
     ),
-    responses((status = 200, body = serde_json::Value))
+    responses(
+        (status = 200, description = "Successful response", body = models::MessageResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn delete_workflow_action(
     State(state): State<LiveRouterState>,

@@ -72,8 +72,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **delete_workflow_action**
-> delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing) -> Any, OpenAPI.Clients.ApiResponse <br/>
-> delete_workflow_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64; _mediaType=nothing) -> Channel{ Any }, OpenAPI.Clients.ApiResponse
+> delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing) -> MessageResponse, OpenAPI.Clients.ApiResponse <br/>
+> delete_workflow_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64; _mediaType=nothing) -> Channel{ MessageResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -87,7 +87,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-**Any**
+[**MessageResponse**](MessageResponse.md)
 
 ### Authorization
 
