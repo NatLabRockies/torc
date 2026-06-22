@@ -647,19 +647,22 @@ where
 
         let action_type: String = row.get("action_type");
         let existing_config_str: String = row.get("action_config");
-        // Fail loudly on a malformed stored config rather than silently treating it as
-        // an empty object -- that would drop every existing field on the merge.
+        // A malformed/non-object stored config is server-side data corruption, not a
+        // client request problem -- fail loudly with a 500 (and log) rather than
+        // silently treating it as an empty object, which would drop every existing
+        // field on the merge.
         let mut merged: serde_json::Value = match serde_json::from_str(&existing_config_str) {
             Ok(value) => value,
             Err(e) => {
-                return Ok(
-                    UpdateWorkflowActionResponse::UnprocessableContentErrorResponse(
-                        message_error_response(format!(
-                            "stored action_config is not valid JSON: {}",
-                            e
-                        )),
-                    ),
+                error!(
+                    "stored action_config is not valid JSON for workflow_id={} action_id={}: {}",
+                    workflow_id, action_id, e
                 );
+                return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
+                    message_error_response(
+                        "stored action_config is not valid JSON".to_string(),
+                    ),
+                ));
             }
         };
 
@@ -671,13 +674,15 @@ where
                 }
             }
             None => {
-                return Ok(
-                    UpdateWorkflowActionResponse::UnprocessableContentErrorResponse(
-                        message_error_response(
-                            "existing action_config is not a JSON object".to_string(),
-                        ),
-                    ),
+                error!(
+                    "stored action_config is not a JSON object for workflow_id={} action_id={}",
+                    workflow_id, action_id
                 );
+                return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
+                    message_error_response(
+                        "stored action_config is not a JSON object".to_string(),
+                    ),
+                ));
             }
         }
 
