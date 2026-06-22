@@ -199,6 +199,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(create_workflow_action).get(get_workflow_actions),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}",
+            put(update_workflow_action).delete(delete_workflow_action),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/actions/pending",
             get(get_pending_actions),
         )
@@ -3545,6 +3549,71 @@ pub async fn claim_action(
         .await
     {
         Ok(response) => claim_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    put,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}",
+    operation_id = "update_workflow_action",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn update_workflow_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+    Json(updates): Json<serde_json::Value>,
+) -> Response<Body> {
+    match state
+        .server
+        .update_workflow_action(workflow_id, action_id, updates, &context)
+        .await
+    {
+        Ok(response) => update_workflow_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    delete,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}",
+    operation_id = "delete_workflow_action",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::MessageResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn delete_workflow_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .delete_workflow_action(workflow_id, action_id, &context)
+        .await
+    {
+        Ok(response) => delete_workflow_action_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

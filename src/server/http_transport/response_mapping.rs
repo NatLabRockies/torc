@@ -526,6 +526,17 @@ map_response!(
     ConflictResponse => StatusCode::CONFLICT
 );
 map_response!(
+    update_workflow_action_response,
+    UpdateWorkflowActionResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
+    delete_workflow_action_response,
+    DeleteWorkflowActionResponse,
+    SuccessfulResponse
+);
+map_response!(
     cancel_workflow_response,
     CancelWorkflowResponse,
     SuccessfulResponse

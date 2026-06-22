@@ -185,6 +185,31 @@ where
             .await
     }
 
+    pub(super) async fn transport_update_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        updates: serde_json::Value,
+        context: &C,
+    ) -> Result<UpdateWorkflowActionResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, UpdateWorkflowActionResponse);
+        self.workflow_actions_api
+            .update_workflow_action(workflow_id, action_id, updates, context)
+            .await
+    }
+
+    pub(super) async fn transport_delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, DeleteWorkflowActionResponse);
+        self.workflow_actions_api
+            .delete_workflow_action(workflow_id, action_id, context)
+            .await
+    }
+
     pub(super) async fn transport_list_workflows(
         &self,
         offset: Option<i64>,

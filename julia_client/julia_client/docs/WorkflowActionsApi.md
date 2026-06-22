@@ -6,8 +6,10 @@ Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**claim_action**](WorkflowActionsApi.md#claim_action) | **POST** /workflows/{id}/actions/{action_id}/claim | 
 [**create_workflow_action**](WorkflowActionsApi.md#create_workflow_action) | **POST** /workflows/{id}/actions | 
+[**delete_workflow_action**](WorkflowActionsApi.md#delete_workflow_action) | **DELETE** /workflows/{id}/actions/{action_id} | 
 [**get_pending_actions**](WorkflowActionsApi.md#get_pending_actions) | **GET** /workflows/{id}/actions/pending | 
 [**get_workflow_actions**](WorkflowActionsApi.md#get_workflow_actions) | **GET** /workflows/{id}/actions | 
+[**update_workflow_action**](WorkflowActionsApi.md#update_workflow_action) | **PUT** /workflows/{id}/actions/{action_id} | 
 
 
 # **claim_action**
@@ -65,6 +67,35 @@ No authorization required
 ### HTTP request headers
 
  - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **delete_workflow_action**
+> delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing) -> MessageResponse, OpenAPI.Clients.ApiResponse <br/>
+> delete_workflow_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64; _mediaType=nothing) -> Channel{ MessageResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowActionsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**action_id** | **Int64** | Action ID |
+
+### Return type
+
+[**MessageResponse**](MessageResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
@@ -127,6 +158,36 @@ No authorization required
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **update_workflow_action**
+> update_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64, body::Any; _mediaType=nothing) -> WorkflowActionModel, OpenAPI.Clients.ApiResponse <br/>
+> update_workflow_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64, body::Any; _mediaType=nothing) -> Channel{ WorkflowActionModel }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowActionsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**action_id** | **Int64** | Action ID |
+**body** | **Any** |  |
+
+### Return type
+
+[**WorkflowActionModel**](WorkflowActionModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

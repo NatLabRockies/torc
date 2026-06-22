@@ -6,8 +6,8 @@ use log::{debug, error, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    ClaimActionResponse, CreateWorkflowActionResponse, GetPendingActionsResponse,
-    GetWorkflowActionsResponse,
+    ClaimActionResponse, CreateWorkflowActionResponse, DeleteWorkflowActionResponse,
+    GetPendingActionsResponse, GetWorkflowActionsResponse, UpdateWorkflowActionResponse,
 };
 
 use crate::models;
@@ -153,6 +153,23 @@ pub trait WorkflowActionsApi<C> {
         compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError>;
+
+    /// Update action_config for an existing workflow action (partial update)
+    async fn update_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        updates: serde_json::Value,
+        context: &C,
+    ) -> Result<UpdateWorkflowActionResponse, ApiError>;
+
+    /// Delete a single workflow action
+    async fn delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError>;
 }
 
 /// Implementation of workflow actions API for the server
@@ -568,6 +585,197 @@ where
                 ))
             }
         }
+    }
+
+    /// Update action_config for an existing workflow action (partial update)
+    async fn update_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        updates: serde_json::Value,
+        context: &C,
+    ) -> Result<UpdateWorkflowActionResponse, ApiError> {
+        debug!(
+            "update_workflow_action(workflow_id={}, action_id={}) - X-Span-ID: {:?}",
+            workflow_id,
+            action_id,
+            context.get().0.clone()
+        );
+
+        // Build merge map for the partial update
+        let update_map = match updates.as_object() {
+            Some(map) => map.clone(),
+            None => {
+                return Ok(
+                    UpdateWorkflowActionResponse::UnprocessableContentErrorResponse(
+                        message_error_response("updates body must be a JSON object".to_string()),
+                    ),
+                );
+            }
+        };
+
+        if update_map.is_empty() {
+            return Ok(
+                UpdateWorkflowActionResponse::UnprocessableContentErrorResponse(
+                    message_error_response("updates body has no fields to merge".to_string()),
+                ),
+            );
+        }
+
+        // Fetch the existing action (the full row so we can return the updated model
+        // without an extra round trip).
+        let existing = sqlx::query(
+            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, \
+             trigger_count, required_triggers, executed, executed_at, executed_by, \
+             persistent, is_recovery \
+             FROM workflow_action WHERE id = ? AND workflow_id = ?",
+        )
+        .bind(action_id)
+        .bind(workflow_id)
+        .fetch_optional(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow action"))?;
+
+        let row = match existing {
+            Some(row) => row,
+            None => {
+                return Ok(UpdateWorkflowActionResponse::NotFoundErrorResponse(
+                    resource_not_found_response("Action", action_id),
+                ));
+            }
+        };
+
+        let action_type: String = row.get("action_type");
+        let existing_config_str: String = row.get("action_config");
+        // A malformed/non-object stored config is server-side data corruption, not a
+        // client request problem -- fail loudly with a 500 (and log) rather than
+        // silently treating it as an empty object, which would drop every existing
+        // field on the merge.
+        let mut merged: serde_json::Value = match serde_json::from_str(&existing_config_str) {
+            Ok(value) => value,
+            Err(e) => {
+                error!(
+                    "stored action_config is not valid JSON for workflow_id={} action_id={}: {}",
+                    workflow_id, action_id, e
+                );
+                return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
+                    message_error_response("stored action_config is not valid JSON".to_string()),
+                ));
+            }
+        };
+
+        // Merge update fields on top of existing config
+        match merged.as_object_mut() {
+            Some(existing_obj) => {
+                for (key, value) in update_map {
+                    existing_obj.insert(key, value);
+                }
+            }
+            None => {
+                error!(
+                    "stored action_config is not a JSON object for workflow_id={} action_id={}",
+                    workflow_id, action_id
+                );
+                return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
+                    message_error_response("stored action_config is not a JSON object".to_string()),
+                ));
+            }
+        }
+
+        // Validate the merged config against the action_type
+        if let Err(validation_error) = validate_action_config(&action_type, &merged) {
+            return Ok(
+                UpdateWorkflowActionResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!("Invalid action_config: {}", validation_error)),
+                ),
+            );
+        }
+
+        // Persist the updated config
+        let merged_str = merged.to_string();
+        if let Err(e) = sqlx::query(
+            "UPDATE workflow_action SET action_config = ? WHERE id = ? AND workflow_id = ?",
+        )
+        .bind(&merged_str)
+        .bind(action_id)
+        .bind(workflow_id)
+        .execute(self.context.pool.as_ref())
+        .await
+        {
+            error!("Failed to update workflow action: {}", e);
+            return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
+                message_error_response(format!("Failed to update workflow action: {}", e)),
+            ));
+        }
+
+        // Build the updated model from the row we already have plus the merged config.
+        let job_ids_str: Option<String> = row.get("job_ids");
+        let job_ids: Option<Vec<i64>> = job_ids_str.and_then(|s| serde_json::from_str(&s).ok());
+
+        let updated = models::WorkflowActionModel {
+            id: Some(row.get("id")),
+            workflow_id: row.get("workflow_id"),
+            trigger_type: row.get("trigger_type"),
+            action_type,
+            action_config: merged,
+            job_ids,
+            trigger_count: row.get("trigger_count"),
+            required_triggers: row.get("required_triggers"),
+            executed: row.get::<i32, _>("executed") != 0,
+            executed_at: row.get("executed_at"),
+            executed_by: row.get("executed_by"),
+            persistent: row.get::<i32, _>("persistent") != 0,
+            is_recovery: row.get::<i32, _>("is_recovery") != 0,
+        };
+
+        Ok(UpdateWorkflowActionResponse::SuccessfulResponse(updated))
+    }
+
+    /// Delete a single workflow action
+    async fn delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError> {
+        debug!(
+            "delete_workflow_action(workflow_id={}, action_id={}) - X-Span-ID: {:?}",
+            workflow_id,
+            action_id,
+            context.get().0.clone()
+        );
+
+        // Scope the delete to the workflow so an action_id from another workflow
+        // cannot be removed (and so a mismatch reports not-found rather than 0 rows).
+        let result =
+            match sqlx::query("DELETE FROM workflow_action WHERE id = ? AND workflow_id = ?")
+                .bind(action_id)
+                .bind(workflow_id)
+                .execute(self.context.pool.as_ref())
+                .await
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    return Err(database_error_with_msg(
+                        e,
+                        "Failed to delete workflow action",
+                    ));
+                }
+            };
+
+        if result.rows_affected() == 0 {
+            return Ok(DeleteWorkflowActionResponse::NotFoundErrorResponse(
+                resource_not_found_response("Action", action_id),
+            ));
+        }
+
+        info!(
+            "Deleted workflow action workflow_id={} action_id={}",
+            workflow_id, action_id
+        );
+        Ok(DeleteWorkflowActionResponse::SuccessfulResponse(
+            serde_json::json!({"message": "Workflow action deleted successfully"}),
+        ))
     }
 }
 

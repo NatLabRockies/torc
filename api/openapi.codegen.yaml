@@ -4441,6 +4441,106 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/WorkflowActionModel'
+  /workflows/{id}/actions/{action_id}:
+    put:
+      tags:
+      - workflow_actions
+      operationId: update_workflow_action
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+      - workflow_actions
+      operationId: delete_workflow_action
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/actions/{action_id}/claim:
     post:
       tags:

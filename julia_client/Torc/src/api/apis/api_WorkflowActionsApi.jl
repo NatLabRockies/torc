@@ -69,6 +69,38 @@ function create_workflow_action(_api::WorkflowActionsApi, response_stream::Chann
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_delete_workflow_action_WorkflowActionsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => MessageResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "DELETE", _returntypes_delete_workflow_action_WorkflowActionsApi, "/workflows/{id}/actions/{action_id}", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "action_id", action_id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+- action_id::Int64 (required)
+
+Return: MessageResponse, OpenAPI.Clients.ApiResponse
+"""
+function delete_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_workflow_action(_api, id, action_id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function delete_workflow_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_delete_workflow_action(_api, id, action_id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_get_pending_actions_WorkflowActionsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => Vector{WorkflowActionModel},
 )
@@ -125,7 +157,43 @@ function get_workflow_actions(_api::WorkflowActionsApi, response_stream::Channel
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_update_workflow_action_WorkflowActionsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowActionModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_update_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64, body::Any; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "PUT", _returntypes_update_workflow_action_WorkflowActionsApi, "/workflows/{id}/actions/{action_id}", [], body)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "action_id", action_id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+- action_id::Int64 (required)
+- body::Any (required)
+
+Return: WorkflowActionModel, OpenAPI.Clients.ApiResponse
+"""
+function update_workflow_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64, body::Any; _mediaType=nothing)
+    _ctx = _oacinternal_update_workflow_action(_api, id, action_id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function update_workflow_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64, body::Any; _mediaType=nothing)
+    _ctx = _oacinternal_update_workflow_action(_api, id, action_id, body; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 export claim_action
 export create_workflow_action
+export delete_workflow_action
 export get_pending_actions
 export get_workflow_actions
+export update_workflow_action

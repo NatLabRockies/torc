@@ -28,6 +28,16 @@ pub enum CreateWorkflowActionError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`delete_workflow_action`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DeleteWorkflowActionError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`get_pending_actions`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -39,6 +49,17 @@ pub enum GetPendingActionsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetWorkflowActionsError {
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`update_workflow_action`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UpdateWorkflowActionError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -159,6 +180,67 @@ pub fn create_workflow_action(
     } else {
         let content = resp.text()?;
         let entity: Option<CreateWorkflowActionError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+pub fn delete_workflow_action(
+    configuration: &configuration::Configuration,
+    id: i64,
+    action_id: i64,
+) -> Result<models::MessageResponse, Error<DeleteWorkflowActionError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_id = id;
+    let p_path_action_id = action_id;
+
+    let uri_str = format!(
+        "{}/workflows/{id}/actions/{action_id}",
+        configuration.base_path,
+        id = p_path_id,
+        action_id = p_path_action_id
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::DELETE, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = configuration.apply_auth(req_builder);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => {
+                return Err(Error::from(serde_json::Error::custom(
+                    "Received `text/plain` content type response that cannot be converted to `models::MessageResponse`",
+                )));
+            }
+            ContentType::Unsupported(unknown_type) => {
+                return Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::MessageResponse`"
+                ))));
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<DeleteWorkflowActionError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,
@@ -292,6 +374,68 @@ pub fn get_workflow_actions(
     } else {
         let content = resp.text()?;
         let entity: Option<GetWorkflowActionsError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+pub fn update_workflow_action(
+    configuration: &configuration::Configuration,
+    id: i64,
+    action_id: i64,
+    body: Option<serde_json::Value>,
+) -> Result<models::WorkflowActionModel, Error<UpdateWorkflowActionError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_id = id;
+    let p_path_action_id = action_id;
+    let p_body_body = body;
+
+    let uri_str = format!(
+        "{}/workflows/{id}/actions/{action_id}",
+        configuration.base_path,
+        id = p_path_id,
+        action_id = p_path_action_id
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = configuration.apply_auth(req_builder);
+    req_builder = req_builder.json(&p_body_body);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => {
+                return Err(Error::from(serde_json::Error::custom(
+                    "Received `text/plain` content type response that cannot be converted to `models::WorkflowActionModel`",
+                )));
+            }
+            ContentType::Unsupported(unknown_type) => {
+                return Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::WorkflowActionModel`"
+                ))));
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<UpdateWorkflowActionError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

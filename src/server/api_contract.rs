@@ -388,6 +388,23 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError>;
 
+    /// Update action_config for an existing workflow action (partial update).
+    async fn update_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        updates: serde_json::Value,
+        context: &C,
+    ) -> Result<UpdateWorkflowActionResponse, ApiError>;
+
+    /// Delete a single workflow action.
+    async fn delete_workflow_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<DeleteWorkflowActionResponse, ApiError>;
+
     /// Delete all compute node records for one workflow.
     async fn delete_compute_nodes(
         &self,

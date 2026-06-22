@@ -144,9 +144,10 @@ mod openapi_user_data_paths {
 #[allow(unused_imports)]
 mod openapi_workflow_action_paths {
     pub use crate::server::live_router::{
-        __path_claim_action, __path_create_workflow_action, __path_get_pending_actions,
-        __path_get_workflow_actions, claim_action, create_workflow_action, get_pending_actions,
-        get_workflow_actions,
+        __path_claim_action, __path_create_workflow_action, __path_delete_workflow_action,
+        __path_get_pending_actions, __path_get_workflow_actions, __path_update_workflow_action,
+        claim_action, create_workflow_action, delete_workflow_action, get_pending_actions,
+        get_workflow_actions, update_workflow_action,
     };
 }
 
@@ -506,6 +507,8 @@ fn resolve_schema_properties<'a>(
         openapi_workflow_action_paths::get_workflow_actions,
         openapi_workflow_action_paths::get_pending_actions,
         openapi_workflow_action_paths::claim_action,
+        openapi_workflow_action_paths::update_workflow_action,
+        openapi_workflow_action_paths::delete_workflow_action,
         openapi_result_paths::create_result,
         openapi_result_paths::delete_results,
         openapi_result_paths::list_results,
@@ -1897,6 +1900,22 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
         "/workflows/{id}/actions/{action_id}/claim",
         "post",
         "claim_action",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
+        "/workflows/{id}/actions/{action_id}",
+        "put",
+        "update_workflow_action",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
+        "/workflows/{id}/actions/{action_id}",
+        "delete",
+        "delete_workflow_action",
         &mut issues,
     );
     check_component_properties(
