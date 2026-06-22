@@ -1,0 +1,803 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Slurm Overview - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.38.0/docs/src/specialized/hpc/slurm-workflows.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="slurm-overview"><a class="header" href="#slurm-overview">Slurm Overview</a></h1>
+<p>This document explains how Torc simplifies running workflows on Slurm-based HPC systems. The key
+insight is that <strong>you don't need to understand Slurm schedulers or workflow actions</strong> to run
+workflows on HPC systems—Torc handles this automatically.</p>
+<h2 id="the-simple-approach"><a class="header" href="#the-simple-approach">The Simple Approach</a></h2>
+<p>Running a workflow on Slurm requires just two things:</p>
+<ol>
+<li><strong>Define your jobs with resource requirements</strong></li>
+<li><strong>Submit with <code>slurm generate</code> + <code>submit</code></strong></li>
+</ol>
+<p>That's it. Torc will analyze your workflow, generate appropriate Slurm configurations, and submit
+everything for execution.</p>
+<blockquote>
+<p><strong>⚠️ Important:</strong> The <code>slurm generate</code> + <code>submit</code> command uses heuristics to auto-generate Slurm
+schedulers and workflow actions. For complex workflows with unusual dependency patterns, the
+generated configuration may not be optimal and could result in suboptimal allocation timing.
+<strong>Always preview the configuration first</strong> using <code>torc slurm generate</code> (see
+<a href="#previewing-generated-configuration">Previewing Generated Configuration</a>) before submitting
+production workflows.</p>
+</blockquote>
+<h3 id="example-workflow"><a class="header" href="#example-workflow">Example Workflow</a></h3>
+<p>Here's a complete workflow specification that runs on Slurm:</p>
+<pre><code class="language-yaml">name: data_analysis_pipeline
+description: Analyze experimental data with preprocessing, training, and evaluation
+
+resource_requirements:
+  - name: light
+    num_cpus: 4
+    memory: 8g
+    runtime: PT30M
+
+  - name: compute
+    num_cpus: 32
+    memory: 64g
+    runtime: PT2H
+
+  - name: gpu
+    num_cpus: 16
+    num_gpus: 2
+    memory: 128g
+    runtime: PT4H
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py --input data/ --output processed/
+    resource_requirements: light
+
+  - name: train_model
+    command: python train.py --data processed/ --output model/
+    resource_requirements: gpu
+    depends_on: [preprocess]
+
+  - name: evaluate
+    command: python evaluate.py --model model/ --output results/
+    resource_requirements: compute
+    depends_on: [train_model]
+
+  - name: generate_report
+    command: python report.py --results results/
+    resource_requirements: light
+    depends_on: [evaluate]
+</code></pre>
+<h3 id="submitting-the-workflow"><a class="header" href="#submitting-the-workflow">Submitting the Workflow</a></h3>
+<p><code>torc slurm generate</code> writes the augmented spec to stdout, so pipe it straight into <code>torc submit -</code>:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml | torc submit -
+</code></pre>
+<p>Or save the generated spec to a file and submit that file:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject -o workflow_with_slurm.yaml workflow.yaml
+torc submit workflow_with_slurm.yaml
+</code></pre>
+<p>Torc will:</p>
+<ol>
+<li>Detect which HPC system you're on (e.g., NLR Kestrel)</li>
+<li>Match each job's requirements to appropriate partitions</li>
+<li>Generate Slurm scheduler configurations</li>
+<li>Create workflow actions that stage resource allocation based on dependencies</li>
+<li>Submit the workflow for execution</li>
+</ol>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<p>When you use <code>slurm generate</code> + <code>submit</code>, Torc performs intelligent analysis of your workflow:</p>
+<h3 id="1-per-job-scheduler-generation"><a class="header" href="#1-per-job-scheduler-generation">1. Per-Job Scheduler Generation</a></h3>
+<p>Each job gets its own Slurm scheduler configuration based on its resource requirements. This means:</p>
+<ul>
+<li>Jobs are matched to the most appropriate partition</li>
+<li>Memory, CPU, and GPU requirements are correctly specified</li>
+<li>Walltime is set to the partition's maximum (explained below)</li>
+</ul>
+<h3 id="2-staged-resource-allocation"><a class="header" href="#2-staged-resource-allocation">2. Staged Resource Allocation</a></h3>
+<p>Torc analyzes job dependencies and creates <strong>staged workflow actions</strong>. Every scheduler is tied to
+the jobs it runs via an <code>on_jobs_ready</code> action:</p>
+<ul>
+<li><strong>Jobs without dependencies</strong> — <code>on_jobs_ready</code> gated on those (root) jobs. They are ready as soon
+as the workflow is initialized, so their resources are allocated immediately, just as the workflow
+starts.</li>
+<li><strong>Jobs with dependencies</strong> — <code>on_jobs_ready</code> gated on those jobs, so resources are allocated only
+when the jobs become ready to run.</li>
+</ul>
+<p>This prevents wasting allocation time on resources that aren't needed yet. For example, in the
+workflow above:</p>
+<ul>
+<li><code>preprocess</code> resources are allocated at workflow start (it is a root job)</li>
+<li><code>train_model</code> resources are allocated when <code>preprocess</code> completes</li>
+<li><code>evaluate</code> resources are allocated when <code>train_model</code> completes</li>
+<li><code>generate_report</code> resources are allocated when <code>evaluate</code> completes</li>
+</ul>
+<p>Tying every scheduler to its jobs (rather than scheduling root jobs with <code>on_workflow_start</code>) also
+makes re-runs work: if you reset a subset of jobs and reinitialize, only those jobs' actions are
+re-armed, so a follow-up <code>torc submit</code> re-schedules exactly the jobs being re-run. See
+<a href="#re-running-part-of-a-workflow">Re-running part of a workflow</a> below.</p>
+<h3 id="3-walltime-calculation"><a class="header" href="#3-walltime-calculation">3. Walltime Calculation</a></h3>
+<p>By default, Torc sets the walltime to <strong>1.5× your longest job's runtime</strong> (capped at the partition's
+maximum). This provides headroom for jobs that run slightly longer than expected.</p>
+<p>You can customize this behavior:</p>
+<ul>
+<li><code>--walltime-strategy max-job-runtime</code> (default): Uses longest job runtime × multiplier</li>
+<li><code>--walltime-strategy max-partition-time</code>: Uses the partition's maximum walltime</li>
+<li><code>--walltime-multiplier 2.0</code>: Change the safety multiplier (default: 1.5)</li>
+</ul>
+<p>See <a href="#walltime-strategy-options">Walltime Strategy Options</a> for details.</p>
+<h3 id="4-hpc-profile-knowledge"><a class="header" href="#4-hpc-profile-knowledge">4. HPC Profile Knowledge</a></h3>
+<p>Torc includes built-in knowledge of HPC systems like NLR Kestrel, including:</p>
+<ul>
+<li>Available partitions and their resource limits</li>
+<li>GPU configurations</li>
+<li>Memory and CPU specifications</li>
+<li>Special requirements (e.g., minimum node counts for high-bandwidth partitions)</li>
+</ul>
+<blockquote>
+<p><strong>Using an unsupported HPC?</strong> Please
+<a href="https://github.com/NatLabRockies/torc/issues">request built-in support</a> so everyone benefits. You
+can also <a href="./custom-hpc-profile.html">create a custom profile</a> for immediate use.</p>
+</blockquote>
+<h2 id="resource-requirements-specification"><a class="header" href="#resource-requirements-specification">Resource Requirements Specification</a></h2>
+<p>Resource requirements are the key to the simplified workflow. Define them once and reference them
+from jobs:</p>
+<pre><code class="language-yaml">resource_requirements:
+  - name: small
+    num_cpus: 4
+    num_gpus: 0
+    num_nodes: 1
+    memory: 8g
+    runtime: PT1H
+
+  - name: gpu_training
+    num_cpus: 32
+    num_gpus: 4
+    num_nodes: 1
+    memory: 256g
+    runtime: PT8H
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Description</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>Reference name for jobs</td><td><code>"compute"</code></td></tr>
+<tr><td><code>num_cpus</code></td><td>CPU cores required</td><td><code>32</code></td></tr>
+<tr><td><code>num_gpus</code></td><td>GPUs required (0 if none)</td><td><code>2</code></td></tr>
+<tr><td><code>num_nodes</code></td><td>Nodes required</td><td><code>1</code></td></tr>
+<tr><td><code>memory</code></td><td>Memory with unit suffix</td><td><code>"64g"</code>, <code>"512m"</code></td></tr>
+<tr><td><code>runtime</code></td><td>ISO8601 duration</td><td><code>"PT2H"</code>, <code>"PT30M"</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="runtime-format"><a class="header" href="#runtime-format">Runtime Format</a></h3>
+<p>Use ISO8601 duration format:</p>
+<ul>
+<li><code>PT30M</code> — 30 minutes</li>
+<li><code>PT2H</code> — 2 hours</li>
+<li><code>PT1H30M</code> — 1 hour 30 minutes</li>
+<li><code>P1D</code> — 1 day</li>
+<li><code>P2DT4H</code> — 2 days 4 hours</li>
+</ul>
+<h2 id="job-dependencies"><a class="header" href="#job-dependencies">Job Dependencies</a></h2>
+<p>Define dependencies explicitly or implicitly through file/data relationships:</p>
+<h3 id="explicit-dependencies"><a class="header" href="#explicit-dependencies">Explicit Dependencies</a></h3>
+<pre><code class="language-yaml">jobs:
+  - name: step1
+    command: ./step1.sh
+    resource_requirements: small
+
+  - name: step2
+    command: ./step2.sh
+    resource_requirements: small
+    depends_on: [step1]
+
+  - name: step3
+    command: ./step3.sh
+    resource_requirements: small
+    depends_on: [step1, step2]  # Waits for both
+</code></pre>
+<h3 id="implicit-dependencies-via-files"><a class="header" href="#implicit-dependencies-via-files">Implicit Dependencies (via Files)</a></h3>
+<pre><code class="language-yaml">files:
+  - name: raw_data
+    path: /data/raw.csv
+  - name: processed_data
+    path: /data/processed.csv
+
+jobs:
+  - name: process
+    command: python process.py
+    input_files: [raw_data]
+    output_files: [processed_data]
+    resource_requirements: compute
+
+  - name: analyze
+    command: python analyze.py
+    input_files: [processed_data]  # Creates implicit dependency on 'process'
+    resource_requirements: compute
+</code></pre>
+<h2 id="previewing-generated-configuration"><a class="header" href="#previewing-generated-configuration">Previewing Generated Configuration</a></h2>
+<blockquote>
+<p><strong>Recommended Practice:</strong> Always preview the generated configuration before submitting to Slurm,
+especially for complex workflows. This allows you to verify that schedulers and actions are
+appropriate for your workflow structure.</p>
+</blockquote>
+<h3 id="viewing-the-execution-plan"><a class="header" href="#viewing-the-execution-plan">Viewing the Execution Plan</a></h3>
+<p>Before generating schedulers, visualize how your workflow will execute in stages:</p>
+<pre><code class="language-bash">torc workflows execution-plan workflow.yaml
+</code></pre>
+<p>This shows the execution stages, which jobs run at each stage, and (if schedulers are defined) when
+Slurm allocations are requested. See
+<a href="../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> for detailed
+examples.</p>
+<h3 id="generating-slurm-configuration"><a class="header" href="#generating-slurm-configuration">Generating Slurm Configuration</a></h3>
+<p>Preview what Torc will generate:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject --profile kestrel workflow.yaml
+</code></pre>
+<p>This outputs the complete workflow with generated schedulers and actions:</p>
+<h4 id="scheduler-grouping-options"><a class="header" href="#scheduler-grouping-options">Scheduler Grouping Options</a></h4>
+<p>By default, Torc creates <strong>one scheduler per partition</strong>: jobs whose resource requirements would
+land on the same partition share an allocation. So if three jobs have three different resource
+requirement definitions (e.g., <code>cpu</code>, <code>memory</code>, <code>mixed</code>) but all fit on the same partition, you get
+one scheduler instead of three.</p>
+<p>The <code>--group-by</code> option controls how jobs are grouped into schedulers:</p>
+<pre><code class="language-bash"># Default: one scheduler per partition
+torc slurm generate --account myproject workflow.yaml
+torc slurm generate --account myproject --group-by partition workflow.yaml
+# Result: 1 scheduler (short_scheduler) if all jobs fit on the "short" partition
+
+# One scheduler per resource_requirements name
+torc slurm generate --account myproject --group-by resource-requirements workflow.yaml
+# Result: 3 schedulers (cpu_scheduler, memory_scheduler, mixed_scheduler)
+</code></pre>
+<p><strong>When to use <code>--group-by partition</code> (default):</strong></p>
+<ul>
+<li>Your workflow has resource requirement definitions that all fit on the same partition</li>
+<li>You want to minimize Slurm queue overhead by reducing the number of allocations</li>
+<li>Jobs have similar characteristics and can share nodes efficiently</li>
+</ul>
+<p><strong>When to use <code>--group-by resource-requirements</code>:</strong></p>
+<ul>
+<li>Jobs have significantly different resource profiles that benefit from separate allocations</li>
+<li>You want fine-grained control over which jobs share resources</li>
+<li>You're debugging and want clear separation between job types</li>
+</ul>
+<p>When grouping by partition, the scheduler uses the <strong>maximum</strong> resource values from all grouped
+requirements (max memory, max CPUs, max runtime, etc.) to ensure all jobs can run.</p>
+<h4 id="walltime-strategy-options"><a class="header" href="#walltime-strategy-options">Walltime Strategy Options</a></h4>
+<p>The <code>--walltime-strategy</code> option controls how Torc calculates the walltime for generated schedulers:</p>
+<pre><code class="language-bash"># Default: use max job runtime with a safety multiplier (1.5x)
+torc slurm generate --account myproject workflow.yaml
+torc slurm generate --account myproject --walltime-strategy max-job-runtime workflow.yaml
+
+# Use the partition's maximum allowed walltime
+torc slurm generate --account myproject --walltime-strategy max-partition-time workflow.yaml
+</code></pre>
+<p><strong>Walltime strategies:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Strategy</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>max-job-runtime</code></td><td>Uses the longest job's runtime × multiplier (default: 1.5x). Capped at partition max.</td></tr>
+<tr><td><code>max-partition-time</code></td><td>Uses the partition's maximum walltime. More conservative but may impact queue scheduling.</td></tr>
+</tbody></table>
+</div>
+<p><strong>Customizing the multiplier:</strong></p>
+<p>The <code>--walltime-multiplier</code> option (default: 1.5) provides a safety margin when using
+<code>max-job-runtime</code>:</p>
+<pre><code class="language-bash"># Use 2x the max job runtime for extra buffer
+torc slurm generate --account myproject --walltime-multiplier 2.0 workflow.yaml
+
+# Use exact job runtime (no buffer - use with caution)
+torc slurm generate --account myproject --walltime-multiplier 1.0 workflow.yaml
+</code></pre>
+<p><strong>When to use <code>max-job-runtime</code> (default):</strong></p>
+<ul>
+<li>You want better queue scheduling (shorter walltime requests often get prioritized)</li>
+<li>Your job runtime estimates are reasonably accurate</li>
+<li>You prefer the Torc runner to exit early rather than holding idle allocations</li>
+</ul>
+<p><strong>When to use <code>max-partition-time</code>:</strong></p>
+<ul>
+<li>Your job runtimes are highly variable or unpredictable</li>
+<li>You consistently underestimate job runtimes</li>
+<li>Queue priority is not a concern</li>
+</ul>
+<pre><code class="language-yaml">name: data_analysis_pipeline
+# ... original content ...
+
+jobs:
+  - name: preprocess
+    command: python preprocess.py --input data/ --output processed/
+    resource_requirements: light
+    scheduler: preprocess_scheduler
+
+  # ... more jobs ...
+
+slurm_schedulers:
+  - name: preprocess_scheduler
+    account: myproject
+    mem: 8g
+    nodes: 1
+    walltime: "04:00:00"
+
+  - name: train_model_scheduler
+    account: myproject
+    mem: 128g
+    nodes: 1
+    gres: "gpu:2"
+    walltime: "04:00:00"
+
+  # ... more schedulers ...
+
+actions:
+  - trigger_type: on_jobs_ready
+    action_type: schedule_nodes
+    jobs: [preprocess]
+    scheduler: preprocess_scheduler
+    scheduler_type: slurm
+    num_allocations: 1
+
+  - trigger_type: on_jobs_ready
+    action_type: schedule_nodes
+    jobs: [train_model]
+    scheduler: train_model_scheduler
+    scheduler_type: slurm
+    num_allocations: 1
+
+  # ... more actions ...
+</code></pre>
+<p>Every scheduler is gated on the jobs it runs with <code>on_jobs_ready</code> — including root jobs like
+<code>preprocess</code>, which are ready at workflow start. This is what makes a re-run reschedule only the
+affected jobs.</p>
+<p>Save the output to inspect or modify before submission:</p>
+<pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml -o workflow_with_schedulers.yaml
+</code></pre>
+<h2 id="re-running-part-of-a-workflow"><a class="header" href="#re-running-part-of-a-workflow">Re-running part of a workflow</a></h2>
+<p>Because every scheduler is tied to its jobs with <code>on_jobs_ready</code>, you can re-run a subset of a
+finished (or partially failed) workflow and have only the affected allocations re-submitted:</p>
+<pre><code class="language-bash"># Reset the jobs you want to re-run (downstream jobs reset automatically), then reinitialize:
+torc jobs reset-status &lt;id1&gt; &lt;id2&gt; ... --reinit
+
+# Re-submit: only the reset jobs' allocations are scheduled.
+torc submit &lt;workflow_id&gt;
+</code></pre>
+<p>How it works: <code>reinitialize</code> re-arms only the actions whose jobs were reset; actions for untouched
+jobs stay suppressed (so they are not re-scheduled and do not submit duplicate allocations).
+<code>torc submit</code> then fires every pending <code>schedule_nodes</code> action — which is exactly the reset jobs'
+actions. Downstream actions whose jobs aren't ready yet are fired later by a running worker, as
+their dependencies complete.</p>
+<p>For example, with separate job classes each on their own partition (see
+<a href="https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_multi_class_slurm.yaml"><code>examples/yaml/workflow_actions_multi_class_slurm.yaml</code></a>),
+resetting only the GPU and big-memory jobs re-schedules only the GPU and big-memory allocations; the
+regular-job allocations are left alone.</p>
+<blockquote>
+<p><strong>Important — <code>submit</code> does not right-size the re-run.</strong> <code>torc submit</code> re-fires each pending
+action with the <code>num_allocations</code> from its spec, <strong>verbatim</strong>. The granularity of a re-run is
+therefore the granularity of your actions:</p>
+<ul>
+<li>With <strong>per-stage / per-class</strong> actions (as above), resetting a subset re-arms only the matching
+actions, so <code>submit</code> schedules only those — the common, efficient case.</li>
+<li>With a <strong>single large fan-in</strong> action (e.g. one <code>on_jobs_ready</code> action gating 100k jobs with
+<code>num_allocations: 500</code>), resetting <em>any</em> subset re-arms that one action, and <code>submit</code> submits
+its full <code>num_allocations</code> (500) — even if only 100 jobs need to re-run. The jobs still run (the
+surplus workers find no claimable work and idle out), but it badly over-allocates.</li>
+</ul>
+<p>For a right-sized partial re-run of a large fan-in stage, use
+<a href="../fault-tolerance/automatic-recovery.html"><code>torc recover</code></a> instead: it regenerates
+<code>schedule_nodes</code> actions sized to the jobs that are actually pending (and suppresses the spec's
+full-size action), so it allocates for the 100 jobs rather than the whole stage.</p>
+</blockquote>
+<blockquote>
+<p><strong>Note:</strong> <code>torc submit</code> is one-shot — it submits the currently-pending allocations and returns.
+For an unattended multi-stage re-run, follow it with <code>torc watch</code> so that if every worker exits
+(e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up. For a
+guided re-run that also sizes allocations from prior runs, use
+<a href="../fault-tolerance/automatic-recovery.html"><code>torc recover</code></a>.</p>
+</blockquote>
+<blockquote>
+<p><strong>Tip:</strong> This is why auto-generated and recommended specs use <code>on_jobs_ready</code> (tied to jobs)
+rather than <code>on_workflow_start</code> for <code>schedule_nodes</code>. An <code>on_workflow_start</code> action is kept (not
+re-armed) on reinitialize and <code>torc submit</code> cannot re-fire it, so a reset root job would have no
+allocation. <code>on_workflow_start</code> <code>schedule_nodes</code> is still fine for a single allocation that serves
+the whole workflow, but such an allocation isn't selectively re-run-safe.</p>
+</blockquote>
+<h3 id="manually-scheduling-a-re-run-with-torc-slurm-schedule-nodes"><a class="header" href="#manually-scheduling-a-re-run-with-torc-slurm-schedule-nodes">Manually scheduling a re-run with <code>torc slurm schedule-nodes</code></a></h3>
+<p>If you want to provide the compute yourself instead of letting <code>submit</code> fire the actions — for
+example "run my 10 reset jobs on 1 node" — use <code>torc slurm schedule-nodes</code>:</p>
+<pre><code class="language-bash">torc jobs reset-status &lt;id1&gt; ... &lt;id10&gt; --reinit
+torc slurm schedule-nodes -n1 &lt;workflow_id&gt;
+</code></pre>
+<p>A worker started this way still claims the workflow's own <strong>pending</strong> <code>schedule_nodes</code> actions and
+submits their allocations. So if the reinit left a coarse action re-armed (e.g. an <code>on_jobs_ready</code>
+action gating the whole stage), that worker would fire its full <code>num_allocations</code> on top of the one
+you requested. To prevent surprises, <code>schedule-nodes</code> checks for pending <code>schedule_nodes</code> actions
+and <strong>prompts</strong> you to suppress them, proceed (let them fire), or cancel. For non-interactive use:</p>
+<ul>
+<li><code>--suppress-actions</code> — mark the pending actions executed first, so only your <code>-n</code> request is
+submitted.</li>
+<li><code>--no-prompts</code> — skip the prompt and proceed (let the actions fire); the historical behavior.</li>
+</ul>
+<p>(<code>torc recover</code> does the suppression automatically and additionally right-sizes the allocation to
+the pending jobs, so it is usually the better tool for a partial re-run.)</p>
+<h3 id="choosing-a-stages-scheduler-trigger-upstream-vs-the-stages-own-jobs"><a class="header" href="#choosing-a-stages-scheduler-trigger-upstream-vs-the-stages-own-jobs">Choosing a stage's scheduler trigger: upstream vs. the stage's own jobs</a></h3>
+<p>For <code>schedule_nodes</code>, <strong>what you gate the action on</strong> determines how subset re-runs behave:</p>
+<ul>
+<li><strong>Gate on the stage's own jobs</strong> (<code>on_jobs_ready[&lt;this stage's jobs&gt;]</code>) — resetting any of them
+re-arms the action, so <code>submit</code> re-schedules them automatically. Best for <strong>per-class /
+per-stage</strong> actions where auto re-run at the action's <code>num_allocations</code> is what you want.</li>
+<li><strong>Gate on the upstream job</strong> whose completion unlocks the stage (<code>on_jobs_complete[&lt;upstream&gt;]</code>) —
+resetting the stage's own jobs leaves the upstream terminal, so the action stays <strong>suppressed</strong>
+and does not re-fire. Best for a <strong>large fan-in stage</strong> you expect to re-run in subsets: the
+coarse action won't over-allocate, and you provide the compute with <code>torc slurm schedule-nodes</code> or
+<code>torc recover</code>. The trade-off is that reinit won't auto-reschedule the reset jobs — which for a
+coarse stage is what you want anyway.</li>
+</ul>
+<h2 id="torc-server-considerations"><a class="header" href="#torc-server-considerations">Torc Server Considerations</a></h2>
+<p>The Torc server must be accessible to compute nodes. Options include:</p>
+<ol>
+<li><strong>Shared server</strong> (Recommended): A team member allocates a dedicated server in the HPC
+environment</li>
+<li><strong>Login node</strong>: Suitable for small workflows with few, long-running jobs</li>
+</ol>
+<p>For large workflows with many short jobs, a dedicated server prevents overloading login nodes.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-focus-on-resource-requirements"><a class="header" href="#1-focus-on-resource-requirements">1. Focus on Resource Requirements</a></h3>
+<p>Spend time accurately defining resource requirements. Torc handles the rest:</p>
+<pre><code class="language-yaml">resource_requirements:
+  # Be specific about what each job type needs
+  - name: io_heavy
+    num_cpus: 4
+    memory: 32g      # High memory for data loading
+    runtime: PT1H
+
+  - name: compute_heavy
+    num_cpus: 64
+    memory: 16g      # Less memory, more CPU
+    runtime: PT4H
+</code></pre>
+<h3 id="2-use-meaningful-names"><a class="header" href="#2-use-meaningful-names">2. Use Meaningful Names</a></h3>
+<p>Name resource requirements by their purpose, not by partition:</p>
+<pre><code class="language-yaml"># Good - describes the workload
+resource_requirements:
+  - name: data_preprocessing
+  - name: model_training
+  - name: inference
+
+# Avoid - ties you to specific infrastructure
+resource_requirements:
+  - name: short_partition
+  - name: gpu_h100
+</code></pre>
+<h3 id="3-group-similar-jobs"><a class="header" href="#3-group-similar-jobs">3. Group Similar Jobs</a></h3>
+<p>Jobs with similar requirements can share resource requirement definitions:</p>
+<pre><code class="language-yaml">resource_requirements:
+  - name: quick_task
+    num_cpus: 2
+    memory: 4g
+    runtime: PT15M
+
+jobs:
+  - name: validate_input
+    command: ./validate.sh
+    resource_requirements: quick_task
+
+  - name: check_output
+    command: ./check.sh
+    resource_requirements: quick_task
+    depends_on: [main_process]
+</code></pre>
+<h3 id="4-test-locally-first"><a class="header" href="#4-test-locally-first">4. Test Locally First</a></h3>
+<p>Validate your workflow logic locally before submitting to HPC:</p>
+<pre><code class="language-bash"># Run locally (without Slurm)
+torc run workflow.yaml
+
+# Then submit to HPC
+torc slurm generate --account myproject workflow.yaml | torc submit -
+</code></pre>
+<h2 id="limitations-and-caveats"><a class="header" href="#limitations-and-caveats">Limitations and Caveats</a></h2>
+<p>The auto-generation in <code>torc slurm generate</code> uses heuristics that work well for common workflow
+patterns but may not be optimal for all cases:</p>
+<h3 id="when-auto-generation-works-well"><a class="header" href="#when-auto-generation-works-well">When Auto-Generation Works Well</a></h3>
+<ul>
+<li><strong>Linear pipelines</strong>: A → B → C → D</li>
+<li><strong>Fan-out patterns</strong>: One job unblocks many (e.g., preprocess → 100 work jobs)</li>
+<li><strong>Fan-in patterns</strong>: Many jobs unblock one (e.g., 100 work jobs → postprocess)</li>
+<li><strong>Simple DAGs</strong>: Clear dependency structures with distinct resource tiers</li>
+</ul>
+<h3 id="when-to-use-manual-configuration"><a class="header" href="#when-to-use-manual-configuration">When to Use Manual Configuration</a></h3>
+<p>Consider using <code>torc slurm generate</code> to preview and manually adjust, or define schedulers manually,
+when:</p>
+<ul>
+<li><strong>Complex dependency graphs</strong>: Multiple interleaved dependency patterns</li>
+<li><strong>Shared schedulers</strong>: You want multiple jobs to share the same Slurm allocation</li>
+<li><strong>Custom timing</strong>: Specific requirements for when allocations should be requested</li>
+<li><strong>Resource optimization</strong>: Fine-tuning to minimize allocation waste</li>
+<li><strong>Multi-node jobs</strong>: Jobs requiring coordination across multiple nodes (see
+<a href="./multi-node-jobs.html">Multi-Node Jobs</a>)</li>
+</ul>
+<h3 id="what-could-go-wrong"><a class="header" href="#what-could-go-wrong">What Could Go Wrong</a></h3>
+<p>Without previewing, auto-generation might:</p>
+<ol>
+<li><strong>Request allocations too early</strong>: Wasting queue time waiting for dependencies</li>
+<li><strong>Request allocations too late</strong>: Adding latency to job startup</li>
+<li><strong>Create suboptimal scheduler groupings</strong>: Not sharing allocations when beneficial</li>
+<li><strong>Miss optimization opportunities</strong>: Not recognizing patterns that could share resources</li>
+</ol>
+<h3 id="dynamic-jobs-spawn_jobs"><a class="header" href="#dynamic-jobs-spawn_jobs">Dynamic Jobs (<code>spawn_jobs</code>)</a></h3>
+<p><code>torc slurm generate</code> analyzes the <strong>static</strong> workflow specification — the jobs declared at workflow
+creation. Jobs added at runtime by <a href="../../core/tutorials/dynamic-jobs.html"><code>spawn_jobs</code></a> (the
+dynamic-jobs orchestrator pattern) are by definition not visible to it, so the generated schedulers
+allocate compute capacity only for the originally-declared workload.</p>
+<p>For iterative workflows that grow at runtime, pair <code>torc slurm generate</code> with
+<a href="../fault-tolerance/automatic-recovery.html#auto-scheduling-for-unplanned-jobs"><code>torc watch --auto-schedule</code></a>.
+The watch loop detects spawned jobs (rows with <code>origin = 'spawn'</code>) and submits additional Slurm
+allocations to cover them — without it, spawned children sit <code>Ready</code> until the originally-planned
+allocations happen to have spare capacity.</p>
+<p><strong>Best Practice</strong>: For production workflows, always run <code>torc slurm generate</code> first, review the
+output, and submit the reviewed configuration with <code>torc submit</code>.</p>
+<h2 id="advanced-manual-scheduler-configuration"><a class="header" href="#advanced-manual-scheduler-configuration">Advanced: Manual Scheduler Configuration</a></h2>
+<p>For advanced users who need fine-grained control, you can define schedulers and actions manually.
+See <a href="./slurm.html">Advanced Slurm Configuration</a> for details.</p>
+<p>Common reasons for manual configuration:</p>
+<ul>
+<li>Non-standard partition requirements</li>
+<li>Custom Slurm directives (e.g., <code>--constraint</code>)</li>
+<li>Multi-node jobs with specific topology requirements</li>
+<li>Reusing allocations across multiple jobs for efficiency</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="no-partition-found-for-job"><a class="header" href="#no-partition-found-for-job">"No partition found for job"</a></h3>
+<p>Your resource requirements exceed what's available. Check:</p>
+<ul>
+<li>Memory doesn't exceed partition limits</li>
+<li>Runtime doesn't exceed partition walltime</li>
+<li>GPU count is available on GPU partitions</li>
+</ul>
+<p>Use <code>torc hpc partitions &lt;profile&gt;</code> to see available resources.</p>
+<h3 id="jobs-not-starting"><a class="header" href="#jobs-not-starting">Jobs Not Starting</a></h3>
+<p>Ensure the Torc server is accessible from compute nodes:</p>
+<pre><code class="language-bash"># From a compute node
+curl $TORC_API_URL/health
+</code></pre>
+<h3 id="wrong-partition-selected"><a class="header" href="#wrong-partition-selected">Wrong Partition Selected</a></h3>
+<p>Use <code>torc hpc match</code> to see which partitions match your requirements:</p>
+<pre><code class="language-bash">torc hpc match kestrel --cpus 32 --memory 64g --walltime 02:00:00 --gpus 2
+</code></pre>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../../core/workflows/visualizing-workflows.html">Visualizing Workflow Structure</a> — Execution plans
+and DAG visualization</li>
+<li><a href="./hpc-profiles.html">HPC Profiles</a> — Detailed HPC profile usage</li>
+<li><a href="./slurm.html">Advanced Slurm Configuration</a> — Manual Slurm scheduler setup</li>
+<li><a href="../../core/reference/resources.html">Resource Requirements Reference</a> — Complete specification</li>
+<li><a href="../design/workflow-actions.html">Workflow Actions</a> — Understanding actions</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/admin/choosing-deployment.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/hpc/submit-slurm-workflow.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/admin/choosing-deployment.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/hpc/submit-slurm-workflow.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

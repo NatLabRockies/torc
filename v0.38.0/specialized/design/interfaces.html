@@ -1,0 +1,570 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Interface Architecture - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.38.0/docs/src/specialized/design/interfaces.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="interface-architecture"><a class="header" href="#interface-architecture">Interface Architecture</a></h1>
+<p>This document describes the design decisions behind Torc's multi-interface architecture and the
+patterns used to expose functionality consistently across all user-facing interfaces.</p>
+<h2 id="problem-statement"><a class="header" href="#problem-statement">Problem Statement</a></h2>
+<p>Torc needs to serve diverse user workflows:</p>
+<ul>
+<li><strong>Automation scripts</strong> need programmatic access via CLI and API clients</li>
+<li><strong>Interactive monitoring</strong> requires real-time updates via TUI and web dashboard</li>
+<li><strong>AI assistants</strong> need structured tool access via the MCP protocol</li>
+<li><strong>External integrations</strong> require language-agnostic HTTP APIs</li>
+</ul>
+<p>Each interface has different requirements for output format, error handling, and interaction
+patterns, yet all must provide consistent access to core functionality.</p>
+<h2 id="design-goals"><a class="header" href="#design-goals">Design Goals</a></h2>
+<ol>
+<li><strong>Consistency</strong>: All interfaces expose the same core operations with consistent semantics</li>
+<li><strong>Single Source of Truth</strong>: Business logic lives in the server; clients are thin wrappers</li>
+<li><strong>Interface-Appropriate UX</strong>: Each interface adapts presentation to its context</li>
+<li><strong>Maintainability</strong>: Adding features should require minimal interface-specific code</li>
+<li><strong>Discoverability</strong>: Users should easily find available operations in each interface</li>
+</ol>
+<h2 id="solution-overview"><a class="header" href="#solution-overview">Solution Overview</a></h2>
+<p>The architecture follows a layered approach where the CLI serves as the foundation for Rust-based
+interfaces, while external clients communicate directly with the HTTP API.</p>
+<pre class="mermaid">graph TD
+    subgraph ui[&quot;User Interfaces&quot;]
+        CLI[&quot;CLI&lt;br/&gt;(torc)&quot;]
+        TUI[&quot;TUI&lt;br/&gt;(torc tui)&quot;]
+        DASH_BE[&quot;Dashboard Backend&lt;br/&gt;(torc-dash)&quot;]
+        DASH_FE[&quot;Dashboard Frontend&lt;br/&gt;(JavaScript)&quot;]
+        MCP[&quot;MCP Server&lt;br/&gt;(torc-mcp-server)&quot;]
+        PY[&quot;Python Client&quot;]
+        JL[&quot;Julia Client&quot;]
+    end
+
+    subgraph lib[&quot;Rust Client Library&quot;]
+        API[&quot;src/client/apis/&lt;br/&gt;Generated OpenAPI client&quot;]
+        CMD[&quot;src/client/commands/&lt;br/&gt;CLI command handlers&quot;]
+    end
+
+    subgraph server[&quot;Server&quot;]
+        HTTP[&quot;HTTP API&lt;br/&gt;(torc-server)&quot;]
+        DB[(SQLite Database)]
+    end
+
+    CLI --&gt; CMD
+    CMD --&gt; API
+    TUI --&gt; API
+    TUI --&gt; HTTP
+    DASH_BE --&gt; API
+    MCP --&gt; API
+    DASH_FE --&gt; HTTP
+    PY --&gt; HTTP
+    JL --&gt; HTTP
+    API --&gt; HTTP
+    HTTP --&gt; DB
+
+    style CLI fill:#4a9eff,color:#fff
+    style TUI fill:#17a2b8,color:#fff
+    style DASH_BE fill:#17a2b8,color:#fff
+    style DASH_FE fill:#17a2b8,color:#fff
+    style MCP fill:#6f42c1,color:#fff
+    style PY fill:#ffc107,color:#000
+    style JL fill:#ffc107,color:#000
+    style API fill:#4a9eff,color:#fff
+    style CMD fill:#4a9eff,color:#fff
+    style HTTP fill:#28a745,color:#fff
+    style DB fill:#28a745,color:#fff
+</pre>
+<p><strong>Key architectural decisions:</strong></p>
+<ul>
+<li><strong>CLI as foundation</strong>: The CLI (<code>src/client/commands/</code>) provides the command implementations that
+other Rust interfaces can reuse.</li>
+<li><strong>Shared Rust client library</strong>: The TUI, Dashboard backend, and MCP server all use the generated
+Rust API client (<code>src/client/apis/</code>) as the CLI does. This client library makes HTTP requests to
+the torc-server.</li>
+<li><strong>Direct HTTP access</strong>: The TUI, Dashboard JavaScript frontend, Python client, and Julia client
+also communicate directly with the HTTP API for certain operations.</li>
+</ul>
+<h2 id="interface-implementations"><a class="header" href="#interface-implementations">Interface Implementations</a></h2>
+<h3 id="cli-command-line-interface"><a class="header" href="#cli-command-line-interface">CLI (Command Line Interface)</a></h3>
+<p><strong>Location</strong>: <code>src/client/commands/</code></p>
+<p><strong>Design Pattern</strong>: Subcommand dispatch with format-aware output</p>
+<p>The CLI uses <code>clap</code> for argument parsing with a hierarchical command structure:</p>
+<pre><code>torc
+├── workflows
+│   ├── create
+│   ├── list
+│   ├── run
+│   └── ...
+├── jobs
+│   ├── list
+│   ├── get
+│   └── ...
+└── ...
+</code></pre>
+<p><strong>Key Design Decisions</strong>:</p>
+<ol>
+<li>
+<p><strong>Dual Output Formats</strong>: Every list/get command supports <code>--format table</code> (human-readable) and
+<code>--format json</code> (machine-parseable). This enables both interactive use and scripting.</p>
+</li>
+<li>
+<p><strong>Pagination Built-In</strong>: All list commands include <code>--offset</code> and <code>--limit</code> flags, mirroring the
+API's pagination model directly.</p>
+</li>
+<li>
+<p><strong>Environment Variable Fallbacks</strong>: Common parameters like <code>--url</code> fall back to environment
+variables (<code>TORC_API_URL</code>), reducing repetition in scripts.</p>
+</li>
+<li>
+<p><strong>Consistent Error Output</strong>: Errors write to stderr with context, while successful output goes to
+stdout, enabling clean piping.</p>
+</li>
+</ol>
+<p><strong>Implementation Pattern</strong>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn handle_list(config: &amp;Configuration, format: &amp;str) {
+    match list_items(config) {
+        Ok(items) =&gt; match format {
+            "json" =&gt; println!("{}", serde_json::to_string_pretty(&amp;items).unwrap()),
+            _ =&gt; display_table(&amp;items),
+        },
+        Err(e) =&gt; eprintln!("Error: {}", e),
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="tui-terminal-user-interface"><a class="header" href="#tui-terminal-user-interface">TUI (Terminal User Interface)</a></h3>
+<p><strong>Location</strong>: <code>src/tui/</code></p>
+<p><strong>Design Pattern</strong>: Component-based reactive UI with polling updates</p>
+<p><strong>Key Design Decisions</strong>:</p>
+<ol>
+<li>
+<p><strong>Separation of Concerns</strong>:</p>
+<ul>
+<li><code>app.rs</code>: Application state and business logic</li>
+<li><code>ui.rs</code>: Rendering logic using ratatui</li>
+<li><code>api.rs</code>: API client with <code>anyhow::Result</code> error handling</li>
+<li><code>components.rs</code>: Reusable UI widgets (dialogs, lists)</li>
+</ul>
+</li>
+<li>
+<p><strong>Blocking API Client</strong>: Unlike the async server, the TUI uses <code>reqwest::blocking</code> to simplify
+the event loop. API calls happen on the main thread between render cycles.</p>
+</li>
+<li>
+<p><strong>Modal Dialogs</strong>: Confirmation dialogs for destructive actions (delete, cancel) prevent
+accidental data loss in the fast-paced terminal environment.</p>
+</li>
+<li>
+<p><strong>Vim-Style Navigation</strong>: Keyboard shortcuts follow vim conventions (j/k for navigation, Enter
+for selection) for power users.</p>
+</li>
+</ol>
+<p><strong>State Management</strong>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct App {
+    pub workflows: Vec&lt;WorkflowModel&gt;,
+    pub selected_workflow: Option&lt;usize&gt;,
+    pub detail_view: DetailViewType,
+    pub confirmation_dialog: Option&lt;ConfirmationDialog&gt;,
+}
+
+impl App {
+    pub fn handle_key_event(&amp;mut self, key: KeyEvent) -&gt; AppAction {
+        if self.confirmation_dialog.is_some() {
+            return self.handle_dialog_key(key);
+        }
+        // Normal key handling
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="dashboard-web-ui"><a class="header" href="#dashboard-web-ui">Dashboard (Web UI)</a></h3>
+<p><strong>Location</strong>: <code>torc-dash/src/</code></p>
+<p><strong>Design Pattern</strong>: Axum web server using the Rust client library</p>
+<p><strong>Key Design Decisions</strong>:</p>
+<ol>
+<li>
+<p><strong>Shared Client Library</strong>: The dashboard uses the same Rust API client (<code>src/client/apis/</code>) as
+the CLI, TUI, and MCP server, ensuring consistent behavior across all Rust-based interfaces.</p>
+</li>
+<li>
+<p><strong>Embedded Assets</strong>: Static files (HTML, CSS, JS) are embedded at compile time using
+<code>rust-embed</code>, producing a single binary for deployment.</p>
+</li>
+<li>
+<p><strong>Server-Sent Events</strong>: Real-time updates use SSE for workflow status changes, avoiding the
+complexity of WebSocket state management.</p>
+</li>
+<li>
+<p><strong>Separate Binary</strong>: The dashboard runs as <code>torc-dash</code>, not part of the main <code>torc</code> binary,
+allowing independent deployment and scaling.</p>
+</li>
+</ol>
+<p><strong>API Integration Pattern</strong>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn list_workflows(
+    State(state): State&lt;AppState&gt;,
+) -&gt; Result&lt;Json&lt;Vec&lt;WorkflowModel&gt;&gt;, StatusCode&gt; {
+    let workflows = default_api::list_workflows(&amp;state.config, None, None, None, None)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(workflows.items))
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="mcp-server-ai-assistant-interface"><a class="header" href="#mcp-server-ai-assistant-interface">MCP Server (AI Assistant Interface)</a></h3>
+<p><strong>Location</strong>: <code>torc-mcp-server/src/</code></p>
+<p><strong>Design Pattern</strong>: Tool-based RPC with structured outputs</p>
+<p><strong>Key Design Decisions</strong>:</p>
+<ol>
+<li>
+<p><strong>Blocking Client, Async Transport</strong>: The MCP server creates a blocking <code>reqwest</code> client before
+spawning the tokio runtime. This avoids nested runtime issues when the MCP transport is async but
+the Torc client expects blocking calls.</p>
+</li>
+<li>
+<p><strong>Structured JSON Responses</strong>: Tool outputs are JSON objects with consistent fields, making them
+easy for AI models to parse and reason about.</p>
+</li>
+<li>
+<p><strong>Error as Content</strong>: Errors are returned as structured content (not transport failures), giving
+AI assistants context to retry or explain failures.</p>
+</li>
+<li>
+<p><strong>Operation Scoping</strong>: Tools are scoped to common high-level operations (list workflows, get
+status, run workflow) rather than exposing every API endpoint.</p>
+</li>
+</ol>
+<p><strong>Tool Implementation</strong>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn list_workflows(config: &amp;Configuration) -&gt; Result&lt;CallToolResult, McpError&gt; {
+    let workflows = default_api::list_workflows(config, None, None, None, None)
+        .map_err(|e| McpError::internal_error(
+            format!("Failed to list workflows: {}", e), None
+        ))?;
+
+    let summary: Vec&lt;_&gt; = workflows.items.iter().map(|w| json!({
+        "id": w.id,
+        "name": w.name,
+        "status": format!("{:?}", w.status),
+    })).collect();
+
+    Ok(CallToolResult::success(vec![
+        Content::text(serde_json::to_string_pretty(&amp;summary).unwrap())
+    ]))
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="pythonjulia-api-clients"><a class="header" href="#pythonjulia-api-clients">Python/Julia API Clients</a></h3>
+<p><strong>Location</strong>: Generated in <code>python_client/</code> and <code>julia_client/</code></p>
+<p><strong>Design Pattern</strong>: OpenAPI-generated clients with language-idiomatic wrappers</p>
+<p><strong>Key Design Decisions</strong>:</p>
+<ol>
+<li>
+<p><strong>Generated Code</strong>: Core API clients are generated from <code>api/openapi.yaml</code> using
+openapi-generator. This ensures type safety and automatic updates when the API changes.</p>
+</li>
+<li>
+<p><strong>No Manual Edits</strong>: Generated files in <code>openapi_client/</code> directories should never be manually
+edited. Customizations go in wrapper modules.</p>
+</li>
+<li>
+<p><strong>Synchronous and Async</strong>: Python client supports both sync and async usage patterns via the
+generated client's configuration.</p>
+</li>
+</ol>
+<p><strong>Regeneration Workflow</strong>:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh emit
+bash sync_openapi.sh check
+bash sync_openapi.sh clients --use-rust-spec
+</code></pre>
+<p>This workflow regenerates the Rust, Python, and Julia clients from <code>api/openapi.codegen.yaml</code>. Run
+<code>emit</code> first to refresh that file from the Rust-owned scaffold, and <code>check</code> to verify the checked-in
+artifacts still match. When the emitted spec should replace the checked-in artifact, run:</p>
+<pre><code class="language-bash">cd api
+bash sync_openapi.sh all --promote
+</code></pre>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives Considered</a></h2>
+<h3 id="graphql-instead-of-rest"><a class="header" href="#graphql-instead-of-rest">GraphQL Instead of REST</a></h3>
+<p><strong>Rejected because</strong>:</p>
+<ul>
+<li>REST's simplicity matches Torc's CRUD-heavy operations</li>
+<li>OpenAPI provides excellent code generation for multiple languages</li>
+<li>Pagination and filtering are well-handled by query parameters</li>
+<li>GraphQL's flexibility isn't needed for the fixed data model</li>
+</ul>
+<h3 id="single-unified-binary"><a class="header" href="#single-unified-binary">Single Unified Binary</a></h3>
+<p><strong>Rejected because</strong>:</p>
+<ul>
+<li>The dashboard has significant web dependencies (static assets, tower middleware)</li>
+<li>Separate binaries allow independent deployment</li>
+<li>Feature flags still provide unified builds when desired</li>
+</ul>
+<h3 id="grpc-for-internal-communication"><a class="header" href="#grpc-for-internal-communication">gRPC for Internal Communication</a></h3>
+<p><strong>Rejected because</strong>:</p>
+<ul>
+<li>HTTP/JSON is more debuggable and accessible</li>
+<li>Browser-based dashboard would need a proxy anyway</li>
+<li>Python/Julia clients benefit from REST's simplicity</li>
+</ul>
+<h2 id="implementation-guidelines"><a class="header" href="#implementation-guidelines">Implementation Guidelines</a></h2>
+<p>When adding a new feature that should be exposed to users:</p>
+<ol>
+<li><strong>Start with the live Rust-owned API contract</strong>: Define the endpoint in
+<code>src/server/live_router.rs</code> and <code>src/models.rs</code></li>
+<li><strong>Implement server-side</strong>: Add handler in <code>src/server/api/</code></li>
+<li><strong>Promote and regenerate</strong>: Run <code>api/sync_openapi.sh all --promote</code> when the contract is ready,
+or <code>api/sync_openapi.sh clients --use-rust-spec</code> for local client iteration against the
+Rust-emitted spec</li>
+<li><strong>Add CLI command</strong>: Create handler in <code>src/client/commands/</code></li>
+<li><strong>Update TUI if applicable</strong>: Add to relevant view in <code>src/tui/</code></li>
+<li><strong>Update Dashboard if applicable</strong>: Add route in <code>torc-dash/src/</code></li>
+<li><strong>Add MCP tool if user-facing</strong>: Add tool function in <code>torc-mcp-server/src/</code></li>
+<li><strong>Document in all interfaces</strong>: Update reference docs for each affected interface</li>
+</ol>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Torc's multi-interface architecture achieves consistency through:</p>
+<ul>
+<li><strong>Centralized business logic</strong> in the server</li>
+<li><strong>Generated API clients</strong> from a single OpenAPI spec</li>
+<li><strong>Interface-specific adapters</strong> that translate between user expectations and API semantics</li>
+<li><strong>Consistent data models</strong> shared across all implementations</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/workflow-graph.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/design/ro-crate.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/workflow-graph.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/design/ro-crate.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
