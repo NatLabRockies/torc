@@ -659,9 +659,7 @@ where
                     workflow_id, action_id, e
                 );
                 return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
-                    message_error_response(
-                        "stored action_config is not valid JSON".to_string(),
-                    ),
+                    message_error_response("stored action_config is not valid JSON".to_string()),
                 ));
             }
         };
@@ -679,9 +677,7 @@ where
                     workflow_id, action_id
                 );
                 return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
-                    message_error_response(
-                        "stored action_config is not a JSON object".to_string(),
-                    ),
+                    message_error_response("stored action_config is not a JSON object".to_string()),
                 ));
             }
         }
