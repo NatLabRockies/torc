@@ -261,12 +261,21 @@ have many thousands of short jobs, check with your operations team about resourc
 </code></pre>
 <h3 id="action-trigger-types"><a class="header" href="#action-trigger-types">Action Trigger Types</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Trigger</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>on_workflow_start</code></td><td>Fires when workflow is submitted</td></tr>
+<tr><td><code>on_workflow_start</code></td><td>Fires at the workflow's first init, and again on a full re-init (<code>torc workflows init</code>); a partial reinit keeps it suppressed</td></tr>
 <tr><td><code>on_jobs_ready</code></td><td>Fires when specified jobs become ready</td></tr>
 <tr><td><code>on_jobs_complete</code></td><td>Fires when specified jobs complete</td></tr>
 <tr><td><code>on_workflow_complete</code></td><td>Fires when all jobs complete</td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Recommended for <code>schedule_nodes</code>: use <code>on_jobs_ready</code> gated on the jobs the allocation runs</strong>,
+even for root jobs (which are ready at init, so it still fires at the start). This ties each
+allocation to its jobs, so a selective re-run (<code>torc jobs reset-status &lt;ids&gt; --reinit</code> then
+<code>torc submit</code>) re-schedules only the reset jobs. An <code>on_workflow_start</code> <code>schedule_nodes</code> action is
+kept (not re-armed) on reinitialize and <code>torc submit</code> cannot re-fire it, so a reset job would have
+no allocation. <code>on_workflow_start</code> is still fine for a single allocation serving the whole
+workflow.</p>
+</blockquote>
 <h3 id="assigning-jobs-to-schedulers"><a class="header" href="#assigning-jobs-to-schedulers">Assigning Jobs to Schedulers</a></h3>
 <p>Reference schedulers in job definitions:</p>
 <pre><code class="language-yaml">jobs:

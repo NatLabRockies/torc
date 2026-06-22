@@ -585,6 +585,13 @@ managed by torc: <code>partition</code>, <code>nodes</code>, <code>walltime</cod
 <tr><td><code>persistent</code></td><td>boolean</td><td>false</td><td>Whether the action persists and can be claimed by multiple workers</td></tr>
 </tbody></table>
 </div>
+<p>For <code>schedule_nodes</code>, prefer <code>on_jobs_ready</code> (gated on the jobs the allocation runs) over
+<code>on_workflow_start</code>, even for root jobs — root jobs are ready at init, so the action still fires at
+the start, but tying it to the jobs makes a selective re-run
+(<code>torc jobs reset-status &lt;ids&gt; --reinit</code> then <code>torc submit</code>) re-schedule only the reset jobs.
+<code>on_workflow_start</code> <code>schedule_nodes</code> is kept on reinitialize and <code>torc submit</code> cannot re-fire it.
+See
+<a href="../../specialized/hpc/slurm-workflows.html#re-running-part-of-a-workflow">Re-running part of a workflow</a>.</p>
 <h2 id="resourcemonitorconfig"><a class="header" href="#resourcemonitorconfig">ResourceMonitorConfig</a></h2>
 <p>Configuration for resource usage monitoring.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>

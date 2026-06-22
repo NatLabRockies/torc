@@ -272,20 +272,27 @@ torc submit workflow_with_slurm.yaml
 <li>Walltime is set to the partition's maximum (explained below)</li>
 </ul>
 <h3 id="2-staged-resource-allocation"><a class="header" href="#2-staged-resource-allocation">2. Staged Resource Allocation</a></h3>
-<p>Torc analyzes job dependencies and creates <strong>staged workflow actions</strong>:</p>
+<p>Torc analyzes job dependencies and creates <strong>staged workflow actions</strong>. Every scheduler is tied to
+the jobs it runs via an <code>on_jobs_ready</code> action:</p>
 <ul>
-<li><strong>Jobs without dependencies</strong> trigger <code>on_workflow_start</code> — resources are allocated immediately</li>
-<li><strong>Jobs with dependencies</strong> trigger <code>on_jobs_ready</code> — resources are allocated only when the job
-becomes ready to run</li>
+<li><strong>Jobs without dependencies</strong> — <code>on_jobs_ready</code> gated on those (root) jobs. They are ready as soon
+as the workflow is initialized, so their resources are allocated immediately, just as the workflow
+starts.</li>
+<li><strong>Jobs with dependencies</strong> — <code>on_jobs_ready</code> gated on those jobs, so resources are allocated only
+when the jobs become ready to run.</li>
 </ul>
 <p>This prevents wasting allocation time on resources that aren't needed yet. For example, in the
 workflow above:</p>
 <ul>
-<li><code>preprocess</code> resources are allocated at workflow start</li>
+<li><code>preprocess</code> resources are allocated at workflow start (it is a root job)</li>
 <li><code>train_model</code> resources are allocated when <code>preprocess</code> completes</li>
 <li><code>evaluate</code> resources are allocated when <code>train_model</code> completes</li>
 <li><code>generate_report</code> resources are allocated when <code>evaluate</code> completes</li>
 </ul>
+<p>Tying every scheduler to its jobs (rather than scheduling root jobs with <code>on_workflow_start</code>) also
+makes re-runs work: if you reset a subset of jobs and reinitialize, only those jobs' actions are
+re-armed, so a follow-up <code>torc submit</code> re-schedules exactly the jobs being re-run. See
+<a href="#re-running-part-of-a-workflow">Re-running part of a workflow</a> below.</p>
 <h3 id="3-walltime-calculation"><a class="header" href="#3-walltime-calculation">3. Walltime Calculation</a></h3>
 <p>By default, Torc sets the walltime to <strong>1.5× your longest job's runtime</strong> (capped at the partition's
 maximum). This provides headroom for jobs that run slightly longer than expected.</p>
@@ -495,8 +502,9 @@ slurm_schedulers:
   # ... more schedulers ...
 
 actions:
-  - trigger_type: on_workflow_start
+  - trigger_type: on_jobs_ready
     action_type: schedule_nodes
+    jobs: [preprocess]
     scheduler: preprocess_scheduler
     scheduler_type: slurm
     num_allocations: 1
@@ -510,9 +518,92 @@ actions:
 
   # ... more actions ...
 </code></pre>
+<p>Every scheduler is gated on the jobs it runs with <code>on_jobs_ready</code> — including root jobs like
+<code>preprocess</code>, which are ready at workflow start. This is what makes a re-run reschedule only the
+affected jobs.</p>
 <p>Save the output to inspect or modify before submission:</p>
 <pre><code class="language-bash">torc slurm generate --account myproject workflow.yaml -o workflow_with_schedulers.yaml
 </code></pre>
+<h2 id="re-running-part-of-a-workflow"><a class="header" href="#re-running-part-of-a-workflow">Re-running part of a workflow</a></h2>
+<p>Because every scheduler is tied to its jobs with <code>on_jobs_ready</code>, you can re-run a subset of a
+finished (or partially failed) workflow and have only the affected allocations re-submitted:</p>
+<pre><code class="language-bash"># Reset the jobs you want to re-run (downstream jobs reset automatically), then reinitialize:
+torc jobs reset-status &lt;id1&gt; &lt;id2&gt; ... --reinit
+
+# Re-submit: only the reset jobs' allocations are scheduled.
+torc submit &lt;workflow_id&gt;
+</code></pre>
+<p>How it works: <code>reinitialize</code> re-arms only the actions whose jobs were reset; actions for untouched
+jobs stay suppressed (so they are not re-scheduled and do not submit duplicate allocations).
+<code>torc submit</code> then fires every pending <code>schedule_nodes</code> action — which is exactly the reset jobs'
+actions. Downstream actions whose jobs aren't ready yet are fired later by a running worker, as
+their dependencies complete.</p>
+<p>For example, with separate job classes each on their own partition (see
+<a href="https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_multi_class_slurm.yaml"><code>examples/yaml/workflow_actions_multi_class_slurm.yaml</code></a>),
+resetting only the GPU and big-memory jobs re-schedules only the GPU and big-memory allocations; the
+regular-job allocations are left alone.</p>
+<blockquote>
+<p><strong>Important — <code>submit</code> does not right-size the re-run.</strong> <code>torc submit</code> re-fires each pending
+action with the <code>num_allocations</code> from its spec, <strong>verbatim</strong>. The granularity of a re-run is
+therefore the granularity of your actions:</p>
+<ul>
+<li>With <strong>per-stage / per-class</strong> actions (as above), resetting a subset re-arms only the matching
+actions, so <code>submit</code> schedules only those — the common, efficient case.</li>
+<li>With a <strong>single large fan-in</strong> action (e.g. one <code>on_jobs_ready</code> action gating 100k jobs with
+<code>num_allocations: 500</code>), resetting <em>any</em> subset re-arms that one action, and <code>submit</code> submits
+its full <code>num_allocations</code> (500) — even if only 100 jobs need to re-run. The jobs still run (the
+surplus workers find no claimable work and idle out), but it badly over-allocates.</li>
+</ul>
+<p>For a right-sized partial re-run of a large fan-in stage, use
+<a href="../fault-tolerance/automatic-recovery.html"><code>torc recover</code></a> instead: it regenerates
+<code>schedule_nodes</code> actions sized to the jobs that are actually pending (and suppresses the spec's
+full-size action), so it allocates for the 100 jobs rather than the whole stage.</p>
+</blockquote>
+<blockquote>
+<p><strong>Note:</strong> <code>torc submit</code> is one-shot — it submits the currently-pending allocations and returns.
+For an unattended multi-stage re-run, follow it with <code>torc watch</code> so that if every worker exits
+(e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up. For a
+guided re-run that also sizes allocations from prior runs, use
+<a href="../fault-tolerance/automatic-recovery.html"><code>torc recover</code></a>.</p>
+</blockquote>
+<blockquote>
+<p><strong>Tip:</strong> This is why auto-generated and recommended specs use <code>on_jobs_ready</code> (tied to jobs)
+rather than <code>on_workflow_start</code> for <code>schedule_nodes</code>. An <code>on_workflow_start</code> action is kept (not
+re-armed) on reinitialize and <code>torc submit</code> cannot re-fire it, so a reset root job would have no
+allocation. <code>on_workflow_start</code> <code>schedule_nodes</code> is still fine for a single allocation that serves
+the whole workflow, but such an allocation isn't selectively re-run-safe.</p>
+</blockquote>
+<h3 id="manually-scheduling-a-re-run-with-torc-slurm-schedule-nodes"><a class="header" href="#manually-scheduling-a-re-run-with-torc-slurm-schedule-nodes">Manually scheduling a re-run with <code>torc slurm schedule-nodes</code></a></h3>
+<p>If you want to provide the compute yourself instead of letting <code>submit</code> fire the actions — for
+example "run my 10 reset jobs on 1 node" — use <code>torc slurm schedule-nodes</code>:</p>
+<pre><code class="language-bash">torc jobs reset-status &lt;id1&gt; ... &lt;id10&gt; --reinit
+torc slurm schedule-nodes -n1 &lt;workflow_id&gt;
+</code></pre>
+<p>A worker started this way still claims the workflow's own <strong>pending</strong> <code>schedule_nodes</code> actions and
+submits their allocations. So if the reinit left a coarse action re-armed (e.g. an <code>on_jobs_ready</code>
+action gating the whole stage), that worker would fire its full <code>num_allocations</code> on top of the one
+you requested. To prevent surprises, <code>schedule-nodes</code> checks for pending <code>schedule_nodes</code> actions
+and <strong>prompts</strong> you to suppress them, proceed (let them fire), or cancel. For non-interactive use:</p>
+<ul>
+<li><code>--suppress-actions</code> — mark the pending actions executed first, so only your <code>-n</code> request is
+submitted.</li>
+<li><code>--no-prompts</code> — skip the prompt and proceed (let the actions fire); the historical behavior.</li>
+</ul>
+<p>(<code>torc recover</code> does the suppression automatically and additionally right-sizes the allocation to
+the pending jobs, so it is usually the better tool for a partial re-run.)</p>
+<h3 id="choosing-a-stages-scheduler-trigger-upstream-vs-the-stages-own-jobs"><a class="header" href="#choosing-a-stages-scheduler-trigger-upstream-vs-the-stages-own-jobs">Choosing a stage's scheduler trigger: upstream vs. the stage's own jobs</a></h3>
+<p>For <code>schedule_nodes</code>, <strong>what you gate the action on</strong> determines how subset re-runs behave:</p>
+<ul>
+<li><strong>Gate on the stage's own jobs</strong> (<code>on_jobs_ready[&lt;this stage's jobs&gt;]</code>) — resetting any of them
+re-arms the action, so <code>submit</code> re-schedules them automatically. Best for <strong>per-class /
+per-stage</strong> actions where auto re-run at the action's <code>num_allocations</code> is what you want.</li>
+<li><strong>Gate on the upstream job</strong> whose completion unlocks the stage (<code>on_jobs_complete[&lt;upstream&gt;]</code>) —
+resetting the stage's own jobs leaves the upstream terminal, so the action stays <strong>suppressed</strong>
+and does not re-fire. Best for a <strong>large fan-in stage</strong> you expect to re-run in subsets: the
+coarse action won't over-allocate, and you provide the compute with <code>torc slurm schedule-nodes</code> or
+<code>torc recover</code>. The trade-off is that reinit won't auto-reschedule the reset jobs — which for a
+coarse stage is what you want anyway.</li>
+</ul>
 <h2 id="torc-server-considerations"><a class="header" href="#torc-server-considerations">Torc Server Considerations</a></h2>
 <p>The Torc server must be accessible to compute nodes. Options include:</p>
 <ol>

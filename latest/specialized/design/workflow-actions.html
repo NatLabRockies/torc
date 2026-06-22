@@ -205,10 +205,12 @@ resource management throughout workflow execution.</p>
 <h2 id="trigger-types"><a class="header" href="#trigger-types">Trigger Types</a></h2>
 <h3 id="workflow-lifecycle-triggers"><a class="header" href="#workflow-lifecycle-triggers">Workflow Lifecycle Triggers</a></h3>
 <h4 id="on_workflow_start"><a class="header" href="#on_workflow_start"><code>on_workflow_start</code></a></h4>
-<p>Executes once, at the workflow's first initialization.</p>
-<p><strong>When it fires</strong>: During the first <code>initialize_jobs</code>, after jobs are transitioned from
-uninitialized to ready/blocked states. It does <strong>not</strong> fire again on reinitialize — a reinit is not
-a new start (see <a href="#workflow-reinitialization">Workflow Reinitialization</a>).</p>
+<p>Executes when the workflow is initialized from the top.</p>
+<p><strong>When it fires</strong>: During a full <code>initialize_jobs</code> (the first initialize, or <code>torc workflows init</code>,
+which resets every job), after jobs are transitioned from uninitialized to ready/blocked states. It
+does <strong>not</strong> fire again on a <em>partial</em> reinitialize (<code>torc workflows reinit</code>,
+<code>torc jobs reset-status --reinit</code>, <code>recover</code>) — a partial reinit is not a new start (see
+<a href="#workflow-reinitialization">Workflow Reinitialization</a>).</p>
 <p><strong>Typical use cases</strong>:</p>
 <ul>
 <li>Scheduling Slurm allocations</li>
@@ -389,6 +391,18 @@ multi-node allocation. Not compatible with <code>execution_config.mode: slurm</c
 <li>Cost optimization (allocate only when needed)</li>
 <li>Separating workflow phases with different resource requirements</li>
 </ul>
+<p><strong>Recommended: tie <code>schedule_nodes</code> to jobs with <code>on_jobs_ready</code>.</strong> Prefer <code>on_jobs_ready</code> (gated on
+the jobs the allocation will run) over <code>on_workflow_start</code> for scheduling — even for root jobs,
+which are <code>Ready</code> at init so the action fires at the same moment. The reason is re-run safety: when
+you reset a subset of jobs and reinitialize, a job-gated action whose jobs were reset is re-armed,
+so the next <code>torc submit</code> re-schedules exactly those jobs (see
+<a href="#re-running-a-slurm-workflow">Re-running on Slurm</a>). An <code>on_workflow_start</code> action is kept
+(suppressed) on reinitialize and cannot be re-fired by <code>submit</code>, so the reset job would have no
+allocation. <code>torc slurm generate</code> now emits <code>on_jobs_ready[root_jobs]</code> for no-dependency jobs for
+this reason.</p>
+<p><code>on_workflow_start</code> <code>schedule_nodes</code> is still valid when a single allocation serves the whole
+workflow (it can't be gated on jobs that aren't all ready at once), but that allocation is not
+selectively re-run-safe — re-run it with <code>torc recover</code> or a manual <code>torc slurm schedule-nodes</code>.</p>
 <h2 id="complete-examples"><a class="header" href="#complete-examples">Complete Examples</a></h2>
 <p>Refer to this
 <a href="https://github.com/NatLabRockies/torc/blob/main/examples/yaml/workflow_actions_simple_slurm.yaml">example</a></p>
@@ -472,12 +486,18 @@ is "duplicate side effect," not "duplicate allocation."</p>
     style rearm fill:#fff3cd,stroke:#ffc107,color:#856404
     style terminal fill:#cce5ff,stroke:#004085,color:#004085
 </pre>
-<p>Per trigger:</p>
+<p>The keep logic below applies to a <strong>partial</strong> reinitialize (<code>reinit</code>, <code>reset-status --reinit</code>,
+<code>recover</code>, <code>regenerate</code>, <code>watch</code>). A <strong>full</strong> initialize — <code>torc workflows init</code>, which first resets
+every job — is a clean slate and re-arms <strong>every</strong> action, including <code>on_workflow_start</code>; otherwise
+re-running <code>workflows init</code> on a workflow that already ran would leave its start actions suppressed
+forever. (The server distinguishes the two by <code>only_uninitialized</code>: <code>false</code> = full, <code>true</code> =
+partial.)</p>
+<p>Per trigger (partial reinitialize):</p>
 <ul>
-<li><strong><code>on_workflow_start</code> → keep.</strong> The workflow starts exactly once in its lifetime; a reinitialize
-is not a new start. This is what stops plain <code>reinit</code> / <code>reset-status --reinit</code> from re-running
-start-time setup or re-submitting the original node count. (A never-fired action keeps
-<code>executed = 0</code> and still fires, so a first real initialize is unaffected.)</li>
+<li><strong><code>on_workflow_start</code> → keep.</strong> A partial reinit is not a new start, so this stops plain <code>reinit</code>
+/ <code>reset-status --reinit</code> from re-running start-time setup or re-submitting the original node
+count. (A never-fired action keeps <code>executed = 0</code> and still fires, so a first real initialize is
+unaffected; a full <code>workflows init</code> re-arms it as noted above.)</li>
 <li><strong><code>on_jobs_ready</code> / <code>on_jobs_complete</code> → keep iff the gating jobs are still all terminal.</strong> That
 is the <em>subset</em> re-run (the gates were untouched, so the event already happened and is not
 recurring). Re-arm when any gate was reset — the <em>full</em> re-run, where that job will run again and
@@ -512,9 +532,44 @@ when a worker starts.</li>
 </ol>
 <p>With multiple gating jobs, the action is only kept executed when <strong>all</strong> of them remain terminal;
 resetting any one of them re-arms it.</p>
-<p>The client-side <code>recover</code>/<code>regenerate</code> guards (<code>mark_satisfied_schedule_actions_executed</code>) remain as
-defense in depth, but the server is now the single point that prevents reinit from resurrecting an
-already-satisfied action, so all entry points are covered uniformly.</p>
+<p>The <code>recover</code>/<code>regenerate</code> paths keep their own <code>mark_satisfied_schedule_actions_executed</code> guard,
+and it is <strong>load-bearing, not just redundant</strong>: those paths take over allocation themselves (they
+submit the user's chosen count, or regenerate recovery actions and submit). After they reset the
+failed jobs and reinitialize, the server <em>correctly</em> re-arms those jobs' <code>on_jobs_ready</code> actions
+(right for plain <code>reinit</code>, where they should fire), but the reset gate is now <code>Ready</code>, so the action
+is satisfied and would fire on the first worker and submit a second allocation. <code>mark_satisfied</code>
+marks those satisfied actions executed so recover's own submission is not duplicated. The server
+cannot do this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit,
+the action should fire." For the <code>on_workflow_start</code> and already-terminal-gated cases the guard is
+now a no-op (the server already keeps those executed, and <code>mark_satisfied</code> skips already-executed
+actions); the reset-<code>on_jobs_ready</code> case is the one it still handles.</p>
+<h3 id="re-running-a-slurm-workflow"><a class="header" href="#re-running-a-slurm-workflow">Re-running a Slurm workflow</a></h3>
+<p><code>torc submit</code> fires <strong>every pending Slurm <code>schedule_nodes</code> action</strong>, regardless of trigger type
+(<code>on_workflow_start</code> to bootstrap, plus <code>on_jobs_ready</code>/<code>on_jobs_complete</code> whose gating jobs are
+ready). Combined with the re-arm logic above, this gives a clean selective re-run:</p>
+<pre><code class="language-bash">torc jobs reset-status &lt;id1&gt; &lt;id2&gt; ... --reinit   # reset the jobs to re-run + reinitialize
+torc submit &lt;workflow_id&gt;                          # re-schedule exactly those jobs
+</code></pre>
+<p>Because reinitialize re-arms only the job-gated actions whose jobs were reset (untouched stages stay
+suppressed), the re-armed actions for the reset jobs become pending and <code>submit</code> schedules just
+their allocations — nothing for the stages that did not change. Worked example: a workflow with
+separate <code>on_jobs_ready</code> <code>schedule_nodes</code> actions for regular, big-memory, and GPU job classes;
+reset only the GPU and big-memory jobs and reinitialize, and <code>submit</code> re-schedules only the GPU and
+big-memory allocations. Downstream actions (e.g. a postprocess gated on all classes) are not yet
+pending — they fire later, from a running worker, once their jobs become ready
+(<code>job_runner::check_and_execute_actions</code>).</p>
+<p>This is why job-gated scheduling is recommended over <code>on_workflow_start</code> (which <code>submit</code> cannot
+re-fire once kept). <code>submit</code> itself is one-shot: it submits the currently-pending allocations and
+returns. For an unattended multi-stage re-run, follow it with <code>torc watch</code> so that if every worker
+exits (e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up
+(<code>torc watch --auto-schedule</code>).</p>
+<p><code>submit</code> re-fires each action's <code>num_allocations</code> <strong>verbatim</strong> — it does not right-size the re-run.
+So the re-run granularity is the action granularity: per-stage/per-class actions reschedule only the
+affected subset, but a single large fan-in action (e.g. one <code>on_jobs_ready</code> gating 100k jobs with
+<code>num_allocations: 500</code>) re-arms as a whole when any subset is reset, and <code>submit</code> re-submits its
+full count even if only a handful of jobs need to re-run. For a right-sized partial re-run of such a
+stage, use <code>torc recover</code>, which regenerates <code>schedule_nodes</code> actions sized to the actually-pending
+jobs (and suppresses the spec's full-size action via <code>mark_satisfied_schedule_actions_executed</code>).</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
 <li><strong>No Action Dependencies</strong>: Actions cannot depend on other actions completing</li>
