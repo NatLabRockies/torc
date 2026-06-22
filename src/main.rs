@@ -968,12 +968,44 @@ fn main() {
                         *claim_backoff_max_secs,
                         &allocation_overrides,
                     ) {
-                        Ok(()) => {
+                        Ok(outcome) if outcome.allocations_submitted > 0 => {
                             print_workflow_message(
                                 &format,
                                 workflow_id,
-                                &format!("Successfully submitted workflow {}", workflow_id),
+                                &format!(
+                                    "Successfully submitted workflow {} ({} allocation(s))",
+                                    workflow_id, outcome.allocations_submitted
+                                ),
                             );
+                        }
+                        Ok(outcome) => {
+                            // Zero allocations submitted is not a benign "deferred" state: deferred
+                            // job-gated actions are only fired by running workers, and a worker
+                            // only exists because an allocation launched it. So nothing downstream
+                            // will fire what this submit declined to launch — report it as an error.
+                            eprintln!(
+                                "Error: submit launched 0 allocations for workflow {}",
+                                workflow_id
+                            );
+                            eprintln!();
+                            if outcome.slurm_actions_seen > 0 {
+                                eprintln!(
+                                    "{} pending slurm schedule_nodes action(s) were due but produced \
+                                     no allocations. They may have been claimed by a concurrent \
+                                     submitter, or their allocation counts were set to 0.",
+                                    outcome.slurm_actions_seen
+                                );
+                            } else {
+                                eprintln!(
+                                    "No slurm schedule_nodes actions were due. The workflow may \
+                                     already be running or complete, or it has no on_workflow_start \
+                                     / on_jobs_ready action to bootstrap the first allocation."
+                                );
+                                eprintln!();
+                                eprintln!("Check status with:");
+                                eprintln!("  torc workflows status {}", workflow_id);
+                            }
+                            std::process::exit(1);
                         }
                         Err(e) => {
                             eprintln!("Error submitting workflow {}: {}", workflow_id, e);

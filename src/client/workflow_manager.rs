@@ -17,6 +17,24 @@ pub struct InitializationCheck {
     pub existing_output_files: Vec<String>,
 }
 
+/// Summary of what `WorkflowManager::start` actually did, so the caller can distinguish a real
+/// submission from a no-op. A zero-allocation outcome is not a benign "deferred" state: deferred
+/// `on_jobs_ready`/`on_jobs_complete` actions are only ever fired by running workers, and a worker
+/// only exists because an allocation launched it. So if a submit invocation launches no
+/// allocations, nothing downstream will ever fire it either — the caller should report that as an
+/// error rather than printing success.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StartOutcome {
+    /// Total Slurm allocations actually submitted across every fired schedule_nodes action.
+    pub allocations_submitted: i32,
+    /// Number of slurm schedule_nodes actions that were pending and due at submit time (counted
+    /// before claim/dedup). Used to explain a zero-allocation outcome: zero here means nothing was
+    /// due (already running/complete, or misconfigured with no bootstrap action); non-zero means
+    /// actions were due but produced no allocations (claimed by a concurrent submitter, or their
+    /// counts were overridden to 0).
+    pub slurm_actions_seen: usize,
+}
+
 pub struct WorkflowManager {
     config: Configuration,
     torc_config: TorcConfig,
@@ -224,7 +242,7 @@ impl WorkflowManager {
         poll_interval_override: Option<i32>,
         claim_backoff_max_secs_override: Option<f64>,
         allocation_overrides: &std::collections::HashMap<i64, i32>,
-    ) -> Result<(), TorcError> {
+    ) -> Result<StartOutcome, TorcError> {
         // Check if workflow is uninitialized
         match apis::workflows_api::is_workflow_uninitialized(&self.config, self.workflow_id) {
             Ok(response) => {
@@ -280,6 +298,7 @@ impl WorkflowManager {
         };
 
         // Filter for schedule_nodes actions
+        let mut outcome = StartOutcome::default();
         for action in actions {
             let action_type = &action.action_type;
             let action_id = action.id.unwrap_or(0);
@@ -295,6 +314,7 @@ impl WorkflowManager {
 
                 // Only claim the action if we can execute it (scheduler_type == "slurm")
                 if scheduler_type == "slurm" {
+                    outcome.slurm_actions_seen += 1;
                     // Claim the action atomically (no compute_node_id since we're on login node)
                     let claimed = match crate::client::utils::claim_action(
                         &self.config,
@@ -361,6 +381,7 @@ impl WorkflowManager {
                         claim_backoff_max_secs_override,
                     ) {
                         Ok(()) => {
+                            outcome.allocations_submitted += num_allocations.max(0);
                             info!(
                                 "Successfully scheduled {} Slurm allocation(s) for {} action {}",
                                 num_allocations, action.trigger_type, action_id
@@ -386,7 +407,7 @@ impl WorkflowManager {
             }
         }
 
-        Ok(())
+        Ok(outcome)
     }
 
     /// Reinitialize the workflow. Resets workflow status (which also bumps
