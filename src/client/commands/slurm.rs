@@ -4899,6 +4899,43 @@ pub struct SchedulerInfo {
     pub has_dependencies: bool,
 }
 
+/// Fire every pending `schedule_nodes` action for the workflow via `WorkflowManager::start` --
+/// the same path `torc submit` uses -- and return the number of Slurm allocations submitted.
+///
+/// `handle_regenerate --submit` calls this instead of scheduling allocations directly, so recovery
+/// schedules nodes exclusively through actions. The workflow is already initialized at this point,
+/// so `start` skips initialization and only claims/executes the pending (ready-now) recovery
+/// actions; deferred recovery actions remain Waiting for a worker to fire later.
+fn fire_pending_schedule_nodes_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    output_dir: &Path,
+    poll_interval: Option<i32>,
+) -> Result<i64, String> {
+    let workflow = utils::send_with_retries(
+        config,
+        || apis::workflows_api::get_workflow(config, workflow_id),
+        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+    )
+    .map_err(|e| format!("Failed to fetch workflow {}: {}", workflow_id, e))?;
+
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
+
+    let outcome = workflow_manager
+        .start(
+            false, // force
+            None,  // max_parallel_jobs_override
+            output_dir.to_str().unwrap_or("torc_output"),
+            poll_interval,
+            None, // claim_backoff_max_secs_override
+            &std::collections::HashMap::new(),
+        )
+        .map_err(|e| format!("Failed to fire schedule_nodes actions: {}", e))?;
+
+    Ok(outcome.allocations_submitted as i64)
+}
+
 /// Handle the regenerate command - regenerates Slurm schedulers for pending jobs
 #[allow(clippy::too_many_arguments, clippy::result_large_err)]
 fn handle_regenerate(
@@ -4921,7 +4958,6 @@ fn handle_regenerate(
 ) {
     // Load HPC config and registry
     let torc_config = TorcConfig::load().unwrap_or_default();
-    let effective_poll_interval = poll_interval.unwrap_or(torc_config.client.slurm.poll_interval);
     let registry = create_registry_with_config_public(&torc_config.client.hpc);
 
     // Get the HPC profile
@@ -5375,7 +5411,17 @@ fn handle_regenerate(
         }
     }
 
-    // Create recovery actions for deferred groups (from planned actions with is_recovery=true)
+    // Map each created scheduler to whether its jobs still depend on unfinished work. A ready-now
+    // scheduler (no pending dependencies) gets a Pending recovery action that the submit path below
+    // fires immediately; a deferred scheduler gets a Waiting action that a running worker fires once
+    // the gate jobs complete.
+    let scheduler_has_deps: HashMap<&str, bool> = schedulers_created
+        .iter()
+        .map(|s| (s.name.as_str(), s.has_dependencies))
+        .collect();
+
+    // Create recovery actions tying each generated scheduler to its jobs (one per generated
+    // scheduler, from planned actions with is_recovery=true).
     for action in &plan.actions {
         if !action.is_recovery {
             continue; // Skip non-recovery actions
@@ -5422,6 +5468,20 @@ fn handle_regenerate(
             "num_allocations": action.num_allocations,
         });
 
+        let has_dependencies = scheduler_has_deps
+            .get(action.scheduler_name.as_str())
+            .copied()
+            .unwrap_or(false);
+        // A ready-now action's gate jobs are all satisfied (Ready) right now, so arm it to Pending:
+        // trigger_count == required_triggers, which the server sets to job_ids.len() for job-gated
+        // triggers. A deferred action stays Waiting (0) until its gate jobs complete and a worker
+        // fires it.
+        let trigger_count = if has_dependencies {
+            0
+        } else {
+            job_ids.len() as i64
+        };
+
         let action_body = models::WorkflowActionModel {
             id: None,
             workflow_id,
@@ -5429,7 +5489,7 @@ fn handle_regenerate(
             action_type: "schedule_nodes".to_string(),
             action_config,
             job_ids: Some(job_ids.clone()),
-            trigger_count: 0,
+            trigger_count,
             required_triggers: 1,
             executed: false,
             executed_at: None,
@@ -5481,45 +5541,32 @@ fn handle_regenerate(
             std::process::exit(1);
         }
 
+        // Deferred schedulers (jobs still gated on unfinished dependencies) keep their on_jobs_ready
+        // recovery action in the Waiting state; a running worker fires it once the gate jobs
+        // complete. Only report them here -- there is nothing to submit yet.
         for scheduler_info in &schedulers_created {
-            // Skip schedulers for jobs with dependencies - they will be submitted
-            // when their on_jobs_ready action fires
             if scheduler_info.has_dependencies {
                 println!(
-                    "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action",
+                    "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action when dependencies complete",
                     scheduler_info.name, scheduler_info.num_allocations
                 );
                 allocations_deferred += scheduler_info.num_allocations;
-                continue;
             }
+        }
 
-            match schedule_slurm_nodes(
-                config,
-                workflow_id,
-                scheduler_info.id,
-                scheduler_info.num_allocations as i32,
-                false, // start_one_worker_per_node
-                "",
-                output_dir.to_str().unwrap_or("torc_output"),
-                effective_poll_interval,
-                None,  // max_parallel_jobs
-                false, // keep_submission_scripts
-                None,  // claim_backoff_max_secs (rely on runner-side config)
-            ) {
-                Ok(()) => {
-                    println!(
-                        "  Submitted {} allocation(s) for scheduler '{}'",
-                        scheduler_info.num_allocations, scheduler_info.name
-                    );
-                    allocations_submitted += scheduler_info.num_allocations;
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Error submitting allocations for scheduler '{}': {}",
-                        scheduler_info.name, e
-                    );
-                    std::process::exit(1);
-                }
+        // Submit the ready-now allocations through the SAME path `torc submit` uses: fire every
+        // pending schedule_nodes action. The recovery actions for ready-now schedulers were created
+        // Pending above, so this claims and executes them (marking each Executed). We deliberately do
+        // NOT call schedule_slurm_nodes directly here: scheduling exclusively through actions keeps
+        // action state honest -- no action is left in a perpetual Waiting state after its allocation
+        // was already submitted out-of-band -- and routes all scheduling through one code path.
+        match fire_pending_schedule_nodes_actions(config, workflow_id, output_dir, poll_interval) {
+            Ok(submitted_count) => {
+                allocations_submitted = submitted_count;
+            }
+            Err(e) => {
+                eprintln!("Error submitting allocations: {}", e);
+                std::process::exit(1);
             }
         }
         submitted = true;
