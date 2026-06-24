@@ -1592,6 +1592,9 @@ fn test_satisfied_schedule_action_not_rearmed_on_reinitialize(start_server: &Ser
     );
 
     // work1 fails, then we re-run only the failed job: reset failed jobs + reinitialize.
+    // Wait for the background unblocking task to move work1 blocked->ready before running it;
+    // otherwise the running transition races with the unblock and 422s ("concurrently modified").
+    wait_for_job_status(config, work1_id, JobStatus::Ready);
     run_job_to_status(
         config,
         workflow_id,
