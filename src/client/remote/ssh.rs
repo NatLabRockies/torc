@@ -67,23 +67,21 @@ pub fn ssh_execute_capture(worker: &WorkerEntry, command: &str) -> Result<String
 }
 
 /// Check if SSH connection to a worker is possible.
+///
+/// This probes the remote shell family (POSIX vs Windows), which both verifies
+/// connectivity and confirms the host runs a shell that `torc remote` supports.
+/// A previous implementation ran the POSIX `true` builtin, which fails on
+/// Windows hosts and caused them to be rejected before any work was attempted.
 pub fn check_ssh_connectivity(worker: &WorkerEntry) -> Result<(), String> {
     debug!("Checking SSH connectivity to {}", worker.display_name());
 
-    // Run a simple command to test connectivity
-    let output = ssh_execute(worker, "true", Some(10))?;
-
-    if output.status.success() {
-        debug!("SSH connectivity OK for {}", worker.display_name());
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!(
-            "SSH connection failed to {}: {}",
+    super::shell::detect_remote_shell(worker).map(|shell| {
+        debug!(
+            "SSH connectivity OK for {} (shell={:?})",
             worker.display_name(),
-            stderr.trim()
-        ))
-    }
+            shell
+        );
+    })
 }
 
 /// Get the torc version on a remote host.

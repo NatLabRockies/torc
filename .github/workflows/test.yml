@@ -87,6 +87,45 @@ jobs:
         env:
           DATABASE_URL: sqlite:db/sqlite/dev.db
 
+      # Configure key-based SSH to localhost so the remote-worker loopback test
+      # can exercise the real shell commands against this host.
+      - name: Setup SSH loopback (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo systemctl start ssh || sudo service ssh start
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q
+          cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Sanity check that non-interactive (key-based) login works
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new localhost "uname -a"
+
+      - name: Setup SSH loopback (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Install and start the OpenSSH server. Its default shell is cmd.exe,
+          # which is exactly the path the loopback test should cover.
+          Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+          Start-Service sshd
+          Set-Service -Name sshd -StartupType Automatic
+
+          $sshDir = "$env:USERPROFILE\.ssh"
+          New-Item -ItemType Directory -Force -Path $sshDir | Out-Null
+          ssh-keygen -t ed25519 -f "$sshDir\id_ed25519" -N '""' -q
+
+          # The runner user is an administrator, so OpenSSH reads authorized
+          # keys from administrators_authorized_keys with strict ACLs.
+          $adminKeys = "$env:ProgramData\ssh\administrators_authorized_keys"
+          Get-Content "$sshDir\id_ed25519.pub" | Out-File -FilePath $adminKeys -Encoding ascii
+          icacls $adminKeys /inheritance:r
+          icacls $adminKeys /grant "Administrators:F" /grant "SYSTEM:F"
+
+          ssh-keyscan -H localhost 2>$null | Out-File -Append -Encoding ascii "$sshDir\known_hosts"
+          # Sanity check that non-interactive (key-based) login works
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new localhost "powershell -NoProfile -Command Write-Output ok"
+
       - name: Build test binaries (only necessary packages)
         run: cargo build --all-features -p torc
         env:
@@ -112,6 +151,29 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
+
+      # Opt-in loopback test: drives the remote-worker shell commands against
+      # localhost over SSH, validating the real per-OS command strings.
+      - name: Run remote loopback test (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cargo nextest run --all-features -E 'test(loopback_remote_shell_lifecycle)'
+        env:
+          RUST_BACKTRACE: 1
+          CARGO_INCREMENTAL: 0
+          TORC_TEST_SSH_LOOPBACK: '1'
+          OPENSSL_DIR: C:/vcpkg/installed/x64-windows-static-md
+          OPENSSL_ROOT_DIR: C:/vcpkg/installed/x64-windows-static-md
+          OPENSSL_INCLUDE_DIR: C:/vcpkg/installed/x64-windows-static-md/include
+          OPENSSL_LIB_DIR: C:/vcpkg/installed/x64-windows-static-md/lib
+          VCPKG_ROOT: C:/vcpkg
+
+      - name: Run remote loopback test (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo nextest run --all-features -E 'test(loopback_remote_shell_lifecycle)'
+        env:
+          RUST_BACKTRACE: 1
+          CARGO_INCREMENTAL: 0
+          TORC_TEST_SSH_LOOPBACK: '1'
 
       # Clean up intermediate build artifacts to free disk space for Julia
       # Keep only the binaries needed to run the server

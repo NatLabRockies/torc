@@ -23,10 +23,12 @@
 //! torc remote collect-logs workers.txt <workflow-id>
 //! ```
 
+pub mod shell;
 pub mod ssh;
 pub mod types;
 pub mod worker_file;
 
+pub use shell::{RemoteShell, detect_remote_shell};
 pub use ssh::{
     check_all_connectivity, check_ssh_connectivity, get_remote_torc_version, parallel_execute,
     scp_download, ssh_execute, ssh_execute_capture, verify_all_versions, verify_version,
