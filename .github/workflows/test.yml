@@ -137,12 +137,17 @@ jobs:
           CARGO_INCREMENTAL: 0
           CARGO_TERM_COLOR: always
 
+      # Includes the SSH loopback test in the same nextest invocation as the
+      # other Windows test. Running it as a separate `cargo nextest run` step
+      # triggers a rebuild, and Windows cannot relink torc-server.exe while it
+      # is locked ("Access is denied"); a single invocation builds only once.
       - name: Run tests (Windows - limited test set)
         if: matrix.os == 'windows-latest'
-        run: cargo nextest run --all-features -E 'test(test_many_jobs_parameterized)'
+        run: cargo nextest run --all-features -E 'test(test_many_jobs_parameterized) + test(loopback_remote_shell_lifecycle)'
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
+          TORC_TEST_SSH_LOOPBACK: '1'
           OPENSSL_DIR: C:/vcpkg/installed/x64-windows-static-md
           OPENSSL_ROOT_DIR: C:/vcpkg/installed/x64-windows-static-md
           OPENSSL_INCLUDE_DIR: C:/vcpkg/installed/x64-windows-static-md/include
@@ -156,21 +161,10 @@ jobs:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
 
-      # Opt-in loopback test: drives the remote-worker shell commands against
-      # localhost over SSH, validating the real per-OS command strings.
-      - name: Run remote loopback test (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cargo nextest run --all-features -E 'test(loopback_remote_shell_lifecycle)'
-        env:
-          RUST_BACKTRACE: 1
-          CARGO_INCREMENTAL: 0
-          TORC_TEST_SSH_LOOPBACK: '1'
-          OPENSSL_DIR: C:/vcpkg/installed/x64-windows-static-md
-          OPENSSL_ROOT_DIR: C:/vcpkg/installed/x64-windows-static-md
-          OPENSSL_INCLUDE_DIR: C:/vcpkg/installed/x64-windows-static-md/include
-          OPENSSL_LIB_DIR: C:/vcpkg/installed/x64-windows-static-md/lib
-          VCPKG_ROOT: C:/vcpkg
-
+      # Opt-in loopback test on Ubuntu: drives the remote-worker shell commands
+      # against localhost over SSH, validating the real POSIX command strings.
+      # (The Windows equivalent runs in the limited-test step above to avoid a
+      # second build that would fail to relink torc-server.exe.)
       - name: Run remote loopback test (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: cargo nextest run --all-features -E 'test(loopback_remote_shell_lifecycle)'
