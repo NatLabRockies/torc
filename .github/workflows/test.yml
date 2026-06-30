@@ -113,14 +113,18 @@ jobs:
 
           $sshDir = "$env:USERPROFILE\.ssh"
           New-Item -ItemType Directory -Force -Path $sshDir | Out-Null
-          ssh-keygen -t ed25519 -f "$sshDir\id_ed25519" -N '""' -q
+          # -N '' is an empty passphrase (PowerShell passes it as "" to the exe);
+          # the BatchMode sanity check below fails loudly if the key is encrypted.
+          ssh-keygen -t ed25519 -f "$sshDir\id_ed25519" -N '' -q
 
           # The runner user is an administrator, so OpenSSH reads authorized
-          # keys from administrators_authorized_keys with strict ACLs.
+          # keys from administrators_authorized_keys with strict ACLs. Use
+          # /inheritance:r + /grant:r so only Administrators and SYSTEM remain;
+          # OpenSSH rejects the file if any other identity can access it.
           $adminKeys = "$env:ProgramData\ssh\administrators_authorized_keys"
           Get-Content "$sshDir\id_ed25519.pub" | Out-File -FilePath $adminKeys -Encoding ascii
           icacls $adminKeys /inheritance:r
-          icacls $adminKeys /grant "Administrators:F" /grant "SYSTEM:F"
+          icacls $adminKeys /grant:r "Administrators:F" "SYSTEM:F"
 
           ssh-keyscan -H localhost 2>$null | Out-File -Append -Encoding ascii "$sshDir\known_hosts"
           # Sanity check that non-interactive (key-based) login works

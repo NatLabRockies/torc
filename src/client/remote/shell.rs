@@ -48,6 +48,23 @@ fn powershell_encoded(script: &str) -> String {
     )
 }
 
+/// Quote a value for safe interpolation into a POSIX shell command.
+///
+/// Wraps the value in single quotes, escaping embedded single quotes as `'\''`,
+/// so paths/arguments containing whitespace or shell metacharacters are passed
+/// through literally rather than re-interpreted by the shell.
+fn posix_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+/// Quote a value for safe interpolation into a PowerShell single-quoted string.
+///
+/// In PowerShell, a literal single quote inside a single-quoted string is
+/// escaped by doubling it (`''`).
+fn powershell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
 /// Detect the remote shell family for a worker by probing over SSH.
 ///
 /// POSIX hosts respond to `uname`. If `uname` is unavailable but the host is
@@ -59,11 +76,23 @@ pub fn detect_remote_shell(worker: &WorkerEntry) -> Result<RemoteShell, String> 
 
     if uname.status.success() {
         let kernel = String::from_utf8_lossy(&uname.stdout);
-        if !kernel.trim().is_empty() {
+        let trimmed = kernel.trim();
+        // A Windows host with Git/MSYS/Cygwin may have `uname` on PATH even
+        // though its SSH shell is cmd.exe/PowerShell (where `mkdir -p`, `pgrep`,
+        // etc. would fail). Those report MINGW*/MSYS*/CYGWIN*, so treat them as
+        // non-POSIX and let them fall through to the PowerShell probe.
+        let looks_windows = {
+            let upper = trimmed.to_ascii_uppercase();
+            upper.contains("MINGW")
+                || upper.contains("MSYS")
+                || upper.contains("CYGWIN")
+                || upper.contains("WINDOWS")
+        };
+        if !trimmed.is_empty() && !looks_windows {
             debug!(
                 "Detected POSIX shell on {} (uname={})",
                 worker.display_name(),
-                kernel.trim()
+                trimmed
             );
             return Ok(RemoteShell::Posix);
         }
@@ -104,10 +133,10 @@ impl RemoteShell {
     /// Command to create `dir` (including parents), succeeding if it exists.
     pub fn mkdir_p(&self, dir: &str) -> String {
         match self {
-            RemoteShell::Posix => format!("mkdir -p {}", dir),
+            RemoteShell::Posix => format!("mkdir -p {}", posix_quote(dir)),
             RemoteShell::Windows => powershell_encoded(&format!(
-                "New-Item -ItemType Directory -Force -Path '{}' | Out-Null",
-                dir
+                "New-Item -ItemType Directory -Force -Path {} | Out-Null",
+                powershell_quote(dir)
             )),
         }
     }
@@ -128,36 +157,46 @@ impl RemoteShell {
     ) -> String {
         match self {
             RemoteShell::Posix => {
-                let cmd = std::iter::once(program.to_string())
-                    .chain(args.iter().cloned())
+                let cmd = std::iter::once(posix_quote(program))
+                    .chain(args.iter().map(|a| posix_quote(a)))
                     .collect::<Vec<_>>()
                     .join(" ");
                 // nohup + background + disown so the worker outlives the SSH session.
-                format!(
-                    "bash -c 'nohup {} > {} 2>&1 & echo $! > {}; disown'",
-                    cmd, log_file, pid_file
-                )
+                let inner = format!(
+                    "nohup {} > {} 2>&1 & echo $! > {}; disown",
+                    cmd,
+                    posix_quote(log_file),
+                    posix_quote(pid_file)
+                );
+                // Wrap the script as a single `bash -c '...'` argument, escaping
+                // any single quotes the inner quoting introduced.
+                format!("bash -c '{}'", inner.replace('\'', r"'\''"))
             }
             RemoteShell::Windows => {
                 // Start-Process cannot redirect stdout and stderr to the same
                 // file, so stderr (where the torc log lives) goes to `log_file`
                 // and stdout to a sibling `.out` file.
-                let arg_list = args
-                    .iter()
-                    .map(|a| format!("'{}'", a))
-                    .collect::<Vec<_>>()
-                    .join(",");
+                let arg_clause = if args.is_empty() {
+                    String::new()
+                } else {
+                    let arg_list = args
+                        .iter()
+                        .map(|a| powershell_quote(a))
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!(" -ArgumentList {}", arg_list)
+                };
                 let out_file = format!("{}.out", log_file);
                 powershell_encoded(&format!(
-                    "$p = Start-Process -FilePath '{program}' -ArgumentList {arg_list} \
-                     -RedirectStandardError '{log}' -RedirectStandardOutput '{out}' \
+                    "$p = Start-Process -FilePath {program}{arg_clause} \
+                     -RedirectStandardError {log} -RedirectStandardOutput {out} \
                      -WindowStyle Hidden -PassThru; \
-                     $p.Id | Out-File -Encoding ascii -FilePath '{pid}'",
-                    program = program,
-                    arg_list = arg_list,
-                    log = log_file,
-                    out = out_file,
-                    pid = pid_file,
+                     $p.Id | Out-File -Encoding ascii -FilePath {pid}",
+                    program = powershell_quote(program),
+                    arg_clause = arg_clause,
+                    log = powershell_quote(log_file),
+                    out = powershell_quote(&out_file),
+                    pid = powershell_quote(pid_file),
                 ))
             }
         }
@@ -167,8 +206,10 @@ impl RemoteShell {
     /// file does not exist, so callers can treat that as "no PID file".
     pub fn read_file(&self, path: &str) -> String {
         match self {
-            RemoteShell::Posix => format!("cat {}", path),
-            RemoteShell::Windows => powershell_encoded(&format!("Get-Content '{}'", path)),
+            RemoteShell::Posix => format!("cat {}", posix_quote(path)),
+            RemoteShell::Windows => {
+                powershell_encoded(&format!("Get-Content {}", powershell_quote(path)))
+            }
         }
     }
 
@@ -195,13 +236,13 @@ impl RemoteShell {
         match self {
             RemoteShell::Posix => format!(
                 "grep -q 'Starting torc job runner' {} 2>/dev/null && echo started || echo waiting",
-                log_file
+                posix_quote(log_file)
             ),
             RemoteShell::Windows => powershell_encoded(&format!(
-                "if ((Test-Path '{log}') -and \
-                 (Select-String -Quiet -Pattern 'Starting torc job runner' -Path '{log}')) \
+                "if ((Test-Path {log}) -and \
+                 (Select-String -Quiet -Pattern 'Starting torc job runner' -Path {log})) \
                  {{ 'started' }} else {{ 'waiting' }}",
-                log = log_file
+                log = powershell_quote(log_file)
             )),
         }
     }
@@ -263,9 +304,13 @@ impl RemoteShell {
                     signal, pid
                 )
             }
+            // `-ErrorAction Stop` makes a failed Stop-Process (e.g. access
+            // denied) throw, so the command exits non-zero instead of falsely
+            // reporting "killed".
             RemoteShell::Windows => powershell_encoded(&format!(
                 "if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) \
-                 {{ Stop-Process -Id {pid} -Force; 'killed' }} else {{ 'not_found' }}",
+                 {{ Stop-Process -Id {pid} -Force -ErrorAction Stop; 'killed' }} \
+                 else {{ 'not_found' }}",
                 pid = pid
             )),
         }
@@ -274,10 +319,15 @@ impl RemoteShell {
     /// Command that prints `exists` if `dir` is a directory, else `missing`.
     pub fn dir_exists(&self, dir: &str) -> String {
         match self {
-            RemoteShell::Posix => format!("test -d {} && echo exists || echo missing", dir),
+            RemoteShell::Posix => {
+                format!(
+                    "test -d {} && echo exists || echo missing",
+                    posix_quote(dir)
+                )
+            }
             RemoteShell::Windows => powershell_encoded(&format!(
-                "if (Test-Path -PathType Container '{}') {{ 'exists' }} else {{ 'missing' }}",
-                dir
+                "if (Test-Path -PathType Container {}) {{ 'exists' }} else {{ 'missing' }}",
+                powershell_quote(dir)
             )),
         }
     }
@@ -289,13 +339,14 @@ impl RemoteShell {
             RemoteShell::Posix => {
                 format!(
                     "tail -{} {} 2>/dev/null || echo 'No log available'",
-                    lines, file
+                    lines,
+                    posix_quote(file)
                 )
             }
             RemoteShell::Windows => powershell_encoded(&format!(
-                "if (Test-Path '{file}') {{ Get-Content -Tail {lines} '{file}' }} \
+                "if (Test-Path {file}) {{ Get-Content -Tail {lines} {file} }} \
                  else {{ 'No log available' }}",
-                file = file,
+                file = powershell_quote(file),
                 lines = lines
             )),
         }
@@ -319,18 +370,24 @@ impl RemoteShell {
     /// 1803+) and accepts the same `-czf -C` flags.
     pub fn create_tarball(&self, tarball: &str, dir: &str) -> String {
         match self {
-            RemoteShell::Posix => format!("tar -czf {} -C {} . 2>/dev/null", tarball, dir),
-            RemoteShell::Windows => format!("tar -czf {} -C {} .", tarball, dir),
+            RemoteShell::Posix => format!(
+                "tar -czf {} -C {} . 2>/dev/null",
+                posix_quote(tarball),
+                posix_quote(dir)
+            ),
+            // Runs via the remote default shell (cmd.exe), so use double quotes,
+            // which cmd.exe understands, rather than POSIX single quotes.
+            RemoteShell::Windows => format!("tar -czf \"{}\" -C \"{}\" .", tarball, dir),
         }
     }
 
     /// Command to remove the file at `path` (no error if absent).
     pub fn remove_file(&self, path: &str) -> String {
         match self {
-            RemoteShell::Posix => format!("rm -f {}", path),
+            RemoteShell::Posix => format!("rm -f {}", posix_quote(path)),
             RemoteShell::Windows => powershell_encoded(&format!(
-                "Remove-Item -Force -ErrorAction SilentlyContinue '{}'",
-                path
+                "Remove-Item -Force -ErrorAction SilentlyContinue {}",
+                powershell_quote(path)
             )),
         }
     }
@@ -338,10 +395,10 @@ impl RemoteShell {
     /// Command to recursively remove the directory at `path` (no error if absent).
     pub fn remove_dir(&self, path: &str) -> String {
         match self {
-            RemoteShell::Posix => format!("rm -rf {}", path),
+            RemoteShell::Posix => format!("rm -rf {}", posix_quote(path)),
             RemoteShell::Windows => powershell_encoded(&format!(
-                "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '{}'",
-                path
+                "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue {}",
+                powershell_quote(path)
             )),
         }
     }
@@ -369,17 +426,28 @@ mod tests {
     #[test]
     fn posix_commands_are_bash() {
         let sh = RemoteShell::Posix;
-        assert_eq!(sh.mkdir_p("out"), "mkdir -p out");
-        assert!(
-            sh.start_detached("torc", &["run".into()], "log", "pid")
-                .contains("nohup torc run")
-        );
-        assert_eq!(sh.read_file("p"), "cat p");
+        assert_eq!(sh.mkdir_p("out"), "mkdir -p 'out'");
+        let start = sh.start_detached("torc", &["run".into()], "log", "pid");
+        assert!(start.starts_with("bash -c "));
+        assert!(start.contains("nohup"));
+        assert!(start.contains("disown"));
+        assert_eq!(sh.read_file("p"), "cat 'p'");
         assert!(sh.is_process_alive(42).contains("kill -0 42"));
         assert!(sh.kill_process(42, true).contains("kill -TERM 42"));
         assert!(sh.kill_process(42, false).contains("kill -KILL 42"));
         assert_eq!(sh.temp_tarball_path("a.tgz"), "/tmp/a.tgz");
-        assert_eq!(sh.remove_dir("d"), "rm -rf d");
+        assert_eq!(sh.remove_dir("d"), "rm -rf 'd'");
+    }
+
+    #[test]
+    fn posix_quoting_is_injection_safe() {
+        // A path with whitespace and a single quote must be quoted such that the
+        // shell sees it as one literal token and cannot break out of the quote.
+        assert_eq!(posix_quote("a b"), "'a b'");
+        assert_eq!(posix_quote("a'b"), r"'a'\''b'");
+        // An attempted injection stays inside the quotes.
+        let cmd = RemoteShell::Posix.remove_dir("d; rm -rf /");
+        assert_eq!(cmd, "rm -rf 'd; rm -rf /'");
     }
 
     #[test]
@@ -406,14 +474,28 @@ mod tests {
         assert!(start_script.contains("-RedirectStandardOutput 'log.out'"));
 
         assert!(decode_powershell(&sh.is_process_alive(7)).contains("Get-Process -Id 7"));
-        assert!(decode_powershell(&sh.kill_process(7, true)).contains("Stop-Process -Id 7 -Force"));
+        assert!(
+            decode_powershell(&sh.kill_process(7, true))
+                .contains("Stop-Process -Id 7 -Force -ErrorAction Stop")
+        );
         assert!(decode_powershell(&sh.torc_process_pid(9)).contains("' run 9( |$)'"));
         assert_eq!(sh.temp_tarball_path("a.tgz"), "a.tgz");
     }
 
     #[test]
+    fn windows_quoting_doubles_single_quotes() {
+        // PowerShell escapes a literal single quote by doubling it.
+        assert_eq!(powershell_quote("a'b"), "'a''b'");
+        let start = RemoteShell::Windows.start_detached("torc", &["a'b".into()], "log", "pid");
+        assert!(decode_powershell(&start).contains("'a''b'"));
+    }
+
+    #[test]
     fn windows_tarball_uses_tar() {
         let sh = RemoteShell::Windows;
-        assert_eq!(sh.create_tarball("a.tgz", "out"), "tar -czf a.tgz -C out .");
+        assert_eq!(
+            sh.create_tarball("a.tgz", "out"),
+            "tar -czf \"a.tgz\" -C \"out\" ."
+        );
     }
 }
