@@ -324,11 +324,12 @@ impl RemoteShell {
                 )
             }
             // `taskkill /T` kills the recorded cmd.exe and its child worker
-            // process. Exit 0 = killed, 128 = process not found; any other code
-            // throws so a real failure (e.g. access denied) surfaces as an error
-            // rather than a false "killed".
+            // process. Its "SUCCESS:" chatter is discarded (`*> $null`) so only
+            // the status token is emitted. Exit 0 = killed, 128 = process not
+            // found; any other code throws so a real failure (e.g. access
+            // denied) surfaces as an error rather than a false "killed".
             RemoteShell::Windows => powershell_encoded(&format!(
-                "taskkill /PID {pid} /T /F 2>$null; \
+                "taskkill /PID {pid} /T /F *> $null; \
                  switch ($LASTEXITCODE) {{ 0 {{ 'killed' }} 128 {{ 'not_found' }} \
                  default {{ throw \"taskkill failed: $LASTEXITCODE\" }} }}",
                 pid = pid
