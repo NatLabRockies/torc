@@ -65,6 +65,15 @@ fn powershell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
+/// Quote a value for use as a `cmd.exe` token by wrapping it in double quotes.
+///
+/// cmd has no general escape for an embedded double quote, but worker paths and
+/// arguments do not contain them in practice; double-quoting handles the common
+/// case of spaces.
+fn cmd_quote(value: &str) -> String {
+    format!("\"{}\"", value)
+}
+
 /// Detect the remote shell family for a worker by probing over SSH.
 ///
 /// POSIX hosts respond to `uname`. If `uname` is unavailable but the host is
@@ -144,10 +153,18 @@ impl RemoteShell {
     /// Command to launch a detached `torc` worker, redirecting output to
     /// `log_file` and writing the worker PID to `pid_file`.
     ///
-    /// `program` is the worker executable (`torc`) and `args` its arguments.
-    /// The worker's `env_logger` output (including the "Starting torc job
-    /// runner" startup line) goes to stderr, so both shells route stderr to
+    /// `program` is the worker executable (`torc`) and `args` its arguments. The
+    /// worker's `env_logger` output (including the "Starting torc job runner"
+    /// startup line) goes to stderr, so both shells merge stderr+stdout into
     /// `log_file`, which the liveness/tail checks inspect.
+    ///
+    /// The launched process must outlive the SSH session. POSIX uses
+    /// `nohup ... & disown`. Windows uses `Win32_Process.Create` (via CIM): the
+    /// new process is owned by the WMI service rather than the SSH session, so
+    /// it is not killed when the session disconnects -- unlike `Start-Process`,
+    /// whose children inherit the session's job object. The recorded PID is the
+    /// wrapping `cmd.exe`, which lives for the worker's lifetime and whose tree
+    /// `kill_process` tears down with `taskkill /T`.
     pub fn start_detached(
         &self,
         program: &str,
@@ -173,29 +190,25 @@ impl RemoteShell {
                 format!("bash -c '{}'", inner.replace('\'', r"'\''"))
             }
             RemoteShell::Windows => {
-                // Start-Process cannot redirect stdout and stderr to the same
-                // file, so stderr (where the torc log lives) goes to `log_file`
-                // and stdout to a sibling `.out` file.
-                let arg_clause = if args.is_empty() {
-                    String::new()
-                } else {
-                    let arg_list = args
-                        .iter()
-                        .map(|a| powershell_quote(a))
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    format!(" -ArgumentList {}", arg_list)
-                };
-                let out_file = format!("{}.out", log_file);
+                // Build the command line cmd.exe will run: the program and args,
+                // merging stderr into the log file. cmd handles the redirection;
+                // double quotes guard paths/args containing spaces.
+                let mut inner = cmd_quote(program);
+                for arg in args {
+                    inner.push(' ');
+                    inner.push_str(&cmd_quote(arg));
+                }
+                inner.push_str(&format!(" > {} 2>&1", cmd_quote(log_file)));
+                // `cmd.exe /s /c "..."` strips exactly the outermost quote pair
+                // and runs the remainder verbatim.
+                let command_line = format!("cmd.exe /s /c \"{}\"", inner);
                 powershell_encoded(&format!(
-                    "$p = Start-Process -FilePath {program}{arg_clause} \
-                     -RedirectStandardError {log} -RedirectStandardOutput {out} \
-                     -WindowStyle Hidden -PassThru; \
-                     $p.Id | Out-File -Encoding ascii -FilePath {pid}",
-                    program = powershell_quote(program),
-                    arg_clause = arg_clause,
-                    log = powershell_quote(log_file),
-                    out = powershell_quote(&out_file),
+                    "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create \
+                     -Arguments @{{ CommandLine = {cmd} }}; \
+                     if ($r.ReturnValue -ne 0) {{ throw \"Win32_Process Create failed: \
+                     $($r.ReturnValue)\" }}; \
+                     $r.ProcessId | Out-File -Encoding ascii -FilePath {pid}",
+                    cmd = powershell_quote(&command_line),
                     pid = powershell_quote(pid_file),
                 ))
             }
@@ -304,13 +317,14 @@ impl RemoteShell {
                     signal, pid
                 )
             }
-            // `-ErrorAction Stop` makes a failed Stop-Process (e.g. access
-            // denied) throw, so the command exits non-zero instead of falsely
-            // reporting "killed".
+            // `taskkill /T` kills the recorded cmd.exe and its child worker
+            // process. Exit 0 = killed, 128 = process not found; any other code
+            // throws so a real failure (e.g. access denied) surfaces as an error
+            // rather than a false "killed".
             RemoteShell::Windows => powershell_encoded(&format!(
-                "if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) \
-                 {{ Stop-Process -Id {pid} -Force -ErrorAction Stop; 'killed' }} \
-                 else {{ 'not_found' }}",
+                "taskkill /PID {pid} /T /F 2>$null; \
+                 switch ($LASTEXITCODE) {{ 0 {{ 'killed' }} 128 {{ 'not_found' }} \
+                 default {{ throw \"taskkill failed: $LASTEXITCODE\" }} }}",
                 pid = pid
             )),
         }
@@ -467,17 +481,14 @@ mod tests {
             "pid",
         );
         let start_script = decode_powershell(&start);
-        assert!(start_script.contains("Start-Process -FilePath 'torc'"));
-        assert!(start_script.contains("'--url','u','run'"));
-        // stderr (where the torc log line goes) must land in the greppable log file.
-        assert!(start_script.contains("-RedirectStandardError 'log'"));
-        assert!(start_script.contains("-RedirectStandardOutput 'log.out'"));
+        // Launched via Win32_Process.Create so it survives SSH disconnect.
+        assert!(start_script.contains("Win32_Process -MethodName Create"));
+        // cmd.exe runs the program with merged stderr+stdout into the log file.
+        assert!(start_script.contains(r#"cmd.exe /s /c ""torc" "--url" "u" "run" > "log" 2>&1""#));
+        assert!(start_script.contains("$r.ProcessId | Out-File -Encoding ascii -FilePath 'pid'"));
 
         assert!(decode_powershell(&sh.is_process_alive(7)).contains("Get-Process -Id 7"));
-        assert!(
-            decode_powershell(&sh.kill_process(7, true))
-                .contains("Stop-Process -Id 7 -Force -ErrorAction Stop")
-        );
+        assert!(decode_powershell(&sh.kill_process(7, true)).contains("taskkill /PID 7 /T /F"));
         assert!(decode_powershell(&sh.torc_process_pid(9)).contains("' run 9( |$)'"));
         assert_eq!(sh.temp_tarball_path("a.tgz"), "a.tgz");
     }
@@ -486,8 +497,10 @@ mod tests {
     fn windows_quoting_doubles_single_quotes() {
         // PowerShell escapes a literal single quote by doubling it.
         assert_eq!(powershell_quote("a'b"), "'a''b'");
+        // The arg flows into the cmd line (double-quoted), and the whole line is
+        // PowerShell single-quoted, so the embedded quote is doubled.
         let start = RemoteShell::Windows.start_detached("torc", &["a'b".into()], "log", "pid");
-        assert!(decode_powershell(&start).contains("'a''b'"));
+        assert!(decode_powershell(&start).contains(r#""a''b""#));
     }
 
     #[test]
