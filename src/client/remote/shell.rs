@@ -202,9 +202,15 @@ impl RemoteShell {
                 // `cmd.exe /s /c "..."` strips exactly the outermost quote pair
                 // and runs the remainder verbatim.
                 let command_line = format!("cmd.exe /s /c \"{}\"", inner);
+                // Win32_Process.Create does not inherit the SSH session's working
+                // directory (it launches from the WMI host's directory), so pass
+                // the session's CWD explicitly. Otherwise relative paths -- the
+                // log file and the worker's --output-dir -- resolve against the
+                // wrong directory and the process exits immediately.
                 powershell_encoded(&format!(
-                    "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create \
-                     -Arguments @{{ CommandLine = {cmd} }}; \
+                    "$cwd = (Get-Location).Path; \
+                     $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create \
+                     -Arguments @{{ CommandLine = {cmd}; CurrentDirectory = $cwd }}; \
                      if ($r.ReturnValue -ne 0) {{ throw \"Win32_Process Create failed: \
                      $($r.ReturnValue)\" }}; \
                      $r.ProcessId | Out-File -Encoding ascii -FilePath {pid}",
@@ -483,6 +489,8 @@ mod tests {
         let start_script = decode_powershell(&start);
         // Launched via Win32_Process.Create so it survives SSH disconnect.
         assert!(start_script.contains("Win32_Process -MethodName Create"));
+        // Must run in the SSH session's CWD, not the WMI host's directory.
+        assert!(start_script.contains("CurrentDirectory = $cwd"));
         // cmd.exe runs the program with merged stderr+stdout into the log file.
         assert!(start_script.contains(r#"cmd.exe /s /c ""torc" "--url" "u" "run" > "log" 2>&1""#));
         assert!(start_script.contains("$r.ProcessId | Out-File -Encoding ascii -FilePath 'pid'"));
