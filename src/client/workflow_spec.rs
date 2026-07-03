@@ -1089,12 +1089,17 @@ fn collect_parameter_names(
         }
     }
 
+    // Cache column lookups by resolved path so a `parameters_file` referenced by
+    // multiple jobs/files/user_data (or shared at the workflow level) is parsed
+    // at most once during this validation pass.
+    let mut table_cache: HashMap<String, Option<Vec<String>>> = HashMap::new();
+
     // Column names from a workflow-level `parameters_file` are shared with any
     // job/file/user_data that opts in via `use_parameters_file: true`, so we add
     // them to the global valid-token set for the pre-substitution check.
     let workflow_table_cols: Option<Vec<String>> = map
         .get("parameters_file")
-        .and_then(|v| table_columns_for_path(v, variables));
+        .and_then(|v| table_columns_for_path(v, variables, &mut table_cache));
     if let Some(cols) = workflow_table_cols.as_ref() {
         for k in cols {
             out.insert(k.clone());
@@ -1116,7 +1121,7 @@ fn collect_parameter_names(
             }
             if let Some(cols) = item_map
                 .get("parameters_file")
-                .and_then(|v| table_columns_for_path(v, variables))
+                .and_then(|v| table_columns_for_path(v, variables, &mut table_cache))
             {
                 for k in cols {
                     out.insert(k);
@@ -1142,17 +1147,30 @@ fn collect_parameter_names(
 /// `"{data_dir}/sweep.csv"`), so any `variables` are substituted before the file
 /// is read. Column collection is strictly best-effort: a table that cannot be
 /// read here (missing file, unresolved non-variable token, parse error) yields
-/// `None` rather than an error, leaving the authoritative diagnostic to
-/// `expand_parameters`, which reads the fully-substituted spec.
+/// `None` rather than an error.
+///
+/// Returning `None` means the table's columns are *not* added to the valid-token
+/// set, so if the spec references a `{column}` token from an unreadable table the
+/// undefined-token check may surface that first (reporting the token) rather than
+/// the table-read failure. When the table *is* readable, an authoritative
+/// diagnostic for any remaining problem is still left to `expand_parameters`,
+/// which reads the fully-substituted spec.
+///
+/// `cache` memoizes results by resolved path so a table shared across multiple
+/// specs is parsed at most once per validation pass.
 fn table_columns_for_path(
     value: &serde_json::Value,
     variables: &HashMap<String, ParameterValue>,
+    cache: &mut HashMap<String, Option<Vec<String>>>,
 ) -> Option<Vec<String>> {
     let serde_json::Value::String(path) = value else {
         return None;
     };
     let resolved = substitute_workflow_variables_in_string(path, variables);
-    load_parameter_table_columns(&resolved).ok()
+    cache
+        .entry(resolved.clone())
+        .or_insert_with(|| load_parameter_table_columns(&resolved).ok())
+        .clone()
 }
 
 /// Read a `parameters_file` and return the union of its column names across all
