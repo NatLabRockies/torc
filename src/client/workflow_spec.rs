@@ -952,7 +952,7 @@ fn apply_workflow_variables(
     }
 
     let mut parameter_names: HashSet<String> = HashSet::new();
-    collect_parameter_names(&value, &mut parameter_names);
+    collect_parameter_names(&value, &variables, &mut parameter_names);
     let mut collisions: Vec<&String> = variables
         .keys()
         .filter(|name| parameter_names.contains(*name))
@@ -1075,7 +1075,11 @@ fn json_value_kind(value: &serde_json::Value) -> &'static str {
 /// Collect every parameter name declared anywhere in the spec value.
 /// Looks at top-level `parameters`, and at `parameters` inside any object found
 /// in the `jobs`, `files`, or `user_data` arrays.
-fn collect_parameter_names(value: &serde_json::Value, out: &mut HashSet<String>) {
+fn collect_parameter_names(
+    value: &serde_json::Value,
+    variables: &HashMap<String, ParameterValue>,
+    out: &mut HashSet<String>,
+) {
     let serde_json::Value::Object(map) = value else {
         return;
     };
@@ -1084,6 +1088,24 @@ fn collect_parameter_names(value: &serde_json::Value, out: &mut HashSet<String>)
             out.insert(k.clone());
         }
     }
+
+    // Cache column lookups by resolved path so a `parameters_file` referenced by
+    // multiple jobs/files/user_data (or shared at the workflow level) is parsed
+    // at most once during this validation pass.
+    let mut table_cache: HashMap<String, Option<Vec<String>>> = HashMap::new();
+
+    // Column names from a workflow-level `parameters_file` are shared with any
+    // job/file/user_data that opts in via `use_parameters_file: true`, so we add
+    // them to the global valid-token set for the pre-substitution check.
+    let workflow_table_cols: Option<Vec<String>> = map
+        .get("parameters_file")
+        .and_then(|v| table_columns_for_path(v, variables, &mut table_cache));
+    if let Some(cols) = workflow_table_cols.as_ref() {
+        for k in cols {
+            out.insert(k.clone());
+        }
+    }
+
     for field in ["jobs", "files", "user_data"] {
         let Some(serde_json::Value::Array(items)) = map.get(field) else {
             continue;
@@ -1097,8 +1119,76 @@ fn collect_parameter_names(value: &serde_json::Value, out: &mut HashSet<String>)
                     out.insert(k.clone());
                 }
             }
+            if let Some(cols) = item_map
+                .get("parameters_file")
+                .and_then(|v| table_columns_for_path(v, variables, &mut table_cache))
+            {
+                for k in cols {
+                    out.insert(k);
+                }
+            }
+            if matches!(
+                item_map.get("use_parameters_file"),
+                Some(serde_json::Value::Bool(true))
+            ) && let Some(cols) = workflow_table_cols.as_ref()
+            {
+                for k in cols {
+                    out.insert(k.clone());
+                }
+            }
         }
     }
+}
+
+/// Resolve a `parameters_file` JSON value to its column names for the
+/// pre-substitution validation pass.
+///
+/// The path may still contain workflow-variable tokens (e.g.
+/// `"{data_dir}/sweep.csv"`), so any `variables` are substituted before the file
+/// is read. Column collection is strictly best-effort: a table that cannot be
+/// read here (missing file, unresolved non-variable token, parse error) yields
+/// `None` rather than an error.
+///
+/// Returning `None` means the table's columns are *not* added to the valid-token
+/// set, so if the spec references a `{column}` token from an unreadable table the
+/// undefined-token check may surface that first (reporting the token) rather than
+/// the table-read failure. When the table *is* readable, an authoritative
+/// diagnostic for any remaining problem is still left to `expand_parameters`,
+/// which reads the fully-substituted spec.
+///
+/// `cache` memoizes results by resolved path so a table shared across multiple
+/// specs is parsed at most once per validation pass.
+fn table_columns_for_path(
+    value: &serde_json::Value,
+    variables: &HashMap<String, ParameterValue>,
+    cache: &mut HashMap<String, Option<Vec<String>>>,
+) -> Option<Vec<String>> {
+    let serde_json::Value::String(path) = value else {
+        return None;
+    };
+    let resolved = substitute_workflow_variables_in_string(path, variables);
+    cache
+        .entry(resolved.clone())
+        .or_insert_with(|| load_parameter_table_columns(&resolved).ok())
+        .clone()
+}
+
+/// Read a `parameters_file` and return the union of its column names across all
+/// rows. Used during the pre-substitution validation pass so that `{col}` tokens
+/// driven by a CSV/JSON table are recognized as valid parameter references.
+///
+/// The union (rather than just the first row) matters for JSON/JSONL tables,
+/// whose objects are not required to share a uniform key set.
+fn load_parameter_table_columns(path: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let rows =
+        load_parameter_table(path).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+    let mut cols: HashSet<String> = HashSet::new();
+    for row in &rows {
+        cols.extend(row.keys().cloned());
+    }
+    let mut cols: Vec<String> = cols.into_iter().collect();
+    cols.sort();
+    Ok(cols)
 }
 
 /// Recursively walk a JSON value, substituting `{var}` and `{var:fmt}` in every
@@ -8815,6 +8905,139 @@ jobs:
         assert_eq!(spec.jobs[0].command, "/scratch/proj/run.sh --idx 1");
         assert_eq!(spec.jobs[2].name, "job_003");
         assert_eq!(spec.jobs[2].command, "/scratch/proj/run.sh --idx 3");
+    }
+
+    #[test]
+    fn test_workflow_variables_with_local_parameters_file() {
+        // Regression: a spec combining workflow `variables` with a job-level
+        // `parameters_file` must not reject the table's column tokens ({lr}, {tag})
+        // as "undefined" during the pre-substitution validation pass.
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("sweep.csv");
+        std::fs::write(&csv_path, "lr,tag\n0.1,fast\n0.01,slow\n").unwrap();
+        let yaml = format!(
+            r#"
+name: vars_and_table
+variables:
+  base: /scratch/proj
+jobs:
+  - name: "job_{{tag}}"
+    command: "{{base}}/train.sh --lr {{lr}} --tag {{tag}}"
+    parameters_file: "{path}"
+"#,
+            path = csv_path.display()
+        );
+        let mut spec = WorkflowSpec::from_spec_file_content(&yaml, "yaml")
+            .expect("variables + local parameters_file should parse without undefined-token error");
+        // The variable is substituted at parse time; table columns survive for expansion.
+        assert_eq!(
+            spec.jobs[0].command,
+            "/scratch/proj/train.sh --lr {lr} --tag {tag}"
+        );
+        spec.expand_parameters().expect("expansion should succeed");
+        assert_eq!(spec.jobs.len(), 2);
+        assert_eq!(spec.jobs[0].name, "job_fast");
+        assert_eq!(
+            spec.jobs[0].command,
+            "/scratch/proj/train.sh --lr 0.1 --tag fast"
+        );
+        assert_eq!(spec.jobs[1].name, "job_slow");
+        assert_eq!(
+            spec.jobs[1].command,
+            "/scratch/proj/train.sh --lr 0.01 --tag slow"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_with_shared_parameters_file() {
+        // Regression: a workflow-level `parameters_file` opted into via
+        // `use_parameters_file: true` must contribute its column names to the
+        // valid-token set so `{region}` is not flagged as undefined.
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("regions.csv");
+        std::fs::write(&csv_path, "region\nwest\neast\n").unwrap();
+        let yaml = format!(
+            r#"
+name: vars_and_shared_table
+variables:
+  base: /scratch/proj
+parameters_file: "{path}"
+jobs:
+  - name: "job_{{region}}"
+    command: "{{base}}/run.sh --region {{region}}"
+    use_parameters_file: true
+"#,
+            path = csv_path.display()
+        );
+        let mut spec = WorkflowSpec::from_spec_file_content(&yaml, "yaml").expect(
+            "variables + shared parameters_file should parse without undefined-token error",
+        );
+        spec.expand_parameters().expect("expansion should succeed");
+        assert_eq!(spec.jobs.len(), 2);
+        assert_eq!(spec.jobs[0].name, "job_west");
+        assert_eq!(spec.jobs[0].command, "/scratch/proj/run.sh --region west");
+        assert_eq!(spec.jobs[1].name, "job_east");
+        assert_eq!(spec.jobs[1].command, "/scratch/proj/run.sh --region east");
+    }
+
+    #[test]
+    fn test_workflow_variables_with_variable_in_parameters_file_path() {
+        // Regression: the `parameters_file` path itself may reference a workflow
+        // variable. The pre-substitution column scan must resolve variables in the
+        // path before reading, rather than trying to open the literal
+        // "{data_dir}/sweep.csv" and erroring.
+        let dir = tempfile::tempdir().unwrap();
+        let csv_path = dir.path().join("sweep.csv");
+        std::fs::write(&csv_path, "lr\n0.1\n0.01\n").unwrap();
+        let yaml = format!(
+            r#"
+name: var_in_path
+variables:
+  data_dir: "{parent}"
+jobs:
+  - name: "job_{{lr}}"
+    command: "train.sh --lr {{lr}}"
+    parameters_file: "{{data_dir}}/sweep.csv"
+"#,
+            parent = dir.path().display()
+        );
+        let mut spec = WorkflowSpec::from_spec_file_content(&yaml, "yaml")
+            .expect("a variable in the parameters_file path must not cause a spurious read error");
+        spec.expand_parameters().expect("expansion should succeed");
+        assert_eq!(spec.jobs.len(), 2);
+        assert_eq!(spec.jobs[0].name, "job_0.1");
+        assert_eq!(spec.jobs[0].command, "train.sh --lr 0.1");
+    }
+
+    #[test]
+    fn test_workflow_variables_with_heterogeneous_json_table() {
+        // Regression: JSON parameter tables are not required to share a uniform
+        // key set. A column that appears only in a later row ({extra}) must still
+        // be recognized during the pre-substitution validation pass, so the union
+        // of all rows' keys is collected (not just the first row's).
+        let dir = tempfile::tempdir().unwrap();
+        let json_path = dir.path().join("rows.json");
+        std::fs::write(&json_path, r#"[{"tag": "a"}, {"tag": "b", "extra": "x"}]"#).unwrap();
+        let yaml = format!(
+            r#"
+name: heterogeneous_table
+variables:
+  base: /scratch/proj
+jobs:
+  - name: "job_{{tag}}"
+    command: "{{base}}/run.sh --tag {{tag}} --extra {{extra}}"
+    parameters_file: "{path}"
+"#,
+            path = json_path.display()
+        );
+        // Without unioning every row's keys, `{extra}` would be flagged as an
+        // undefined template name here.
+        let spec = WorkflowSpec::from_spec_file_content(&yaml, "yaml")
+            .expect("columns present only in later JSON rows must be recognized as valid tokens");
+        assert_eq!(
+            spec.jobs[0].command,
+            "/scratch/proj/run.sh --tag {tag} --extra {extra}"
+        );
     }
 
     #[test]

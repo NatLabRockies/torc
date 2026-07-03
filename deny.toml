@@ -11,6 +11,8 @@ ignore = [
     { id = "RUSTSEC-2025-0069", reason = "daemonize - no alternative available yet" },
     { id = "RUSTSEC-2025-0057", reason = "fxhash via tracing-timing - needs upstream update" },
     { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 via tabled and validator - no safe upgrade available yet" },
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml O(N²) DoS via plist/service-manager - no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml NsReader heap DoS via plist/service-manager - no upstream upgrade available" },
 ]
 
 # License compliance - permissive allow-list
