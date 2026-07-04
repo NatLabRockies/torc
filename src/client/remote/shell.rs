@@ -399,12 +399,15 @@ impl RemoteShell {
                 posix_quote(tarball),
                 posix_quote(dir)
             ),
-            // Runs via the remote default shell (cmd.exe), so use the same
-            // double-quoting helper as `start_detached` rather than POSIX single
-            // quotes.
-            RemoteShell::Windows => {
-                format!("tar -czf {} -C {} .", cmd_quote(tarball), cmd_quote(dir))
-            }
+            // Run `tar` from PowerShell (encoded) like every other Windows
+            // command, rather than emitting a bare `tar` string that depends on
+            // the host's default SSH shell being cmd.exe. Encoding also keeps
+            // the paths quote-safe.
+            RemoteShell::Windows => powershell_encoded(&format!(
+                "tar -czf {} -C {} .",
+                powershell_quote(tarball),
+                powershell_quote(dir)
+            )),
         }
     }
 
@@ -524,9 +527,10 @@ mod tests {
     #[test]
     fn windows_tarball_uses_tar() {
         let sh = RemoteShell::Windows;
-        assert_eq!(
-            sh.create_tarball("a.tgz", "out"),
-            "tar -czf \"a.tgz\" -C \"out\" ."
-        );
+        let tarball = sh.create_tarball("a.tgz", "out");
+        // Emitted as encoded PowerShell (not a bare cmd.exe string) so it does
+        // not depend on the host's default SSH shell.
+        assert!(tarball.starts_with("powershell -NoProfile -NonInteractive -EncodedCommand "));
+        assert_eq!(decode_powershell(&tarball), "tar -czf 'a.tgz' -C 'out' .");
     }
 }

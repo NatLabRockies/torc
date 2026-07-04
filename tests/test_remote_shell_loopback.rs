@@ -45,6 +45,29 @@ fn stub_worker(shell: RemoteShell) -> (&'static str, Vec<String>) {
     }
 }
 
+/// Poll the remote PID file until it contains a parseable PID, up to a bounded
+/// timeout. Returns the PID, or panics if it never appears.
+///
+/// `read_file` exits non-zero (Err) while the file is absent, and can briefly
+/// return empty content after the file is created but before the PID is written;
+/// both are treated as "not ready yet" and retried.
+fn poll_for_pid(worker: &WorkerEntry, shell: RemoteShell, pid_file: &str) -> u32 {
+    let deadline = 30;
+    let mut waited = 0;
+    let mut last = String::from("<never read>");
+    while waited < deadline {
+        if let Ok(raw) = ssh_execute_capture(worker, &shell.read_file(pid_file)) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                return pid;
+            }
+            last = raw;
+        }
+        sleep(Duration::from_millis(500));
+        waited += 1;
+    }
+    panic!("PID file {pid_file} did not contain a number within {deadline} polls (last: {last:?})");
+}
+
 #[test]
 fn loopback_remote_shell_lifecycle() {
     if !loopback_enabled() {
@@ -101,16 +124,10 @@ fn loopback_remote_shell_lifecycle() {
         String::from_utf8_lossy(&start.stderr)
     );
 
-    // Give the process a moment to spawn and write the PID file.
-    sleep(Duration::from_secs(2));
-
-    // 4. Read and parse the PID.
-    let pid_raw = ssh_execute_capture(&worker, &shell.read_file(&pid_file))
-        .unwrap_or_else(|e| panic!("reading PID file failed: {e}"));
-    let pid: u32 = pid_raw
-        .trim()
-        .parse()
-        .unwrap_or_else(|_| panic!("PID file did not contain a number: {pid_raw:?}"));
+    // 4. Poll for the PID file rather than sleeping a fixed interval: the
+    //    detached spawn (especially Win32_Process.Create on a busy Windows CI
+    //    runner) can take a variable amount of time to write the PID.
+    let pid = poll_for_pid(&worker, shell, &pid_file);
     eprintln!("stub worker started with PID {pid}");
 
     // 5. The PID should be alive.
