@@ -22,11 +22,11 @@ Worker hosts may run either a POSIX operating system (Linux, macOS, \*BSD) or Wi
 the remote shell automatically the first time it contacts each host and issues platform-appropriate
 commands:
 
-- **POSIX hosts** are driven through a POSIX shell (`mkdir -p`, `nohup`, `pgrep`, `kill`, `tar`,
-  ...).
-- **Windows hosts** are driven through PowerShell (`Start-Process`, `Get-Process`, `Stop-Process`,
-  `tar`, ...). Commands are sent as PowerShell `-EncodedCommand` payloads, so they work whether the
-  host's OpenSSH default shell is `cmd.exe` or PowerShell.
+- **POSIX hosts** are driven through `bash` (`mkdir -p`, `nohup ... & disown`, `pgrep`, `kill`,
+  `tar`, ...), so worker hosts must have `bash` on `PATH`.
+- **Windows hosts** are driven through PowerShell (`Win32_Process.Create`, `Get-Process`,
+  `taskkill`, `tar`, ...). Commands are sent as PowerShell `-EncodedCommand` payloads, so they work
+  whether the host's OpenSSH default shell is `cmd.exe` or PowerShell.
 
 Requirements:
 
@@ -280,8 +280,8 @@ torc remote run 42 --workers workers.txt
 1. **Shell Detection**: Probes each host to determine whether it is POSIX or Windows, then issues
    platform-appropriate commands for the rest of the operation
 2. **Version Check**: Verifies all remote machines have the same torc version
-3. **Worker Start**: Starts detached workers (via `nohup` on POSIX, `Start-Process` on Windows) that
-   survive SSH disconnection
+3. **Worker Start**: Starts detached workers (via `nohup ... & disown` on POSIX,
+   `Win32_Process.Create` on Windows) that survive SSH disconnection
 4. **Job Execution**: Each worker polls the server for available jobs and executes them locally
 5. **Completion**: Workers exit when the workflow is complete or canceled
 

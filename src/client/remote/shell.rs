@@ -301,9 +301,12 @@ impl RemoteShell {
     /// Build the shared PowerShell prologue that locates torc worker processes
     /// for `workflow_id`, binding the matches to `$m`, then appends `tail`.
     fn win_find_torc_script(workflow_id: i64, tail: &str) -> String {
+        // Filter by process name at the CIM query level so we do not enumerate
+        // and marshal every process on a busy host; the CommandLine regex match
+        // still runs client-side because WQL cannot express it.
         format!(
-            "$m = Get-CimInstance Win32_Process | Where-Object {{ \
-             $_.Name -eq 'torc.exe' -and $_.CommandLine -match ' run {}( |$)' }}; {}",
+            "$m = Get-CimInstance Win32_Process -Filter \"Name = 'torc.exe'\" | \
+             Where-Object {{ $_.CommandLine -match ' run {}( |$)' }}; {}",
             workflow_id, tail
         )
     }
@@ -396,9 +399,12 @@ impl RemoteShell {
                 posix_quote(tarball),
                 posix_quote(dir)
             ),
-            // Runs via the remote default shell (cmd.exe), so use double quotes,
-            // which cmd.exe understands, rather than POSIX single quotes.
-            RemoteShell::Windows => format!("tar -czf \"{}\" -C \"{}\" .", tarball, dir),
+            // Runs via the remote default shell (cmd.exe), so use the same
+            // double-quoting helper as `start_detached` rather than POSIX single
+            // quotes.
+            RemoteShell::Windows => {
+                format!("tar -czf {} -C {} .", cmd_quote(tarball), cmd_quote(dir))
+            }
         }
     }
 
@@ -498,7 +504,10 @@ mod tests {
 
         assert!(decode_powershell(&sh.is_process_alive(7)).contains("Get-Process -Id 7"));
         assert!(decode_powershell(&sh.kill_process(7, true)).contains("taskkill /PID 7 /T /F"));
-        assert!(decode_powershell(&sh.torc_process_pid(9)).contains("' run 9( |$)'"));
+        let pid_lookup = decode_powershell(&sh.torc_process_pid(9));
+        assert!(pid_lookup.contains("' run 9( |$)'"));
+        // Filter by process name at the CIM query level to avoid enumerating all processes.
+        assert!(pid_lookup.contains("Get-CimInstance Win32_Process -Filter \"Name = 'torc.exe'\""));
         assert_eq!(sh.temp_tarball_path("a.tgz"), "a.tgz");
     }
 
