@@ -11,7 +11,8 @@ use crate::client::commands::{get_env_user_name, select_workflow_interactively};
 use crate::client::remote::{
     RemoteOperationResult, RemoteShell, RemoteWorkerState, WorkerEntry, check_all_connectivity,
     check_ssh_connectivity, detect_remote_shell, parallel_execute, parse_worker_content,
-    parse_worker_file, scp_download, ssh_execute, ssh_execute_capture, verify_all_versions,
+    parse_worker_file, scp_download, ssh_execute, ssh_execute_capture, ssh_execute_checked,
+    verify_all_versions,
 };
 use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
@@ -524,6 +525,41 @@ fn handle_run(
     }
 }
 
+/// Poll the remote PID file until it contains a parseable PID, up to a bounded
+/// timeout.
+///
+/// `read_file` exits non-zero (an `Err`) while the file is still absent, and can
+/// briefly return empty content after the file is created but before the PID is
+/// written; both are treated as "not ready yet" and retried. Returns the PID, or
+/// an error describing the last thing read if it never appears in time.
+fn poll_for_remote_pid(
+    worker: &WorkerEntry,
+    shell: RemoteShell,
+    pid_file: &str,
+) -> Result<u32, String> {
+    const MAX_ATTEMPTS: u32 = 20;
+    const POLL_DELAY_MS: u64 = 500;
+
+    let read_cmd = shell.read_file(pid_file);
+    let mut last = String::from("<never read>");
+    for _ in 0..MAX_ATTEMPTS {
+        if let Ok(raw) = ssh_execute_capture(worker, &read_cmd) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                return Ok(pid);
+            }
+            last = raw;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(POLL_DELAY_MS));
+    }
+
+    Err(format!(
+        "PID file '{}' did not contain a valid PID within {} seconds (last read: '{}')",
+        pid_file,
+        (MAX_ATTEMPTS as u64 * POLL_DELAY_MS) / 1000,
+        last.trim()
+    ))
+}
+
 /// Start a single worker on a remote machine.
 #[allow(clippy::too_many_arguments)]
 fn start_remote_worker(
@@ -598,36 +634,23 @@ fn start_remote_worker(
         start_cmd
     );
 
-    if let Err(e) = ssh_execute(worker, &start_cmd, Some(60)) {
+    // Use the checked variant: a launch that fails on the remote side (a
+    // PowerShell `throw`, a missing `torc`, a permissions error) must surface
+    // here with the real stderr, rather than silently succeeding and reappearing
+    // later as a confusing "failed to read PID file" error.
+    if let Err(e) = ssh_execute_checked(worker, &start_cmd, Some(60)) {
         return RemoteOperationResult::failure(
             worker.clone(),
             format!("Failed to start worker: {}", e),
         );
     }
 
-    // Give it a moment to start
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    // Read PID file
-    let pid_cmd = shell.read_file(&pid_file);
-    let pid_output = match ssh_execute_capture(worker, &pid_cmd) {
-        Ok(output) => output,
-        Err(e) => {
-            return RemoteOperationResult::failure(
-                worker.clone(),
-                format!("Failed to read PID file: {}", e),
-            );
-        }
-    };
-
-    let pid: u32 = match pid_output.trim().parse() {
-        Ok(p) => p,
-        Err(_) => {
-            return RemoteOperationResult::failure(
-                worker.clone(),
-                format!("Invalid PID in file: '{}'", pid_output.trim()),
-            );
-        }
+    // Poll for the PID file rather than sleeping a fixed interval: the detached
+    // spawn (especially Win32_Process.Create on a busy Windows host) can take a
+    // variable amount of time to create the file and write the PID.
+    let pid = match poll_for_remote_pid(worker, shell, &pid_file) {
+        Ok(pid) => pid,
+        Err(e) => return RemoteOperationResult::failure(worker.clone(), e),
     };
 
     // Verify process is running with retries
@@ -1006,7 +1029,7 @@ fn collect_worker_logs(
 
     // Create tarball
     let tar_cmd = shell.create_tarball(&remote_tarball, remote_output_dir);
-    if let Err(e) = ssh_execute(worker, &tar_cmd, Some(300)) {
+    if let Err(e) = ssh_execute_checked(worker, &tar_cmd, Some(300)) {
         return RemoteOperationResult::failure(
             worker.clone(),
             format!("Failed to create archive: {}", e),
@@ -1039,7 +1062,7 @@ fn collect_worker_logs(
     // Delete remote output directory if requested
     if delete_after {
         let delete_cmd = shell.remove_dir(remote_output_dir);
-        if let Err(e) = ssh_execute(worker, &delete_cmd, Some(60)) {
+        if let Err(e) = ssh_execute_checked(worker, &delete_cmd, Some(60)) {
             return RemoteOperationResult::failure(
                 worker.clone(),
                 format!("Collected but failed to delete: {}", e),
@@ -1130,7 +1153,7 @@ fn delete_worker_logs(worker: &WorkerEntry, remote_output_dir: &str) -> RemoteOp
 
     // Delete the directory
     let delete_cmd = shell.remove_dir(remote_output_dir);
-    match ssh_execute(worker, &delete_cmd, Some(60)) {
+    match ssh_execute_checked(worker, &delete_cmd, Some(60)) {
         Ok(_) => {
             RemoteOperationResult::success(worker.clone(), format!("Deleted {}", remote_output_dir))
         }

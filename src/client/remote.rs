@@ -31,7 +31,8 @@ pub mod worker_file;
 pub use shell::{RemoteShell, detect_remote_shell};
 pub use ssh::{
     check_all_connectivity, check_ssh_connectivity, get_remote_torc_version, parallel_execute,
-    scp_download, ssh_execute, ssh_execute_capture, verify_all_versions, verify_version,
+    scp_download, ssh_execute, ssh_execute_capture, ssh_execute_checked, verify_all_versions,
+    verify_version,
 };
 pub use types::{RemoteOperationResult, RemoteWorkerState, WorkerEntry};
 pub use worker_file::{parse_worker_content, parse_worker_file};

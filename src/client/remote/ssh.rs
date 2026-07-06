@@ -48,22 +48,55 @@ pub fn ssh_execute(
         .map_err(|e| format!("SSH execution failed for {}: {}", worker.display_name(), e))
 }
 
+/// Execute a command on a remote host, failing if the remote command exits
+/// non-zero.
+///
+/// Plain [`ssh_execute`] returns `Ok` whenever SSH itself connects, even if the
+/// remote command failed (e.g. a PowerShell `throw`, a missing executable, or a
+/// permission error). Callers that treat that `Ok` as success silently swallow
+/// the real failure, which then resurfaces later as a confusing downstream error
+/// (an unreadable PID file, a missing archive) with the original stderr lost.
+/// This wrapper checks `status.success()` and surfaces the remote stderr at the
+/// call site instead.
+pub fn ssh_execute_checked(
+    worker: &WorkerEntry,
+    command: &str,
+    timeout_secs: Option<u64>,
+) -> Result<Output, String> {
+    let output = ssh_execute(worker, command, timeout_secs)?;
+
+    if output.status.success() {
+        Ok(output)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Prefer stderr, but fall back to stdout since some shells (notably
+        // cmd.exe/PowerShell) write diagnostics there.
+        let detail = if stderr.trim().is_empty() {
+            stdout.trim()
+        } else {
+            stderr.trim()
+        };
+        let code = output
+            .status
+            .code()
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "signal".to_string());
+        Err(format!(
+            "Command failed on {} (exit {}): {}",
+            worker.display_name(),
+            code,
+            detail
+        ))
+    }
+}
+
 /// Execute a command on a remote host and return stdout as a string.
 ///
 /// Returns an error if the command fails (non-zero exit code).
 pub fn ssh_execute_capture(worker: &WorkerEntry, command: &str) -> Result<String, String> {
-    let output = ssh_execute(worker, command, None)?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!(
-            "Command failed on {}: {}",
-            worker.display_name(),
-            stderr.trim()
-        ))
-    }
+    let output = ssh_execute_checked(worker, command, None)?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 /// Check if SSH connection to a worker is possible.
