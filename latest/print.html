@@ -16214,6 +16214,29 @@ workflows whose jobs each launch their own Slurm allocation</li>
 <li>Environments without a scheduler</li>
 <li>Testing distributed workflows before HPC deployment</li>
 </ul>
+<h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported Platforms</a></h2>
+<p>Worker hosts may run either a POSIX operating system (Linux, macOS, *BSD) or Windows. Torc detects
+the remote shell automatically the first time it contacts each host and issues platform-appropriate
+commands:</p>
+<ul>
+<li><strong>POSIX hosts</strong> are driven through <code>bash</code> (<code>mkdir -p</code>, <code>nohup ... &amp; disown</code>, <code>pgrep</code>, <code>kill</code>,
+<code>tar</code>, ...), so worker hosts must have <code>bash</code> on <code>PATH</code>.</li>
+<li><strong>Windows hosts</strong> are driven through PowerShell (<code>Win32_Process.Create</code>, <code>Get-Process</code>,
+<code>taskkill</code>, <code>tar</code>, ...). Commands are sent as PowerShell <code>-EncodedCommand</code> payloads, so they work
+whether the host's OpenSSH default shell is <code>cmd.exe</code> or PowerShell.</li>
+</ul>
+<p>Requirements:</p>
+<ul>
+<li>The host must run an SSH server (OpenSSH Server is available on Windows 10/11 and Windows Server).</li>
+<li><code>torc</code> must be on the host's <code>PATH</code>.</li>
+<li>Windows hosts need PowerShell (built in) and <code>tar.exe</code> (built into Windows 10 1803+ and later) for
+<code>collect-logs</code>.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> <code>torc remote stop</code> performs a graceful shutdown (SIGTERM) on POSIX hosts but always
+performs a forced stop on Windows, which has no SIGTERM equivalent for a detached process. Use
+checkpoint/restart patterns rather than relying on a graceful stop signal for Windows workers.</p>
+</blockquote>
 <h2 id="worker-file-format"><a class="header" href="#worker-file-format">Worker File Format</a></h2>
 <p>Create a text file listing remote machines:</p>
 <pre><code class="language-text"># Lines starting with # are comments
@@ -16378,8 +16401,11 @@ torc remote add-workers-from-file workers.txt 42
 </code></pre>
 <h2 id="how-it-works-5"><a class="header" href="#how-it-works-5">How It Works</a></h2>
 <ol>
+<li><strong>Shell Detection</strong>: Probes each host to determine whether it is POSIX or Windows, then issues
+platform-appropriate commands for the rest of the operation</li>
 <li><strong>Version Check</strong>: Verifies all remote machines have the same torc version</li>
-<li><strong>Worker Start</strong>: Uses <code>nohup</code> to start detached workers that survive SSH disconnection</li>
+<li><strong>Worker Start</strong>: Starts detached workers (via <code>nohup ... &amp; disown</code> on POSIX,
+<code>Win32_Process.Create</code> on Windows) that survive SSH disconnection</li>
 <li><strong>Job Execution</strong>: Each worker polls the server for available jobs and executes them locally</li>
 <li><strong>Completion</strong>: Workers exit when the workflow is complete or canceled</li>
 </ol>
@@ -16449,6 +16475,14 @@ production).</p>
 <li>Check jobs are ready: <code>torc jobs list &lt;id&gt;</code></li>
 <li>Check resource requirements match available resources</li>
 </ol>
+<h3 id="could-not-determine-the-remote-shell"><a class="header" href="#could-not-determine-the-remote-shell">Could Not Determine the Remote Shell</a></h3>
+<pre><code>Could not determine the remote shell on worker1: the host responded to neither 'uname' (POSIX)
+nor PowerShell. 'torc remote' supports POSIX shells and Windows PowerShell.
+</code></pre>
+<p>The host is reachable over SSH but is neither a POSIX shell nor a PowerShell-capable Windows host.
+On Windows, make sure PowerShell is on the SSH session's <code>PATH</code> (it is by default) and that the
+OpenSSH Server is configured normally. Torc works with either the default <code>cmd.exe</code> shell or a
+PowerShell default shell.</p>
 <h2 id="comparison-with-slurm"><a class="header" href="#comparison-with-slurm">Comparison with Slurm</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Remote Workers</th><th>Slurm</th></tr></thead><tbody>
 <tr><td>Scheduler required</td><td>No</td><td>Yes</td></tr>
