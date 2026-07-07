@@ -1,0 +1,302 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Admin SQL Access - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.38.1/docs/src/specialized/admin/admin-sql.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="admin-sql-access-database-escape-hatch"><a class="header" href="#admin-sql-access-database-escape-hatch">Admin SQL Access (Database Escape Hatch)</a></h1>
+<p><code>torc admin sql</code> lets an admin run a raw SQL statement against the server database. It is a
+controlled, audit-logged escape hatch for inspecting state and surgically repairing the database
+when a bug or edge case leaves a workflow stuck and no dedicated command can fix it. It is
+admin-only (requires <code>--admin-user</code> on the server) and is safer than opening <code>sqlite3</code> on the server
+host directly, because it is authenticated, guard-railed, and audited.</p>
+<blockquote>
+<p><strong>Warning:</strong> Raw writes bypass application invariants (the job status state machine, the
+background unblocking contract). A direct <code>UPDATE</code>/<code>DELETE</code> can leave the database in a state Torc
+never produces. Prefer a dedicated <code>torc</code> command when one exists, and treat raw SQL as a last
+resort.</p>
+</blockquote>
+<h2 id="reading-default"><a class="header" href="#reading-default">Reading (default)</a></h2>
+<p>Without <code>--write</code>, the statement runs on a <strong>read-only</strong> connection, so any write is rejected by
+SQLite itself. Results honor the global <code>-f/--format</code> option (<code>table</code>, <code>csv</code>, or <code>json</code>):</p>
+<pre><code class="language-bash">torc admin sql "SELECT id, status FROM job LIMIT 5"
+torc -f csv  admin sql "SELECT id, status FROM job"
+torc -f json admin sql "SELECT * FROM admin_audit_log"
+</code></pre>
+<p><code>--limit</code> caps the number of returned rows (default and maximum 100,000, the same as other list
+endpoints).</p>
+<p>JSON output is an array of objects under <code>items</code>, with a parallel <code>columns</code> array giving the display
+order. Column names the query repeats (e.g. an unaliased join on two <code>id</code> columns) are suffixed
+(<code>id</code>, <code>id_2</code>, ...) so each object's keys stay unique:</p>
+<pre><code class="language-json">{
+  "columns": ["id", "workflow_id", "max_mem"],
+  "items": [{ "id": 2, "workflow_id": 1, "max_mem": 447610880 }],
+  "committed": false
+}
+</code></pre>
+<h2 id="writing"><a class="header" href="#writing">Writing</a></h2>
+<p>Writes require <code>--write</code>. The CLI first previews how many rows the statement would affect (a dry-run
+that rolls back), prompts for confirmation, then commits:</p>
+<pre><code class="language-bash">torc admin sql --write "UPDATE result SET return_code=0 WHERE id=42"
+</code></pre>
+<ul>
+<li><code>--yes</code> skips the confirmation prompt.</li>
+<li>An unqualified <code>UPDATE</code>/<code>DELETE</code> (no <code>WHERE</code> clause) is refused unless you pass
+<code>--allow-full-table</code>. The leading verb is detected past an optional <code>WITH</code> (CTE), so
+<code>WITH ... DELETE FROM t</code> is guarded the same as a bare <code>DELETE</code>.</li>
+<li>DDL (<code>DROP</code>/<code>ALTER</code>/<code>TRUNCATE</code>), <code>ATTACH</code>/<code>DETACH</code>, and multi-statement input are always rejected.
+Leading comments cannot be used to hide a disallowed keyword.</li>
+</ul>
+<h2 id="audit-log"><a class="header" href="#audit-log">Audit log</a></h2>
+<p>Every committing write is recorded in the durable <code>admin_audit_log</code> table (user, timestamp,
+statement, rows affected, success). This table has no foreign key to <code>workflow</code>, so the audit trail
+survives workflow deletion. Review it with a read query:</p>
+<pre><code class="language-bash">torc admin sql "SELECT user_name, timestamp, sql_text, rows_affected FROM admin_audit_log ORDER BY id DESC LIMIT 20"
+</code></pre>
+<h2 id="disabling-the-feature"><a class="header" href="#disabling-the-feature">Disabling the feature</a></h2>
+<p>The raw-SQL endpoint is enabled by default. Cautious operators can turn it off at the server with
+two <code>torc-server run</code> flags (also settable in the server config file):</p>
+<ul>
+<li><code>--disable-admin-sql</code> disables the endpoint entirely; both reads and writes return <code>403</code>.</li>
+<li><code>--disable-admin-sql-writes</code> keeps read-only queries working but rejects every <code>--write</code>
+(including the dry-run preview) with <code>403</code>.</li>
+</ul>
+<p>The audit-log listing (<code>GET /admin/audit-log</code>) is <strong>not</strong> gated by these flags, so a past trail of
+admin writes stays reviewable even after the feature is disabled.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/admin/authentication.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/admin/tls-configuration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/admin/authentication.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/admin/tls-configuration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

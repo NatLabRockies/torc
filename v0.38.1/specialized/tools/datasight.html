@@ -1,0 +1,411 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Analyzing Workflows with datasight - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.38.1/docs/src/specialized/tools/datasight.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="analyzing-torc-workflows-with-datasight"><a class="header" href="#analyzing-torc-workflows-with-datasight">Analyzing Torc Workflows with datasight</a></h1>
+<p><a href="https://github.com/dsgrid/datasight"><strong>datasight</strong></a> is an AI-powered data exploration tool that
+connects an AI agent to a SQL database (DuckDB, PostgreSQL, SQLite, Flight SQL) and provides a web
+UI for asking natural-language questions. The agent writes SQL, runs it, and renders interactive
+Plotly visualizations.</p>
+<p>A torc server stores its state in <strong>SQLite</strong>, which makes it a natural fit for datasight. This guide
+shows how to point datasight at a torc database to answer questions like:</p>
+<ul>
+<li><em>Which jobs in workflow 123 exceeded their memory allocation?</em></li>
+<li><em>Show failures grouped by return code.</em></li>
+<li><em>What's the average exec time per resource group?</em></li>
+<li><em>Which compute nodes ran the longest jobs?</em></li>
+</ul>
+<blockquote>
+<p><strong>Read-only tool.</strong> datasight queries the database — it does not mutate it. For changes (rerun,
+recover, update resources) use the regular <code>torc</code> CLI commands.</p>
+</blockquote>
+<hr />
+<h2 id="three-audiences"><a class="header" href="#three-audiences">Three Audiences</a></h2>
+<p>Setup depends on whether you have direct read access to the torc server's SQLite file.</p>
+<div class="table-wrapper"><table><thead><tr><th>Audience</th><th>Path</th></tr></thead><tbody>
+<tr><td><strong>Admin / shared-server operator</strong></td><td>Point datasight directly at <code>dev.db</code> (or your prod DB path).</td></tr>
+<tr><td><strong>End user — admin will run an export</strong></td><td>Ask the admin to run <code>torc-server export</code> to produce a filtered SQLite copy and hand it back. Same IDs preserved.</td></tr>
+<tr><td><strong>End user without any admin coop</strong></td><td>Use <code>torc workflows export</code> to get a JSON, import into a local torc-server, then point datasight at <em>that</em> DB.</td></tr>
+</tbody></table>
+</div>
+<p>The admin path is one step. The admin-mediated export (Path B) is the right default when you can get
+cooperation from whoever runs the server — it preserves the original workflow and job IDs, so log
+files and ticket references continue to make sense. Path C is the fallback when no admin help is
+available; the JSON round-trip assigns new IDs.</p>
+<hr />
+<h2 id="path-a--admin--direct-db-access"><a class="header" href="#path-a--admin--direct-db-access">Path A — Admin / Direct DB Access</a></h2>
+<h3 id="1-install-datasight"><a class="header" href="#1-install-datasight">1. Install datasight</a></h3>
+<pre><code class="language-bash">uv tool install datasight
+</code></pre>
+<p>Set up an Anthropic API key (or another supported LLM provider — see the datasight README).</p>
+<h3 id="2-bootstrap-a-project-from-the-torc-reference-files"><a class="header" href="#2-bootstrap-a-project-from-the-torc-reference-files">2. Bootstrap a project from the torc reference files</a></h3>
+<p>This repo ships a ready-to-use config under
+<a href="https://github.com/NatLabRockies/torc/tree/main/examples/datasight"><code>examples/datasight/</code></a>:</p>
+<pre><code class="language-bash">mkdir ~/torc-analysis
+cd ~/torc-analysis
+datasight init
+cp /path/to/torc/examples/datasight/schema.yaml .
+cp /path/to/torc/examples/datasight/schema_description.md .
+cp /path/to/torc/examples/datasight/queries.yaml .
+</code></pre>
+<p>Edit <code>.env</code> to point at the torc SQLite database:</p>
+<pre><code class="language-bash">DATABASE_URL=sqlite:////absolute/path/to/torc/server/db/sqlite/dev.db
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+</code></pre>
+<h3 id="3-run"><a class="header" href="#3-run">3. Run</a></h3>
+<pre><code class="language-bash">datasight run
+</code></pre>
+<p>Open <a href="http://127.0.0.1:8084">http://127.0.0.1:8084</a> and start asking questions. By default datasight binds to localhost;
+use <code>--unix-socket /path/to/datasight.sock</code> for SSH-forwarded socket access on HPC login nodes.</p>
+<hr />
+<h2 id="path-b--admin-mediated-sqlite-export-recommended-for-end-users"><a class="header" href="#path-b--admin-mediated-sqlite-export-recommended-for-end-users">Path B — Admin-Mediated SQLite Export (recommended for end users)</a></h2>
+<p>The admin runs <code>torc-server export</code> on the server host to produce a filtered SQLite file containing
+only the requested workflows, then sends the file to you. You point datasight at it like a normal
+SQLite database.</p>
+<p>This preserves all original workflow and job IDs, so the database in your hands is <em>the same
+database</em> the production server has — just trimmed to your subset. Log lines like
+<code>workflow_id=42 job_id=917</code> keep matching, which makes Path A debugging usable for end users.</p>
+<h3 id="1-admin-runs-the-export"><a class="header" href="#1-admin-runs-the-export">1. Admin runs the export</a></h3>
+<pre><code class="language-bash"># Filter by user (most common)
+torc-server export --user alice --output alice.db
+
+# Or by access group
+torc-server export --access-group 7 --output proj-energy.db
+
+# Or by specific workflow IDs
+torc-server export 42 99 --output requested.db
+
+# Full copy (no filter)
+torc-server export --output snapshot.db
+</code></pre>
+<p>By default, <code>access_group</code>, <code>workflow_access_group</code>, and <code>user_group_membership</code> are stripped from
+filtered exports because those tables span the whole server and would leak entries for other users
+and groups. Pass <code>--preserve-access-groups</code> only when producing a full copy or when the recipient is
+authorized to see the entire access-control state.</p>
+<p>The admin should review the output (<code>sqlite3 alice.db "SELECT id, user, name FROM workflow"</code>) before
+handing it over.</p>
+<p>Useful flags:</p>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Effect</th></tr></thead><tbody>
+<tr><td><code>--overwrite</code></td><td>Replace an existing output file.</td></tr>
+<tr><td><code>--preserve-access-groups</code></td><td>Keep ACL tables instead of stripping them. Only safe for full copies or vetted recipients.</td></tr>
+<tr><td><code>--no-vacuum</code></td><td>Skip the final <code>VACUUM</code>; faster, but the file keeps the source's original size even after rows are deleted.</td></tr>
+</tbody></table>
+</div>
+<p>The export uses SQLite's <code>VACUUM INTO</code> for a transactionally consistent snapshot, then deletes
+non-matching workflows; cascading foreign keys clean up the per-workflow rows automatically.</p>
+<h3 id="2-point-datasight-at-the-file"><a class="header" href="#2-point-datasight-at-the-file">2. Point datasight at the file</a></h3>
+<p>Follow the same setup as Path A, with <code>DATABASE_URL</code> pointing at the SQLite file the admin sent you.
+No local torc-server is required.</p>
+<blockquote>
+<p><strong>Refresh.</strong> The export is a snapshot in time. For new results, ask for a fresh export — there is
+no in-place update.</p>
+</blockquote>
+<hr />
+<h2 id="path-c--user-without-any-db-access"><a class="header" href="#path-c--user-without-any-db-access">Path C — User Without Any DB Access</a></h2>
+<p>If you can't get an admin to run <code>torc-server export</code> for you, fall back to the JSON export/import
+flow. This trades ID preservation for not needing any server-side cooperation.</p>
+<h3 id="1-get-an-export-with-results-included"><a class="header" href="#1-get-an-export-with-results-included">1. Get an export with results included</a></h3>
+<p>Either run this yourself (if you have CLI access to the shared server) or ask the admin to run it
+for you:</p>
+<pre><code class="language-bash">torc workflows export &lt;workflow_id&gt; --include-results --include-events \
+  --output workflow_&lt;id&gt;.json
+</code></pre>
+<p>The <code>--include-results</code> flag is <strong>essential</strong> — without it the <code>result</code> table is empty and most of
+the useful queries (memory overruns, slow jobs, failure causes) won't work. <code>--include-events</code> is
+optional but useful for timeline analysis.</p>
+<p>See <a href="../../core/workflows/export-import-workflows.html">Exporting and Importing Workflows</a> for the
+full export/import reference.</p>
+<h3 id="2-run-a-personal-local-torc-server"><a class="header" href="#2-run-a-personal-local-torc-server">2. Run a personal local torc-server</a></h3>
+<p>You only need this for storage; you don't have to actually execute jobs through it. Install torc
+locally, then start a server with its own SQLite database:</p>
+<pre><code class="language-bash">torc-server run --host localhost -p 8080
+</code></pre>
+<p>In a second shell, point your CLI at it:</p>
+<pre><code class="language-bash">export TORC_API_URL="http://localhost:8080/torc-service/v1"
+torc workflows import workflow_&lt;id&gt;.json
+</code></pre>
+<p>The import creates a fresh workflow with a new ID in your local DB. Take note of the local DB path
+(default <code>db/sqlite/dev.db</code>).</p>
+<h3 id="3-run-datasight-against-your-local-db"><a class="header" href="#3-run-datasight-against-your-local-db">3. Run datasight against your local DB</a></h3>
+<p>Follow the same setup as Path A, with <code>DATABASE_URL</code> pointing at your local torc-server's SQLite
+file.</p>
+<blockquote>
+<p><strong>Note on freshness.</strong> The export is a snapshot. If you want to analyze new results from the
+shared server you need a fresh export. For ongoing monitoring, ask your admin about adding
+read-only access to the production DB or running datasight against it on the server side.</p>
+</blockquote>
+<hr />
+<h2 id="the-reference-files"><a class="header" href="#the-reference-files">The Reference Files</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>File</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><a href="https://github.com/NatLabRockies/torc/blob/main/examples/datasight/schema.yaml"><code>schema.yaml</code></a></td><td>Restricts AI exploration to the analytically useful tables; hides internal scheduling columns.</td></tr>
+<tr><td><a href="https://github.com/NatLabRockies/torc/blob/main/examples/datasight/schema_description.md"><code>schema_description.md</code></a></td><td>Domain context for the AI: status integer enum, return code conventions, key joins, JSON metadata extraction.</td></tr>
+<tr><td><a href="https://github.com/NatLabRockies/torc/blob/main/examples/datasight/queries.yaml"><code>queries.yaml</code></a></td><td>Seeded NL/SQL pairs the AI uses as few-shot examples.</td></tr>
+</tbody></table>
+</div>
+<p>The <code>schema_description.md</code> is the highest-leverage file — without it, the AI will see raw integer
+status codes (0–10) on <code>job.status</code> and have no way to decode them, won't know that <code>137</code> return
+code means OOM, and won't know to use <code>memory_bytes</code> instead of the human-readable <code>memory</code> string
+for math. <strong>Customize it</strong> with anything specific to how your team uses <code>workflow.metadata</code> (project
+tags, ticket IDs, dataset versions, etc.) — that's where datasight unlocks the most value.</p>
+<hr />
+<h2 id="example-questions-to-try"><a class="header" href="#example-questions-to-try">Example Questions to Try</a></h2>
+<p>Once datasight is running, try these to verify the integration is working:</p>
+<ul>
+<li><em>"How many workflows are in the database, grouped by user?"</em></li>
+<li><em>"For workflow 123, show jobs whose peak memory exceeded their allocation, sorted by overage."</em></li>
+<li><em>"Plot exec time distribution for workflow 123, faceted by resource group."</em></li>
+<li><em>"Which compute nodes had the most failed jobs last week?"</em></li>
+<li><em>"For my workflows tagged with project='climate-2026' in metadata, summarize total CPU-hours."</em></li>
+</ul>
+<p>Pin useful results to the dashboard, or export the session as a self-contained HTML page or a
+runnable Python script — see the datasight docs for more.</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<p><strong>The AI keeps writing <code>WHERE status = 'failed'</code>.</strong> Your <code>schema_description.md</code> isn't being loaded.
+Confirm it sits in the project directory next to <code>.env</code> and restart <code>datasight run</code>.</p>
+<p><strong>Queries return nothing for <code>result</code>-table questions.</strong> Either the workflow hasn't run any jobs
+yet, or (Path C) your export was missing <code>--include-results</code>.</p>
+<p><strong><code>datasight run</code> complains it can't open the DB.</strong> SQLite requires an absolute path in
+<code>DATABASE_URL</code> (<code>sqlite:////absolute/path/...</code> — note the four slashes).</p>
+<p><strong>Schema introspection is slow.</strong> The torc DB has many internal tables; the included <code>schema.yaml</code>
+already filters to the analytical subset, which keeps startup fast.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/tools/ai-assistant.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/tools/map_python_function_across_workers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/tools/ai-assistant.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/tools/map_python_function_across_workers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
