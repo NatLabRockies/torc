@@ -624,6 +624,27 @@ fn start_remote_worker(
     let pid_file = format!("{}/torc_worker_{}.pid", output_dir, workflow_id);
     let log_file = format!("{}/torc_worker_{}.log", output_dir, workflow_id);
 
+    // The Windows detached-launch path builds a `cmd.exe /s /c "..."` command
+    // line, and cmd.exe has no reliable way to escape an embedded double quote.
+    // Reject any value containing one up front with a clear error, rather than
+    // emitting a mangled (and potentially injectable) command line. POSIX quoting
+    // handles quotes safely, so this guard only applies to Windows hosts.
+    if shell == RemoteShell::Windows
+        && let Some(bad) = torc_args
+            .iter()
+            .chain([&log_file, &pid_file])
+            .find(|v| v.contains('"'))
+    {
+        return RemoteOperationResult::failure(
+            worker.clone(),
+            format!(
+                "Refusing to launch worker: value contains a double quote, which cannot be \
+                 safely escaped for the Windows cmd.exe launcher: {:?}",
+                bad
+            ),
+        );
+    }
+
     // Launch the worker detached so it outlives the SSH session, redirecting
     // output to the log file and recording the PID.
     let start_cmd = shell.start_detached("torc", &torc_args, &log_file, &pid_file);

@@ -67,9 +67,9 @@ fn powershell_quote(value: &str) -> String {
 
 /// Quote a value for use as a `cmd.exe` token by wrapping it in double quotes.
 ///
-/// cmd has no general escape for an embedded double quote, but worker paths and
-/// arguments do not contain them in practice; double-quoting handles the common
-/// case of spaces.
+/// cmd has no general escape for an embedded double quote; callers
+/// (`start_remote_worker`) reject values containing one before building the
+/// command line. Double-quoting here handles the common case of spaces.
 fn cmd_quote(value: &str) -> String {
     format!("\"{}\"", value)
 }
