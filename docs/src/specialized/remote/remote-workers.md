@@ -16,6 +16,29 @@ Remote workers are ideal for:
 - Environments without a scheduler
 - Testing distributed workflows before HPC deployment
 
+## Supported Platforms
+
+Worker hosts may run either a POSIX operating system (Linux, macOS, \*BSD) or Windows. Torc detects
+the remote shell automatically the first time it contacts each host and issues platform-appropriate
+commands:
+
+- **POSIX hosts** are driven through `bash` (`mkdir -p`, `nohup ... & disown`, `pgrep`, `kill`,
+  `tar`, ...), so worker hosts must have `bash` on `PATH`.
+- **Windows hosts** are driven through PowerShell (`Win32_Process.Create`, `Get-Process`,
+  `taskkill`, `tar`, ...). Commands are sent as PowerShell `-EncodedCommand` payloads, so they work
+  whether the host's OpenSSH default shell is `cmd.exe` or PowerShell.
+
+Requirements:
+
+- The host must run an SSH server (OpenSSH Server is available on Windows 10/11 and Windows Server).
+- `torc` must be on the host's `PATH`.
+- Windows hosts need PowerShell (built in) and `tar.exe` (built into Windows 10 1803+ and later) for
+  `collect-logs`.
+
+> **Note:** `torc remote stop` performs a graceful shutdown (SIGTERM) on POSIX hosts but always
+> performs a forced stop on Windows, which has no SIGTERM equivalent for a detached process. Use
+> checkpoint/restart patterns rather than relying on a graceful stop signal for Windows workers.
+
 ## Worker File Format
 
 Create a text file listing remote machines:
@@ -254,10 +277,13 @@ torc remote run 42 --workers workers.txt
 
 ## How It Works
 
-1. **Version Check**: Verifies all remote machines have the same torc version
-2. **Worker Start**: Uses `nohup` to start detached workers that survive SSH disconnection
-3. **Job Execution**: Each worker polls the server for available jobs and executes them locally
-4. **Completion**: Workers exit when the workflow is complete or canceled
+1. **Shell Detection**: Probes each host to determine whether it is POSIX or Windows, then issues
+   platform-appropriate commands for the rest of the operation
+2. **Version Check**: Verifies all remote machines have the same torc version
+3. **Worker Start**: Starts detached workers (via `nohup ... & disown` on POSIX,
+   `Win32_Process.Create` on Windows) that survive SSH disconnection
+4. **Job Execution**: Each worker polls the server for available jobs and executes them locally
+5. **Completion**: Workers exit when the workflow is complete or canceled
 
 The server coordinates job distribution. Multiple workers can safely poll the same workflow without
 double-allocating jobs.
@@ -356,6 +382,18 @@ If workers start but don't claim jobs:
 1. Check the workflow is initialized: `torc status <id>`
 2. Check jobs are ready: `torc jobs list <id>`
 3. Check resource requirements match available resources
+
+### Could Not Determine the Remote Shell
+
+```
+Could not determine the remote shell on worker1: the host responded to neither 'uname' (POSIX)
+nor PowerShell. 'torc remote' supports POSIX shells and Windows PowerShell.
+```
+
+The host is reachable over SSH but is neither a POSIX shell nor a PowerShell-capable Windows host.
+On Windows, make sure PowerShell is on the SSH session's `PATH` (it is by default) and that the
+OpenSSH Server is configured normally. Torc works with either the default `cmd.exe` shell or a
+PowerShell default shell.
 
 ## Comparison with Slurm
 

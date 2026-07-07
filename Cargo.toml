@@ -232,6 +232,7 @@ client = [
     "dep:percent-encoding",
     "dep:sha2",
     "dep:hex",
+    "dep:base64",
     "dep:shlex",
     "dep:flate2",
     "dep:tar",

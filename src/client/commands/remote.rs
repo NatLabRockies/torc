@@ -9,9 +9,10 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::{get_env_user_name, select_workflow_interactively};
 use crate::client::remote::{
-    RemoteOperationResult, RemoteWorkerState, WorkerEntry, check_all_connectivity,
-    check_ssh_connectivity, parallel_execute, parse_worker_content, parse_worker_file,
-    scp_download, ssh_execute, ssh_execute_capture, verify_all_versions,
+    RemoteOperationResult, RemoteShell, RemoteWorkerState, WorkerEntry, check_all_connectivity,
+    check_ssh_connectivity, detect_remote_shell, parallel_execute, parse_worker_content,
+    parse_worker_file, scp_download, ssh_execute, ssh_execute_capture, ssh_execute_checked,
+    verify_all_versions,
 };
 use crate::client::workflow_manager::WorkflowManager;
 use crate::config::TorcConfig;
@@ -524,6 +525,41 @@ fn handle_run(
     }
 }
 
+/// Poll the remote PID file until it contains a parseable PID, up to a bounded
+/// timeout.
+///
+/// `read_file` exits non-zero (an `Err`) while the file is still absent, and can
+/// briefly return empty content after the file is created but before the PID is
+/// written; both are treated as "not ready yet" and retried. Returns the PID, or
+/// an error describing the last thing read if it never appears in time.
+fn poll_for_remote_pid(
+    worker: &WorkerEntry,
+    shell: RemoteShell,
+    pid_file: &str,
+) -> Result<u32, String> {
+    const MAX_ATTEMPTS: u32 = 20;
+    const POLL_DELAY_MS: u64 = 500;
+
+    let read_cmd = shell.read_file(pid_file);
+    let mut last = String::from("<never read>");
+    for _ in 0..MAX_ATTEMPTS {
+        if let Ok(raw) = ssh_execute_capture(worker, &read_cmd) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                return Ok(pid);
+            }
+            last = raw;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(POLL_DELAY_MS));
+    }
+
+    Err(format!(
+        "PID file '{}' did not contain a valid PID within {} seconds (last read: '{}')",
+        pid_file,
+        (MAX_ATTEMPTS as u64 * POLL_DELAY_MS) / 1000,
+        last.trim()
+    ))
+}
+
 /// Start a single worker on a remote machine.
 #[allow(clippy::too_many_arguments)]
 fn start_remote_worker(
@@ -537,8 +573,15 @@ fn start_remote_worker(
     memory_gb: Option<f64>,
     num_gpus: Option<i64>,
 ) -> RemoteOperationResult {
+    // Detect the remote shell family so we issue commands the host understands
+    // (POSIX shells vs Windows PowerShell).
+    let shell = match detect_remote_shell(worker) {
+        Ok(shell) => shell,
+        Err(e) => return RemoteOperationResult::failure(worker.clone(), e),
+    };
+
     // Create output directory on remote
-    let mkdir_cmd = format!("mkdir -p {}", output_dir);
+    let mkdir_cmd = shell.mkdir_p(output_dir);
     if let Err(e) = ssh_execute_capture(worker, &mkdir_cmd) {
         return RemoteOperationResult::failure(
             worker.clone(),
@@ -546,36 +589,65 @@ fn start_remote_worker(
         );
     }
 
-    // Build the torc run command
-    // --url is a global option that must come before the subcommand
-    let mut torc_cmd = format!(
-        "torc --url {} run {} --output-dir {} --poll-interval {}",
-        api_url, workflow_id, output_dir, poll_interval
-    );
+    // Build the torc run command arguments.
+    // --url is a global option that must come before the subcommand.
+    let mut torc_args: Vec<String> = vec![
+        "--url".to_string(),
+        api_url.to_string(),
+        "run".to_string(),
+        workflow_id.to_string(),
+        "--output-dir".to_string(),
+        output_dir.to_string(),
+        "--poll-interval".to_string(),
+        poll_interval.to_string(),
+    ];
 
     if let Some(cpus) = num_cpus {
-        torc_cmd.push_str(&format!(" --num-cpus {}", cpus));
+        torc_args.push("--num-cpus".to_string());
+        torc_args.push(cpus.to_string());
     }
     if let Some(mem) = memory_gb {
-        torc_cmd.push_str(&format!(" --memory-gb {}", mem));
+        torc_args.push("--memory-gb".to_string());
+        torc_args.push(mem.to_string());
     }
     if let Some(gpus) = num_gpus {
-        torc_cmd.push_str(&format!(" --num-gpus {}", gpus));
+        torc_args.push("--num-gpus".to_string());
+        torc_args.push(gpus.to_string());
     }
     if let Some(max) = max_parallel_jobs {
-        torc_cmd.push_str(&format!(" --max-parallel-jobs {}", max));
+        torc_args.push("--max-parallel-jobs".to_string());
+        torc_args.push(max.to_string());
     }
 
-    // PID file and log file paths
+    // PID file and log file paths. Forward slashes are accepted by both POSIX
+    // and Windows file APIs (including PowerShell).
     let pid_file = format!("{}/torc_worker_{}.pid", output_dir, workflow_id);
     let log_file = format!("{}/torc_worker_{}.log", output_dir, workflow_id);
 
-    // Start with nohup, redirect output, save PID
-    // Use bash -c to ensure proper shell handling
-    let start_cmd = format!(
-        "bash -c 'nohup {} > {} 2>&1 & echo $! > {}; disown'",
-        torc_cmd, log_file, pid_file
-    );
+    // The Windows detached-launch path builds a `cmd.exe /s /c "..."` command
+    // line, and cmd.exe has no reliable way to escape an embedded double quote.
+    // Reject any value containing one up front with a clear error, rather than
+    // emitting a mangled (and potentially injectable) command line. POSIX quoting
+    // handles quotes safely, so this guard only applies to Windows hosts.
+    if shell == RemoteShell::Windows
+        && let Some(bad) = torc_args
+            .iter()
+            .chain([&log_file, &pid_file])
+            .find(|v| v.contains('"'))
+    {
+        return RemoteOperationResult::failure(
+            worker.clone(),
+            format!(
+                "Refusing to launch worker: value contains a double quote, which cannot be \
+                 safely escaped for the Windows cmd.exe launcher: {:?}",
+                bad
+            ),
+        );
+    }
+
+    // Launch the worker detached so it outlives the SSH session, redirecting
+    // output to the log file and recording the PID.
+    let start_cmd = shell.start_detached("torc", &torc_args, &log_file, &pid_file);
 
     debug!(
         "Starting worker on {}: {}",
@@ -583,36 +655,23 @@ fn start_remote_worker(
         start_cmd
     );
 
-    if let Err(e) = ssh_execute(worker, &start_cmd, Some(60)) {
+    // Use the checked variant: a launch that fails on the remote side (a
+    // PowerShell `throw`, a missing `torc`, a permissions error) must surface
+    // here with the real stderr, rather than silently succeeding and reappearing
+    // later as a confusing "failed to read PID file" error.
+    if let Err(e) = ssh_execute_checked(worker, &start_cmd, Some(60)) {
         return RemoteOperationResult::failure(
             worker.clone(),
             format!("Failed to start worker: {}", e),
         );
     }
 
-    // Give it a moment to start
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    // Read PID file
-    let pid_cmd = format!("cat {}", pid_file);
-    let pid_output = match ssh_execute_capture(worker, &pid_cmd) {
-        Ok(output) => output,
-        Err(e) => {
-            return RemoteOperationResult::failure(
-                worker.clone(),
-                format!("Failed to read PID file: {}", e),
-            );
-        }
-    };
-
-    let pid: u32 = match pid_output.trim().parse() {
-        Ok(p) => p,
-        Err(_) => {
-            return RemoteOperationResult::failure(
-                worker.clone(),
-                format!("Invalid PID in file: '{}'", pid_output.trim()),
-            );
-        }
+    // Poll for the PID file rather than sleeping a fixed interval: the detached
+    // spawn (especially Win32_Process.Create on a busy Windows host) can take a
+    // variable amount of time to create the file and write the PID.
+    let pid = match poll_for_remote_pid(worker, shell, &pid_file) {
+        Ok(pid) => pid,
+        Err(e) => return RemoteOperationResult::failure(worker.clone(), e),
     };
 
     // Verify process is running with retries
@@ -621,11 +680,8 @@ fn start_remote_worker(
     const RETRY_DELAY_MS: u64 = 1000;
 
     for attempt in 0..MAX_RETRIES {
-        // First try kill -0
-        let check_cmd = format!(
-            "kill -0 {} 2>/dev/null && echo running || echo stopped",
-            pid
-        );
+        // First check whether the PID is alive
+        let check_cmd = shell.is_process_alive(pid);
         let check_output = ssh_execute_capture(worker, &check_cmd).unwrap_or_default();
 
         if check_output.trim() == "running" {
@@ -636,19 +692,13 @@ fn start_remote_worker(
         }
 
         // Also check if log file shows successful startup (job_runner logs this on start)
-        let log_check_cmd = format!(
-            "grep -q 'Starting torc job runner' {} 2>/dev/null && echo started || echo waiting",
-            log_file
-        );
+        let log_check_cmd = shell.log_shows_startup(&log_file);
         let log_check_output = ssh_execute_capture(worker, &log_check_cmd).unwrap_or_default();
 
         if log_check_output.trim() == "started" {
-            // Log shows startup, verify process is still running with pgrep
-            // Use word boundary pattern to avoid matching workflow 123 when looking for 12
-            let pgrep_cmd = format!(
-                "pgrep -f 'torc .* run {}( |$)' >/dev/null 2>&1 && echo running || echo stopped",
-                workflow_id
-            );
+            // Log shows startup, verify the worker process is still running.
+            // Use word boundary pattern to avoid matching workflow 123 when looking for 12.
+            let pgrep_cmd = shell.torc_process_running(workflow_id);
             let pgrep_output = ssh_execute_capture(worker, &pgrep_cmd).unwrap_or_default();
 
             if pgrep_output.trim() == "running" {
@@ -666,10 +716,7 @@ fn start_remote_worker(
     }
 
     // All retries exhausted - process appears to have died
-    let tail_cmd = format!(
-        "tail -5 {} 2>/dev/null || echo 'No log available'",
-        log_file
-    );
+    let tail_cmd = shell.tail(&log_file, 5);
     let log_output = ssh_execute_capture(worker, &tail_cmd).unwrap_or_default();
     RemoteOperationResult::failure(
         worker.clone(),
@@ -725,31 +772,34 @@ fn check_remote_worker_status(
     workflow_id: i64,
     output_dir: &str,
 ) -> RemoteWorkerState {
+    // Detect the remote shell so liveness checks use the right commands.
+    let shell = match detect_remote_shell(worker) {
+        Ok(shell) => shell,
+        Err(error) => return RemoteWorkerState::Unknown { error },
+    };
+
     let pid_file = format!("{}/torc_worker_{}.pid", output_dir, workflow_id);
 
     // Read PID file
-    let pid_cmd = format!("cat {} 2>/dev/null", pid_file);
+    let pid_cmd = shell.read_file(&pid_file);
     let pid_output = match ssh_execute_capture(worker, &pid_cmd) {
         Ok(output) => output,
         Err(_) => {
-            // No PID file, but check if process is running anyway via pgrep
-            return check_worker_via_pgrep(worker, workflow_id);
+            // No PID file, but check if process is running anyway
+            return check_worker_via_pgrep(worker, shell, workflow_id);
         }
     };
 
     let pid: u32 = match pid_output.trim().parse() {
         Ok(p) => p,
         Err(_) => {
-            // Invalid PID file, fall back to pgrep
-            return check_worker_via_pgrep(worker, workflow_id);
+            // Invalid PID file, fall back to process search
+            return check_worker_via_pgrep(worker, shell, workflow_id);
         }
     };
 
-    // Check if process is running via kill -0
-    let check_cmd = format!(
-        "kill -0 {} 2>/dev/null && echo running || echo stopped",
-        pid
-    );
+    // Check if the process is alive
+    let check_cmd = shell.is_process_alive(pid);
     match ssh_execute_capture(worker, &check_cmd) {
         Ok(output) => {
             if output.trim() == "running" {
@@ -759,17 +809,19 @@ fn check_remote_worker_status(
                 RemoteWorkerState::NotRunning
             }
         }
-        Err(_) => check_worker_via_pgrep(worker, workflow_id),
+        Err(_) => check_worker_via_pgrep(worker, shell, workflow_id),
     }
 }
 
-/// Check if a torc worker is running via pgrep (fallback when PID check fails).
-fn check_worker_via_pgrep(worker: &WorkerEntry, workflow_id: i64) -> RemoteWorkerState {
+/// Check if a torc worker is running by searching processes (fallback when the
+/// PID check fails).
+fn check_worker_via_pgrep(
+    worker: &WorkerEntry,
+    shell: RemoteShell,
+    workflow_id: i64,
+) -> RemoteWorkerState {
     // Use word boundary pattern to avoid matching workflow 123 when looking for 12
-    let pgrep_cmd = format!(
-        "pgrep -f 'torc .* run {}( |$)' 2>/dev/null | head -1",
-        workflow_id
-    );
+    let pgrep_cmd = shell.torc_process_pid(workflow_id);
     match ssh_execute_capture(worker, &pgrep_cmd) {
         Ok(output) => {
             let trimmed = output.trim();
@@ -801,7 +853,6 @@ fn handle_stop(
     }
 
     let output_dir_owned = output_dir.to_string();
-    let signal = if force { "KILL" } else { "TERM" };
 
     println!(
         "Stopping workers (signal: {})...",
@@ -810,7 +861,7 @@ fn handle_stop(
 
     let results: Vec<RemoteOperationResult> = parallel_execute(
         &workers,
-        move |worker| stop_remote_worker(worker, workflow_id, &output_dir_owned, signal),
+        move |worker| stop_remote_worker(worker, workflow_id, &output_dir_owned, force),
         max_parallel_ssh,
     );
 
@@ -827,16 +878,26 @@ fn handle_stop(
 }
 
 /// Stop a single remote worker.
+///
+/// `force` requests an immediate kill (SIGKILL on POSIX). When false, POSIX
+/// workers receive SIGTERM for a graceful shutdown. Windows has no SIGTERM
+/// equivalent for a detached process, so Windows workers are always stopped
+/// forcibly regardless of `force`.
 fn stop_remote_worker(
     worker: &WorkerEntry,
     workflow_id: i64,
     output_dir: &str,
-    signal: &str,
+    force: bool,
 ) -> RemoteOperationResult {
+    let shell = match detect_remote_shell(worker) {
+        Ok(shell) => shell,
+        Err(e) => return RemoteOperationResult::failure(worker.clone(), e),
+    };
+
     let pid_file = format!("{}/torc_worker_{}.pid", output_dir, workflow_id);
 
     // Read PID
-    let pid_cmd = format!("cat {} 2>/dev/null", pid_file);
+    let pid_cmd = shell.read_file(&pid_file);
     let pid_output = match ssh_execute_capture(worker, &pid_cmd) {
         Ok(output) => output,
         Err(_) => {
@@ -851,17 +912,21 @@ fn stop_remote_worker(
         }
     };
 
-    // Send signal
-    let kill_cmd = format!(
-        "kill -{} {} 2>/dev/null && echo killed || echo not_found",
-        signal, pid
-    );
+    // Stop the worker. POSIX honors the graceful/forced distinction; Windows is
+    // always a forced stop.
+    let graceful = !force;
+    let stop_label = match shell {
+        RemoteShell::Posix if graceful => "SIGTERM",
+        RemoteShell::Posix => "SIGKILL",
+        RemoteShell::Windows => "forced stop",
+    };
+    let kill_cmd = shell.kill_process(pid, graceful);
     match ssh_execute_capture(worker, &kill_cmd) {
         Ok(output) => {
             if output.trim() == "killed" {
                 RemoteOperationResult::success(
                     worker.clone(),
-                    format!("Sent SIG{} to PID {}", signal, pid),
+                    format!("Sent {} to PID {}", stop_label, pid),
                 )
             } else {
                 RemoteOperationResult::success(worker.clone(), "Process not running")
@@ -954,19 +1019,21 @@ fn collect_worker_logs(
     remote_output_dir: &str,
     delete_after: bool,
 ) -> RemoteOperationResult {
+    let shell = match detect_remote_shell(worker) {
+        Ok(shell) => shell,
+        Err(e) => return RemoteOperationResult::failure(worker.clone(), e),
+    };
+
     // Create tarball on remote
     let tarball_name = format!(
         "torc_logs_{}_{}.tar.gz",
         workflow_id,
         worker.host.replace('.', "_")
     );
-    let remote_tarball = format!("/tmp/{}", tarball_name);
+    let remote_tarball = shell.temp_tarball_path(&tarball_name);
 
     // Check if remote directory exists
-    let check_cmd = format!(
-        "test -d {} && echo exists || echo missing",
-        remote_output_dir
-    );
+    let check_cmd = shell.dir_exists(remote_output_dir);
     match ssh_execute_capture(worker, &check_cmd) {
         Ok(output) => {
             if output.trim() == "missing" {
@@ -982,11 +1049,8 @@ fn collect_worker_logs(
     }
 
     // Create tarball
-    let tar_cmd = format!(
-        "tar -czf {} -C {} . 2>/dev/null",
-        remote_tarball, remote_output_dir
-    );
-    if let Err(e) = ssh_execute(worker, &tar_cmd, Some(300)) {
+    let tar_cmd = shell.create_tarball(&remote_tarball, remote_output_dir);
+    if let Err(e) = ssh_execute_checked(worker, &tar_cmd, Some(300)) {
         return RemoteOperationResult::failure(
             worker.clone(),
             format!("Failed to create archive: {}", e),
@@ -1013,13 +1077,13 @@ fn collect_worker_logs(
     }
 
     // Clean up remote tarball
-    let rm_cmd = format!("rm -f {}", remote_tarball);
+    let rm_cmd = shell.remove_file(&remote_tarball);
     let _ = ssh_execute(worker, &rm_cmd, None);
 
     // Delete remote output directory if requested
     if delete_after {
-        let delete_cmd = format!("rm -rf {}", remote_output_dir);
-        if let Err(e) = ssh_execute(worker, &delete_cmd, Some(60)) {
+        let delete_cmd = shell.remove_dir(remote_output_dir);
+        if let Err(e) = ssh_execute_checked(worker, &delete_cmd, Some(60)) {
             return RemoteOperationResult::failure(
                 worker.clone(),
                 format!("Collected but failed to delete: {}", e),
@@ -1084,11 +1148,13 @@ fn handle_delete_logs(
 
 /// Delete logs from a single remote worker.
 fn delete_worker_logs(worker: &WorkerEntry, remote_output_dir: &str) -> RemoteOperationResult {
+    let shell = match detect_remote_shell(worker) {
+        Ok(shell) => shell,
+        Err(e) => return RemoteOperationResult::failure(worker.clone(), e),
+    };
+
     // Check if remote directory exists
-    let check_cmd = format!(
-        "test -d {} && echo exists || echo missing",
-        remote_output_dir
-    );
+    let check_cmd = shell.dir_exists(remote_output_dir);
     match ssh_execute_capture(worker, &check_cmd) {
         Ok(output) => {
             if output.trim() == "missing" {
@@ -1107,8 +1173,8 @@ fn delete_worker_logs(worker: &WorkerEntry, remote_output_dir: &str) -> RemoteOp
     }
 
     // Delete the directory
-    let delete_cmd = format!("rm -rf {}", remote_output_dir);
-    match ssh_execute(worker, &delete_cmd, Some(60)) {
+    let delete_cmd = shell.remove_dir(remote_output_dir);
+    match ssh_execute_checked(worker, &delete_cmd, Some(60)) {
         Ok(_) => {
             RemoteOperationResult::success(worker.clone(), format!("Deleted {}", remote_output_dir))
         }
