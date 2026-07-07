@@ -226,9 +226,14 @@ impl RemoteShell {
     pub fn read_file(&self, path: &str) -> String {
         match self {
             RemoteShell::Posix => format!("cat {}", posix_quote(path)),
-            RemoteShell::Windows => {
-                powershell_encoded(&format!("Get-Content {}", powershell_quote(path)))
-            }
+            // `-ErrorAction Stop` makes a missing file a terminating error so
+            // PowerShell exits non-zero (its default is a non-terminating error
+            // that still exits 0, which would break the "no PID file" contract
+            // callers rely on). `-LiteralPath` avoids wildcard expansion.
+            RemoteShell::Windows => powershell_encoded(&format!(
+                "Get-Content -LiteralPath {} -ErrorAction Stop",
+                powershell_quote(path)
+            )),
         }
     }
 
@@ -394,8 +399,11 @@ impl RemoteShell {
     /// 1803+) and accepts the same `-czf -C` flags.
     pub fn create_tarball(&self, tarball: &str, dir: &str) -> String {
         match self {
+            // Let tar write diagnostics to stderr: callers run this via
+            // `ssh_execute_checked`, which surfaces the remote stderr on
+            // failure, so suppressing it would produce a blank error message.
             RemoteShell::Posix => format!(
-                "tar -czf {} -C {} . 2>/dev/null",
+                "tar -czf {} -C {} .",
                 posix_quote(tarball),
                 posix_quote(dir)
             ),
