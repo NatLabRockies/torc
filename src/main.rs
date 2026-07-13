@@ -28,6 +28,7 @@ use torc::client::commands::resource_requirements::handle_resource_requirements_
 use torc::client::commands::results::handle_result_commands;
 use torc::client::commands::ro_crate::handle_ro_crate_commands;
 use torc::client::commands::scheduled_compute_nodes::handle_scheduled_compute_node_commands;
+use torc::client::commands::self_update::handle_self_commands;
 use torc::client::commands::slurm::handle_slurm_commands;
 use torc::client::commands::tasks::handle_tasks_commands;
 use torc::client::commands::user_data::handle_user_data_commands;
@@ -479,6 +480,7 @@ fn main() {
             | Commands::Exec { .. }
             | Commands::Watch { .. }
             | Commands::Tui(..)
+            | Commands::SelfCommand { .. }
             | Commands::Completions { .. }
     );
 
@@ -564,6 +566,7 @@ fn main() {
             | Commands::Tui(..)
             | Commands::Config { .. }
             | Commands::Hpc { .. }
+            | Commands::SelfCommand { .. }
             | Commands::Exec { dry_run: true, .. }
     );
 
@@ -1296,6 +1299,12 @@ fn main() {
         }
         Commands::Config { command } => {
             handle_config_commands(command);
+        }
+        Commands::SelfCommand { command } => {
+            if let Err(error) = handle_self_commands(command) {
+                eprintln!("Error: {error}");
+                std::process::exit(1);
+            }
         }
         Commands::Tui(args) => {
             let basic_auth = config.basic_auth.clone();
