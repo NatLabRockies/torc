@@ -22,5 +22,7 @@ jobs:
       - name: Run cargo deny
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
+          # No --config: the action appends command-arguments after `check`, and
+          # cargo-deny only accepts --config as a global flag. ./deny.toml is the
+          # default config path, so passing it was redundant anyway.
           command: check
-          command-arguments: --config deny.toml

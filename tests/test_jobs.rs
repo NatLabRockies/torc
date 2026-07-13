@@ -573,7 +573,7 @@ fn test_jobs_complete_with_different_statuses(start_server: &ServerProcess) {
     ];
     for status in &statuses {
         let status_str = status.to_string();
-        let job = create_test_job(config, workflow_id, &format!("job_{}", &status_str));
+        let job = create_test_job(config, workflow_id, &format!("job_{}", status_str));
         let job_id = job.id.unwrap();
 
         // Create a ResultModel for the completion
