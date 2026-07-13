@@ -5222,6 +5222,9 @@ mod tests {
         assert!(message.contains("Reading logs from output directory: /scratch/runs"));
         assert!(message.contains("Press 'o'"));
         assert!(message.contains("- The job used a stdio mode that doesn't capture stdout"));
+        // The `\` line continuations must not leak source indentation into the
+        // popup: every line has to start hard against the left margin.
+        assert!(message.lines().all(|line| !line.starts_with(' ')));
     }
 
     #[test]
