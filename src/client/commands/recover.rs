@@ -1680,7 +1680,7 @@ fn recover_workflow_interactive(
                 v.job_id,
                 truncate(&v.job_name, 30),
                 v.return_code,
-                &v.configured_memory,
+                v.configured_memory,
                 v.peak_memory_formatted.as_deref().unwrap_or("-"),
                 v.oom_reason.as_deref().unwrap_or("-"),
             );
@@ -1714,7 +1714,7 @@ fn recover_workflow_interactive(
                 v.job_id,
                 truncate(&v.job_name, 30),
                 v.return_code,
-                &v.configured_runtime,
+                v.configured_runtime,
                 v.exec_time_minutes,
                 v.timeout_reason.as_deref().unwrap_or("-"),
             );
@@ -1781,7 +1781,7 @@ fn recover_workflow_interactive(
                 v.job_id,
                 truncate(&v.job_name, 30),
                 v.return_code,
-                &v.configured_memory,
+                v.configured_memory,
             );
         }
         if unknown_jobs.len() > MAX_DISPLAY_ROWS {
@@ -2304,7 +2304,7 @@ fn resolve_existing_scheduler_source(
             let new_name = created.name.unwrap_or_default();
             eprintln!(
                 "  Created scheduler '{}' (ID {}) with walltime {}",
-                &new_name, new_id, &created.walltime
+                new_name, new_id, created.walltime
             );
             Ok((new_id, new_name))
         }
@@ -2352,7 +2352,7 @@ fn prompt_scheduler_choice(
             truncate(s.name.as_deref().unwrap_or("-"), 25),
             truncate(&s.account, 14),
             s.partition.as_deref().unwrap_or("-"),
-            &s.walltime,
+            s.walltime,
             s.nodes,
         );
     }
@@ -2409,7 +2409,7 @@ fn prompt_scheduler_choice(
         // after the user confirms recovery (so declining leaves no orphaned scheduler).
         let walltime_input = prompt_line(&format!(
             "  Walltime [default: {}] (press Enter to keep): ",
-            &scheduler.walltime
+            scheduler.walltime
         ))?;
 
         let source = if walltime_input.is_empty() {

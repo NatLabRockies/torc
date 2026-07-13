@@ -1875,6 +1875,19 @@ impl JobRunner {
                 result.return_code = 1;
                 result.status = JobStatus::Failed;
             }
+            // Log after validation so the line carries the status Torc actually
+            // records, not the raw process exit, and before the batch report so
+            // it is emitted even if the server rejects the completion.
+            info!(
+                "Job completed workflow_id={} job_id={} run_id={} attempt_id={} return_code={} status={} exec_time_s={:.3}",
+                self.workflow_id,
+                job_id,
+                self.run_id,
+                result.attempt_id.unwrap_or(1),
+                result.return_code,
+                format!("{:?}", result.status).to_lowercase(),
+                result.exec_time_minutes * 60.0
+            );
             to_report.push((job_id, result));
         }
         self.handle_completions_batch(to_report)?;
@@ -2415,12 +2428,8 @@ impl JobRunner {
                 continue;
             }
 
-            let status_str = format!("{:?}", final_result.status).to_lowercase();
-            info!(
-                "Job completed workflow_id={} job_id={} run_id={} status={}",
-                self.workflow_id, job_id, final_result.run_id, status_str
-            );
-
+            // The completion itself is logged in check_job_status(), where the
+            // process exit is detected; this path only reports it to the server.
             if let Some(stats) = slurm_stats {
                 match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
                     Ok(_) => {
@@ -2961,12 +2970,15 @@ impl JobRunner {
                     ) {
                         Ok(()) => {
                             info!(
-                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={}{}",
+                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={} pid={}{}",
                                 self.workflow_id,
                                 job_id,
                                 self.run_id,
                                 self.compute_node_id,
                                 attempt_id,
+                                async_job
+                                    .pid()
+                                    .map_or("unknown".to_string(), |p| p.to_string()),
                                 target_node.map_or(String::new(), |n| format!(" node={}", n))
                             );
                             if let Some(node) = target_node {
@@ -3125,12 +3137,15 @@ impl JobRunner {
                     ) {
                         Ok(()) => {
                             info!(
-                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={}",
+                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={} pid={}",
                                 self.workflow_id,
                                 job_id,
                                 self.run_id,
                                 self.compute_node_id,
-                                attempt_id
+                                attempt_id,
+                                async_job
+                                    .pid()
+                                    .map_or("unknown".to_string(), |p| p.to_string())
                             );
                             self.running_jobs.insert(job_id, async_job);
                         }

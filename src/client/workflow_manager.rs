@@ -1085,7 +1085,7 @@ impl WorkflowManager {
                         // If dry run is true, just log the change
                         info!(
                             "Dry run: Would reset job_id={} name='{}' from status={:?} to Uninitialized due to file change in '{}' file_id={}",
-                            job_id, &job.name, job_status, file.name, file_id
+                            job_id, job.name, job_status, file.name, file_id
                         );
 
                         // TODO
@@ -1110,7 +1110,7 @@ impl WorkflowManager {
 
                             info!(
                                 "Dry run: Would reset downstream job_id={} name='{}' status={:?} to Uninitialized",
-                                downstream_job_id, &downstream_job.name, downstream_job.status
+                                downstream_job_id, downstream_job.name, downstream_job.status
                             );
                         }
                     } else {
@@ -1123,7 +1123,7 @@ impl WorkflowManager {
                             Ok(_) => {
                                 info!(
                                     "Reset job_id={} name='{}' from status={:?} to Uninitialized due to file change in '{}' file_id={}",
-                                    job_id, &job.name, job_status, file.name, file_id
+                                    job_id, job.name, job_status, file.name, file_id
                                 );
                             }
                             Err(err) => {
@@ -1139,7 +1139,7 @@ impl WorkflowManager {
                     // Job is not Completed, Failed, or Canceled, no action needed
                     debug!(
                         "job_id={} name='{}' has status={:?}, no reset needed for file change in '{}' file_id={}",
-                        job_id, &job.name, job_status, file.name, file_id
+                        job_id, job.name, job_status, file.name, file_id
                     );
                 }
             }
@@ -1185,7 +1185,7 @@ impl WorkflowManager {
                     any_missing_files = true;
                     debug!(
                         "Output file {} from job {} (name: '{}') is missing",
-                        file.path, job_id, &job.name
+                        file.path, job_id, job.name
                     );
                     break; // No need to check more files for this job
                 }
@@ -1196,7 +1196,7 @@ impl WorkflowManager {
                 if dry_run {
                     info!(
                         "Dry run: Would reset job {} (name: '{}') from Done to Uninitialized due to missing output files",
-                        job_id, &job.name
+                        job_id, job.name
                     );
 
                     // Find and log direct downstream jobs (jobs that depend on this job)
@@ -1220,7 +1220,7 @@ impl WorkflowManager {
 
                         info!(
                             "Dry run: Would reset downstream job {} (name: '{}' status: {:?}) to Uninitialized",
-                            downstream_job_id, &downstream_job.name, downstream_job.status
+                            downstream_job_id, downstream_job.name, downstream_job.status
                         );
                     }
                 } else {
@@ -1233,7 +1233,7 @@ impl WorkflowManager {
                         Ok(_) => {
                             info!(
                                 "Reset job {} (name: '{}') from Done to Uninitialized due to missing output files",
-                                job_id, &job.name
+                                job_id, job.name
                             );
                         }
                         Err(err) => {

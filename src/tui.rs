@@ -298,6 +298,11 @@ where
                                         )));
                                     }
                                 }
+                                KeyCode::Char('o') => {
+                                    // Point the TUI at a different output directory and
+                                    // re-open these logs from there.
+                                    app.start_output_dir_input_from_log_viewer();
+                                }
                                 _ => {}
                             }
                         }

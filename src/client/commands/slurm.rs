@@ -198,9 +198,9 @@ fn select_slurm_scheduler_interactively(
                     "{:<5} {:<20} {:<15} {:<8} {:<12}",
                     scheduler.id.unwrap_or(-1),
                     scheduler.name.as_deref().unwrap_or(""),
-                    &scheduler.account,
+                    scheduler.account,
                     scheduler.nodes,
-                    &scheduler.walltime
+                    scheduler.walltime
                 );
             }
 
