@@ -384,10 +384,6 @@ impl AsyncCliCommand {
         self.is_running = true;
         self.start_time = Utc::now();
         self.status = JobStatus::Running;
-        debug!(
-            "Job process started workflow_id={} job_id={} pid={}",
-            workflow_id, self.job_id, pid
-        );
 
         // Start resource monitoring if enabled.
         // When running inside a Slurm allocation with srun, the job executes inside
@@ -834,17 +830,6 @@ impl AsyncCliCommand {
             }
         }
 
-        let final_rc = self.return_code.unwrap_or(return_code);
-        let final_status = format!("{:?}", self.status).to_lowercase();
-        info!(
-            "Job process completed workflow_id={} job_id={} run_id={} return_code={} status={} exec_time_s={:.3}",
-            self.workflow_id.unwrap_or(0),
-            self.job_id,
-            self.run_id.unwrap_or(0),
-            final_rc,
-            final_status,
-            self.exec_time_s
-        );
         Ok(())
     }
 
@@ -854,18 +839,12 @@ impl AsyncCliCommand {
         self.job.id.expect("Job ID must be set")
     }
 
-    // Get the process ID of the running job. Can only be called if the job is running.
-    // pub fn get_pid(&self) -> Result<u32, Box<dyn std::error::Error>> {
-    //     if !self.is_running {
-    //         return Err("Job is not running".into());
-    //     }
-
-    //     if let Some(ref child) = self.handle {
-    //         Ok(child.id())
-    //     } else {
-    //         Err("No process handle available".into())
-    //     }
-    // }
+    /// Process ID of the job, once `start()` has spawned it. In Slurm mode this
+    /// is the PID of the `srun` process, not of the job itself, which runs
+    /// under slurmstepd.
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
+    }
 
     // pub fn get_exec_time_minutes(&self) -> f64 {
     //     self.exec_time_s / 60.0

@@ -532,11 +532,27 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
         .position(|t| *t == app.detail_view)
         .unwrap_or(0);
 
+    // Surface the directory the Jobs/Results/Scheduled Nodes log viewers read
+    // from. It is a per-workflow choice (`torc run --output-dir`), so it has to
+    // be visible rather than buried in the help popup.
+    let output_dir = Line::from(vec![
+        Span::styled(" logs: ", Style::default().fg(Color::White)),
+        Span::styled(
+            app.output_dir.display().to_string(),
+            Style::default().fg(Color::Cyan),
+        ),
+        Span::styled(" ", Style::default()),
+        Span::styled("o", Style::default().fg(Color::Yellow)),
+        Span::styled(": change ", Style::default().fg(Color::DarkGray)),
+    ])
+    .right_aligned();
+
     let tabs = Tabs::new(titles)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("◈ Detail View")
+                .title_top(output_dir)
                 .border_style(Style::default().fg(Color::DarkGray)),
         )
         .select(selected)

@@ -208,6 +208,7 @@ Press `l` to view logs:
 | `n`             | Next search match                |
 | `N`             | Previous search match            |
 | `y`             | Show file path in status bar     |
+| `o`             | Read logs from another directory |
 | `q` / `Esc`     | Close log viewer                 |
 
 ### 7. Job Actions
@@ -474,14 +475,19 @@ torc config show
 
 ### Log File Locations
 
-Job logs are stored in the `output` directory by default:
+Job logs are stored in the `torc_output` directory by default:
 
 ```
-output/
+torc_output/
 └── job_stdio/
     ├── job_{workflow_id}_{job_id}_{run_id}.o  # stdout
     └── job_{workflow_id}_{job_id}_{run_id}.e  # stderr
 ```
+
+Workflows run with `torc run --output-dir <dir>` write elsewhere. The directory the TUI reads logs
+from is shown on the right of the Detail View tab bar; press `o` (from any pane, or from inside the
+log viewer) to point it at another one. Relative paths resolve against the workflow's submission
+directory, so the TUI finds the logs no matter where it is launched from.
 
 ---
 
@@ -499,7 +505,8 @@ Logs may not be available if:
 
 - The job hasn't run yet
 - You're on a different machine than where jobs ran
-- The output directory is in a different location
+- The workflow ran with a different `--output-dir` (press `o` to change the directory the TUI reads
+  from)
 
 ### Job actions not working
 

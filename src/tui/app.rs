@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread::JoinHandle;
 
@@ -270,6 +270,16 @@ pub enum Focus {
     OutputDirInput,
     RecoverPrompt,
     Popup,
+}
+
+/// Which detail tab opened the log viewer. Recorded so the viewer can be
+/// re-opened against the same job/result/node after the user changes the
+/// output directory from inside the popup.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LogSource {
+    Job,
+    Result,
+    Slurm,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -790,6 +800,12 @@ pub struct App {
     // Output directory for log files
     pub output_dir: PathBuf,
     pub output_dir_input: String,
+    /// Focus to restore when the output-directory input is applied or canceled.
+    output_dir_return_focus: Focus,
+    /// Tab that opened the currently displayed log viewer.
+    log_view_source: Option<LogSource>,
+    /// Log viewer to re-open once the output-directory input closes.
+    pending_log_view: Option<LogSource>,
 }
 
 impl App {
@@ -917,6 +933,9 @@ impl App {
             basic_auth,
             output_dir,
             output_dir_input: String::new(),
+            output_dir_return_focus: Focus::Workflows,
+            log_view_source: None,
+            pending_log_view: None,
         };
 
         // Update client to use the correct URL
@@ -3077,13 +3096,40 @@ impl App {
     // === Output Directory Input ===
 
     pub fn start_output_dir_input(&mut self) {
+        if self.focus != Focus::OutputDirInput {
+            self.output_dir_return_focus = self.focus;
+        }
         self.focus = Focus::OutputDirInput;
         self.output_dir_input = self.output_dir.display().to_string();
     }
 
+    /// Change the output directory while a log viewer is open. The viewer is
+    /// closed so the input widget is visible, and re-opened against the same
+    /// job/result/node once the input is applied or canceled -- the log viewer
+    /// tells users to press `o` when a file is missing, so the key has to work
+    /// from there.
+    pub fn start_output_dir_input_from_log_viewer(&mut self) {
+        let source = self.log_view_source;
+        self.close_popup();
+        self.start_output_dir_input();
+        self.pending_log_view = source;
+    }
+
     pub fn cancel_output_dir_input(&mut self) {
-        self.focus = Focus::Workflows;
+        self.focus = self.output_dir_return_focus;
         self.output_dir_input.clear();
+        self.reopen_pending_log_view();
+    }
+
+    /// Re-open the log viewer that was closed to make room for the
+    /// output-directory input, now reading from the current `output_dir`.
+    fn reopen_pending_log_view(&mut self) {
+        match self.pending_log_view.take() {
+            Some(LogSource::Job) => self.show_job_logs(),
+            Some(LogSource::Result) => self.show_result_logs(),
+            Some(LogSource::Slurm) => self.show_slurm_logs(),
+            None => {}
+        }
     }
 
     pub fn add_output_dir_char(&mut self, c: char) {
@@ -3109,11 +3155,12 @@ impl App {
         };
 
         self.output_dir = path;
-        self.focus = Focus::Workflows;
+        self.focus = self.output_dir_return_focus;
         self.set_status(StatusMessage::success(&format!(
             "Output directory set to: {}",
             self.output_dir.display()
         )));
+        self.reopen_pending_log_view();
     }
 
     pub fn get_current_user_display(&self) -> String {
@@ -4323,6 +4370,7 @@ impl App {
                 )));
             }
 
+            self.log_view_source = Some(LogSource::Job);
             self.previous_focus = self.focus;
             self.focus = Focus::Popup;
             self.popup = Some(PopupType::LogViewer(viewer));
@@ -4390,6 +4438,7 @@ impl App {
             result.attempt_id.unwrap_or(1),
         );
 
+        self.log_view_source = Some(LogSource::Result);
         self.previous_focus = self.focus;
         self.focus = Focus::Popup;
         self.popup = Some(PopupType::LogViewer(viewer));
@@ -4424,11 +4473,11 @@ impl App {
             viewer.stdout_path = Some(combined_path.clone());
             viewer.stdout_content = content;
         } else {
-            viewer.stdout_path = Some(stdout_path.clone());
-            viewer.stdout_content = format!(
-                "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stdout",
-                stdout_path
+            viewer.stdout_content = self.missing_log_message(
+                &stdout_path,
+                &["The job used a stdio mode that doesn't capture stdout"],
             );
+            viewer.stdout_path = Some(stdout_path);
         }
 
         // Try separate .e file first, then fall back to combined .log
@@ -4439,12 +4488,16 @@ impl App {
             viewer.stderr_path = Some(combined_path);
             viewer.stderr_content = content;
         } else {
-            viewer.stderr_path = Some(stderr_path.clone());
-            viewer.stderr_content = format!(
-                "Could not read file: {}\n\nThe file may not exist if:\n- The job has not run yet\n- The output directory is different\n- You are on a different system\n- The job used a stdio mode that doesn't capture stderr",
-                stderr_path
+            viewer.stderr_content = self.missing_log_message(
+                &stderr_path,
+                &["The job used a stdio mode that doesn't capture stderr"],
             );
+            viewer.stderr_path = Some(stderr_path);
         }
+    }
+
+    fn missing_log_message(&self, path: &str, extra_reasons: &[&str]) -> String {
+        missing_log_message(path, &self.resolve_log_output_dir(), extra_reasons)
     }
 
     // === Slurm Log Viewer ===
@@ -4479,6 +4532,7 @@ impl App {
                 )));
             }
 
+            self.log_view_source = Some(LogSource::Slurm);
             self.previous_focus = self.focus;
             self.focus = Focus::Popup;
             self.popup = Some(PopupType::LogViewer(viewer));
@@ -4502,20 +4556,14 @@ impl App {
         if let Ok(content) = std::fs::read_to_string(&stdout_path) {
             viewer.stdout_content = content;
         } else {
-            viewer.stdout_content = format!(
-                "Could not read file: {}\n\nThe file may not exist if:\n- The Slurm job has not run yet\n- The output directory is different\n- You are on a different system",
-                stdout_path
-            );
+            viewer.stdout_content = self.missing_log_message(&stdout_path, &[]);
         }
 
         // Try to read stderr
         if let Ok(content) = std::fs::read_to_string(&stderr_path) {
             viewer.stderr_content = content;
         } else {
-            viewer.stderr_content = format!(
-                "Could not read file: {}\n\nThe file may not exist if:\n- The Slurm job has not run yet\n- The output directory is different\n- You are on a different system",
-                stderr_path
-            );
+            viewer.stderr_content = self.missing_log_message(&stderr_path, &[]);
         }
 
         Ok(())
@@ -5132,4 +5180,54 @@ pub fn filter_workflow_list(
         })
         .cloned()
         .collect()
+}
+
+/// Placeholder shown in the log viewer when a log file cannot be read.
+///
+/// Names the output directory the path was built from and the key that changes
+/// it. A workflow run with a non-default `--output-dir` is the most common
+/// reason the file is missing, and the directory is otherwise invisible from
+/// inside the popup.
+fn missing_log_message(path: &str, output_dir: &Path, extra_reasons: &[&str]) -> String {
+    let mut message = format!(
+        "Could not read file: {}\n\n\
+         Reading logs from output directory: {}\n\
+         Press 'o' to read them from a different directory.\n\n\
+         The file may not exist if:\n\
+         - The job has not run yet\n\
+         - The workflow ran with a different --output-dir\n\
+         - You are on a different system",
+        path,
+        output_dir.display()
+    );
+    for reason in extra_reasons {
+        message.push_str("\n- ");
+        message.push_str(reason);
+    }
+    message
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_missing_log_message_names_output_dir_and_shortcut() {
+        let message = missing_log_message(
+            "runs/job_stdio/job_wf1_j2_r1_a1.o",
+            Path::new("/scratch/runs"),
+            &["The job used a stdio mode that doesn't capture stdout"],
+        );
+        assert!(message.contains("Could not read file: runs/job_stdio/job_wf1_j2_r1_a1.o"));
+        assert!(message.contains("Reading logs from output directory: /scratch/runs"));
+        assert!(message.contains("Press 'o'"));
+        assert!(message.contains("- The job used a stdio mode that doesn't capture stdout"));
+    }
+
+    #[test]
+    fn test_missing_log_message_without_extra_reasons() {
+        let message = missing_log_message("out/slurm.o", Path::new("out"), &[]);
+        assert!(message.contains("Reading logs from output directory: out"));
+        assert!(message.ends_with("- You are on a different system"));
+    }
 }

@@ -650,7 +650,10 @@ impl HelpPopup {
 
         lines.extend(Self::section("Connection"));
         lines.push(Self::key_line("u", "Change server URL"));
-        lines.push(Self::key_line("o", "Change output directory"));
+        lines.push(Self::key_line(
+            "o",
+            "Change output directory (where job/Slurm logs are read from)",
+        ));
         lines.push(Self::key_line("w", "Change user filter"));
         lines.push(Self::key_line("a", "Toggle show all users"));
 
@@ -1256,7 +1259,9 @@ impl LogViewer {
             Span::styled("g/G", Style::default().fg(Color::Yellow)),
             Span::raw(": top/bottom | "),
             Span::styled("y", Style::default().fg(Color::Yellow)),
-            Span::raw(": copy path"),
+            Span::raw(": copy path | "),
+            Span::styled("o", Style::default().fg(Color::Yellow)),
+            Span::raw(": output dir"),
         ]);
 
         let status_para = Paragraph::new(vec![status_line, help_line]);
