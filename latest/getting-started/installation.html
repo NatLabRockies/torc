@@ -224,6 +224,15 @@ after downloading:</p>
 <pre><code class="language-bash">xattr -cr /path/to/torc*
 </code></pre>
 <p>Alternatively, you can right-click each binary and select "Open" to add a security exception.</p>
+<h3 id="updating-standalone-installer-installations"><a class="header" href="#updating-standalone-installer-installations">Updating Standalone Installer Installations</a></h3>
+<p>If Torc was installed with the standalone installer, update it to the latest release with:</p>
+<pre><code class="language-bash">torc self update
+</code></pre>
+<p>To update to a specific release, pass its tag (for example, <code>torc self update v0.36.0</code>).
+Installations from a release archive must be updated by downloading and replacing the archive.
+Update crates.io installations with <code>cargo install torc --force</code>, Docker installations with
+<code>docker pull ghcr.io/natlabrockies/torc:latest</code>, and site-managed installations through the site
+administrator.</p>
 <h2 id="site-specific-installations"><a class="header" href="#site-specific-installations">Site-Specific Installations</a></h2>
 <p>Some HPC facilities maintain pre-installed Torc binaries and shared servers. Check if your site is
 listed below.</p>
