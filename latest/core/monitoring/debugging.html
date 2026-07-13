@@ -532,8 +532,8 @@ grep -r "Job completed workflow_id=" torc_output/
 # Find failed jobs
 grep -r "status=failed" torc_output/
 
-# Find all job process completions with return codes
-grep -r "Job process completed" torc_output/ | grep "return_code="
+# Find all job completions with non-zero return codes
+grep -r "Job completed workflow_id=" torc_output/ | grep -v "return_code=0 "
 </code></pre>
 <p><strong>Tip</strong>: Redirect grep output to a file for easier analysis of large result sets:</p>
 <pre><code class="language-bash">grep -r "workflow_id=123" torc_output/ &gt; workflow_123_logs.txt
