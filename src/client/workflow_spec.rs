@@ -241,7 +241,7 @@ pub struct FileSpec {
     /// Optional parameters for generating multiple files
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_parameter_map")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -333,7 +333,7 @@ pub struct UserDataSpec {
     /// Tokens of the form `{param_name}` or `{param_name:format}` are substituted into
     /// `name` and into any string value found inside `data` (recursively).
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_parameter_map")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -723,7 +723,7 @@ pub struct JobSpec {
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     /// Multiple parameters create a Cartesian product of jobs by default
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_parameter_map")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -1422,7 +1422,7 @@ pub struct WorkflowSpec {
     /// Shared parameters that can be used by jobs and files
     /// Jobs/files can reference these by setting use_parameters to parameter names
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_parameter_map")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// Shared CSV/JSON parameter table for the whole workflow. Jobs/files/user_data
     /// opt in by setting `use_parameters_file: true`, which expands them over every
