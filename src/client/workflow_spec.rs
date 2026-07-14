@@ -8302,6 +8302,49 @@ jobs:
     }
 
     #[test]
+    fn test_native_yaml_parameter_sequences_for_all_spec_scopes() {
+        let yaml = r#"
+name: native_lists_all_scopes
+parameters:
+  shared:
+    - one
+    - two
+jobs:
+  - name: job_{shared}
+    command: echo
+    use_parameters:
+      - shared
+  - name: local_{local}
+    command: echo
+    parameters:
+      local:
+        - a
+        - b
+files:
+  - name: file_{file}
+    path: /tmp/file_{file}
+    parameters:
+      file:
+        - x
+        - y
+user_data:
+  - name: data_{data}
+    data:
+      value: "{data}"
+    parameters:
+      data:
+        - first
+        - second
+"#;
+        let mut spec = WorkflowSpec::from_spec_file_content(yaml, "yaml").unwrap();
+        spec.expand_parameters().unwrap();
+
+        assert_eq!(spec.jobs.len(), 4);
+        assert_eq!(spec.files.as_ref().unwrap().len(), 2);
+        assert_eq!(spec.user_data.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
     fn test_zip_parameter_mode_json() {
         let json_content = r#"
 {
