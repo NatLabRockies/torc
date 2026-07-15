@@ -79,7 +79,7 @@ files:
   - name: "model_{i}"
     path: "/workspace/models/model_{i}.pt"
     parameters:
-      i: "[0,1,2]"
+      i: [0, 1, 2]
 
   - name: "eval_report"
     path: "/workspace/results/evaluation.json"
@@ -101,7 +101,7 @@ jobs:
     input_files: ["dataset"]
     output_files: ["model_{i}"]
     parameters:
-      i: "[0,1,2]"
+      i: [0, 1, 2]
 
   - name: "evaluate_best"
     command: bash examples/scripts/checkpointing_evaluate.sh

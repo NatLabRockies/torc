@@ -33,8 +33,8 @@ jobs:
     output_files:
       - model_{dataset}_{model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'cnn', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, cnn, transformer]
     parameter_mode: zip
 
   # Evaluation job that processes all models
@@ -52,8 +52,8 @@ jobs:
     output_files:
       - metrics_{dataset}_{model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'cnn', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, cnn, transformer]
     parameter_mode: zip
 
   # Final aggregation job
@@ -71,13 +71,13 @@ files:
   - name: model_{dataset}_{model}
     path: /models/{dataset}_{model}.pt
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'cnn', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, cnn, transformer]
     parameter_mode: zip
 
   - name: metrics_{dataset}_{model}
     path: /results/{dataset}_{model}_metrics.json
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'cnn', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, cnn, transformer]
     parameter_mode: zip

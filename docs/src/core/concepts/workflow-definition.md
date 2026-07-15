@@ -50,8 +50,11 @@ This expands to 10 jobs: `task_1`, `task_2`, ..., `task_10`.
 | --------------- | ---------------- | ------------------------- |
 | Range           | `"1:5"`          | 1, 2, 3, 4, 5             |
 | Range with step | `"0:10:2"`       | 0, 2, 4, 6, 8, 10         |
-| List            | `"[a,b,c]"`      | a, b, c                   |
+| List            | `[a, b, c]`      | a, b, c                   |
 | Float range     | `"0.0:1.0:0.25"` | 0.0, 0.25, 0.5, 0.75, 1.0 |
+
+Lists are native YAML/JSON sequences; the legacy string form (`"[a,b,c]"`) is still accepted and is
+required in KDL specs.
 
 ### Format Specifiers
 
@@ -64,7 +67,7 @@ Control how values appear in names:
 
 - name: lr_{lr:.4f}      # lr_0.0010, lr_0.0100, ...
   parameters:
-    lr: "[0.001,0.01,0.1]"
+    lr: [0.001, 0.01, 0.1]
 ```
 
 ## Resource Requirements

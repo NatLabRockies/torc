@@ -14,7 +14,7 @@
         "raw_{dataset}"
       ],
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']"
+        "dataset": ["sales", "inventory", "customers", "products"]
       }
     },
     {
@@ -31,7 +31,7 @@
         "clean_{dataset}"
       ],
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']"
+        "dataset": ["sales", "inventory", "customers", "products"]
       }
     },
     {
@@ -48,8 +48,8 @@
         "results_{dataset}_{analysis_type}"
       ],
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']",
-        "analysis_type": "['summary','trends','anomalies']"
+        "dataset": ["sales", "inventory", "customers", "products"],
+        "analysis_type": ["summary", "trends", "anomalies"]
       }
     },
     // Generate one report per (dataset, analysis_type) combination. Both
@@ -68,8 +68,8 @@
         "results_{dataset}_{analysis_type}"
       ],
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']",
-        "analysis_type": "['summary','trends','anomalies']"
+        "dataset": ["sales", "inventory", "customers", "products"],
+        "analysis_type": ["summary", "trends", "anomalies"]
       }
     },
     // Create executive summary per dataset. `{dataset}` appears in the name
@@ -85,7 +85,7 @@
         "report_{dataset}_anomalies"
       ],
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']"
+        "dataset": ["sales", "inventory", "customers", "products"]
       }
     }
   ],
@@ -96,22 +96,22 @@
       "name": "raw_{dataset}",
       "path": "/data/raw/{dataset}.csv",
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']"
+        "dataset": ["sales", "inventory", "customers", "products"]
       }
     },
     {
       "name": "clean_{dataset}",
       "path": "/data/clean/{dataset}.csv",
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']"
+        "dataset": ["sales", "inventory", "customers", "products"]
       }
     },
     {
       "name": "results_{dataset}_{analysis_type}",
       "path": "/results/{dataset}_{analysis_type}_results.json",
       "parameters": {
-        "dataset": "['sales','inventory','customers','products']",
-        "analysis_type": "['summary','trends','anomalies']"
+        "dataset": ["sales", "inventory", "customers", "products"],
+        "analysis_type": ["summary", "trends", "anomalies"]
       }
     }
   ],

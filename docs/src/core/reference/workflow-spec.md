@@ -590,14 +590,18 @@ jobs:
 
 Parameters support several formats for generating multiple jobs or files:
 
-| Format                  | Example                      | Description                   |
-| ----------------------- | ---------------------------- | ----------------------------- |
-| Integer range           | `"1:100"`                    | Inclusive range from 1 to 100 |
-| Integer range with step | `"0:100:10"`                 | Range with step size          |
-| Float range             | `"0.0:1.0:0.1"`              | Float range with step         |
-| Integer list            | `"[1,5,10,100]"`             | Explicit list of integers     |
-| Float list              | `"[0.1,0.5,0.9]"`            | Explicit list of floats       |
-| String list             | `"['adam','sgd','rmsprop']"` | Explicit list of strings      |
+| Format                  | Example                | Description                   |
+| ----------------------- | ---------------------- | ----------------------------- |
+| Integer range           | `"1:100"`              | Inclusive range from 1 to 100 |
+| Integer range with step | `"0:100:10"`           | Range with step size          |
+| Float range             | `"0.0:1.0:0.1"`        | Float range with step         |
+| Integer list            | `[1, 5, 10, 100]`      | Explicit list of integers     |
+| Float list              | `[0.1, 0.5, 0.9]`      | Explicit list of floats       |
+| String list             | `[adam, sgd, rmsprop]` | Explicit list of strings      |
+
+Lists are native YAML/JSON sequences. The legacy string-encoded form (e.g. `"[1,5,10]"` or
+`"['adam','sgd']"`) is still accepted, and is required in KDL specs, where parameter values must be
+strings.
 
 **Template substitution in strings:**
 
