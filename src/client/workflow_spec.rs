@@ -10,7 +10,33 @@ use std::sync::LazyLock;
 
 use crate::models;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Deserialize parameter maps while accepting both the legacy string syntax and
+/// native YAML/JSON sequences. Sequences are normalized to the existing list
+/// syntax so the parameter expansion code has one representation to process.
+fn deserialize_parameter_map<'de, D>(
+    deserializer: D,
+) -> Result<Option<HashMap<String, String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let values = Option::<HashMap<String, serde_json::Value>>::deserialize(deserializer)?;
+    values
+        .map(|values| {
+            values
+                .into_iter()
+                .map(|(name, value)| {
+                    let value = match value {
+                        serde_json::Value::String(value) => value,
+                        value => serde_json::to_string(&value).map_err(serde::de::Error::custom)?,
+                    };
+                    Ok((name, value))
+                })
+                .collect()
+        })
+        .transpose()
+}
 
 static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
@@ -215,6 +241,7 @@ pub struct FileSpec {
     /// Optional parameters for generating multiple files
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -306,6 +333,7 @@ pub struct UserDataSpec {
     /// Tokens of the form `{param_name}` or `{param_name:format}` are substituted into
     /// `name` and into any string value found inside `data` (recursively).
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -695,6 +723,7 @@ pub struct JobSpec {
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     /// Multiple parameters create a Cartesian product of jobs by default
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -1393,6 +1422,7 @@ pub struct WorkflowSpec {
     /// Shared parameters that can be used by jobs and files
     /// Jobs/files can reference these by setting use_parameters to parameter names
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_parameter_map")]
     pub parameters: Option<HashMap<String, String>>,
     /// Shared CSV/JSON parameter table for the whole workflow. Jobs/files/user_data
     /// opt in by setting `use_parameters_file: true`, which expands them over every
@@ -8229,6 +8259,89 @@ jobs:
             assert!(job.parameters.is_none());
             assert!(job.parameter_mode.is_none());
         }
+    }
+
+    #[test]
+    fn test_native_yaml_parameter_sequences_support_product_and_zip() {
+        let product_yaml = r#"
+name: native_lists
+jobs:
+  - name: run_{x}_{y}
+    command: echo
+    parameters:
+      x:
+        - a
+        - b
+      y:
+        - 1
+        - 2
+"#;
+        let mut product = WorkflowSpec::from_spec_file_content(product_yaml, "yaml").unwrap();
+        product.expand_parameters().unwrap();
+        assert_eq!(product.jobs.len(), 4);
+
+        let zip_yaml = r#"
+name: native_lists_zip
+jobs:
+  - name: run_{x}_{y}
+    command: echo
+    parameter_mode: zip
+    parameters:
+      x:
+        - a
+        - b
+      y:
+        - 1
+        - 2
+"#;
+        let mut zip = WorkflowSpec::from_spec_file_content(zip_yaml, "yaml").unwrap();
+        zip.expand_parameters().unwrap();
+        assert_eq!(zip.jobs.len(), 2);
+        assert_eq!(zip.jobs[0].name, "run_a_1");
+        assert_eq!(zip.jobs[1].name, "run_b_2");
+    }
+
+    #[test]
+    fn test_native_yaml_parameter_sequences_for_all_spec_scopes() {
+        let yaml = r#"
+name: native_lists_all_scopes
+parameters:
+  shared:
+    - one
+    - two
+jobs:
+  - name: job_{shared}
+    command: echo
+    use_parameters:
+      - shared
+  - name: local_{local}
+    command: echo
+    parameters:
+      local:
+        - a
+        - b
+files:
+  - name: file_{file}
+    path: /tmp/file_{file}
+    parameters:
+      file:
+        - x
+        - y
+user_data:
+  - name: data_{data}
+    data:
+      value: "{data}"
+    parameters:
+      data:
+        - first
+        - second
+"#;
+        let mut spec = WorkflowSpec::from_spec_file_content(yaml, "yaml").unwrap();
+        spec.expand_parameters().unwrap();
+
+        assert_eq!(spec.jobs.len(), 4);
+        assert_eq!(spec.files.as_ref().unwrap().len(), 2);
+        assert_eq!(spec.user_data.as_ref().unwrap().len(), 2);
     }
 
     #[test]
