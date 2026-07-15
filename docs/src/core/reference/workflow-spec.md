@@ -599,9 +599,9 @@ Parameters support several formats for generating multiple jobs or files:
 | Float list              | `[0.1, 0.5, 0.9]`      | Explicit list of floats       |
 | String list             | `[adam, sgd, rmsprop]` | Explicit list of strings      |
 
-Lists are native YAML/JSON sequences. The legacy string-encoded form (e.g. `"[1,5,10]"` or
-`"['adam','sgd']"`) is still accepted, and is required in KDL specs, where parameter values must be
-strings.
+Lists are native YAML/JSON sequences (in JSON, quote the strings). The legacy string-encoded form
+(e.g. `"[1,5,10]"` or `"['adam','sgd']"`) is still accepted, and is required in KDL specs, where
+parameter values must be strings.
 
 **Template substitution in strings:**
 

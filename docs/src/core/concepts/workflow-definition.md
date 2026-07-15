@@ -53,8 +53,8 @@ This expands to 10 jobs: `task_1`, `task_2`, ..., `task_10`.
 | List            | `[a, b, c]`      | a, b, c                   |
 | Float range     | `"0.0:1.0:0.25"` | 0.0, 0.25, 0.5, 0.75, 1.0 |
 
-Lists are native YAML/JSON sequences; the legacy string form (`"[a,b,c]"`) is still accepted and is
-required in KDL specs.
+Lists are native YAML/JSON sequences (in JSON, quote the strings); the legacy string form
+(`"[a,b,c]"`) is still accepted and is required in KDL specs.
 
 ### Format Specifiers
 
