@@ -20,7 +20,7 @@
 #   # Run torc CLI
 #   docker run --rm ghcr.io/natlabrockies/torc:$VERSION torc --version
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 ARG VERSION
 RUN test -n "$VERSION" || (echo "ERROR: VERSION build arg is required" >&2 && exit 1)
