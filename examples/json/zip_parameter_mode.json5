@@ -22,8 +22,8 @@
       "command": "python train.py --dataset={dataset} --model={model}",
       "output_files": ["model_{dataset}_{model}"],
       "parameters": {
-        "dataset": "['cifar10', 'mnist', 'imagenet']",
-        "model": "['resnet', 'cnn', 'transformer']"
+        "dataset": ["cifar10", "mnist", "imagenet"],
+        "model": ["resnet", "cnn", "transformer"]
       },
       "parameter_mode": "zip"
     },
@@ -34,8 +34,8 @@
       "depends_on": ["train_{dataset}_{model}"],
       "input_files": ["model_{dataset}_{model}"],
       "parameters": {
-        "dataset": "['cifar10', 'mnist', 'imagenet']",
-        "model": "['resnet', 'cnn', 'transformer']"
+        "dataset": ["cifar10", "mnist", "imagenet"],
+        "model": ["resnet", "cnn", "transformer"]
       },
       "parameter_mode": "zip"
     }
@@ -47,8 +47,8 @@
       "name": "model_{dataset}_{model}",
       "path": "/models/{dataset}_{model}.pt",
       "parameters": {
-        "dataset": "['cifar10', 'mnist', 'imagenet']",
-        "model": "['resnet', 'cnn', 'transformer']"
+        "dataset": ["cifar10", "mnist", "imagenet"],
+        "model": ["resnet", "cnn", "transformer"]
       },
       "parameter_mode": "zip"
     }

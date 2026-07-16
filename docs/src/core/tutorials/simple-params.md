@@ -132,7 +132,7 @@ all 5 process jobs.
 
 **Parameter Values:**
 
-- `"[0.0001,0.0005,0.001,0.005,0.01]"` - A list of 5 specific values
+- `[0.0001, 0.0005, 0.001, 0.005, 0.01]` - A list of 5 specific values
 
 **File Parameterization:** Notice that both jobs AND files have `parameters:`. When Torc expands:
 
@@ -222,13 +222,16 @@ their specific training job completes.
 
 ### List Format
 
-Explicit list of values:
+Explicit list of values, written as a native YAML sequence:
 
 ```yaml
 parameters:
-  lr: "[0.0001,0.0005,0.001,0.005,0.01]"  # Numbers
-  opt: "['adam','sgd','rmsprop']"          # Strings (note the quotes)
+  lr: [0.0001, 0.0005, 0.001, 0.005, 0.01] # Numbers
+  opt: [adam, sgd, rmsprop]                # Strings
 ```
+
+The legacy string-encoded form (`"[0.0001,0.001]"`, `"['adam','sgd']"`) is still accepted, and is
+required in KDL specs, where parameter values must be strings.
 
 ### Range Format
 
@@ -294,15 +297,15 @@ jobs:
   - name: train_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'vgg', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, vgg, transformer]
 
   # Zip mode: 3 paired jobs (cifar10+resnet, mnist+vgg, imagenet+transformer)
   - name: paired_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'vgg', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, vgg, transformer]
     parameter_mode: zip
 ```
 
@@ -316,7 +319,7 @@ See [Parameterization Reference](../reference/parameterization.md#parameter-mode
 In this tutorial, you learned:
 
 - ✅ How to use `parameters:` to expand one job definition into many
-- ✅ List format (`"[a,b,c]"`) and range format (`"1:100"`)
+- ✅ List format (`[a, b, c]`) and range format (`"1:100"`)
 - ✅ Format specifiers (`{i:03d}`, `{lr:.4f}`) for consistent naming
 - ✅ How parameterized files create one-to-one dependencies
 - ✅ The efficiency of parameter-matched dependencies (each chain runs independently)

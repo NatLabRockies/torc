@@ -6,21 +6,21 @@ jobs:
     command: "wget https://data.example.com/{dataset}.tar.gz -O raw/{dataset}.tar.gz && tar -xzf raw/{dataset}.tar.gz -C raw/"
     resource_requirements: "download"
     parameters:
-      dataset: "['users', 'transactions', 'products', 'reviews']"
+      dataset: [users, transactions, products, reviews]
 
   - name: "validate_{dataset}"
     command: "python scripts/validate.py --input raw/{dataset} --output validated/{dataset}"
     resource_requirements: "cpu"
     depends_on: ["download_dataset_{dataset}"]
     parameters:
-      dataset: "['users', 'transactions', 'products', 'reviews']"
+      dataset: [users, transactions, products, reviews]
 
   - name: "transform_{dataset}"
     command: "python scripts/transform.py --input validated/{dataset} --output transformed/{dataset}"
     resource_requirements: "cpu"
     depends_on: ["validate_{dataset}"]
     parameters:
-      dataset: "['users', 'transactions', 'products', 'reviews']"
+      dataset: [users, transactions, products, reviews]
 
   - name: "aggregate_data"
     command: "python scripts/aggregate.py --input transformed/ --output aggregated/final.parquet"

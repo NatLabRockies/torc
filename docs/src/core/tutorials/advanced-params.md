@@ -25,8 +25,8 @@ values:
 
 ```yaml
 parameters:
-  lr: "[0.001,0.01]"   # 2 values
-  bs: "[16,32]"        # 2 values
+  lr: [0.001, 0.01] # 2 values
+  bs: [16, 32]      # 2 values
 ```
 
 This generates 2 × 2 = **4 jobs**:
@@ -40,9 +40,9 @@ With three parameters:
 
 ```yaml
 parameters:
-  lr: "[0.0001,0.001,0.01]"  # 3 values
-  bs: "[16,32,64]"            # 3 values
-  opt: "['adam','sgd']"       # 2 values
+  lr: [0.0001, 0.001, 0.01] # 3 values
+  bs: [16, 32, 64]          # 3 values
+  opt: [adam, sgd]          # 2 values
 ```
 
 This generates 3 × 3 × 2 = **18 jobs**.
@@ -80,9 +80,9 @@ jobs:
       - model_lr{lr:.4f}_bs{bs}_opt{opt}
       - metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   # Aggregate results (depends on ALL training jobs via file dependencies)
   - name: aggregate_results
@@ -94,9 +94,9 @@ jobs:
     input_files:
       - metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   # Find best model (explicit dependency, no parameters)
   - name: select_best_model
@@ -115,16 +115,16 @@ files:
   - name: model_lr{lr:.4f}_bs{bs}_opt{opt}
     path: /models/model_lr{lr:.4f}_bs{bs}_opt{opt}.pt
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   - name: metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     path: /results/metrics_lr{lr:.4f}_bs{bs}_opt{opt}.json
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
 resource_requirements:
   - name: data_prep

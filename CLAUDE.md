@@ -272,7 +272,9 @@ a single specification:
 - **Parameter Formats**:
   - Integer ranges: `"1:100"` (inclusive) or `"0:100:10"` (with step)
   - Float ranges: `"0.0:1.0:0.1"`
-  - Lists: `"[1,5,10]"` or `"['train','test','validation']"`
+  - Lists: native YAML/JSON sequences, e.g. `[1, 5, 10]` or `[train, test, validation]` (in JSON,
+    quote the strings). The legacy string-encoded form (`"[1,5,10]"`, `"['train','test']"`) is still
+    accepted and remains required in KDL specs, where parameter values must be strings.
 - **Multi-dimensional**: Multiple parameters create Cartesian product (e.g., 3 learning rates × 3
   batch sizes = 9 jobs)
 - **Table-based (`parameters_file`)**: Point a job/file/user_data at a CSV, JSON (array of objects),

@@ -13,7 +13,7 @@ jobs:
   - name: process_{dataset}
     command: python process.py --input data/{dataset}.csv --output results/{dataset}.json
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 ```
 
 This creates 3 jobs:
@@ -39,14 +39,14 @@ jobs:
   - name: process_{dataset}
     command: python process.py -i ${files.input.raw_{dataset}} -o ${files.output.processed_{dataset}}
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 
   - name: aggregate
     command: python aggregate.py --input results/ --output summary.json
     depends_on:
       - process_{dataset}
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 ```
 
 The `aggregate` job automatically waits for all `process_*` jobs to complete.
@@ -74,7 +74,7 @@ jobs:
   - name: analyze_{region}_{year}
     command: python analyze.py --region {region} --year {year} --output results/{region}_{year}.json
     parameters:
-      region: "[north, south, east, west]"
+      region: [north, south, east, west]
       year: "2020:2024"
 ```
 
