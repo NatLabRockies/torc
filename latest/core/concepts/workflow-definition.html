@@ -219,10 +219,12 @@ jobs:
 <div class="table-wrapper"><table><thead><tr><th>Format</th><th>Example</th><th>Expands To</th></tr></thead><tbody>
 <tr><td>Range</td><td><code>"1:5"</code></td><td>1, 2, 3, 4, 5</td></tr>
 <tr><td>Range with step</td><td><code>"0:10:2"</code></td><td>0, 2, 4, 6, 8, 10</td></tr>
-<tr><td>List</td><td><code>"[a,b,c]"</code></td><td>a, b, c</td></tr>
+<tr><td>List</td><td><code>[a, b, c]</code></td><td>a, b, c</td></tr>
 <tr><td>Float range</td><td><code>"0.0:1.0:0.25"</code></td><td>0.0, 0.25, 0.5, 0.75, 1.0</td></tr>
 </tbody></table>
 </div>
+<p>Lists are native YAML/JSON sequences (in JSON, quote the strings); the legacy string form
+(<code>"[a,b,c]"</code>) is still accepted and is required in KDL specs.</p>
 <h3 id="format-specifiers"><a class="header" href="#format-specifiers">Format Specifiers</a></h3>
 <p>Control how values appear in names:</p>
 <pre><code class="language-yaml">- name: job_{i:03d}      # job_001, job_002, ...
@@ -231,7 +233,7 @@ jobs:
 
 - name: lr_{lr:.4f}      # lr_0.0010, lr_0.0100, ...
   parameters:
-    lr: "[0.001,0.01,0.1]"
+    lr: [0.001, 0.01, 0.1]
 </code></pre>
 <h2 id="resource-requirements"><a class="header" href="#resource-requirements">Resource Requirements</a></h2>
 <p>Specify what resources each job needs:</p>

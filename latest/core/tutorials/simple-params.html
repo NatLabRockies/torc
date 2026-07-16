@@ -290,7 +290,7 @@ all 5 process jobs.</p>
 </ul>
 <p><strong>Parameter Values:</strong></p>
 <ul>
-<li><code>"[0.0001,0.0005,0.001,0.005,0.01]"</code> - A list of 5 specific values</li>
+<li><code>[0.0001, 0.0005, 0.001, 0.005, 0.01]</code> - A list of 5 specific values</li>
 </ul>
 <p><strong>File Parameterization:</strong> Notice that both jobs AND files have <code>parameters:</code>. When Torc expands:</p>
 <ul>
@@ -359,11 +359,13 @@ can start (doesn't wait for other training jobs)</li>
 their specific training job completes.</p>
 <h2 id="parameter-format-reference"><a class="header" href="#parameter-format-reference">Parameter Format Reference</a></h2>
 <h3 id="list-format"><a class="header" href="#list-format">List Format</a></h3>
-<p>Explicit list of values:</p>
+<p>Explicit list of values, written as a native YAML sequence:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.0001,0.0005,0.001,0.005,0.01]"  # Numbers
-  opt: "['adam','sgd','rmsprop']"          # Strings (note the quotes)
+  lr: [0.0001, 0.0005, 0.001, 0.005, 0.01] # Numbers
+  opt: [adam, sgd, rmsprop]                # Strings
 </code></pre>
+<p>The legacy string-encoded form (<code>"[0.0001,0.001]"</code>, <code>"['adam','sgd']"</code>) is still accepted, and is
+required in KDL specs, where parameter values must be strings.</p>
 <h3 id="range-format"><a class="header" href="#range-format">Range Format</a></h3>
 <p>For integer or float sequences:</p>
 <pre><code class="language-yaml">parameters:
@@ -414,15 +416,15 @@ parameters</strong>, use <code>parameter_mode: zip</code>:</p>
   - name: train_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'vgg', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, vgg, transformer]
 
   # Zip mode: 3 paired jobs (cifar10+resnet, mnist+vgg, imagenet+transformer)
   - name: paired_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'vgg', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, vgg, transformer]
     parameter_mode: zip
 </code></pre>
 <p>Use zip mode when parameters have a 1:1 correspondence (e.g., input/output file pairs,
@@ -432,7 +434,7 @@ pre-determined configurations).</p>
 <p>In this tutorial, you learned:</p>
 <ul>
 <li>✅ How to use <code>parameters:</code> to expand one job definition into many</li>
-<li>✅ List format (<code>"[a,b,c]"</code>) and range format (<code>"1:100"</code>)</li>
+<li>✅ List format (<code>[a, b, c]</code>) and range format (<code>"1:100"</code>)</li>
 <li>✅ Format specifiers (<code>{i:03d}</code>, <code>{lr:.4f}</code>) for consistent naming</li>
 <li>✅ How parameterized files create one-to-one dependencies</li>
 <li>✅ The efficiency of parameter-matched dependencies (each chain runs independently)</li>

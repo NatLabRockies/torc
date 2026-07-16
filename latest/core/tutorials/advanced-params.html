@@ -205,8 +205,8 @@ multiple hyperparameters that generate all combinations automatically.</p>
 <p>When a job has multiple parameters, Torc creates the <strong>Cartesian product</strong>—every combination of
 values:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.001,0.01]"   # 2 values
-  bs: "[16,32]"        # 2 values
+  lr: [0.001, 0.01] # 2 values
+  bs: [16, 32]      # 2 values
 </code></pre>
 <p>This generates 2 × 2 = <strong>4 jobs</strong>:</p>
 <ul>
@@ -217,9 +217,9 @@ values:</p>
 </ul>
 <p>With three parameters:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.0001,0.001,0.01]"  # 3 values
-  bs: "[16,32,64]"            # 3 values
-  opt: "['adam','sgd']"       # 2 values
+  lr: [0.0001, 0.001, 0.01] # 3 values
+  bs: [16, 32, 64]          # 3 values
+  opt: [adam, sgd]          # 2 values
 </code></pre>
 <p>This generates 3 × 3 × 2 = <strong>18 jobs</strong>.</p>
 <h2 id="step-1-create-the-workflow-specification"><a class="header" href="#step-1-create-the-workflow-specification">Step 1: Create the Workflow Specification</a></h2>
@@ -252,9 +252,9 @@ jobs:
       - model_lr{lr:.4f}_bs{bs}_opt{opt}
       - metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   # Aggregate results (depends on ALL training jobs via file dependencies)
   - name: aggregate_results
@@ -266,9 +266,9 @@ jobs:
     input_files:
       - metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   # Find best model (explicit dependency, no parameters)
   - name: select_best_model
@@ -287,16 +287,16 @@ files:
   - name: model_lr{lr:.4f}_bs{bs}_opt{opt}
     path: /models/model_lr{lr:.4f}_bs{bs}_opt{opt}.pt
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   - name: metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     path: /results/metrics_lr{lr:.4f}_bs{bs}_opt{opt}.json
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
 resource_requirements:
   - name: data_prep

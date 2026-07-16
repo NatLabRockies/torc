@@ -194,7 +194,7 @@ jobs:
   - name: process_{dataset}
     command: python process.py --input data/{dataset}.csv --output results/{dataset}.json
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 </code></pre>
 <p>This creates 3 jobs:</p>
 <ul>
@@ -216,14 +216,14 @@ jobs:
   - name: process_{dataset}
     command: python process.py -i ${files.input.raw_{dataset}} -o ${files.output.processed_{dataset}}
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 
   - name: aggregate
     command: python aggregate.py --input results/ --output summary.json
     depends_on:
       - process_{dataset}
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 </code></pre>
 <p>The <code>aggregate</code> job automatically waits for all <code>process_*</code> jobs to complete.</p>
 <h2 id="processing-numbered-files"><a class="header" href="#processing-numbered-files">Processing Numbered Files</a></h2>
@@ -241,7 +241,7 @@ jobs:
   - name: analyze_{region}_{year}
     command: python analyze.py --region {region} --year {year} --output results/{region}_{year}.json
     parameters:
-      region: "[north, south, east, west]"
+      region: [north, south, east, west]
       year: "2020:2024"
 </code></pre>
 <p>Creates 20 jobs (4 regions × 5 years).</p>

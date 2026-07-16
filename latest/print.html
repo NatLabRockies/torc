@@ -1298,10 +1298,12 @@ jobs:
 <div class="table-wrapper"><table><thead><tr><th>Format</th><th>Example</th><th>Expands To</th></tr></thead><tbody>
 <tr><td>Range</td><td><code>"1:5"</code></td><td>1, 2, 3, 4, 5</td></tr>
 <tr><td>Range with step</td><td><code>"0:10:2"</code></td><td>0, 2, 4, 6, 8, 10</td></tr>
-<tr><td>List</td><td><code>"[a,b,c]"</code></td><td>a, b, c</td></tr>
+<tr><td>List</td><td><code>[a, b, c]</code></td><td>a, b, c</td></tr>
 <tr><td>Float range</td><td><code>"0.0:1.0:0.25"</code></td><td>0.0, 0.25, 0.5, 0.75, 1.0</td></tr>
 </tbody></table>
 </div>
+<p>Lists are native YAML/JSON sequences (in JSON, quote the strings); the legacy string form
+(<code>"[a,b,c]"</code>) is still accepted and is required in KDL specs.</p>
 <h3 id="format-specifiers"><a class="header" href="#format-specifiers">Format Specifiers</a></h3>
 <p>Control how values appear in names:</p>
 <pre><code class="language-yaml">- name: job_{i:03d}      # job_001, job_002, ...
@@ -1310,7 +1312,7 @@ jobs:
 
 - name: lr_{lr:.4f}      # lr_0.0010, lr_0.0100, ...
   parameters:
-    lr: "[0.001,0.01,0.1]"
+    lr: [0.001, 0.01, 0.1]
 </code></pre>
 <h2 id="resource-requirements"><a class="header" href="#resource-requirements">Resource Requirements</a></h2>
 <p>Specify what resources each job needs:</p>
@@ -4872,7 +4874,7 @@ jobs:
   - name: process_{dataset}
     command: python process.py --input data/{dataset}.csv --output results/{dataset}.json
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 </code></pre>
 <p>This creates 3 jobs:</p>
 <ul>
@@ -4894,14 +4896,14 @@ jobs:
   - name: process_{dataset}
     command: python process.py -i ${files.input.raw_{dataset}} -o ${files.output.processed_{dataset}}
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 
   - name: aggregate
     command: python aggregate.py --input results/ --output summary.json
     depends_on:
       - process_{dataset}
     parameters:
-      dataset: "[train, test, validation]"
+      dataset: [train, test, validation]
 </code></pre>
 <p>The <code>aggregate</code> job automatically waits for all <code>process_*</code> jobs to complete.</p>
 <h2 id="processing-numbered-files"><a class="header" href="#processing-numbered-files">Processing Numbered Files</a></h2>
@@ -4919,7 +4921,7 @@ jobs:
   - name: analyze_{region}_{year}
     command: python analyze.py --region {region} --year {year} --output results/{region}_{year}.json
     parameters:
-      region: "[north, south, east, west]"
+      region: [north, south, east, west]
       year: "2020:2024"
 </code></pre>
 <p>Creates 20 jobs (4 regions × 5 years).</p>
@@ -5943,7 +5945,7 @@ all 5 process jobs.</p>
 </ul>
 <p><strong>Parameter Values:</strong></p>
 <ul>
-<li><code>"[0.0001,0.0005,0.001,0.005,0.01]"</code> - A list of 5 specific values</li>
+<li><code>[0.0001, 0.0005, 0.001, 0.005, 0.01]</code> - A list of 5 specific values</li>
 </ul>
 <p><strong>File Parameterization:</strong> Notice that both jobs AND files have <code>parameters:</code>. When Torc expands:</p>
 <ul>
@@ -6012,11 +6014,13 @@ can start (doesn't wait for other training jobs)</li>
 their specific training job completes.</p>
 <h2 id="parameter-format-reference"><a class="header" href="#parameter-format-reference">Parameter Format Reference</a></h2>
 <h3 id="list-format"><a class="header" href="#list-format">List Format</a></h3>
-<p>Explicit list of values:</p>
+<p>Explicit list of values, written as a native YAML sequence:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.0001,0.0005,0.001,0.005,0.01]"  # Numbers
-  opt: "['adam','sgd','rmsprop']"          # Strings (note the quotes)
+  lr: [0.0001, 0.0005, 0.001, 0.005, 0.01] # Numbers
+  opt: [adam, sgd, rmsprop]                # Strings
 </code></pre>
+<p>The legacy string-encoded form (<code>"[0.0001,0.001]"</code>, <code>"['adam','sgd']"</code>) is still accepted, and is
+required in KDL specs, where parameter values must be strings.</p>
 <h3 id="range-format"><a class="header" href="#range-format">Range Format</a></h3>
 <p>For integer or float sequences:</p>
 <pre><code class="language-yaml">parameters:
@@ -6067,15 +6071,15 @@ parameters</strong>, use <code>parameter_mode: zip</code>:</p>
   - name: train_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'vgg', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, vgg, transformer]
 
   # Zip mode: 3 paired jobs (cifar10+resnet, mnist+vgg, imagenet+transformer)
   - name: paired_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'vgg', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, vgg, transformer]
     parameter_mode: zip
 </code></pre>
 <p>Use zip mode when parameters have a 1:1 correspondence (e.g., input/output file pairs,
@@ -6085,7 +6089,7 @@ pre-determined configurations).</p>
 <p>In this tutorial, you learned:</p>
 <ul>
 <li>✅ How to use <code>parameters:</code> to expand one job definition into many</li>
-<li>✅ List format (<code>"[a,b,c]"</code>) and range format (<code>"1:100"</code>)</li>
+<li>✅ List format (<code>[a, b, c]</code>) and range format (<code>"1:100"</code>)</li>
 <li>✅ Format specifiers (<code>{i:03d}</code>, <code>{lr:.4f}</code>) for consistent naming</li>
 <li>✅ How parameterized files create one-to-one dependencies</li>
 <li>✅ The efficiency of parameter-matched dependencies (each chain runs independently)</li>
@@ -6118,8 +6122,8 @@ multiple hyperparameters that generate all combinations automatically.</p>
 <p>When a job has multiple parameters, Torc creates the <strong>Cartesian product</strong>—every combination of
 values:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.001,0.01]"   # 2 values
-  bs: "[16,32]"        # 2 values
+  lr: [0.001, 0.01] # 2 values
+  bs: [16, 32]      # 2 values
 </code></pre>
 <p>This generates 2 × 2 = <strong>4 jobs</strong>:</p>
 <ul>
@@ -6130,9 +6134,9 @@ values:</p>
 </ul>
 <p>With three parameters:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.0001,0.001,0.01]"  # 3 values
-  bs: "[16,32,64]"            # 3 values
-  opt: "['adam','sgd']"       # 2 values
+  lr: [0.0001, 0.001, 0.01] # 3 values
+  bs: [16, 32, 64]          # 3 values
+  opt: [adam, sgd]          # 2 values
 </code></pre>
 <p>This generates 3 × 3 × 2 = <strong>18 jobs</strong>.</p>
 <h2 id="step-1-create-the-workflow-specification-1"><a class="header" href="#step-1-create-the-workflow-specification-1">Step 1: Create the Workflow Specification</a></h2>
@@ -6165,9 +6169,9 @@ jobs:
       - model_lr{lr:.4f}_bs{bs}_opt{opt}
       - metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   # Aggregate results (depends on ALL training jobs via file dependencies)
   - name: aggregate_results
@@ -6179,9 +6183,9 @@ jobs:
     input_files:
       - metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   # Find best model (explicit dependency, no parameters)
   - name: select_best_model
@@ -6200,16 +6204,16 @@ files:
   - name: model_lr{lr:.4f}_bs{bs}_opt{opt}
     path: /models/model_lr{lr:.4f}_bs{bs}_opt{opt}.pt
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
   - name: metrics_lr{lr:.4f}_bs{bs}_opt{opt}
     path: /results/metrics_lr{lr:.4f}_bs{bs}_opt{opt}.json
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      bs: "[16,32,64]"
-      opt: "['adam','sgd']"
+      lr: [0.0001, 0.001, 0.01]
+      bs: [16, 32, 64]
+      opt: [adam, sgd]
 
 resource_requirements:
   - name: data_prep
@@ -11304,11 +11308,14 @@ apply to job monitoring when <code>jobs</code> is omitted. New workflow specs sh
 <tr><td>Integer range</td><td><code>"1:100"</code></td><td>Inclusive range from 1 to 100</td></tr>
 <tr><td>Integer range with step</td><td><code>"0:100:10"</code></td><td>Range with step size</td></tr>
 <tr><td>Float range</td><td><code>"0.0:1.0:0.1"</code></td><td>Float range with step</td></tr>
-<tr><td>Integer list</td><td><code>"[1,5,10,100]"</code></td><td>Explicit list of integers</td></tr>
-<tr><td>Float list</td><td><code>"[0.1,0.5,0.9]"</code></td><td>Explicit list of floats</td></tr>
-<tr><td>String list</td><td><code>"['adam','sgd','rmsprop']"</code></td><td>Explicit list of strings</td></tr>
+<tr><td>Integer list</td><td><code>[1, 5, 10, 100]</code></td><td>Explicit list of integers</td></tr>
+<tr><td>Float list</td><td><code>[0.1, 0.5, 0.9]</code></td><td>Explicit list of floats</td></tr>
+<tr><td>String list</td><td><code>[adam, sgd, rmsprop]</code></td><td>Explicit list of strings</td></tr>
 </tbody></table>
 </div>
+<p>Lists are native YAML/JSON sequences (in JSON, quote the strings). The legacy string-encoded form
+(e.g. <code>"[1,5,10]"</code> or <code>"['adam','sgd']"</code>) is still accepted, and is required in KDL specs, where
+parameter values must be strings.</p>
 <p><strong>Template substitution in strings:</strong></p>
 <ul>
 <li>Basic: <code>{param_name}</code> - Replace with parameter value</li>
@@ -11332,17 +11339,20 @@ parameter ranges.</p>
 </code></pre>
 <h3 id="lists-integer"><a class="header" href="#lists-integer">Lists (Integer)</a></h3>
 <pre><code class="language-yaml">parameters:
-  batch_size: "[16,32,64,128]"
+  batch_size: [16, 32, 64, 128]
 </code></pre>
 <h3 id="lists-float"><a class="header" href="#lists-float">Lists (Float)</a></h3>
 <pre><code class="language-yaml">parameters:
-  threshold: "[0.1,0.5,0.9]"
+  threshold: [0.1, 0.5, 0.9]
 </code></pre>
 <h3 id="lists-string"><a class="header" href="#lists-string">Lists (String)</a></h3>
 <pre><code class="language-yaml">parameters:
-  optimizer: "['adam','sgd','rmsprop']"
-  dataset: "['train','test','validation']"
+  optimizer: [adam, sgd, rmsprop]
+  dataset: [train, test, validation]
 </code></pre>
+<p>Lists are written as native YAML/JSON sequences. The legacy string-encoded form (e.g. <code>"[16,32,64]"</code>
+or <code>"['adam','sgd']"</code>) is still accepted in YAML/JSON/JSON5 specs, and remains the required form in
+KDL specs, where parameter values must be strings.</p>
 <h2 id="template-substitution"><a class="header" href="#template-substitution">Template Substitution</a></h2>
 <p>Use parameter values in job/file specifications with <code>{param_name}</code> syntax:</p>
 <h3 id="basic-substitution"><a class="header" href="#basic-substitution">Basic Substitution</a></h3>
@@ -11374,7 +11384,7 @@ parameter ranges.</p>
   - name: train_lr{lr:.4f}
     command: python train.py --lr={lr}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
+      lr: [0.0001, 0.001, 0.01]
 </code></pre>
 <p>Expands to: <code>train_lr0.0001</code>, <code>train_lr0.0010</code>, <code>train_lr0.0100</code></p>
 <p><strong>Multiple decimals:</strong></p>
@@ -11395,8 +11405,8 @@ parameter ranges.</p>
         --learning-rate={lr} \
         --batch-size={batch_size}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      batch_size: "[16,32,64]"
+      lr: [0.0001, 0.001, 0.01]
+      batch_size: [16, 32, 64]
 </code></pre>
 <p>This expands to 3 × 3 = <strong>9 jobs</strong>:</p>
 <ul>
@@ -11411,7 +11421,7 @@ parameter ranges.</p>
   - name: process_{dataset}_rep{rep:02d}
     command: python process.py --data={dataset} --replicate={rep}
     parameters:
-      dataset: "['train','validation','test']"
+      dataset: [train, validation, test]
       rep: "1:5"
 </code></pre>
 <p>This expands to 3 × 5 = <strong>15 jobs</strong></p>
@@ -11424,7 +11434,7 @@ parameter ranges.</p>
     output_files:
       - data_{config}
     parameters:
-      config: "['A','B','C']"
+      config: [A, B, C]
 
   # Process each generated dataset
   - name: process_{config}
@@ -11434,7 +11444,7 @@ parameter ranges.</p>
     depends_on:
       - generate_{config}
     parameters:
-      config: "['A','B','C']"
+      config: [A, B, C]
 </code></pre>
 <p>This creates 6 jobs with proper dependencies:</p>
 <ul>
@@ -11458,7 +11468,7 @@ parameter ranges.</p>
       learning_rate: 0.001
       output_dir: /results/{experiment}
     parameters:
-      experiment: "['baseline','ablation','full']"
+      experiment: [baseline, ablation, full]
 </code></pre>
 <p>Parameter tokens (<code>{name}</code> / <code>{name:fmt}</code>) are substituted into the user_data <code>name</code> and into every
 string value found recursively inside <code>data</code> -- object values, array elements, and nested
@@ -11570,9 +11580,9 @@ hyperparameter sweeps.</p>
 <h3 id="basic-usage-4"><a class="header" href="#basic-usage-4">Basic Usage</a></h3>
 <pre><code class="language-yaml">name: hyperparameter_sweep
 parameters:
-  lr: "[0.0001,0.001,0.01]"
-  batch_size: "[16,32,64]"
-  optimizer: "['adam','sgd']"
+  lr: [0.0001, 0.001, 0.01]
+  batch_size: [16, 32, 64]
+  optimizer: [adam, sgd]
 
 jobs:
   # Training jobs - inherit parameters via use_parameters
@@ -11611,9 +11621,9 @@ files:
 <h3 id="selective-parameter-inheritance"><a class="header" href="#selective-parameter-inheritance">Selective Parameter Inheritance</a></h3>
 <p>Jobs don't have to use all workflow parameters:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.0001,0.001,0.01]"
-  batch_size: "[16,32,64]"
-  dataset: "['train','validation']"
+  lr: [0.0001, 0.001, 0.01]
+  batch_size: [16, 32, 64]
+  dataset: [train, validation]
 
 jobs:
   # Only uses lr and batch_size (9 jobs)
@@ -11632,7 +11642,7 @@ jobs:
 <h3 id="local-parameters-override-shared"><a class="header" href="#local-parameters-override-shared">Local Parameters Override Shared</a></h3>
 <p>Jobs can define local parameters that take precedence over workflow-level parameters:</p>
 <pre><code class="language-yaml">parameters:
-  lr: "[0.0001,0.001,0.01]"
+  lr: [0.0001, 0.001, 0.01]
 
 jobs:
   # Uses workflow parameter (3 jobs)
@@ -11645,9 +11655,10 @@ jobs:
   - name: special_lr{lr:.4f}
     command: python special.py --lr={lr}
     parameters:
-      lr: "[0.01,0.1]"  # Local override - ignores workflow's lr
+      lr: [0.01, 0.1] # Local override - ignores workflow's lr
 </code></pre>
 <h3 id="kdl-syntax-1"><a class="header" href="#kdl-syntax-1">KDL Syntax</a></h3>
+<p>KDL parameter values must be strings, so lists use the string-encoded form:</p>
 <pre><code class="language-kdl">parameters {
     lr "[0.0001,0.001,0.01]"
     batch_size "[16,32,64]"
@@ -11661,8 +11672,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
 <h3 id="json5-syntax-1"><a class="header" href="#json5-syntax-1">JSON5 Syntax</a></h3>
 <pre><code class="language-json5">{
   parameters: {
-    lr: "[0.0001,0.001,0.01]",
-    batch_size: "[16,32,64]"
+    lr: [0.0001, 0.001, 0.01],
+    batch_size: [16, 32, 64]
   },
   jobs: [
     {
@@ -11682,8 +11693,8 @@ parameter values. You can change this behavior using <code>parameter_mode</code>
   - name: job_{a}_{b}
     command: echo {a} {b}
     parameters:
-      a: "[1, 2, 3]"
-      b: "['x', 'y', 'z']"
+      a: [1, 2, 3]
+      b: [x, y, z]
     # parameter_mode: product  # This is the default
 </code></pre>
 <p>This creates 3 × 3 = <strong>9 jobs</strong>: <code>job_1_x</code>, <code>job_1_y</code>, <code>job_1_z</code>, <code>job_2_x</code>, etc.</p>
@@ -11694,8 +11705,8 @@ parameter lists must have the same length.</p>
   - name: train_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'cnn', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, cnn, transformer]
     parameter_mode: zip
 </code></pre>
 <p>This creates <strong>3 jobs</strong> (not 9):</p>
@@ -11716,6 +11727,7 @@ error:</p>
 Parameter 'dataset' has 3 values, but 'model' has 2 values.
 </code></pre>
 <h3 id="kdl-syntax-2"><a class="header" href="#kdl-syntax-2">KDL Syntax</a></h3>
+<p>KDL parameter values must be strings, so lists use the string-encoded form:</p>
 <pre><code class="language-kdl">job "train_{dataset}_{model}" {
     command "python train.py --dataset={dataset} --model={model}"
     parameters {
@@ -11730,8 +11742,8 @@ Parameter 'dataset' has 3 values, but 'model' has 2 values.
   name: "train_{dataset}_{model}",
   command: "python train.py --dataset={dataset} --model={model}",
   parameters: {
-    dataset: "['cifar10', 'mnist', 'imagenet']",
-    model: "['resnet', 'cnn', 'transformer']"
+    dataset: ["cifar10", "mnist", "imagenet"],
+    model: ["resnet", "cnn", "transformer"]
   },
   parameter_mode: "zip"
 }

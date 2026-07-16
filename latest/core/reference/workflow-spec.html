@@ -672,11 +672,14 @@ apply to job monitoring when <code>jobs</code> is omitted. New workflow specs sh
 <tr><td>Integer range</td><td><code>"1:100"</code></td><td>Inclusive range from 1 to 100</td></tr>
 <tr><td>Integer range with step</td><td><code>"0:100:10"</code></td><td>Range with step size</td></tr>
 <tr><td>Float range</td><td><code>"0.0:1.0:0.1"</code></td><td>Float range with step</td></tr>
-<tr><td>Integer list</td><td><code>"[1,5,10,100]"</code></td><td>Explicit list of integers</td></tr>
-<tr><td>Float list</td><td><code>"[0.1,0.5,0.9]"</code></td><td>Explicit list of floats</td></tr>
-<tr><td>String list</td><td><code>"['adam','sgd','rmsprop']"</code></td><td>Explicit list of strings</td></tr>
+<tr><td>Integer list</td><td><code>[1, 5, 10, 100]</code></td><td>Explicit list of integers</td></tr>
+<tr><td>Float list</td><td><code>[0.1, 0.5, 0.9]</code></td><td>Explicit list of floats</td></tr>
+<tr><td>String list</td><td><code>[adam, sgd, rmsprop]</code></td><td>Explicit list of strings</td></tr>
 </tbody></table>
 </div>
+<p>Lists are native YAML/JSON sequences (in JSON, quote the strings). The legacy string-encoded form
+(e.g. <code>"[1,5,10]"</code> or <code>"['adam','sgd']"</code>) is still accepted, and is required in KDL specs, where
+parameter values must be strings.</p>
 <p><strong>Template substitution in strings:</strong></p>
 <ul>
 <li>Basic: <code>{param_name}</code> - Replace with parameter value</li>
