@@ -13,7 +13,7 @@ jobs:
     output_files:
       - raw_{dataset}
     parameters:
-      dataset: "['sales','inventory','customers','products']"
+      dataset: [sales, inventory, customers, products]
 
   # Stage 2: Clean and preprocess each dataset
   - name: preprocess_{dataset}
@@ -26,7 +26,7 @@ jobs:
     output_files:
       - clean_{dataset}
     parameters:
-      dataset: "['sales','inventory','customers','products']"
+      dataset: [sales, inventory, customers, products]
 
   # Stage 3: Run multiple analysis types on each dataset
   - name: analyze_{dataset}_{analysis_type}
@@ -43,8 +43,8 @@ jobs:
     output_files:
       - results_{dataset}_{analysis_type}
     parameters:
-      dataset: "['sales','inventory','customers','products']"
-      analysis_type: "['summary','trends','anomalies']"
+      dataset: [sales, inventory, customers, products]
+      analysis_type: [summary, trends, anomalies]
 
   # Stage 4: Generate one report per (dataset, analysis_type) combination.
   # Both varying parameters appear in the name so post-expansion names are
@@ -63,8 +63,8 @@ jobs:
     input_files:
       - results_{dataset}_{analysis_type}
     parameters:
-      dataset: "['sales','inventory','customers','products']"
-      analysis_type: "['summary','trends','anomalies']"
+      dataset: [sales, inventory, customers, products]
+      analysis_type: [summary, trends, anomalies]
 
   # Stage 5: Create executive summary per dataset. `{dataset}` appears in
   # the name template so the 4 expanded jobs have unique names. The summary
@@ -77,7 +77,7 @@ jobs:
       - report_{dataset}_trends
       - report_{dataset}_anomalies
     parameters:
-      dataset: "['sales','inventory','customers','products']"
+      dataset: [sales, inventory, customers, products]
 
 # File specifications with parameterization
 files:
@@ -85,20 +85,20 @@ files:
   - name: raw_{dataset}
     path: /data/raw/{dataset}.csv
     parameters:
-      dataset: "['sales','inventory','customers','products']"
+      dataset: [sales, inventory, customers, products]
 
   # Cleaned data files
   - name: clean_{dataset}
     path: /data/clean/{dataset}.csv
     parameters:
-      dataset: "['sales','inventory','customers','products']"
+      dataset: [sales, inventory, customers, products]
 
   # Analysis results (4 datasets * 3 analysis types = 12 files)
   - name: results_{dataset}_{analysis_type}
     path: /results/{dataset}_{analysis_type}_results.json
     parameters:
-      dataset: "['sales','inventory','customers','products']"
-      analysis_type: "['summary','trends','anomalies']"
+      dataset: [sales, inventory, customers, products]
+      analysis_type: [summary, trends, anomalies]
 
 # Resource requirements
 resource_requirements:

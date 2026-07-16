@@ -25,23 +25,27 @@ parameters:
 
 ```yaml
 parameters:
-  batch_size: "[16,32,64,128]"
+  batch_size: [16, 32, 64, 128]
 ```
 
 ### Lists (Float)
 
 ```yaml
 parameters:
-  threshold: "[0.1,0.5,0.9]"
+  threshold: [0.1, 0.5, 0.9]
 ```
 
 ### Lists (String)
 
 ```yaml
 parameters:
-  optimizer: "['adam','sgd','rmsprop']"
-  dataset: "['train','test','validation']"
+  optimizer: [adam, sgd, rmsprop]
+  dataset: [train, test, validation]
 ```
+
+Lists are written as native YAML/JSON sequences. The legacy string-encoded form (e.g. `"[16,32,64]"`
+or `"['adam','sgd']"`) is still accepted in YAML/JSON/JSON5 specs, and remains the required form in
+KDL specs, where parameter values must be strings.
 
 ## Template Substitution
 
@@ -89,7 +93,7 @@ jobs:
   - name: train_lr{lr:.4f}
     command: python train.py --lr={lr}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
+      lr: [0.0001, 0.001, 0.01]
 ```
 
 Expands to: `train_lr0.0001`, `train_lr0.0010`, `train_lr0.0100`
@@ -120,8 +124,8 @@ jobs:
         --learning-rate={lr} \
         --batch-size={batch_size}
     parameters:
-      lr: "[0.0001,0.001,0.01]"
-      batch_size: "[16,32,64]"
+      lr: [0.0001, 0.001, 0.01]
+      batch_size: [16, 32, 64]
 ```
 
 This expands to 3 × 3 = **9 jobs**:
@@ -139,7 +143,7 @@ jobs:
   - name: process_{dataset}_rep{rep:02d}
     command: python process.py --data={dataset} --replicate={rep}
     parameters:
-      dataset: "['train','validation','test']"
+      dataset: [train, validation, test]
       rep: "1:5"
 ```
 
@@ -157,7 +161,7 @@ jobs:
     output_files:
       - data_{config}
     parameters:
-      config: "['A','B','C']"
+      config: [A, B, C]
 
   # Process each generated dataset
   - name: process_{config}
@@ -167,7 +171,7 @@ jobs:
     depends_on:
       - generate_{config}
     parameters:
-      config: "['A','B','C']"
+      config: [A, B, C]
 ```
 
 This creates 6 jobs with proper dependencies:
@@ -198,7 +202,7 @@ user_data:
       learning_rate: 0.001
       output_dir: /results/{experiment}
     parameters:
-      experiment: "['baseline','ablation','full']"
+      experiment: [baseline, ablation, full]
 ```
 
 Parameter tokens (`{name}` / `{name:fmt}`) are substituted into the user_data `name` and into every
@@ -331,9 +335,9 @@ Define parameters once at the workflow level and reuse them across multiple jobs
 ```yaml
 name: hyperparameter_sweep
 parameters:
-  lr: "[0.0001,0.001,0.01]"
-  batch_size: "[16,32,64]"
-  optimizer: "['adam','sgd']"
+  lr: [0.0001, 0.001, 0.01]
+  batch_size: [16, 32, 64]
+  optimizer: [adam, sgd]
 
 jobs:
   # Training jobs - inherit parameters via use_parameters
@@ -376,9 +380,9 @@ Jobs don't have to use all workflow parameters:
 
 ```yaml
 parameters:
-  lr: "[0.0001,0.001,0.01]"
-  batch_size: "[16,32,64]"
-  dataset: "['train','validation']"
+  lr: [0.0001, 0.001, 0.01]
+  batch_size: [16, 32, 64]
+  dataset: [train, validation]
 
 jobs:
   # Only uses lr and batch_size (9 jobs)
@@ -401,7 +405,7 @@ Jobs can define local parameters that take precedence over workflow-level parame
 
 ```yaml
 parameters:
-  lr: "[0.0001,0.001,0.01]"
+  lr: [0.0001, 0.001, 0.01]
 
 jobs:
   # Uses workflow parameter (3 jobs)
@@ -414,10 +418,12 @@ jobs:
   - name: special_lr{lr:.4f}
     command: python special.py --lr={lr}
     parameters:
-      lr: "[0.01,0.1]"  # Local override - ignores workflow's lr
+      lr: [0.01, 0.1] # Local override - ignores workflow's lr
 ```
 
 ### KDL Syntax
+
+KDL parameter values must be strings, so lists use the string-encoded form:
 
 ```kdl
 parameters {
@@ -436,8 +442,8 @@ job "train_lr{lr:.4f}_bs{batch_size}" {
 ```json5
 {
   parameters: {
-    lr: "[0.0001,0.001,0.01]",
-    batch_size: "[16,32,64]"
+    lr: [0.0001, 0.001, 0.01],
+    batch_size: [16, 32, 64]
   },
   jobs: [
     {
@@ -463,8 +469,8 @@ jobs:
   - name: job_{a}_{b}
     command: echo {a} {b}
     parameters:
-      a: "[1, 2, 3]"
-      b: "['x', 'y', 'z']"
+      a: [1, 2, 3]
+      b: [x, y, z]
     # parameter_mode: product  # This is the default
 ```
 
@@ -480,8 +486,8 @@ jobs:
   - name: train_{dataset}_{model}
     command: python train.py --dataset={dataset} --model={model}
     parameters:
-      dataset: "['cifar10', 'mnist', 'imagenet']"
-      model: "['resnet', 'cnn', 'transformer']"
+      dataset: [cifar10, mnist, imagenet]
+      model: [resnet, cnn, transformer]
     parameter_mode: zip
 ```
 
@@ -507,6 +513,8 @@ Parameter 'dataset' has 3 values, but 'model' has 2 values.
 
 ### KDL Syntax
 
+KDL parameter values must be strings, so lists use the string-encoded form:
+
 ```kdl
 job "train_{dataset}_{model}" {
     command "python train.py --dataset={dataset} --model={model}"
@@ -525,8 +533,8 @@ job "train_{dataset}_{model}" {
   name: "train_{dataset}_{model}",
   command: "python train.py --dataset={dataset} --model={model}",
   parameters: {
-    dataset: "['cifar10', 'mnist', 'imagenet']",
-    model: "['resnet', 'cnn', 'transformer']"
+    dataset: ["cifar10", "mnist", "imagenet"],
+    model: ["resnet", "cnn", "transformer"]
   },
   parameter_mode: "zip"
 }

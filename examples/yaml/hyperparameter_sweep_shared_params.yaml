@@ -9,9 +9,9 @@ description: Grid search over learning rate, batch size, and optimizer (using sh
 
 # Workflow-level shared parameters - defined once, used by multiple jobs and files
 parameters:
-  lr: "[0.0001,0.001,0.01]"
-  batch_size: "[16,32,64]"
-  optimizer: "['adam','sgd']"
+  lr: [0.0001, 0.001, 0.01]
+  batch_size: [16, 32, 64]
+  optimizer: [adam, sgd]
 
 # Prepare datasets (one-time setup jobs - no parameters needed)
 jobs:

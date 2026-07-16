@@ -46,14 +46,14 @@ files:
   - name: "sim_{region}_{seed:03d}"
     path: "output/sim_{region}_{seed:03d}.csv"
     parameters:
-      region: "['north','south','east','west']"
+      region: [north, south, east, west]
       seed: "0:5"
 
   # Regional summary files: one per region
   - name: "summary_{region}"
     path: "output/summary_{region}.json"
     parameters:
-      region: "['north','south','east','west']"
+      region: [north, south, east, west]
 
   - name: "global_report"
     path: "output/global_report.json"
@@ -75,7 +75,7 @@ jobs:
     input_files: ["config"]
     output_files: ["sim_{region}_{seed:03d}"]
     parameters:
-      region: "['north','south','east','west']"
+      region: [north, south, east, west]
       seed: "0:5"
 
   # Fan-in: each regional summary aggregates all seeds for its region.
@@ -87,7 +87,7 @@ jobs:
     input_file_regexes: ["^sim_{region}_\\d+$"]
     output_files: ["summary_{region}"]
     parameters:
-      region: "['north','south','east','west']"
+      region: [north, south, east, west]
 
   # Global fan-in: aggregates all 4 regional summaries via regex
   - name: "global_report"
