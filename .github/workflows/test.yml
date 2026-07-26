@@ -196,7 +196,7 @@ jobs:
       # Python and Julia client tests (Unix only for now)
       - name: Setup Python
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
