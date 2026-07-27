@@ -13,56 +13,56 @@ use crate::models::FileModel;
 #[derive(Debug, Clone, Default)]
 pub struct FileListParams {
     /// Workflow ID to list files from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Filter by job ID that produced the files
-    pub produced_by_job_id: Option<i64>,
+    pub(crate) produced_by_job_id: Option<i64>,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of files to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Filter by file name
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
     /// Filter by file path
-    pub path: Option<String>,
+    pub(crate) path: Option<String>,
     /// Filter by output status
-    pub is_output: Option<bool>,
+    pub(crate) is_output: Option<bool>,
 }
 
 impl FileListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_produced_by_job_id(mut self, job_id: i64) -> Self {
+    pub(crate) fn with_produced_by_job_id(mut self, job_id: i64) -> Self {
         self.produced_by_job_id = Some(job_id);
         self
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_is_output(mut self, is_output: bool) -> Self {
+    pub(crate) fn with_is_output(mut self, is_output: bool) -> Self {
         self.is_output = Some(is_output);
         self
     }
@@ -120,7 +120,7 @@ impl Paginatable for FileModel {
 }
 
 /// Type alias for the files iterator
-pub type FilesIterator = PaginatedIterator<FileModel>;
+pub(crate) type FilesIterator = PaginatedIterator<FileModel>;
 
 /// Create a lazy iterator for files that fetches pages on-demand.
 ///
@@ -133,7 +133,7 @@ pub type FilesIterator = PaginatedIterator<FileModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<FileModel, Error>` items
-pub fn iter_files(
+pub(crate) fn iter_files(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: FileListParams,
@@ -153,7 +153,7 @@ pub fn iter_files(
 /// # Returns
 /// `Result<Vec<FileModel>, Error>` containing all files or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_files(
+pub(crate) fn paginate_files(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: FileListParams,

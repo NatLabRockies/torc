@@ -194,7 +194,7 @@ pub struct ValidationSummary {
     /// Number of files that would be created
     pub file_count: usize,
     /// Number of files before parameter expansion
-    pub file_count_before_expansion: usize,
+    pub(crate) file_count_before_expansion: usize,
     /// Number of user data records that would be created
     pub user_data_count: usize,
     /// Number of resource requirements that would be created
@@ -220,9 +220,9 @@ use kdl::{KdlDocument, KdlNode};
 #[serde(deny_unknown_fields)]
 pub struct FileSpec {
     /// Name of the file
-    pub name: String,
+    name: String,
     /// Path to the file
-    pub path: String,
+    path: String,
     /// Optional stable RO-Crate identifier for this file (e.g. a DOI, PURL, or URN).
     /// When provided, this string is used as the `@id` of the file's RO-Crate entity
     /// instead of the file path. The path is still recorded as `sameAs` so the
@@ -230,36 +230,36 @@ pub struct FileSpec {
     /// after parameter expansion. Parameter tokens (`{name}` / `{name:fmt}`) are
     /// substituted into the identifier just like `name` and `path`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub identifier: Option<String>,
+    identifier: Option<String>,
     /// File modification time as Unix timestamp (seconds since epoch).
     /// If not specified, torc automatically checks if the file exists on disk
     /// during workflow creation and uses its actual modification time.
     /// This distinguishes input files (exist before workflow) from output files
     /// (created by jobs). Used by RO-Crate for automatic entity generation.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub st_mtime: Option<f64>,
+    st_mtime: Option<f64>,
     /// Optional parameters for generating multiple files
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default, deserialize_with = "deserialize_parameter_map")]
-    pub parameters: Option<HashMap<String, String>>,
+    parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameter_mode: Option<String>,
+    parameter_mode: Option<String>,
     /// Names of workflow-level parameters to use for this file
     /// If set, only these parameters from the workflow will be used
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_parameters: Option<Vec<String>>,
+    use_parameters: Option<Vec<String>>,
     /// Path to a CSV or JSON file supplying parameter combinations as a table.
     /// Each CSV row / JSON array object becomes one generated file. Mutually
     /// exclusive with `parameters`, `parameter_mode`, and `use_parameters`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameters_file: Option<String>,
+    parameters_file: Option<String>,
     /// Expand this file over the workflow-level `parameters_file` table when set to
     /// true. Mutually exclusive with the per-file parameter sources above.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub use_parameters_file: Option<bool>,
+    use_parameters_file: Option<bool>,
 }
 
 impl FileSpec {
@@ -281,7 +281,7 @@ impl FileSpec {
 
     /// Expand this FileSpec into multiple FileSpecs based on its parameters
     /// Returns a single-element vec if no parameters are present
-    pub fn expand(&self) -> Result<Vec<FileSpec>, String> {
+    fn expand(&self) -> Result<Vec<FileSpec>, String> {
         let combinations = match build_parameter_combinations(
             &self.parameters,
             &self.parameter_mode,
@@ -363,7 +363,7 @@ impl UserDataSpec {
     /// arrays). Non-string JSON values (numbers, bools, null) are not modified, even
     /// though they could in principle be rewritten -- substitution is string-only,
     /// matching how FileSpec handles `name` and `path`.
-    pub fn expand(&self) -> Result<Vec<UserDataSpec>, String> {
+    fn expand(&self) -> Result<Vec<UserDataSpec>, String> {
         let combinations = match build_parameter_combinations(
             &self.parameters,
             &self.parameter_mode,
@@ -436,31 +436,31 @@ pub struct WorkflowActionSpec {
     pub action_type: String,
     /// For on_jobs_ready/on_jobs_complete: exact job names to match
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub jobs: Option<Vec<String>>,
+    pub(crate) jobs: Option<Vec<String>>,
     /// For on_jobs_ready/on_jobs_complete: regex patterns to match job names
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub job_name_regexes: Option<Vec<String>>,
+    pub(crate) job_name_regexes: Option<Vec<String>>,
     /// For run_commands action: array of commands to execute
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub commands: Option<Vec<String>>,
+    pub(crate) commands: Option<Vec<String>>,
     /// For schedule_nodes action: scheduler name (will be translated to scheduler_id)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<String>,
     /// For schedule_nodes action: scheduler type (e.g., "slurm", "local")
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scheduler_type: Option<String>,
+    pub(crate) scheduler_type: Option<String>,
     /// For schedule_nodes action: number of node allocations to request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_allocations: Option<i64>,
     /// For schedule_nodes action: whether to start one worker per node
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_one_worker_per_node: Option<bool>,
+    pub(crate) start_one_worker_per_node: Option<bool>,
     /// For schedule_nodes action: maximum parallel jobs
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_parallel_jobs: Option<i32>,
+    pub(crate) max_parallel_jobs: Option<i32>,
     /// Whether the action persists and can be claimed by multiple workers (default: false)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub persistent: Option<bool>,
+    pub(crate) persistent: Option<bool>,
 }
 
 /// Resource requirements specification for JSON serialization (without workflow_id and id)
@@ -500,17 +500,17 @@ impl ResourceRequirementsSpec {
 pub struct FailureHandlerRuleSpec {
     /// Exit codes that trigger this rule. Can be omitted if match_all_exit_codes is true.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub exit_codes: Vec<i32>,
+    exit_codes: Vec<i32>,
     /// If true, this rule matches any non-zero exit code.
     /// Use this for simple retry-on-any-failure behavior.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub match_all_exit_codes: bool,
+    match_all_exit_codes: bool,
     /// Optional recovery script to run before retrying
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub recovery_script: Option<String>,
+    recovery_script: Option<String>,
     /// Maximum number of retry attempts (defaults to 3)
     #[serde(default = "FailureHandlerRuleSpec::default_max_retries")]
-    pub max_retries: i32,
+    max_retries: i32,
 }
 
 impl FailureHandlerRuleSpec {
@@ -524,9 +524,9 @@ impl FailureHandlerRuleSpec {
 #[serde(deny_unknown_fields)]
 pub struct FailureHandlerSpec {
     /// Name of the failure handler
-    pub name: String,
+    name: String,
     /// Rules for handling different exit codes
-    pub rules: Vec<FailureHandlerRuleSpec>,
+    rules: Vec<FailureHandlerRuleSpec>,
 }
 
 /// Slurm scheduler specification for JSON serialization (without workflow_id and id)
@@ -579,7 +579,7 @@ impl SlurmSchedulerSpec {
 
 /// Parameters that are managed by torc and cannot be set in slurm_defaults
 /// Note: "account" is allowed in slurm_defaults as a workflow-level default
-pub const SLURM_EXCLUDED_PARAMS: &[&str] = &[
+const SLURM_EXCLUDED_PARAMS: &[&str] = &[
     "partition",
     "nodes",
     "walltime",
@@ -2123,7 +2123,7 @@ impl WorkflowSpec {
     ];
 
     /// Validate workflow actions
-    pub fn validate_actions(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn validate_actions(&self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref actions) = self.actions {
             for action in actions {
                 // Reject unknown trigger types (e.g. a typo'd `on_ready_jobs`), which would
@@ -2210,7 +2210,7 @@ impl WorkflowSpec {
     ///
     /// The validation rejects the case where jobs request a different multi-node count
     /// than the scheduler provides (e.g., scheduler allocates 4 nodes but jobs request 2).
-    pub fn validate_scheduler_node_requirements(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn validate_scheduler_node_requirements(&self) -> Result<(), Box<dyn std::error::Error>> {
         // Build lookup maps for resource requirements and schedulers
         let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
             .resource_requirements
@@ -2334,7 +2334,7 @@ impl WorkflowSpec {
     ///
     /// Scheduler fields that are not set (e.g., `mem: None`, `gres: None`) are skipped
     /// for that dimension.
-    pub fn validate_scheduler_resources(&self) -> Vec<String> {
+    fn validate_scheduler_resources(&self) -> Vec<String> {
         let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
             .resource_requirements
             .as_ref()
@@ -3187,7 +3187,7 @@ impl WorkflowSpec {
 
     /// Create a workflow from a pre-parsed and validated spec.
     /// Use this after `validate_for_creation` to avoid re-reading the file.
-    pub fn create_from_validated_spec(
+    pub(crate) fn create_from_validated_spec(
         config: &Configuration,
         mut spec: WorkflowSpec,
         user: &str,
@@ -6304,7 +6304,7 @@ impl WorkflowSpec {
     /// the same order as `from_spec_file`'s extension-less fallback. Returns a
     /// canonical file extension ("json", "json5", "yaml", or "kdl"), or `None`
     /// when the content cannot be parsed by any supported format.
-    pub fn detect_spec_format(content: &str) -> Option<&'static str> {
+    fn detect_spec_format(content: &str) -> Option<&'static str> {
         // A workflow spec is always a mapping/object. Requiring an object (rather
         // than just "parses successfully") avoids false positives -- notably YAML,
         // which happily parses arbitrary text such as KDL as a bare scalar string.
@@ -6410,7 +6410,7 @@ impl WorkflowSpec {
     /// - ${files.output.NAME} - output file (automatically adds to output_files)
     /// - ${user_data.input.NAME} - input user data (automatically adds to input_user_data)
     /// - ${user_data.output.NAME} - output user data (automatically adds to output_user_data)
-    pub fn substitute_variables(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn substitute_variables(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Build file name to path mapping
         let mut file_name_to_path = HashMap::new();
         if let Some(files) = &self.files {

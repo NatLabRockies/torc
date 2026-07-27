@@ -110,16 +110,16 @@ pub trait AccessGroupsApi<C> {
 /// Implementation of access groups API for the server
 #[derive(Clone)]
 pub struct AccessGroupsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 impl AccessGroupsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 
     /// Get all group IDs that a user belongs to
-    pub async fn get_user_group_ids(&self, user_name: &str) -> Result<Vec<i64>, ApiError> {
+    async fn get_user_group_ids(&self, user_name: &str) -> Result<Vec<i64>, ApiError> {
         let records =
             match sqlx::query("SELECT group_id FROM user_group_membership WHERE user_name = $1")
                 .bind(user_name)
@@ -136,7 +136,7 @@ impl AccessGroupsApiImpl {
     }
 
     /// Check if user can access workflow (used internally by other APIs)
-    pub async fn check_workflow_access_internal(
+    async fn check_workflow_access_internal(
         &self,
         user_name: &str,
         workflow_id: i64,
@@ -195,7 +195,7 @@ impl AccessGroupsApiImpl {
     // Group CRUD operations
     // ========================================================================
 
-    pub async fn create_access_group<C>(
+    pub(crate) async fn create_access_group<C>(
         &self,
         body: models::AccessGroupModel,
         context: &C,
@@ -244,7 +244,7 @@ impl AccessGroupsApiImpl {
         Ok(CreateAccessGroupResponse::SuccessfulResponse(group))
     }
 
-    pub async fn get_access_group<C>(
+    pub(crate) async fn get_access_group<C>(
         &self,
         id: i64,
         context: &C,
@@ -293,7 +293,7 @@ impl AccessGroupsApiImpl {
         Ok(GetAccessGroupResponse::SuccessfulResponse(group))
     }
 
-    pub async fn list_access_groups<C>(
+    pub(crate) async fn list_access_groups<C>(
         &self,
         offset: i64,
         limit: i64,
@@ -361,7 +361,7 @@ impl AccessGroupsApiImpl {
         Ok(ListAccessGroupsApiResponse::SuccessfulResponse(response))
     }
 
-    pub async fn delete_access_group<C>(
+    pub(crate) async fn delete_access_group<C>(
         &self,
         id: i64,
         context: &C,
@@ -414,7 +414,7 @@ impl AccessGroupsApiImpl {
     // User-Group membership operations
     // ========================================================================
 
-    pub async fn add_user_to_group<C>(
+    pub(crate) async fn add_user_to_group<C>(
         &self,
         group_id: i64,
         body: models::UserGroupMembershipModel,
@@ -481,7 +481,7 @@ impl AccessGroupsApiImpl {
         Ok(AddUserToGroupResponse::SuccessfulResponse(membership))
     }
 
-    pub async fn remove_user_from_group<C>(
+    pub(crate) async fn remove_user_from_group<C>(
         &self,
         group_id: i64,
         user_name: &str,
@@ -549,7 +549,7 @@ impl AccessGroupsApiImpl {
         }
     }
 
-    pub async fn list_group_members<C>(
+    pub(crate) async fn list_group_members<C>(
         &self,
         group_id: i64,
         offset: i64,
@@ -639,7 +639,7 @@ impl AccessGroupsApiImpl {
         Ok(ListGroupMembersResponse::SuccessfulResponse(response))
     }
 
-    pub async fn list_user_groups<C>(
+    pub(crate) async fn list_user_groups<C>(
         &self,
         user_name: &str,
         offset: i64,
@@ -719,7 +719,7 @@ impl AccessGroupsApiImpl {
     // Workflow-Group association operations
     // ========================================================================
 
-    pub async fn add_workflow_to_group<C>(
+    pub(crate) async fn add_workflow_to_group<C>(
         &self,
         workflow_id: i64,
         group_id: i64,
@@ -814,7 +814,7 @@ impl AccessGroupsApiImpl {
         Ok(AddWorkflowToGroupResponse::SuccessfulResponse(association))
     }
 
-    pub async fn remove_workflow_from_group<C>(
+    pub(crate) async fn remove_workflow_from_group<C>(
         &self,
         workflow_id: i64,
         group_id: i64,
@@ -882,7 +882,7 @@ impl AccessGroupsApiImpl {
         }
     }
 
-    pub async fn list_workflow_groups<C>(
+    pub(crate) async fn list_workflow_groups<C>(
         &self,
         workflow_id: i64,
         offset: i64,
@@ -983,7 +983,7 @@ impl AccessGroupsApiImpl {
     // Authorization check
     // ========================================================================
 
-    pub async fn check_workflow_access<C>(
+    pub(crate) async fn check_workflow_access<C>(
         &self,
         workflow_id: i64,
         user_name: &str,

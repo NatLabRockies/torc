@@ -28,7 +28,7 @@ pub struct TorcMcpServer {
 
 impl TorcMcpServer {
     /// Create a new TorcMcpServer with the given API URL and output directory.
-    pub fn new(api_url: String, output_dir: PathBuf) -> Self {
+    fn new(api_url: String, output_dir: PathBuf) -> Self {
         Self::new_with_tls(api_url, output_dir, TlsConfig::default())
     }
 
@@ -50,7 +50,7 @@ impl TorcMcpServer {
     }
 
     /// Create a new TorcMcpServer with authentication.
-    pub fn with_auth(
+    fn with_auth(
         api_url: String,
         output_dir: PathBuf,
         username: Option<String>,
@@ -111,34 +111,34 @@ impl TorcMcpServer {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct WorkflowIdParam {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct JobIdParam {
     #[schemars(description = "The job ID")]
-    pub job_id: i64,
+    job_id: i64,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetJobLogsParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(description = "The job ID")]
-    pub job_id: i64,
+    job_id: i64,
     #[schemars(description = "The run ID (1 for first run, increments on restart)")]
-    pub run_id: i64,
+    run_id: i64,
     #[schemars(
         description = "The attempt ID (1 for first attempt, increments on retry). Defaults to 1."
     )]
     #[serde(default = "default_attempt_id")]
-    pub attempt_id: i64,
+    attempt_id: i64,
     #[schemars(description = "Log type: 'stdout' or 'stderr'")]
-    pub log_type: String,
+    log_type: String,
     #[schemars(
         description = "Number of lines to return from the end (optional, returns all if not specified)"
     )]
-    pub tail_lines: Option<usize>,
+    tail_lines: Option<usize>,
 }
 
 fn default_attempt_id() -> i64 {
@@ -148,25 +148,25 @@ fn default_attempt_id() -> i64 {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListJobsByStatusParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(
         description = "Job status to filter by: 'uninitialized', 'blocked', 'ready', 'pending', 'running', 'completed', 'failed', 'canceled', 'terminated', 'disabled'"
     )]
-    pub status: String,
+    status: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct UpdateJobResourcesParams {
     #[schemars(description = "The job ID")]
-    pub job_id: i64,
+    job_id: i64,
     #[schemars(description = "Number of CPUs (optional)")]
-    pub num_cpus: Option<i64>,
+    num_cpus: Option<i64>,
     #[schemars(description = "Memory requirement, e.g., '4g', '512m' (optional)")]
-    pub memory: Option<String>,
+    memory: Option<String>,
     #[schemars(
         description = "Runtime in ISO8601 duration format, e.g., 'PT30M', 'PT2H' (optional)"
     )]
-    pub runtime: Option<String>,
+    runtime: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -174,35 +174,35 @@ pub struct CreateWorkflowParams {
     #[schemars(
         description = "Workflow specification as a JSON object (not a string). For Slurm workflows, must include a 'resource_requirements' section and each job must reference one."
     )]
-    pub spec_json: serde_json::Value,
+    spec_json: serde_json::Value,
     #[schemars(description = "User that owns the workflow (optional, defaults to current user)")]
-    pub user: Option<String>,
+    user: Option<String>,
     #[schemars(
         description = "Action to perform: 'create_workflow' to create in the database, 'save_spec_file' to save to filesystem only, 'validate' to validate without creating"
     )]
-    pub action: String,
+    action: String,
     #[schemars(description = "Workflow type: 'local' for local execution, 'slurm' for Slurm HPC")]
-    pub workflow_type: String,
+    workflow_type: String,
     #[schemars(description = "Slurm account (required for slurm workflow_type)")]
-    pub account: Option<String>,
+    account: Option<String>,
     #[schemars(
         description = "HPC profile to use (optional, auto-detected if not specified). Required for slurm if auto-detection fails."
     )]
-    pub hpc_profile: Option<String>,
+    hpc_profile: Option<String>,
     #[schemars(
         description = "Output file path for save_spec_file action (required for save_spec_file, use .json extension)"
     )]
-    pub output_path: Option<String>,
+    output_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CheckResourceUtilizationParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(
         description = "Include failed jobs in the analysis (recommended for recovery diagnostics)"
     )]
-    pub include_failed: Option<bool>,
+    include_failed: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -210,139 +210,139 @@ pub struct GetExecutionPlanParams {
     #[schemars(
         description = "Either a workflow ID (integer) to get plan for existing workflow, or a JSON workflow specification string to preview execution plan before creating"
     )]
-    pub spec_or_id: String,
+    spec_or_id: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct AnalyzeWorkflowLogsParams {
     #[schemars(description = "Workflow ID to analyze logs for")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(
         description = "Output directory where logs are stored (the same directory passed to `torc run`). Defaults to 'torc_output'."
     )]
-    pub output_dir: Option<String>,
+    output_dir: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetWorkflowSummaryParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CheckOfflineJournalsParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(
         description = "Run ID to match journals against (optional). Defaults to the workflow's current run_id, so only journals for the run the server still considers active are reported."
     )]
-    pub run_id: Option<i64>,
+    run_id: Option<i64>,
     #[schemars(
         description = "Base directory to search recursively for journal files (optional). Defaults to the server's output directory. For Slurm runs this is typically the shared output directory passed to `torc run`."
     )]
-    pub base_dir: Option<String>,
+    base_dir: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListResultsParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(description = "Filter by job ID")]
-    pub job_id: Option<i64>,
+    job_id: Option<i64>,
     #[schemars(description = "Filter by run ID")]
-    pub run_id: Option<i64>,
+    run_id: Option<i64>,
     #[schemars(description = "Filter by return code (e.g., 0 for success, 1 for failure)")]
-    pub return_code: Option<i64>,
+    return_code: Option<i64>,
     #[schemars(description = "Show only failed jobs (non-zero return code)")]
-    pub failed_only: Option<bool>,
+    failed_only: Option<bool>,
     #[schemars(
         description = "Filter by job status: completed, failed, terminated, canceled, etc."
     )]
-    pub status: Option<String>,
+    status: Option<String>,
     #[schemars(description = "Maximum number of results to return (default: 100)")]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[schemars(
         description = "Field to sort by: exec_time_minutes, peak_memory_bytes, peak_cpu_percent, return_code"
     )]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[schemars(description = "Reverse the sort order (descending instead of ascending)")]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetSlurmSacctParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct RecoverWorkflowParams {
     #[schemars(description = "The workflow ID to recover")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(
         description = "If true, shows what would be done without making any changes. \
         ALWAYS use dry_run=true first to preview recovery actions, then confirm with user before running with dry_run=false."
     )]
-    pub dry_run: bool,
+    dry_run: bool,
     #[schemars(
         description = "Memory multiplier for OOM failures (default: 1.5 = 50% increase). \
         Jobs that failed due to OOM will have their memory increased by this factor."
     )]
-    pub memory_multiplier: Option<f64>,
+    memory_multiplier: Option<f64>,
     #[schemars(
         description = "Runtime multiplier for timeout failures (default: 1.4 = 40% increase). \
         Jobs that timed out will have their runtime increased by this factor."
     )]
-    pub runtime_multiplier: Option<f64>,
+    runtime_multiplier: Option<f64>,
     #[schemars(
         description = "If true, also retry jobs with unknown failure causes (not OOM or timeout). \
         Default is false - only retry jobs with diagnosable resource issues."
     )]
-    pub retry_unknown: Option<bool>,
+    retry_unknown: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListPendingFailedJobsParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 pub struct FailureClassificationParam {
     #[schemars(description = "The job ID to classify")]
-    pub job_id: i64,
+    job_id: i64,
     #[schemars(description = "The classification action: 'retry' or 'fail'")]
-    pub action: String,
+    action: String,
     #[schemars(description = "Optional new memory requirement (e.g., '8g')")]
-    pub memory: Option<String>,
+    memory: Option<String>,
     #[schemars(description = "Optional new runtime (ISO8601 duration, e.g., 'PT2H')")]
-    pub runtime: Option<String>,
+    runtime: Option<String>,
     #[schemars(description = "Reason for the classification (for logging)")]
-    pub reason: Option<String>,
+    reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ClassifyAndResolveFailuresParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(description = "List of classifications for pending_failed jobs")]
-    pub classifications: Vec<FailureClassificationParam>,
+    classifications: Vec<FailureClassificationParam>,
     #[schemars(
         description = "If true, shows what would be done without making any changes. \
         ALWAYS use dry_run=true first to preview classifications, then confirm with user before running with dry_run=false."
     )]
-    pub dry_run: bool,
+    dry_run: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct AnalyzeResourceUsageParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(
         description = "If true, only include jobs with return_code=0 (successful). \
         If false (default), include all jobs with results."
     )]
-    pub completed_only: Option<bool>,
+    completed_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -350,11 +350,11 @@ pub struct GetExampleParams {
     #[schemars(
         description = "Name of the example to retrieve (e.g., 'diamond_workflow', 'hyperparameter_sweep')"
     )]
-    pub name: String,
+    name: String,
     #[schemars(
         description = "Preferred format: 'yaml' (default), 'json', or 'kdl'. Falls back to available format."
     )]
-    pub format: Option<String>,
+    format: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -371,7 +371,7 @@ pub struct GetDocsParams {
         'workflow-formats' (YAML/JSON/KDL formats), \
         'allocation-strategies' (single-large vs many-small Slurm allocations), \
         'tutorials' (list of available tutorials)")]
-    pub topic: String,
+    topic: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -379,52 +379,52 @@ pub struct PlanAllocationsParams {
     #[schemars(
         description = "Workflow specification as a JSON object (not a string). Must include 'resource_requirements' section with CPU, memory, and runtime for each job type."
     )]
-    pub spec_json: serde_json::Value,
+    spec_json: serde_json::Value,
     #[schemars(description = "Slurm account to use for allocation estimates")]
-    pub account: String,
+    account: String,
     #[schemars(description = "Partition to target (optional, auto-selected if not specified)")]
-    pub partition: Option<String>,
+    partition: Option<String>,
     #[schemars(
         description = "HPC profile to use (optional, auto-detected if not specified). Use when auto-detection fails."
     )]
-    pub hpc_profile: Option<String>,
+    hpc_profile: Option<String>,
     #[schemars(
         description = "Skip sbatch --test-only probes (faster, uses heuristics only). Default: false"
     )]
     #[serde(default)]
-    pub skip_test_only: bool,
+    skip_test_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 pub struct ResourceGroupParam {
     #[schemars(description = "Memory requirement, e.g., '10g', '512m'")]
-    pub memory: String,
+    memory: String,
     #[schemars(description = "Number of CPUs")]
-    pub num_cpus: i64,
+    num_cpus: i64,
     #[schemars(description = "Runtime in ISO8601 duration format, e.g., 'PT2H', 'PT30M'")]
-    pub runtime: String,
+    runtime: String,
     #[schemars(description = "Number of GPUs (defaults to the job's current RR value, or 0)")]
-    pub num_gpus: Option<i64>,
+    num_gpus: Option<i64>,
     #[schemars(description = "Number of nodes (defaults to the job's current RR value, or 1)")]
-    pub num_nodes: Option<i64>,
+    num_nodes: Option<i64>,
     #[schemars(description = "Name for this resource group (auto-generated if not provided)")]
-    pub name: Option<String>,
+    name: Option<String>,
     #[schemars(description = "Job IDs to assign to this resource group")]
-    pub job_ids: Vec<i64>,
+    job_ids: Vec<i64>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct RegroupJobResourcesParams {
     #[schemars(description = "The workflow ID")]
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[schemars(description = "List of new resource groups with job assignments. \
         Each group defines resource requirements and which jobs belong to it.")]
-    pub groups: Vec<ResourceGroupParam>,
+    groups: Vec<ResourceGroupParam>,
     #[schemars(
         description = "If true, shows what would be done without making any changes. \
         ALWAYS use dry_run=true first to preview the regrouping, then confirm with user before running with dry_run=false."
     )]
-    pub dry_run: bool,
+    dry_run: bool,
 }
 
 // Tool implementations using rmcp tool routing.

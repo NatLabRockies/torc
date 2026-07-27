@@ -106,7 +106,7 @@ pub fn memory_string_to_mb(memory_str: &str) -> Option<u64> {
 /// # Panics
 ///
 /// Panics if the memory string is invalid.
-pub fn memory_string_to_gb(memory_str: &str) -> f64 {
+pub(crate) fn memory_string_to_gb(memory_str: &str) -> f64 {
     const GB: i64 = 1024 * 1024 * 1024;
     match memory_string_to_bytes(memory_str) {
         Ok(bytes) => bytes as f64 / GB as f64,

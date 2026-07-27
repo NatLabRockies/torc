@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 
 /// Returns true when `name` is a valid POSIX-style environment variable name:
 /// starts with a letter or underscore, followed by letters, digits, or underscores.
-pub fn is_valid_env_var_name(name: &str) -> bool {
+pub(crate) fn is_valid_env_var_name(name: &str) -> bool {
     let mut chars = name.chars();
     match chars.next() {
         Some(first) if first == '_' || first.is_ascii_alphabetic() => {}
@@ -71,35 +71,35 @@ pub enum EventSeverity {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComputeNodeSchedule {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_parallel_jobs: Option<i64>,
-    pub num_jobs: i64,
-    pub scheduler_id: i64,
+    max_parallel_jobs: Option<i64>,
+    num_jobs: i64,
+    scheduler_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_one_worker_per_node: Option<bool>,
+    start_one_worker_per_node: Option<bool>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ErrorResponse {
-    pub error: Value,
+    pub(crate) error: Value,
     #[serde(rename = "errorNum", skip_serializing_if = "Option::is_none")]
-    pub error_num: Option<i64>,
+    error_num: Option<i64>,
     #[serde(rename = "errorMessage", skip_serializing_if = "Option::is_none")]
-    pub error_message: Option<String>,
+    error_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub code: Option<i64>,
+    code: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PingResponse {
-    pub status: String,
+    status: String,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VersionResponse {
-    pub version: String,
+    pub(crate) version: String,
     pub api_version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub git_hash: Option<String>,
@@ -110,16 +110,16 @@ pub struct VersionResponse {
 pub struct ComputeNodeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     pub hostname: String,
-    pub pid: i64,
-    pub start_time: String,
+    pub(crate) pid: i64,
+    pub(crate) start_time: String,
     /// Allocation end time (RFC3339), reported by the runner at registration.
     /// Used to compute remaining walltime for active nodes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration_seconds: Option<f64>,
+    pub(crate) duration_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_active: Option<bool>,
     pub num_cpus: i64,
@@ -127,12 +127,12 @@ pub struct ComputeNodeModel {
     pub num_gpus: i64,
     pub num_nodes: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub time_limit: Option<String>,
+    pub(crate) time_limit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scheduler_config_id: Option<i64>,
-    pub compute_node_type: String,
+    pub(crate) scheduler_config_id: Option<i64>,
+    pub(crate) compute_node_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scheduler: Option<Value>,
+    pub(crate) scheduler: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -149,17 +149,17 @@ pub struct ComputeNodeModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListComputeNodesResponse {
     pub items: Vec<ComputeNodeModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeleteCountResponse {
-    pub count: i64,
+    count: i64,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -167,8 +167,8 @@ pub struct DeleteCountResponse {
 pub struct EventModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
-    pub workflow_id: i64,
-    pub timestamp: i64,
+    pub(crate) workflow_id: i64,
+    pub(crate) timestamp: i64,
     pub data: Value,
 }
 
@@ -176,11 +176,11 @@ pub struct EventModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListEventsResponse {
     pub items: Vec<EventModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -188,7 +188,7 @@ pub struct ListEventsResponse {
 pub struct FileModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     pub name: String,
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -199,11 +199,11 @@ pub struct FileModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListFilesResponse {
     pub items: Vec<FileModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -211,7 +211,7 @@ pub struct ListFilesResponse {
 pub struct UserDataModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_ephemeral: Option<bool>,
     pub name: String,
@@ -223,11 +223,11 @@ pub struct UserDataModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListUserDataResponse {
     pub items: Vec<UserDataModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -248,14 +248,14 @@ pub struct JobModel {
     /// cleared by complete_job and the reset/retry paths. NULL when the job is
     /// not running (use `status` as the source of truth for "is running").
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_time: Option<String>,
+    pub(crate) start_time: Option<String>,
     /// Compute node executing the current attempt. Set by start_job and cleared
     /// by complete_job and the reset/retry paths. For completed attempts, the
     /// compute node is recorded on the result record.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub compute_node_id: Option<i64>,
+    pub(crate) compute_node_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub schedule_compute_nodes: Option<ComputeNodeSchedule>,
+    pub(crate) schedule_compute_nodes: Option<ComputeNodeSchedule>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cancel_on_blocking_job_failure: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -275,7 +275,7 @@ pub struct JobModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub failure_handler_id: Option<i64>,
+    pub(crate) failure_handler_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attempt_id: Option<i64>,
     /// Scheduling priority; higher values are submitted first. Minimum 0, default 0.
@@ -296,11 +296,11 @@ pub struct JobModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListJobsResponse {
     pub items: Vec<JobModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -337,28 +337,28 @@ pub struct ResultModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peak_memory_bytes: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub avg_memory_bytes: Option<i64>,
+    pub(crate) avg_memory_bytes: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peak_cpu_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub avg_cpu_percent: Option<f64>,
+    pub(crate) avg_cpu_percent: Option<f64>,
     pub status: JobStatus,
     /// Name of the job this result belongs to. Populated by the server on read
     /// paths (list/get) as a convenience so clients need not re-fetch jobs; it
     /// is ignored on create/update input.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub job_name: Option<String>,
+    pub(crate) job_name: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListResultsResponse {
     pub items: Vec<ResultModel>,
-    pub offset: i64,
-    pub max_limit: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
     pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -379,8 +379,8 @@ pub struct BatchCompleteJobsRequest {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobCompletionError {
-    pub job_id: i64,
-    pub message: String,
+    pub(crate) job_id: i64,
+    pub(crate) message: String,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -468,36 +468,36 @@ pub struct ScheduledComputeNodesModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListScheduledComputeNodesResponse {
     pub items: Vec<ScheduledComputeNodesModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LocalSchedulerModel {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i64>,
-    pub workflow_id: i64,
+    pub(crate) id: Option<i64>,
+    pub(crate) workflow_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory: Option<String>,
+    pub(crate) memory: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub num_cpus: Option<i64>,
+    pub(crate) num_cpus: Option<i64>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListLocalSchedulersResponse {
-    pub items: Vec<LocalSchedulerModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) items: Vec<LocalSchedulerModel>,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -531,11 +531,11 @@ pub struct SlurmSchedulerModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListSlurmSchedulersResponse {
     pub items: Vec<SlurmSchedulerModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -823,7 +823,7 @@ impl ExecutionConfig {
     }
 
     /// Whether staggered startup is enabled for Slurm job runners.
-    pub fn staggered_start(&self) -> bool {
+    pub(crate) fn staggered_start(&self) -> bool {
         self.staggered_start.unwrap_or(true)
     }
 
@@ -845,7 +845,7 @@ impl ExecutionConfig {
     }
 
     /// Build from a WorkflowModel's execution_config field.
-    pub fn from_workflow_model(workflow: &WorkflowModel) -> ExecutionConfig {
+    pub(crate) fn from_workflow_model(workflow: &WorkflowModel) -> ExecutionConfig {
         workflow.execution_config.clone().unwrap_or_default()
     }
 }
@@ -865,8 +865,8 @@ pub enum MonitorGranularity {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct JobMonitorConfig {
-    pub enabled: bool,
-    pub granularity: MonitorGranularity,
+    pub(crate) enabled: bool,
+    pub(crate) granularity: MonitorGranularity,
 }
 
 impl Default for JobMonitorConfig {
@@ -883,10 +883,10 @@ impl Default for JobMonitorConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ComputeNodeMonitorConfig {
-    pub enabled: bool,
-    pub granularity: MonitorGranularity,
-    pub cpu: bool,
-    pub memory: bool,
+    pub(crate) enabled: bool,
+    pub(crate) granularity: MonitorGranularity,
+    pub(crate) cpu: bool,
+    pub(crate) memory: bool,
 }
 
 impl Default for ComputeNodeMonitorConfig {
@@ -910,15 +910,15 @@ impl Default for ComputeNodeMonitorConfig {
 #[serde(default)]
 pub struct ResourceMonitorConfig {
     /// Deprecated compatibility field. Use `jobs.enabled` for new workflow specs.
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     /// Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
-    pub granularity: MonitorGranularity,
-    pub sample_interval_seconds: i32,
+    pub(crate) granularity: MonitorGranularity,
+    pub(crate) sample_interval_seconds: i32,
     /// How often buffered time-series samples are flushed to SQLite, in seconds.
-    pub flush_interval_seconds: i32,
-    pub generate_plots: bool,
-    pub jobs: Option<JobMonitorConfig>,
-    pub compute_node: Option<ComputeNodeMonitorConfig>,
+    pub(crate) flush_interval_seconds: i32,
+    pub(crate) generate_plots: bool,
+    pub(crate) jobs: Option<JobMonitorConfig>,
+    pub(crate) compute_node: Option<ComputeNodeMonitorConfig>,
 }
 
 impl Default for ResourceMonitorConfig {
@@ -936,23 +936,23 @@ impl Default for ResourceMonitorConfig {
 }
 
 impl ResourceMonitorConfig {
-    pub fn jobs_config(&self) -> JobMonitorConfig {
+    pub(crate) fn jobs_config(&self) -> JobMonitorConfig {
         self.jobs.clone().unwrap_or(JobMonitorConfig {
             enabled: self.enabled,
             granularity: self.granularity.clone(),
         })
     }
 
-    pub fn compute_node_config(&self) -> Option<ComputeNodeMonitorConfig> {
+    pub(crate) fn compute_node_config(&self) -> Option<ComputeNodeMonitorConfig> {
         self.compute_node.clone().filter(|config| config.enabled)
     }
 
-    pub fn is_enabled(&self) -> bool {
+    pub(crate) fn is_enabled(&self) -> bool {
         self.jobs_config().enabled || self.compute_node_config().is_some()
     }
 
     /// Returns true if any enabled scope uses time-series granularity.
-    pub fn has_timeseries_db(&self) -> bool {
+    pub(crate) fn has_timeseries_db(&self) -> bool {
         let jobs_ts = {
             let jobs = self.jobs_config();
             jobs.enabled && matches!(jobs.granularity, MonitorGranularity::TimeSeries)
@@ -968,11 +968,11 @@ impl ResourceMonitorConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListWorkflowsResponse {
     pub items: Vec<WorkflowModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 /// Request body for `POST /workflows/{id}/archive`. Setting `is_archived`
@@ -1004,7 +1004,7 @@ pub struct ClaimJobsBasedOnResources {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jobs: Option<Vec<JobModel>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
+    pub(crate) reason: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1021,26 +1021,26 @@ pub struct JobDependencyModel {
     pub job_name: String,
     pub depends_on_job_id: i64,
     pub depends_on_job_name: String,
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListJobDependenciesResponse {
     pub items: Vec<JobDependencyModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobFileRelationshipModel {
-    pub file_id: i64,
+    pub(crate) file_id: i64,
     pub file_name: String,
-    pub file_path: String,
+    pub(crate) file_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub producer_job_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1056,8 +1056,8 @@ pub struct JobFileRelationshipModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListJobFileRelationshipsResponse {
     pub items: Vec<JobFileRelationshipModel>,
-    pub offset: i64,
-    pub max_limit: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
     pub count: i64,
     pub total_count: i64,
     pub has_more: bool,
@@ -1066,7 +1066,7 @@ pub struct ListJobFileRelationshipsResponse {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobUserDataRelationshipModel {
-    pub user_data_id: i64,
+    pub(crate) user_data_id: i64,
     pub user_data_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub producer_job_id: Option<i64>,
@@ -1083,18 +1083,18 @@ pub struct JobUserDataRelationshipModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListJobUserDataRelationshipsResponse {
     pub items: Vec<JobUserDataRelationshipModel>,
-    pub offset: i64,
-    pub max_limit: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
     pub count: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListJobIdsResponse {
-    pub job_ids: Vec<i64>,
-    pub count: i64,
+    job_ids: Vec<i64>,
+    count: i64,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1106,18 +1106,18 @@ pub struct ListMissingUserDataResponse {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcessChangedJobInputsResponse {
-    pub reinitialized_jobs: Vec<String>,
+    pub(crate) reinitialized_jobs: Vec<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetReadyJobRequirementsResponse {
-    pub num_jobs: i64,
-    pub num_cpus: i64,
-    pub num_gpus: i64,
-    pub memory_gb: f64,
-    pub max_num_nodes: i64,
-    pub max_runtime: String,
+    num_jobs: i64,
+    num_cpus: i64,
+    num_gpus: i64,
+    memory_gb: f64,
+    max_num_nodes: i64,
+    max_runtime: String,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1166,17 +1166,17 @@ pub struct ListAccessGroupsResponse {
     pub offset: i64,
     pub limit: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListUserGroupMembershipsResponse {
     pub items: Vec<UserGroupMembershipModel>,
-    pub offset: i64,
-    pub limit: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    offset: i64,
+    limit: i64,
+    total_count: i64,
+    has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1186,7 +1186,7 @@ pub struct AccessCheckResponse {
     pub user_name: String,
     pub workflow_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
+    pub(crate) reason: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1199,33 +1199,33 @@ pub struct JobsModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateJobsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub jobs: Option<Vec<JobModel>>,
+    pub(crate) jobs: Option<Vec<JobModel>>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FilesModel {
-    pub files: Vec<FileModel>,
+    pub(crate) files: Vec<FileModel>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateFilesResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub files: Option<Vec<FileModel>>,
+    pub(crate) files: Option<Vec<FileModel>>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserDataListModel {
-    pub user_data: Vec<UserDataModel>,
+    pub(crate) user_data: Vec<UserDataModel>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateUserDataListResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_data: Option<Vec<UserDataModel>>,
+    pub(crate) user_data: Option<Vec<UserDataModel>>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1259,10 +1259,10 @@ pub struct ResourceRequirementsModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListResourceRequirementsResponse {
     pub items: Vec<ResourceRequirementsModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
     pub has_more: bool,
 }
 
@@ -1270,21 +1270,21 @@ pub struct ListResourceRequirementsResponse {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FailureHandlerModel {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i64>,
-    pub workflow_id: i64,
-    pub name: String,
-    pub rules: String,
+    pub(crate) id: Option<i64>,
+    pub(crate) workflow_id: i64,
+    pub(crate) name: String,
+    pub(crate) rules: String,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListFailureHandlersResponse {
-    pub items: Vec<FailureHandlerModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
-    pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) items: Vec<FailureHandlerModel>,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
+    pub(crate) total_count: i64,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1316,17 +1316,17 @@ pub struct SlurmStatsModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListSlurmStatsResponse {
     pub items: Vec<SlurmStatsModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
-pub struct JobStatusMap;
+struct JobStatusMap;
 
 impl JobStatusMap {
-    pub fn enum_to_int_map() -> &'static HashMap<JobStatus, i32> {
+    fn enum_to_int_map() -> &'static HashMap<JobStatus, i32> {
         static MAP: OnceLock<HashMap<JobStatus, i32>> = OnceLock::new();
         MAP.get_or_init(|| {
             let mut map = HashMap::new();
@@ -1345,7 +1345,7 @@ impl JobStatusMap {
         })
     }
 
-    pub fn int_to_enum_map() -> &'static HashMap<i32, JobStatus> {
+    fn int_to_enum_map() -> &'static HashMap<i32, JobStatus> {
         static MAP: OnceLock<HashMap<i32, JobStatus>> = OnceLock::new();
         MAP.get_or_init(|| {
             let mut map = HashMap::new();
@@ -1364,15 +1364,15 @@ impl JobStatusMap {
         })
     }
 
-    pub fn to_int(status: &JobStatus) -> i32 {
+    fn to_int(status: &JobStatus) -> i32 {
         *Self::enum_to_int_map().get(status).unwrap_or(&-1)
     }
 
-    pub fn from_int(value: i32) -> Option<JobStatus> {
+    fn from_int(value: i32) -> Option<JobStatus> {
         Self::int_to_enum_map().get(&value).copied()
     }
 
-    pub fn from_i64(value: i64) -> Option<JobStatus> {
+    fn from_i64(value: i64) -> Option<JobStatus> {
         Self::from_int(value as i32)
     }
 }
@@ -1403,7 +1403,7 @@ impl std::str::FromStr for EventSeverity {
 }
 
 impl CreateJobsResponse {
-    pub fn new() -> CreateJobsResponse {
+    fn new() -> CreateJobsResponse {
         CreateJobsResponse { jobs: None }
     }
 }
@@ -1448,7 +1448,7 @@ impl ComputeNodeModel {
 }
 
 impl ComputeNodeSchedule {
-    pub fn new(num_jobs: i64, scheduler_id: i64) -> ComputeNodeSchedule {
+    fn new(num_jobs: i64, scheduler_id: i64) -> ComputeNodeSchedule {
         ComputeNodeSchedule {
             max_parallel_jobs: None,
             num_jobs,
@@ -1478,7 +1478,7 @@ impl ComputeNodesResources {
 }
 
 impl ErrorResponse {
-    pub fn new(error: serde_json::Value) -> ErrorResponse {
+    pub(crate) fn new(error: serde_json::Value) -> ErrorResponse {
         ErrorResponse {
             error,
             error_num: None,
@@ -1498,7 +1498,7 @@ impl EventModel {
         }
     }
 
-    pub fn timestamp_as_string(&self) -> String {
+    fn timestamp_as_string(&self) -> String {
         use chrono::{DateTime, Utc};
         DateTime::from_timestamp_millis(self.timestamp)
             .map(|dt: DateTime<Utc>| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
@@ -1519,7 +1519,7 @@ impl FileModel {
 }
 
 impl FailureHandlerModel {
-    pub fn new(workflow_id: i64, name: String, rules: String) -> FailureHandlerModel {
+    pub(crate) fn new(workflow_id: i64, name: String, rules: String) -> FailureHandlerModel {
         FailureHandlerModel {
             id: None,
             workflow_id,
@@ -1530,7 +1530,7 @@ impl FailureHandlerModel {
 }
 
 impl ListFailureHandlersResponse {
-    pub fn new(
+    fn new(
         offset: i64,
         max_limit: i64,
         count: i64,
@@ -1567,7 +1567,7 @@ impl RoCrateEntityModel {
 }
 
 impl ListRoCrateEntitiesResponse {
-    pub fn new(
+    fn new(
         offset: i64,
         max_limit: i64,
         count: i64,
@@ -1586,7 +1586,7 @@ impl ListRoCrateEntitiesResponse {
 }
 
 impl GetReadyJobRequirementsResponse {
-    pub fn new(
+    fn new(
         num_jobs: i64,
         num_cpus: i64,
         num_gpus: i64,
@@ -1606,7 +1606,7 @@ impl GetReadyJobRequirementsResponse {
 }
 
 impl IsCompleteResponse {
-    pub fn new(is_canceled: bool, is_complete: bool) -> IsCompleteResponse {
+    fn new(is_canceled: bool, is_complete: bool) -> IsCompleteResponse {
         IsCompleteResponse {
             is_canceled,
             is_complete,
@@ -1684,7 +1684,7 @@ impl std::str::FromStr for JobStatus {
 }
 
 impl JobStatus {
-    pub fn is_terminal(&self) -> bool {
+    pub(crate) fn is_terminal(&self) -> bool {
         matches!(
             self,
             JobStatus::Completed
@@ -1702,8 +1702,8 @@ impl JobStatus {
         )
     }
 
-    pub fn to_int(&self) -> i32 {
-        match *self {
+    pub(crate) fn to_int(self) -> i32 {
+        match self {
             JobStatus::Uninitialized => 0,
             JobStatus::Blocked => 1,
             JobStatus::Ready => 2,
@@ -1718,7 +1718,7 @@ impl JobStatus {
         }
     }
 
-    pub fn from_int(value: i32) -> std::result::Result<Self, String> {
+    pub(crate) fn from_int(value: i32) -> std::result::Result<Self, String> {
         match value {
             0 => Ok(JobStatus::Uninitialized),
             1 => Ok(JobStatus::Blocked),
@@ -1735,37 +1735,37 @@ impl JobStatus {
         }
     }
 
-    pub fn from_i64(value: i64) -> std::result::Result<Self, String> {
+    pub(crate) fn from_i64(value: i64) -> std::result::Result<Self, String> {
         Self::from_int(value as i32)
     }
 }
 
 impl JobsModel {
-    pub fn new(jobs: Vec<JobModel>) -> JobsModel {
+    pub(crate) fn new(jobs: Vec<JobModel>) -> JobsModel {
         JobsModel { jobs }
     }
 }
 
 impl FilesModel {
-    pub fn new(files: Vec<FileModel>) -> FilesModel {
+    pub(crate) fn new(files: Vec<FileModel>) -> FilesModel {
         FilesModel { files }
     }
 }
 
 impl CreateFilesResponse {
-    pub fn new() -> CreateFilesResponse {
+    fn new() -> CreateFilesResponse {
         CreateFilesResponse { files: None }
     }
 }
 
 impl UserDataListModel {
-    pub fn new(user_data: Vec<UserDataModel>) -> UserDataListModel {
+    pub(crate) fn new(user_data: Vec<UserDataModel>) -> UserDataListModel {
         UserDataListModel { user_data }
     }
 }
 
 impl CreateUserDataListResponse {
-    pub fn new() -> CreateUserDataListResponse {
+    fn new() -> CreateUserDataListResponse {
         CreateUserDataListResponse { user_data: None }
     }
 }
@@ -1810,7 +1810,7 @@ empty_list_response_new!(ListJobUserDataRelationshipsResponse);
 empty_list_response_new!(ListSlurmStatsResponse);
 
 impl ListMissingUserDataResponse {
-    pub fn new() -> ListMissingUserDataResponse {
+    fn new() -> ListMissingUserDataResponse {
         ListMissingUserDataResponse {
             user_data: Vec::new(),
         }
@@ -1818,13 +1818,13 @@ impl ListMissingUserDataResponse {
 }
 
 impl ListRequiredExistingFilesResponse {
-    pub fn new() -> ListRequiredExistingFilesResponse {
+    fn new() -> ListRequiredExistingFilesResponse {
         ListRequiredExistingFilesResponse { files: Vec::new() }
     }
 }
 
 impl LocalSchedulerModel {
-    pub fn new(workflow_id: i64) -> LocalSchedulerModel {
+    fn new(workflow_id: i64) -> LocalSchedulerModel {
         LocalSchedulerModel {
             id: None,
             workflow_id,
@@ -1836,7 +1836,7 @@ impl LocalSchedulerModel {
 }
 
 impl ClaimJobsBasedOnResources {
-    pub fn new() -> ClaimJobsBasedOnResources {
+    fn new() -> ClaimJobsBasedOnResources {
         ClaimJobsBasedOnResources {
             jobs: None,
             reason: None,
@@ -1845,13 +1845,13 @@ impl ClaimJobsBasedOnResources {
 }
 
 impl ClaimNextJobsResponse {
-    pub fn new() -> ClaimNextJobsResponse {
+    fn new() -> ClaimNextJobsResponse {
         ClaimNextJobsResponse { jobs: None }
     }
 }
 
 impl ProcessChangedJobInputsResponse {
-    pub fn new() -> ProcessChangedJobInputsResponse {
+    fn new() -> ProcessChangedJobInputsResponse {
         ProcessChangedJobInputsResponse {
             reinitialized_jobs: vec![],
         }
@@ -1925,12 +1925,7 @@ impl ScheduledComputeNodesModel {
 }
 
 impl SlurmSchedulerModel {
-    pub fn new(
-        workflow_id: i64,
-        account: String,
-        nodes: i64,
-        walltime: String,
-    ) -> SlurmSchedulerModel {
+    fn new(workflow_id: i64, account: String, nodes: i64, walltime: String) -> SlurmSchedulerModel {
         SlurmSchedulerModel {
             id: None,
             workflow_id,
@@ -1993,7 +1988,7 @@ impl WorkflowModel {
 }
 
 impl JobDependencyModel {
-    pub fn new(
+    fn new(
         job_id: i64,
         job_name: String,
         depends_on_job_id: i64,
@@ -2011,7 +2006,7 @@ impl JobDependencyModel {
 }
 
 impl JobFileRelationshipModel {
-    pub fn new(
+    fn new(
         file_id: i64,
         file_name: String,
         file_path: String,
@@ -2031,7 +2026,7 @@ impl JobFileRelationshipModel {
 }
 
 impl JobUserDataRelationshipModel {
-    pub fn new(
+    fn new(
         user_data_id: i64,
         user_data_name: String,
         workflow_id: i64,
@@ -2049,7 +2044,7 @@ impl JobUserDataRelationshipModel {
 }
 
 impl WorkflowActionModel {
-    pub fn new(
+    fn new(
         workflow_id: i64,
         trigger_type: String,
         action_type: String,
@@ -2074,7 +2069,7 @@ impl WorkflowActionModel {
 }
 
 impl RemoteWorkerModel {
-    pub fn new(worker: String, workflow_id: i64) -> RemoteWorkerModel {
+    pub(crate) fn new(worker: String, workflow_id: i64) -> RemoteWorkerModel {
         RemoteWorkerModel {
             worker,
             workflow_id,
@@ -2083,7 +2078,11 @@ impl RemoteWorkerModel {
 }
 
 impl ResetJobStatusResponse {
-    pub fn new(workflow_id: i64, updated_count: i64, status: String) -> ResetJobStatusResponse {
+    pub(crate) fn new(
+        workflow_id: i64,
+        updated_count: i64,
+        status: String,
+    ) -> ResetJobStatusResponse {
         ResetJobStatusResponse {
             workflow_id,
             updated_count,
@@ -2092,7 +2091,7 @@ impl ResetJobStatusResponse {
         }
     }
 
-    pub fn with_reset_type(mut self, reset_type: String) -> Self {
+    pub(crate) fn with_reset_type(mut self, reset_type: String) -> Self {
         self.reset_type = Some(reset_type);
         self
     }
@@ -2108,11 +2107,11 @@ impl DeleteCountResponse {
 }
 
 impl VersionResponse {
-    pub fn is_object(&self) -> bool {
+    fn is_object(&self) -> bool {
         true
     }
 
-    pub fn get(&self, key: &str) -> Option<Value> {
+    fn get(&self, key: &str) -> Option<Value> {
         match key {
             "version" => Some(Value::from(self.version.clone())),
             "api_version" => Some(Value::from(self.api_version.clone())),
@@ -2121,13 +2120,13 @@ impl VersionResponse {
         }
     }
 
-    pub fn as_str(&self) -> Option<&str> {
+    fn as_str(&self) -> Option<&str> {
         Some(self.version.as_str())
     }
 }
 
 impl ClaimActionResponse {
-    pub fn get(&self, key: &str) -> Option<Value> {
+    fn get(&self, key: &str) -> Option<Value> {
         match key {
             "claimed" => Some(Value::from(self.success)),
             "success" => Some(Value::from(self.success)),
@@ -2138,7 +2137,7 @@ impl ClaimActionResponse {
 }
 
 impl ReloadAuthResponse {
-    pub fn get(&self, key: &str) -> Option<Value> {
+    fn get(&self, key: &str) -> Option<Value> {
         match key {
             "message" => Some(Value::from(self.message.clone())),
             "user_count" => Some(Value::from(self.user_count)),
@@ -2155,20 +2154,20 @@ impl IsUninitializedResponse {
         }
     }
 
-    pub fn as_bool(&self) -> Option<bool> {
+    fn as_bool(&self) -> Option<bool> {
         Some(self.is_uninitialized)
     }
 }
 
 impl ListJobIdsResponse {
-    pub fn new(job_ids: Vec<i64>) -> ListJobIdsResponse {
+    pub(crate) fn new(job_ids: Vec<i64>) -> ListJobIdsResponse {
         let count = job_ids.len() as i64;
         ListJobIdsResponse { job_ids, count }
     }
 }
 
 impl AccessGroupModel {
-    pub fn new(name: String) -> AccessGroupModel {
+    pub(crate) fn new(name: String) -> AccessGroupModel {
         AccessGroupModel {
             id: None,
             name,
@@ -2179,7 +2178,7 @@ impl AccessGroupModel {
 }
 
 impl UserGroupMembershipModel {
-    pub fn new(user_name: String, group_id: i64) -> UserGroupMembershipModel {
+    pub(crate) fn new(user_name: String, group_id: i64) -> UserGroupMembershipModel {
         UserGroupMembershipModel {
             id: None,
             user_name,
@@ -2191,7 +2190,7 @@ impl UserGroupMembershipModel {
 }
 
 impl WorkflowAccessGroupModel {
-    pub fn new(workflow_id: i64, group_id: i64) -> WorkflowAccessGroupModel {
+    fn new(workflow_id: i64, group_id: i64) -> WorkflowAccessGroupModel {
         WorkflowAccessGroupModel {
             workflow_id,
             group_id,
@@ -2201,7 +2200,12 @@ impl WorkflowAccessGroupModel {
 }
 
 impl ListAccessGroupsResponse {
-    pub fn new(items: Vec<AccessGroupModel>, offset: i64, limit: i64, total_count: i64) -> Self {
+    pub(crate) fn new(
+        items: Vec<AccessGroupModel>,
+        offset: i64,
+        limit: i64,
+        total_count: i64,
+    ) -> Self {
         let has_more = offset + (items.len() as i64) < total_count;
         ListAccessGroupsResponse {
             items,
@@ -2214,7 +2218,7 @@ impl ListAccessGroupsResponse {
 }
 
 impl ListUserGroupMembershipsResponse {
-    pub fn new(
+    pub(crate) fn new(
         items: Vec<UserGroupMembershipModel>,
         offset: i64,
         limit: i64,
@@ -2323,8 +2327,8 @@ pub struct RoCrateEntityModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListRoCrateEntitiesResponse {
     pub items: Vec<RoCrateEntityModel>,
-    pub offset: i64,
-    pub max_limit: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
     pub count: i64,
     pub total_count: i64,
     pub has_more: bool,
@@ -2333,13 +2337,13 @@ pub struct ListRoCrateEntitiesResponse {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageResponse {
-    pub message: String,
+    message: String,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeleteRoCrateEntitiesResponse {
-    pub message: String,
+    message: String,
     pub deleted_count: i64,
 }
 
@@ -2355,23 +2359,23 @@ pub struct ReloadAuthResponse {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdminSqlRequest {
     /// The single SQL statement to execute.
-    pub sql: String,
+    pub(crate) sql: String,
     /// Opt into the write path. When false (default) the statement runs on a
     /// read-only connection, so any write fails at the SQLite layer.
     #[serde(default)]
-    pub write: bool,
+    pub(crate) write: bool,
     /// Permit an unqualified UPDATE/DELETE (no WHERE clause). Ignored on the
     /// read-only path.
     #[serde(default)]
-    pub allow_full_table: bool,
+    pub(crate) allow_full_table: bool,
     /// Write path only: run inside a transaction, report rows affected, then
     /// roll back instead of committing (preview).
     #[serde(default)]
-    pub dry_run: bool,
+    pub(crate) dry_run: bool,
     /// Maximum number of SELECT result rows to return. Defaults to and is capped
     /// at 100,000 (the server-wide list cap); values above the cap are clamped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
 }
 
 /// Response body for the admin raw-SQL endpoint (`POST /admin/sql`).
@@ -2381,14 +2385,14 @@ pub struct AdminSqlResponse {
     /// Column names in result order, defining how `items` is displayed (empty for
     /// write statements). Names the query repeats are suffixed (`id`, `id_2`, ...)
     /// so each item's keys stay unique.
-    pub columns: Vec<String>,
+    pub(crate) columns: Vec<String>,
     /// Result rows as objects keyed by `columns` (empty for write statements).
-    pub items: Vec<serde_json::Map<String, serde_json::Value>>,
+    pub(crate) items: Vec<serde_json::Map<String, serde_json::Value>>,
     /// Number of rows affected by a write statement, when applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rows_affected: Option<i64>,
+    pub(crate) rows_affected: Option<i64>,
     /// True when a write was committed to the database.
-    pub committed: bool,
+    pub(crate) committed: bool,
 }
 
 /// One row of the admin raw-SQL audit log (`admin_audit_log`), returned by
@@ -2397,27 +2401,27 @@ pub struct AdminSqlResponse {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AdminAuditLogEntry {
     /// Auto-increment row id.
-    pub id: i64,
+    pub(crate) id: i64,
     /// User that executed the statement.
-    pub user_name: String,
+    pub(crate) user_name: String,
     /// Execution time in milliseconds since the Unix epoch.
-    pub timestamp: i64,
+    pub(crate) timestamp: i64,
     /// The SQL statement text.
-    pub sql_text: String,
+    pub(crate) sql_text: String,
     /// True for write-path statements (all audited rows are writes).
-    pub is_write: bool,
+    pub(crate) is_write: bool,
     /// True when the full-table guard was overridden for this statement.
-    pub allow_full_table: bool,
+    pub(crate) allow_full_table: bool,
     /// Rows affected by the statement, when known.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rows_affected: Option<i64>,
+    pub(crate) rows_affected: Option<i64>,
     /// True when the write was committed to the database.
-    pub committed: bool,
+    pub(crate) committed: bool,
     /// True when the statement executed without error.
-    pub success: bool,
+    pub(crate) success: bool,
     /// Error message captured for a failed statement, when applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 /// Paginated response for `GET /admin/audit-log` (entries newest first).
@@ -2425,30 +2429,30 @@ pub struct AdminAuditLogEntry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListAdminAuditLogResponse {
     /// Audit-log entries, newest first.
-    pub items: Vec<AdminAuditLogEntry>,
+    pub(crate) items: Vec<AdminAuditLogEntry>,
     /// Offset applied to this page.
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum page size enforced by the server.
-    pub max_limit: i64,
+    pub(crate) max_limit: i64,
     /// Number of entries returned in this page.
-    pub count: i64,
+    pub(crate) count: i64,
     /// Total number of audit-log entries.
-    pub total_count: i64,
+    pub(crate) total_count: i64,
     /// True when more entries exist beyond this page.
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IsCompleteResponse {
-    pub is_canceled: bool,
+    pub(crate) is_canceled: bool,
     pub is_complete: bool,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IsUninitializedResponse {
-    pub is_uninitialized: bool,
+    pub(crate) is_uninitialized: bool,
 }
 
 /// Counts of jobs grouped by status for a single workflow.
@@ -2480,9 +2484,9 @@ pub struct WorkflowStatusResponse {
     pub total_exec_time_minutes: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub walltime_seconds: Option<f64>,
-    pub active_compute_nodes: i64,
-    pub pending_scheduled_nodes: i64,
-    pub active_scheduled_nodes: i64,
+    pub(crate) active_compute_nodes: i64,
+    pub(crate) pending_scheduled_nodes: i64,
+    pub(crate) active_scheduled_nodes: i64,
     pub is_complete: bool,
     pub is_canceled: bool,
     /// Ready jobs whose required runtime exceeds the remaining walltime of every
@@ -2515,9 +2519,9 @@ pub struct SlurmJobCorrelationModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SlurmJobCorrelationsResponse {
     pub items: Vec<SlurmJobCorrelationModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
     pub has_more: bool,
 }
@@ -2545,9 +2549,9 @@ pub struct RunningJobModel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunningJobsResponse {
     pub items: Vec<RunningJobModel>,
-    pub offset: i64,
-    pub max_limit: i64,
-    pub count: i64,
+    pub(crate) offset: i64,
+    pub(crate) max_limit: i64,
+    pub(crate) count: i64,
     pub total_count: i64,
     pub has_more: bool,
 }
@@ -2555,11 +2559,11 @@ pub struct RunningJobsResponse {
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResetJobStatusResponse {
-    pub workflow_id: i64,
-    pub updated_count: i64,
-    pub status: String,
+    workflow_id: i64,
+    pub(crate) updated_count: i64,
+    status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reset_type: Option<String>,
+    reset_type: Option<String>,
 }
 
 #[cfg(test)]
@@ -2861,11 +2865,11 @@ pub struct TaskModel {
     pub status: TaskStatus,
 
     #[serde(rename = "created_at_ms")]
-    pub created_at_ms: i64,
+    pub(crate) created_at_ms: i64,
 
     #[serde(rename = "started_at_ms")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub started_at_ms: Option<i64>,
+    pub(crate) started_at_ms: Option<i64>,
 
     #[serde(rename = "finished_at_ms")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2877,7 +2881,7 @@ pub struct TaskModel {
 }
 
 impl TaskModel {
-    pub fn new(
+    pub(crate) fn new(
         id: i64,
         workflow_id: i64,
         operation: String,

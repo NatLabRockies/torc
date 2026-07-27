@@ -17,7 +17,7 @@ use std::task::{Context, Poll};
 use tokio::sync::broadcast;
 
 /// Domain contract for artifact-centric APIs.
-pub trait ArtifactDomainApi<C: Send + Sync>:
+trait ArtifactDomainApi<C: Send + Sync>:
     FilesApi<C> + ResultsApi<C> + RoCrateApi<C> + UserDataApi<C>
 {
 }
@@ -30,7 +30,7 @@ where
 }
 
 /// Domain contract for scheduler and execution-resource APIs.
-pub trait SchedulingDomainApi<C: Send + Sync>:
+trait SchedulingDomainApi<C: Send + Sync>:
     ComputeNodesApi<C>
     + RemoteWorkersApi<C>
     + ResourceRequirementsApi<C>
@@ -51,7 +51,7 @@ where
 }
 
 /// Domain contract for workflow and access-control APIs.
-pub trait WorkflowDomainApi<C: Send + Sync>:
+trait WorkflowDomainApi<C: Send + Sync>:
     AccessGroupsApi<C> + WorkflowActionsApi<C> + WorkflowsApi<C>
 {
 }
@@ -64,7 +64,7 @@ where
 }
 
 /// Domain contract for jobs and workflow execution state changes.
-pub trait JobDomainApi<C: Send + Sync>: JobsApi<C> {}
+trait JobDomainApi<C: Send + Sync>: JobsApi<C> {}
 
 impl<T, C> JobDomainApi<C> for T
 where
@@ -74,7 +74,7 @@ where
 }
 
 /// Domain contract for event and failure-handler APIs.
-pub trait EventDomainApi<C: Send + Sync>: EventsApi<C> + FailureHandlersApi<C> {}
+trait EventDomainApi<C: Send + Sync>: EventsApi<C> + FailureHandlersApi<C> {}
 
 impl<T, C> EventDomainApi<C> for T
 where
@@ -85,7 +85,7 @@ where
 
 /// Small shared surface for service-level behavior that is not tied to one resource family.
 #[async_trait]
-pub trait SystemApi<C: Send + Sync> {
+trait SystemApi<C: Send + Sync> {
     fn poll_ready(
         &self,
         _cx: &mut Context,
@@ -1226,7 +1226,7 @@ pub trait TransportApiCore<C: Send + Sync> {
 }
 
 /// Transport contract for artifact-related HTTP endpoints.
-pub trait ArtifactTransportApi<C: Send + Sync>: TransportApiCore<C> {}
+trait ArtifactTransportApi<C: Send + Sync>: TransportApiCore<C> {}
 impl<T, C> ArtifactTransportApi<C> for T
 where
     C: Send + Sync,
@@ -1235,7 +1235,7 @@ where
 }
 
 /// Transport contract for scheduler and compute-resource HTTP endpoints.
-pub trait SchedulingTransportApi<C: Send + Sync>: TransportApiCore<C> {}
+trait SchedulingTransportApi<C: Send + Sync>: TransportApiCore<C> {}
 impl<T, C> SchedulingTransportApi<C> for T
 where
     C: Send + Sync,
@@ -1244,7 +1244,7 @@ where
 }
 
 /// Transport contract for workflow and workflow-action HTTP endpoints.
-pub trait WorkflowTransportApi<C: Send + Sync>: TransportApiCore<C> {}
+trait WorkflowTransportApi<C: Send + Sync>: TransportApiCore<C> {}
 impl<T, C> WorkflowTransportApi<C> for T
 where
     C: Send + Sync,
@@ -1253,7 +1253,7 @@ where
 }
 
 /// Transport contract for job lifecycle and claiming HTTP endpoints.
-pub trait JobTransportApi<C: Send + Sync>: TransportApiCore<C> {}
+trait JobTransportApi<C: Send + Sync>: TransportApiCore<C> {}
 impl<T, C> JobTransportApi<C> for T
 where
     C: Send + Sync,
@@ -1262,7 +1262,7 @@ where
 }
 
 /// Transport contract for event and failure-handler HTTP endpoints.
-pub trait EventTransportApi<C: Send + Sync>: TransportApiCore<C> {}
+trait EventTransportApi<C: Send + Sync>: TransportApiCore<C> {}
 impl<T, C> EventTransportApi<C> for T
 where
     C: Send + Sync,
@@ -1271,7 +1271,7 @@ where
 }
 
 /// Transport contract for access-control and authorization HTTP endpoints.
-pub trait AccessTransportApi<C: Send + Sync>: TransportApiCore<C> {}
+trait AccessTransportApi<C: Send + Sync>: TransportApiCore<C> {}
 impl<T, C> AccessTransportApi<C> for T
 where
     C: Send + Sync,
@@ -1280,7 +1280,7 @@ where
 }
 
 /// Public transport contract used by the HTTP layer.
-pub trait TransportApi<C: Send + Sync>:
+trait TransportApi<C: Send + Sync>:
     TransportApiCore<C>
     + ArtifactTransportApi<C>
     + SchedulingTransportApi<C>
@@ -1305,7 +1305,7 @@ where
 }
 
 /// Composed live server contract used by higher-level transport code.
-pub trait Api<C: Send + Sync>:
+trait Api<C: Send + Sync>:
     TransportApi<C>
     + SystemApi<C>
     + ArtifactDomainApi<C>

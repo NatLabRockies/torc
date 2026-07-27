@@ -58,7 +58,7 @@ pub fn ssh_execute(
 /// (an unreadable PID file, a missing archive) with the original stderr lost.
 /// This wrapper checks `status.success()` and surfaces the remote stderr at the
 /// call site instead.
-pub fn ssh_execute_checked(
+pub(crate) fn ssh_execute_checked(
     worker: &WorkerEntry,
     command: &str,
     timeout_secs: Option<u64>,
@@ -105,7 +105,7 @@ pub fn ssh_execute_capture(worker: &WorkerEntry, command: &str) -> Result<String
 /// connectivity and confirms the host runs a shell that `torc remote` supports.
 /// A previous implementation ran the POSIX `true` builtin, which fails on
 /// Windows hosts and caused them to be rejected before any work was attempted.
-pub fn check_ssh_connectivity(worker: &WorkerEntry) -> Result<(), String> {
+pub(crate) fn check_ssh_connectivity(worker: &WorkerEntry) -> Result<(), String> {
     debug!("Checking SSH connectivity to {}", worker.display_name());
 
     super::shell::detect_remote_shell(worker).map(|shell| {
@@ -120,7 +120,7 @@ pub fn check_ssh_connectivity(worker: &WorkerEntry) -> Result<(), String> {
 /// Get the torc version on a remote host.
 ///
 /// Returns the version string (e.g., "torc 0.7.0").
-pub fn get_remote_torc_version(worker: &WorkerEntry) -> Result<String, String> {
+pub(crate) fn get_remote_torc_version(worker: &WorkerEntry) -> Result<String, String> {
     debug!("Getting torc version from {}", worker.display_name());
 
     let output = ssh_execute_capture(worker, "torc --version")?;
@@ -130,13 +130,13 @@ pub fn get_remote_torc_version(worker: &WorkerEntry) -> Result<String, String> {
 /// Parse the version from a torc version string.
 ///
 /// Handles formats like "torc 0.7.0" or just "0.7.0".
-pub fn parse_torc_version(version_str: &str) -> String {
+fn parse_torc_version(version_str: &str) -> String {
     let trimmed = version_str.trim();
     trimmed.strip_prefix("torc ").unwrap_or(trimmed).to_string()
 }
 
 /// Verify that a remote worker has the same torc version as local.
-pub fn verify_version(worker: &WorkerEntry, local_version: &str) -> Result<(), String> {
+pub(crate) fn verify_version(worker: &WorkerEntry, local_version: &str) -> Result<(), String> {
     let remote_version_str = get_remote_torc_version(worker)?;
     let remote_version = parse_torc_version(&remote_version_str);
 
@@ -160,7 +160,7 @@ pub fn verify_version(worker: &WorkerEntry, local_version: &str) -> Result<(), S
 /// Execute a command on a remote host via SCP.
 ///
 /// Returns the raw Output from the SCP command.
-pub fn scp_download(
+pub(crate) fn scp_download(
     worker: &WorkerEntry,
     remote_path: &str,
     local_path: &str,
@@ -201,7 +201,11 @@ pub fn scp_download(
 /// Execute operations in parallel across multiple workers.
 ///
 /// Returns results in the same order as the input workers.
-pub fn parallel_execute<F, R>(workers: &[WorkerEntry], operation: F, max_parallel: usize) -> Vec<R>
+pub(crate) fn parallel_execute<F, R>(
+    workers: &[WorkerEntry],
+    operation: F,
+    max_parallel: usize,
+) -> Vec<R>
 where
     F: Fn(&WorkerEntry) -> R + Send + Sync + Clone + 'static,
     R: Send + 'static,
@@ -276,7 +280,7 @@ where
 /// Verify that all workers have matching torc versions.
 ///
 /// Returns Ok if all versions match, or an error with details about mismatches.
-pub fn verify_all_versions(
+pub(crate) fn verify_all_versions(
     workers: &[WorkerEntry],
     local_version: &str,
     max_parallel: usize,
@@ -307,7 +311,10 @@ pub fn verify_all_versions(
 /// Check SSH connectivity to all workers.
 ///
 /// Returns Ok if all workers are reachable, or an error with details.
-pub fn check_all_connectivity(workers: &[WorkerEntry], max_parallel: usize) -> Result<(), String> {
+pub(crate) fn check_all_connectivity(
+    workers: &[WorkerEntry],
+    max_parallel: usize,
+) -> Result<(), String> {
     info!(
         "Checking SSH connectivity to {} worker(s)...",
         workers.len()

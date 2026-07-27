@@ -28,36 +28,36 @@ use crate::models;
 /// - Negative, clearly distinguishing it from normal exit codes
 /// - Related to signal convention (128 is the base for signal exits)
 /// - Easy to identify in logs and results
-pub const ORPHANED_JOB_RETURN_CODE: i64 = -128;
+pub(crate) const ORPHANED_JOB_RETURN_CODE: i64 = -128;
 
 /// Result of orphan cleanup operation
 #[derive(Debug, Clone, Serialize)]
 pub struct OrphanCleanupResult {
     /// Number of jobs failed due to terminated Slurm allocations
-    pub slurm_jobs_failed: usize,
+    pub(crate) slurm_jobs_failed: usize,
     /// Number of pending Slurm allocations that were cleaned up
-    pub pending_allocations_cleaned: usize,
+    pub(crate) pending_allocations_cleaned: usize,
     /// Number of running jobs failed due to no active compute nodes
-    pub running_jobs_failed: usize,
+    pub(crate) running_jobs_failed: usize,
     /// Number of compute nodes deactivated because their Slurm allocation is gone
     pub compute_nodes_deactivated: usize,
     /// Details of each orphaned job that was failed
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub failed_job_details: Vec<OrphanedJobDetail>,
+    pub(crate) failed_job_details: Vec<OrphanedJobDetail>,
 }
 
 /// Details about an orphaned job that was failed
 #[derive(Debug, Clone, Serialize)]
 pub struct OrphanedJobDetail {
-    pub job_id: i64,
-    pub job_name: String,
-    pub reason: String,
-    pub slurm_job_id: Option<String>,
+    pub(crate) job_id: i64,
+    pub(crate) job_name: String,
+    pub(crate) reason: String,
+    pub(crate) slurm_job_id: Option<String>,
 }
 
 impl OrphanCleanupResult {
     /// Returns true if any cleanup was performed
-    pub fn any_cleaned(&self) -> bool {
+    pub(crate) fn any_cleaned(&self) -> bool {
         self.slurm_jobs_failed > 0
             || self.pending_allocations_cleaned > 0
             || self.running_jobs_failed > 0
@@ -65,7 +65,7 @@ impl OrphanCleanupResult {
     }
 
     /// Total number of jobs that were failed
-    pub fn total_jobs_failed(&self) -> usize {
+    pub(crate) fn total_jobs_failed(&self) -> usize {
         self.slurm_jobs_failed + self.running_jobs_failed
     }
 }
@@ -780,7 +780,7 @@ fn deactivate_orphaned_compute_nodes(
 /// itself). `slurm_job_id` is used only for logging context.
 ///
 /// Returns the number of compute nodes that were deactivated.
-pub fn deactivate_compute_nodes_for_scheduled_node(
+pub(crate) fn deactivate_compute_nodes_for_scheduled_node(
     config: &Configuration,
     workflow_id: i64,
     scheduled_compute_node_id: i64,

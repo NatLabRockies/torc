@@ -13,24 +13,24 @@ use std::path::{Path, PathBuf};
 pub struct Args {
     /// Path to the resource metrics database file(s)
     #[arg(required = true)]
-    pub db_paths: Vec<PathBuf>,
+    pub(crate) db_paths: Vec<PathBuf>,
 
     /// Output directory for generated plots (default: current directory)
     #[arg(short, long, default_value = ".")]
-    pub output_dir: PathBuf,
+    pub(crate) output_dir: PathBuf,
 
     /// Only plot specific job IDs (comma-separated)
     #[arg(short, long, value_delimiter = ',')]
-    pub job_ids: Vec<i64>,
+    pub(crate) job_ids: Vec<i64>,
 
     /// Optional prefix for output filenames. When empty, files are named e.g. `job_4.html`,
     /// `summary.html`, `system_timeline.html`.
     #[arg(short = 'p', long, default_value = "")]
-    pub prefix: String,
+    pub(crate) prefix: String,
 
     /// Output format: html or json
     #[arg(short = 'f', long, default_value = "html")]
-    pub format: String,
+    pub(crate) format: String,
 }
 
 #[derive(Debug, Clone)]

@@ -53,7 +53,7 @@ const PING_INTERVAL_SECONDS: u64 = 30;
 ///     .arg("echo hello")
 ///     .output()?;
 /// ```
-pub fn shell_command() -> Command {
+pub(crate) fn shell_command() -> Command {
     if cfg!(target_os = "windows") {
         let mut cmd = Command::new("cmd");
         cmd.arg("/C");
@@ -77,7 +77,7 @@ pub fn shell_command() -> Command {
 ///
 /// Silent when `submission_directory` is unset (older workflows) or matches
 /// the current directory.
-pub fn warn_if_cwd_differs_from_submission_directory(
+pub(crate) fn warn_if_cwd_differs_from_submission_directory(
     submission_directory: Option<&str>,
     command_name: &str,
 ) {
@@ -110,7 +110,7 @@ pub fn warn_if_cwd_differs_from_submission_directory(
 /// `TORC_WORKFLOW_SUBMISSION_DIR`. Returns `None` (with a logged warning) if
 /// the CWD cannot be read or contains non-UTF-8 characters; the workflow
 /// still gets created in that case.
-pub fn capture_submission_directory() -> Option<String> {
+pub(crate) fn capture_submission_directory() -> Option<String> {
     match std::env::current_dir() {
         Ok(path) => match path.to_str() {
             Some(s) => Some(s.to_string()),
@@ -369,7 +369,7 @@ where
 /// * `Ok(true)` - Successfully claimed the action
 /// * `Ok(false)` - Action was already claimed by another compute node
 /// * `Err(_)` - An error occurred during the claim attempt
-pub fn claim_action(
+pub(crate) fn claim_action(
     config: &Configuration,
     workflow_id: i64,
     action_id: i64,
@@ -414,7 +414,7 @@ pub fn claim_action(
 /// let num_gpus = detect_nvidia_gpus();
 /// println!("Detected {} NVIDIA GPU(s)", num_gpus);
 /// ```
-pub fn detect_nvidia_gpus() -> i64 {
+pub(crate) fn detect_nvidia_gpus() -> i64 {
     match nvml_wrapper::Nvml::init() {
         Ok(nvml) => match nvml.device_count() {
             Ok(count) => {
@@ -598,7 +598,7 @@ fn parse_dmesg_timestamp(line: &str) -> Option<DateTime<Local>> {
 
 /// Display format used everywhere humans see timestamps in the CLI/TUI/dash:
 /// `YYYY-MM-DD HH:MM:SS ±HHMM` in the client's local timezone.
-pub const HUMAN_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
+const HUMAN_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
 
 /// Render an RFC3339 timestamp (as returned by the server) as a local-time
 /// string with an explicit ±HHMM offset. Returns the input verbatim if it
@@ -606,7 +606,7 @@ pub const HUMAN_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S %z";
 ///
 /// JSON output should keep the raw RFC3339 UTC value — only call this when
 /// rendering for human consumption (tables, detail views).
-pub fn format_local_timestamp(rfc3339_utc: &str) -> String {
+pub(crate) fn format_local_timestamp(rfc3339_utc: &str) -> String {
     match DateTime::parse_from_rfc3339(rfc3339_utc) {
         Ok(dt) => dt
             .with_timezone(&Local)
@@ -636,7 +636,7 @@ pub fn parse_finite_non_negative_secs(s: &str) -> Result<f64, String> {
 
 /// Same as [`format_local_timestamp`] but for unix-epoch seconds (e.g.
 /// `file.st_mtime`).
-pub fn format_local_timestamp_epoch(epoch_secs: f64) -> String {
+pub(crate) fn format_local_timestamp_epoch(epoch_secs: f64) -> String {
     // Converting (secs: i64, nsecs: u32) via `from_timestamp` is fragile here:
     // float rounding can push `nsecs` to 1_000_000_000, and pre-epoch values
     // give negative fractional nsecs that underflow the u32 cast. Both make

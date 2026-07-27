@@ -37,7 +37,7 @@ fn check_server_connection(
     apis::system_api::ping(&config).is_ok()
 }
 
-pub fn run(
+pub(crate) fn run(
     standalone: bool,
     port: u16,
     database: Option<String>,

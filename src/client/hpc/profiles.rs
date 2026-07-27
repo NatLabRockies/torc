@@ -33,7 +33,7 @@ pub enum HpcDetection {
 
 impl HpcDetection {
     /// Check if this detection method matches the current environment
-    pub fn matches(&self) -> bool {
+    fn matches(&self) -> bool {
         match self {
             HpcDetection::EnvVar { name, value } => {
                 env::var(name).map(|v| v == *value).unwrap_or(false)
@@ -118,7 +118,7 @@ pub struct HpcPartition {
 
 impl HpcPartition {
     /// Get the maximum wall time as a Duration
-    pub fn max_walltime(&self) -> Duration {
+    fn max_walltime(&self) -> Duration {
         Duration::from_secs(self.max_walltime_secs)
     }
 
@@ -139,7 +139,7 @@ impl HpcPartition {
     }
 
     /// Get memory in GB
-    pub fn memory_gb(&self) -> f64 {
+    pub(crate) fn memory_gb(&self) -> f64 {
         self.memory_mb as f64 / 1024.0
     }
 
@@ -349,7 +349,7 @@ impl HpcProfile {
     }
 
     /// Get all GPU partitions
-    pub fn gpu_partitions(&self) -> Vec<&HpcPartition> {
+    fn gpu_partitions(&self) -> Vec<&HpcPartition> {
         self.partitions
             .iter()
             .filter(|p| p.gpus_per_node.is_some())
@@ -357,7 +357,7 @@ impl HpcProfile {
     }
 
     /// Get all CPU-only partitions
-    pub fn cpu_partitions(&self) -> Vec<&HpcPartition> {
+    fn cpu_partitions(&self) -> Vec<&HpcPartition> {
         self.partitions
             .iter()
             .filter(|p| p.gpus_per_node.is_none())
@@ -380,7 +380,7 @@ impl HpcProfileRegistry {
     }
 
     /// Create a registry with all built-in profiles
-    pub fn with_builtin_profiles() -> Self {
+    pub(crate) fn with_builtin_profiles() -> Self {
         let mut registry = Self::new();
         registry.register(super::dane::dane_profile());
         registry.register(super::kestrel::kestrel_profile());
@@ -395,7 +395,7 @@ impl HpcProfileRegistry {
     }
 
     /// Get all registered profiles
-    pub fn profiles(&self) -> &[HpcProfile] {
+    pub(crate) fn profiles(&self) -> &[HpcProfile] {
         &self.profiles
     }
 
@@ -420,7 +420,7 @@ impl HpcProfileRegistry {
     }
 
     /// Get profile names
-    pub fn names(&self) -> Vec<&str> {
+    fn names(&self) -> Vec<&str> {
         self.profiles.iter().map(|p| p.name.as_str()).collect()
     }
 }

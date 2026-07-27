@@ -384,10 +384,7 @@ impl<C> Server<C> {
         Ok(())
     }
 
-    pub(super) async fn update_jobs_from_completion_reversal(
-        &self,
-        job_id: i64,
-    ) -> Result<(), ApiError> {
+    async fn update_jobs_from_completion_reversal(&self, job_id: i64) -> Result<(), ApiError> {
         debug!(
             "update_jobs_from_completion_reversal: resetting downstream jobs for job_id={}",
             job_id

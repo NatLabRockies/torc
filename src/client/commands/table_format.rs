@@ -13,7 +13,7 @@ use tabled::{Table, Tabled};
 /// Records are streamed straight to a locked stdout handle (no full
 /// materialization). A broken pipe (e.g. piping into `head`) exits silently
 /// with code 0; any other write error is reported to stderr and exits 1.
-pub fn display_csv<T: Tabled>(items: &[T]) {
+pub(crate) fn display_csv<T: Tabled>(items: &[T]) {
     display_csv_excluding(items, &[]);
 }
 
@@ -22,7 +22,7 @@ pub fn display_csv<T: Tabled>(items: &[T]) {
 /// reported as warnings on stderr, matching `display_table_excluding`.
 ///
 /// Shares the streaming/error behavior documented on [`display_csv`].
-pub fn display_csv_excluding<T: Tabled>(items: &[T], exclude_columns: &[String]) {
+pub(crate) fn display_csv_excluding<T: Tabled>(items: &[T], exclude_columns: &[String]) {
     warn_unknown_columns::<T>(exclude_columns);
     let keep = kept_columns::<T>(exclude_columns);
 
@@ -96,7 +96,7 @@ fn handle_csv_write_error(e: csv::Error) -> ! {
 ///
 /// Returns `true` if `format` is `"csv"` (CSV was printed and the caller should
 /// skip its human-readable preamble / empty-state messages), otherwise `false`.
-pub fn display_csv_if_csv<T: Tabled>(format: &str, items: &[T]) -> bool {
+pub(crate) fn display_csv_if_csv<T: Tabled>(format: &str, items: &[T]) -> bool {
     if format == "csv" {
         display_csv(items);
         true
@@ -106,7 +106,7 @@ pub fn display_csv_if_csv<T: Tabled>(format: &str, items: &[T]) -> bool {
 }
 
 /// Display a collection of items as a formatted table
-pub fn display_table<T: Tabled>(items: &[T]) {
+pub(crate) fn display_table<T: Tabled>(items: &[T]) {
     if items.is_empty() {
         return;
     }
@@ -130,7 +130,7 @@ pub fn display_table_with_title<T: Tabled>(items: &[T], title: &str) {
 }
 
 /// Display a collection of items as a formatted table with a total count
-pub fn display_table_with_count<T: Tabled>(items: &[T], item_type: &str) {
+pub(crate) fn display_table_with_count<T: Tabled>(items: &[T], item_type: &str) {
     if items.is_empty() {
         return;
     }
@@ -143,7 +143,7 @@ pub fn display_table_with_count<T: Tabled>(items: &[T], item_type: &str) {
 
 /// Build a table string with specified columns excluded (case-insensitive match).
 /// Returns the table string and a list of any column names that were not found.
-pub fn build_table_excluding<T: Tabled>(
+fn build_table_excluding<T: Tabled>(
     items: &[T],
     exclude_columns: &[String],
 ) -> (String, Vec<String>) {
@@ -166,7 +166,7 @@ pub fn build_table_excluding<T: Tabled>(
 }
 
 /// Display a table with specified columns excluded (case-insensitive match).
-pub fn display_table_excluding<T: Tabled>(
+pub(crate) fn display_table_excluding<T: Tabled>(
     items: &[T],
     exclude_columns: &[String],
     item_type: &str,
@@ -196,7 +196,7 @@ pub fn display_table_excluding<T: Tabled>(
 /// result set of an arbitrary SQL `SELECT`), so the table is assembled from a
 /// [`Builder`]. Cell values are already stringified. Prints a short notice when
 /// there are no columns.
-pub fn display_dynamic_table(columns: &[String], rows: &[Vec<String>]) {
+pub(crate) fn display_dynamic_table(columns: &[String], rows: &[Vec<String>]) {
     if columns.is_empty() {
         println!("(no columns)");
         return;
@@ -215,7 +215,7 @@ pub fn display_dynamic_table(columns: &[String], rows: &[Vec<String>]) {
 ///
 /// Always emits the header row, even with no data rows. Shares the streaming and
 /// broken-pipe behavior documented on [`display_csv`].
-pub fn display_dynamic_csv(columns: &[String], rows: &[Vec<String>]) {
+pub(crate) fn display_dynamic_csv(columns: &[String], rows: &[Vec<String>]) {
     let stdout = std::io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     let result = (|| -> csv::Result<()> {

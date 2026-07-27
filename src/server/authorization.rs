@@ -23,7 +23,7 @@ pub enum AccessCheckResult {
 }
 
 impl AccessCheckResult {
-    pub fn is_allowed(&self) -> bool {
+    pub(crate) fn is_allowed(&self) -> bool {
         matches!(self, AccessCheckResult::Allowed)
     }
 }
@@ -40,12 +40,12 @@ pub struct AuthorizationService {
 impl AuthorizationService {
     /// If true, authorization checks are enforced
     /// If false, all access is allowed (for backward compatibility)
-    pub fn enforce_access_control(&self) -> bool {
+    pub(crate) fn enforce_access_control(&self) -> bool {
         self.enforce_access_control
     }
 
     /// Create a new authorization service
-    pub fn new(pool: Arc<SqlitePool>, enforce_access_control: bool) -> Self {
+    pub(crate) fn new(pool: Arc<SqlitePool>, enforce_access_control: bool) -> Self {
         Self {
             pool,
             enforce_access_control,
@@ -54,7 +54,7 @@ impl AuthorizationService {
 
     /// Extract the username from the authorization context
     /// Returns None if no authorization is present or user is anonymous
-    pub fn get_username(auth: &Option<Authorization>) -> Option<&str> {
+    pub(crate) fn get_username(auth: &Option<Authorization>) -> Option<&str> {
         auth.as_ref().and_then(|a| {
             if a.subject == "anonymous" {
                 None
@@ -71,7 +71,7 @@ impl AuthorizationService {
     /// 2. The user is the owner of the workflow
     /// 3. The user is a system administrator
     /// 4. The user belongs to a group that has access to the workflow
-    pub async fn check_workflow_access(
+    pub(crate) async fn check_workflow_access(
         &self,
         auth: &Option<Authorization>,
         workflow_id: i64,
@@ -181,7 +181,7 @@ impl AuthorizationService {
     }
 
     /// Check if a user can access a job (via workflow access)
-    pub async fn check_job_access(
+    pub(crate) async fn check_job_access(
         &self,
         auth: &Option<Authorization>,
         job_id: i64,
@@ -233,7 +233,7 @@ impl AuthorizationService {
     ];
 
     /// Check if a user can access a resource that has a workflow_id column
-    pub async fn check_resource_access(
+    pub(crate) async fn check_resource_access(
         &self,
         auth: &Option<Authorization>,
         resource_id: i64,
@@ -282,7 +282,7 @@ impl AuthorizationService {
 
     /// Get all workflow IDs that a user can access
     /// This is useful for filtering list queries
-    pub async fn get_accessible_workflow_ids(
+    pub(crate) async fn get_accessible_workflow_ids(
         &self,
         auth: &Option<Authorization>,
     ) -> Result<Option<Vec<i64>>, String> {
@@ -343,7 +343,7 @@ impl AuthorizationService {
 
     /// Build a SQL WHERE clause fragment for filtering by accessible workflows
     /// Returns None if no filtering is needed, or Some(clause, bind_values) if filtering is needed
-    pub async fn build_workflow_access_filter(
+    async fn build_workflow_access_filter(
         &self,
         auth: &Option<Authorization>,
         workflow_id_column: &str,
@@ -365,7 +365,7 @@ impl AuthorizationService {
     }
 
     /// Check if access control is enforced
-    pub fn is_enforced(&self) -> bool {
+    pub(crate) fn is_enforced(&self) -> bool {
         self.enforce_access_control
     }
 
@@ -401,7 +401,10 @@ impl AuthorizationService {
     /// Check if a user is a system administrator
     ///
     /// A user is an admin if they are a member of the "admin" group (is_system = 1)
-    pub async fn check_admin_access(&self, auth: &Option<Authorization>) -> AccessCheckResult {
+    pub(crate) async fn check_admin_access(
+        &self,
+        auth: &Option<Authorization>,
+    ) -> AccessCheckResult {
         if !self.enforce_access_control {
             return AccessCheckResult::Allowed;
         }
@@ -438,7 +441,7 @@ impl AuthorizationService {
     /// 2. They are an admin of that specific group (role = 'admin')
     ///
     /// Note: The system 'admin' group can only be managed via config
-    pub async fn check_group_admin_access(
+    pub(crate) async fn check_group_admin_access(
         &self,
         auth: &Option<Authorization>,
         group_id: i64,
@@ -530,7 +533,7 @@ impl AuthorizationService {
     /// A user can add a workflow to a group if:
     /// 1. They are the owner of the workflow, OR
     /// 2. They are an admin of the group (or system admin)
-    pub async fn check_workflow_group_access(
+    pub(crate) async fn check_workflow_group_access(
         &self,
         auth: &Option<Authorization>,
         workflow_id: i64,
@@ -584,7 +587,7 @@ impl AuthorizationService {
     }
 
     /// Check if a group is a system group (cannot be deleted)
-    pub async fn is_system_group(&self, group_id: i64) -> Result<bool, String> {
+    pub(crate) async fn is_system_group(&self, group_id: i64) -> Result<bool, String> {
         match sqlx::query("SELECT is_system FROM access_group WHERE id = $1")
             .bind(group_id)
             .fetch_optional(self.pool.as_ref())

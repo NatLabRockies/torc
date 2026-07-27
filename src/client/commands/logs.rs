@@ -354,10 +354,10 @@ impl std::fmt::Display for ErrorSeverity {
 /// A detected error in a log file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectedError {
-    pub file: String,
-    pub line_number: usize,
+    pub(crate) file: String,
+    pub(crate) line_number: usize,
     pub pattern_name: String,
-    pub severity: ErrorSeverity,
+    pub(crate) severity: ErrorSeverity,
     pub line_content: String,
 }
 
@@ -365,9 +365,9 @@ pub struct DetectedError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogAnalysisResult {
     /// Workflow ID that was analyzed
-    pub workflow_id: Option<i64>,
+    workflow_id: Option<i64>,
     /// Number of log files parsed
-    pub files_parsed: usize,
+    pub(crate) files_parsed: usize,
     /// Total number of errors detected
     pub error_count: usize,
     /// Total number of warnings detected
@@ -375,9 +375,9 @@ pub struct LogAnalysisResult {
     /// All detected errors
     pub errors: Vec<DetectedError>,
     /// Errors grouped by file
-    pub errors_by_file: HashMap<String, Vec<DetectedError>>,
+    pub(crate) errors_by_file: HashMap<String, Vec<DetectedError>>,
     /// Error counts by pattern type
-    pub errors_by_type: HashMap<String, usize>,
+    pub(crate) errors_by_type: HashMap<String, usize>,
 }
 
 impl LogAnalysisResult {

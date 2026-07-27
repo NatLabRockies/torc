@@ -32,14 +32,14 @@ fn metadata_value_to_map(value: &serde_json::Value) -> HashMap<String, serde_jso
 /// `(workflow_id, entity_id)` uniqueness index or shadow synthetic entities
 /// emitted at export time. Validator and exporter share this list so adding a
 /// new synthetic prefix in one place doesn't drift from the other.
-pub const RESERVED_ENTITY_ID_PREFIXES: &[&str] = &["#torc-", "#software-", "#job-"];
+const RESERVED_ENTITY_ID_PREFIXES: &[&str] = &["#torc-", "#software-", "#job-"];
 
 /// Exact `@id` values reserved for Torc's synthetic export-root entities. Same
 /// rationale as [`RESERVED_ENTITY_ID_PREFIXES`].
-pub const RESERVED_ENTITY_IDS: &[&str] = &["ro-crate-metadata.json", "./"];
+const RESERVED_ENTITY_IDS: &[&str] = &["ro-crate-metadata.json", "./"];
 
 /// True when `id` matches a reserved exact value or starts with a reserved prefix.
-pub fn is_reserved_entity_id(id: &str) -> bool {
+pub(crate) fn is_reserved_entity_id(id: &str) -> bool {
     RESERVED_ENTITY_IDS.contains(&id)
         || RESERVED_ENTITY_ID_PREFIXES
             .iter()
@@ -64,7 +64,7 @@ fn refs_value(ids: &[String]) -> Option<serde_json::Value> {
 ///
 /// Returns the hash as a lowercase hexadecimal string, or None if the file
 /// cannot be read.
-pub fn compute_file_sha256(path: &str) -> Option<String> {
+fn compute_file_sha256(path: &str) -> Option<String> {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(e) => {
@@ -107,7 +107,7 @@ pub fn compute_file_sha256(path: &str) -> Option<String> {
 /// `identifier_override` carries a user-supplied stable identifier (DOI, PURL, URN,
 /// ...) for input files; see [`FileSpec::identifier`]. When None, the @id falls back
 /// to the file path to preserve the original behaviour.
-pub fn build_file_entity(
+fn build_file_entity(
     workflow_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
@@ -174,7 +174,7 @@ pub fn build_file_entity(
 ///
 /// For output files, includes `prov:wasGeneratedBy` linking to the job's CreateAction entity.
 #[allow(clippy::too_many_arguments)]
-pub fn build_file_entity_with_provenance(
+fn build_file_entity_with_provenance(
     workflow_id: i64,
     run_id: i64,
     file: &FileModel,
@@ -248,7 +248,7 @@ pub fn build_file_entity_with_provenance(
 /// - `prov:hadPlan`: reference to the workflow plan entity
 /// - `instrument`: reference to the run-specific software agent
 /// - `result`: references to output file entities
-pub fn build_create_action_entity(
+fn build_create_action_entity(
     workflow_id: i64,
     run_id: i64,
     job: &JobModel,
@@ -368,7 +368,7 @@ fn parse_entity_datetime(entity: &RoCrateEntityModel, field: &str) -> Option<Dat
 /// Find an existing RO-Crate entity for a file.
 ///
 /// Returns the entity if one with the given file_id already exists, None otherwise.
-pub fn find_entity_for_file(
+fn find_entity_for_file(
     config: &Configuration,
     workflow_id: i64,
     file_id: i64,
@@ -382,7 +382,7 @@ pub fn find_entity_for_file(
     }
 }
 
-pub fn find_entity_by_entity_id(
+fn find_entity_by_entity_id(
     config: &Configuration,
     workflow_id: i64,
     entity_id: &str,
@@ -493,7 +493,7 @@ fn create_or_update_run_entity(
     }
 }
 
-pub fn create_workflow_provenance_entities(
+pub(crate) fn create_workflow_provenance_entities(
     config: &Configuration,
     workflow_id: i64,
     run_id: i64,
@@ -512,7 +512,7 @@ pub fn create_workflow_provenance_entities(
 ///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
-pub fn create_ro_crate_entity_for_file(
+fn create_ro_crate_entity_for_file(
     config: &Configuration,
     workflow_id: i64,
     file: &FileModel,
@@ -604,7 +604,7 @@ pub fn create_ro_crate_entity_for_file(
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
 #[allow(clippy::too_many_arguments)]
-pub fn create_ro_crate_entity_for_output_file(
+pub(crate) fn create_ro_crate_entity_for_output_file(
     config: &Configuration,
     workflow_id: i64,
     run_id: i64,
@@ -693,7 +693,7 @@ pub fn create_ro_crate_entity_for_output_file(
 ///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
 /// the calling operation.
-pub fn create_create_action_entity(
+pub(crate) fn create_create_action_entity(
     config: &Configuration,
     workflow_id: i64,
     run_id: i64,
@@ -773,7 +773,7 @@ fn append_result_ref(metadata: &mut serde_json::Value, id: &str) -> bool {
 /// Returns `Some("#job-{id}-attempt-{attempt}")` on success so the caller can
 /// wire the dataset's `prov:wasGeneratedBy`. This is a non-blocking operation:
 /// warnings are logged and `None` is returned on failure.
-pub fn link_dataset_to_job_create_action(
+pub(crate) fn link_dataset_to_job_create_action(
     config: &Configuration,
     workflow_id: i64,
     run_id: i64,
@@ -882,7 +882,7 @@ fn append_dataset_result(
 ///
 /// Returns an error if the entity cannot be created -- callers should roll back
 /// the workflow on failure, the same way they do for other creation steps.
-pub fn create_input_file_entity_with_identifier(
+pub(crate) fn create_input_file_entity_with_identifier(
     config: &Configuration,
     workflow_id: i64,
     file: &FileModel,
@@ -916,7 +916,7 @@ pub fn create_input_file_entity_with_identifier(
 ///
 /// Called during workflow initialization when `enable_ro_crate` is true.
 /// Input files are identified as files with `st_mtime` set (they exist before the workflow runs).
-pub fn create_entities_for_input_files(
+pub(crate) fn create_entities_for_input_files(
     config: &Configuration,
     workflow_id: i64,
     files: &[FileModel],
@@ -998,7 +998,7 @@ fn build_software_entity(
 ///
 /// This is called during workflow initialization regardless of `enable_ro_crate`.
 /// The `run_id` is included in each entity to distinguish software records across runs.
-pub fn create_software_entities(config: &Configuration, workflow_id: i64, run_id: i64) {
+pub(crate) fn create_software_entities(config: &Configuration, workflow_id: i64, run_id: i64) {
     let mut binary_names: Vec<&str> = vec!["torc"];
 
     // torc-slurm-job-runner is only available on Linux

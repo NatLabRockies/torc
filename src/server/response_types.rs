@@ -4,8 +4,8 @@
 //! domain-grouped modules so the rest of the server no longer depends directly on one large
 //! response barrel.
 
-pub mod access {
-    pub use crate::server::api_responses::{
+pub(crate) mod access {
+    pub(crate) use crate::server::api_responses::{
         AddUserToGroupResponse, AddWorkflowToGroupResponse, CheckWorkflowAccessResponse,
         CreateAccessGroupResponse, DeleteAccessGroupResponse, GetAccessGroupResponse,
         ListAccessGroupsApiResponse, ListGroupMembersResponse, ListUserGroupsApiResponse,
@@ -13,8 +13,8 @@ pub mod access {
     };
 }
 
-pub mod artifacts {
-    pub use crate::server::api_responses::{
+pub(crate) mod artifacts {
+    pub(crate) use crate::server::api_responses::{
         CreateFileResponse, CreateFilesResponse, CreateResultResponse, CreateRoCrateEntityResponse,
         CreateUserDataListResponse, CreateUserDataResponse, DeleteAllUserDataResponse,
         DeleteFileResponse, DeleteFilesResponse, DeleteResultResponse, DeleteResultsResponse,
@@ -26,8 +26,8 @@ pub mod artifacts {
     };
 }
 
-pub mod events {
-    pub use crate::server::api_responses::{
+pub(crate) mod events {
+    pub(crate) use crate::server::api_responses::{
         CreateEventResponse, CreateFailureHandlerResponse, DeleteEventResponse,
         DeleteEventsResponse, DeleteFailureHandlerResponse, GetEventResponse,
         GetFailureHandlerResponse, ListEventsResponse, ListFailureHandlersResponse,
@@ -35,8 +35,8 @@ pub mod events {
     };
 }
 
-pub mod jobs {
-    pub use crate::server::api_responses::{
+pub(crate) mod jobs {
+    pub(crate) use crate::server::api_responses::{
         BatchCompleteJobsResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
         CompleteJobResponse, CreateJobResponse, CreateJobsResponse, DeleteJobResponse,
         DeleteJobsResponse, GetJobResponse, GetReadyJobRequirementsResponse,
@@ -47,8 +47,8 @@ pub mod jobs {
     };
 }
 
-pub mod scheduling {
-    pub use crate::server::api_responses::{
+pub(crate) mod scheduling {
+    pub(crate) use crate::server::api_responses::{
         CreateComputeNodeResponse, CreateLocalSchedulerResponse, CreateRemoteWorkersResponse,
         CreateResourceRequirementsResponse, CreateScheduledComputeNodeResponse,
         CreateSlurmSchedulerResponse, CreateSlurmStatsResponse,
@@ -67,15 +67,15 @@ pub mod scheduling {
     };
 }
 
-pub mod system {
-    pub use crate::server::api_responses::{
+pub(crate) mod system {
+    pub(crate) use crate::server::api_responses::{
         AdminSqlResponse, GetTaskResponse, GetVersionResponse, ListAdminAuditLogResponse,
         PingResponse, ReloadAuthResponse,
     };
 }
 
-pub mod workflows {
-    pub use crate::server::api_responses::{
+pub(crate) mod workflows {
+    pub(crate) use crate::server::api_responses::{
         ArchiveWorkflowResponse, CancelWorkflowResponse, ClaimActionResponse,
         CreateWorkflowActionResponse, CreateWorkflowResponse, DeleteWorkflowActionResponse,
         DeleteWorkflowResponse, GetActiveTaskResponse, GetPendingActionsResponse,

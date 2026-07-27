@@ -1,0 +1,36 @@
+# Torc ships these binaries as part of its release artifacts. Keep the production
+# surface explicit so Hawk can distinguish supported entry points from internal code.
+[[production]]
+package = "torc"
+bin = "torc"
+reason = "shipped unified CLI"
+
+[[production]]
+package = "torc"
+bin = "torc-openapi"
+reason = "shipped OpenAPI utility"
+
+[[production]]
+package = "torc"
+bin = "torc-server"
+reason = "shipped server binary"
+
+[[production]]
+package = "torc"
+bin = "torc-htpasswd"
+reason = "shipped authentication utility"
+
+[[production]]
+package = "torc"
+bin = "torc-mcp-server"
+reason = "shipped MCP server"
+
+[[production]]
+package = "torc"
+bin = "torc-dash"
+reason = "shipped dashboard"
+
+[[production]]
+package = "torc"
+bin = "torc-slurm-job-runner"
+reason = "shipped Slurm job runner"

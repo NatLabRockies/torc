@@ -19,13 +19,13 @@ const DB_FILENAME_PREFIX: &str = "resource_metrics";
 #[derive(Debug, Clone)]
 pub struct OomViolation {
     /// PID of the job process (used to identify the job in running_jobs map).
-    pub pid: u32,
+    pub(crate) pid: u32,
     /// Torc job ID.
-    pub job_id: i64,
+    pub(crate) job_id: i64,
     /// Current memory usage in bytes.
-    pub memory_bytes: u64,
+    pub(crate) memory_bytes: u64,
     /// Configured memory limit in bytes.
-    pub limit_bytes: u64,
+    pub(crate) limit_bytes: u64,
 }
 
 // `ResourceMonitorConfig` (struct + impl) and its sub-types now live in
@@ -38,7 +38,7 @@ pub use crate::models::{
 /// Returns the path of the time-series metrics database that would be produced for the
 /// given `output_dir` / `unique_label`. This mirrors the layout created by
 /// `init_timeseries_db` so callers (e.g. post-run plot generation) can locate the file.
-pub fn timeseries_db_path(output_dir: &Path, unique_label: &str) -> PathBuf {
+fn timeseries_db_path(output_dir: &Path, unique_label: &str) -> PathBuf {
     output_dir
         .join("resource_utilization")
         .join(format!("{}_{}.db", DB_FILENAME_PREFIX, unique_label))
@@ -47,10 +47,10 @@ pub fn timeseries_db_path(output_dir: &Path, unique_label: &str) -> PathBuf {
 /// Metrics collected for a single job
 #[derive(Debug, Clone)]
 pub struct JobMetrics {
-    pub peak_memory_bytes: u64,
-    pub avg_memory_bytes: u64,
-    pub peak_cpu_percent: f64,
-    pub avg_cpu_percent: f64,
+    pub(crate) peak_memory_bytes: u64,
+    pub(crate) avg_memory_bytes: u64,
+    pub(crate) peak_cpu_percent: f64,
+    pub(crate) avg_cpu_percent: f64,
     sample_count: usize,
     total_memory_bytes: u64,
     total_cpu_percent: f64,
@@ -103,11 +103,11 @@ impl JobMetrics {
 
 #[derive(Debug, Clone)]
 pub struct SystemMetricsSummary {
-    pub sample_count: i64,
-    pub peak_cpu_percent: f64,
-    pub avg_cpu_percent: f64,
-    pub peak_memory_bytes: u64,
-    pub avg_memory_bytes: u64,
+    pub(crate) sample_count: i64,
+    pub(crate) peak_cpu_percent: f64,
+    pub(crate) avg_cpu_percent: f64,
+    pub(crate) peak_memory_bytes: u64,
+    pub(crate) avg_memory_bytes: u64,
 }
 
 /// Metrics collected for the whole system while this runner is active.
@@ -257,7 +257,7 @@ pub struct ResourceMonitor {
 
 impl ResourceMonitor {
     /// Create a new resource monitor
-    pub fn new(
+    pub(crate) fn new(
         config: ResourceMonitorConfig,
         output_dir: PathBuf,
         unique_label: String,
@@ -304,17 +304,17 @@ impl ResourceMonitor {
     }
 
     /// Path to the time-series metrics DB, or `None` if no time-series scope is enabled.
-    pub fn timeseries_db_path(&self) -> Option<&Path> {
+    pub(crate) fn timeseries_db_path(&self) -> Option<&Path> {
         self.db_path.as_deref()
     }
 
     /// Whether the workflow requested post-run plot generation.
-    pub fn generate_plots(&self) -> bool {
+    pub(crate) fn generate_plots(&self) -> bool {
         self.config.generate_plots
     }
 
     /// Returns `true` when the monitor is configured for `TimeSeries` granularity.
-    pub fn is_time_series(&self) -> bool {
+    pub(crate) fn is_time_series(&self) -> bool {
         matches!(
             self.config.jobs_config().granularity,
             MonitorGranularity::TimeSeries
@@ -322,7 +322,7 @@ impl ResourceMonitor {
     }
 
     /// Returns `true` when per-job monitoring is enabled.
-    pub fn jobs_enabled(&self) -> bool {
+    pub(crate) fn jobs_enabled(&self) -> bool {
         self.config.jobs_config().enabled
     }
 
@@ -330,7 +330,7 @@ impl ResourceMonitor {
     ///
     /// If `memory_limit_bytes` is set and the job exceeds this limit, an OOM violation
     /// will be sent via [`recv_oom_violations()`].
-    pub fn start_monitoring(
+    pub(crate) fn start_monitoring(
         &self,
         pid: u32,
         job_id: i64,
@@ -354,7 +354,7 @@ impl ResourceMonitor {
     ///
     /// Returns a vector of jobs that have exceeded their memory limits.
     /// The job runner should kill these jobs and mark them as OOM-killed.
-    pub fn recv_oom_violations(&self) -> Vec<OomViolation> {
+    pub(crate) fn recv_oom_violations(&self) -> Vec<OomViolation> {
         let mut violations = Vec::new();
         loop {
             match self.oom_rx.try_recv() {
@@ -380,7 +380,7 @@ impl ResourceMonitor {
     ///
     /// `pid` must be the srun process PID so that the existing `stop_monitoring(pid)` API
     /// continues to work without changes.
-    pub fn start_monitoring_slurm(
+    pub(crate) fn start_monitoring_slurm(
         &self,
         pid: u32,
         slurm_job_id: String,
@@ -408,7 +408,7 @@ impl ResourceMonitor {
     ///
     /// Sends a stop command to the monitoring thread and waits for it to return
     /// the collected metrics via a response channel, with a 5-second timeout.
-    pub fn stop_monitoring(&self, pid: u32) -> Option<JobMetrics> {
+    pub(crate) fn stop_monitoring(&self, pid: u32) -> Option<JobMetrics> {
         let (response_tx, response_rx) = channel();
         if let Err(e) = self
             .tx
@@ -431,7 +431,7 @@ impl ResourceMonitor {
     }
 
     /// Shutdown the monitoring thread and return compute-node summary metrics, if collected.
-    pub fn shutdown(self) -> Option<SystemMetricsSummary> {
+    pub(crate) fn shutdown(self) -> Option<SystemMetricsSummary> {
         let (response_tx, response_rx) = channel();
         if let Err(e) = self.tx.send(MonitorCommand::Shutdown { response_tx }) {
             error!("Failed to send shutdown command: {}", e);
@@ -1079,7 +1079,7 @@ fn collect_process_tree_stats(root_pid: u32, sys: &System) -> (f64, u64, usize) 
 /// Discover the numeric step ID for a named step, retrying a few times for Slurm registration.
 ///
 /// Called at srun launch time. Returns `None` if the step doesn't appear within ~1 second.
-pub fn discover_step_id_with_retries(slurm_job_id: &str, step_name: &str) -> Option<String> {
+pub(crate) fn discover_step_id_with_retries(slurm_job_id: &str, step_name: &str) -> Option<String> {
     for attempt in 0..5 {
         let map = discover_step_ids(slurm_job_id);
         if let Some(id) = map.get(step_name) {

@@ -39,7 +39,7 @@ impl CredentialCache {
     ///
     /// # Arguments
     /// * `ttl` - How long successful authentications should be cached
-    pub fn new(ttl: Duration) -> Self {
+    pub(crate) fn new(ttl: Duration) -> Self {
         Self {
             cache: Arc::new(RwLock::new(HashMap::new())),
             ttl,
@@ -59,7 +59,7 @@ impl CredentialCache {
     /// Check if credentials are cached and still valid.
     ///
     /// Returns `true` if the credentials are in the cache and haven't expired.
-    pub fn is_cached(&self, username: &str, password: &str) -> bool {
+    pub(crate) fn is_cached(&self, username: &str, password: &str) -> bool {
         let key = Self::cache_key(username, password);
         let cache = self.cache.read();
 
@@ -74,7 +74,7 @@ impl CredentialCache {
     /// Cache a successful authentication.
     ///
     /// Only call this after bcrypt verification succeeds.
-    pub fn cache_success(&self, username: &str, password: &str) {
+    pub(crate) fn cache_success(&self, username: &str, password: &str) {
         let key = Self::cache_key(username, password);
         let entry = CacheEntry {
             expires_at: Instant::now() + self.ttl,
@@ -98,7 +98,7 @@ impl CredentialCache {
     /// Clear all cached entries.
     ///
     /// Used when the htpasswd file is reloaded to invalidate stale credentials.
-    pub fn clear(&self) {
+    pub(crate) fn clear(&self) {
         self.cache.write().clear();
     }
 

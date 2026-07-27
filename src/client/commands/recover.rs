@@ -104,11 +104,11 @@ pub struct RecoveryResult {
     pub jobs_to_retry: Vec<i64>,
     /// Detailed resource adjustments (for JSON output)
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub adjustments: Vec<ResourceAdjustmentReport>,
+    adjustments: Vec<ResourceAdjustmentReport>,
     /// Slurm scheduler dry-run result (only in dry-run mode)
     /// Memory values are updated to reflect the adjusted values from recovery heuristics.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub slurm_dry_run: Option<RegenerateDryRunResult>,
+    slurm_dry_run: Option<RegenerateDryRunResult>,
 }
 
 /// Full recovery report for JSON output
@@ -127,9 +127,9 @@ pub struct RecoveryReport {
 /// Information about Slurm logs for a job
 #[derive(Debug)]
 pub struct SlurmLogInfo {
-    pub slurm_job_id: Option<String>,
-    pub slurm_stdout: Option<String>,
-    pub slurm_stderr: Option<String>,
+    slurm_job_id: Option<String>,
+    slurm_stdout: Option<String>,
+    slurm_stderr: Option<String>,
 }
 
 /// Whether unknown-cause failures should be retried.
@@ -140,7 +140,7 @@ pub struct SlurmLogInfo {
 /// effects) and recovery would then abort with "no auto-recoverable jobs" because the
 /// unknown jobs were never added to the retry set. Both `torc recover` and
 /// `torc watch --recover` flow through here, so the rule is applied identically.
-pub(crate) fn effective_retry_unknown(retry_unknown: bool, recovery_hook: Option<&str>) -> bool {
+fn effective_retry_unknown(retry_unknown: bool, recovery_hook: Option<&str>) -> bool {
     retry_unknown || recovery_hook.is_some()
 }
 
@@ -647,10 +647,7 @@ pub fn recover_workflow(
 ///
 /// Returns `Err(message)` with a neutral description of what is wrong. Callers can
 /// prepend their own action-specific prefix when surfacing the error to the user.
-pub(crate) fn check_workflow_quiesced(
-    config: &Configuration,
-    workflow_id: i64,
-) -> Result<(), String> {
+fn check_workflow_quiesced(config: &Configuration, workflow_id: i64) -> Result<(), String> {
     // Check if workflow is complete
     let is_complete = apis::workflows_api::is_workflow_complete(config, workflow_id)
         .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
@@ -1286,7 +1283,7 @@ pub fn reinitialize_workflow(config: &Configuration, workflow_id: i64) -> Result
 }
 
 /// Run the user's custom recovery hook command
-pub fn run_recovery_hook(
+fn run_recovery_hook(
     config: &Configuration,
     workflow_id: i64,
     hook_command: &str,
@@ -1369,7 +1366,7 @@ pub fn run_recovery_hook(
 }
 
 /// Regenerate Slurm schedulers and submit allocations
-pub fn regenerate_and_submit(
+pub(crate) fn regenerate_and_submit(
     config: &Configuration,
     workflow_id: i64,
     output_dir: &Path,

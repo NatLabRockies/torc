@@ -2,7 +2,7 @@ pub mod access_groups;
 pub mod admin;
 pub mod compute_nodes;
 pub mod config;
-pub mod diagnose;
+pub(crate) mod diagnose;
 pub mod events;
 pub mod failure_handlers;
 pub mod files;
@@ -11,7 +11,7 @@ pub mod job_dependencies;
 pub mod jobs;
 pub mod logs;
 pub mod orphan_detection;
-pub mod output;
+pub(crate) mod output;
 pub mod pagination;
 pub mod reconcile;
 pub mod recover;
@@ -23,7 +23,7 @@ pub mod ro_crate;
 pub mod scheduled_compute_nodes;
 pub mod self_update;
 pub mod slurm;
-pub mod table_format;
+pub(crate) mod table_format;
 pub mod tasks;
 pub mod user_data;
 pub mod watch;
@@ -114,19 +114,19 @@ pub fn select_workflow_interactively(
 }
 
 /// Helper function to get user name from parameter or environment variables
-pub fn get_user_name(user: &Option<String>) -> String {
+fn get_user_name(user: &Option<String>) -> String {
     if user.is_some() {
         return user.as_deref().unwrap().to_string();
     }
     get_env_user_name()
 }
 
-pub fn get_env_user_name() -> String {
+pub(crate) fn get_env_user_name() -> String {
     crate::get_username()
 }
 
 /// Truncate string to specified length
-pub fn truncate_string(s: &str, max_len: usize) -> String {
+fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
@@ -135,7 +135,7 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
 }
 
 /// Print API errors in a user-friendly way
-pub fn print_error<T>(operation: &str, error: &crate::client::apis::Error<T>) {
+pub(crate) fn print_error<T>(operation: &str, error: &crate::client::apis::Error<T>) {
     match error {
         crate::client::apis::Error::Reqwest(e) => {
             eprintln!("Network error while {}: {}", operation, e);

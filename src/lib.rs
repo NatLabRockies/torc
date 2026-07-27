@@ -3,6 +3,10 @@
 //! This library provides shared functionality for the Torc workflow orchestration system.
 //! It includes data models, server implementation, and client utilities.
 
+// Visibility reductions performed by Hawk intentionally leave some generated/API compatibility
+// helpers unused in a given binary feature profile.
+#![allow(dead_code)]
+
 /// Maximum number of records that can be transferred in a single API request or response.
 /// Used for both batch creation limits and pagination limits.
 pub const MAX_RECORD_TRANSFER_COUNT: i64 = 100_000;
@@ -23,7 +27,7 @@ pub mod api_version;
 pub mod memory_utils;
 pub mod models;
 pub mod network_utils;
-pub mod ro_crate_json_ld;
+pub(crate) mod ro_crate_json_ld;
 pub mod time_utils;
 
 // Configuration module (requires config feature, enabled by client)
@@ -71,15 +75,14 @@ pub mod cli;
 pub use models::{
     ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodeSchedule,
     ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel, FileModel,
-    GetReadyJobRequirementsResponse, IsCompleteResponse, JobDependencyModel,
-    JobFileRelationshipModel, JobModel, JobStatus, JobUserDataRelationshipModel, JobsModel,
-    ListComputeNodesResponse, ListEventsResponse, ListFilesResponse, ListJobDependenciesResponse,
-    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
-    ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
-    ListResourceRequirementsResponse, ListResultsResponse, ListScheduledComputeNodesResponse,
-    ListSlurmSchedulersResponse, ListUserDataResponse, ListWorkflowsResponse, LocalSchedulerModel,
-    ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel, RunningJobModel,
-    RunningJobsResponse, ScheduledComputeNodesModel, SlurmJobCorrelationModel,
+    IsCompleteResponse, JobDependencyModel, JobFileRelationshipModel, JobModel, JobStatus,
+    JobUserDataRelationshipModel, JobsModel, ListComputeNodesResponse, ListEventsResponse,
+    ListFilesResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
+    ListJobUserDataRelationshipsResponse, ListJobsResponse, ListMissingUserDataResponse,
+    ListRequiredExistingFilesResponse, ListResourceRequirementsResponse, ListResultsResponse,
+    ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse, ListUserDataResponse,
+    ListWorkflowsResponse, ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel,
+    RunningJobModel, RunningJobsResponse, ScheduledComputeNodesModel, SlurmJobCorrelationModel,
     SlurmJobCorrelationsResponse, SlurmSchedulerModel, UserDataModel, WorkflowActionModel,
     WorkflowModel, WorkflowStatusResponse,
 };

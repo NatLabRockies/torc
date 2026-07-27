@@ -12,10 +12,7 @@ use tokio::net::TcpListener;
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "ios")))]
 use openssl::ssl::{Ssl, SslAcceptor, SslFiletype, SslMethod};
 
-pub(super) async fn sync_admin_group(
-    pool: &SqlitePool,
-    admin_users: &[String],
-) -> Result<(), sqlx::Error> {
+async fn sync_admin_group(pool: &SqlitePool, admin_users: &[String]) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO access_group (name, description, is_system)

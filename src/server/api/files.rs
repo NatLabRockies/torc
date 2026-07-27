@@ -83,13 +83,13 @@ pub trait FilesApi<C> {
 /// Implementation of files API for the server
 #[derive(Clone)]
 pub struct FilesApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const FILE_COLUMNS: &[&str] = &["id", "workflow_id", "name", "path", "st_mtime"];
 
 impl FilesApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

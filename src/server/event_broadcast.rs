@@ -12,15 +12,15 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BroadcastEvent {
     /// The workflow ID this event belongs to.
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Timestamp in milliseconds since Unix epoch.
-    pub timestamp: i64,
+    pub(crate) timestamp: i64,
     /// The type of event (e.g., "job_started", "job_completed", "job_failed").
-    pub event_type: String,
+    pub(crate) event_type: String,
     /// The severity level of the event.
-    pub severity: EventSeverity,
+    pub(crate) severity: EventSeverity,
     /// Event-specific data as JSON.
-    pub data: serde_json::Value,
+    pub(crate) data: serde_json::Value,
 }
 
 /// Event broadcaster that manages a broadcast channel for SSE events.
@@ -34,7 +34,7 @@ impl EventBroadcaster {
     ///
     /// The capacity determines how many events can be buffered before slow
     /// receivers start missing events (lagging).
-    pub fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
         Self {
             sender: Arc::new(sender),
@@ -45,7 +45,7 @@ impl EventBroadcaster {
     ///
     /// If there are no subscribers, the event is silently dropped.
     /// This is intentional - events are ephemeral and not persisted.
-    pub fn broadcast(&self, event: BroadcastEvent) {
+    pub(crate) fn broadcast(&self, event: BroadcastEvent) {
         // Ignore the result - if there are no receivers, the event is dropped
         let _ = self.sender.send(event);
     }
@@ -54,7 +54,7 @@ impl EventBroadcaster {
     ///
     /// Returns a receiver that will receive all future events broadcast
     /// after this subscription is created.
-    pub fn subscribe(&self) -> broadcast::Receiver<BroadcastEvent> {
+    pub(crate) fn subscribe(&self) -> broadcast::Receiver<BroadcastEvent> {
         self.sender.subscribe()
     }
 }

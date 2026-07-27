@@ -12,9 +12,9 @@ use std::time::UNIX_EPOCH;
 
 #[derive(Debug, serde::Serialize)]
 pub struct InitializationCheck {
-    pub safe: bool,
-    pub missing_input_files: Vec<String>,
-    pub existing_output_files: Vec<String>,
+    pub(crate) safe: bool,
+    pub(crate) missing_input_files: Vec<String>,
+    pub(crate) existing_output_files: Vec<String>,
 }
 
 /// Summary of what `WorkflowManager::start` actually did, so the caller can distinguish a real
@@ -65,7 +65,7 @@ impl WorkflowManager {
 
     /// Check if initialization is safe to run without executing.
     /// Returns information about missing input files and existing output files.
-    pub fn check_initialization(&self) -> Result<InitializationCheck, TorcError> {
+    pub(crate) fn check_initialization(&self) -> Result<InitializationCheck, TorcError> {
         // Check for missing required input files
         let missing_input_files = self.get_missing_required_files()?;
 
@@ -570,7 +570,7 @@ impl WorkflowManager {
 
     /// Check for existing output files and optionally delete them.
     /// If delete_files is true, deletes the files. If false, logs warnings only.
-    pub fn cleanup_output_files(&self, delete_files: bool) -> Result<(), TorcError> {
+    fn cleanup_output_files(&self, delete_files: bool) -> Result<(), TorcError> {
         info!(
             "Checking for existing output files for workflow {}",
             self.workflow_id
@@ -696,7 +696,7 @@ impl WorkflowManager {
         Ok(())
     }
 
-    pub fn check_user_data(&self) -> Result<(), TorcError> {
+    fn check_user_data(&self) -> Result<(), TorcError> {
         match apis::workflows_api::list_missing_user_data(&self.config, self.workflow_id) {
             Ok(response) => {
                 if !response.user_data.is_empty() {
@@ -984,7 +984,7 @@ impl WorkflowManager {
     /// Calls the server's process_changed_job_inputs endpoint which computes
     /// input hashes and resets jobs to Uninitialized if inputs have changed.
     /// If dry_run is true, log required changes but do not apply them.
-    pub fn process_changed_user_data(&self, dry_run: bool) -> Result<(), TorcError> {
+    fn process_changed_user_data(&self, dry_run: bool) -> Result<(), TorcError> {
         debug!(
             "Processing changed user_data for workflow {}",
             self.workflow_id
@@ -1253,7 +1253,7 @@ impl WorkflowManager {
     /// Check that all required existing files for the workflow exist on the filesystem.
     /// If force is true, log missing files as warnings but don't return an error.
     /// If force is false, return an error if any required files are missing.
-    pub fn check_workflow_files(&self, force: bool) -> Result<(), TorcError> {
+    fn check_workflow_files(&self, force: bool) -> Result<(), TorcError> {
         // Get list of required existing file IDs
         let response =
             match apis::workflows_api::list_required_existing_files(&self.config, self.workflow_id)

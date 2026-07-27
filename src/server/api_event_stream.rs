@@ -13,18 +13,18 @@ use tokio::sync::broadcast;
 
 /// Default cap on captured request/response body bytes per direction
 /// that are forwarded to subscribers.
-pub const DEFAULT_BODY_CAPTURE_LIMIT: usize = 8 * 1024;
+const DEFAULT_BODY_CAPTURE_LIMIT: usize = 8 * 1024;
 
 /// Environment variable that overrides [`DEFAULT_BODY_CAPTURE_LIMIT`].
-pub const BODY_CAPTURE_LIMIT_ENV: &str = "TORC_API_EVENT_BODY_MAX_BYTES";
+const BODY_CAPTURE_LIMIT_ENV: &str = "TORC_API_EVENT_BODY_MAX_BYTES";
 
 /// Hard ceiling on bytes the middleware will buffer in memory in order
 /// to capture a body. Requests/responses whose advertised length
 /// exceeds this are passed through untouched (no body capture).
-pub const BODY_CAPTURE_HARD_CAP_BYTES: usize = 1024 * 1024;
+pub(crate) const BODY_CAPTURE_HARD_CAP_BYTES: usize = 1024 * 1024;
 
 /// Resolve the per-direction body display limit at runtime.
-pub fn body_capture_limit() -> usize {
+pub(crate) fn body_capture_limit() -> usize {
     std::env::var(BODY_CAPTURE_LIMIT_ENV)
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -35,51 +35,51 @@ pub fn body_capture_limit() -> usize {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiRequestEvent {
     /// Unix epoch milliseconds at which the request finished.
-    pub timestamp_ms: i64,
+    pub(crate) timestamp_ms: i64,
     /// HTTP method (e.g. `GET`, `POST`).
-    pub method: String,
+    pub(crate) method: String,
     /// URL path component (without query string).
-    pub path: String,
+    pub(crate) path: String,
     /// URL query string, if any (without the leading `?`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub query: Option<String>,
+    pub(crate) query: Option<String>,
     /// Final HTTP status code returned to the client.
-    pub status: u16,
+    pub(crate) status: u16,
     /// Wall-clock duration spent inside the router, in milliseconds.
-    pub latency_ms: u64,
+    pub(crate) latency_ms: u64,
     /// `x-span-id` assigned by `inject_request_context`, when available.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
+    pub(crate) request_id: Option<String>,
     /// Authenticated subject extracted from the request, when available.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<String>,
+    pub(crate) user: Option<String>,
     /// Captured request body when body capture was enabled and the
     /// payload was textual.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_body: Option<CapturedBody>,
+    pub(crate) request_body: Option<CapturedBody>,
     /// Captured response body when body capture was enabled and the
     /// payload was textual.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_body: Option<CapturedBody>,
+    pub(crate) response_body: Option<CapturedBody>,
 }
 
 /// Captured payload, possibly truncated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapturedBody {
     /// Total observed length in bytes (before truncation).
-    pub bytes: usize,
+    pub(crate) bytes: usize,
     /// Whether `text` was truncated to fit the capture limit.
-    pub truncated: bool,
+    pub(crate) truncated: bool,
     /// UTF-8 view of the (possibly truncated) body. `None` when the
     /// body was not valid UTF-8 — binary payloads are reported as
     /// metadata only.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
+    pub(crate) text: Option<String>,
 }
 
 impl CapturedBody {
     /// Build a [`CapturedBody`] from raw bytes, truncating to `limit`.
-    pub fn from_bytes(bytes: &[u8], limit: usize) -> Self {
+    pub(crate) fn from_bytes(bytes: &[u8], limit: usize) -> Self {
         let total = bytes.len();
         let truncated = total > limit;
         let slice = if truncated { &bytes[..limit] } else { bytes };
@@ -101,7 +101,7 @@ pub struct ApiEventBroadcaster {
 
 impl ApiEventBroadcaster {
     /// Create a broadcaster with the given channel capacity.
-    pub fn new(capacity: usize) -> Self {
+    fn new(capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
         Self {
             sender: Arc::new(sender),
@@ -110,29 +110,29 @@ impl ApiEventBroadcaster {
     }
 
     /// Returns the number of currently connected receivers.
-    pub fn receiver_count(&self) -> usize {
+    pub(crate) fn receiver_count(&self) -> usize {
         self.sender.receiver_count()
     }
 
     /// Returns the number of receivers that asked for body capture.
-    pub fn body_subscriber_count(&self) -> usize {
+    pub(crate) fn body_subscriber_count(&self) -> usize {
         self.body_subscribers.load(Ordering::Relaxed)
     }
 
     /// Broadcast an event. Returns `true` if at least one receiver was
     /// notified. Drops silently when there are no subscribers.
-    pub fn broadcast(&self, event: ApiRequestEvent) -> bool {
+    pub(crate) fn broadcast(&self, event: ApiRequestEvent) -> bool {
         self.sender.send(event).is_ok()
     }
 
     /// Subscribe to the channel.
-    pub fn subscribe(&self) -> broadcast::Receiver<ApiRequestEvent> {
+    pub(crate) fn subscribe(&self) -> broadcast::Receiver<ApiRequestEvent> {
         self.sender.subscribe()
     }
 
     /// Register interest in body capture; the returned guard decrements
     /// the body-subscriber count when dropped.
-    pub fn body_subscriber_guard(&self) -> BodySubscriberGuard {
+    pub(crate) fn body_subscriber_guard(&self) -> BodySubscriberGuard {
         self.body_subscribers.fetch_add(1, Ordering::Relaxed);
         BodySubscriberGuard {
             counter: self.body_subscribers.clone(),

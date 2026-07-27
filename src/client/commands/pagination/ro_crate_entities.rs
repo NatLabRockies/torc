@@ -13,24 +13,24 @@ use crate::models::RoCrateEntityModel;
 #[derive(Debug, Clone, Default)]
 pub struct RoCrateEntityListParams {
     /// Workflow ID to list RO-Crate entities from
-    pub workflow_id: i64,
+    workflow_id: i64,
     /// Pagination offset
-    pub offset: i64,
+    offset: i64,
     /// Maximum number of entities to return
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 impl RoCrateEntityListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
@@ -86,7 +86,7 @@ impl Paginatable for RoCrateEntityModel {
 }
 
 /// Type alias for the RO-Crate entities iterator
-pub type RoCrateEntitiesIterator = PaginatedIterator<RoCrateEntityModel>;
+type RoCrateEntitiesIterator = PaginatedIterator<RoCrateEntityModel>;
 
 /// Create a lazy iterator for RO-Crate entities that fetches pages on-demand.
 ///
@@ -99,7 +99,7 @@ pub type RoCrateEntitiesIterator = PaginatedIterator<RoCrateEntityModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<RoCrateEntityModel, Error>` items
-pub fn iter_ro_crate_entities(
+fn iter_ro_crate_entities(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: RoCrateEntityListParams,
@@ -119,7 +119,7 @@ pub fn iter_ro_crate_entities(
 /// # Returns
 /// `Result<Vec<RoCrateEntityModel>, Error>` containing all entities or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_ro_crate_entities(
+pub(crate) fn paginate_ro_crate_entities(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: RoCrateEntityListParams,

@@ -19,8 +19,6 @@ use super::recover::{RecoverArgs, recover_workflow, regenerate_and_submit};
 
 // Use shared orphan detection logic
 use super::orphan_detection::cleanup_orphaned_jobs;
-// Re-export for backwards compatibility
-pub use super::orphan_detection::ORPHANED_JOB_RETURN_CODE;
 
 /// Default wait time for database connectivity issues (in minutes)
 const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;

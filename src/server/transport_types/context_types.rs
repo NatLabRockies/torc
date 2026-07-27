@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::auth_types;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ApiError(pub String);
+pub struct ApiError(pub(crate) String);
 
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -105,10 +105,10 @@ impl Push<Option<auth_types::Authorization>> for EmptyContext {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct XSpanIdString(pub String);
+pub struct XSpanIdString(pub(crate) String);
 
 impl XSpanIdString {
-    pub fn get_or_generate<B>(request: &Request<B>) -> Self {
+    pub(crate) fn get_or_generate<B>(request: &Request<B>) -> Self {
         let span = request
             .headers()
             .get("x-span-id")
