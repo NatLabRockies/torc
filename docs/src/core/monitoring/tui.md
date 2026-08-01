@@ -94,7 +94,7 @@ Select a workflow and use these keys:
 | `W` | Watch         | Watch workflow with auto-recovery (live output)         |
 | `V` | Recover       | One-shot recovery: bump resources and resubmit failures |
 | `v` | Recover (dry) | Preview recovery without applying changes               |
-| `C` | Cancel        | Cancel running workflow                                 |
+| `C` | Cancel        | Cancel workflow and its Slurm allocations               |
 | `d` | Delete        | Delete workflow (destructive!)                          |
 
 Most destructive actions show a yes/no confirmation dialog. Recovery (`V`) is gated by the

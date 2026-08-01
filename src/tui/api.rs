@@ -1,6 +1,7 @@
 use crate::client::apis;
 use crate::client::apis::configuration::{BasicAuth, Configuration, TlsConfig};
 use crate::client::config::TorcConfig;
+use crate::client::workflow_cancel::{CanceledAllocations, cancel_scheduler_allocations};
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::models::{
     ComputeNodeModel, FileModel, JobDependencyModel, JobModel, JobStatus, ResultModel,
@@ -370,11 +371,24 @@ impl TorcClient {
         Ok(())
     }
 
-    pub fn cancel_workflow(&self, workflow_id: i64) -> Result<()> {
+    /// Cancel a workflow and any Slurm allocations scheduled for it.
+    ///
+    /// Canceling the workflow alone leaves its allocations queued; when one starts it
+    /// finds no runnable jobs and exits immediately, so the allocations are canceled too
+    /// (same as `torc cancel`). Returns the allocation-cancellation summary; failures
+    /// there are reported in it rather than failing the whole call, since the workflow
+    /// itself was already canceled.
+    pub fn cancel_workflow(&self, workflow_id: i64) -> Result<CanceledAllocations> {
         apis::workflows_api::cancel_workflow(&self.config, workflow_id)
             .context("Failed to cancel workflow")?;
 
-        Ok(())
+        let outcome = cancel_scheduler_allocations(&self.config, workflow_id, &mut |_| {})
+            .unwrap_or_else(|e| CanceledAllocations {
+                errors: vec![format!("Failed to list scheduled compute nodes: {}", e)],
+                ..Default::default()
+            });
+
+        Ok(outcome)
     }
 
     // === Job Actions ===

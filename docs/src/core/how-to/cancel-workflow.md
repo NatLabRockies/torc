@@ -15,6 +15,11 @@ This:
 - Sends SIGKILL to all running processes
 - Sends `scancel` to all active or pending Slurm allocations
 
+## Cancel from the TUI
+
+Press `C` on a workflow in `torc tui`. This runs the same cancellation as `torc cancel`, including
+the `scancel` of outstanding Slurm allocations, and reports how many were canceled.
+
 ## Check Cancellation Status
 
 Verify the workflow was canceled:
