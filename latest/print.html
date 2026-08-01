@@ -11078,6 +11078,7 @@ job reference).</li>
 <tr><td><code>ntasks_per_node</code></td><td>integer</td><td>none</td><td>Number of tasks per node</td></tr>
 <tr><td><code>tmp</code></td><td>string</td><td>none</td><td>Temporary storage specification</td></tr>
 <tr><td><code>extra</code></td><td>string</td><td>none</td><td>Additional Slurm parameters</td></tr>
+<tr><td><code>serialize_allocations</code></td><td>boolean</td><td><code>false</code></td><td>Run this scheduler's allocations one at a time. See <a href="core/reference/../../specialized/hpc/chained-allocations.html">Chained Allocations</a></td></tr>
 </tbody></table>
 </div>
 <h2 id="executionconfig"><a class="header" href="#executionconfig">ExecutionConfig</a></h2>
@@ -14250,6 +14251,80 @@ schedule them independently across nodes for maximum throughput.</p>
 <li><a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> — Manual scheduler and srun wrapping details</li>
 <li><a href="specialized/hpc/../../core/reference/resources.html">Resource Requirements Reference</a> — Complete field reference</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="chained-allocations"><a class="header" href="#chained-allocations">Chained Allocations</a></h1>
+<p>Some workflows need more wall time than any single Slurm allocation provides. A chain of 500
+sequential jobs at 2-4 hours each is weeks of serial work, but partitions typically cap allocations
+at hours. You need one allocation to run as many jobs as fit, exit, and the next to pick up where it
+left off.</p>
+<p>Set <code>serialize_allocations</code> on a Slurm scheduler and torc submits every allocation for that
+scheduler under one shared Slurm job name with <code>--dependency=singleton</code>. Slurm then runs them
+strictly one at a time. Submit them all up front and they chain themselves, with no long-running
+process on the login node.</p>
+<h2 id="configuring-a-scheduler"><a class="header" href="#configuring-a-scheduler">Configuring a Scheduler</a></h2>
+<pre><code class="language-yaml">slurm_schedulers:
+  - name: chain
+    account: my_account
+    walltime: "12:00:00"
+    nodes: 1
+    serialize_allocations: true
+
+resource_requirements:
+  - name: serial
+    num_cpus: 104
+    memory: "200g"
+    runtime: "PT4H"
+</code></pre>
+<p>A complete runnable spec is at <code>examples/yaml/chained_allocations.yaml</code>.</p>
+<p>Or on an existing scheduler:</p>
+<pre><code class="language-bash">torc slurm create &lt;workflow_id&gt; -n chain -a my_account -W 12:00:00 --serialize-allocations
+torc slurm update &lt;scheduler_id&gt; --serialize-allocations true
+</code></pre>
+<p>Then submit the whole chain at once:</p>
+<pre><code class="language-bash">torc slurm schedule-nodes &lt;workflow_id&gt; -n 167
+</code></pre>
+<p>All 167 allocations enter the queue immediately. Slurm starts one, holds the rest, and releases the
+next each time the current one ends.</p>
+<h2 id="how-many-allocations-to-submit"><a class="header" href="#how-many-allocations-to-submit">How Many Allocations to Submit</a></h2>
+<p>Divide the total work by what one allocation can absorb. A worker claims jobs until its remaining
+wall time can no longer fit the next one, so with a 12-hour walltime and a declared <code>runtime</code> of
+<code>PT4H</code>, each allocation completes at least three jobs:</p>
+<pre><code>allocations = ceil(total_jobs / floor(walltime / runtime))
+            = ceil(500 / floor(12 / 4)) = 167
+</code></pre>
+<p>Round up. Over-submitting is cheap: once the workflow has no runnable jobs left, the finishing
+worker cancels every allocation still queued for the workflow, so the surplus never starts.</p>
+<h2 id="why-the-chain-beats-scheduling-on-shutdown"><a class="header" href="#why-the-chain-beats-scheduling-on-shutdown">Why the Chain Beats Scheduling on Shutdown</a></h2>
+<p>A worker could submit its own replacement as it exits, but that pays Slurm's full
+submit-and-schedule latency at every link — 167 times over — and makes each link's submission depend
+on its predecessor exiting cleanly. A chained allocation is already sitting in the queue when its
+predecessor ends, so it is typically released the moment the slot frees. On clusters that accrue age
+priority for dependency-held jobs (<code>PriorityFlags=ACCRUE_ALWAYS</code> in the Slurm config), each link
+also builds priority while its predecessor runs; by default Slurm starts the age clock only when the
+dependency clears.</p>
+<h2 id="wall-time-and-job-runtime"><a class="header" href="#wall-time-and-job-runtime">Wall Time and Job Runtime</a></h2>
+<p>The server only hands a worker jobs whose declared <code>runtime</code> fits in the allocation's remaining wall
+time. This is what makes the handoff clean: an allocation stops claiming once the next job no longer
+fits, idles briefly, and exits, releasing the slot early rather than sitting idle until walltime.</p>
+<p>Declare <code>runtime</code> at or above the worst case you expect. If a job overruns its declared runtime it
+is terminated when the walltime expires, and jobs downstream of it are left blocked with nothing to
+unblock them — which ends the chain, since the remaining queued allocations have no runnable work.</p>
+<h2 id="scope-of-the-chain"><a class="header" href="#scope-of-the-chain">Scope of the Chain</a></h2>
+<p>The shared job name is derived from the workflow ID and the scheduler ID, so:</p>
+<ul>
+<li>Two schedulers in one workflow chain independently.</li>
+<li>The same workflow submitted twice chains independently per scheduler.</li>
+<li>Allocations added later — by a second <code>schedule-nodes</code> call, or by a <code>schedule_nodes</code> action
+firing from a compute node — join the existing chain rather than running alongside it.</li>
+</ul>
+<p>Slurm scopes <code>singleton</code> to a job name <strong>per user</strong>, so the name is prefixed with <code>torc-</code> to keep
+the chain from serializing against your unrelated Slurm jobs.</p>
+<p>Because the chain depends on every allocation sharing one fixed name,
+<code>torc slurm schedule-nodes --job-prefix</code> is rejected for a serialized scheduler: a per-invocation
+prefix would change the name and fork the chain.</p>
+<h2 id="interaction-with-extra"><a class="header" href="#interaction-with-extra">Interaction with <code>extra</code></a></h2>
+<p><code>extra</code> is emitted after torc's own <code>#SBATCH</code> directives, so a <code>--dependency</code> set there overrides
+the generated <code>--dependency=singleton</code> and breaks the chain. Use <code>extra</code> for unrelated flags
+(<code>--reservation</code>, <code>--constraint</code>) when serializing allocations.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-slurm-configuration"><a class="header" href="#advanced-slurm-configuration">Advanced Slurm Configuration</a></h1>
 <p>This guide covers advanced Slurm configuration for users who need fine-grained control over their
 HPC workflows.</p>
