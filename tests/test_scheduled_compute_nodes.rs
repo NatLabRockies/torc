@@ -25,6 +25,7 @@ fn create_test_slurm_scheduler(
         tmp: Some("100G".to_string()),
         walltime: "04:00:00".to_string(),
         extra: None,
+        serialize_allocations: None,
     };
     apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("Failed to create test Slurm scheduler")

@@ -306,6 +306,14 @@ EXAMPLES:
         /// Add extra Slurm parameters, for example --extra='--reservation=my-reservation'
         #[arg(short, long)]
         extra: Option<String>,
+        /// Run this scheduler's allocations one at a time instead of concurrently
+        ///
+        /// All allocations submitted for this scheduler share one Slurm job name and
+        /// carry --dependency=singleton, so Slurm chains them. Submit N allocations up
+        /// front and each starts as its predecessor finishes. Use for sequential work
+        /// that needs more wall time than a single allocation provides.
+        #[arg(long, default_value = "false")]
+        serialize_allocations: bool,
     },
     /// Modify a Slurm config in the database
     #[command(hide = true)]
@@ -342,6 +350,11 @@ EXAMPLES:
         /// Add extra Slurm parameters
         #[arg(short, long)]
         extra: Option<String>,
+        /// Run this scheduler's allocations one at a time instead of concurrently
+        ///
+        /// See `torc slurm create --help` for what serialization does.
+        #[arg(long)]
+        serialize_allocations: Option<bool>,
     },
     /// Show the current Slurm configs in the database
     #[command(
@@ -1083,6 +1096,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             tmp,
             walltime,
             extra,
+            serialize_allocations,
         } => {
             let user_name = get_env_user_name();
             let wf_id = workflow_id.unwrap_or_else(|| {
@@ -1106,6 +1120,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 tmp: tmp.clone(),
                 walltime: walltime.clone(),
                 extra: extra.clone(),
+                serialize_allocations: Some(*serialize_allocations),
             };
 
             match apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler) {
@@ -1139,6 +1154,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             tmp,
             walltime,
             extra,
+            serialize_allocations,
         } => {
             let mut scheduler =
                 match apis::slurm_schedulers_api::get_slurm_scheduler(config, *scheduler_id) {
@@ -1189,6 +1205,10 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             }
             if let Some(e) = extra {
                 scheduler.extra = Some(e.clone());
+                changed = true;
+            }
+            if let Some(s) = serialize_allocations {
+                scheduler.serialize_allocations = Some(*s);
                 changed = true;
             }
 
@@ -1294,6 +1314,10 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                         eprintln!(
                             "  Extra: {}",
                             scheduler.extra.unwrap_or_else(|| "None".to_string())
+                        );
+                        eprintln!(
+                            "  Serialize allocations: {}",
+                            scheduler.serialize_allocations.unwrap_or(false)
                         );
                     }
                 }
@@ -2122,6 +2146,23 @@ pub fn review_submit_pending_actions(
     Ok(overrides)
 }
 
+/// Build the shared Slurm job name used by a scheduler with `serialize_allocations`.
+///
+/// `--dependency=singleton` is scoped to (user, job name), so every allocation that
+/// should chain must submit under exactly this name -- including allocations submitted
+/// by separate processes (a later `schedule-nodes` call, or a `schedule_nodes` action
+/// fired from a compute node). That rules out the per-allocation name, which embeds the
+/// submitting PID and a counter.
+///
+/// Keying on `(workflow_id, scheduler_id)` keeps the name stable across those processes
+/// while scoping the chain to one scheduler: two schedulers in one workflow, or the same
+/// scheduler in two workflows, get distinct names and run independently. The `torc-`
+/// prefix keeps the singleton set from colliding with the user's unrelated Slurm jobs,
+/// which would otherwise serialize against this chain.
+fn serialized_slurm_job_name(job_prefix: &str, workflow_id: i64, scheduler_id: i64) -> String {
+    format!("{}torc-wf{}-sched{}", job_prefix, workflow_id, scheduler_id)
+}
+
 /// Result indicating success or failure
 #[allow(clippy::too_many_arguments)]
 pub fn schedule_slurm_nodes(
@@ -2222,6 +2263,16 @@ pub fn schedule_slurm_nodes(
         config_map.insert("extra".to_string(), extra.clone());
     }
 
+    // Serialized schedulers chain their allocations: all of them share one Slurm job
+    // name and carry --dependency=singleton, which Slurm scopes to (user, job name).
+    // Inserted after slurm_defaults so a workflow-level `dependency` default cannot
+    // silently break the chain. A `--dependency` in `extra` still wins: `extra` is
+    // emitted last, and overriding it is the documented escape hatch.
+    let serialize_allocations = scheduler.serialize_allocations.unwrap_or(false);
+    if serialize_allocations {
+        config_map.insert("dependency".to_string(), "singleton".to_string());
+    }
+
     std::fs::create_dir_all(output)?;
 
     // Compute startup jitter window for thundering herd mitigation.
@@ -2257,13 +2308,20 @@ pub fn schedule_slurm_nodes(
             std::process::id(),
             job_num
         );
+        // The submission script keeps the unique name so concurrent submissions never
+        // overwrite each other's files, even when the Slurm job name is shared.
         let script_path = format!("{}/{}.sh", output, job_name);
+        let slurm_job_name = if serialize_allocations {
+            serialized_slurm_job_name(job_prefix, workflow_id, scheduler_config_id)
+        } else {
+            job_name.clone()
+        };
 
         let tls_ca_cert = config.tls.ca_cert_path.as_ref().and_then(|p| p.to_str());
         let tls_insecure = config.tls.insecure;
 
         if let Err(e) = slurm_interface.create_submission_script(
-            &job_name,
+            &slurm_job_name,
             &config.base_path,
             workflow_id,
             output,
@@ -2325,7 +2383,7 @@ pub fn schedule_slurm_nodes(
                     .expect("Created scheduled compute node should have an ID");
                 info!(
                     "Submitted Slurm job name={} with ID={} (scheduled_compute_node_id={})",
-                    job_name, slurm_job_id_int, scn_id
+                    slurm_job_name, slurm_job_id_int, scn_id
                 );
             }
             Err(e) => {
@@ -5375,6 +5433,9 @@ fn handle_regenerate(
             qos: planned.qos.clone(),
             tmp: None,
             extra: None,
+            // Auto-generated schedulers size themselves for parallel work; serializing
+            // is an explicit opt-in on a user-authored scheduler.
+            serialize_allocations: None,
         };
 
         let created_scheduler = match utils::send_with_retries(
@@ -5815,5 +5876,38 @@ mod tests {
         assert_eq!(parse_walltime_secs("04:30:00").unwrap(), 4 * 3600 + 30 * 60);
         assert_eq!(parse_walltime_secs("1-00:00:00").unwrap(), 24 * 3600);
         assert_eq!(parse_walltime_secs("30:00").unwrap(), 30 * 60);
+    }
+
+    /// The chain only forms if every allocation submits under the same name, so the
+    /// name must not vary with anything process-local (PID, allocation counter).
+    #[test]
+    fn test_serialized_slurm_job_name_is_stable() {
+        assert_eq!(
+            serialized_slurm_job_name("", 42, 7),
+            serialized_slurm_job_name("", 42, 7)
+        );
+        assert_eq!(serialized_slurm_job_name("", 42, 7), "torc-wf42-sched7");
+    }
+
+    /// Distinct schedulers must not share a singleton set, or unrelated allocations
+    /// would serialize against each other.
+    #[test]
+    fn test_serialized_slurm_job_name_scopes_to_workflow_and_scheduler() {
+        assert_ne!(
+            serialized_slurm_job_name("", 42, 7),
+            serialized_slurm_job_name("", 42, 8)
+        );
+        assert_ne!(
+            serialized_slurm_job_name("", 42, 7),
+            serialized_slurm_job_name("", 43, 7)
+        );
+    }
+
+    #[test]
+    fn test_serialized_slurm_job_name_honors_job_prefix() {
+        assert_eq!(
+            serialized_slurm_job_name("run1_", 42, 7),
+            "run1_torc-wf42-sched7"
+        );
     }
 }

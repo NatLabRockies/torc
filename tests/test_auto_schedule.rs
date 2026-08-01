@@ -238,6 +238,7 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
         qos: None,
         tmp: None,
         extra: None,
+        serialize_allocations: None,
     };
 
     let created = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
@@ -283,6 +284,7 @@ fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
         qos: None,
         tmp: None,
         extra: None,
+        serialize_allocations: None,
     };
 
     let created_scheduler = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)

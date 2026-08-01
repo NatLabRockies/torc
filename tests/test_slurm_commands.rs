@@ -487,6 +487,62 @@ fn test_create_submission_script_with_extra() {
     let _ = fs::remove_file(&script_path);
 }
 
+/// A serialized scheduler chains its allocations by submitting them all under one
+/// Slurm job name with `--dependency=singleton`. Both halves are required: singleton
+/// is scoped to (user, job name), so the shared name is what makes the dependency
+/// select the right set of jobs.
+#[test]
+fn test_create_submission_script_with_singleton_dependency() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_singleton.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "12:00:00".to_string());
+    config.insert("dependency".to_string(), "singleton".to_string());
+
+    let result = interface.create_submission_script(
+        "torc-wf42-sched7",
+        "http://localhost:8080/torc-service/v1",
+        42,
+        "/tmp/output",
+        10,
+        None,
+        &script_path,
+        &config,
+        false,
+        None,
+        None,
+        false,
+        0,
+        None,
+    );
+
+    assert!(
+        result.is_ok(),
+        "Failed to create submission script: {:?}",
+        result.err()
+    );
+
+    let script_content =
+        fs::read_to_string(&script_path).expect("Failed to read submission script");
+
+    assert!(
+        script_content.contains("#SBATCH --dependency=singleton"),
+        "Should carry the singleton dependency, got:\n{}",
+        script_content
+    );
+    assert!(
+        script_content.contains("#SBATCH --job-name=torc-wf42-sched7"),
+        "Should submit under the shared chain name, got:\n{}",
+        script_content
+    );
+
+    let _ = fs::remove_file(&script_path);
+}
+
 #[test]
 fn test_create_submission_script_without_srun() {
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
@@ -1924,6 +1980,7 @@ fn create_test_slurm_scheduler(
         tmp: Some("50G".to_string()),
         walltime: "01:00:00".to_string(),
         extra: None,
+        serialize_allocations: None,
     };
     apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("Failed to create Slurm scheduler")

@@ -15,6 +15,7 @@
         ntasks_per_node=nothing,
         partition=nothing,
         qos=nothing,
+        serialize_allocations=nothing,
         tmp=nothing,
         walltime=nothing,
         workflow_id=nothing,
@@ -30,6 +31,7 @@
     - ntasks_per_node::Int64
     - partition::String
     - qos::String
+    - serialize_allocations::Bool : Run this scheduler&#39;s allocations strictly one at a time.  When set, every allocation submitted for this scheduler shares one Slurm job name and carries &#x60;--dependency&#x3D;singleton&#x60;, so Slurm serializes them. Submit N allocations up front and they chain: each runs until its walltime can no longer fit a ready job, exits, and the next starts. Used for long sequential workflows that outlive any single allocation.
     - tmp::String
     - walltime::String
     - workflow_id::Int64
@@ -45,18 +47,19 @@ Base.@kwdef mutable struct SlurmSchedulerModel <: OpenAPI.APIModel
     ntasks_per_node::Union{Nothing, Int64} = nothing
     partition::Union{Nothing, String} = nothing
     qos::Union{Nothing, String} = nothing
+    serialize_allocations::Union{Nothing, Bool} = nothing
     tmp::Union{Nothing, String} = nothing
     walltime::Union{Nothing, String} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function SlurmSchedulerModel(account, extra, gres, id, mem, name, nodes, ntasks_per_node, partition, qos, tmp, walltime, workflow_id, )
-        o = new(account, extra, gres, id, mem, name, nodes, ntasks_per_node, partition, qos, tmp, walltime, workflow_id, )
+    function SlurmSchedulerModel(account, extra, gres, id, mem, name, nodes, ntasks_per_node, partition, qos, serialize_allocations, tmp, walltime, workflow_id, )
+        o = new(account, extra, gres, id, mem, name, nodes, ntasks_per_node, partition, qos, serialize_allocations, tmp, walltime, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type SlurmSchedulerModel
 
-const _property_types_SlurmSchedulerModel = Dict{Symbol,String}(Symbol("account")=>"String", Symbol("extra")=>"String", Symbol("gres")=>"String", Symbol("id")=>"Int64", Symbol("mem")=>"String", Symbol("name")=>"String", Symbol("nodes")=>"Int64", Symbol("ntasks_per_node")=>"Int64", Symbol("partition")=>"String", Symbol("qos")=>"String", Symbol("tmp")=>"String", Symbol("walltime")=>"String", Symbol("workflow_id")=>"Int64", )
+const _property_types_SlurmSchedulerModel = Dict{Symbol,String}(Symbol("account")=>"String", Symbol("extra")=>"String", Symbol("gres")=>"String", Symbol("id")=>"Int64", Symbol("mem")=>"String", Symbol("name")=>"String", Symbol("nodes")=>"Int64", Symbol("ntasks_per_node")=>"Int64", Symbol("partition")=>"String", Symbol("qos")=>"String", Symbol("serialize_allocations")=>"Bool", Symbol("tmp")=>"String", Symbol("walltime")=>"String", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ SlurmSchedulerModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_SlurmSchedulerModel[name]))}
 
 function OpenAPI.check_required(o::SlurmSchedulerModel)
@@ -78,6 +81,7 @@ function OpenAPI.validate_properties(o::SlurmSchedulerModel)
     OpenAPI.validate_property(SlurmSchedulerModel, Symbol("ntasks_per_node"), o.ntasks_per_node)
     OpenAPI.validate_property(SlurmSchedulerModel, Symbol("partition"), o.partition)
     OpenAPI.validate_property(SlurmSchedulerModel, Symbol("qos"), o.qos)
+    OpenAPI.validate_property(SlurmSchedulerModel, Symbol("serialize_allocations"), o.serialize_allocations)
     OpenAPI.validate_property(SlurmSchedulerModel, Symbol("tmp"), o.tmp)
     OpenAPI.validate_property(SlurmSchedulerModel, Symbol("walltime"), o.walltime)
     OpenAPI.validate_property(SlurmSchedulerModel, Symbol("workflow_id"), o.workflow_id)
@@ -101,6 +105,7 @@ function OpenAPI.validate_property(::Type{ SlurmSchedulerModel }, name::Symbol, 
     if name === Symbol("ntasks_per_node")
         OpenAPI.validate_param(name, "SlurmSchedulerModel", :format, val, "int64")
     end
+
 
 
 

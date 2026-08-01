@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -36,10 +36,11 @@ class SlurmSchedulerModel(BaseModel):
     ntasks_per_node: Optional[StrictInt] = None
     partition: Optional[StrictStr] = None
     qos: Optional[StrictStr] = None
+    serialize_allocations: Optional[StrictBool] = Field(default=None, description="Run this scheduler's allocations strictly one at a time.  When set, every allocation submitted for this scheduler shares one Slurm job name and carries `--dependency=singleton`, so Slurm serializes them. Submit N allocations up front and they chain: each runs until its walltime can no longer fit a ready job, exits, and the next starts. Used for long sequential workflows that outlive any single allocation.")
     tmp: Optional[StrictStr] = None
     walltime: StrictStr
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["account", "extra", "gres", "id", "mem", "name", "nodes", "ntasks_per_node", "partition", "qos", "tmp", "walltime", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["account", "extra", "gres", "id", "mem", "name", "nodes", "ntasks_per_node", "partition", "qos", "serialize_allocations", "tmp", "walltime", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -120,6 +121,11 @@ class SlurmSchedulerModel(BaseModel):
         if self.qos is None and "qos" in self.model_fields_set:
             _dict['qos'] = None
 
+        # set to None if serialize_allocations (nullable) is None
+        # and model_fields_set contains the field
+        if self.serialize_allocations is None and "serialize_allocations" in self.model_fields_set:
+            _dict['serialize_allocations'] = None
+
         # set to None if tmp (nullable) is None
         # and model_fields_set contains the field
         if self.tmp is None and "tmp" in self.model_fields_set:
@@ -147,6 +153,7 @@ class SlurmSchedulerModel(BaseModel):
             "ntasks_per_node": obj.get("ntasks_per_node"),
             "partition": obj.get("partition"),
             "qos": obj.get("qos"),
+            "serialize_allocations": obj.get("serialize_allocations"),
             "tmp": obj.get("tmp"),
             "walltime": obj.get("walltime"),
             "workflow_id": obj.get("workflow_id")

@@ -629,6 +629,7 @@ fn test_generate_schedulers_existing_schedulers_no_force() {
             qos: None,
             tmp: None,
             extra: None,
+            serialize_allocations: None,
         }]),
         ..Default::default()
     };
@@ -688,6 +689,7 @@ fn test_generate_schedulers_existing_schedulers_with_force() {
             qos: None,
             tmp: None,
             extra: None,
+            serialize_allocations: None,
         }]),
         ..Default::default()
     };

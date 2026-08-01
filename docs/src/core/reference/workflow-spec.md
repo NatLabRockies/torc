@@ -266,19 +266,20 @@ A single rule within a failure handler for handling specific exit codes.
 
 Defines a Slurm HPC job scheduler configuration.
 
-| Name              | Type    | Default      | Description                                  |
-| ----------------- | ------- | ------------ | -------------------------------------------- |
-| `name`            | string  | none         | Name of the scheduler (used for referencing) |
-| `account`         | string  | _required_   | Slurm account                                |
-| `partition`       | string  | none         | Slurm partition name                         |
-| `nodes`           | integer | `1`          | Number of nodes to allocate                  |
-| `walltime`        | string  | `"01:00:00"` | Wall time limit                              |
-| `mem`             | string  | none         | Memory specification                         |
-| `gres`            | string  | none         | Generic resources (e.g., GPUs)               |
-| `qos`             | string  | none         | Quality of service                           |
-| `ntasks_per_node` | integer | none         | Number of tasks per node                     |
-| `tmp`             | string  | none         | Temporary storage specification              |
-| `extra`           | string  | none         | Additional Slurm parameters                  |
+| Name                    | Type    | Default      | Description                                                                                                             |
+| ----------------------- | ------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `name`                  | string  | none         | Name of the scheduler (used for referencing)                                                                            |
+| `account`               | string  | _required_   | Slurm account                                                                                                           |
+| `partition`             | string  | none         | Slurm partition name                                                                                                    |
+| `nodes`                 | integer | `1`          | Number of nodes to allocate                                                                                             |
+| `walltime`              | string  | `"01:00:00"` | Wall time limit                                                                                                         |
+| `mem`                   | string  | none         | Memory specification                                                                                                    |
+| `gres`                  | string  | none         | Generic resources (e.g., GPUs)                                                                                          |
+| `qos`                   | string  | none         | Quality of service                                                                                                      |
+| `ntasks_per_node`       | integer | none         | Number of tasks per node                                                                                                |
+| `tmp`                   | string  | none         | Temporary storage specification                                                                                         |
+| `extra`                 | string  | none         | Additional Slurm parameters                                                                                             |
+| `serialize_allocations` | boolean | `false`      | Run this scheduler's allocations one at a time. See [Chained Allocations](../../specialized/hpc/chained-allocations.md) |
 
 ## ExecutionConfig
 
