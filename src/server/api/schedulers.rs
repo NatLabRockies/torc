@@ -203,6 +203,7 @@ const SLURM_SCHEDULER_COLUMNS: &[&str] = &[
     "tmp",
     "walltime",
     "extra",
+    "serialize_allocations",
 ];
 
 impl SchedulersApiImpl {
@@ -313,6 +314,9 @@ where
             context.get().0.clone()
         );
 
+        // Stored NOT NULL; an omitted value means "not serialized".
+        let serialize_allocations = body.serialize_allocations.unwrap_or(false);
+
         let result = match sqlx::query!(
             r#"
             INSERT INTO slurm_scheduler
@@ -329,8 +333,9 @@ where
                 ,tmp
                 ,walltime
                 ,extra
+                ,serialize_allocations
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING rowid
         "#,
             body.workflow_id,
@@ -345,6 +350,7 @@ where
             body.tmp,
             body.walltime,
             body.extra,
+            serialize_allocations,
         )
         .fetch_one(self.context.pool.as_ref())
         .await
@@ -356,6 +362,10 @@ where
             }
         };
         body.id = Some(result.id);
+        // Report what was stored, not what was sent: the column is NOT NULL, so an
+        // omitted serialize_allocations persists as false and every other read path
+        // (get/list/update) returns it explicitly.
+        body.serialize_allocations = Some(serialize_allocations);
         Ok(CreateSlurmSchedulerResponse::SuccessfulResponse(body))
     }
 
@@ -593,7 +603,7 @@ where
         let record = match sqlx::query(
             r#"
             SELECT id, workflow_id, name, account, gres, mem, nodes, ntasks_per_node,
-                   partition, qos, tmp, walltime, extra
+                   partition, qos, tmp, walltime, extra, serialize_allocations
             FROM slurm_scheduler
             WHERE id = $1
             "#,
@@ -627,6 +637,7 @@ where
             tmp: record.get("tmp"),
             walltime: record.get("walltime"),
             extra: record.get("extra"),
+            serialize_allocations: Some(record.get::<i64, _>("serialize_allocations") != 0),
         };
 
         Ok(GetSlurmSchedulerResponse::SuccessfulResponse(
@@ -918,7 +929,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, account, gres, mem, nodes, ntasks_per_node, partition, qos, tmp, walltime, extra FROM slurm_scheduler".to_string();
+        let base_query = "SELECT id, workflow_id, name, account, gres, mem, nodes, ntasks_per_node, partition, qos, tmp, walltime, extra, serialize_allocations FROM slurm_scheduler".to_string();
 
         // Build WHERE clause
         let where_clause = "workflow_id = ?".to_string();
@@ -976,6 +987,7 @@ where
                 tmp: record.get("tmp"),
                 walltime: record.get("walltime"),
                 extra: record.get("extra"),
+                serialize_allocations: Some(record.get::<i64, _>("serialize_allocations") != 0),
             });
         }
 
@@ -1215,7 +1227,8 @@ where
                 ,tmp = COALESCE($10, tmp)
                 ,walltime = COALESCE($11, walltime)
                 ,extra = COALESCE($12, extra)
-            WHERE id = $13
+                ,serialize_allocations = COALESCE($13, serialize_allocations)
+            WHERE id = $14
             "#,
         )
         .bind(body.workflow_id)
@@ -1230,6 +1243,7 @@ where
         .bind(body.tmp)
         .bind(body.walltime)
         .bind(body.extra)
+        .bind(body.serialize_allocations)
         .bind(id)
         .execute(self.context.pool.as_ref())
         .await

@@ -557,6 +557,7 @@ fn test_regenerate_uses_existing_account(start_server: &ServerProcess) {
         qos: None,
         tmp: None,
         extra: None,
+        serialize_allocations: None,
     };
     apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("Failed to create scheduler");

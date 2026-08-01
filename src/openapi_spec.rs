@@ -1804,6 +1804,7 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "tmp",
             "walltime",
             "extra",
+            "serialize_allocations",
         ],
         &mut issues,
     );
