@@ -1,0 +1,58 @@
+name: "Chained Allocations"
+description: "Sequential jobs spanning multiple Slurm allocations chained with serialize_allocations"
+
+# A sequence of jobs whose total runtime exceeds any single allocation's walltime.
+# The scheduler below sets serialize_allocations, so every allocation is submitted
+# under one shared Slurm job name with --dependency=singleton: Slurm runs them one
+# at a time, and each picks up where its predecessor left off.
+#
+# See docs: specialized/hpc/chained-allocations.md
+
+jobs:
+  - name: "step1"
+    command: "echo 'Running step 1' && sleep 10"
+    resource_requirements: "serial"
+
+  - name: "step2"
+    command: "echo 'Running step 2' && sleep 10"
+    depends_on: ["step1"]
+    resource_requirements: "serial"
+
+  - name: "step3"
+    command: "echo 'Running step 3' && sleep 10"
+    depends_on: ["step2"]
+    resource_requirements: "serial"
+
+  - name: "step4"
+    command: "echo 'Running step 4' && sleep 10"
+    depends_on: ["step3"]
+    resource_requirements: "serial"
+
+resource_requirements:
+  # Declare runtime at or above the worst case: the server only hands a worker a job
+  # whose declared runtime fits the allocation's remaining walltime, which is what
+  # makes each allocation exit cleanly when the next job no longer fits.
+  - name: "serial"
+    num_cpus: 4
+    num_nodes: 1
+    memory: "8g"
+    runtime: "PT2H"
+
+slurm_schedulers:
+  - name: "chain"
+    account: "demo_project"
+    nodes: 1
+    walltime: "04:00:00"
+    serialize_allocations: true
+
+actions:
+  # Submit the whole chain up front. With a 4-hour walltime and 2-hour job runtime,
+  # each allocation completes floor(4 / 2) = 2 jobs, so 4 jobs need
+  # ceil(4 / 2) = 2 allocations. Over-submitting is safe: once no runnable jobs
+  # remain, the finishing worker cancels the surplus still sitting in the queue.
+  - trigger_type: "on_jobs_ready"
+    action_type: "schedule_nodes"
+    jobs: ["step1"]
+    scheduler: "chain"
+    scheduler_type: "slurm"
+    num_allocations: 2

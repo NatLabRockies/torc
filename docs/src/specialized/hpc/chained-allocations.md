@@ -27,6 +27,8 @@ resource_requirements:
     runtime: "PT4H"
 ```
 
+A complete runnable spec is at `examples/yaml/chained_allocations.yaml`.
+
 Or on an existing scheduler:
 
 ```bash
@@ -59,10 +61,13 @@ worker cancels every allocation still queued for the workflow, so the surplus ne
 
 ## Why the Chain Beats Scheduling on Shutdown
 
-A worker could submit its own replacement as it exits, but each replacement would enter the queue
-with no accrued age and pay full queue wait — 167 times over. A chained allocation is queued from
-the start and accrues priority while its predecessor runs, so it is typically ready to start the
-moment the slot frees.
+A worker could submit its own replacement as it exits, but that pays Slurm's full
+submit-and-schedule latency at every link — 167 times over — and makes each link's submission depend
+on its predecessor exiting cleanly. A chained allocation is already sitting in the queue when its
+predecessor ends, so it is typically released the moment the slot frees. On clusters that accrue age
+priority for dependency-held jobs (`PriorityFlags=ACCRUE_ALWAYS` in the Slurm config), each link
+also builds priority while its predecessor runs; by default Slurm starts the age clock only when the
+dependency clears.
 
 ## Wall Time and Job Runtime
 

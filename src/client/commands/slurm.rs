@@ -164,6 +164,8 @@ struct SlurmSchedulerTableRow {
     partition: String,
     #[tabled(rename = "QOS")]
     qos: String,
+    #[tabled(rename = "Serialized")]
+    serialize_allocations: bool,
 }
 
 /// Select a Slurm scheduler interactively from available schedulers for a workflow
@@ -1271,6 +1273,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                                 walltime: s.walltime.clone(),
                                 partition: s.partition.clone().unwrap_or_default(),
                                 qos: s.qos.clone().unwrap_or_default(),
+                                serialize_allocations: s.serialize_allocations.unwrap_or(false),
                             })
                             .collect();
 
@@ -2303,10 +2306,18 @@ pub fn schedule_slurm_nodes(
             .get("nodes")
             .and_then(|v| v.parse().ok())
             .unwrap_or(1);
-        let total_runners = if start_one_worker_per_node {
-            num_hpc_jobs * nodes_per_alloc
+        // Serialized allocations run one at a time, so only the runners inside a
+        // single allocation ever start together; sizing the window to the whole
+        // chain would just add dead time to every link.
+        let allocs_at_once = if serialize_allocations {
+            1
         } else {
             num_hpc_jobs
+        };
+        let total_runners = if start_one_worker_per_node {
+            allocs_at_once * nodes_per_alloc
+        } else {
+            allocs_at_once
         };
         let delay = compute_startup_delay(total_runners.max(0) as u32);
         if delay > 0 {

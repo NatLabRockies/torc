@@ -4428,3 +4428,17 @@ fn test_slurm_scheduler_serialize_allocations_kdl_roundtrip() {
     // An omitted value stays omitted rather than round-tripping to Some(false).
     assert_eq!(schedulers[1].serialize_allocations, None);
 }
+
+/// The shipped chained-allocations example (referenced from the docs) parses and
+/// carries `serialize_allocations` on its scheduler.
+#[test]
+fn test_chained_allocations_example_parses() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/yaml/chained_allocations.yaml");
+    let spec = WorkflowSpec::from_spec_file(&path).expect("Failed to parse example");
+
+    let schedulers = spec.slurm_schedulers.expect("schedulers missing");
+    assert_eq!(schedulers.len(), 1);
+    assert_eq!(schedulers[0].serialize_allocations, Some(true));
+    assert_eq!(spec.jobs.len(), 4);
+}
