@@ -141,12 +141,12 @@ const IDLE_BACKOFF_CAP_SECS: f64 = 30.0;
 
 /// How long after a locally-observed job completion an *untriggered* action
 /// still keeps an idle runner alive. Completions bump an action's
-/// `trigger_count` only after the server's background unblock task runs (a few
-/// seconds by default), so an action that is about to become triggerable can
+/// `trigger_count` only after the server's background unblock task runs
+/// so an action that is about to become triggerable can
 /// briefly still look untriggered. This window covers that lag; past it, an
 /// untriggered action is one gated on work this node is not doing, and holding
 /// the allocation open for it wastes the rest of the walltime.
-const ACTION_TRIGGER_GRACE_SECONDS: u64 = 60;
+const ACTION_TRIGGER_GRACE_SECONDS: u64 = 120;
 
 /// What the workflow's actions imply about whether an idle runner should stay
 /// alive. See [`JobRunner::pending_action_state`].
