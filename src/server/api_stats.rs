@@ -322,6 +322,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wide_interval_buckets_are_anchored_to_the_interval_floor() {
+        // Output buckets start at the floor of `now` aligned to
+        // `interval_seconds`, so a single wide bucket covers only the
+        // interval `now` falls in -- data from just before the boundary is
+        // outside it. Callers that want a rolling window must ask for a
+        // finer interval.
+        let ring = ApiStatsRing::new();
+        // 1_700_000_040 is a minute boundary; record just before it and
+        // snapshot just after.
+        let before_boundary = 1_700_000_039_900;
+        let after_boundary = 1_700_000_040_100;
+        ring.record(before_boundary, 200, 10, 20);
+
+        let wide = ring.snapshot(after_boundary, 60, 60);
+        assert_eq!(wide.buckets.len(), 1);
+        assert_eq!(wide.buckets[0].request_count, 0);
+
+        let fine = ring.snapshot(after_boundary, 60, 1);
+        assert_eq!(fine.buckets.len(), 60);
+        let total: u64 = fine.buckets.iter().map(|b| b.request_count).sum();
+        assert_eq!(total, 1);
+    }
+
+    #[test]
     fn record_and_snapshot_single_bucket() {
         let ring = ApiStatsRing::new();
         let t = 1_700_000_000_000;
