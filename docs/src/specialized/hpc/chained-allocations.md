@@ -86,6 +86,10 @@ The shared job name is derived from the workflow ID and the scheduler ID, so:
 Slurm scopes `singleton` to a job name **per user**, so the name is prefixed with `torc-` to keep
 the chain from serializing against your unrelated Slurm jobs.
 
+Because the chain depends on every allocation sharing one fixed name,
+`torc slurm schedule-nodes --job-prefix` is rejected for a serialized scheduler: a per-invocation
+prefix would change the name and fork the chain.
+
 ## Interaction with `extra`
 
 `extra` is emitted after torc's own `#SBATCH` directives, so a `--dependency` set there overrides

@@ -425,6 +425,9 @@ EXAMPLES:
         #[arg(long, default_value = "false")]
         start_one_worker_per_node: bool,
         /// Job prefix for the Slurm job names
+        ///
+        /// Not allowed when the scheduler has serialize_allocations set: chained
+        /// allocations must all share one fixed Slurm job name.
         #[arg(short, long, default_value = "")]
         job_prefix: String,
         /// Keep submission scripts after job submission
@@ -2158,9 +2161,11 @@ pub fn review_submit_pending_actions(
 /// while scoping the chain to one scheduler: two schedulers in one workflow, or the same
 /// scheduler in two workflows, get distinct names and run independently. The `torc-`
 /// prefix keeps the singleton set from colliding with the user's unrelated Slurm jobs,
-/// which would otherwise serialize against this chain.
-fn serialized_slurm_job_name(job_prefix: &str, workflow_id: i64, scheduler_id: i64) -> String {
-    format!("{}torc-wf{}-sched{}", job_prefix, workflow_id, scheduler_id)
+/// which would otherwise serialize against this chain. The user's `--job-prefix` is
+/// deliberately absent -- a per-invocation prefix would fork the chain, so
+/// `schedule_slurm_nodes` rejects it for serialized schedulers.
+fn serialized_slurm_job_name(workflow_id: i64, scheduler_id: i64) -> String {
+    format!("torc-wf{}-sched{}", workflow_id, scheduler_id)
 }
 
 /// Result indicating success or failure
@@ -2193,6 +2198,22 @@ pub fn schedule_slurm_nodes(
             return Err(format!("Failed to get Slurm scheduler: {}", e).into());
         }
     };
+
+    // A serialized scheduler submits every allocation under one fixed job name (see
+    // serialized_slurm_job_name); a per-invocation prefix would change that name and
+    // fork the chain, since later submissions -- a schedule_nodes action fired from a
+    // compute node, or a top-up schedule-nodes call without the flag -- carry no
+    // prefix. Reject it rather than silently splitting the chain.
+    let serialize_allocations = scheduler.serialize_allocations.unwrap_or(false);
+    if serialize_allocations && !job_prefix.is_empty() {
+        return Err(format!(
+            "--job-prefix is not supported for scheduler_id={} because it has \
+             serialize_allocations set: every allocation in the chain must share one \
+             Slurm job name",
+            scheduler_config_id
+        )
+        .into());
+    }
 
     // Fetch workflow to get slurm_defaults
     let workflow = match utils::send_with_retries(
@@ -2268,7 +2289,6 @@ pub fn schedule_slurm_nodes(
     // Inserted after slurm_defaults so a workflow-level `dependency` default cannot
     // silently break the chain. A `--dependency` in `extra` still wins: `extra` is
     // emitted last, and overriding it is the documented escape hatch.
-    let serialize_allocations = scheduler.serialize_allocations.unwrap_or(false);
     if serialize_allocations {
         config_map.insert("dependency".to_string(), "singleton".to_string());
     }
@@ -2312,7 +2332,7 @@ pub fn schedule_slurm_nodes(
         // overwrite each other's files, even when the Slurm job name is shared.
         let script_path = format!("{}/{}.sh", output, job_name);
         let slurm_job_name = if serialize_allocations {
-            serialized_slurm_job_name(job_prefix, workflow_id, scheduler_config_id)
+            serialized_slurm_job_name(workflow_id, scheduler_config_id)
         } else {
             job_name.clone()
         };
@@ -5883,10 +5903,10 @@ mod tests {
     #[test]
     fn test_serialized_slurm_job_name_is_stable() {
         assert_eq!(
-            serialized_slurm_job_name("", 42, 7),
-            serialized_slurm_job_name("", 42, 7)
+            serialized_slurm_job_name(42, 7),
+            serialized_slurm_job_name(42, 7)
         );
-        assert_eq!(serialized_slurm_job_name("", 42, 7), "torc-wf42-sched7");
+        assert_eq!(serialized_slurm_job_name(42, 7), "torc-wf42-sched7");
     }
 
     /// Distinct schedulers must not share a singleton set, or unrelated allocations
@@ -5894,20 +5914,12 @@ mod tests {
     #[test]
     fn test_serialized_slurm_job_name_scopes_to_workflow_and_scheduler() {
         assert_ne!(
-            serialized_slurm_job_name("", 42, 7),
-            serialized_slurm_job_name("", 42, 8)
+            serialized_slurm_job_name(42, 7),
+            serialized_slurm_job_name(42, 8)
         );
         assert_ne!(
-            serialized_slurm_job_name("", 42, 7),
-            serialized_slurm_job_name("", 43, 7)
-        );
-    }
-
-    #[test]
-    fn test_serialized_slurm_job_name_honors_job_prefix() {
-        assert_eq!(
-            serialized_slurm_job_name("run1_", 42, 7),
-            "run1_torc-wf42-sched7"
+            serialized_slurm_job_name(42, 7),
+            serialized_slurm_job_name(43, 7)
         );
     }
 }

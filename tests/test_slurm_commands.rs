@@ -543,6 +543,58 @@ fn test_create_submission_script_with_singleton_dependency() {
     let _ = fs::remove_file(&script_path);
 }
 
+/// The chain name is fixed per (workflow, scheduler); a per-invocation `--job-prefix`
+/// would change it and fork the chain, so scheduling must reject the combination
+/// instead of silently splitting the singleton set.
+#[rstest]
+fn test_schedule_nodes_rejects_job_prefix_for_serialized_scheduler(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let workflow = create_test_workflow(config, "test_serialized_job_prefix_workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let scheduler = models::SlurmSchedulerModel {
+        id: None,
+        workflow_id,
+        name: Some("chain".to_string()),
+        account: "test_account".to_string(),
+        gres: None,
+        mem: None,
+        nodes: 1,
+        ntasks_per_node: None,
+        partition: None,
+        qos: None,
+        tmp: None,
+        walltime: "01:00:00".to_string(),
+        extra: None,
+        serialize_allocations: Some(true),
+    };
+    let scheduler = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("Failed to create Slurm scheduler");
+    let scheduler_id = scheduler.id.unwrap();
+
+    let result = torc::client::commands::slurm::schedule_slurm_nodes(
+        config,
+        workflow_id,
+        scheduler_id,
+        1,
+        false,
+        "run1_",
+        "torc_output",
+        30,
+        None,
+        false,
+        None,
+    );
+
+    let err = result.expect_err("job_prefix must be rejected for a serialized scheduler");
+    assert!(
+        err.to_string().contains("--job-prefix"),
+        "Error should explain the job_prefix rejection, got: {}",
+        err
+    );
+}
+
 #[test]
 fn test_create_submission_script_without_srun() {
     let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
