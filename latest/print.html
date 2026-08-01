@@ -4252,6 +4252,9 @@ fi
 <li>Sends SIGKILL to all running processes</li>
 <li>Sends <code>scancel</code> to all active or pending Slurm allocations</li>
 </ul>
+<h2 id="cancel-from-the-tui"><a class="header" href="#cancel-from-the-tui">Cancel from the TUI</a></h2>
+<p>Press <code>C</code> on a workflow in <code>torc tui</code>. This runs the same cancellation as <code>torc cancel</code>, including
+the <code>scancel</code> of outstanding Slurm allocations, and reports how many were canceled.</p>
 <h2 id="check-cancellation-status"><a class="header" href="#check-cancellation-status">Check Cancellation Status</a></h2>
 <p>Verify the workflow was canceled:</p>
 <pre><code class="language-bash">torc status &lt;workflow_id&gt;
@@ -7812,7 +7815,7 @@ configuration.</p>
 <tr><td><code>W</code></td><td>Watch</td><td>Watch workflow with auto-recovery (live output)</td></tr>
 <tr><td><code>V</code></td><td>Recover</td><td>One-shot recovery: bump resources and resubmit failures</td></tr>
 <tr><td><code>v</code></td><td>Recover (dry)</td><td>Preview recovery without applying changes</td></tr>
-<tr><td><code>C</code></td><td>Cancel</td><td>Cancel running workflow</td></tr>
+<tr><td><code>C</code></td><td>Cancel</td><td>Cancel workflow and its Slurm allocations</td></tr>
 <tr><td><code>d</code></td><td>Delete</td><td>Delete workflow (destructive!)</td></tr>
 </tbody></table>
 </div>
