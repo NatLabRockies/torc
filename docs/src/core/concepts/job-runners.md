@@ -239,7 +239,28 @@ branches above:
    itself self-rate-limits via `drain_ping_interval_secs`).
 10. **Exit checks** — break out on `SIGTERM`, on the end-of-allocation deadline (direct mode applies
     a pre-deadline window so `SIGTERM` has time to land before `SIGKILL`), or after an idle interval
-    past `compute_node_wait_for_new_jobs_seconds` with no pending actions that could add capacity.
+    past `compute_node_wait_for_new_jobs_seconds` with no actions left for this runner to execute
+    (see [Idle Exit and Workflow Actions](#idle-exit-and-workflow-actions)).
+
+### Idle Exit and Workflow Actions
+
+An idle runner does not exit if it still has a workflow action to execute — a `schedule_nodes`
+action, for example, may add the capacity that runs the next jobs. But "has an action to execute" is
+narrower than "the workflow declares an action":
+
+- **Triggered** (`trigger_count >= required_triggers`) and unexecuted: the action is ready to run
+  now, so the runner stays alive to run it.
+- **Untriggered**: the action is gated on job completions that may be happening on other nodes. The
+  runner honors it for only 60 seconds after its own last local job completion — the window in which
+  the server's background unblock task may not yet have bumped the trigger count — and then exits.
+- **Already executed by this runner**: ignored. Persistent actions keep `executed = 0` on the server
+  so that every worker gets a turn, so the server flag alone cannot tell a runner it is done.
+- **Missing an ID**: ignored. The runner cannot claim such an action, so it cannot be a reason to
+  wait.
+
+Treating every declared action as a reason to wait pins an idle runner to its full walltime whenever
+a workflow chains downstream actions, which is exactly the wasted allocation the idle timeout exists
+to prevent.
 
 ### Adaptive Backoff
 
