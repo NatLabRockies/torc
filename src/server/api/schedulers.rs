@@ -362,6 +362,10 @@ where
             }
         };
         body.id = Some(result.id);
+        // Report what was stored, not what was sent: the column is NOT NULL, so an
+        // omitted serialize_allocations persists as false and every other read path
+        // (get/list/update) returns it explicitly.
+        body.serialize_allocations = Some(serialize_allocations);
         Ok(CreateSlurmSchedulerResponse::SuccessfulResponse(body))
     }
 

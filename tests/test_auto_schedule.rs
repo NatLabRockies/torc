@@ -246,6 +246,10 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
 
     assert!(created.id.is_some(), "Scheduler should have an ID");
     assert_eq!(created.account, "test_account");
+    // The create response must report the stored value: the column is NOT NULL, so
+    // an omitted serialize_allocations comes back as an explicit false, matching
+    // what get/list return.
+    assert_eq!(created.serialize_allocations, Some(false));
 
     // Verify we can list the scheduler
     let response = apis::slurm_schedulers_api::list_slurm_schedulers(
