@@ -255,6 +255,8 @@ narrower than "the workflow declares an action":
   the server's background unblock task may not yet have bumped the trigger count — and then exits.
 - **Already executed by this runner**: ignored. Persistent actions keep `executed = 0` on the server
   so that every worker gets a turn, so the server flag alone cannot tell a runner it is done.
+- **Missing an ID**: ignored. The runner cannot claim such an action, so it cannot be a reason to
+  wait.
 
 Treating every declared action as a reason to wait pins an idle runner to its full walltime whenever
 a workflow chains downstream actions, which is exactly the wasted allocation the idle timeout exists

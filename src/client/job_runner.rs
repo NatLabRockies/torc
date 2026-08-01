@@ -216,9 +216,16 @@ fn classify_pending_actions(
         if action.executed {
             continue;
         }
+        // An action without an id cannot be claimed or executed
+        // (check_and_execute_actions skips it), so it must never hold the
+        // runner open either.
+        let Some(action_id) = action.id else {
+            warn!("Ignoring pending action with no id when deciding whether to stay alive");
+            continue;
+        };
         // Skip actions this runner already took its turn at (persistent
         // actions stay unexecuted server-side so other workers can claim them)
-        if action.id.is_some_and(|id| already_executed.contains(&id)) {
+        if already_executed.contains(&action_id) {
             continue;
         }
         // Only consider job-triggered actions (on_jobs_ready, on_jobs_complete)
@@ -235,7 +242,7 @@ fn classify_pending_actions(
         debug!(
             "Found unexecuted action {} (trigger={}, type={}, trigger_count={}, \
             required_triggers={}, triggered={}) that we can handle",
-            action.id.unwrap_or(-1),
+            action_id,
             action.trigger_type,
             action.action_type,
             action.trigger_count,
@@ -3992,6 +3999,18 @@ mod tests {
         ];
         assert_eq!(
             classify_pending_actions(&actions, &HashSet::new()),
+            PendingActionState::None
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_ignores_actions_without_an_id() {
+        // check_and_execute_actions cannot claim an action with no id, so a
+        // malformed response must not be able to pin an allocation.
+        let mut action = make_action(1, "on_jobs_ready", 1, 1, false);
+        action.id = None;
+        assert_eq!(
+            classify_pending_actions(&[action], &HashSet::new()),
             PendingActionState::None
         );
     }
