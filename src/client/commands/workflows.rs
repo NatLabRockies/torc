@@ -48,11 +48,10 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::pagination::{
     ComputeNodeListParams, EventListParams, FileListParams, JobListParams,
-    ResourceRequirementsListParams, ResultListParams, ScheduledComputeNodeListParams,
-    SlurmSchedulersListParams, UserDataListParams, WorkflowListParams, paginate_compute_nodes,
-    paginate_events, paginate_files, paginate_jobs, paginate_resource_requirements,
-    paginate_results, paginate_scheduled_compute_nodes, paginate_slurm_schedulers,
-    paginate_user_data, paginate_workflows,
+    ResourceRequirementsListParams, ResultListParams, SlurmSchedulersListParams,
+    UserDataListParams, WorkflowListParams, paginate_compute_nodes, paginate_events,
+    paginate_files, paginate_jobs, paginate_resource_requirements, paginate_results,
+    paginate_slurm_schedulers, paginate_user_data, paginate_workflows,
 };
 use crate::client::commands::reports::check_resource_utilization;
 use crate::client::commands::workflow_export::{
@@ -64,7 +63,6 @@ use crate::client::commands::{
     print_error, select_workflow_interactively,
     table_format::{display_csv, display_table_with_count},
 };
-use crate::client::hpc::hpc_interface::HpcInterface;
 use crate::client::report_models::ResourceUtilizationReport;
 use crate::client::resource_correction::{
     ResourceCorrectionContext, ResourceCorrectionOptions, ResourceLookupContext,
@@ -72,6 +70,7 @@ use crate::client::resource_correction::{
     detect_runtime_violation, detect_timeout,
 };
 use crate::client::utils::format_local_timestamp;
+use crate::client::workflow_cancel::{CancelProgress, cancel_scheduler_allocations};
 use crate::client::workflow_manager::WorkflowManager;
 use crate::client::workflow_spec::WorkflowSpec;
 use crate::config::TorcConfig;
@@ -1812,136 +1811,50 @@ pub fn handle_cancel(
         }
     }
 
-    // Get all scheduled compute nodes for this workflow
-    let nodes = match paginate_scheduled_compute_nodes(
-        config,
-        selected_workflow_id,
-        ScheduledComputeNodeListParams::new(),
-    ) {
-        Ok(nodes) => nodes,
-        Err(e) => {
-            if format == "json" {
-                let error_response = serde_json::json!({
-                    "status": "error",
-                    "message": format!("Failed to list scheduled compute nodes: {}", e),
-                    "workflow_id": selected_workflow_id
-                });
-                println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
-            } else {
-                print_error("listing scheduled compute nodes", &e);
-            }
-            std::process::exit(1);
+    // Cancel any outstanding Slurm allocations. Otherwise a queued allocation would start
+    // later, find no runnable jobs, and exit immediately.
+    let quiet = format == "json";
+    let mut report_progress = |progress: CancelProgress<'_>| {
+        if quiet {
+            return;
+        }
+        match progress {
+            CancelProgress::Info(message) => println!("  {}", message),
+            CancelProgress::Error(message) => eprintln!("  {}", message),
         }
     };
 
-    let mut canceled_jobs = Vec::new();
-    let mut errors = Vec::new();
-
-    for node in nodes {
-        if node.scheduler_type == "slurm" {
-            match crate::client::hpc::slurm_interface::SlurmInterface::new() {
-                Ok(slurm_interface) => {
-                    let job_id_str = node.scheduler_id.to_string();
-                    match slurm_interface.cancel_job(&job_id_str) {
-                        Ok(_) => {
-                            canceled_jobs.push(node.scheduler_id);
-                            if format != "json" {
-                                println!("  Canceled Slurm job: {}", node.scheduler_id);
-                            }
-                            // Update the ScheduledComputeNode status to "canceled"
-                            if let Some(node_id) = node.id {
-                                let updated_node = models::ScheduledComputeNodesModel::new(
-                                    node.workflow_id,
-                                    node.scheduler_id,
-                                    node.scheduler_config_id,
-                                    node.scheduler_type.clone(),
-                                    "canceled".to_string(),
-                                );
-                                if let Err(e) =
-                                    apis::scheduled_compute_nodes_api::update_scheduled_compute_node(
-                                        config,
-                                        node_id,
-                                        updated_node,
-                                    )
-                                {
-                                    let error_msg =
-                                        format!("Failed to update node {} status: {}", node_id, e);
-                                    errors.push(error_msg.clone());
-                                    if format != "json" {
-                                        eprintln!("  {}", error_msg);
-                                    }
-                                } else if format != "json" {
-                                    println!(
-                                        "  Updated node {} status to canceled",
-                                        node.scheduler_id
-                                    );
-                                }
-
-                                // `scancel` kills the job runner ungracefully, so it never
-                                // deactivates its own compute node. Do it here, otherwise the
-                                // ComputeNode rows stay is_active=true and block `torc recover`.
-                                match super::orphan_detection::deactivate_compute_nodes_for_scheduled_node(
-                                    config,
-                                    node.workflow_id,
-                                    node_id,
-                                    &node.scheduler_id.to_string(),
-                                    false,
-                                ) {
-                                    Ok(count) => {
-                                        if count > 0 && format != "json" {
-                                            println!(
-                                                "  Deactivated {} compute node(s) for node {}",
-                                                count, node.scheduler_id
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        let error_msg = format!(
-                                            "Failed to deactivate compute nodes for node {}: {}",
-                                            node.scheduler_id, e
-                                        );
-                                        errors.push(error_msg.clone());
-                                        if format != "json" {
-                                            eprintln!("  {}", error_msg);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let error_msg =
-                                format!("Failed to cancel Slurm job {}: {}", node.scheduler_id, e);
-                            errors.push(error_msg.clone());
-                            if format != "json" {
-                                eprintln!("  {}", error_msg);
-                            }
-                        }
-                    }
+    let outcome =
+        match cancel_scheduler_allocations(config, selected_workflow_id, &mut report_progress) {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                if format == "json" {
+                    let error_response = serde_json::json!({
+                        "status": "error",
+                        "message": format!("Failed to list scheduled compute nodes: {}", e),
+                        "workflow_id": selected_workflow_id
+                    });
+                    println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
+                } else {
+                    print_error("listing scheduled compute nodes", &e);
                 }
-                Err(e) => {
-                    let error_msg = format!(
-                        "Failed to create SlurmInterface for job {}: {}",
-                        node.scheduler_id, e
-                    );
-                    errors.push(error_msg.clone());
-                    if format != "json" {
-                        eprintln!("  {}", error_msg);
-                    }
-                }
+                std::process::exit(1);
             }
-        }
-    }
+        };
 
     if format == "json" {
         let response = serde_json::json!({
-            "status": if errors.is_empty() { "success" } else { "partial_success" },
+            "status": if outcome.errors.is_empty() { "success" } else { "partial_success" },
             "workflow_id": selected_workflow_id,
-            "canceled_slurm_jobs": canceled_jobs,
-            "errors": if errors.is_empty() { None } else { Some(errors) }
+            "canceled_slurm_jobs": outcome.canceled_slurm_jobs,
+            "errors": if outcome.errors.is_empty() { None } else { Some(outcome.errors) }
         });
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
-    } else if !canceled_jobs.is_empty() {
-        println!("Canceled {} Slurm job(s)", canceled_jobs.len());
+    } else if !outcome.canceled_slurm_jobs.is_empty() {
+        println!(
+            "Canceled {} Slurm job(s)",
+            outcome.canceled_slurm_jobs.len()
+        );
     }
 }
 
