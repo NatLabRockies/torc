@@ -33,6 +33,7 @@ pub mod slurm_utils;
 pub mod sse_client;
 pub mod utils;
 pub mod version_check;
+pub mod workflow_cancel;
 pub mod workflow_graph;
 pub mod workflow_manager;
 pub mod workflow_spec;

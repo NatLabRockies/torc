@@ -1794,6 +1794,117 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
     );
 }
 
+/// Regression test for the bug where canceling a workflow from the TUI left its Slurm
+/// allocations queued (https://github.com/NatLabRockies/torc/issues/433). The TUI now calls
+/// the same `cancel_scheduler_allocations` used by `torc cancel`, so exercise that shared
+/// function directly: the allocation must be scancel'd, the scheduled compute node marked
+/// canceled, and its compute node deactivated.
+#[rstest]
+#[serial(slurm)]
+fn test_cancel_scheduler_allocations_cancels_slurm_jobs(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    cleanup_fake_slurm_state();
+    setup_fake_slurm_commands();
+
+    // Seed the fake Slurm jobs file so fake_scancel.sh recognizes the allocation.
+    let slurm_job_id: i64 = 4242;
+    let jobs_file = format!(
+        "{}/fake_slurm_jobs.txt",
+        env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
+    );
+    fs::write(
+        &jobs_file,
+        format!(
+            "{}|test_job|PENDING|2026-01-01T00:00:00|Unknown|test_account|debug|normal\n",
+            slurm_job_id
+        ),
+    )
+    .expect("Failed to seed fake Slurm jobs file");
+
+    let workflow = create_test_workflow(config, "test_cancel_scheduler_allocations");
+    let workflow_id = workflow.id.unwrap();
+    let scheduler = create_test_slurm_scheduler(config, workflow_id);
+    let scheduler_config_id = scheduler.id.unwrap();
+
+    // A queued allocation, as `torc submit` leaves it.
+    let scheduled_node = models::ScheduledComputeNodesModel::new(
+        workflow_id,
+        slurm_job_id,
+        scheduler_config_id,
+        "slurm".to_string(),
+        "pending".to_string(),
+    );
+    let created_scheduled =
+        apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, scheduled_node)
+            .expect("Failed to create scheduled compute node");
+    let scheduled_compute_node_id = created_scheduled.id.unwrap();
+
+    // An active compute node running under that allocation. `scancel` kills the job runner
+    // ungracefully, so cancellation has to deactivate it.
+    let mut compute_node = models::ComputeNodeModel::new(
+        workflow_id,
+        "cancel-alloc-host".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        4,
+        8.0,
+        0,
+        1,
+        "slurm".to_string(),
+        Some(json!({ "scheduler_id": scheduled_compute_node_id })),
+    );
+    compute_node.is_active = Some(true);
+    let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .expect("Failed to create compute node");
+    let compute_node_id = created_node.id.unwrap();
+
+    let outcome = torc::client::workflow_cancel::cancel_scheduler_allocations(
+        config,
+        workflow_id,
+        &mut |_| {},
+    )
+    .expect("cancel_scheduler_allocations failed");
+
+    assert!(
+        outcome.errors.is_empty(),
+        "expected no errors, got {:?}",
+        outcome.errors
+    );
+    assert_eq!(
+        outcome.canceled_slurm_jobs,
+        vec![slurm_job_id],
+        "the queued Slurm allocation should have been canceled"
+    );
+    assert_eq!(outcome.deactivated_compute_nodes, 1);
+
+    // The fake scancel marks the allocation CANCELLED in its jobs file.
+    let jobs_contents =
+        fs::read_to_string(&jobs_file).expect("Failed to read fake Slurm jobs file");
+    assert!(
+        jobs_contents.contains("CANCELLED"),
+        "scancel should have been invoked, jobs file: {}",
+        jobs_contents
+    );
+
+    let final_scheduled = apis::scheduled_compute_nodes_api::get_scheduled_compute_node(
+        config,
+        scheduled_compute_node_id,
+    )
+    .expect("Failed to get scheduled compute node");
+    assert_eq!(final_scheduled.status, "canceled");
+
+    let final_node = apis::compute_nodes_api::get_compute_node(config, compute_node_id)
+        .expect("Failed to get compute node");
+    assert_eq!(
+        final_node.is_active,
+        Some(false),
+        "compute node should be deactivated so `torc recover` is not blocked"
+    );
+
+    cleanup_fake_slurm_state();
+}
+
 /// Helper function to create a test Slurm scheduler
 fn create_test_slurm_scheduler(
     config: &torc::client::Configuration,
