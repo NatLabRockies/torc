@@ -27,7 +27,7 @@
 
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -138,6 +138,117 @@ impl Default for Wakeup {
 /// workflow-complete and idle-exit (`compute_node_wait_for_new_jobs_seconds`)
 /// — neither needs slower than 30s resolution.
 const IDLE_BACKOFF_CAP_SECS: f64 = 30.0;
+
+/// How long after a locally-observed job completion an *untriggered* action
+/// still keeps an idle runner alive. Completions bump an action's
+/// `trigger_count` only after the server's background unblock task runs (a few
+/// seconds by default), so an action that is about to become triggerable can
+/// briefly still look untriggered. This window covers that lag; past it, an
+/// untriggered action is one gated on work this node is not doing, and holding
+/// the allocation open for it wastes the rest of the walltime.
+const ACTION_TRIGGER_GRACE_SECONDS: u64 = 60;
+
+/// What the workflow's actions imply about whether an idle runner should stay
+/// alive. See [`JobRunner::pending_action_state`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingActionState {
+    /// At least one action this runner can handle is triggered
+    /// (`trigger_count >= required_triggers`) and unexecuted. It is ready to
+    /// run now, so the runner must stay alive to execute it.
+    Triggered,
+    /// Every unexecuted action this runner can handle is still untriggered.
+    /// Whether that is worth waiting for depends on how recently this node
+    /// completed a job -- see [`ACTION_TRIGGER_GRACE_SECONDS`].
+    UntriggeredOnly,
+    /// Nothing unexecuted that this runner could handle.
+    None,
+}
+
+/// Whether a job runner is able to execute the given action itself.
+/// Job runners can handle:
+/// - run_commands actions (always)
+/// - schedule_nodes actions (including slurm)
+fn runner_can_handle_action(action: &crate::models::WorkflowActionModel) -> bool {
+    let action_type = &action.action_type;
+
+    match action_type.as_str() {
+        "run_commands" => true,
+        "schedule_nodes" => {
+            // Check scheduler_type in action_config
+            let scheduler_type = action
+                .action_config
+                .get("scheduler_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            // Job runners can handle slurm schedule_nodes using schedule_slurm_nodes_for_action
+            let can_handle = scheduler_type == "slurm";
+            if !can_handle {
+                debug!(
+                    "Cannot handle schedule_nodes action: scheduler_type='{}' (expected 'slurm'). action_config={:?}",
+                    scheduler_type, action.action_config
+                );
+            }
+            can_handle
+        }
+        _ => {
+            debug!(
+                "Cannot handle action: unknown action_type='{}'",
+                action_type
+            );
+            false
+        }
+    }
+}
+
+/// Classify a workflow's actions for the idle-exit decision. Split out from
+/// [`JobRunner::pending_action_state`] so the decision logic is testable
+/// without a server. `already_executed` holds the actions this runner ran
+/// itself, which covers persistent actions the server leaves unexecuted.
+fn classify_pending_actions(
+    actions: &[crate::models::WorkflowActionModel],
+    already_executed: &HashSet<i64>,
+) -> PendingActionState {
+    let mut state = PendingActionState::None;
+    // Check if we can handle any unexecuted on_jobs_ready or on_jobs_complete actions
+    for action in actions {
+        // Skip already executed actions
+        if action.executed {
+            continue;
+        }
+        // Skip actions this runner already took its turn at (persistent
+        // actions stay unexecuted server-side so other workers can claim them)
+        if action.id.is_some_and(|id| already_executed.contains(&id)) {
+            continue;
+        }
+        // Only consider job-triggered actions (on_jobs_ready, on_jobs_complete)
+        // on_workflow_start and on_worker_start are handled at startup
+        if action.trigger_type != "on_jobs_ready" && action.trigger_type != "on_jobs_complete" {
+            continue;
+        }
+        if !runner_can_handle_action(action) {
+            continue;
+        }
+        // Mirrors the server's pending query: an action fires only once its
+        // trigger count reaches the required threshold.
+        let triggered = action.trigger_count >= action.required_triggers;
+        debug!(
+            "Found unexecuted action {} (trigger={}, type={}, trigger_count={}, \
+            required_triggers={}, triggered={}) that we can handle",
+            action.id.unwrap_or(-1),
+            action.trigger_type,
+            action.action_type,
+            action.trigger_count,
+            action.required_triggers,
+            triggered
+        );
+        if triggered {
+            return PendingActionState::Triggered;
+        }
+        state = PendingActionState::UntriggeredOnly;
+    }
+    state
+}
 
 /// Effective sleep interval when the runner has no tracked children. The
 /// configured base is the runner's preferred completion-check cadence; when
@@ -437,6 +548,15 @@ pub struct JobRunner {
     /// Uses std::time::Instant instead of wall clock time to avoid issues with
     /// NTP clock adjustments that could cause premature idle timeout exits.
     last_job_claimed_time: Option<Instant>,
+    /// Monotonic timestamp of the last job completion this runner observed.
+    /// Bounds how long an untriggered action may keep an idle runner alive:
+    /// only a local completion can move an action toward its trigger threshold
+    /// from this node, so the grace window is measured from that event.
+    last_completion_time: Option<Instant>,
+    /// Actions this runner has already executed in this process. Persistent
+    /// actions keep `executed = 0` on the server so every worker gets a turn,
+    /// so the server flag alone cannot tell us we are done with one.
+    executed_action_ids: HashSet<i64>,
     /// Tracks whether any job failed during this run
     had_failures: bool,
     /// Tracks whether any job was terminated during this run
@@ -734,6 +854,8 @@ impl JobRunner {
             termination_requested: Arc::new(AtomicBool::new(false)),
             wakeup: Wakeup::new(),
             last_job_claimed_time: None,
+            last_completion_time: None,
+            executed_action_ids: HashSet::new(),
             had_failures: false,
             had_terminations: false,
             start_instant: Instant::now(),
@@ -1030,6 +1152,9 @@ impl JobRunner {
                     }
                 }
             };
+            if completions > 0 {
+                self.last_completion_time = Some(Instant::now());
+            }
             if self.execution_config.limit_resources()
                 && exec_mode == ExecutionMode::Direct
                 && let Err(e) = self.handle_oom_violations()
@@ -1220,14 +1345,40 @@ impl JobRunner {
                     .unwrap_or(0);
 
                 if idle_seconds >= self.rules.compute_node_wait_for_new_jobs_seconds {
-                    // Before exiting, check if there are pending actions we can handle
-                    // Actions like schedule_nodes might add more compute capacity
-                    if self.has_pending_actions_we_can_handle() {
-                        debug!(
-                            "Idle for {} seconds but pending actions exist, continuing to wait",
-                            idle_seconds
-                        );
-                    } else {
+                    // Before exiting, check for actions we could still execute.
+                    // Actions like schedule_nodes might add more compute capacity.
+                    // A triggered action is ready to run now, so wait for it. An
+                    // untriggered one is gated on job completions; only a local
+                    // completion can advance it from this node, so wait only
+                    // briefly after one -- otherwise it is gated on work
+                    // happening elsewhere and waiting burns the allocation.
+                    let seconds_since_completion = self
+                        .last_completion_time
+                        .map(|t| t.elapsed().as_secs())
+                        .unwrap_or(u64::MAX);
+                    let hold_for_action = match self.pending_action_state() {
+                        PendingActionState::Triggered => {
+                            info!(
+                                "Idle for {} seconds but a triggered action is waiting to be executed, continuing to wait",
+                                idle_seconds
+                            );
+                            true
+                        }
+                        PendingActionState::UntriggeredOnly
+                            if seconds_since_completion < ACTION_TRIGGER_GRACE_SECONDS =>
+                        {
+                            info!(
+                                "Idle for {} seconds but a job completed {} seconds ago and an untriggered action may \
+                                still be triggered by it, continuing to wait (grace: {} seconds)",
+                                idle_seconds,
+                                seconds_since_completion,
+                                ACTION_TRIGGER_GRACE_SECONDS
+                            );
+                            true
+                        }
+                        PendingActionState::UntriggeredOnly | PendingActionState::None => false,
+                    };
+                    if !hold_for_action {
                         info!(
                             "No jobs claimed for {} seconds (limit: {} seconds). Exiting job runner.",
                             idle_seconds, self.rules.compute_node_wait_for_new_jobs_seconds
@@ -3390,18 +3541,37 @@ impl JobRunner {
             }
 
             info!("Executing action {} (trigger: {})", action_id, trigger_type);
+            // Record it locally before executing: whether or not execution
+            // succeeds, this runner has taken its turn at the action and must
+            // not treat it as a reason to keep an idle allocation open. The
+            // server clears `executed` only for non-persistent actions, so
+            // without this a persistent action would hold every runner open
+            // for its full walltime.
+            self.executed_action_ids.insert(action_id);
             if let Err(e) = self.execute_action(&action) {
                 error!("Failed to execute action {}: {}", action_id, e);
             }
         }
     }
 
-    /// Check if there are any unexecuted actions that this job runner can handle.
-    /// This is used to prevent early exit when actions might still need to be executed.
-    /// We check for unexecuted (not just pending) actions because the background thread
-    /// might not have processed job completions yet, so actions that will become pending
-    /// soon should also keep us alive.
-    fn has_pending_actions_we_can_handle(&self) -> bool {
+    /// Classify the workflow's unexecuted actions for the idle-exit decision.
+    ///
+    /// This inspects ALL actions, not just the ones the server reports as
+    /// pending, so it can distinguish two very different situations:
+    ///
+    /// * [`PendingActionState::Triggered`] -- the action has met its trigger
+    ///   threshold and is waiting to be executed. The runner must stay alive.
+    /// * [`PendingActionState::UntriggeredOnly`] -- the action exists but its
+    ///   `trigger_count` has not reached `required_triggers`. It is gated on
+    ///   job completions that may never happen on this node, so the caller
+    ///   only honors it inside [`ACTION_TRIGGER_GRACE_SECONDS`] of a local
+    ///   completion (the window in which the server's background unblock task
+    ///   may not have bumped the count yet).
+    ///
+    /// Treating both cases as "keep waiting" pins an idle runner to its full
+    /// walltime whenever the workflow declares a downstream action, which is
+    /// exactly the allocation waste the idle timeout exists to prevent.
+    fn pending_action_state(&self) -> PendingActionState {
         // Get ALL actions for this workflow (not just pending ones)
         match self.send_with_retries(
             || -> Result<Vec<crate::models::WorkflowActionModel>, Box<dyn std::error::Error>> {
@@ -3412,35 +3582,10 @@ impl JobRunner {
                 Ok(actions)
             },
         ) {
-            Ok(actions) => {
-                // Check if we can handle any unexecuted on_jobs_ready or on_jobs_complete actions
-                for action in &actions {
-                    // Skip already executed actions
-                    if action.executed {
-                        continue;
-                    }
-                    // Only consider job-triggered actions (on_jobs_ready, on_jobs_complete)
-                    // on_workflow_start and on_worker_start are handled at startup
-                    if action.trigger_type != "on_jobs_ready"
-                        && action.trigger_type != "on_jobs_complete"
-                    {
-                        continue;
-                    }
-                    if self.can_handle_action(action) {
-                        debug!(
-                            "Found unexecuted action {} (trigger={}, type={}) that we can handle",
-                            action.id.unwrap_or(-1),
-                            action.trigger_type,
-                            action.action_type
-                        );
-                        return true;
-                    }
-                }
-                false
-            }
+            Ok(actions) => classify_pending_actions(&actions, &self.executed_action_ids),
             Err(e) => {
                 error!("Failed to check for unexecuted actions: {}", e);
-                false
+                PendingActionState::None
             }
         }
     }
@@ -3450,36 +3595,7 @@ impl JobRunner {
     /// - run_commands actions (always)
     /// - schedule_nodes actions (including slurm)
     fn can_handle_action(&self, action: &crate::models::WorkflowActionModel) -> bool {
-        let action_type = &action.action_type;
-
-        match action_type.as_str() {
-            "run_commands" => true,
-            "schedule_nodes" => {
-                // Check scheduler_type in action_config
-                let scheduler_type = action
-                    .action_config
-                    .get("scheduler_type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-
-                // Job runners can handle slurm schedule_nodes using schedule_slurm_nodes_for_action
-                let can_handle = scheduler_type == "slurm";
-                if !can_handle {
-                    debug!(
-                        "Cannot handle schedule_nodes action: scheduler_type='{}' (expected 'slurm'). action_config={:?}",
-                        scheduler_type, action.action_config
-                    );
-                }
-                can_handle
-            }
-            _ => {
-                debug!(
-                    "Cannot handle action: unknown action_type='{}'",
-                    action_type
-                );
-                false
-            }
-        }
+        runner_can_handle_action(action)
     }
 
     /// Execute a workflow action
@@ -3809,6 +3925,135 @@ mod tests {
         let cap = 300.0;
         let next = next_poll_interval(base, base, cap, false, false);
         assert!(next >= base);
+    }
+
+    // Idle-exit action classification. These exercise the pure helper used by
+    // the main loop's idle timeout without standing up a server.
+
+    fn make_action(
+        id: i64,
+        trigger_type: &str,
+        trigger_count: i64,
+        required_triggers: i64,
+        executed: bool,
+    ) -> crate::models::WorkflowActionModel {
+        crate::models::WorkflowActionModel {
+            id: Some(id),
+            workflow_id: 1,
+            trigger_type: trigger_type.to_string(),
+            action_type: "schedule_nodes".to_string(),
+            action_config: serde_json::json!({"scheduler_type": "slurm"}),
+            job_ids: None,
+            trigger_count,
+            required_triggers,
+            executed,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: false,
+        }
+    }
+
+    #[test]
+    fn classify_pending_actions_no_actions_is_none() {
+        assert_eq!(
+            classify_pending_actions(&[], &HashSet::new()),
+            PendingActionState::None
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_triggered_action_holds_runner() {
+        let actions = vec![make_action(1, "on_jobs_ready", 1, 1, false)];
+        assert_eq!(
+            classify_pending_actions(&actions, &HashSet::new()),
+            PendingActionState::Triggered
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_untriggered_action_is_not_triggered() {
+        // The workflow-1437 case: a schedule_nodes action for a downstream job
+        // that has not become ready yet. It must not read as Triggered, or an
+        // idle runner holds its whole allocation waiting for work gated on
+        // another node.
+        let actions = vec![make_action(2225, "on_jobs_ready", 0, 1, false)];
+        assert_eq!(
+            classify_pending_actions(&actions, &HashSet::new()),
+            PendingActionState::UntriggeredOnly
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_executed_actions_ignored() {
+        let actions = vec![
+            make_action(2223, "on_jobs_ready", 1, 1, true),
+            make_action(2224, "on_jobs_ready", 1, 1, true),
+        ];
+        assert_eq!(
+            classify_pending_actions(&actions, &HashSet::new()),
+            PendingActionState::None
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_skips_actions_this_runner_already_ran() {
+        // A persistent action keeps `executed = 0` server-side so other
+        // workers can claim it. Once this runner has run it, it must not keep
+        // this runner's allocation open.
+        let mut action = make_action(7, "on_jobs_ready", 1, 1, false);
+        action.persistent = true;
+        let already_executed = HashSet::from([7]);
+        assert_eq!(
+            classify_pending_actions(std::slice::from_ref(&action), &already_executed),
+            PendingActionState::None
+        );
+        // ...but it does hold a runner that has not run it yet.
+        assert_eq!(
+            classify_pending_actions(&[action], &HashSet::new()),
+            PendingActionState::Triggered
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_triggered_wins_over_untriggered() {
+        // Order must not matter: any triggered action we can handle keeps the
+        // runner alive regardless of how many untriggered ones precede it.
+        let actions = vec![
+            make_action(1, "on_jobs_complete", 0, 2, false),
+            make_action(2, "on_jobs_ready", 3, 1, false),
+        ];
+        assert_eq!(
+            classify_pending_actions(&actions, &HashSet::new()),
+            PendingActionState::Triggered
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_ignores_non_job_triggers() {
+        // on_workflow_start / on_worker_start run at startup, not from the
+        // main loop, so they must never hold an idle runner open.
+        let actions = vec![
+            make_action(1, "on_workflow_start", 1, 1, false),
+            make_action(2, "on_worker_start", 1, 1, false),
+            make_action(3, "on_workflow_complete", 1, 1, false),
+        ];
+        assert_eq!(
+            classify_pending_actions(&actions, &HashSet::new()),
+            PendingActionState::None
+        );
+    }
+
+    #[test]
+    fn classify_pending_actions_ignores_unhandleable_actions() {
+        // A non-slurm schedule_nodes action is executed elsewhere, so it is
+        // not this runner's reason to stay alive.
+        let mut action = make_action(1, "on_jobs_ready", 1, 1, false);
+        action.action_config = serde_json::json!({"scheduler_type": "aws"});
+        assert_eq!(
+            classify_pending_actions(&[action], &HashSet::new()),
+            PendingActionState::None
+        );
     }
 
     #[test]
