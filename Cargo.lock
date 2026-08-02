@@ -5642,7 +5642,7 @@ dependencies = [
  "async-trait",
  "axoupdater",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.0",
  "bcrypt",
  "bytes",
  "cargo-husky",
