@@ -62,7 +62,7 @@ jobs:
       - name: Install Hawk
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
-            https://github.com/astral-sh/hawk/releases/latest/download/cargo-hawk-installer.sh | sh
+            https://github.com/astral-sh/hawk/releases/download/0.1.10/cargo-hawk-installer.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Run Hawk

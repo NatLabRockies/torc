@@ -34,3 +34,26 @@ reason = "shipped dashboard"
 package = "torc"
 bin = "torc-slurm-job-runner"
 reason = "shipped Slurm job runner"
+
+# These model aliases are part of the crate-root API retained for downstream users,
+# even though Torc's in-workspace binaries do not import them across the crate boundary.
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "torc"
+item = "GetReadyJobRequirementsResponse"
+level = "allow"
+reason = "backward-compatible crate-root model re-export"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "torc"
+item = "ListLocalSchedulersResponse"
+level = "allow"
+reason = "backward-compatible crate-root model re-export"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "torc"
+item = "LocalSchedulerModel"
+level = "allow"
+reason = "backward-compatible crate-root model re-export"

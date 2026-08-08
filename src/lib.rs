@@ -3,10 +3,6 @@
 //! This library provides shared functionality for the Torc workflow orchestration system.
 //! It includes data models, server implementation, and client utilities.
 
-// Visibility reductions performed by Hawk intentionally leave some generated/API compatibility
-// helpers unused in a given binary feature profile.
-#![allow(dead_code)]
-
 /// Maximum number of records that can be transferred in a single API request or response.
 /// Used for both batch creation limits and pagination limits.
 pub const MAX_RECORD_TRANSFER_COUNT: i64 = 100_000;
@@ -25,6 +21,7 @@ pub fn get_username() -> String {
 // Shared modules (always available)
 pub mod api_version;
 pub mod memory_utils;
+#[allow(dead_code)]
 pub mod models;
 pub mod network_utils;
 pub(crate) mod ro_crate_json_ld;
@@ -32,18 +29,22 @@ pub mod time_utils;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]
+#[allow(dead_code)]
 pub mod config;
 
 // Server modules (behind feature flag)
 #[cfg(feature = "server")]
+#[allow(dead_code)]
 pub mod server;
 
 // Client modules (behind feature flag)
 #[cfg(feature = "client")]
+#[allow(dead_code)]
 pub mod client;
 
 // TUI module (behind feature flag)
 #[cfg(feature = "tui")]
+#[allow(dead_code)]
 pub mod tui;
 
 // Binary command modules (behind feature flags) - re-exported for standalone binaries
@@ -61,6 +62,7 @@ pub mod plot_resources_cmd;
 
 // MCP server modules (behind feature flag)
 #[cfg(feature = "mcp-server")]
+#[allow(dead_code)]
 pub mod mcp_server;
 
 // Rust-owned OpenAPI emission
@@ -75,14 +77,15 @@ pub mod cli;
 pub use models::{
     ClaimJobsBasedOnResources, ClaimNextJobsResponse, ComputeNodeModel, ComputeNodeSchedule,
     ComputeNodesResources, CreateJobsResponse, ErrorResponse, EventModel, FileModel,
-    IsCompleteResponse, JobDependencyModel, JobFileRelationshipModel, JobModel, JobStatus,
-    JobUserDataRelationshipModel, JobsModel, ListComputeNodesResponse, ListEventsResponse,
-    ListFilesResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
-    ListJobUserDataRelationshipsResponse, ListJobsResponse, ListMissingUserDataResponse,
-    ListRequiredExistingFilesResponse, ListResourceRequirementsResponse, ListResultsResponse,
-    ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse, ListUserDataResponse,
-    ListWorkflowsResponse, ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel,
-    RunningJobModel, RunningJobsResponse, ScheduledComputeNodesModel, SlurmJobCorrelationModel,
+    GetReadyJobRequirementsResponse, IsCompleteResponse, JobDependencyModel,
+    JobFileRelationshipModel, JobModel, JobStatus, JobUserDataRelationshipModel, JobsModel,
+    ListComputeNodesResponse, ListEventsResponse, ListFilesResponse, ListJobDependenciesResponse,
+    ListJobFileRelationshipsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
+    ListLocalSchedulersResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
+    ListResourceRequirementsResponse, ListResultsResponse, ListScheduledComputeNodesResponse,
+    ListSlurmSchedulersResponse, ListUserDataResponse, ListWorkflowsResponse, LocalSchedulerModel,
+    ProcessChangedJobInputsResponse, ResourceRequirementsModel, ResultModel, RunningJobModel,
+    RunningJobsResponse, ScheduledComputeNodesModel, SlurmJobCorrelationModel,
     SlurmJobCorrelationsResponse, SlurmSchedulerModel, UserDataModel, WorkflowActionModel,
     WorkflowModel, WorkflowStatusResponse,
 };

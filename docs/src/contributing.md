@@ -39,7 +39,7 @@ cargo install cargo-release
 ```bash
 rustup toolchain install 1.97.1
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/astral-sh/hawk/releases/latest/download/cargo-hawk-installer.sh | sh
+  https://github.com/astral-sh/hawk/releases/download/0.1.10/cargo-hawk-installer.sh | sh
 ```
 
 7. **Set up the database:**
