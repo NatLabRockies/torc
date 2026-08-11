@@ -202,6 +202,7 @@ fn test_workflow_specification_complete_serialization() {
             tmp: Some("10G".to_string()),
             walltime: "01:00:00".to_string(),
             extra: None,
+            serialize_allocations: None,
         },
         SlurmSchedulerSpec {
             name: Some("gpu".to_string()),
@@ -215,6 +216,7 @@ fn test_workflow_specification_complete_serialization() {
             tmp: Some("50G".to_string()),
             walltime: "04:00:00".to_string(),
             extra: Some("--constraint=v100".to_string()),
+            serialize_allocations: None,
         },
     ];
 
@@ -1077,6 +1079,7 @@ fn test_workflow_specification_with_all_resource_types() {
         tmp: Some("20G".to_string()),
         walltime: "02:00:00".to_string(),
         extra: Some("--test-flag".to_string()),
+        serialize_allocations: None,
     }];
 
     let mut job = JobSpec::new(
@@ -1256,6 +1259,7 @@ fn test_specification_structs_serialization() {
         tmp: Some("50G".to_string()),
         walltime: "04:00:00".to_string(),
         extra: Some("--test-flag".to_string()),
+        serialize_allocations: None,
     };
 
     // Test serialization roundtrip
@@ -1324,6 +1328,7 @@ fn test_workflow_specification_with_new_structs() {
         tmp: Some("10G".to_string()),
         walltime: "02:00:00".to_string(),
         extra: None,
+        serialize_allocations: None,
     }];
 
     let mut job = JobSpec::new("process_data".to_string(), "python process.py".to_string());
@@ -4388,4 +4393,52 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     let _ = apis::workflows_api::delete_workflow(&start_server.config, workflow_id);
 
     eprintln!("✓ Execution plan from spec matches execution plan from database");
+}
+
+/// `serialize_allocations` must survive a KDL round-trip. KDL v2 spells booleans
+/// `#true`/`#false`; emitting a bare `true` produces a file that fails to parse, and
+/// nothing else would catch that since the field is optional and silently absent.
+#[test]
+fn test_slurm_scheduler_serialize_allocations_kdl_roundtrip() {
+    let yaml = r#"
+        name: serialize_roundtrip_test
+        user: test_user
+        jobs:
+          - name: job1
+            command: "echo hello"
+        slurm_schedulers:
+          - name: chain
+            account: my_account
+            walltime: "12:00:00"
+            nodes: 1
+            serialize_allocations: true
+          - name: parallel
+            account: my_account
+            walltime: "04:00:00"
+            nodes: 1
+    "#;
+    let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
+
+    let kdl_str = spec.to_kdl_str();
+    let roundtripped =
+        WorkflowSpec::from_spec_file_content(&kdl_str, "kdl").expect("Failed to parse KDL");
+
+    let schedulers = roundtripped.slurm_schedulers.expect("schedulers missing");
+    assert_eq!(schedulers[0].serialize_allocations, Some(true));
+    // An omitted value stays omitted rather than round-tripping to Some(false).
+    assert_eq!(schedulers[1].serialize_allocations, None);
+}
+
+/// The shipped chained-allocations example (referenced from the docs) parses and
+/// carries `serialize_allocations` on its scheduler.
+#[test]
+fn test_chained_allocations_example_parses() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/yaml/chained_allocations.yaml");
+    let spec = WorkflowSpec::from_spec_file(&path).expect("Failed to parse example");
+
+    let schedulers = spec.slurm_schedulers.expect("schedulers missing");
+    assert_eq!(schedulers.len(), 1);
+    assert_eq!(schedulers[0].serialize_allocations, Some(true));
+    assert_eq!(spec.jobs.len(), 4);
 }

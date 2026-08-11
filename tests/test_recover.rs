@@ -380,6 +380,7 @@ fn workflow_has_schedulers_reflects_scheduler_presence(start_server: &ServerProc
         tmp: None,
         walltime: "01:00:00".to_string(),
         extra: None,
+        serialize_allocations: None,
     };
     apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("create scheduler");
@@ -432,6 +433,7 @@ fn detect_recovery_execution_mode_distinguishes_local_remote_slurm(start_server:
         tmp: None,
         walltime: "01:00:00".to_string(),
         extra: None,
+        serialize_allocations: None,
     };
     apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
         .expect("create scheduler");

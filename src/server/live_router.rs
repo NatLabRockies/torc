@@ -5079,11 +5079,15 @@ mod live_router_tests {
             assert_eq!(resp.status(), StatusCode::OK);
         }
 
+        // One-second buckets over the last 60s. A single 60s-wide bucket
+        // would be anchored to the floor of the current wall-clock minute,
+        // so a minute boundary landing between the pings and this request
+        // would drop all of them.
         let resp = router
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri("/torc-service/v1/admin/api-stats?window_seconds=60&interval_seconds=60")
+                    .uri("/torc-service/v1/admin/api-stats?window_seconds=60&interval_seconds=1")
                     .body(Body::empty())
                     .expect("valid request"),
             )

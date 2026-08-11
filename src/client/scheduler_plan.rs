@@ -1038,6 +1038,9 @@ pub(crate) fn apply_plan_to_spec(plan: &SchedulerPlan, spec: &mut WorkflowSpec) 
             qos: ps.qos.clone(),
             tmp: None,
             extra: None,
+            // Planned schedulers are sized for parallel work; serializing is an
+            // explicit opt-in on a user-authored scheduler.
+            serialize_allocations: None,
         })
         .collect();
 

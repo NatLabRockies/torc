@@ -105,7 +105,11 @@ impl WorkflowAction {
                 "DELETE workflow '{}'?\nThis action cannot be undone!",
                 workflow_name
             ),
-            Self::Cancel => format!("Cancel workflow '{}'?", workflow_name),
+            Self::Cancel => format!(
+                "Cancel workflow '{}'?\n\
+                 This cancels running jobs and any associated Slurm allocations.",
+                workflow_name
+            ),
         }
     }
 
@@ -3493,6 +3497,11 @@ impl App {
             return self.reset_workflow_cli(workflow_id, workflow_name);
         }
 
+        // Handle Cancel specially - it also cancels Slurm allocations and reports on them
+        if action == WorkflowAction::Cancel {
+            return self.cancel_workflow_with_allocations(workflow_id, workflow_name);
+        }
+
         let result = match action {
             WorkflowAction::Initialize => unreachable!(), // Handled above
             WorkflowAction::InitializeForce => unreachable!(), // Handled above
@@ -3504,9 +3513,9 @@ impl App {
             WorkflowAction::WatchNoAuto => unreachable!(), // Handled above
             WorkflowAction::Recover => unreachable!(),    // Handled above
             WorkflowAction::RecoverDryRun => unreachable!(), // Handled above
+            WorkflowAction::Cancel => unreachable!(),     // Handled above
             WorkflowAction::Submit => self.client.submit_workflow(workflow_id),
             WorkflowAction::Delete => self.client.delete_workflow(workflow_id),
-            WorkflowAction::Cancel => self.client.cancel_workflow(workflow_id),
         };
 
         match result {
@@ -3522,11 +3531,11 @@ impl App {
                     WorkflowAction::WatchNoAuto => unreachable!(),
                     WorkflowAction::Recover => unreachable!(),
                     WorkflowAction::RecoverDryRun => unreachable!(),
+                    WorkflowAction::Cancel => unreachable!(),
                     WorkflowAction::Submit => {
                         format!("Workflow '{}' submitted to scheduler", workflow_name)
                     }
                     WorkflowAction::Delete => format!("Workflow '{}' deleted", workflow_name),
-                    WorkflowAction::Cancel => format!("Workflow '{}' canceled", workflow_name),
                 };
                 self.set_status(StatusMessage::success(&msg));
 
@@ -3542,6 +3551,53 @@ impl App {
                 self.set_status(StatusMessage::error(&format!(
                     "Failed to {} workflow: {}",
                     action.title().to_lowercase(),
+                    e
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Cancel a workflow along with its outstanding Slurm allocations.
+    ///
+    /// Canceling the workflow without the allocations leaves them queued; when one starts
+    /// it finds no runnable jobs and exits immediately. Allocation failures are reported
+    /// as a warning rather than an error because the workflow itself was canceled.
+    fn cancel_workflow_with_allocations(
+        &mut self,
+        workflow_id: i64,
+        workflow_name: &str,
+    ) -> Result<()> {
+        self.set_status(StatusMessage::info(&format!(
+            "Canceling workflow '{}'...",
+            workflow_name
+        )));
+
+        match self.client.cancel_workflow(workflow_id) {
+            Ok(outcome) => {
+                let canceled = outcome.canceled_slurm_jobs.len();
+                let mut msg = format!("Workflow '{}' canceled", workflow_name);
+                if canceled > 0 {
+                    msg.push_str(&format!(" ({} Slurm allocation(s) canceled)", canceled));
+                }
+
+                if outcome.errors.is_empty() {
+                    self.set_status(StatusMessage::success(&msg));
+                } else {
+                    self.set_status(StatusMessage::warning(&format!(
+                        "{}, but canceling allocations had errors: {}",
+                        msg,
+                        outcome.errors.join("; ")
+                    )));
+                }
+
+                // Reload the detail data to show updated status
+                let _ = self.load_detail_data();
+            }
+            Err(e) => {
+                self.set_status(StatusMessage::error(&format!(
+                    "Failed to cancel workflow: {}",
                     e
                 )));
             }

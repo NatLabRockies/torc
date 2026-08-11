@@ -525,6 +525,15 @@ pub struct SlurmSchedulerModel {
     pub walltime: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<String>,
+    /// Run this scheduler's allocations strictly one at a time.
+    ///
+    /// When set, every allocation submitted for this scheduler shares one Slurm job
+    /// name and carries `--dependency=singleton`, so Slurm serializes them. Submit N
+    /// allocations up front and they chain: each runs until its walltime can no longer
+    /// fit a ready job, exits, and the next starts. Used for long sequential workflows
+    /// that outlive any single allocation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serialize_allocations: Option<bool>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1940,6 +1949,7 @@ impl SlurmSchedulerModel {
             tmp: None,
             walltime,
             extra: None,
+            serialize_allocations: None,
         }
     }
 }

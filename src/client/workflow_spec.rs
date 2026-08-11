@@ -565,6 +565,14 @@ pub struct SlurmSchedulerSpec {
     /// Extra parameters
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<String>,
+    /// Run this scheduler's allocations strictly one at a time.
+    ///
+    /// Every allocation submitted for this scheduler shares one Slurm job name and
+    /// carries `--dependency=singleton`, so Slurm chains them instead of running them
+    /// concurrently. Submit N allocations up front and each starts as its predecessor
+    /// finishes -- useful when a workflow's sequential work outlives a single walltime.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serialize_allocations: Option<bool>,
 }
 
 impl SlurmSchedulerSpec {
@@ -3909,6 +3917,7 @@ impl WorkflowSpec {
                         tmp: scheduler_spec.tmp.clone(),
                         walltime: scheduler_spec.walltime.clone(),
                         extra: scheduler_spec.extra.clone(),
+                        serialize_allocations: scheduler_spec.serialize_allocations,
                     };
 
                     let created_scheduler =
@@ -5045,6 +5054,14 @@ impl WorkflowSpec {
                             );
                         }
                     }
+                    "serialize_allocations" => {
+                        if let Some(v) = child.entries().first().and_then(|e| e.value().as_bool()) {
+                            obj.insert(
+                                "serialize_allocations".to_string(),
+                                serde_json::Value::Bool(v),
+                            );
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -6117,6 +6134,12 @@ impl WorkflowSpec {
         lines.push(format!("    walltime {}", escape(&sched.walltime)));
         if let Some(ref extra) = sched.extra {
             lines.push(format!("    extra {}", escape(extra)));
+        }
+        if let Some(serialize) = sched.serialize_allocations {
+            lines.push(format!(
+                "    serialize_allocations {}",
+                if serialize { "#true" } else { "#false" }
+            ));
         }
         lines.push("}".to_string());
     }
