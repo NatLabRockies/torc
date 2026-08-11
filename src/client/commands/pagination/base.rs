@@ -160,15 +160,3 @@ impl<T: Paginatable> Iterator for PaginatedIterator<T> {
         }
     }
 }
-
-/// Helper function to collect all paginated results into a Vec.
-///
-/// This is a convenience function for when you need all results at once.
-fn paginate<T: Paginatable>(
-    config: &apis::configuration::Configuration,
-    params: T::Params,
-) -> Result<Vec<T>, apis::Error<T::ListError>> {
-    let initial_limit = params.limit().unwrap_or(crate::MAX_RECORD_TRANSFER_COUNT);
-    let iter = PaginatedIterator::<T>::new(config.clone(), params, Some(initial_limit));
-    iter.collect()
-}

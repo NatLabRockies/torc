@@ -359,11 +359,6 @@ completion_check_interval_secs = 5
         }
     }
 
-    /// Get the configuration paths
-    fn paths() -> ConfigPaths {
-        ConfigPaths::new()
-    }
-
     /// Convert to TOML string
     pub fn to_toml(&self) -> Result<String, ::toml::ser::Error> {
         ::toml::to_string_pretty(self)

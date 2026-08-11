@@ -67,12 +67,3 @@ pub struct AllowAllAuthenticator<T, RC> {
     _inner: PhantomData<T>,
     _context: PhantomData<RC>,
 }
-
-impl<T, RC> AllowAllAuthenticator<T, RC> {
-    fn new() -> Self {
-        Self {
-            _inner: PhantomData,
-            _context: PhantomData,
-        }
-    }
-}

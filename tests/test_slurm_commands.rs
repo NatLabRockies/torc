@@ -1,8 +1,8 @@
 mod common;
 
 use common::{
-    ServerProcess, create_minimal_resources_workflow, create_test_workflow, run_cli_with_json,
-    start_server,
+    ServerProcess, create_minimal_resources_workflow, create_test_workflow, run_cli_command,
+    run_cli_with_json, start_server,
 };
 use rstest::rstest;
 use serde_json::json;
@@ -573,21 +573,23 @@ fn test_schedule_nodes_rejects_job_prefix_for_serialized_scheduler(start_server:
         .expect("Failed to create Slurm scheduler");
     let scheduler_id = scheduler.id.unwrap();
 
-    let result = torc::client::commands::slurm::schedule_slurm_nodes(
-        config,
-        workflow_id,
-        scheduler_id,
-        1,
-        false,
-        "run1_",
-        "torc_output",
-        30,
+    let workflow_id = workflow_id.to_string();
+    let scheduler_id = scheduler_id.to_string();
+    let err = run_cli_command(
+        &[
+            "slurm",
+            "schedule-nodes",
+            &workflow_id,
+            "--scheduler-config-id",
+            &scheduler_id,
+            "--job-prefix",
+            "run1_",
+        ],
+        start_server,
         None,
-        false,
-        None,
-    );
+    )
+    .expect_err("job_prefix must be rejected for a serialized scheduler");
 
-    let err = result.expect_err("job_prefix must be rejected for a serialized scheduler");
     assert!(
         err.to_string().contains("--job-prefix"),
         "Error should explain the job_prefix rejection, got: {}",

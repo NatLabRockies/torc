@@ -44,11 +44,6 @@ impl ResourceRequirementsListParams {
         Self::default()
     }
 
-    fn with_job_id(mut self, job_id: i64) -> Self {
-        self.job_id = Some(job_id);
-        self
-    }
-
     pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
@@ -66,36 +61,6 @@ impl ResourceRequirementsListParams {
 
     pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
-        self
-    }
-
-    fn with_name(mut self, name: String) -> Self {
-        self.name = Some(name);
-        self
-    }
-
-    fn with_memory(mut self, memory: String) -> Self {
-        self.memory = Some(memory);
-        self
-    }
-
-    fn with_num_cpus(mut self, num_cpus: i64) -> Self {
-        self.num_cpus = Some(num_cpus);
-        self
-    }
-
-    fn with_num_gpus(mut self, num_gpus: i64) -> Self {
-        self.num_gpus = Some(num_gpus);
-        self
-    }
-
-    fn with_num_nodes(mut self, num_nodes: i64) -> Self {
-        self.num_nodes = Some(num_nodes);
-        self
-    }
-
-    fn with_runtime(mut self, runtime: String) -> Self {
-        self.runtime = Some(runtime);
         self
     }
 }

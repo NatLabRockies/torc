@@ -22,10 +22,6 @@ pub struct ScheduledComputeNodeListParams {
     sort_by: Option<String>,
     /// Reverse sort order
     reverse_sort: Option<bool>,
-    /// Filter by scheduler ID
-    scheduler_id: Option<String>,
-    /// Filter by scheduler config ID
-    scheduler_config_id: Option<String>,
     /// Filter by status
     status: Option<String>,
 }
@@ -33,36 +29,6 @@ pub struct ScheduledComputeNodeListParams {
 impl ScheduledComputeNodeListParams {
     pub(crate) fn new() -> Self {
         Self::default()
-    }
-
-    fn with_offset(mut self, offset: i64) -> Self {
-        self.offset = offset;
-        self
-    }
-
-    fn with_limit(mut self, limit: i64) -> Self {
-        self.limit = Some(limit);
-        self
-    }
-
-    fn with_sort_by(mut self, sort_by: String) -> Self {
-        self.sort_by = Some(sort_by);
-        self
-    }
-
-    fn with_reverse_sort(mut self, reverse: bool) -> Self {
-        self.reverse_sort = Some(reverse);
-        self
-    }
-
-    fn with_scheduler_id(mut self, scheduler_id: String) -> Self {
-        self.scheduler_id = Some(scheduler_id);
-        self
-    }
-
-    fn with_scheduler_config_id(mut self, scheduler_config_id: String) -> Self {
-        self.scheduler_config_id = Some(scheduler_config_id);
-        self
     }
 
     pub(crate) fn with_status(mut self, status: String) -> Self {
@@ -109,8 +75,8 @@ impl Paginatable for ScheduledComputeNodesModel {
             Some(limit),
             params.sort_by.as_deref(),
             params.reverse_sort,
-            params.scheduler_id.as_deref(),
-            params.scheduler_config_id.as_deref(),
+            None,
+            None,
             params.status.as_deref(),
         )?;
 

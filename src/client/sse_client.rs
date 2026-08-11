@@ -9,7 +9,6 @@ use crate::client::apis::configuration::{
 use crate::models::EventSeverity;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
-use std::time::Duration;
 
 /// A broadcast event received from the SSE stream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,38 +202,6 @@ impl SseConnection {
                 data.push_str(value);
             }
             // Ignore other fields (id:, retry:, etc.)
-        }
-    }
-}
-
-/// Connect to the SSE endpoint and process events with a callback.
-///
-/// This is a convenience function that handles the connection loop and
-/// calls the provided callback for each received event.
-fn stream_events<F>(
-    config: &Configuration,
-    workflow_id: i64,
-    level: Option<EventSeverity>,
-    duration: Option<Duration>,
-    mut callback: F,
-) -> Result<(), SseError>
-where
-    F: FnMut(SseEvent),
-{
-    let mut connection = SseConnection::connect(config, workflow_id, level)?;
-    let start = std::time::Instant::now();
-
-    loop {
-        // Check duration timeout
-        if let Some(max_duration) = duration
-            && start.elapsed() >= max_duration
-        {
-            return Ok(());
-        }
-
-        match connection.next_event()? {
-            Some(event) => callback(event),
-            None => return Err(SseError::ConnectionClosed),
         }
     }
 }

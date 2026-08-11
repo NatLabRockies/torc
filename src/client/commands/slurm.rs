@@ -4357,7 +4357,6 @@ pub(crate) fn analyze_plan_allocations(
 
             let queue = match crate::client::hpc::slurm::query_queue_depth(Some(part_name)) {
                 Ok(mut v) => v.pop().unwrap_or(QueueDepthInfo {
-                    partition: part_name.clone(),
                     pending_jobs: 0,
                     pending_nodes: 0,
                     running_jobs: 0,
@@ -4368,7 +4367,6 @@ pub(crate) fn analyze_plan_allocations(
                         part_name, e
                     );
                     QueueDepthInfo {
-                        partition: part_name.clone(),
                         pending_jobs: 0,
                         pending_nodes: 0,
                         running_jobs: 0,

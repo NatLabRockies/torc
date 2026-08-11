@@ -27,11 +27,6 @@ pub struct TorcMcpServer {
 }
 
 impl TorcMcpServer {
-    /// Create a new TorcMcpServer with the given API URL and output directory.
-    fn new(api_url: String, output_dir: PathBuf) -> Self {
-        Self::new_with_tls(api_url, output_dir, TlsConfig::default())
-    }
-
     /// Create a new TorcMcpServer with TLS configuration.
     pub fn new_with_tls(api_url: String, output_dir: PathBuf, tls: TlsConfig) -> Self {
         let mut config = Configuration::with_tls(tls);
@@ -47,22 +42,6 @@ impl TorcMcpServer {
             examples_dir: None,
             tool_router: Self::tool_router(),
         }
-    }
-
-    /// Create a new TorcMcpServer with authentication.
-    fn with_auth(
-        api_url: String,
-        output_dir: PathBuf,
-        username: Option<String>,
-        password: Option<String>,
-    ) -> Self {
-        Self::with_auth_and_tls(
-            api_url,
-            output_dir,
-            username,
-            password,
-            TlsConfig::default(),
-        )
     }
 
     /// Create a new TorcMcpServer with authentication and TLS configuration.

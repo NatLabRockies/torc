@@ -396,13 +396,6 @@ fn find_entity_by_entity_id(
     }
 }
 
-/// Check if an RO-Crate entity already exists for a file.
-///
-/// Returns true if an entity with the given file_id already exists.
-pub fn entity_exists_for_file(config: &Configuration, workflow_id: i64, file_id: i64) -> bool {
-    find_entity_for_file(config, workflow_id, file_id).is_some()
-}
-
 fn create_or_update_entity_by_entity_id(
     config: &Configuration,
     workflow_id: i64,

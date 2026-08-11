@@ -21,7 +21,6 @@ pub fn get_username() -> String {
 // Shared modules (always available)
 pub mod api_version;
 pub mod memory_utils;
-#[allow(dead_code)]
 pub mod models;
 pub mod network_utils;
 pub(crate) mod ro_crate_json_ld;
@@ -29,22 +28,18 @@ pub mod time_utils;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]
-#[allow(dead_code)]
 pub mod config;
 
 // Server modules (behind feature flag)
 #[cfg(feature = "server")]
-#[allow(dead_code)]
 pub mod server;
 
 // Client modules (behind feature flag)
 #[cfg(feature = "client")]
-#[allow(dead_code)]
 pub mod client;
 
 // TUI module (behind feature flag)
 #[cfg(feature = "tui")]
-#[allow(dead_code)]
 pub mod tui;
 
 // Binary command modules (behind feature flags) - re-exported for standalone binaries
@@ -62,7 +57,6 @@ pub mod plot_resources_cmd;
 
 // MCP server modules (behind feature flag)
 #[cfg(feature = "mcp-server")]
-#[allow(dead_code)]
 pub mod mcp_server;
 
 // Rust-owned OpenAPI emission

@@ -884,33 +884,6 @@ impl JobsApiImpl {
         Ok(hash_hex)
     }
 
-    /// Store job input hash in job_internal table
-    ///
-    /// Uses INSERT ON CONFLICT to upsert - will insert new record or update existing one.
-    async fn store_job_input_hash(&self, job_id: i64, hash: &str) -> Result<(), ApiError> {
-        match sqlx::query!(
-            r#"
-            INSERT INTO job_internal (job_id, input_hash)
-            VALUES ($1, $2)
-            ON CONFLICT(job_id) DO UPDATE SET input_hash = excluded.input_hash
-            "#,
-            job_id,
-            hash
-        )
-        .execute(self.context.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!(
-                    "Stored input hash {} for job {} in job_internal",
-                    hash, job_id
-                );
-                Ok(())
-            }
-            Err(e) => Err(database_error_with_msg(e, "Failed to store job input hash")),
-        }
-    }
-
     /// Compute and store input hashes for all jobs in a workflow using bulk queries.
     ///
     /// This is much more efficient than calling `compute_job_input_hash` per job because it

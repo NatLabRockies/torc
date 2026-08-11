@@ -49,11 +49,6 @@ impl ConfirmationDialog {
         self
     }
 
-    fn with_confirm_text(mut self, text: &str) -> Self {
-        self.confirm_text = text.to_string();
-        self
-    }
-
     pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         // Calculate dialog size - center in screen
         let dialog_width = 60.min(area.width.saturating_sub(4));

@@ -341,29 +341,6 @@ impl AuthorizationService {
         Ok(Some(ids))
     }
 
-    /// Build a SQL WHERE clause fragment for filtering by accessible workflows
-    /// Returns None if no filtering is needed, or Some(clause, bind_values) if filtering is needed
-    async fn build_workflow_access_filter(
-        &self,
-        auth: &Option<Authorization>,
-        workflow_id_column: &str,
-    ) -> Result<Option<(String, Vec<i64>)>, String> {
-        match self.get_accessible_workflow_ids(auth).await? {
-            None => Ok(None), // No filtering needed
-            Some(ids) if ids.is_empty() => {
-                // User has no access to any workflows - return impossible condition
-                Ok(Some(("1 = 0".to_string(), Vec::new())))
-            }
-            Some(ids) => {
-                // Build IN clause
-                let placeholders: Vec<String> =
-                    (0..ids.len()).map(|i| format!("${}", i + 1)).collect();
-                let clause = format!("{} IN ({})", workflow_id_column, placeholders.join(", "));
-                Ok(Some((clause, ids)))
-            }
-        }
-    }
-
     /// Check if access control is enforced
     pub(crate) fn is_enforced(&self) -> bool {
         self.enforce_access_control

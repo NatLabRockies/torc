@@ -67,18 +67,6 @@ impl HtpasswdFile {
         Ok(HtpasswdFile { users })
     }
 
-    /// Create an empty htpasswd file (for testing or programmatic creation)
-    fn new() -> Self {
-        HtpasswdFile {
-            users: HashMap::new(),
-        }
-    }
-
-    /// Add a user with an already-hashed password
-    fn add_user(&mut self, username: String, bcrypt_hash: String) {
-        self.users.insert(username, bcrypt_hash);
-    }
-
     /// Verify a username and password against the htpasswd file
     /// Returns true if the credentials are valid, false otherwise
     pub fn verify(&self, username: &str, password: &str) -> bool {
@@ -101,11 +89,6 @@ impl HtpasswdFile {
     pub fn user_count(&self) -> usize {
         self.users.len()
     }
-
-    /// Check if a username exists
-    fn has_user(&self, username: &str) -> bool {
-        self.users.contains_key(username)
-    }
 }
 
 #[cfg(test)]
@@ -113,17 +96,6 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
-
-    #[test]
-    fn test_verify_valid_password() {
-        let mut htpasswd = HtpasswdFile::new();
-        // Hash for "password123" with cost 4 (low cost for testing)
-        let hash = "$2b$04$aZQZqW0z2Z6Z2Z6Z2Z6Z2O7YZJ3Z2Z6Z2Z6Z2Z6Z2Z6Z2Z6Z2Z6ZO";
-        htpasswd.add_user("testuser".to_string(), hash.to_string());
-
-        // This will fail because we're using a fake hash, but it tests the structure
-        // In real usage, you'd use bcrypt::hash() to generate proper hashes
-    }
 
     #[test]
     fn test_load_htpasswd_file() -> Result<()> {
@@ -147,10 +119,6 @@ mod tests {
         let htpasswd = HtpasswdFile::load(file.path())?;
 
         assert_eq!(htpasswd.user_count(), 3);
-        assert!(htpasswd.has_user("user1"));
-        assert!(htpasswd.has_user("user2"));
-        assert!(htpasswd.has_user("user3"));
-        assert!(!htpasswd.has_user("nonexistent"));
 
         Ok(())
     }

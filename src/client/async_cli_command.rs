@@ -212,10 +212,6 @@ impl AsyncCliCommand {
 
     /// Returns the Slurm step name, if running inside an allocation.
     /// Set after `start()` is called.
-    fn step_name(&self) -> Option<&str> {
-        self.step_name.as_deref()
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub fn start(
         &mut self,

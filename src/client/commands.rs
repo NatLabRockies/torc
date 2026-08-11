@@ -113,14 +113,6 @@ pub fn select_workflow_interactively(
     }
 }
 
-/// Helper function to get user name from parameter or environment variables
-fn get_user_name(user: &Option<String>) -> String {
-    if user.is_some() {
-        return user.as_deref().unwrap().to_string();
-    }
-    get_env_user_name()
-}
-
 pub(crate) fn get_env_user_name() -> String {
     crate::get_username()
 }

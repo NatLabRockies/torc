@@ -46,16 +46,6 @@ pub struct HtpasswdAuthenticator {
 }
 
 impl HtpasswdAuthenticator {
-    /// Create a new authenticator with optional htpasswd file
-    /// If htpasswd is None and require_auth is false, all requests are allowed (backward compatible)
-    /// If require_auth is true, authentication is required
-    fn new(htpasswd: Option<HtpasswdFile>, require_auth: bool) -> Self {
-        HtpasswdAuthenticator {
-            htpasswd,
-            require_auth,
-        }
-    }
-
     fn create_authorization(username: String) -> Authorization {
         Authorization {
             subject: username,
@@ -149,27 +139,6 @@ where
     require_auth: bool,
     credential_cache: SharedCredentialCache,
     marker: PhantomData<RC>,
-}
-
-impl<T, RC> MakeHtpasswdAuthenticator<T, RC>
-where
-    RC: RcBound,
-    RC::Result: Send + 'static,
-{
-    fn new(
-        inner: T,
-        htpasswd: SharedHtpasswd,
-        require_auth: bool,
-        credential_cache: SharedCredentialCache,
-    ) -> Self {
-        MakeHtpasswdAuthenticator {
-            inner,
-            htpasswd,
-            require_auth,
-            credential_cache,
-            marker: PhantomData,
-        }
-    }
 }
 
 impl<Inner, RC, Target> Service<Target> for MakeHtpasswdAuthenticator<Inner, RC>

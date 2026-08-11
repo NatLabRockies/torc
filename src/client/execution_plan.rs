@@ -493,12 +493,11 @@ impl ExecutionPlan {
 
         // Show connected components if we have a graph
         if let Some(ref graph) = self.graph {
-            let mut graph_clone = graph.clone();
-            let components = graph_clone.connected_components();
-            if components.len() > 1 {
+            let component_count = graph.independent_component_count();
+            if component_count > 1 {
                 println!(
                     "\nNote: Workflow has {} independent sub-workflows that can run in parallel",
-                    components.len()
+                    component_count
                 );
             }
         }
@@ -603,84 +602,6 @@ impl ExecutionPlan {
         println!("\n{}", "=".repeat(80));
         println!("Total Events: {}", self.events.len());
         println!("{}\n", "=".repeat(80));
-    }
-
-    /// Get the underlying workflow graph (if available)
-    fn workflow_graph(&self) -> Option<&WorkflowGraph> {
-        self.graph.as_ref()
-    }
-
-    /// Convert to legacy stage format for backwards compatibility
-    /// Note: This flattens the DAG into a linear sequence, which may not
-    /// accurately represent parallel subgraphs
-    fn to_stages(&self) -> Vec<ExecutionStage> {
-        let mut stages = Vec::new();
-        let mut displayed = HashSet::new();
-        let mut queue: Vec<String> = self.root_events.clone();
-        let mut stage_number = 0;
-
-        while !queue.is_empty() {
-            let mut next_queue = Vec::new();
-            let mut events_at_level = Vec::new();
-
-            for event_id in &queue {
-                if displayed.contains(event_id) {
-                    continue;
-                }
-
-                if let Some(event) = self.events.get(event_id) {
-                    if event
-                        .depends_on_events
-                        .iter()
-                        .all(|d| displayed.contains(d))
-                    {
-                        events_at_level.push(event_id.clone());
-                    } else {
-                        next_queue.push(event_id.clone());
-                    }
-                }
-            }
-
-            // Merge events at the same level into a single stage
-            if !events_at_level.is_empty() {
-                let mut merged_allocations = Vec::new();
-                let mut merged_jobs = Vec::new();
-                let mut trigger_parts = Vec::new();
-
-                for event_id in &events_at_level {
-                    if let Some(event) = self.events.get(event_id) {
-                        merged_allocations.extend(event.scheduler_allocations.clone());
-                        merged_jobs.extend(event.jobs_becoming_ready.clone());
-                        trigger_parts.push(event.trigger_description.clone());
-                        displayed.insert(event_id.clone());
-
-                        for unlocked in &event.unlocks_events {
-                            if !displayed.contains(unlocked) && !next_queue.contains(unlocked) {
-                                next_queue.push(unlocked.clone());
-                            }
-                        }
-                    }
-                }
-
-                let trigger_description = if trigger_parts.len() == 1 {
-                    trigger_parts[0].clone()
-                } else {
-                    trigger_parts.join(" AND ")
-                };
-
-                stages.push(ExecutionStage {
-                    stage_number,
-                    trigger_description,
-                    scheduler_allocations: merged_allocations,
-                    jobs_becoming_ready: merged_jobs,
-                });
-                stage_number += 1;
-            }
-
-            queue = next_queue;
-        }
-
-        stages
     }
 }
 

@@ -432,7 +432,6 @@ pub struct PartitionAvailability {
 /// Queue depth information for a partition
 #[derive(Debug, Clone)]
 pub struct QueueDepthInfo {
-    pub(crate) partition: String,
     pub(crate) pending_jobs: u32,
     pub(crate) pending_nodes: u32,
     pub(crate) running_jobs: u32,
@@ -569,8 +568,7 @@ fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
         let state = parts[1].to_uppercase();
         let nodes: u32 = parts[2].parse().unwrap_or(0);
 
-        let entry = map.entry(name.clone()).or_insert(QueueDepthInfo {
-            partition: name,
+        let entry = map.entry(name).or_insert(QueueDepthInfo {
             pending_jobs: 0,
             pending_nodes: 0,
             running_jobs: 0,
@@ -596,12 +594,8 @@ fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
 pub struct SbatchTestResult {
     /// Estimated start time from Slurm scheduler
     pub(crate) estimated_start: Option<chrono::NaiveDateTime>,
-    /// Whether the probe succeeded
-    success: bool,
     /// Error message if the probe failed
     pub(crate) error_message: Option<String>,
-    /// Raw output from sbatch (for debugging)
-    raw_output: String,
 }
 
 /// Get the sbatch executable path (allows for testing with fake binary in dev/test builds)
@@ -663,9 +657,7 @@ pub(crate) fn run_sbatch_test_only(
         Err(e) => {
             return SbatchTestResult {
                 estimated_start: None,
-                success: false,
                 error_message: Some(format!("Failed to run sbatch: {}", e)),
-                raw_output: String::new(),
             };
         }
     };
@@ -701,9 +693,7 @@ fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
                 {
                     return SbatchTestResult {
                         estimated_start: Some(dt),
-                        success: true,
                         error_message: None,
-                        raw_output: output.to_string(),
                     };
                 }
             }
@@ -713,18 +703,14 @@ fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
         if line.contains("error:") || line.contains("Unable to allocate") {
             return SbatchTestResult {
                 estimated_start: None,
-                success: false,
                 error_message: Some(line.to_string()),
-                raw_output: output.to_string(),
             };
         }
     }
 
     SbatchTestResult {
         estimated_start: None,
-        success: false,
         error_message: Some("Could not parse sbatch --test-only output".to_string()),
-        raw_output: output.to_string(),
     }
 }
 
@@ -844,15 +830,12 @@ gpu-h100|RUNNING|1
         let result = parse_queue_depth(input).unwrap();
         assert_eq!(result.len(), 2);
 
-        let std_q = result.iter().find(|q| q.partition == "standard").unwrap();
-        assert_eq!(std_q.pending_jobs, 2);
-        assert_eq!(std_q.pending_nodes, 12);
-        assert_eq!(std_q.running_jobs, 2);
-
-        let gpu_q = result.iter().find(|q| q.partition == "gpu-h100").unwrap();
-        assert_eq!(gpu_q.pending_jobs, 1);
-        assert_eq!(gpu_q.pending_nodes, 2);
-        assert_eq!(gpu_q.running_jobs, 1);
+        assert!(result.iter().any(|queue| {
+            queue.pending_jobs == 2 && queue.pending_nodes == 12 && queue.running_jobs == 2
+        }));
+        assert!(result.iter().any(|queue| {
+            queue.pending_jobs == 1 && queue.pending_nodes == 2 && queue.running_jobs == 1
+        }));
     }
 
     #[test]
@@ -865,7 +848,7 @@ gpu-h100|RUNNING|1
     fn test_parse_sbatch_test_only_success() {
         let output = "sbatch: Job 12345 to start at 2026-03-17T14:30:00 using 167 processors on nodes node[001-167]";
         let result = parse_sbatch_test_only(output);
-        assert!(result.success);
+        assert!(result.error_message.is_none());
         assert!(result.estimated_start.is_some());
         let dt = result.estimated_start.unwrap();
         assert_eq!(dt.to_string(), "2026-03-17 14:30:00");
@@ -876,7 +859,7 @@ gpu-h100|RUNNING|1
         // Some Slurm versions use a simpler format
         let output = "sbatch: Job 99999 to start at 2026-04-01T08:00:00 on nodes compute-001";
         let result = parse_sbatch_test_only(output);
-        assert!(result.success);
+        assert!(result.error_message.is_none());
         let dt = result.estimated_start.unwrap();
         assert_eq!(dt.to_string(), "2026-04-01 08:00:00");
     }
@@ -885,7 +868,6 @@ gpu-h100|RUNNING|1
     fn test_parse_sbatch_test_only_error() {
         let output = "sbatch: error: Batch job submission failed: Invalid account or account/partition combination specified";
         let result = parse_sbatch_test_only(output);
-        assert!(!result.success);
         assert!(result.estimated_start.is_none());
         assert!(result.error_message.is_some());
     }
@@ -894,7 +876,7 @@ gpu-h100|RUNNING|1
     fn test_parse_sbatch_test_only_unparseable() {
         let output = "some unexpected output";
         let result = parse_sbatch_test_only(output);
-        assert!(!result.success);
+        assert!(result.error_message.is_some());
         assert!(result.estimated_start.is_none());
     }
 
@@ -906,7 +888,7 @@ sbatch: Pending job allocation 0
 sbatch: Job 54321 to start at 2026-03-18T09:15:00 using 4 processors on nodes node[100-103]
 ";
         let result = parse_sbatch_test_only(output);
-        assert!(result.success);
+        assert!(result.error_message.is_none());
         let dt = result.estimated_start.unwrap();
         assert_eq!(dt.to_string(), "2026-03-18 09:15:00");
     }

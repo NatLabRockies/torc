@@ -571,41 +571,6 @@ pub(crate) fn substitute_parameters(
     result
 }
 
-/// Substitute parameter values into a regex pattern string
-/// Escapes regex metacharacters in the parameter values to ensure literal matching
-/// Supports both {param_name} and {param_name:format} syntax
-fn substitute_parameters_regex(template: &str, params: &HashMap<String, ParameterValue>) -> String {
-    let mut result = template.to_string();
-
-    for (param_name, param_value) in params {
-        // Replace every {param_name:format} occurrence using a cursor (see substitute_parameters
-        // for why this is required to guarantee termination).
-        let pattern_with_format = format!("{{{}:", param_name);
-        let mut cursor = 0;
-        while let Some(rel_idx) = result[cursor..].find(&pattern_with_format) {
-            let start_idx = cursor + rel_idx;
-            let Some(end_offset) = result[start_idx..].find('}') else {
-                break;
-            };
-            let end_idx = start_idx + end_offset + 1;
-            let format_spec = &result[start_idx + pattern_with_format.len()..end_idx - 1];
-            let value_str = param_value.format(Some(format_spec));
-            let escaped = regex::escape(&value_str);
-            let escaped_len = escaped.len();
-            result.replace_range(start_idx..end_idx, &escaped);
-            cursor = start_idx + escaped_len;
-        }
-
-        // Replace simple {param_name} occurrences (single-pass, safe).
-        let pattern = format!("{{{}}}", param_name);
-        let value_str = param_value.to_string();
-        let escaped = regex::escape(&value_str);
-        result = result.replace(&pattern, &escaped);
-    }
-
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -956,19 +921,6 @@ mod tests {
 
         let result = substitute_parameters("prefix {w:02d} suffix", &params);
         assert_eq!(result, "prefix {w:02d} suffix");
-    }
-
-    #[test]
-    fn test_substitute_parameters_regex_mixed_format_and_simple() {
-        // Same fix as substitute_parameters: mixed {w} + {w:02d} must both be replaced
-        // (and substituted values are regex-escaped).
-        let mut params = HashMap::new();
-        params.insert("w".to_string(), ParameterValue::Integer(7));
-        params.insert("tag".to_string(), ParameterValue::String("a.b".to_string()));
-
-        let result = substitute_parameters_regex("^out_{w}_{w:02d}_{tag}$", &params);
-        // "a.b" must be regex-escaped to "a\.b" since it's intended for literal matching.
-        assert_eq!(result, "^out_7_07_a\\.b$");
     }
 
     #[test]
