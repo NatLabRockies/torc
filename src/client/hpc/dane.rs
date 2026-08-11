@@ -9,7 +9,7 @@
 use super::profiles::{HpcDetection, HpcPartition, HpcProfile};
 
 /// Create the Dane HPC profile
-pub fn dane_profile() -> HpcProfile {
+pub(crate) fn dane_profile() -> HpcProfile {
     HpcProfile {
         name: "dane".to_string(),
         display_name: "LLNL Dane".to_string(),

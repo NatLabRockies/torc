@@ -27,33 +27,33 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
 
 /// Number of 1-second buckets retained. One hour of history.
-pub const BUCKET_COUNT: usize = 3600;
+const BUCKET_COUNT: usize = 3600;
 
 /// Default window the API endpoint reports when none is requested.
-pub const DEFAULT_WINDOW_SECONDS: u64 = 3600;
+pub(crate) const DEFAULT_WINDOW_SECONDS: u64 = 3600;
 
 /// Default aggregation interval for the API endpoint.
-pub const DEFAULT_INTERVAL_SECONDS: u64 = 60;
+pub(crate) const DEFAULT_INTERVAL_SECONDS: u64 = 60;
 
 /// One second's worth of accumulated request stats.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ApiStatsBucket {
     /// Bucket start, in Unix epoch milliseconds.
-    pub start_ms: i64,
+    start_ms: i64,
     /// Total requests handled during this bucket.
-    pub request_count: u64,
+    pub(crate) request_count: u64,
     /// Sum of data frame bytes received in inbound requests.
-    pub bytes_in: u64,
+    bytes_in: u64,
     /// Sum of data frame bytes written in outbound responses.
-    pub bytes_out: u64,
+    pub(crate) bytes_out: u64,
     /// Requests that returned a 2xx status.
-    pub status_2xx: u64,
+    status_2xx: u64,
     /// Requests that returned a 4xx status.
-    pub status_4xx: u64,
+    pub(crate) status_4xx: u64,
     /// Requests that returned a 5xx status.
-    pub status_5xx: u64,
+    status_5xx: u64,
     /// Requests that returned anything else (1xx, 3xx).
-    pub status_other: u64,
+    status_other: u64,
 }
 
 impl ApiStatsBucket {
@@ -72,13 +72,13 @@ impl ApiStatsBucket {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiStatsSnapshot {
     /// Server-side current time in Unix epoch milliseconds.
-    pub now_ms: i64,
+    now_ms: i64,
     /// Width of each bucket in seconds.
-    pub interval_seconds: u64,
+    interval_seconds: u64,
     /// Total span covered by `buckets`, in seconds.
-    pub window_seconds: u64,
+    window_seconds: u64,
     /// Newest first: `buckets[0]` is the most recent interval.
-    pub buckets: Vec<ApiStatsBucket>,
+    pub(crate) buckets: Vec<ApiStatsBucket>,
 }
 
 /// Mutex-protected ring of per-second counters.
@@ -111,7 +111,7 @@ impl Inner {
 }
 
 impl ApiStatsRing {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let buckets = (0..BUCKET_COUNT)
             .map(|_| ApiStatsBucket::default())
             .collect::<Vec<_>>()
@@ -127,7 +127,7 @@ impl ApiStatsRing {
     /// For streaming responses this is fired once when the response
     /// body starts (with `bytes_out = 0`); the streamed bytes are
     /// attributed second-by-second via [`Self::record_bytes_out`].
-    pub fn record(&self, now_ms: i64, status: u16, bytes_in: u64, bytes_out: u64) {
+    pub(crate) fn record(&self, now_ms: i64, status: u16, bytes_in: u64, bytes_out: u64) {
         if now_ms <= 0 {
             return;
         }
@@ -148,7 +148,7 @@ impl ApiStatsRing {
     /// touching the request count or status breakdown. Used to bucket
     /// each streamed response frame by the second it is actually sent,
     /// rather than deferring the whole stream to the disconnect second.
-    pub fn record_bytes_out(&self, now_ms: i64, bytes_out: u64) {
+    pub(crate) fn record_bytes_out(&self, now_ms: i64, bytes_out: u64) {
         if now_ms <= 0 || bytes_out == 0 {
             return;
         }
@@ -158,7 +158,7 @@ impl ApiStatsRing {
 
     /// Aggregate the last `window_seconds` of recorded data into
     /// `interval_seconds`-wide buckets, newest first.
-    pub fn snapshot(
+    pub(crate) fn snapshot(
         &self,
         now_ms: i64,
         window_seconds: u64,
@@ -234,7 +234,7 @@ impl<B> CountingBody<B> {
     /// `counter`. Use this for request bodies, where the consuming
     /// middleware reads the final count directly from `counter` after
     /// the handler returns.
-    pub fn new(inner: B, counter: Arc<AtomicU64>) -> Self {
+    pub(crate) fn new(inner: B, counter: Arc<AtomicU64>) -> Self {
         Self {
             inner,
             counter: Some(counter),
@@ -249,7 +249,7 @@ impl<B> CountingBody<B> {
     /// the request as soon as it starts and attributes streamed bytes
     /// to the second they leave the server, rather than deferring the
     /// whole stream to completion.
-    pub fn with_recorder<S, F>(inner: B, on_start: S, on_frame: F) -> Self
+    pub(crate) fn with_recorder<S, F>(inner: B, on_start: S, on_frame: F) -> Self
     where
         S: FnOnce() + Send + 'static,
         F: Fn(u64) + Send + 'static,

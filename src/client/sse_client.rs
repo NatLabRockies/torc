@@ -15,13 +15,13 @@ use std::time::Duration;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SseEvent {
     /// The workflow ID this event belongs to.
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Timestamp in milliseconds since Unix epoch.
-    pub timestamp: i64,
+    pub(crate) timestamp: i64,
     /// The type of event (e.g., "job_started", "job_completed", "job_failed").
     pub event_type: String,
     /// The severity level of the event.
-    pub severity: EventSeverity,
+    pub(crate) severity: EventSeverity,
     /// Event-specific data as JSON.
     pub data: serde_json::Value,
 }
@@ -211,7 +211,7 @@ impl SseConnection {
 ///
 /// This is a convenience function that handles the connection loop and
 /// calls the provided callback for each received event.
-pub fn stream_events<F>(
+fn stream_events<F>(
     config: &Configuration,
     workflow_id: i64,
     level: Option<EventSeverity>,

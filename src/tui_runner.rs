@@ -8,23 +8,23 @@ use crate::client::apis::configuration::BasicAuth;
 pub struct Args {
     /// Start in standalone mode: automatically start a torc-server
     #[arg(long)]
-    pub standalone: bool,
+    standalone: bool,
 
     /// Port for the server in standalone mode (default: 8080)
     #[arg(long, default_value = "8080")]
-    pub port: u16,
+    port: u16,
 
     /// Database path for standalone mode
     #[arg(long)]
-    pub database: Option<String>,
+    database: Option<String>,
 
     /// Path to a PEM-encoded CA certificate to trust for TLS connections
     #[arg(long, env = "TORC_TLS_CA_CERT")]
-    pub tls_ca_cert: Option<String>,
+    tls_ca_cert: Option<String>,
 
     /// Skip TLS certificate verification (for testing only)
     #[arg(long, env = "TORC_TLS_INSECURE")]
-    pub tls_insecure: bool,
+    tls_insecure: bool,
 }
 
 pub fn run(args: &Args, basic_auth: Option<BasicAuth>) -> Result<()> {

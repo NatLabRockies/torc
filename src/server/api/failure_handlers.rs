@@ -54,11 +54,11 @@ pub trait FailureHandlersApi<C> {
 /// Implementation of failure handlers API for the server
 #[derive(Clone)]
 pub struct FailureHandlersApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 impl FailureHandlersApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

@@ -65,7 +65,7 @@ pub fn detect_slurm_profile() -> Option<HpcProfile> {
 }
 
 /// Generate an HPC profile from the current Slurm cluster
-pub fn generate_dynamic_slurm_profile(
+pub(crate) fn generate_dynamic_slurm_profile(
     name: Option<String>,
     display_name: Option<String>,
     skip_stdby: bool,
@@ -274,7 +274,7 @@ pub fn parse_sinfo_string(input: &str) -> Result<Vec<SinfoPartition>, String> {
 }
 
 /// Parse timelimit string from Slurm format to seconds
-pub fn parse_slurm_timelimit(s: &str) -> u64 {
+pub(crate) fn parse_slurm_timelimit(s: &str) -> u64 {
     let s = s.trim();
 
     if s == "infinite" || s == "UNLIMITED" {
@@ -421,27 +421,27 @@ pub(crate) fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>)
 /// Node availability counts for a partition
 #[derive(Debug, Clone)]
 pub struct PartitionAvailability {
-    pub partition: String,
-    pub idle: u32,
-    pub mixed: u32,
-    pub allocated: u32,
-    pub down: u32,
-    pub total: u32,
+    pub(crate) partition: String,
+    pub(crate) idle: u32,
+    pub(crate) mixed: u32,
+    pub(crate) allocated: u32,
+    pub(crate) down: u32,
+    pub(crate) total: u32,
 }
 
 /// Queue depth information for a partition
 #[derive(Debug, Clone)]
 pub struct QueueDepthInfo {
-    pub partition: String,
-    pub pending_jobs: u32,
-    pub pending_nodes: u32,
-    pub running_jobs: u32,
+    pub(crate) partition: String,
+    pub(crate) pending_jobs: u32,
+    pub(crate) pending_nodes: u32,
+    pub(crate) running_jobs: u32,
 }
 
 /// Query sinfo for node availability per partition.
 ///
 /// If `partition` is Some, only queries that partition. Otherwise queries all.
-pub fn query_partition_availability(
+pub(crate) fn query_partition_availability(
     partition: Option<&str>,
 ) -> Result<Vec<PartitionAvailability>, String> {
     let mut args = vec!["-e", "-o", "%P|%T|%D", "--noheader"];
@@ -470,7 +470,7 @@ pub fn query_partition_availability(
 
 /// Parse sinfo output for node availability.
 /// Format: "%P|%T|%D" (partition|state|node_count)
-pub fn parse_partition_availability(input: &str) -> Result<Vec<PartitionAvailability>, String> {
+fn parse_partition_availability(input: &str) -> Result<Vec<PartitionAvailability>, String> {
     let mut map: HashMap<String, PartitionAvailability> = HashMap::new();
 
     for line in input.lines() {
@@ -519,7 +519,7 @@ pub fn parse_partition_availability(input: &str) -> Result<Vec<PartitionAvailabi
 /// Query squeue for queue depth on a partition.
 ///
 /// If `partition` is Some, only queries that partition. Otherwise queries all.
-pub fn query_queue_depth(partition: Option<&str>) -> Result<Vec<QueueDepthInfo>, String> {
+pub(crate) fn query_queue_depth(partition: Option<&str>) -> Result<Vec<QueueDepthInfo>, String> {
     let squeue_exec = if cfg!(any(test, debug_assertions)) {
         std::env::var("TORC_FAKE_SQUEUE").unwrap_or_else(|_| "squeue".to_string())
     } else {
@@ -552,7 +552,7 @@ pub fn query_queue_depth(partition: Option<&str>) -> Result<Vec<QueueDepthInfo>,
 
 /// Parse squeue output for queue depth.
 /// Format: "%P|%T|%D" (partition|state|nodes)
-pub fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
+fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
     let mut map: HashMap<String, QueueDepthInfo> = HashMap::new();
 
     for line in input.lines() {
@@ -595,13 +595,13 @@ pub fn parse_queue_depth(input: &str) -> Result<Vec<QueueDepthInfo>, String> {
 #[derive(Debug, Clone)]
 pub struct SbatchTestResult {
     /// Estimated start time from Slurm scheduler
-    pub estimated_start: Option<chrono::NaiveDateTime>,
+    pub(crate) estimated_start: Option<chrono::NaiveDateTime>,
     /// Whether the probe succeeded
-    pub success: bool,
+    success: bool,
     /// Error message if the probe failed
-    pub error_message: Option<String>,
+    pub(crate) error_message: Option<String>,
     /// Raw output from sbatch (for debugging)
-    pub raw_output: String,
+    raw_output: String,
 }
 
 /// Get the sbatch executable path (allows for testing with fake binary in dev/test builds)
@@ -617,7 +617,7 @@ fn get_sbatch_exec() -> String {
 ///
 /// This does NOT submit a job. It asks the scheduler when a job with the given
 /// parameters would start, without actually queuing it.
-pub fn run_sbatch_test_only(
+pub(crate) fn run_sbatch_test_only(
     account: &str,
     partition: Option<&str>,
     nodes: u32,
@@ -684,7 +684,7 @@ pub fn run_sbatch_test_only(
 ///
 /// Some Slurm versions use slightly different formats:
 /// `sbatch: Job 12345 to start at 2026-03-17T14:30:00 on nodes ...`
-pub fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
+fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
     // Look for the estimated start time pattern
     // Various Slurm versions may use slightly different formats
     for line in output.lines() {

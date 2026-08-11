@@ -90,13 +90,13 @@ pub trait UserDataApi<C> {
 /// Implementation of user data API for the server
 #[derive(Clone)]
 pub struct UserDataApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const USER_DATA_COLUMNS: &[&str] = &["id", "workflow_id", "name", "is_ephemeral", "data"];
 
 impl UserDataApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

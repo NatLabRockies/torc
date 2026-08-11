@@ -35,16 +35,16 @@ use utoipa::IntoParams;
 
 #[derive(Clone)]
 pub struct LiveRouterState {
-    pub openapi_state: OpenApiAppState,
-    pub server: Server<EmptyContext>,
-    pub auth: LiveAuthState,
+    pub(crate) openapi_state: OpenApiAppState,
+    pub(crate) server: Server<EmptyContext>,
+    pub(crate) auth: LiveAuthState,
 }
 
 #[derive(Clone)]
 pub struct LiveAuthState {
-    pub htpasswd: SharedHtpasswd,
-    pub require_auth: bool,
-    pub credential_cache: SharedCredentialCache,
+    pub(crate) htpasswd: SharedHtpasswd,
+    pub(crate) require_auth: bool,
+    pub(crate) credential_cache: SharedCredentialCache,
 }
 
 macro_rules! path_handler {
@@ -77,7 +77,7 @@ fn max_bulk_request_body_bytes() -> usize {
     })
 }
 
-pub fn app_router(state: LiveRouterState) -> Router {
+pub(crate) fn app_router(state: LiveRouterState) -> Router {
     Router::new()
         .merge(
             Router::new()
@@ -433,16 +433,16 @@ pub fn app_router(state: LiveRouterState) -> Router {
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct AccessPaginationQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct PendingActionsQuery {
     #[param(nullable = true)]
-    pub trigger_type: Option<Vec<String>>,
+    trigger_type: Option<Vec<String>>,
 }
 
 fn parse_pending_actions_query(query: Option<&str>) -> PendingActionsQuery {
@@ -459,83 +459,83 @@ fn parse_pending_actions_query(query: Option<&str>) -> PendingActionsQuery {
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct WorkflowsListQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub name: Option<String>,
+    name: Option<String>,
     #[param(nullable = true)]
-    pub user: Option<String>,
+    user: Option<String>,
     #[param(nullable = true)]
-    pub description: Option<String>,
+    description: Option<String>,
     #[param(nullable = true)]
-    pub is_archived: Option<bool>,
+    is_archived: Option<bool>,
     /// Filter to workflows shared with this access group (by group name).
     #[param(nullable = true)]
-    pub access_group: Option<String>,
+    access_group: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct InitializeJobsQuery {
     #[param(nullable = true)]
-    pub only_uninitialized: Option<bool>,
+    only_uninitialized: Option<bool>,
     #[param(nullable = true)]
-    pub clear_ephemeral_user_data: Option<bool>,
+    clear_ephemeral_user_data: Option<bool>,
     #[serde(rename = "async")]
     #[param(nullable = true)]
-    pub async_: Option<bool>,
+    async_: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ResetWorkflowStatusQuery {
     #[param(nullable = true)]
-    pub force: Option<bool>,
+    force: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ResetJobStatusQuery {
     #[param(nullable = true)]
-    pub failed_only: Option<bool>,
+    failed_only: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ClaimJobsBasedOnResourcesQuery {
     #[param(nullable = true)]
-    pub strict_scheduler_match: Option<bool>,
+    strict_scheduler_match: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ClaimNextJobsQuery {
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct WorkflowRelationshipsQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ProcessChangedJobInputsQuery {
     #[param(nullable = true)]
-    pub dry_run: Option<bool>,
+    dry_run: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ReadyJobRequirementsQuery {
     #[param(nullable = true)]
-    pub scheduler_config_id: Option<i64>,
+    scheduler_config_id: Option<i64>,
 }
 
 #[utoipa::path(
@@ -614,12 +614,12 @@ pub struct AdminAuditLogQuery {
     /// Offset for pagination (0-based). Defaults to 0.
     #[serde(default)]
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     /// Maximum number of entries to return. Defaults to and is capped at 100,000
     /// (the server-wide list cap); values above the cap are clamped.
     #[serde(default)]
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[utoipa::path(
@@ -659,7 +659,7 @@ pub struct ApiEventStreamQuery {
     /// payloads aren't streamed unless requested.
     #[serde(default)]
     #[param(nullable = true)]
-    pub include_bodies: Option<bool>,
+    include_bodies: Option<bool>,
 }
 
 #[utoipa::path(
@@ -672,7 +672,7 @@ pub struct ApiEventStreamQuery {
         (status = 200, description = "Server-Sent Events stream of inbound API requests")
     )
 )]
-pub async fn admin_api_events_stream(
+async fn admin_api_events_stream(
     State(state): State<LiveRouterState>,
     Extension(context): Extension<EmptyContext>,
     Query(params): Query<ApiEventStreamQuery>,
@@ -730,11 +730,11 @@ pub struct ApiStatsQuery {
     /// (1 hour). Capped at the ring buffer's retention (3600s).
     #[serde(default)]
     #[param(nullable = true)]
-    pub window_seconds: Option<u64>,
+    window_seconds: Option<u64>,
     /// Aggregation bucket width in seconds. Defaults to 60.
     #[serde(default)]
     #[param(nullable = true)]
-    pub interval_seconds: Option<u64>,
+    interval_seconds: Option<u64>,
 }
 
 #[utoipa::path(
@@ -747,7 +747,7 @@ pub struct ApiStatsQuery {
         (status = 200, description = "Aggregated request counts and bytes per bucket")
     )
 )]
-pub async fn admin_api_stats(
+async fn admin_api_stats(
     State(state): State<LiveRouterState>,
     Extension(context): Extension<EmptyContext>,
     Query(params): Query<ApiStatsQuery>,
@@ -1155,26 +1155,26 @@ pub async fn check_workflow_access(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ComputeNodesQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub hostname: Option<String>,
+    hostname: Option<String>,
     #[param(nullable = true)]
-    pub is_active: Option<bool>,
+    is_active: Option<bool>,
     #[param(nullable = true)]
-    pub scheduled_compute_node_id: Option<i64>,
+    scheduled_compute_node_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct DeleteComputeNodesQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
 }
 
 #[utoipa::path(
@@ -1343,19 +1343,19 @@ pub async fn delete_compute_node(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct EventsQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub category: Option<String>,
+    category: Option<String>,
     #[param(nullable = true)]
-    pub after_timestamp: Option<i64>,
+    after_timestamp: Option<i64>,
 }
 
 #[utoipa::path(
@@ -1523,23 +1523,23 @@ pub async fn delete_event(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct FilesQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub produced_by_job_id: Option<i64>,
+    produced_by_job_id: Option<i64>,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub name: Option<String>,
+    name: Option<String>,
     #[param(nullable = true)]
-    pub path: Option<String>,
+    path: Option<String>,
     #[param(nullable = true)]
-    pub is_output: Option<bool>,
+    is_output: Option<bool>,
 }
 
 #[utoipa::path(
@@ -1705,19 +1705,19 @@ pub async fn delete_file(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct LocalSchedulersQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub memory: Option<String>,
+    memory: Option<String>,
     #[param(nullable = true)]
-    pub num_cpus: Option<i64>,
+    num_cpus: Option<i64>,
 }
 
 #[utoipa::path(
@@ -1889,52 +1889,52 @@ pub async fn delete_local_scheduler(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ResourceRequirementsQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub job_id: Option<i64>,
+    job_id: Option<i64>,
     #[param(nullable = true)]
-    pub name: Option<String>,
+    name: Option<String>,
     #[param(nullable = true)]
-    pub memory: Option<String>,
+    memory: Option<String>,
     #[param(nullable = true)]
-    pub num_cpus: Option<i64>,
+    num_cpus: Option<i64>,
     #[param(nullable = true)]
-    pub num_gpus: Option<i64>,
+    num_gpus: Option<i64>,
     #[param(nullable = true)]
-    pub num_nodes: Option<i64>,
+    num_nodes: Option<i64>,
     #[param(nullable = true)]
-    pub runtime: Option<i64>,
+    runtime: Option<i64>,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct FailureHandlersListQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct SlurmStatsQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub job_id: Option<i64>,
+    job_id: Option<i64>,
     #[param(nullable = true)]
-    pub run_id: Option<i64>,
+    run_id: Option<i64>,
     #[param(nullable = true)]
-    pub attempt_id: Option<i64>,
+    attempt_id: Option<i64>,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[utoipa::path(
@@ -2282,25 +2282,25 @@ pub async fn list_slurm_stats(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct JobsListQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub status: Option<models::JobStatus>,
+    status: Option<models::JobStatus>,
     #[param(nullable = true)]
-    pub needs_file_id: Option<i64>,
+    needs_file_id: Option<i64>,
     #[param(nullable = true)]
-    pub upstream_job_id: Option<i64>,
+    upstream_job_id: Option<i64>,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub include_relationships: Option<bool>,
+    include_relationships: Option<bool>,
     #[param(nullable = true)]
-    pub active_compute_node_id: Option<i64>,
+    active_compute_node_id: Option<i64>,
     /// When set, filters by job provenance: `true` returns only jobs with
     /// `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
     /// children); `false` returns only originally-declared jobs.
@@ -2308,25 +2308,25 @@ pub struct JobsListQuery {
     /// Slurm allocations with `limit=1` (the response's `total_count`
     /// suffices — no rows downloaded).
     #[param(nullable = true)]
-    pub origin_is_set: Option<bool>,
+    origin_is_set: Option<bool>,
     /// Substring filter on the job name (SQL `LIKE %value%`, case-insensitive
     /// for ASCII).
     #[param(nullable = true)]
-    pub name: Option<String>,
+    name: Option<String>,
     /// Substring filter on the job command (SQL `LIKE %value%`, case-insensitive
     /// for ASCII).
     #[param(nullable = true)]
-    pub command: Option<String>,
+    command: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct DeleteJobsQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct RetryJobQuery {
-    pub max_retries: i32,
+    max_retries: i32,
 }
 
 #[utoipa::path(
@@ -2683,30 +2683,30 @@ pub async fn retry_job(
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct CreateUserDataQuery {
     #[param(nullable = true)]
-    pub consumer_job_id: Option<i64>,
+    consumer_job_id: Option<i64>,
     #[param(nullable = true)]
-    pub producer_job_id: Option<i64>,
+    producer_job_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct UserDataQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub consumer_job_id: Option<i64>,
+    consumer_job_id: Option<i64>,
     #[param(nullable = true)]
-    pub producer_job_id: Option<i64>,
+    producer_job_id: Option<i64>,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub name: Option<String>,
+    name: Option<String>,
     #[param(nullable = true)]
-    pub is_ephemeral: Option<bool>,
+    is_ephemeral: Option<bool>,
 }
 
 #[utoipa::path(
@@ -2882,27 +2882,27 @@ pub async fn delete_user_data(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ResultsQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub job_id: Option<i64>,
+    job_id: Option<i64>,
     #[param(nullable = true)]
-    pub run_id: Option<i64>,
+    run_id: Option<i64>,
     #[param(nullable = true)]
-    pub return_code: Option<i64>,
+    return_code: Option<i64>,
     #[param(nullable = true)]
-    pub status: Option<models::JobStatus>,
+    status: Option<models::JobStatus>,
     #[param(nullable = true)]
-    pub compute_node_id: Option<i64>,
+    compute_node_id: Option<i64>,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub all_runs: Option<bool>,
+    all_runs: Option<bool>,
 }
 
 #[utoipa::path(
@@ -3074,34 +3074,34 @@ pub async fn delete_result(
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ScheduledComputeNodesQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     #[param(nullable = true)]
-    pub scheduler_id: Option<String>,
+    scheduler_id: Option<String>,
     #[param(nullable = true)]
-    pub scheduler_config_id: Option<String>,
+    scheduler_config_id: Option<String>,
     #[param(nullable = true)]
-    pub status: Option<String>,
+    status: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct SlurmSchedulersQuery {
-    pub workflow_id: i64,
+    workflow_id: i64,
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
 }
 
 #[utoipa::path(
@@ -3916,9 +3916,9 @@ pub async fn get_workflow_status(
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct SlurmJobCorrelationsQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[utoipa::path(
@@ -3953,9 +3953,9 @@ pub async fn get_slurm_job_correlations(
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct RunningJobsQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[utoipa::path(
@@ -4313,17 +4313,17 @@ pub async fn list_required_existing_files(
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct RoCrateEntitiesQuery {
     #[param(nullable = true)]
-    pub offset: Option<i64>,
+    offset: Option<i64>,
     #[param(nullable = true)]
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     #[param(nullable = true)]
-    pub file_id: Option<i64>,
+    file_id: Option<i64>,
     #[param(nullable = true)]
-    pub entity_id: Option<String>,
+    entity_id: Option<String>,
     #[param(nullable = true)]
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     #[param(nullable = true)]
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
 }
 
 #[utoipa::path(

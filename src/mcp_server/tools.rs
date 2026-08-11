@@ -33,7 +33,7 @@ fn invalid_params(msg: &str) -> McpError {
 }
 
 /// Get workflow status with job counts.
-pub fn get_workflow_status(
+pub(crate) fn get_workflow_status(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<CallToolResult, McpError> {
@@ -69,7 +69,10 @@ pub fn get_workflow_status(
 }
 
 /// Get detailed job information.
-pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolResult, McpError> {
+pub(crate) fn get_job_details(
+    config: &Configuration,
+    job_id: i64,
+) -> Result<CallToolResult, McpError> {
     let job = apis::jobs_api::get_job(config, job_id)
         .map_err(|e| internal_error(format!("Failed to get job: {}", e)))?;
 
@@ -122,7 +125,7 @@ pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolRe
 }
 
 /// Read job logs.
-pub fn get_job_logs(
+pub(crate) fn get_job_logs(
     output_dir: &Path,
     workflow_id: i64,
     job_id: i64,
@@ -158,7 +161,7 @@ pub fn get_job_logs(
 }
 
 /// List failed jobs in a workflow.
-pub fn list_failed_jobs(
+pub(crate) fn list_failed_jobs(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<CallToolResult, McpError> {
@@ -192,7 +195,7 @@ pub fn list_failed_jobs(
 }
 
 /// List jobs by status.
-pub fn list_jobs_by_status(
+pub(crate) fn list_jobs_by_status(
     config: &Configuration,
     workflow_id: i64,
     status: &str,
@@ -233,7 +236,7 @@ pub fn list_jobs_by_status(
 }
 
 /// Check resource utilization for a workflow.
-pub fn check_resource_utilization(
+pub(crate) fn check_resource_utilization(
     config: &Configuration,
     workflow_id: i64,
     include_failed: bool,
@@ -299,7 +302,7 @@ pub fn check_resource_utilization(
 }
 
 /// Update job resource requirements.
-pub fn update_job_resources(
+pub(crate) fn update_job_resources(
     config: &Configuration,
     job_id: i64,
     num_cpus: Option<i64>,
@@ -381,7 +384,7 @@ pub fn update_job_resources(
 /// - action: "validate" (validate only), "create_workflow" (create in database) or "save_spec_file" (save to filesystem)
 /// - workflow_type: "local" or "slurm"
 #[allow(clippy::too_many_arguments)]
-pub fn create_workflow(
+pub(crate) fn create_workflow(
     config: &Configuration,
     spec_json: &str,
     user: &str,
@@ -695,7 +698,7 @@ pub fn create_workflow(
 /// Accepts either:
 /// - A workflow ID (integer as string) for existing workflows
 /// - A JSON workflow specification string for previewing before creation
-pub fn get_execution_plan(
+pub(crate) fn get_execution_plan(
     config: &Configuration,
     spec_or_id: &str,
 ) -> Result<CallToolResult, McpError> {
@@ -861,7 +864,7 @@ pub fn get_execution_plan(
 /// Scans all log files for a workflow and detects common error patterns like:
 /// OOM, timeout, segfaults, permission denied, disk full, connection errors,
 /// Python exceptions, Rust panics, and Slurm errors.
-pub fn analyze_workflow_logs(
+pub(crate) fn analyze_workflow_logs(
     output_dir: &Path,
     workflow_id: i64,
 ) -> Result<CallToolResult, McpError> {
@@ -992,7 +995,7 @@ pub fn analyze_workflow_logs(
 /// are not reflected on the server until replayed, so a workflow can look stalled
 /// or partially failed when it actually finished offline. This tool only inspects
 /// the filesystem; it never replays anything.
-pub fn check_offline_journals(
+pub(crate) fn check_offline_journals(
     config: &Configuration,
     base_dir: &Path,
     workflow_id: i64,
@@ -1157,7 +1160,7 @@ fn shell_quote(s: &str) -> String {
 }
 
 /// Get workflow summary.
-pub fn get_workflow_summary(
+pub(crate) fn get_workflow_summary(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<CallToolResult, McpError> {
@@ -1172,7 +1175,7 @@ pub fn get_workflow_summary(
 
 /// List job results with filtering options.
 #[allow(clippy::too_many_arguments)]
-pub fn list_results(
+pub(crate) fn list_results(
     workflow_id: i64,
     job_id: Option<i64>,
     run_id: Option<i64>,
@@ -1228,7 +1231,7 @@ pub fn list_results(
 }
 
 /// Get Slurm sacct accounting data for a workflow with walltime summary.
-pub fn get_slurm_sacct(workflow_id: i64) -> Result<CallToolResult, McpError> {
+pub(crate) fn get_slurm_sacct(workflow_id: i64) -> Result<CallToolResult, McpError> {
     let output = Command::new("torc")
         .args(["-f", "json", "slurm", "sacct", &workflow_id.to_string()])
         .output()
@@ -1304,7 +1307,7 @@ fn parse_elapsed_to_seconds(elapsed: &str) -> i64 {
 ///
 /// This function runs `torc recover` with the specified parameters.
 /// When dry_run is true, it shows what would be done without making changes.
-pub fn recover_workflow(
+pub(crate) fn recover_workflow(
     workflow_id: i64,
     output_dir: &Path,
     dry_run: bool,
@@ -1374,7 +1377,7 @@ pub fn recover_workflow(
 ///
 /// These are jobs that failed without a matching failure handler and are awaiting
 /// AI-assisted classification to determine whether they should be retried or marked as failed.
-pub fn list_pending_failed_jobs(
+pub(crate) fn list_pending_failed_jobs(
     config: &Configuration,
     workflow_id: i64,
     output_dir: &Path,
@@ -1465,15 +1468,15 @@ pub fn list_pending_failed_jobs(
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct FailureClassification {
     /// The job ID to classify
-    pub job_id: i64,
+    pub(crate) job_id: i64,
     /// The classification action: "retry" or "fail"
-    pub action: String,
+    pub(crate) action: String,
     /// Optional new memory requirement (e.g., "8g")
-    pub memory: Option<String>,
+    pub(crate) memory: Option<String>,
     /// Optional new runtime (ISO8601 duration, e.g., "PT2H")
-    pub runtime: Option<String>,
+    pub(crate) runtime: Option<String>,
     /// Reason for the classification (for logging)
-    pub reason: Option<String>,
+    pub(crate) reason: Option<String>,
 }
 
 /// Classify and resolve pending_failed jobs.
@@ -1483,7 +1486,7 @@ pub struct FailureClassification {
 /// - Resets them to "ready" status with bumped attempt_id for retry
 ///
 /// Resource requirements can optionally be adjusted before retry.
-pub fn classify_and_resolve_failures(
+pub(crate) fn classify_and_resolve_failures(
     config: &Configuration,
     workflow_id: i64,
     classifications: Vec<FailureClassification>,
@@ -1788,7 +1791,7 @@ fn compute_memory_stats(values: &[i64]) -> serde_json::Value {
 ///
 /// Returns structured JSON with per-RR summary statistics and per-job detail,
 /// optimized for AI cluster analysis.
-pub fn analyze_resource_usage(
+pub(crate) fn analyze_resource_usage(
     config: &Configuration,
     workflow_id: i64,
     completed_only: bool,
@@ -1938,19 +1941,19 @@ pub fn analyze_resource_usage(
 /// A resource group definition for regrouping jobs.
 #[derive(Debug, Clone)]
 pub struct ResourceGroup {
-    pub memory: String,
-    pub num_cpus: i64,
-    pub runtime: String,
-    pub num_gpus: Option<i64>,
-    pub num_nodes: Option<i64>,
-    pub name: Option<String>,
-    pub job_ids: Vec<i64>,
+    pub(crate) memory: String,
+    pub(crate) num_cpus: i64,
+    pub(crate) runtime: String,
+    pub(crate) num_gpus: Option<i64>,
+    pub(crate) num_nodes: Option<i64>,
+    pub(crate) name: Option<String>,
+    pub(crate) job_ids: Vec<i64>,
 }
 
 /// Regroup jobs into new resource requirement groups.
 ///
 /// Creates new RR records and reassigns jobs to them. Supports dry_run for previewing.
-pub fn regroup_job_resources(
+pub(crate) fn regroup_job_resources(
     config: &Configuration,
     workflow_id: i64,
     groups: Vec<ResourceGroup>,
@@ -2600,7 +2603,7 @@ fn read_example_content(
 }
 
 /// List available example workflow specifications.
-pub fn list_examples(examples_dir: Option<&Path>) -> Result<CallToolResult, McpError> {
+pub(crate) fn list_examples(examples_dir: Option<&Path>) -> Result<CallToolResult, McpError> {
     let descriptions = example_descriptions();
 
     let mut examples = Vec::new();
@@ -2642,7 +2645,7 @@ pub fn list_examples(examples_dir: Option<&Path>) -> Result<CallToolResult, McpE
 }
 
 /// Get a specific example workflow specification.
-pub fn get_example(
+pub(crate) fn get_example(
     examples_dir: Option<&Path>,
     name: &str,
     format: &str,
@@ -2668,7 +2671,7 @@ pub fn get_example(
 }
 
 /// Get documentation on a specific topic.
-pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, McpError> {
+pub(crate) fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, McpError> {
     let mapping = doc_topic_mapping();
 
     // Find matching topic (case-insensitive)
@@ -2744,7 +2747,7 @@ pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, 
 }
 
 /// Analyze a workflow spec and recommend Slurm allocation strategy.
-pub fn plan_allocations(
+pub(crate) fn plan_allocations(
     spec_json: &str,
     account: &str,
     partition: Option<&str>,
@@ -2827,7 +2830,10 @@ pub fn plan_allocations(
 
 /// List all available MCP resources (docs + examples).
 /// Resources are always listed since they can be fetched from GitHub.
-pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) -> Vec<Resource> {
+pub(crate) fn list_mcp_resources(
+    docs_dir: Option<&Path>,
+    examples_dir: Option<&Path>,
+) -> Vec<Resource> {
     let mut resources = Vec::new();
 
     // Add documentation resources (always listed — fetched from GitHub if not local)
@@ -2881,7 +2887,7 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
 }
 
 /// Read an MCP resource by URI.
-pub fn read_mcp_resource(
+pub(crate) fn read_mcp_resource(
     docs_dir: Option<&Path>,
     examples_dir: Option<&Path>,
     uri: &str,

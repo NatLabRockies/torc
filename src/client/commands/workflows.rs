@@ -2189,7 +2189,7 @@ fn wait_for_workflow_task_or_exit(
     }
 }
 
-pub fn handle_reinitialize(
+fn handle_reinitialize(
     config: &Configuration,
     workflow_id: &Option<i64>,
     force: bool,
@@ -2328,7 +2328,7 @@ pub fn handle_reinitialize(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn handle_initialize(
+fn handle_initialize(
     config: &Configuration,
     workflow_id: &Option<i64>,
     force: bool,

@@ -13,59 +13,59 @@ use crate::models::ComputeNodeModel;
 #[derive(Debug, Clone, Default)]
 pub struct ComputeNodeListParams {
     /// Workflow ID to list compute nodes from
-    pub workflow_id: i64,
+    workflow_id: i64,
     /// Pagination offset
-    pub offset: i64,
+    offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     /// Filter by hostname
-    pub hostname: Option<String>,
+    hostname: Option<String>,
     /// Filter by active status
-    pub is_active: Option<bool>,
+    is_active: Option<bool>,
     /// Filter by scheduled compute node ID
-    pub scheduled_compute_node_id: Option<i64>,
+    scheduled_compute_node_id: Option<i64>,
 }
 
 impl ComputeNodeListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_hostname(mut self, hostname: String) -> Self {
+    fn with_hostname(mut self, hostname: String) -> Self {
         self.hostname = Some(hostname);
         self
     }
 
-    pub fn with_is_active(mut self, is_active: bool) -> Self {
+    pub(crate) fn with_is_active(mut self, is_active: bool) -> Self {
         self.is_active = Some(is_active);
         self
     }
 
-    pub fn with_scheduled_compute_node_id(mut self, id: i64) -> Self {
+    pub(crate) fn with_scheduled_compute_node_id(mut self, id: i64) -> Self {
         self.scheduled_compute_node_id = Some(id);
         self
     }
@@ -122,7 +122,7 @@ impl Paginatable for ComputeNodeModel {
 }
 
 /// Type alias for the compute nodes iterator
-pub type ComputeNodesIterator = PaginatedIterator<ComputeNodeModel>;
+type ComputeNodesIterator = PaginatedIterator<ComputeNodeModel>;
 
 /// Create a lazy iterator for compute nodes that fetches pages on-demand.
 ///
@@ -133,7 +133,7 @@ pub type ComputeNodesIterator = PaginatedIterator<ComputeNodeModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<ComputeNodeModel, Error>` items
-pub fn iter_compute_nodes(
+fn iter_compute_nodes(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ComputeNodeListParams,
@@ -153,7 +153,7 @@ pub fn iter_compute_nodes(
 /// # Returns
 /// `Result<Vec<ComputeNodeModel>, Error>` containing all compute nodes or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_compute_nodes(
+pub(crate) fn paginate_compute_nodes(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ComputeNodeListParams,

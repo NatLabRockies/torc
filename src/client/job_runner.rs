@@ -76,7 +76,7 @@ pub struct Wakeup {
 }
 
 impl Wakeup {
-    pub fn new() -> Arc<Self> {
+    fn new() -> Arc<Self> {
         Arc::new(Self {
             pending: Mutex::new(false),
             cv: Condvar::new(),
@@ -93,7 +93,7 @@ impl Wakeup {
 
     /// Wait until notified or `timeout` elapses. Returns `true` if a
     /// notification was consumed, `false` on timeout.
-    pub fn wait_with_timeout(&self, timeout: Duration) -> bool {
+    fn wait_with_timeout(&self, timeout: Duration) -> bool {
         let mut pending = self.pending.lock().unwrap();
         if *pending {
             *pending = false;
@@ -309,13 +309,13 @@ fn next_poll_interval(
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct FailureHandlerRule {
     #[serde(default)]
-    pub exit_codes: Vec<i32>,
+    exit_codes: Vec<i32>,
     /// If true, this rule matches any non-zero exit code
     #[serde(default)]
-    pub match_all_exit_codes: bool,
-    pub recovery_script: Option<String>,
+    match_all_exit_codes: bool,
+    recovery_script: Option<String>,
     #[serde(default = "default_max_retries")]
-    pub max_retries: i32,
+    max_retries: i32,
 }
 
 fn default_max_retries() -> i32 {
@@ -992,7 +992,7 @@ impl JobRunner {
     ///
     /// Returns `true` if the termination flag has been set, indicating that the
     /// JobRunner should stop accepting new jobs and gracefully terminate running ones.
-    pub fn is_termination_requested(&self) -> bool {
+    fn is_termination_requested(&self) -> bool {
         self.termination_requested.load(Ordering::SeqCst)
     }
 
@@ -1004,7 +1004,7 @@ impl JobRunner {
     ///
     /// Typically, termination is triggered by a signal handler, but this method
     /// allows programmatic termination for testing or other use cases.
-    pub fn request_termination(&self) {
+    fn request_termination(&self) {
         self.termination_requested.store(true, Ordering::SeqCst);
     }
 

@@ -1,0 +1,59 @@
+# Torc ships these binaries as part of its release artifacts. Keep the production
+# surface explicit so Hawk can distinguish supported entry points from internal code.
+[[production]]
+package = "torc"
+bin = "torc"
+reason = "shipped unified CLI"
+
+[[production]]
+package = "torc"
+bin = "torc-openapi"
+reason = "shipped OpenAPI utility"
+
+[[production]]
+package = "torc"
+bin = "torc-server"
+reason = "shipped server binary"
+
+[[production]]
+package = "torc"
+bin = "torc-htpasswd"
+reason = "shipped authentication utility"
+
+[[production]]
+package = "torc"
+bin = "torc-mcp-server"
+reason = "shipped MCP server"
+
+[[production]]
+package = "torc"
+bin = "torc-dash"
+reason = "shipped dashboard"
+
+[[production]]
+package = "torc"
+bin = "torc-slurm-job-runner"
+reason = "shipped Slurm job runner"
+
+# These model aliases are part of the crate-root API retained for downstream users,
+# even though Torc's in-workspace binaries do not import them across the crate boundary.
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "torc"
+item = "GetReadyJobRequirementsResponse"
+level = "allow"
+reason = "backward-compatible crate-root model re-export"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "torc"
+item = "ListLocalSchedulersResponse"
+level = "allow"
+reason = "backward-compatible crate-root model re-export"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "torc"
+item = "LocalSchedulerModel"
+level = "allow"
+reason = "backward-compatible crate-root model re-export"

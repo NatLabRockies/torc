@@ -46,10 +46,10 @@ pub struct ServiceConfig {
 
 impl ServiceConfig {
     /// Default completion check interval for services (5 seconds)
-    pub const DEFAULT_SERVICE_INTERVAL_SECS: f64 = 5.0;
+    const DEFAULT_SERVICE_INTERVAL_SECS: f64 = 5.0;
 
     /// Default credential cache TTL in seconds (must match clap default in ServerConfig)
-    pub const DEFAULT_CREDENTIAL_CACHE_TTL_SECS: u64 = 60;
+    const DEFAULT_CREDENTIAL_CACHE_TTL_SECS: u64 = 60;
 
     /// Create default configuration for system-level service
     /// Uses a shorter completion check interval (5s) since local services
@@ -207,7 +207,7 @@ fn service_label() -> ServiceLabel {
 }
 
 /// Install the service with the given configuration
-pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
+fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
     // Validate HTTPS configuration upfront to avoid installing a service that fails to start
     if config.https {
         if config.tls_cert.is_none() {
@@ -359,7 +359,7 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
 }
 
 /// Uninstall the service
-pub fn uninstall_service(user_level: bool) -> Result<()> {
+fn uninstall_service(user_level: bool) -> Result<()> {
     let manager = get_service_manager(user_level)?;
 
     manager
@@ -377,7 +377,7 @@ pub fn uninstall_service(user_level: bool) -> Result<()> {
 }
 
 /// Start the service
-pub fn start_service(user_level: bool) -> Result<()> {
+fn start_service(user_level: bool) -> Result<()> {
     let manager = get_service_manager(user_level)?;
     let label = service_label();
 
@@ -394,7 +394,7 @@ pub fn start_service(user_level: bool) -> Result<()> {
 }
 
 /// Stop the service
-pub fn stop_service(user_level: bool) -> Result<()> {
+fn stop_service(user_level: bool) -> Result<()> {
     let manager = get_service_manager(user_level)?;
     let label = service_label();
 
@@ -411,7 +411,7 @@ pub fn stop_service(user_level: bool) -> Result<()> {
 }
 
 /// Check service status
-pub fn service_status(user_level: bool) -> Result<()> {
+fn service_status(user_level: bool) -> Result<()> {
     let service_type = if user_level { "user" } else { "system" };
     println!(
         "Service status check varies by platform ({} service):",

@@ -43,7 +43,7 @@ pub struct HpcJobInfo {
 }
 
 impl HpcJobInfo {
-    pub fn new(job_id: String, name: String, status: HpcJobStatus) -> Self {
+    pub(crate) fn new(job_id: String, name: String, status: HpcJobStatus) -> Self {
         Self {
             job_id,
             name,
@@ -52,7 +52,7 @@ impl HpcJobInfo {
     }
 
     /// Create an empty job info for when no job is found
-    pub fn none() -> Self {
+    pub(crate) fn none() -> Self {
         Self {
             job_id: String::new(),
             name: String::new(),
@@ -65,21 +65,21 @@ impl HpcJobInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HpcJobStats {
     /// HPC job ID
-    pub hpc_job_id: String,
+    pub(crate) hpc_job_id: String,
     /// Job name
-    pub name: String,
+    pub(crate) name: String,
     /// Job start time
-    pub start: DateTime<Utc>,
+    pub(crate) start: DateTime<Utc>,
     /// Job end time (if finished)
-    pub end: Option<DateTime<Utc>>,
+    pub(crate) end: Option<DateTime<Utc>>,
     /// Job state as a string
-    pub state: String,
+    pub(crate) state: String,
     /// Account used for the job
-    pub account: String,
+    pub(crate) account: String,
     /// Partition/queue name
-    pub partition: String,
+    pub(crate) partition: String,
     /// Quality of Service
-    pub qos: String,
+    pub(crate) qos: String,
 }
 
 /// HPC types supported

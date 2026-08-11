@@ -73,7 +73,7 @@ pub trait ComputeNodesApi<C> {
 /// Implementation of compute nodes API for the server
 #[derive(Clone)]
 pub struct ComputeNodesApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const COMPUTE_NODE_COLUMNS: &[&str] = &[
@@ -100,7 +100,7 @@ const COMPUTE_NODE_COLUMNS: &[&str] = &[
 ];
 
 impl ComputeNodesApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

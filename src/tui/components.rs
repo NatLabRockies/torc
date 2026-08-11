@@ -16,11 +16,11 @@ use crate::client::utils::format_local_timestamp;
 /// A confirmation dialog that asks the user to confirm an action
 #[derive(Debug, Clone)]
 pub struct ConfirmationDialog {
-    pub title: String,
-    pub message: String,
-    pub confirm_text: String,
-    pub cancel_text: String,
-    pub is_destructive: bool,
+    title: String,
+    message: String,
+    confirm_text: String,
+    cancel_text: String,
+    is_destructive: bool,
 }
 
 impl Default for ConfirmationDialog {
@@ -36,7 +36,7 @@ impl Default for ConfirmationDialog {
 }
 
 impl ConfirmationDialog {
-    pub fn new(title: &str, message: &str) -> Self {
+    pub(crate) fn new(title: &str, message: &str) -> Self {
         Self {
             title: title.to_string(),
             message: message.to_string(),
@@ -44,17 +44,17 @@ impl ConfirmationDialog {
         }
     }
 
-    pub fn destructive(mut self) -> Self {
+    pub(crate) fn destructive(mut self) -> Self {
         self.is_destructive = true;
         self
     }
 
-    pub fn with_confirm_text(mut self, text: &str) -> Self {
+    fn with_confirm_text(mut self, text: &str) -> Self {
         self.confirm_text = text.to_string();
         self
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         // Calculate dialog size - center in screen
         let dialog_width = 60.min(area.width.saturating_sub(4));
         // Estimate the wrapped height of the message so multi-line content
@@ -136,19 +136,19 @@ impl ConfirmationDialog {
 /// serves as the confirmation gate: pressing Enter applies, Esc cancels.
 #[derive(Debug, Clone)]
 pub struct RecoverPromptDialog {
-    pub title: String,
-    pub message: String,
-    pub memory_input: String,
-    pub runtime_input: String,
+    title: String,
+    message: String,
+    memory_input: String,
+    runtime_input: String,
     /// 0 = memory field, 1 = runtime field
-    pub active_field: u8,
+    active_field: u8,
     /// Validation error to show under the inputs (e.g. unparseable number)
-    pub error: Option<String>,
-    pub is_destructive: bool,
+    error: Option<String>,
+    is_destructive: bool,
 }
 
 impl RecoverPromptDialog {
-    pub fn new(title: &str, message: &str, is_destructive: bool) -> Self {
+    pub(crate) fn new(title: &str, message: &str, is_destructive: bool) -> Self {
         Self {
             title: title.to_string(),
             message: message.to_string(),
@@ -160,7 +160,7 @@ impl RecoverPromptDialog {
         }
     }
 
-    pub fn toggle_field(&mut self) {
+    pub(crate) fn toggle_field(&mut self) {
         self.active_field = 1 - self.active_field;
     }
 
@@ -172,7 +172,7 @@ impl RecoverPromptDialog {
         }
     }
 
-    pub fn add_char(&mut self, c: char) {
+    pub(crate) fn add_char(&mut self, c: char) {
         // Allow only digits and a single decimal point.
         if c.is_ascii_digit() || c == '.' {
             let buf = self.active_buf_mut();
@@ -186,14 +186,14 @@ impl RecoverPromptDialog {
         }
     }
 
-    pub fn backspace(&mut self) {
+    pub(crate) fn backspace(&mut self) {
         self.active_buf_mut().pop();
         self.error = None;
     }
 
     /// Parse the two fields. Returns (memory_multiplier, runtime_multiplier)
     /// or an error message suitable for inline display.
-    pub fn parse(&self) -> Result<(f64, f64), String> {
+    pub(crate) fn parse(&self) -> Result<(f64, f64), String> {
         let mem = self
             .memory_input
             .parse::<f64>()
@@ -208,11 +208,11 @@ impl RecoverPromptDialog {
         Ok((mem, rt))
     }
 
-    pub fn set_error(&mut self, message: String) {
+    pub(crate) fn set_error(&mut self, message: String) {
         self.error = Some(message);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         let dialog_width = 60.min(area.width.saturating_sub(4));
         let dialog_height = 12.min(area.height.saturating_sub(2));
 
@@ -344,13 +344,13 @@ pub enum StatusLevel {
 /// A status message to display in the status bar
 #[derive(Debug, Clone)]
 pub struct StatusMessage {
-    pub message: String,
-    pub level: StatusLevel,
-    pub timestamp: std::time::Instant,
+    pub(crate) message: String,
+    level: StatusLevel,
+    timestamp: std::time::Instant,
 }
 
 impl StatusMessage {
-    pub fn info(message: &str) -> Self {
+    pub(crate) fn info(message: &str) -> Self {
         Self {
             message: message.to_string(),
             level: StatusLevel::Info,
@@ -358,7 +358,7 @@ impl StatusMessage {
         }
     }
 
-    pub fn success(message: &str) -> Self {
+    pub(crate) fn success(message: &str) -> Self {
         Self {
             message: message.to_string(),
             level: StatusLevel::Success,
@@ -366,7 +366,7 @@ impl StatusMessage {
         }
     }
 
-    pub fn warning(message: &str) -> Self {
+    pub(crate) fn warning(message: &str) -> Self {
         Self {
             message: message.to_string(),
             level: StatusLevel::Warning,
@@ -374,7 +374,7 @@ impl StatusMessage {
         }
     }
 
-    pub fn error(message: &str) -> Self {
+    pub(crate) fn error(message: &str) -> Self {
         Self {
             message: message.to_string(),
             level: StatusLevel::Error,
@@ -382,7 +382,7 @@ impl StatusMessage {
         }
     }
 
-    pub fn color(&self) -> Color {
+    pub(crate) fn color(&self) -> Color {
         match self.level {
             StatusLevel::Info => Color::Cyan,
             StatusLevel::Success => Color::Green,
@@ -392,7 +392,7 @@ impl StatusMessage {
     }
 
     /// Check if message should still be displayed (auto-dismiss after 5 seconds for success/info)
-    pub fn is_visible(&self) -> bool {
+    pub(crate) fn is_visible(&self) -> bool {
         match self.level {
             StatusLevel::Success | StatusLevel::Info => {
                 self.timestamp.elapsed() < std::time::Duration::from_secs(5)
@@ -406,19 +406,19 @@ impl StatusMessage {
 /// Used when error messages are too long for the status bar
 #[derive(Debug, Clone)]
 pub struct ErrorDialog {
-    pub title: String,
-    pub message: String,
+    title: String,
+    message: String,
 }
 
 impl ErrorDialog {
-    pub fn new(title: &str, message: &str) -> Self {
+    pub(crate) fn new(title: &str, message: &str) -> Self {
         Self {
             title: title.to_string(),
             message: message.to_string(),
         }
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         // Calculate dialog size based on message length
         // Allow more width and height for long messages
         let dialog_width = 80.min(area.width.saturating_sub(4));
@@ -501,10 +501,10 @@ pub enum HelpContext {
 }
 
 /// A help popup showing keybindings relevant to the current context.
-pub struct HelpPopup;
+pub(crate) struct HelpPopup;
 
 impl HelpPopup {
-    pub fn render(f: &mut Frame, area: Rect, context: HelpContext) {
+    pub(crate) fn render(f: &mut Frame, area: Rect, context: HelpContext) {
         let popup_width = 70.min(area.width.saturating_sub(4));
         let popup_height = 48.min(area.height.saturating_sub(2));
 
@@ -691,17 +691,17 @@ impl HelpPopup {
 /// Job details popup showing full job information
 #[derive(Debug, Clone)]
 pub struct JobDetailsPopup {
-    pub job_id: i64,
-    pub job_name: String,
-    pub command: String,
-    pub status: String,
-    pub compute_node_id: Option<i64>,
-    pub start_time: Option<String>,
-    pub scroll_offset: u16,
+    job_id: i64,
+    job_name: String,
+    command: String,
+    status: String,
+    compute_node_id: Option<i64>,
+    start_time: Option<String>,
+    scroll_offset: u16,
 }
 
 impl JobDetailsPopup {
-    pub fn new(
+    pub(crate) fn new(
         job_id: i64,
         job_name: String,
         command: String,
@@ -720,15 +720,15 @@ impl JobDetailsPopup {
         }
     }
 
-    pub fn scroll_down(&mut self) {
+    pub(crate) fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
     }
 
-    pub fn scroll_up(&mut self) {
+    pub(crate) fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         let popup_width = 80.min(area.width.saturating_sub(4));
         let popup_height = 20.min(area.height.saturating_sub(2));
 
@@ -810,16 +810,16 @@ impl JobDetailsPopup {
 /// large/nested objects are readable. Scrollable for payloads taller than the popup.
 #[derive(Debug, Clone)]
 pub struct UserDataDetailsPopup {
-    pub user_data_id: i64,
-    pub name: String,
-    pub is_ephemeral: Option<bool>,
+    user_data_id: i64,
+    name: String,
+    is_ephemeral: Option<bool>,
     /// Pre-formatted, pretty-printed JSON payload (one entry per visual line).
-    pub data_pretty: String,
-    pub scroll_offset: u16,
+    data_pretty: String,
+    scroll_offset: u16,
 }
 
 impl UserDataDetailsPopup {
-    pub fn new(
+    pub(crate) fn new(
         user_data_id: i64,
         name: String,
         is_ephemeral: Option<bool>,
@@ -840,15 +840,15 @@ impl UserDataDetailsPopup {
         }
     }
 
-    pub fn scroll_down(&mut self) {
+    pub(crate) fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
     }
 
-    pub fn scroll_up(&mut self) {
+    pub(crate) fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         let popup_width = 90.min(area.width.saturating_sub(4));
         let popup_height = 24.min(area.height.saturating_sub(2));
 
@@ -907,15 +907,19 @@ impl UserDataDetailsPopup {
 /// Popup showing expanded details for a single workflow. Rows are built by the
 /// caller as `(label, value)` pairs so this component stays decoupled from the
 /// workflow model. Scrollable for workflows with many configured fields.
-pub struct WorkflowDetailsPopup {
-    pub workflow_id: i64,
-    pub workflow_name: String,
-    pub rows: Vec<(String, String)>,
-    pub scroll_offset: u16,
+pub(crate) struct WorkflowDetailsPopup {
+    workflow_id: i64,
+    workflow_name: String,
+    rows: Vec<(String, String)>,
+    scroll_offset: u16,
 }
 
 impl WorkflowDetailsPopup {
-    pub fn new(workflow_id: i64, workflow_name: String, rows: Vec<(String, String)>) -> Self {
+    pub(crate) fn new(
+        workflow_id: i64,
+        workflow_name: String,
+        rows: Vec<(String, String)>,
+    ) -> Self {
         Self {
             workflow_id,
             workflow_name,
@@ -924,15 +928,15 @@ impl WorkflowDetailsPopup {
         }
     }
 
-    pub fn scroll_down(&mut self) {
+    pub(crate) fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
     }
 
-    pub fn scroll_up(&mut self) {
+    pub(crate) fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         let popup_width = 90.min(area.width.saturating_sub(4));
         let popup_height = 24.min(area.height.saturating_sub(2));
 
@@ -982,18 +986,18 @@ impl WorkflowDetailsPopup {
 /// Log viewer for displaying job stdout/stderr
 #[derive(Debug, Clone)]
 pub struct LogViewer {
-    pub job_id: i64,
-    pub job_name: String,
-    pub stdout_path: Option<String>,
-    pub stderr_path: Option<String>,
-    pub stdout_content: String,
-    pub stderr_content: String,
-    pub active_tab: LogTab,
-    pub scroll_offset: u16,
-    pub search_query: String,
-    pub search_matches: Vec<usize>, // Line numbers with matches
-    pub current_match: usize,
-    pub is_searching: bool,
+    pub(crate) job_id: i64,
+    job_name: String,
+    pub(crate) stdout_path: Option<String>,
+    pub(crate) stderr_path: Option<String>,
+    pub(crate) stdout_content: String,
+    pub(crate) stderr_content: String,
+    active_tab: LogTab,
+    scroll_offset: u16,
+    search_query: String,
+    search_matches: Vec<usize>, // Line numbers with matches
+    current_match: usize,
+    pub(crate) is_searching: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1003,7 +1007,7 @@ pub enum LogTab {
 }
 
 impl LogViewer {
-    pub fn new(job_id: i64, job_name: String) -> Self {
+    pub(crate) fn new(job_id: i64, job_name: String) -> Self {
         Self {
             job_id,
             job_name,
@@ -1020,7 +1024,7 @@ impl LogViewer {
         }
     }
 
-    pub fn toggle_tab(&mut self) {
+    pub(crate) fn toggle_tab(&mut self) {
         self.active_tab = match self.active_tab {
             LogTab::Stdout => LogTab::Stderr,
             LogTab::Stderr => LogTab::Stdout,
@@ -1028,58 +1032,58 @@ impl LogViewer {
         self.scroll_offset = 0;
     }
 
-    pub fn scroll_down(&mut self, amount: u16) {
+    pub(crate) fn scroll_down(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_add(amount);
     }
 
-    pub fn scroll_up(&mut self, amount: u16) {
+    pub(crate) fn scroll_up(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
     }
 
-    pub fn scroll_to_top(&mut self) {
+    pub(crate) fn scroll_to_top(&mut self) {
         self.scroll_offset = 0;
     }
 
-    pub fn scroll_to_bottom(&mut self, visible_height: u16) {
+    pub(crate) fn scroll_to_bottom(&mut self, visible_height: u16) {
         let content = self.current_content();
         let line_count = content.lines().count() as u16;
         self.scroll_offset = line_count.saturating_sub(visible_height);
     }
 
-    pub fn current_content(&self) -> &str {
+    fn current_content(&self) -> &str {
         match self.active_tab {
             LogTab::Stdout => &self.stdout_content,
             LogTab::Stderr => &self.stderr_content,
         }
     }
 
-    pub fn current_path(&self) -> Option<&str> {
+    pub(crate) fn current_path(&self) -> Option<&str> {
         match self.active_tab {
             LogTab::Stdout => self.stdout_path.as_deref(),
             LogTab::Stderr => self.stderr_path.as_deref(),
         }
     }
 
-    pub fn start_search(&mut self) {
+    pub(crate) fn start_search(&mut self) {
         self.is_searching = true;
         self.search_query.clear();
     }
 
-    pub fn cancel_search(&mut self) {
+    pub(crate) fn cancel_search(&mut self) {
         self.is_searching = false;
     }
 
-    pub fn add_search_char(&mut self, c: char) {
+    pub(crate) fn add_search_char(&mut self, c: char) {
         self.search_query.push(c);
         self.update_search_matches();
     }
 
-    pub fn remove_search_char(&mut self) {
+    pub(crate) fn remove_search_char(&mut self) {
         self.search_query.pop();
         self.update_search_matches();
     }
 
-    pub fn apply_search(&mut self) {
+    pub(crate) fn apply_search(&mut self) {
         self.is_searching = false;
         if !self.search_matches.is_empty() {
             self.jump_to_match(0);
@@ -1107,14 +1111,14 @@ impl LogViewer {
         self.current_match = 0;
     }
 
-    pub fn next_match(&mut self) {
+    pub(crate) fn next_match(&mut self) {
         if !self.search_matches.is_empty() {
             self.current_match = (self.current_match + 1) % self.search_matches.len();
             self.jump_to_current_match();
         }
     }
 
-    pub fn prev_match(&mut self) {
+    pub(crate) fn prev_match(&mut self) {
         if !self.search_matches.is_empty() {
             self.current_match = if self.current_match == 0 {
                 self.search_matches.len() - 1
@@ -1135,7 +1139,7 @@ impl LogViewer {
         self.jump_to_match(self.current_match);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         f.render_widget(Clear, area);
 
         let block = Block::default()
@@ -1272,19 +1276,19 @@ impl LogViewer {
 /// File viewer for displaying file contents
 #[derive(Debug, Clone)]
 pub struct FileViewer {
-    pub file_name: String,
-    pub file_path: String,
-    pub content: String,
-    pub scroll_offset: u16,
-    pub search_query: String,
-    pub search_matches: Vec<usize>, // Line numbers with matches
-    pub current_match: usize,
-    pub is_searching: bool,
-    pub is_binary: bool,
+    file_name: String,
+    pub(crate) file_path: String,
+    content: String,
+    scroll_offset: u16,
+    search_query: String,
+    search_matches: Vec<usize>, // Line numbers with matches
+    current_match: usize,
+    pub(crate) is_searching: bool,
+    is_binary: bool,
 }
 
 impl FileViewer {
-    pub fn new(file_name: String, file_path: String) -> Self {
+    pub(crate) fn new(file_name: String, file_path: String) -> Self {
         Self {
             file_name,
             file_path,
@@ -1298,7 +1302,7 @@ impl FileViewer {
         }
     }
 
-    pub fn load_content(&mut self) -> Result<(), String> {
+    pub(crate) fn load_content(&mut self) -> Result<(), String> {
         let path = Path::new(&self.file_path);
 
         if !path.exists() {
@@ -1374,43 +1378,43 @@ impl FileViewer {
         Ok(())
     }
 
-    pub fn scroll_down(&mut self, amount: u16) {
+    pub(crate) fn scroll_down(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_add(amount);
     }
 
-    pub fn scroll_up(&mut self, amount: u16) {
+    pub(crate) fn scroll_up(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
     }
 
-    pub fn scroll_to_top(&mut self) {
+    pub(crate) fn scroll_to_top(&mut self) {
         self.scroll_offset = 0;
     }
 
-    pub fn scroll_to_bottom(&mut self, visible_height: u16) {
+    pub(crate) fn scroll_to_bottom(&mut self, visible_height: u16) {
         let line_count = self.content.lines().count() as u16;
         self.scroll_offset = line_count.saturating_sub(visible_height);
     }
 
-    pub fn start_search(&mut self) {
+    pub(crate) fn start_search(&mut self) {
         self.is_searching = true;
         self.search_query.clear();
     }
 
-    pub fn cancel_search(&mut self) {
+    pub(crate) fn cancel_search(&mut self) {
         self.is_searching = false;
     }
 
-    pub fn add_search_char(&mut self, c: char) {
+    pub(crate) fn add_search_char(&mut self, c: char) {
         self.search_query.push(c);
         self.update_search_matches();
     }
 
-    pub fn remove_search_char(&mut self) {
+    pub(crate) fn remove_search_char(&mut self) {
         self.search_query.pop();
         self.update_search_matches();
     }
 
-    pub fn apply_search(&mut self) {
+    pub(crate) fn apply_search(&mut self) {
         self.is_searching = false;
         if !self.search_matches.is_empty() {
             self.jump_to_match(0);
@@ -1437,14 +1441,14 @@ impl FileViewer {
         self.current_match = 0;
     }
 
-    pub fn next_match(&mut self) {
+    pub(crate) fn next_match(&mut self) {
         if !self.search_matches.is_empty() {
             self.current_match = (self.current_match + 1) % self.search_matches.len();
             self.jump_to_current_match();
         }
     }
 
-    pub fn prev_match(&mut self) {
+    pub(crate) fn prev_match(&mut self) {
         if !self.search_matches.is_empty() {
             self.current_match = if self.current_match == 0 {
                 self.search_matches.len() - 1
@@ -1465,7 +1469,7 @@ impl FileViewer {
         self.jump_to_match(self.current_match);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         f.render_widget(Clear, area);
 
         let block = Block::default()
@@ -1577,18 +1581,18 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
 pub struct ProcessViewer {
-    pub title: String,
-    pub output_lines: Vec<String>,
-    pub scroll_offset: u16,
-    pub auto_scroll: bool,
-    pub is_running: bool,
-    pub kill_confirm: bool,
+    pub(crate) title: String,
+    output_lines: Vec<String>,
+    scroll_offset: u16,
+    auto_scroll: bool,
+    pub(crate) is_running: bool,
+    pub(crate) kill_confirm: bool,
     child: Option<Child>,
     output_receiver: Option<Receiver<String>>,
 }
 
 impl ProcessViewer {
-    pub fn new(title: String) -> Self {
+    pub(crate) fn new(title: String) -> Self {
         Self {
             title,
             output_lines: Vec::new(),
@@ -1603,7 +1607,7 @@ impl ProcessViewer {
 
     /// Start a process and capture its output. Takes a prebuilt `Command` so
     /// callers can attach connection arguments and environment variables.
-    pub fn start(&mut self, mut cmd: Command) -> Result<(), String> {
+    pub(crate) fn start(&mut self, mut cmd: Command) -> Result<(), String> {
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         let mut child = cmd
@@ -1654,7 +1658,7 @@ impl ProcessViewer {
     }
 
     /// Poll for new output from the process
-    pub fn poll_output(&mut self) {
+    pub(crate) fn poll_output(&mut self) {
         // Don't poll if process is not running and we've already cleaned up
         if !self.is_running && self.output_receiver.is_none() {
             return;
@@ -1720,19 +1724,19 @@ impl ProcessViewer {
     }
 
     /// Request kill confirmation
-    pub fn request_kill(&mut self) {
+    pub(crate) fn request_kill(&mut self) {
         if self.is_running {
             self.kill_confirm = true;
         }
     }
 
     /// Cancel kill confirmation
-    pub fn cancel_kill(&mut self) {
+    pub(crate) fn cancel_kill(&mut self) {
         self.kill_confirm = false;
     }
 
     /// Kill the running process
-    pub fn kill(&mut self) {
+    pub(crate) fn kill(&mut self) {
         self.kill_confirm = false;
         if let Some(ref mut child) = self.child {
             let _ = child.kill();
@@ -1742,34 +1746,34 @@ impl ProcessViewer {
         }
     }
 
-    pub fn scroll_down(&mut self, amount: u16) {
+    pub(crate) fn scroll_down(&mut self, amount: u16) {
         self.auto_scroll = false;
         self.scroll_offset = self.scroll_offset.saturating_add(amount);
     }
 
-    pub fn scroll_up(&mut self, amount: u16) {
+    pub(crate) fn scroll_up(&mut self, amount: u16) {
         self.auto_scroll = false;
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
     }
 
-    pub fn scroll_to_top(&mut self) {
+    pub(crate) fn scroll_to_top(&mut self) {
         self.auto_scroll = false;
         self.scroll_offset = 0;
     }
 
-    pub fn scroll_to_bottom(&mut self) {
+    pub(crate) fn scroll_to_bottom(&mut self) {
         self.auto_scroll = true;
         self.scroll_offset = u16::MAX;
     }
 
-    pub fn toggle_auto_scroll(&mut self) {
+    pub(crate) fn toggle_auto_scroll(&mut self) {
         self.auto_scroll = !self.auto_scroll;
         if self.auto_scroll {
             self.scroll_offset = u16::MAX;
         }
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
+    pub(crate) fn render(&self, f: &mut Frame, area: Rect) {
         f.render_widget(Clear, area);
 
         let status_indicator = if self.is_running {

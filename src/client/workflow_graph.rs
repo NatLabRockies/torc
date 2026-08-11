@@ -21,43 +21,43 @@ use crate::models::{JobModel, ResourceRequirementsModel};
 #[derive(Debug, Clone)]
 pub struct JobNode {
     /// Job name (may contain parameter placeholders like `{index}`)
-    pub name: String,
+    name: String,
     /// Resource requirements name
-    pub resource_requirements: Option<String>,
+    resource_requirements: Option<String>,
     /// Number of job instances (1 for non-parameterized, N for parameterized)
-    pub instance_count: usize,
+    pub(crate) instance_count: usize,
     /// Regex pattern matching all instances of this job
-    pub name_pattern: String,
+    name_pattern: String,
     /// Assigned scheduler name
-    pub scheduler: Option<String>,
+    scheduler: Option<String>,
     /// Original job spec reference data
-    pub command: String,
+    command: String,
 }
 
 /// Represents a group of jobs that share scheduling characteristics
 #[derive(Debug, Clone)]
 pub struct SchedulerGroup {
     /// Resource requirements name
-    pub resource_requirements: String,
+    pub(crate) resource_requirements: String,
     /// Whether jobs in this group have dependencies
-    pub has_dependencies: bool,
+    pub(crate) has_dependencies: bool,
     /// Total job count across all jobs in this group
-    pub job_count: usize,
+    pub(crate) job_count: usize,
     /// Job name patterns for matching (regex patterns)
-    pub job_name_patterns: Vec<String>,
+    pub(crate) job_name_patterns: Vec<String>,
     /// Job names in this group
-    pub job_names: Vec<String>,
+    pub(crate) job_names: Vec<String>,
 }
 
 /// A connected component (independent sub-workflow) within the graph
 #[derive(Debug, Clone)]
 pub struct WorkflowComponent {
     /// Job names in this component
-    pub jobs: HashSet<String>,
+    jobs: HashSet<String>,
     /// Root jobs (no dependencies within the component)
-    pub roots: Vec<String>,
+    roots: Vec<String>,
     /// Leaf jobs (nothing depends on them within the component)
-    pub leaves: Vec<String>,
+    leaves: Vec<String>,
 }
 
 /// The main workflow graph structure
@@ -77,7 +77,7 @@ pub struct WorkflowGraph {
 
 impl WorkflowGraph {
     /// Create a new empty graph
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             nodes: HashMap::new(),
             depends_on: HashMap::new(),
@@ -186,7 +186,7 @@ impl WorkflowGraph {
     ///
     /// This is used for recovery scenarios and execution plan visualization
     /// when we don't have access to the original workflow specification.
-    pub fn from_jobs(
+    pub(crate) fn from_jobs(
         jobs: &[JobModel],
         resource_requirements: &[ResourceRequirementsModel],
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -297,27 +297,27 @@ impl WorkflowGraph {
     }
 
     /// Get all job names in the graph
-    pub fn job_names(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn job_names(&self) -> impl Iterator<Item = &String> {
         self.nodes.keys()
     }
 
     /// Get a job node by name
-    pub fn get_job(&self, name: &str) -> Option<&JobNode> {
+    pub(crate) fn get_job(&self, name: &str) -> Option<&JobNode> {
         self.nodes.get(name)
     }
 
     /// Get the number of jobs in the graph
-    pub fn job_count(&self) -> usize {
+    pub(crate) fn job_count(&self) -> usize {
         self.nodes.len()
     }
 
     /// Get total instance count (accounting for parameterized jobs)
-    pub fn total_instance_count(&self) -> usize {
+    pub(crate) fn total_instance_count(&self) -> usize {
         self.nodes.values().map(|n| n.instance_count).sum()
     }
 
     /// Check if a job has any dependencies
-    pub fn has_dependencies(&self, job: &str) -> bool {
+    fn has_dependencies(&self, job: &str) -> bool {
         self.depends_on
             .get(job)
             .map(|deps| !deps.is_empty())
@@ -325,17 +325,17 @@ impl WorkflowGraph {
     }
 
     /// Get the jobs that a job depends on (its blockers)
-    pub fn dependencies_of(&self, job: &str) -> Option<&HashSet<String>> {
+    pub(crate) fn dependencies_of(&self, job: &str) -> Option<&HashSet<String>> {
         self.depends_on.get(job)
     }
 
     /// Get the jobs that depend on a job (its dependents)
-    pub fn dependents_of(&self, job: &str) -> Option<&HashSet<String>> {
+    fn dependents_of(&self, job: &str) -> Option<&HashSet<String>> {
         self.depended_by.get(job)
     }
 
     /// Get root jobs (jobs with no dependencies)
-    pub fn roots(&self) -> Vec<&str> {
+    pub(crate) fn roots(&self) -> Vec<&str> {
         self.nodes
             .keys()
             .filter(|name| {
@@ -349,7 +349,7 @@ impl WorkflowGraph {
     }
 
     /// Get leaf jobs (jobs that nothing depends on)
-    pub fn leaves(&self) -> Vec<&str> {
+    fn leaves(&self) -> Vec<&str> {
         self.nodes
             .keys()
             .filter(|name| {
@@ -366,7 +366,9 @@ impl WorkflowGraph {
     ///
     /// Level 0 contains jobs with no dependencies.
     /// Level N contains jobs whose dependencies are all in levels < N.
-    pub fn topological_levels(&mut self) -> Result<&Vec<Vec<String>>, Box<dyn std::error::Error>> {
+    pub(crate) fn topological_levels(
+        &mut self,
+    ) -> Result<&Vec<Vec<String>>, Box<dyn std::error::Error>> {
         if let Some(ref levels) = self.levels {
             return Ok(levels);
         }
@@ -406,7 +408,7 @@ impl WorkflowGraph {
     /// Find connected components (independent sub-workflows)
     ///
     /// Each component can be scheduled independently of others.
-    pub fn connected_components(&mut self) -> &Vec<WorkflowComponent> {
+    pub(crate) fn connected_components(&mut self) -> &Vec<WorkflowComponent> {
         if let Some(ref components) = self.components {
             return components;
         }
@@ -485,7 +487,7 @@ impl WorkflowGraph {
     }
 
     /// Extract a sub-graph containing only the specified jobs
-    pub fn subgraph(&self, job_names: &HashSet<String>) -> Self {
+    fn subgraph(&self, job_names: &HashSet<String>) -> Self {
         let mut subgraph = Self::new();
 
         // Copy relevant nodes
@@ -524,7 +526,7 @@ impl WorkflowGraph {
     ///
     /// Jobs are grouped by their resource requirements and dependency status.
     /// This is used for scheduler generation.
-    pub fn scheduler_groups(&self) -> Vec<SchedulerGroup> {
+    pub(crate) fn scheduler_groups(&self) -> Vec<SchedulerGroup> {
         // Group by (resource_requirements, has_dependencies)
         let mut groups: HashMap<(String, bool), SchedulerGroup> = HashMap::new();
 
@@ -556,9 +558,7 @@ impl WorkflowGraph {
     /// Generate scheduler groups per connected component
     ///
     /// Returns a map of component index to scheduler groups for that component.
-    pub fn scheduler_groups_by_component(
-        &mut self,
-    ) -> Vec<(WorkflowComponent, Vec<SchedulerGroup>)> {
+    fn scheduler_groups_by_component(&mut self) -> Vec<(WorkflowComponent, Vec<SchedulerGroup>)> {
         let components = self.connected_components().clone();
         let mut result = Vec::new();
 
@@ -574,7 +574,7 @@ impl WorkflowGraph {
     /// Find the critical path (longest path through the graph)
     ///
     /// Returns job names along the critical path and the total instance count.
-    pub fn critical_path(&mut self) -> Result<(Vec<String>, usize), Box<dyn std::error::Error>> {
+    fn critical_path(&mut self) -> Result<(Vec<String>, usize), Box<dyn std::error::Error>> {
         // Use dynamic programming on topological order
         let levels = self.topological_levels()?.clone();
 
@@ -632,7 +632,7 @@ impl WorkflowGraph {
     }
 
     /// Get jobs that become ready when a set of jobs complete
-    pub fn jobs_unblocked_by(&self, completed_jobs: &HashSet<String>) -> Vec<String> {
+    pub(crate) fn jobs_unblocked_by(&self, completed_jobs: &HashSet<String>) -> Vec<String> {
         let mut unblocked = Vec::new();
 
         for (name, deps) in &self.depends_on {
@@ -650,7 +650,7 @@ impl WorkflowGraph {
     }
 
     /// Find actions that should trigger when specific jobs become ready
-    pub fn matching_actions<'a>(
+    pub(crate) fn matching_actions<'a>(
         &self,
         jobs_becoming_ready: &[String],
         actions: &'a [WorkflowActionSpec],

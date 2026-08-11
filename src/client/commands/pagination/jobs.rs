@@ -13,82 +13,82 @@ use crate::models::{JobModel, JobStatus};
 #[derive(Debug, Clone, Default)]
 pub struct JobListParams {
     /// Workflow ID to list jobs from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Filter by job status
-    pub status: Option<JobStatus>,
+    pub(crate) status: Option<JobStatus>,
     /// Filter by file ID that the job needs
-    pub needs_file_id: Option<i64>,
+    pub(crate) needs_file_id: Option<i64>,
     /// Filter by upstream job ID
-    pub upstream_job_id: Option<i64>,
+    pub(crate) upstream_job_id: Option<i64>,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of jobs to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Include job relationships in response
-    pub include_relationships: Option<bool>,
+    pub(crate) include_relationships: Option<bool>,
     /// Filter by active compute node ID
-    pub active_compute_node_id: Option<i64>,
+    pub(crate) active_compute_node_id: Option<i64>,
     /// Filter by job provenance. `Some(true)` returns only jobs with
     /// `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
     /// children); `Some(false)` returns only originally-declared jobs.
-    pub origin_is_set: Option<bool>,
+    pub(crate) origin_is_set: Option<bool>,
 }
 
 impl JobListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_status(mut self, status: JobStatus) -> Self {
+    pub(crate) fn with_status(mut self, status: JobStatus) -> Self {
         self.status = Some(status);
         self
     }
 
-    pub fn with_needs_file_id(mut self, file_id: i64) -> Self {
+    pub(crate) fn with_needs_file_id(mut self, file_id: i64) -> Self {
         self.needs_file_id = Some(file_id);
         self
     }
 
-    pub fn with_upstream_job_id(mut self, job_id: i64) -> Self {
+    pub(crate) fn with_upstream_job_id(mut self, job_id: i64) -> Self {
         self.upstream_job_id = Some(job_id);
         self
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_include_relationships(mut self, include: bool) -> Self {
+    pub(crate) fn with_include_relationships(mut self, include: bool) -> Self {
         self.include_relationships = Some(include);
         self
     }
 
-    pub fn with_active_compute_node_id(mut self, id: i64) -> Self {
+    pub(crate) fn with_active_compute_node_id(mut self, id: i64) -> Self {
         self.active_compute_node_id = Some(id);
         self
     }
 
-    pub fn with_origin_is_set(mut self, origin_is_set: bool) -> Self {
+    fn with_origin_is_set(mut self, origin_is_set: bool) -> Self {
         self.origin_is_set = Some(origin_is_set);
         self
     }
@@ -150,7 +150,7 @@ impl Paginatable for JobModel {
 }
 
 /// Type alias for the jobs iterator
-pub type JobsIterator = PaginatedIterator<JobModel>;
+pub(crate) type JobsIterator = PaginatedIterator<JobModel>;
 
 /// Create a lazy iterator for jobs that fetches pages on-demand.
 ///
@@ -163,7 +163,7 @@ pub type JobsIterator = PaginatedIterator<JobModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<JobModel, Error>` items
-pub fn iter_jobs(
+pub(crate) fn iter_jobs(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: JobListParams,
@@ -183,7 +183,7 @@ pub fn iter_jobs(
 /// # Returns
 /// `Result<Vec<JobModel>, Error>` containing all jobs or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_jobs(
+pub(crate) fn paginate_jobs(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: JobListParams,

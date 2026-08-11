@@ -43,10 +43,10 @@ pub struct ResourceCorrectionOptions {
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ResourceCorrectionResult {
     pub resource_requirements_updated: usize,
-    pub jobs_analyzed: usize,
-    pub memory_corrections: usize,
-    pub runtime_corrections: usize,
-    pub cpu_corrections: usize,
+    pub(crate) jobs_analyzed: usize,
+    pub(crate) memory_corrections: usize,
+    pub(crate) runtime_corrections: usize,
+    pub(crate) cpu_corrections: usize,
     pub downsize_memory_corrections: usize,
     pub downsize_runtime_corrections: usize,
     pub downsize_cpu_corrections: usize,
@@ -176,44 +176,44 @@ struct DownsizeCandidate {
 #[derive(Debug, Clone, Serialize)]
 pub struct ResourceAdjustmentReport {
     /// The resource_requirements_id being adjusted
-    pub resource_requirements_id: i64,
+    pub(crate) resource_requirements_id: i64,
     /// Direction of adjustment: "upscale" or "downscale"
     pub direction: String,
     /// Job IDs that share this resource requirement
-    pub job_ids: Vec<i64>,
+    pub(crate) job_ids: Vec<i64>,
     /// Job names for reference
-    pub job_names: Vec<String>,
+    pub(crate) job_names: Vec<String>,
     /// Whether memory was adjusted
     pub memory_adjusted: bool,
     /// Original memory setting
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_memory: Option<String>,
+    pub(crate) original_memory: Option<String>,
     /// New memory setting
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_memory: Option<String>,
+    pub(crate) new_memory: Option<String>,
     /// Maximum peak memory observed (bytes)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_peak_memory_bytes: Option<u64>,
+    max_peak_memory_bytes: Option<u64>,
     /// Whether runtime was adjusted
     pub runtime_adjusted: bool,
     /// Original runtime setting
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_runtime: Option<String>,
+    pub(crate) original_runtime: Option<String>,
     /// New runtime setting
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_runtime: Option<String>,
+    pub(crate) new_runtime: Option<String>,
     /// Whether CPU was adjusted
     #[serde(default, skip_serializing_if = "is_false")]
     pub cpu_adjusted: bool,
     /// Original CPU count
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_cpus: Option<i64>,
+    pub(crate) original_cpus: Option<i64>,
     /// New CPU count
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_cpus: Option<i64>,
+    pub(crate) new_cpus: Option<i64>,
     /// Maximum peak CPU percentage observed
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_peak_cpu_percent: Option<f64>,
+    max_peak_cpu_percent: Option<f64>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -255,7 +255,7 @@ struct ResourceAdjustment {
 
 /// Format bytes to memory string (e.g., "12g", "512m")
 /// Uses ceiling division to ensure sufficient memory allocation
-pub fn format_memory_bytes_short(bytes: u64) -> String {
+pub(crate) fn format_memory_bytes_short(bytes: u64) -> String {
     const GB: u64 = 1024 * 1024 * 1024;
     const MB: u64 = 1024 * 1024;
     const KB: u64 = 1024;
@@ -272,7 +272,7 @@ pub fn format_memory_bytes_short(bytes: u64) -> String {
 }
 
 /// Format seconds to ISO8601 duration (e.g., "PT2H30M")
-pub fn format_duration_iso8601(secs: u64) -> String {
+pub(crate) fn format_duration_iso8601(secs: u64) -> String {
     let hours = secs / 3600;
     let mins = (secs % 3600) / 60;
     if hours > 0 && mins > 0 {

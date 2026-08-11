@@ -175,11 +175,11 @@ pub trait WorkflowActionsApi<C> {
 /// Implementation of workflow actions API for the server
 #[derive(Clone)]
 pub struct WorkflowActionsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 impl WorkflowActionsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }
@@ -783,7 +783,7 @@ where
 impl WorkflowActionsApiImpl {
     /// Check and trigger workflow actions based on trigger type and job state changes
     /// This is called by other API endpoints when state changes occur
-    pub async fn check_and_trigger_actions(
+    pub(crate) async fn check_and_trigger_actions(
         &self,
         workflow_id: i64,
         trigger_type: &str,
@@ -1018,7 +1018,7 @@ impl WorkflowActionsApiImpl {
     /// slate: every action is re-armed, including `on_workflow_start`. Otherwise re-running
     /// `workflows init` on a workflow that already ran would leave its `on_workflow_start` actions
     /// suppressed forever.
-    pub async fn reset_actions_for_reinitialize(
+    pub(crate) async fn reset_actions_for_reinitialize(
         &self,
         workflow_id: i64,
         only_uninitialized: bool,

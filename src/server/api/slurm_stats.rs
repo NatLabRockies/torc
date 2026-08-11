@@ -39,7 +39,7 @@ pub struct SlurmStatsApiImpl {
 }
 
 impl SlurmStatsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         SlurmStatsApiImpl { context }
     }
 }

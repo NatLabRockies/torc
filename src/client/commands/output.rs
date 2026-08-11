@@ -19,7 +19,7 @@ use serde::Serialize;
 /// ```ignore
 /// print_json(&job, "job");
 /// ```
-pub fn print_json<T: Serialize>(value: &T, type_name: &str) {
+pub(crate) fn print_json<T: Serialize>(value: &T, type_name: &str) {
     match serde_json::to_string_pretty(value) {
         Ok(json) => println!("{}", json),
         Err(e) => {
@@ -46,7 +46,7 @@ pub fn print_json<T: Serialize>(value: &T, type_name: &str) {
 /// print_json_wrapped(&jobs, "jobs");
 /// // Outputs: {"items": [...]}
 /// ```
-pub fn print_json_wrapped<T: Serialize>(items: &[T], type_name: &str) {
+pub(crate) fn print_json_wrapped<T: Serialize>(items: &[T], type_name: &str) {
     let output = serde_json::json!({ "items": items });
     print_json(&output, type_name);
 }
@@ -137,7 +137,7 @@ pub fn print_error_json_and_exit(message: &str, details: Option<serde_json::Valu
 ///
 /// # Returns
 /// `true` if JSON was printed, `false` if caller should handle table format
-pub fn print_if_json<T: Serialize>(format: &str, value: &T, type_name: &str) -> bool {
+pub(crate) fn print_if_json<T: Serialize>(format: &str, value: &T, type_name: &str) -> bool {
     match format {
         "json" => {
             print_json(value, type_name);
@@ -158,7 +158,11 @@ pub fn print_if_json<T: Serialize>(format: &str, value: &T, type_name: &str) -> 
 ///
 /// # Returns
 /// `true` if JSON was printed, `false` if caller should handle table format
-pub fn print_wrapped_if_json<T: Serialize>(format: &str, items: &[T], type_name: &str) -> bool {
+pub(crate) fn print_wrapped_if_json<T: Serialize>(
+    format: &str,
+    items: &[T],
+    type_name: &str,
+) -> bool {
     if format == "json" {
         print_json_wrapped(items, type_name);
         true

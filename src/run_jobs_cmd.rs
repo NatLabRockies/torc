@@ -18,7 +18,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
-pub enum LogStream {
+pub(crate) enum LogStream {
     Stdout,
     Stderr,
 }
@@ -163,7 +163,7 @@ pub fn run(args: &Args) {
     let _ = run_with_log_stream(args, LogStream::Stdout);
 }
 
-pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
+pub(crate) fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
     let hostname = hostname::get()
         .expect("Failed to get hostname")
         .into_string()

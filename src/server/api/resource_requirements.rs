@@ -80,7 +80,7 @@ pub trait ResourceRequirementsApi<C> {
 /// Implementation of resource requirements API for the server
 #[derive(Clone)]
 pub struct ResourceRequirementsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const RESOURCE_REQUIREMENTS_COLUMNS: &[&str] = &[
@@ -95,7 +95,7 @@ const RESOURCE_REQUIREMENTS_COLUMNS: &[&str] = &[
 ];
 
 impl ResourceRequirementsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

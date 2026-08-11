@@ -39,7 +39,7 @@ enum CreateTaskError {
 }
 
 /// Result of `create_or_get_initialize_jobs_task`.
-pub(super) enum TaskCreation {
+enum TaskCreation {
     /// A new task was inserted; the caller must spawn the background work.
     Created(models::TaskModel),
     /// An identical task is already active; returned idempotently. No work spawned.
@@ -383,7 +383,7 @@ impl<C> Deref for Server<C> {
 }
 
 impl<C> Server<C> {
-    pub fn new(
+    pub(crate) fn new(
         pool: SqlitePool,
         enforce_access_control: bool,
         htpasswd: crate::server::auth::SharedHtpasswd,
@@ -414,11 +414,11 @@ impl<C> Server<C> {
     }
 
     /// Get a reference to the event broadcaster for SSE subscriptions.
-    pub fn get_event_broadcaster(&self) -> &EventBroadcaster {
+    fn get_event_broadcaster(&self) -> &EventBroadcaster {
         &self.event_broadcaster
     }
 
-    pub fn shared_state(&self) -> Arc<LiveServerState> {
+    fn shared_state(&self) -> Arc<LiveServerState> {
         self.shared.clone()
     }
 
@@ -474,7 +474,7 @@ impl<C> Server<C> {
     }
 
     /// Load the single active async task for a workflow, if any.
-    pub(super) async fn get_active_task(
+    async fn get_active_task(
         &self,
         workflow_id: i64,
     ) -> Result<Option<models::TaskModel>, ApiError> {
@@ -1039,7 +1039,7 @@ impl<C> Server<C> {
     }
 
     #[cfg(feature = "openapi-codegen")]
-    pub fn openapi_app_state(&self) -> crate::openapi_spec::OpenApiAppState {
+    pub(crate) fn openapi_app_state(&self) -> crate::openapi_spec::OpenApiAppState {
         self.shared.openapi_app_state(
             full_version(),
             API_VERSION.to_string(),

@@ -48,7 +48,7 @@ pub enum AdminSqlError {
 
 impl AdminSqlError {
     /// The human-readable message, regardless of kind.
-    pub fn message(&self) -> &str {
+    pub(crate) fn message(&self) -> &str {
         match self {
             AdminSqlError::User(m) | AdminSqlError::Internal(m) => m,
         }
@@ -56,7 +56,7 @@ impl AdminSqlError {
 
     /// Whether this is a server-side failure (HTTP 500) rather than a caller
     /// SQL error (HTTP 422).
-    pub fn is_internal(&self) -> bool {
+    pub(crate) fn is_internal(&self) -> bool {
         matches!(self, AdminSqlError::Internal(_))
     }
 }
@@ -64,7 +64,7 @@ impl AdminSqlError {
 /// Clamp a caller-supplied row limit into `1..=MAX_RECORD_TRANSFER_COUNT`. The
 /// admin endpoints (`admin sql` SELECTs and the audit-log listing) use the same
 /// row cap (100,000) as the standard list endpoints.
-pub fn clamp_limit(limit: Option<i64>) -> usize {
+pub(crate) fn clamp_limit(limit: Option<i64>) -> usize {
     match limit {
         Some(n) if n > 0 => n.min(MAX_RECORD_TRANSFER_COUNT) as usize,
         _ => MAX_RECORD_TRANSFER_COUNT as usize,
@@ -104,7 +104,11 @@ pub fn clamp_limit(limit: Option<i64>) -> usize {
 /// full SQL parser: a `WHERE` inside a subquery can satisfy the guard.
 ///
 /// Returns `Err(message)` describing a 422-class rejection.
-pub fn validate_statement(sql: &str, is_write: bool, allow_full_table: bool) -> Result<(), String> {
+pub(crate) fn validate_statement(
+    sql: &str,
+    is_write: bool,
+    allow_full_table: bool,
+) -> Result<(), String> {
     if sql.trim().is_empty() {
         return Err("SQL statement is empty".to_string());
     }
@@ -315,7 +319,7 @@ fn depth0_keywords(upper: &str) -> Vec<&str> {
 /// `query_only` are server-side failures ([`Internal`](AdminSqlError::Internal),
 /// 500); a statement that fails to run is the caller's fault
 /// ([`User`](AdminSqlError::User), 422).
-pub async fn execute_read_only(
+pub(crate) async fn execute_read_only(
     pool: &SqlitePool,
     sql: &str,
     limit: usize,
@@ -414,9 +418,9 @@ fn dedupe_columns(raw: Vec<String>) -> Vec<String> {
 }
 
 /// Attribution recorded alongside a committing write in `admin_audit_log`.
-pub struct AuditContext<'a> {
-    pub user_name: &'a str,
-    pub allow_full_table: bool,
+pub(crate) struct AuditContext<'a> {
+    pub(crate) user_name: &'a str,
+    pub(crate) allow_full_table: bool,
 }
 
 /// Execute a write statement inside a transaction.
@@ -439,7 +443,7 @@ pub struct AuditContext<'a> {
 /// caller's fault ([`User`](AdminSqlError::User), 422); transaction begin/commit,
 /// rollback, and the atomic audit insert are server-side failures
 /// ([`Internal`](AdminSqlError::Internal), 500).
-pub async fn execute_write(
+pub(crate) async fn execute_write(
     pool: &SqlitePool,
     sql: &str,
     dry_run: bool,
@@ -499,7 +503,7 @@ pub async fn execute_write(
 /// [`execute_write`] instead. Read-only queries and dry-run previews are not
 /// audited.
 #[allow(clippy::too_many_arguments)]
-pub async fn record_audit(
+pub(crate) async fn record_audit(
     pool: &SqlitePool,
     user_name: &str,
     sql: &str,
@@ -566,7 +570,7 @@ where
 /// Reads run on the shared pool: the audit log is append-only and admin-only, so
 /// no read-only connection is needed here. Returns the page of typed entries and
 /// the unpaginated total for pagination metadata.
-pub async fn list_audit_log(
+pub(crate) async fn list_audit_log(
     pool: &SqlitePool,
     offset: i64,
     limit: i64,

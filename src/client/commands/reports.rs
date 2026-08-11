@@ -59,7 +59,7 @@ struct ResourceUtilizationRow {
     over_utilization: String,
 }
 
-pub fn check_resource_utilization(
+pub(crate) fn check_resource_utilization(
     config: &Configuration,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
@@ -201,7 +201,7 @@ pub fn build_resource_utilization_report(
     )
 }
 
-pub fn build_resource_utilization_report_with_all(
+fn build_resource_utilization_report_with_all(
     config: &Configuration,
     workflow_id: Option<i64>,
     run_id: Option<i64>,
@@ -585,7 +585,7 @@ fn check_log_file_exists(path: &str, log_type: &str, job_id: i64) {
 }
 
 /// Generate comprehensive JSON report of job results including log file paths
-pub fn generate_results_report(
+pub(crate) fn generate_results_report(
     config: &Configuration,
     workflow_id: Option<i64>,
     output_dir: &Path,
@@ -617,7 +617,7 @@ pub fn generate_results_report(
     print_json(&report, "results report");
 }
 
-pub fn build_results_report(
+pub(crate) fn build_results_report(
     config: &Configuration,
     workflow_id: Option<i64>,
     output_dir: &Path,
@@ -969,7 +969,7 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
 /// This function reshapes the typed response into the JSON value consumed by
 /// `generate_summary` and the MCP tools, adding the human-readable
 /// `*_formatted` presentation fields.
-pub fn build_workflow_summary_report(
+pub(crate) fn build_workflow_summary_report(
     config: &Configuration,
     workflow_id: Option<i64>,
 ) -> Result<serde_json::Value, String> {

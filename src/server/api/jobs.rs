@@ -228,7 +228,7 @@ pub trait JobsApi<C> {
 /// Implementation of jobs API for the server
 #[derive(Clone)]
 pub struct JobsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const JOB_COLUMNS: &[&str] = &[
@@ -270,7 +270,7 @@ fn vec_id_set_changed<T: Ord + Clone>(
 }
 
 impl JobsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 
@@ -809,7 +809,7 @@ impl JobsApiImpl {
     /// - depends_on_job_ids
     ///
     /// The hash is used to detect if job inputs have changed, requiring re-execution.
-    pub async fn compute_job_input_hash(&self, job_id: i64) -> Result<String, ApiError> {
+    async fn compute_job_input_hash(&self, job_id: i64) -> Result<String, ApiError> {
         // Get the job with all relationships
         let job = self.get_job_with_relationships(job_id).await?;
 
@@ -887,7 +887,7 @@ impl JobsApiImpl {
     /// Store job input hash in job_internal table
     ///
     /// Uses INSERT ON CONFLICT to upsert - will insert new record or update existing one.
-    pub async fn store_job_input_hash(&self, job_id: i64, hash: &str) -> Result<(), ApiError> {
+    async fn store_job_input_hash(&self, job_id: i64, hash: &str) -> Result<(), ApiError> {
         match sqlx::query!(
             r#"
             INSERT INTO job_internal (job_id, input_hash)
@@ -916,7 +916,7 @@ impl JobsApiImpl {
     /// This is much more efficient than calling `compute_job_input_hash` per job because it
     /// fetches all relationship data in a small number of bulk queries instead of 7+ queries
     /// per job. For a workflow with 100K jobs, this reduces ~700K sequential queries to ~7.
-    pub async fn compute_and_store_all_input_hashes(
+    pub(crate) async fn compute_and_store_all_input_hashes(
         &self,
         workflow_id: i64,
     ) -> Result<(), ApiError> {
@@ -1201,7 +1201,7 @@ impl JobsApiImpl {
     /// Get stored job input hash from job_internal table
     ///
     /// Returns None if no hash has been stored for this job yet.
-    pub async fn get_stored_job_input_hash(&self, job_id: i64) -> Result<Option<String>, ApiError> {
+    async fn get_stored_job_input_hash(&self, job_id: i64) -> Result<Option<String>, ApiError> {
         match sqlx::query!(
             r#"
             SELECT input_hash

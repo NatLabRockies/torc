@@ -12,7 +12,7 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 
 /// The current version of this binary, set at compile time.
-pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The API version that this client expects from the server.
 ///
@@ -23,15 +23,15 @@ pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const CLIENT_API_VERSION: &str = crate::api_version::HTTP_API_VERSION;
 
 /// The git commit hash of this binary, set at compile time via build.rs.
-pub const GIT_HASH: &str = env!("GIT_HASH");
+pub(crate) const GIT_HASH: &str = env!("GIT_HASH");
 
 /// Returns the full version string including git hash (e.g., "0.8.0 (abc1234)")
-pub fn full_version() -> String {
+pub(crate) fn full_version() -> String {
     format!("{} ({})", CLIENT_VERSION, GIT_HASH)
 }
 
 /// Returns just the version with git hash suffix (e.g., "0.8.0-abc1234")
-pub fn version_with_hash() -> String {
+fn version_with_hash() -> String {
     format!("{}-{}", CLIENT_VERSION, GIT_HASH)
 }
 
@@ -73,7 +73,7 @@ pub struct ServerInfo {
 #[derive(Debug, Clone)]
 pub struct VersionCheckResult {
     /// The client binary version.
-    pub client_version: String,
+    client_version: String,
     /// The server binary version (if successfully retrieved).
     pub server_version: Option<String>,
     /// The client API version.
@@ -88,7 +88,7 @@ pub struct VersionCheckResult {
 
 impl VersionCheckResult {
     /// Creates a new result for when the server couldn't be reached.
-    pub fn server_unreachable() -> Self {
+    fn server_unreachable() -> Self {
         Self {
             client_version: CLIENT_VERSION.to_string(),
             server_version: None,
@@ -279,7 +279,7 @@ fn format_legacy_version_message(
 }
 
 /// Fetches server information from the /version endpoint.
-pub fn get_server_info(config: &Configuration) -> Option<ServerInfo> {
+fn get_server_info(config: &Configuration) -> Option<ServerInfo> {
     match apis::system_api::get_version(config) {
         Ok(value) => Some(ServerInfo {
             version: value.version,
@@ -291,7 +291,7 @@ pub fn get_server_info(config: &Configuration) -> Option<ServerInfo> {
 
 /// Fetches the server version string from the API.
 /// Returns the binary version for display purposes (e.g., in log messages).
-pub fn get_server_version(config: &Configuration) -> Option<String> {
+fn get_server_version(config: &Configuration) -> Option<String> {
     get_server_info(config).map(|info| info.version)
 }
 
@@ -320,7 +320,7 @@ pub fn print_version_warning(result: &VersionCheckResult) -> VersionMismatchSeve
 
 /// Checks the server version and prints appropriate warnings.
 /// Returns true if the version check passed (no major incompatibility).
-pub fn check_and_warn(config: &Configuration) -> bool {
+pub(crate) fn check_and_warn(config: &Configuration) -> bool {
     let result = check_version(config);
     let severity = print_version_warning(&result);
     !severity.is_blocking()

@@ -9,7 +9,7 @@ use super::common::{HpcJobStats, HpcJobStatus, HpcType};
 use super::hpc_interface::HpcInterface;
 
 /// Manages HPC job submission and monitoring
-pub struct HpcManager {
+pub(crate) struct HpcManager {
     output: String,
     config: HashMap<String, String>,
     hpc_type: HpcType,
@@ -23,7 +23,7 @@ impl HpcManager {
     /// * `config` - Configuration parameters for the HPC scheduler
     /// * `hpc_type` - Type of HPC scheduler (Slurm, PBS, etc.)
     /// * `output` - Directory path for job output files
-    pub fn new(config: HashMap<String, String>, hpc_type: HpcType, output: String) -> Result<Self> {
+    fn new(config: HashMap<String, String>, hpc_type: HpcType, output: String) -> Result<Self> {
         let interface = super::create_hpc_interface(hpc_type)?;
 
         trace!("Constructed HpcManager with output={}", output);
@@ -43,7 +43,7 @@ impl HpcManager {
     ///
     /// # Returns
     /// The return code from the cancellation command (0 = success)
-    pub fn cancel_job(&self, job_id: &str) -> Result<i32> {
+    fn cancel_job(&self, job_id: &str) -> Result<i32> {
         let ret = self.interface.cancel_job(job_id)?;
 
         if ret == 0 {
@@ -62,7 +62,7 @@ impl HpcManager {
     ///
     /// # Returns
     /// The current status of the job
-    pub fn get_status(&self, job_id: &str) -> Result<HpcJobStatus> {
+    fn get_status(&self, job_id: &str) -> Result<HpcJobStatus> {
         let info = self.interface.get_status(job_id)?;
         trace!("hpc_job_id={} status={:?}", job_id, info.status);
         Ok(info.status)
@@ -72,7 +72,7 @@ impl HpcManager {
     ///
     /// # Returns
     /// HashMap mapping job_id to HpcJobStatus
-    pub fn get_statuses(&self) -> Result<HashMap<String, HpcJobStatus>> {
+    fn get_statuses(&self) -> Result<HashMap<String, HpcJobStatus>> {
         self.interface.get_statuses()
     }
 
@@ -83,7 +83,7 @@ impl HpcManager {
     ///
     /// # Returns
     /// HpcJobStats with detailed job information
-    pub fn get_job_stats(&self, job_id: &str) -> Result<HpcJobStats> {
+    fn get_job_stats(&self, job_id: &str) -> Result<HpcJobStats> {
         self.interface.get_job_stats(job_id)
     }
 
@@ -91,12 +91,12 @@ impl HpcManager {
     ///
     /// # Returns
     /// Path to local storage space
-    pub fn get_local_scratch(&self) -> Result<String> {
+    fn get_local_scratch(&self) -> Result<String> {
         self.interface.get_local_scratch()
     }
 
     /// Return the type of HPC management system
-    pub fn hpc_type(&self) -> HpcType {
+    fn hpc_type(&self) -> HpcType {
         self.hpc_type
     }
 
@@ -107,7 +107,7 @@ impl HpcManager {
     ///
     /// # Returns
     /// Vector of node hostnames in deterministic order
-    pub fn list_active_nodes(&self, job_id: &str) -> Result<Vec<String>> {
+    fn list_active_nodes(&self, job_id: &str) -> Result<Vec<String>> {
         self.interface.list_active_nodes(job_id)
     }
 
@@ -125,7 +125,7 @@ impl HpcManager {
     /// # Returns
     /// The HPC job ID
     #[allow(clippy::too_many_arguments)]
-    pub fn submit(
+    fn submit(
         &self,
         directory: &Path,
         name: &str,

@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(super) fn decode_path_segment(segment: &str) -> Option<String> {
+fn decode_path_segment(segment: &str) -> Option<String> {
     percent_encoding::percent_decode_str(segment)
         .decode_utf8()
         .ok()
@@ -75,7 +75,7 @@ pub(super) fn parse_workflow_failure_handlers_path(path: &str) -> Option<i64> {
 }
 
 #[cfg(test)]
-pub(super) fn parse_workflow_suffix_path(path: &str, suffix: &str) -> Option<i64> {
+fn parse_workflow_suffix_path(path: &str, suffix: &str) -> Option<i64> {
     strip_prefix_and_suffix(path, "/torc-service/v1/workflows/", suffix)?
         .parse::<i64>()
         .ok()

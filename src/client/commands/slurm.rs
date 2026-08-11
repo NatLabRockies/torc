@@ -994,7 +994,7 @@ pub fn generate_schedulers_for_workflow(
 pub struct GenerateResult {
     pub scheduler_count: usize,
     pub action_count: usize,
-    pub warnings: Vec<String>,
+    warnings: Vec<String>,
 }
 
 /// Parse memory string like "100g", "512m", "1024" (MB) into MB
@@ -2173,7 +2173,7 @@ fn serialized_slurm_job_name(workflow_id: i64, scheduler_id: i64) -> String {
 
 /// Result indicating success or failure
 #[allow(clippy::too_many_arguments)]
-pub fn schedule_slurm_nodes(
+pub(crate) fn schedule_slurm_nodes(
     config: &Configuration,
     workflow_id: i64,
     scheduler_config_id: i64,
@@ -2545,30 +2545,30 @@ pub fn create_compute_node(
 /// Known Slurm error patterns and their descriptions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlurmErrorPattern {
-    pub pattern: String,
-    pub description: String,
-    pub severity: String, // "error", "warning", "info"
+    pattern: String,
+    description: String,
+    severity: String, // "error", "warning", "info"
 }
 
 /// Information about a Torc job affected by a Slurm error
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AffectedJob {
-    pub job_id: i64,
-    pub job_name: String,
+    job_id: i64,
+    job_name: String,
 }
 
 /// A detected error in a Slurm log file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlurmLogError {
-    pub file: String,
-    pub slurm_job_id: String,
-    pub line_number: usize,
-    pub line: String,
-    pub pattern_description: String,
-    pub severity: String,
-    pub node: Option<String>,
+    file: String,
+    slurm_job_id: String,
+    line_number: usize,
+    line: String,
+    pattern_description: String,
+    severity: String,
+    node: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub affected_jobs: Option<Vec<AffectedJob>>,
+    affected_jobs: Option<Vec<AffectedJob>>,
 }
 
 /// Get known Slurm error patterns to search for
@@ -2937,7 +2937,7 @@ fn scan_file_for_slurm_errors(
 }
 
 /// Parse Slurm log files for known error messages
-pub fn parse_slurm_logs(
+fn parse_slurm_logs(
     config: &Configuration,
     workflow_id: i64,
     output_dir: &PathBuf,
@@ -3210,21 +3210,21 @@ pub fn parse_slurm_logs(
 #[derive(Tabled, Serialize, Deserialize, Clone)]
 pub struct SacctSummaryRow {
     #[tabled(rename = "Slurm Job")]
-    pub slurm_job_id: String,
+    slurm_job_id: String,
     #[tabled(rename = "Job Step")]
-    pub job_step: String,
+    job_step: String,
     #[tabled(rename = "State")]
-    pub state: String,
+    state: String,
     #[tabled(rename = "Exit Code")]
-    pub exit_code: String,
+    exit_code: String,
     #[tabled(rename = "Elapsed")]
-    pub elapsed: String,
+    elapsed: String,
     #[tabled(rename = "Max RSS")]
-    pub max_rss: String,
+    max_rss: String,
     #[tabled(rename = "CPU Time")]
-    pub cpu_time: String,
+    cpu_time: String,
     #[tabled(rename = "Nodes")]
-    pub nodes: String,
+    nodes: String,
 }
 
 /// Extract state string from various sacct JSON formats
@@ -3652,7 +3652,7 @@ fn fetch_sacct_for_workflow(
 }
 
 /// Run sacct for all scheduled compute nodes of type slurm and display summary
-pub fn run_sacct_for_workflow(
+fn run_sacct_for_workflow(
     config: &Configuration,
     workflow_id: i64,
     output_dir: &PathBuf,
@@ -3842,56 +3842,56 @@ struct SbatchEstimate {
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanAllocationsResult {
     /// Workflow analysis metrics
-    pub workflow_analysis: WorkflowAnalysisInfo,
+    workflow_analysis: WorkflowAnalysisInfo,
     /// Cluster state per partition
-    pub cluster_state: Vec<ClusterStateInfo>,
+    cluster_state: Vec<ClusterStateInfo>,
     /// Allocation recommendations per resource group
-    pub recommendations: Vec<AllocationRecommendation>,
+    recommendations: Vec<AllocationRecommendation>,
     /// Warnings from the scheduler plan generation
-    pub warnings: Vec<String>,
+    warnings: Vec<String>,
     /// Scheduler plan details per resource group
-    pub resource_groups: Vec<ResourceGroupInfo>,
+    resource_groups: Vec<ResourceGroupInfo>,
     /// Profile name used for the analysis
-    pub profile_name: String,
+    profile_name: String,
     /// Profile display name
-    pub profile_display_name: String,
+    profile_display_name: String,
     /// Resolved account name
-    pub account: String,
+    account: String,
 }
 
 /// Workflow analysis metrics
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowAnalysisInfo {
-    pub total_jobs: usize,
-    pub total_instances: usize,
-    pub dependency_depth: usize,
-    pub max_parallelism: usize,
-    pub max_parallelism_level: usize,
-    pub resource_groups: usize,
+    total_jobs: usize,
+    total_instances: usize,
+    dependency_depth: usize,
+    max_parallelism: usize,
+    max_parallelism_level: usize,
+    resource_groups: usize,
 }
 
 /// Cluster state for a single partition
 #[derive(Debug, Clone, Serialize)]
 pub struct ClusterStateInfo {
-    pub partition: String,
-    pub idle: u32,
-    pub mixed: u32,
-    pub allocated: u32,
-    pub down: u32,
-    pub total: u32,
-    pub pending_jobs: u32,
-    pub pending_nodes: u32,
-    pub running_jobs: u32,
+    partition: String,
+    idle: u32,
+    mixed: u32,
+    allocated: u32,
+    down: u32,
+    total: u32,
+    pending_jobs: u32,
+    pending_nodes: u32,
+    running_jobs: u32,
 }
 
 /// Resource group information from the scheduler plan
 #[derive(Debug, Clone, Serialize)]
 pub struct ResourceGroupInfo {
-    pub name: String,
-    pub partition: Option<String>,
-    pub job_count: usize,
-    pub walltime: String,
-    pub ideal_nodes: i64,
+    name: String,
+    partition: Option<String>,
+    job_count: usize,
+    walltime: String,
+    ideal_nodes: i64,
 }
 
 /// Allocation strategy recommendation
@@ -4224,7 +4224,7 @@ fn compute_recommendations(
 /// This is the core logic for `plan-allocations`, separated from CLI I/O so it can
 /// be used by both the CLI and MCP tool.
 #[allow(clippy::too_many_arguments)]
-pub fn analyze_plan_allocations(
+pub(crate) fn analyze_plan_allocations(
     spec: &mut WorkflowSpec,
     account: &str,
     partition: Option<&str>,
@@ -4949,62 +4949,62 @@ fn pretty_print_yaml(spec: &WorkflowSpec) -> String {
 /// Result of regenerating schedulers for an existing workflow
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegenerateResult {
-    pub workflow_id: i64,
-    pub pending_jobs: usize,
-    pub schedulers_created: Vec<SchedulerInfo>,
-    pub total_allocations: i64,
+    workflow_id: i64,
+    pending_jobs: usize,
+    schedulers_created: Vec<SchedulerInfo>,
+    total_allocations: i64,
     /// Number of allocations actually submitted immediately
-    pub allocations_submitted: i64,
+    allocations_submitted: i64,
     /// Number of allocations deferred (will be submitted via on_jobs_ready action)
-    pub allocations_deferred: i64,
-    pub warnings: Vec<String>,
-    pub submitted: bool,
+    allocations_deferred: i64,
+    warnings: Vec<String>,
+    submitted: bool,
 }
 
 /// Information about a planned scheduler (for dry run output)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlannedSchedulerInfo {
-    pub name: String,
-    pub account: String,
-    pub partition: Option<String>,
-    pub walltime: String,
-    pub mem: Option<String>,
-    pub nodes: i64,
-    pub num_allocations: i64,
-    pub job_count: usize,
-    pub job_names: Vec<String>,
-    pub has_dependencies: bool,
+    pub(crate) name: String,
+    pub(crate) account: String,
+    pub(crate) partition: Option<String>,
+    pub(crate) walltime: String,
+    pub(crate) mem: Option<String>,
+    pub(crate) nodes: i64,
+    pub(crate) num_allocations: i64,
+    pub(crate) job_count: usize,
+    pub(crate) job_names: Vec<String>,
+    pub(crate) has_dependencies: bool,
 }
 
 /// Dry run result for regenerate command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegenerateDryRunResult {
-    pub dry_run: bool,
-    pub workflow_id: i64,
-    pub pending_jobs: usize,
-    pub profile_name: String,
-    pub profile_display_name: String,
-    pub planned_schedulers: Vec<PlannedSchedulerInfo>,
-    pub total_allocations: i64,
-    pub would_submit: bool,
-    pub warnings: Vec<String>,
+    dry_run: bool,
+    workflow_id: i64,
+    pending_jobs: usize,
+    profile_name: String,
+    profile_display_name: String,
+    pub(crate) planned_schedulers: Vec<PlannedSchedulerInfo>,
+    pub(crate) total_allocations: i64,
+    pub(crate) would_submit: bool,
+    warnings: Vec<String>,
 }
 
 /// Information about a created scheduler
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SchedulerInfo {
-    pub id: i64,
-    pub name: String,
-    pub account: String,
-    pub partition: Option<String>,
-    pub walltime: String,
-    pub nodes: i64,
-    pub num_allocations: i64,
-    pub job_count: usize,
+    id: i64,
+    name: String,
+    account: String,
+    partition: Option<String>,
+    walltime: String,
+    nodes: i64,
+    num_allocations: i64,
+    job_count: usize,
     /// Whether the jobs using this scheduler have dependencies on other pending jobs.
     /// If true, allocations should not be submitted immediately - they will be
     /// submitted when the on_jobs_ready action fires.
-    pub has_dependencies: bool,
+    has_dependencies: bool,
 }
 
 /// Fire every pending `schedule_nodes` action for the workflow via `WorkflowManager::start` --

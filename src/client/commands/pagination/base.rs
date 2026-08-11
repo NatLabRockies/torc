@@ -40,9 +40,9 @@ pub trait PaginationParams {
 /// This wraps the API response with the essential pagination metadata.
 pub struct PaginatedResponse<T> {
     /// The items in this page (None if empty)
-    pub items: Vec<T>,
+    pub(crate) items: Vec<T>,
     /// Whether there are more pages available
-    pub has_more: bool,
+    pub(crate) has_more: bool,
 }
 
 /// Trait for types that can be paginated.
@@ -92,7 +92,7 @@ impl<T: Paginatable> PaginatedIterator<T> {
     /// * `config` - API configuration
     /// * `params` - Resource-specific parameters
     /// * `initial_limit` - Page size for each API call (default: MAX_RECORD_TRANSFER_COUNT)
-    pub fn new(
+    pub(crate) fn new(
         config: apis::configuration::Configuration,
         params: T::Params,
         initial_limit: Option<i64>,
@@ -164,7 +164,7 @@ impl<T: Paginatable> Iterator for PaginatedIterator<T> {
 /// Helper function to collect all paginated results into a Vec.
 ///
 /// This is a convenience function for when you need all results at once.
-pub fn paginate<T: Paginatable>(
+fn paginate<T: Paginatable>(
     config: &apis::configuration::Configuration,
     params: T::Params,
 ) -> Result<Vec<T>, apis::Error<T::ListError>> {

@@ -13,11 +13,8 @@ cd torc
 
 2. **Install Rust and dependencies:**
 
-Make sure you have Rust 1.85 or later installed:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+Make sure you have Rust 1.95 or later installed. Hawk requires its analysis to run with the exact
+compiler toolchain it was built against, currently Rust 1.97.1.
 
 3. **Install cargo-nextest:**
 
@@ -37,7 +34,15 @@ cargo install sqlx-cli --no-default-features --features sqlite
 cargo install cargo-release
 ```
 
-6. **Set up the database:**
+6. **Install Hawk:**
+
+```bash
+rustup toolchain install 1.97.1
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/astral-sh/hawk/releases/download/0.1.10/cargo-hawk-installer.sh | sh
+```
+
+7. **Set up the database:**
 
 ```bash
 # Create .env file
@@ -47,7 +52,7 @@ echo "DATABASE_URL=sqlite:torc.db" > .env
 sqlx migrate run --source torc-server/migrations
 ```
 
-7. **Build and test:**
+8. **Build and test:**
 
 ```bash
 cargo build
@@ -69,6 +74,9 @@ cargo clippy --all --all-targets --all-features -- -D warnings
 
 # Run all checks
 cargo fmt --check && cargo clippy --all --all-targets --all-features -- -D warnings
+
+# Check public APIs with Hawk (run with the pinned Hawk toolchain)
+cargo +1.97.1 hawk check -D warnings
 ```
 
 ### Adding Tests
@@ -121,6 +129,7 @@ git commit -m "Add feature: description"
 cargo nextest run --all-features
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo +1.97.1 hawk check -D warnings
 ```
 
 4. **Push to your fork:**

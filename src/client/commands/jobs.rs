@@ -1514,7 +1514,7 @@ pub fn create_jobs_from_file(
 }
 
 /// Get the current job count for a workflow
-pub fn get_current_job_count(
+fn get_current_job_count(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<i64, Box<dyn std::error::Error>> {
@@ -2166,7 +2166,7 @@ fn handle_reset_job_status(
 }
 
 /// Get existing job names to avoid duplicates
-pub fn get_existing_job_names(
+fn get_existing_job_names(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
