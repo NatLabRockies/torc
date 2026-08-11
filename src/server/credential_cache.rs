@@ -101,18 +101,6 @@ impl CredentialCache {
     pub(crate) fn clear(&self) {
         self.cache.write().clear();
     }
-
-    /// Get the number of entries in the cache (for debugging/monitoring).
-    #[allow(dead_code)]
-    pub fn len(&self) -> usize {
-        self.cache.read().len()
-    }
-
-    /// Check if the cache is empty.
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.cache.read().is_empty()
-    }
 }
 
 impl std::fmt::Debug for CredentialCache {
@@ -127,7 +115,6 @@ impl std::fmt::Debug for CredentialCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread::sleep;
 
     #[test]
     fn test_cache_hit() {
@@ -151,15 +138,13 @@ mod tests {
 
     #[test]
     fn test_cache_expiry() {
-        let cache = CredentialCache::new(Duration::from_millis(50));
+        let cache = CredentialCache::new(Duration::from_secs(60));
+        let key = CredentialCache::cache_key("user", "password");
 
         cache.cache_success("user", "password");
-        assert!(cache.is_cached("user", "password"));
+        cache.cache.write().get_mut(&key).unwrap().expires_at =
+            Instant::now() - Duration::from_secs(1);
 
-        // Wait for expiry
-        sleep(Duration::from_millis(100));
-
-        // Should no longer be cached
         assert!(!cache.is_cached("user", "password"));
     }
 
