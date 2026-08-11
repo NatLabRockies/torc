@@ -51,6 +51,81 @@ pub(crate) fn print_json_wrapped<T: Serialize>(items: &[T], type_name: &str) {
     print_json(&output, type_name);
 }
 
+/// Print a success response with workflow ID.
+///
+/// Output format: `{"workflow_id": N, "status": "success", "message": "..."}`
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to include
+/// * `message` - Success message to display
+pub fn print_success_response(workflow_id: i64, message: &str) {
+    let output = serde_json::json!({
+        "workflow_id": workflow_id,
+        "status": "success",
+        "message": message
+    });
+    // Success responses are simple and should never fail to serialize
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+}
+
+/// Print a success response with custom status and optional extra fields.
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to include
+/// * `status` - Status string (e.g., "success", "partial_success")
+/// * `message` - Message to display
+/// * `extra` - Optional additional JSON value to merge into response
+pub fn print_status_response(
+    workflow_id: i64,
+    status: &str,
+    message: &str,
+    extra: Option<serde_json::Value>,
+) {
+    let mut output = serde_json::json!({
+        "workflow_id": workflow_id,
+        "status": status,
+        "message": message
+    });
+    if let Some(extra_fields) = extra
+        && let Some(obj) = extra_fields.as_object()
+    {
+        for (key, value) in obj {
+            output[key] = value.clone();
+        }
+    }
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+}
+
+/// Print an error response to stderr.
+///
+/// Output format: `{"status": "error", "message": "...", ...}`
+///
+/// Note: This function does NOT exit. Call `std::process::exit(1)` after if needed.
+///
+/// # Arguments
+/// * `message` - Error message to display
+/// * `details` - Optional additional JSON value with error details
+pub fn print_error_json(message: &str, details: Option<serde_json::Value>) {
+    let mut output = serde_json::json!({
+        "status": "error",
+        "message": message
+    });
+    if let Some(d) = details {
+        output["details"] = d;
+    }
+    eprintln!("{}", serde_json::to_string_pretty(&output).unwrap());
+}
+
+/// Print an error response to stderr and exit with code 1.
+///
+/// # Arguments
+/// * `message` - Error message to display
+/// * `details` - Optional additional JSON value with error details
+pub fn print_error_json_and_exit(message: &str, details: Option<serde_json::Value>) -> ! {
+    print_error_json(message, details);
+    std::process::exit(1);
+}
+
 /// Conditionally print as JSON or return for table formatting.
 ///
 /// This is a helper for the common pattern where we check format and either

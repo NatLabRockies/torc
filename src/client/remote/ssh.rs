@@ -120,7 +120,7 @@ pub(crate) fn check_ssh_connectivity(worker: &WorkerEntry) -> Result<(), String>
 /// Get the torc version on a remote host.
 ///
 /// Returns the version string (e.g., "torc 0.7.0").
-fn get_remote_torc_version(worker: &WorkerEntry) -> Result<String, String> {
+pub(crate) fn get_remote_torc_version(worker: &WorkerEntry) -> Result<String, String> {
     debug!("Getting torc version from {}", worker.display_name());
 
     let output = ssh_execute_capture(worker, "torc --version")?;
@@ -136,7 +136,7 @@ fn parse_torc_version(version_str: &str) -> String {
 }
 
 /// Verify that a remote worker has the same torc version as local.
-fn verify_version(worker: &WorkerEntry, local_version: &str) -> Result<(), String> {
+pub(crate) fn verify_version(worker: &WorkerEntry, local_version: &str) -> Result<(), String> {
     let remote_version_str = get_remote_torc_version(worker)?;
     let remote_version = parse_torc_version(&remote_version_str);
 

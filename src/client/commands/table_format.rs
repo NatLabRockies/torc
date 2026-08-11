@@ -116,6 +116,19 @@ pub(crate) fn display_table<T: Tabled>(items: &[T]) {
     println!("{}", table);
 }
 
+/// Display a collection of items as a formatted table with a custom title
+pub fn display_table_with_title<T: Tabled>(items: &[T], title: &str) {
+    if items.is_empty() {
+        println!("{}", title);
+        return;
+    }
+
+    println!("{}", title);
+    let mut table = Table::new(items);
+    table.with(Style::rounded());
+    println!("{}", table);
+}
+
 /// Display a collection of items as a formatted table with a total count
 pub(crate) fn display_table_with_count<T: Tabled>(items: &[T], item_type: &str) {
     if items.is_empty() {

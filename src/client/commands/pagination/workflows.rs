@@ -57,8 +57,18 @@ impl WorkflowListParams {
         self
     }
 
+    fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
     pub(crate) fn with_user(mut self, user: String) -> Self {
         self.user = Some(user);
+        self
+    }
+
+    fn with_description(mut self, description: String) -> Self {
+        self.description = Some(description);
         self
     }
 

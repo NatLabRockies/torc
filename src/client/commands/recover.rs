@@ -128,6 +128,8 @@ pub struct RecoveryReport {
 #[derive(Debug)]
 pub struct SlurmLogInfo {
     slurm_job_id: Option<String>,
+    slurm_stdout: Option<String>,
+    slurm_stderr: Option<String>,
 }
 
 /// Whether unknown-cause failures should be retried.
@@ -1001,6 +1003,8 @@ fn correlate_slurm_logs(
                 result.job_id,
                 SlurmLogInfo {
                     slurm_job_id: result.slurm_job_id.clone(),
+                    slurm_stdout: result.slurm_stdout.clone(),
+                    slurm_stderr: result.slurm_stderr.clone(),
                 },
             );
         }

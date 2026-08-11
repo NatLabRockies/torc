@@ -27,6 +27,18 @@ impl WorkerEntry {
         }
     }
 
+    /// Set the user for this entry.
+    fn with_user(mut self, user: impl Into<String>) -> Self {
+        self.user = Some(user.into());
+        self
+    }
+
+    /// Set the port for this entry.
+    fn with_port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
     /// Returns the SSH target string: [user@]host
     pub(crate) fn ssh_target(&self) -> String {
         match &self.user {
@@ -122,6 +134,33 @@ mod tests {
         assert_eq!(entry.port, None);
         assert_eq!(entry.ssh_target(), "example.com");
         assert_eq!(entry.to_string(), "example.com");
+    }
+
+    #[test]
+    fn test_worker_entry_with_user() {
+        let entry = WorkerEntry::new("example.com").with_user("alice");
+        assert_eq!(entry.host, "example.com");
+        assert_eq!(entry.user, Some("alice".to_string()));
+        assert_eq!(entry.ssh_target(), "alice@example.com");
+        assert_eq!(entry.to_string(), "alice@example.com");
+    }
+
+    #[test]
+    fn test_worker_entry_with_port() {
+        let entry = WorkerEntry::new("example.com").with_port(2222);
+        assert_eq!(entry.host, "example.com");
+        assert_eq!(entry.port, Some(2222));
+        assert_eq!(entry.ssh_target(), "example.com");
+        assert_eq!(entry.to_string(), "example.com:2222");
+    }
+
+    #[test]
+    fn test_worker_entry_full() {
+        let entry = WorkerEntry::new("example.com")
+            .with_user("alice")
+            .with_port(2222);
+        assert_eq!(entry.ssh_target(), "alice@example.com");
+        assert_eq!(entry.to_string(), "alice@example.com:2222");
     }
 
     #[test]

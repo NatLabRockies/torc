@@ -87,6 +87,11 @@ impl JobListParams {
         self.active_compute_node_id = Some(id);
         self
     }
+
+    fn with_origin_is_set(mut self, origin_is_set: bool) -> Self {
+        self.origin_is_set = Some(origin_is_set);
+        self
+    }
 }
 
 impl PaginationParams for JobListParams {

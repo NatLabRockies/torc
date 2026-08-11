@@ -30,6 +30,11 @@ pub(crate) fn full_version() -> String {
     format!("{} ({})", CLIENT_VERSION, GIT_HASH)
 }
 
+/// Returns just the version with git hash suffix (e.g., "0.8.0-abc1234")
+fn version_with_hash() -> String {
+    format!("{}-{}", CLIENT_VERSION, GIT_HASH)
+}
+
 /// Severity level for API version mismatches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VersionMismatchSeverity {
@@ -67,6 +72,8 @@ pub struct ServerInfo {
 /// Result of an API version check operation.
 #[derive(Debug, Clone)]
 pub struct VersionCheckResult {
+    /// The client binary version.
+    client_version: String,
     /// The server binary version (if successfully retrieved).
     pub server_version: Option<String>,
     /// The client API version.
@@ -83,6 +90,7 @@ impl VersionCheckResult {
     /// Creates a new result for when the server couldn't be reached.
     fn server_unreachable() -> Self {
         Self {
+            client_version: CLIENT_VERSION.to_string(),
             server_version: None,
             client_api_version: CLIENT_API_VERSION.to_string(),
             server_api_version: None,
@@ -115,6 +123,7 @@ impl VersionCheckResult {
         };
 
         Self {
+            client_version: CLIENT_VERSION.to_string(),
             server_version: Some(server_info.version.clone()),
             client_api_version: CLIENT_API_VERSION.to_string(),
             server_api_version: server_info.api_version.clone(),
@@ -280,6 +289,12 @@ fn get_server_info(config: &Configuration) -> Option<ServerInfo> {
     }
 }
 
+/// Fetches the server version string from the API.
+/// Returns the binary version for display purposes (e.g., in log messages).
+fn get_server_version(config: &Configuration) -> Option<String> {
+    get_server_info(config).map(|info| info.version)
+}
+
 /// Performs an API version check between the client and server.
 pub fn check_version(config: &Configuration) -> VersionCheckResult {
     match get_server_info(config) {
@@ -301,4 +316,12 @@ pub fn print_version_warning(result: &VersionCheckResult) -> VersionMismatchSeve
         }
     }
     result.severity
+}
+
+/// Checks the server version and prints appropriate warnings.
+/// Returns true if the version check passed (no major incompatibility).
+pub(crate) fn check_and_warn(config: &Configuration) -> bool {
+    let result = check_version(config);
+    let severity = print_version_warning(&result);
+    !severity.is_blocking()
 }

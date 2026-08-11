@@ -3,7 +3,7 @@
 use crate::MAX_RECORD_TRANSFER_COUNT;
 use crate::models;
 use crate::server::authorization::{AccessCheckResult, AuthorizationService};
-use crate::server::event_broadcast::BroadcastEvent;
+use crate::server::event_broadcast::{BroadcastEvent, EventBroadcaster};
 use crate::server::htpasswd::HtpasswdFile;
 use crate::server::transport_types::auth_types::Authorization;
 use crate::server::transport_types::context_types::{Has, XSpanIdString};
@@ -411,6 +411,15 @@ impl<C> Server<C> {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(1);
         self.last_completion_time.store(now, Ordering::Release);
+    }
+
+    /// Get a reference to the event broadcaster for SSE subscriptions.
+    fn get_event_broadcaster(&self) -> &EventBroadcaster {
+        &self.event_broadcaster
+    }
+
+    fn shared_state(&self) -> Arc<LiveServerState> {
+        self.shared.clone()
     }
 
     fn now_ms() -> i64 {

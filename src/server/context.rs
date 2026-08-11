@@ -13,6 +13,20 @@ pub struct MakeAddContext<T, A> {
     marker: PhantomData<A>,
 }
 
+impl<T, A, B, C, D> MakeAddContext<T, A>
+where
+    A: Default + Push<XSpanIdString, Result = B>,
+    B: Push<Option<AuthData>, Result = C>,
+    C: Push<Option<Authorization>, Result = D>,
+{
+    fn new(inner: T) -> MakeAddContext<T, A> {
+        MakeAddContext {
+            inner,
+            marker: PhantomData,
+        }
+    }
+}
+
 // Make a service that adds context.
 impl<Target, T, A, B, C, D> Service<Target> for MakeAddContext<T, A>
 where

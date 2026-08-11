@@ -9,6 +9,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 /// Returns true when `name` is a valid POSIX-style environment variable name:
 /// starts with a letter or underscore, followed by letters, digits, or underscores.
@@ -1331,6 +1332,60 @@ pub struct ListSlurmStatsResponse {
     pub(crate) has_more: bool,
 }
 
+struct JobStatusMap;
+
+impl JobStatusMap {
+    fn enum_to_int_map() -> &'static HashMap<JobStatus, i32> {
+        static MAP: OnceLock<HashMap<JobStatus, i32>> = OnceLock::new();
+        MAP.get_or_init(|| {
+            let mut map = HashMap::new();
+            map.insert(JobStatus::Uninitialized, 0);
+            map.insert(JobStatus::Blocked, 1);
+            map.insert(JobStatus::Ready, 2);
+            map.insert(JobStatus::Pending, 3);
+            map.insert(JobStatus::Running, 4);
+            map.insert(JobStatus::Completed, 5);
+            map.insert(JobStatus::Failed, 6);
+            map.insert(JobStatus::Canceled, 7);
+            map.insert(JobStatus::Terminated, 8);
+            map.insert(JobStatus::Disabled, 9);
+            map.insert(JobStatus::PendingFailed, 10);
+            map
+        })
+    }
+
+    fn int_to_enum_map() -> &'static HashMap<i32, JobStatus> {
+        static MAP: OnceLock<HashMap<i32, JobStatus>> = OnceLock::new();
+        MAP.get_or_init(|| {
+            let mut map = HashMap::new();
+            map.insert(0, JobStatus::Uninitialized);
+            map.insert(1, JobStatus::Blocked);
+            map.insert(2, JobStatus::Ready);
+            map.insert(3, JobStatus::Pending);
+            map.insert(4, JobStatus::Running);
+            map.insert(5, JobStatus::Completed);
+            map.insert(6, JobStatus::Failed);
+            map.insert(7, JobStatus::Canceled);
+            map.insert(8, JobStatus::Terminated);
+            map.insert(9, JobStatus::Disabled);
+            map.insert(10, JobStatus::PendingFailed);
+            map
+        })
+    }
+
+    fn to_int(status: &JobStatus) -> i32 {
+        *Self::enum_to_int_map().get(status).unwrap_or(&-1)
+    }
+
+    fn from_int(value: i32) -> Option<JobStatus> {
+        Self::int_to_enum_map().get(&value).copied()
+    }
+
+    fn from_i64(value: i64) -> Option<JobStatus> {
+        Self::from_int(value as i32)
+    }
+}
+
 impl std::fmt::Display for EventSeverity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1353,6 +1408,12 @@ impl std::str::FromStr for EventSeverity {
             "error" => Ok(EventSeverity::Error),
             _ => Err(format!("Invalid severity level: {}", s)),
         }
+    }
+}
+
+impl CreateJobsResponse {
+    fn new() -> CreateJobsResponse {
+        CreateJobsResponse { jobs: None }
     }
 }
 
@@ -1391,6 +1452,17 @@ impl ComputeNodeModel {
             avg_cpu_percent: None,
             peak_memory_bytes: None,
             avg_memory_bytes: None,
+        }
+    }
+}
+
+impl ComputeNodeSchedule {
+    fn new(num_jobs: i64, scheduler_id: i64) -> ComputeNodeSchedule {
+        ComputeNodeSchedule {
+            max_parallel_jobs: None,
+            num_jobs,
+            scheduler_id,
+            start_one_worker_per_node: Some(false),
         }
     }
 }
@@ -1434,6 +1506,13 @@ impl EventModel {
             data,
         }
     }
+
+    fn timestamp_as_string(&self) -> String {
+        use chrono::{DateTime, Utc};
+        DateTime::from_timestamp_millis(self.timestamp)
+            .map(|dt: DateTime<Utc>| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
+            .unwrap_or_else(|| format!("{}ms", self.timestamp))
+    }
 }
 
 impl FileModel {
@@ -1459,6 +1538,25 @@ impl FailureHandlerModel {
     }
 }
 
+impl ListFailureHandlersResponse {
+    fn new(
+        offset: i64,
+        max_limit: i64,
+        count: i64,
+        total_count: i64,
+        has_more: bool,
+    ) -> ListFailureHandlersResponse {
+        ListFailureHandlersResponse {
+            items: vec![],
+            offset,
+            max_limit,
+            count,
+            total_count,
+            has_more,
+        }
+    }
+}
+
 impl RoCrateEntityModel {
     pub fn new(
         workflow_id: i64,
@@ -1473,6 +1571,54 @@ impl RoCrateEntityModel {
             entity_id,
             entity_type,
             metadata,
+        }
+    }
+}
+
+impl ListRoCrateEntitiesResponse {
+    fn new(
+        offset: i64,
+        max_limit: i64,
+        count: i64,
+        total_count: i64,
+        has_more: bool,
+    ) -> ListRoCrateEntitiesResponse {
+        ListRoCrateEntitiesResponse {
+            items: vec![],
+            offset,
+            max_limit,
+            count,
+            total_count,
+            has_more,
+        }
+    }
+}
+
+impl GetReadyJobRequirementsResponse {
+    fn new(
+        num_jobs: i64,
+        num_cpus: i64,
+        num_gpus: i64,
+        memory_gb: f64,
+        max_num_nodes: i64,
+        max_runtime: String,
+    ) -> GetReadyJobRequirementsResponse {
+        GetReadyJobRequirementsResponse {
+            num_jobs,
+            num_cpus,
+            num_gpus,
+            memory_gb,
+            max_num_nodes,
+            max_runtime,
+        }
+    }
+}
+
+impl IsCompleteResponse {
+    fn new(is_canceled: bool, is_complete: bool) -> IsCompleteResponse {
+        IsCompleteResponse {
+            is_canceled,
+            is_complete,
         }
     }
 }
@@ -1615,9 +1761,21 @@ impl FilesModel {
     }
 }
 
+impl CreateFilesResponse {
+    fn new() -> CreateFilesResponse {
+        CreateFilesResponse { files: None }
+    }
+}
+
 impl UserDataListModel {
     pub(crate) fn new(user_data: Vec<UserDataModel>) -> UserDataListModel {
         UserDataListModel { user_data }
+    }
+}
+
+impl CreateUserDataListResponse {
+    fn new() -> CreateUserDataListResponse {
+        CreateUserDataListResponse { user_data: None }
     }
 }
 
@@ -1659,6 +1817,55 @@ empty_list_response_new!(ListJobDependenciesResponse);
 empty_list_response_new!(ListJobFileRelationshipsResponse);
 empty_list_response_new!(ListJobUserDataRelationshipsResponse);
 empty_list_response_new!(ListSlurmStatsResponse);
+
+impl ListMissingUserDataResponse {
+    fn new() -> ListMissingUserDataResponse {
+        ListMissingUserDataResponse {
+            user_data: Vec::new(),
+        }
+    }
+}
+
+impl ListRequiredExistingFilesResponse {
+    fn new() -> ListRequiredExistingFilesResponse {
+        ListRequiredExistingFilesResponse { files: Vec::new() }
+    }
+}
+
+impl LocalSchedulerModel {
+    fn new(workflow_id: i64) -> LocalSchedulerModel {
+        LocalSchedulerModel {
+            id: None,
+            workflow_id,
+            name: Some("default".to_string()),
+            memory: None,
+            num_cpus: None,
+        }
+    }
+}
+
+impl ClaimJobsBasedOnResources {
+    fn new() -> ClaimJobsBasedOnResources {
+        ClaimJobsBasedOnResources {
+            jobs: None,
+            reason: None,
+        }
+    }
+}
+
+impl ClaimNextJobsResponse {
+    fn new() -> ClaimNextJobsResponse {
+        ClaimNextJobsResponse { jobs: None }
+    }
+}
+
+impl ProcessChangedJobInputsResponse {
+    fn new() -> ProcessChangedJobInputsResponse {
+        ProcessChangedJobInputsResponse {
+            reinitialized_jobs: vec![],
+        }
+    }
+}
 
 impl ResourceRequirementsModel {
     pub fn new(workflow_id: i64, name: String) -> ResourceRequirementsModel {
@@ -1726,6 +1933,27 @@ impl ScheduledComputeNodesModel {
     }
 }
 
+impl SlurmSchedulerModel {
+    fn new(workflow_id: i64, account: String, nodes: i64, walltime: String) -> SlurmSchedulerModel {
+        SlurmSchedulerModel {
+            id: None,
+            workflow_id,
+            name: None,
+            account,
+            gres: None,
+            mem: None,
+            nodes,
+            ntasks_per_node: None,
+            partition: None,
+            qos: Some("normal".to_string()),
+            tmp: None,
+            walltime,
+            extra: None,
+            serialize_allocations: None,
+        }
+    }
+}
+
 impl UserDataModel {
     pub fn new(workflow_id: i64, name: String) -> UserDataModel {
         UserDataModel {
@@ -1769,6 +1997,87 @@ impl WorkflowModel {
     }
 }
 
+impl JobDependencyModel {
+    fn new(
+        job_id: i64,
+        job_name: String,
+        depends_on_job_id: i64,
+        depends_on_job_name: String,
+        workflow_id: i64,
+    ) -> JobDependencyModel {
+        JobDependencyModel {
+            job_id,
+            job_name,
+            depends_on_job_id,
+            depends_on_job_name,
+            workflow_id,
+        }
+    }
+}
+
+impl JobFileRelationshipModel {
+    fn new(
+        file_id: i64,
+        file_name: String,
+        file_path: String,
+        workflow_id: i64,
+    ) -> JobFileRelationshipModel {
+        JobFileRelationshipModel {
+            file_id,
+            file_name,
+            file_path,
+            producer_job_id: None,
+            producer_job_name: None,
+            consumer_job_id: None,
+            consumer_job_name: None,
+            workflow_id,
+        }
+    }
+}
+
+impl JobUserDataRelationshipModel {
+    fn new(
+        user_data_id: i64,
+        user_data_name: String,
+        workflow_id: i64,
+    ) -> JobUserDataRelationshipModel {
+        JobUserDataRelationshipModel {
+            user_data_id,
+            user_data_name,
+            producer_job_id: None,
+            producer_job_name: None,
+            consumer_job_id: None,
+            consumer_job_name: None,
+            workflow_id,
+        }
+    }
+}
+
+impl WorkflowActionModel {
+    fn new(
+        workflow_id: i64,
+        trigger_type: String,
+        action_type: String,
+        action_config: serde_json::Value,
+    ) -> WorkflowActionModel {
+        WorkflowActionModel {
+            id: None,
+            workflow_id,
+            trigger_type,
+            action_type,
+            action_config,
+            job_ids: None,
+            trigger_count: 0,
+            required_triggers: 1,
+            executed: false,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: false,
+        }
+    }
+}
+
 impl RemoteWorkerModel {
     pub(crate) fn new(worker: String, workflow_id: i64) -> RemoteWorkerModel {
         RemoteWorkerModel {
@@ -1807,12 +2116,56 @@ impl DeleteCountResponse {
     }
 }
 
+impl VersionResponse {
+    fn is_object(&self) -> bool {
+        true
+    }
+
+    fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "version" => Some(Value::from(self.version.clone())),
+            "api_version" => Some(Value::from(self.api_version.clone())),
+            "git_hash" => self.git_hash.clone().map(Value::from),
+            _ => None,
+        }
+    }
+
+    fn as_str(&self) -> Option<&str> {
+        Some(self.version.as_str())
+    }
+}
+
+impl ClaimActionResponse {
+    fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "claimed" => Some(Value::from(self.success)),
+            "success" => Some(Value::from(self.success)),
+            "action_id" => Some(Value::from(self.action_id)),
+            _ => None,
+        }
+    }
+}
+
+impl ReloadAuthResponse {
+    fn get(&self, key: &str) -> Option<Value> {
+        match key {
+            "message" => Some(Value::from(self.message.clone())),
+            "user_count" => Some(Value::from(self.user_count)),
+            _ => None,
+        }
+    }
+}
+
 impl IsUninitializedResponse {
     pub fn get(&self, key: &str) -> Option<Value> {
         match key {
             "is_uninitialized" => Some(Value::from(self.is_uninitialized)),
             _ => None,
         }
+    }
+
+    fn as_bool(&self) -> Option<bool> {
+        Some(self.is_uninitialized)
     }
 }
 
@@ -1841,6 +2194,16 @@ impl UserGroupMembershipModel {
             user_name,
             group_id,
             role: "member".to_string(),
+            created_at: None,
+        }
+    }
+}
+
+impl WorkflowAccessGroupModel {
+    fn new(workflow_id: i64, group_id: i64) -> WorkflowAccessGroupModel {
+        WorkflowAccessGroupModel {
+            workflow_id,
+            group_id,
             created_at: None,
         }
     }

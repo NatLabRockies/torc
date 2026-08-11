@@ -55,6 +55,11 @@ impl ComputeNodeListParams {
         self
     }
 
+    fn with_hostname(mut self, hostname: String) -> Self {
+        self.hostname = Some(hostname);
+        self
+    }
+
     pub(crate) fn with_is_active(mut self, is_active: bool) -> Self {
         self.is_active = Some(is_active);
         self

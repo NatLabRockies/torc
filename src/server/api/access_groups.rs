@@ -118,6 +118,23 @@ impl AccessGroupsApiImpl {
         Self { context }
     }
 
+    /// Get all group IDs that a user belongs to
+    async fn get_user_group_ids(&self, user_name: &str) -> Result<Vec<i64>, ApiError> {
+        let records =
+            match sqlx::query("SELECT group_id FROM user_group_membership WHERE user_name = $1")
+                .bind(user_name)
+                .fetch_all(self.context.pool.as_ref())
+                .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    return Err(database_error_with_msg(e, "Failed to get user groups"));
+                }
+            };
+
+        Ok(records.into_iter().map(|row| row.get("group_id")).collect())
+    }
+
     /// Check if user can access workflow (used internally by other APIs)
     async fn check_workflow_access_internal(
         &self,

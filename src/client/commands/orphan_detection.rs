@@ -28,7 +28,7 @@ use crate::models;
 /// - Negative, clearly distinguishing it from normal exit codes
 /// - Related to signal convention (128 is the base for signal exits)
 /// - Easy to identify in logs and results
-const ORPHANED_JOB_RETURN_CODE: i64 = -128;
+pub(crate) const ORPHANED_JOB_RETURN_CODE: i64 = -128;
 
 /// Result of orphan cleanup operation
 #[derive(Debug, Clone, Serialize)]

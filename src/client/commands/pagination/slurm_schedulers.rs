@@ -22,6 +22,24 @@ pub struct SlurmSchedulersListParams {
     pub(crate) sort_by: Option<String>,
     /// Reverse sort order
     pub(crate) reverse_sort: Option<bool>,
+    /// Filter by name
+    pub(crate) name: Option<String>,
+    /// Filter by account
+    pub(crate) account: Option<String>,
+    /// Filter by gres
+    pub(crate) gres: Option<String>,
+    /// Filter by mem
+    pub(crate) mem: Option<String>,
+    /// Filter by nodes
+    pub(crate) nodes: Option<i64>,
+    /// Filter by partition
+    pub(crate) partition: Option<String>,
+    /// Filter by qos
+    pub(crate) qos: Option<String>,
+    /// Filter by tmp
+    pub(crate) tmp: Option<String>,
+    /// Filter by walltime
+    pub(crate) walltime: Option<String>,
 }
 
 impl SlurmSchedulersListParams {
@@ -36,6 +54,31 @@ impl SlurmSchedulersListParams {
 
     pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
+        self
+    }
+
+    fn with_sort_by(mut self, sort_by: String) -> Self {
+        self.sort_by = Some(sort_by);
+        self
+    }
+
+    fn with_reverse_sort(mut self, reverse: bool) -> Self {
+        self.reverse_sort = Some(reverse);
+        self
+    }
+
+    fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    fn with_account(mut self, account: String) -> Self {
+        self.account = Some(account);
+        self
+    }
+
+    fn with_partition(mut self, partition: String) -> Self {
+        self.partition = Some(partition);
         self
     }
 }

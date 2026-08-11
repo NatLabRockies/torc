@@ -996,6 +996,18 @@ impl JobRunner {
         self.termination_requested.load(Ordering::SeqCst)
     }
 
+    /// Requests termination programmatically.
+    ///
+    /// This method sets the termination flag, causing the JobRunner to initiate
+    /// graceful shutdown on its next iteration. This is an alternative to setting
+    /// the flag via the `Arc<AtomicBool>` returned by [`get_termination_flag()`].
+    ///
+    /// Typically, termination is triggered by a signal handler, but this method
+    /// allows programmatic termination for testing or other use cases.
+    fn request_termination(&self) {
+        self.termination_requested.store(true, Ordering::SeqCst);
+    }
+
     pub fn run_worker(&mut self) -> Result<WorkerResult, Box<dyn std::error::Error>> {
         use crate::client::version_check;
 

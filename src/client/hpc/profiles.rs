@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use std::time::Duration;
 
 /// How to detect if we're running on a particular HPC system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -116,6 +117,11 @@ pub struct HpcPartition {
 }
 
 impl HpcPartition {
+    /// Get the maximum wall time as a Duration
+    fn max_walltime(&self) -> Duration {
+        Duration::from_secs(self.max_walltime_secs)
+    }
+
     /// Format wall time as HH:MM:SS string
     pub fn max_walltime_str(&self) -> String {
         let secs = self.max_walltime_secs;
@@ -341,6 +347,22 @@ impl HpcProfile {
             .min_by_key(|p| (p.memory_mb, p.max_walltime_secs))
             .copied()
     }
+
+    /// Get all GPU partitions
+    fn gpu_partitions(&self) -> Vec<&HpcPartition> {
+        self.partitions
+            .iter()
+            .filter(|p| p.gpus_per_node.is_some())
+            .collect()
+    }
+
+    /// Get all CPU-only partitions
+    fn cpu_partitions(&self) -> Vec<&HpcPartition> {
+        self.partitions
+            .iter()
+            .filter(|p| p.gpus_per_node.is_none())
+            .collect()
+    }
 }
 
 /// Registry of known HPC profiles
@@ -395,5 +417,10 @@ impl HpcProfileRegistry {
 
         // Fall back to dynamic Slurm detection if no other profile matches
         super::slurm::detect_slurm_profile()
+    }
+
+    /// Get profile names
+    fn names(&self) -> Vec<&str> {
+        self.profiles.iter().map(|p| p.name.as_str()).collect()
     }
 }

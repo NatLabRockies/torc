@@ -356,6 +356,32 @@ macro_rules! paginated_list_response {
     }};
 }
 
+/// Common pagination response structure
+#[derive(Debug)]
+pub struct PaginationInfo {
+    offset: i64,
+    limit: Option<i64>,
+    total_count: i64,
+}
+
+impl PaginationInfo {
+    fn new(offset: Option<i64>, limit: Option<i64>, total_count: i64) -> Self {
+        Self {
+            offset: offset.unwrap_or(0),
+            limit,
+            total_count,
+        }
+    }
+
+    fn has_more(&self) -> bool {
+        if let Some(limit) = self.limit {
+            self.offset + limit < self.total_count
+        } else {
+            false
+        }
+    }
+}
+
 // Re-export submodules
 pub mod access_groups;
 pub mod admin;
@@ -376,7 +402,7 @@ pub mod workflow_actions;
 pub mod workflows;
 
 // Re-export API traits and implementations
-pub(crate) use access_groups::AccessGroupsApiImpl;
+pub(crate) use access_groups::{AccessGroupsApi, AccessGroupsApiImpl};
 pub(crate) use compute_nodes::{ComputeNodesApi, ComputeNodesApiImpl};
 pub(crate) use events::{EventsApi, EventsApiImpl};
 pub(crate) use failure_handlers::{FailureHandlersApi, FailureHandlersApiImpl};
