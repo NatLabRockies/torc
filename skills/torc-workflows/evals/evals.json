@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "local_run_exit_status",
+      "prompt": "My CI script runs `torc run workflow.yaml` and it always passes even when jobs fail. Why?",
+      "assertions": [
+        "states that torc run exits 0 even when jobs failed",
+        "recommends checking torc status or torc results list --failed",
+        "notes that torc exec exits non-zero on job failure"
+      ]
+    },
+    {
+      "name": "slurm_submission_path",
+      "prompt": "My workflow has resource_requirements but torc submit says it has no schedule_nodes action. What do I do?",
+      "assertions": [
+        "explains that torc submit requires a schedule_nodes action",
+        "uses torc slurm generate to produce an augmented spec",
+        "submits the generated spec rather than the original file",
+        "validates with torc create --dry-run before submitting"
+      ]
+    },
+    {
+      "name": "spec_env_semantics",
+      "prompt": "In my Torc spec, env: OUTDIR: \"$(date +%F)\" is passed to jobs literally instead of expanding. Fix it.",
+      "assertions": [
+        "states that workflow and job env values are literal strings and are not shell-evaluated",
+        "moves the dynamic value into the job command or an invocation_script",
+        "does not claim a shell option makes env values expand"
+      ]
+    },
+    {
+      "name": "partial_rerun_choice",
+      "prompt": "Workflow 42 finished with 3 failed jobs out of 500 on Slurm. Rerun only those without redoing everything.",
+      "assertions": [
+        "chooses a targeted reset such as torc jobs reset-status or torc recover rather than a full workflow reset",
+        "uses --dry-run before applying changes",
+        "explains that downstream dependents are reset by torc workflows reinit",
+        "resubmits with torc submit after the reset"
+      ]
+    },
+    {
+      "name": "sweep_preflight",
+      "prompt": "I widened a Torc parameter range and want to be sure I am not about to create 50,000 jobs.",
+      "assertions": [
+        "runs torc create --dry-run to see the expanded counts",
+        "notes that dry-run needs no server and exits non-zero on validation failure",
+        "checks the expanded job count before creating the workflow"
+      ]
+    }
+  ]
+}

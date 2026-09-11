@@ -69,6 +69,7 @@ torc/
 ├── python_client/
 │   ├── src/torc/
 │   └── pyproject.toml
+├── skills/
 └── examples/
 ```
 
@@ -79,6 +80,8 @@ torc/
 - Workflow manager and job runner live in `src/client/`
 - Resource management and job execution live in `src/client/job_runner.rs`
 - API client integration patterns live in `src/client/apis/`
+- Agent Skills for using and developing Torc live in `skills/` (see `skills/README.md`); keep them
+  current when CLI behavior, configuration, or repository workflows change
 
 ## Useful Commands
 

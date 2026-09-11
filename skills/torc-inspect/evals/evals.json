@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "json_parsing_shape",
+      "prompt": "My script runs `torc -f json jobs list` and jq fails with a parse error. Fix it.",
+      "assertions": [
+        "identifies that the omitted workflow ID makes the CLI print a selection table on stdout",
+        "passes the workflow ID explicitly",
+        "notes that list commands return an object with an items array"
+      ]
+    },
+    {
+      "name": "results_versus_jobs",
+      "prompt": "torc jobs list shows job 12 as ready, but torc results list shows it failed. Which is right?",
+      "assertions": [
+        "explains that jobs list is current state and results list is per-execution history",
+        "notes that results list shows only the latest run unless --all-runs is passed",
+        "explains that run_id increments on torc workflows reinit"
+      ]
+    },
+    {
+      "name": "completion_wait_loop",
+      "prompt": "Write a shell loop that waits for Torc workflow 42 and fails the script if any job failed.",
+      "assertions": [
+        "uses torc workflows is-complete or torc watch rather than parsing table output",
+        "checks failed and terminated counts from server state",
+        "does not rely on the exit status of torc run",
+        "exits non-zero when failures are present"
+      ]
+    },
+    {
+      "name": "csv_export_limits",
+      "prompt": "Export `torc status` for workflow 42 as CSV.",
+      "assertions": [
+        "states that csv is rejected for multi-section reports such as status",
+        "recommends -f json for status",
+        "notes that -f csv works for list commands such as results list"
+      ]
+    }
+  ]
+}

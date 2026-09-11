@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "oom_diagnosis",
+      "prompt": "A Torc job on Slurm exited with 137. Diagnose it.",
+      "assertions": [
+        "identifies 137 as SIGKILL, typically out of memory",
+        "corroborates with torc workflows check-resources --include-failed",
+        "checks Slurm state via torc slurm sacct or the dmesg log",
+        "recommends raising memory or running torc workflows correct-resources",
+        "does not assert OOM from the exit code alone without corroborating evidence"
+      ]
+    },
+    {
+      "name": "orphaned_running_jobs",
+      "prompt": "Torc shows 12 jobs as running but the Slurm allocation ended hours ago.",
+      "assertions": [
+        "uses torc workflows sync-status with --dry-run first",
+        "explains that orphaned jobs are marked failed so recovery can proceed",
+        "notes that this clears stale allocations that block torc recover"
+      ]
+    },
+    {
+      "name": "runtime_blocked_packing",
+      "prompt": "Allocations are running with free CPUs but my ready Torc jobs never start.",
+      "assertions": [
+        "runs torc workflows diagnose",
+        "explains that a job whose runtime exceeds remaining walltime will not be started",
+        "suggests more allocations, longer walltime, or lower job runtime",
+        "does not require Slurm access for the diagnosis"
+      ]
+    },
+    {
+      "name": "missing_logs",
+      "prompt": "torc results list --include-logs warns that every log file is missing.",
+      "assertions": [
+        "checks that the output directory matches the one used during the run",
+        "notes that log filenames embed run_id and attempt_id",
+        "considers stdio modes and delete_on_success as intentional suppression",
+        "considers that logs may live on the compute node or worker"
+      ]
+    },
+    {
+      "name": "offline_drain_recovery",
+      "prompt": "The Torc server was down for an hour. Jobs clearly finished but no results exist.",
+      "assertions": [
+        "explains offline drain and the offline_journal directory",
+        "runs torc workflows reconcile with the workflow ID and run ID",
+        "uses --base-dir when journals are spread across compute nodes"
+      ]
+    }
+  ]
+}
