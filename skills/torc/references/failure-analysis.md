@@ -130,7 +130,12 @@ Jobs in `pending_failed` (workflows with `use_pending_failed: true`) failed with
 failure-handler rule. They are waiting on a decision, not on resources.
 
 Options: classify with an AI agent (`torc recover <id> --ai-recovery --ai-agent <cli>`,
-experimental), use the MCP tools `list_pending_failed_jobs` and `classify_and_resolve_failures`, or
-resolve them manually with `torc workflows reset-status <id> --failed-only`.
+experimental), use the MCP tools `list_pending_failed_jobs` and `classify_and_resolve_failures` (see
+`mcp-tools.md`), or resolve them manually with `torc workflows reset-status <id> --failed-only`.
+
+No CLI command makes the transient-versus-permanent judgement itself, so when MCP tools are
+connected they are the direct path: `list_pending_failed_jobs` returns each job with its stderr, and
+`classify_and_resolve_failures` applies a per-job `retry` (optionally with new `memory` or
+`runtime`) or `fail` with a recorded reason. Call it with `dry_run: true` first.
 
 `torc watch` exits 1 when only `pending_failed` jobs remain, because it cannot decide for you.

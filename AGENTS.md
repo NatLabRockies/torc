@@ -80,8 +80,9 @@ torc/
 - Workflow manager and job runner live in `src/client/`
 - Resource management and job execution live in `src/client/job_runner.rs`
 - API client integration patterns live in `src/client/apis/`
-- The `torc` Agent Skill for using and developing Torc lives in `skills/torc/`; keep it current when
-  CLI behavior, configuration, or repository workflows change
+- The `torc` Agent Skill in `skills/torc/` documents using Torc through the CLI and MCP server, not
+  contributing to it; keep it and the MCP tool surface in sync when CLI behavior, MCP tools, or
+  configuration change
 
 ## Useful Commands
 

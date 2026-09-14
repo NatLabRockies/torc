@@ -133,23 +133,32 @@
       ]
     },
     {
-      "name": "api_change_chain",
-      "prompt": "I need to add a query parameter to an existing torc API endpoint.",
+      "name": "mcp_resource_regrouping",
+      "prompt": "Torc MCP tools are connected. One resource requirement covers jobs using 2 GB and jobs using 20 GB. Fix the grouping.",
       "assertions": [
-        "edits src/openapi_spec.rs rather than api/openapi.yaml",
-        "runs api/sync_openapi.sh to emit, check, and regenerate clients",
-        "bumps HTTP_API_VERSION in src/api_version.rs for a new optional parameter",
-        "does not hand-edit generated client code"
+        "uses analyze_resource_usage to see the per-requirement usage distribution",
+        "uses regroup_job_resources rather than the CLI correct-resources path",
+        "calls the mutating tool with dry_run true first and shows the before/after",
+        "notes that jobs left out of every group keep their current requirement"
       ]
     },
     {
-      "name": "pre_commit_gates",
-      "prompt": "What do I run before committing a Rust change to torc?",
+      "name": "mcp_cannot_submit",
+      "prompt": "Using only the Torc MCP tools, start this workflow on Slurm.",
       "assertions": [
-        "runs cargo fmt -- --check",
-        "runs cargo clippy --all --all-targets --all-features -- -D warnings",
-        "runs dprint check",
-        "notes that --all-features requires a database or the .sqlx cache"
+        "states that MCP cannot submit work or generate schedulers",
+        "directs the user to the CLI for torc slurm generate and torc submit",
+        "does not invent an MCP tool that submits workflows"
+      ]
+    },
+    {
+      "name": "mcp_spec_authoring_default",
+      "prompt": "Use the Torc MCP server to create a workflow spec for a parameter sweep.",
+      "assertions": [
+        "defaults to the save_spec_file action rather than create_workflow",
+        "asks whether the target is local or Slurm, and requests the account for Slurm",
+        "tells the user to replace placeholder commands before running",
+        "suggests only real commands such as torc run or torc submit"
       ]
     }
   ]

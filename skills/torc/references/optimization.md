@@ -352,6 +352,13 @@ The iteration loop that works: run a representative subset with monitoring on, r
 `check-resources --all`, apply `correct-resources`, regenerate schedulers, and compare the new
 allocation count and `torc slurm usage` against the previous run.
 
+If Torc MCP tools are connected, two of them do this better than the CLI can.
+`analyze_resource_usage` reports the usage _distribution_ per requirement (min/max/mean/median of
+peak memory, CPU, and exec time), which is what reveals one requirement hiding two workloads, and
+`regroup_job_resources` creates the new requirement groups and reassigns jobs with a `dry_run`
+preview. The CLI path above adjusts and separates existing requirements but cannot synthesize new
+groups from observed clusters. See `mcp-tools.md`.
+
 ## Verification commands
 
 ```bash

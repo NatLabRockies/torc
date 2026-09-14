@@ -1,12 +1,12 @@
 ---
 name: torc
 description: >
-  Author, run, optimize, inspect, and debug Torc workflows, and develop the Torc codebase. Use for
-  workflow specs in YAML/JSON5/JSON/KDL, local runs, torc exec, Slurm submission and allocation
-  sizing, node packing and parallel-jobs-per-node decisions, remote SSH workers, reruns and
-  recovery, status/results/log queries, JSON and CSV scripting, configuration and log levels, and
-  repository quality gates, tests, and OpenAPI regeneration. Do not use for generic Slurm, SSH, or
-  shell questions with no Torc workflow involved.
+  Author, run, optimize, inspect, and debug Torc workflows through the torc CLI or the Torc MCP
+  server. Use for workflow specs in YAML/JSON5/JSON/KDL, local runs, torc exec, Slurm submission and
+  allocation sizing, node packing and parallel-jobs-per-node decisions, remote SSH workers, reruns
+  and recovery, status/results/log queries, JSON and CSV scripting, MCP tools, configuration, and log
+  levels. Do not use for generic Slurm, SSH, or shell questions with no Torc workflow involved, or
+  for contributing to the Torc codebase itself.
 license: BSD-3-Clause
 ---
 
@@ -46,27 +46,28 @@ Read only the reference that matches the task. Do not preload them.
 | Configure settings: files, precedence, environment variables           | `references/settings.md`           |
 | Set log levels or find log destinations                                | `references/logging.md`            |
 | Define or override an HPC profile for a cluster                        | `references/hpc-profiles.md`       |
-| Repository quality gates, formatting, CI expectations                  | `references/quality-gates.md`      |
-| Write or debug tests, fixtures, serialization                          | `references/testing.md`            |
-| Change the HTTP API, regenerate clients, add a migration               | `references/api-and-database.md`   |
-| Add a feature across CLI, API, TUI, dashboard, MCP                     | `references/adding-features.md`    |
+| Drive Torc from an AI assistant over MCP                               | `references/mcp-tools.md`          |
 
 ## Core loop
 
-1. **Confirm the target.** Identify the server (`torc ping`), the workflow spec or ID, and the
+1. **Pick the surface.** If Torc MCP tools are connected, prefer them for inspection, log reading,
+   resource analysis, and recovery, and do not shell out to `torc` for what a tool already does. MCP
+   cannot start work, generate schedulers, or drive remote workers, so those stay on the CLI. See
+   `references/mcp-tools.md`.
+2. **Confirm the target.** Identify the server (`torc ping`), the workflow spec or ID, and the
    execution mode. `torc --help` groups commands, but most subcommand groups are hidden from the
    top-level list, so use `torc <group> --help` for the real inventory.
-2. **Validate offline first.** `torc create --dry-run <spec>` parses the spec, expands parameters,
+3. **Validate offline first.** `torc create --dry-run <spec>` parses the spec, expands parameters,
    and reports resulting job/file/action counts without a server. It exits non-zero on failure.
    Always check the expanded job count before creating a sweep.
-3. **Smoke test small.** Run locally with `-s` into a scratch output directory and a low
+4. **Smoke test small.** Run locally with `-s` into a scratch output directory and a low
    `--max-parallel-jobs` before scaling. Never smoke test into a directory holding real artifacts.
-4. **Size the work before submitting.** On Slurm, packing and allocation count follow directly from
+5. **Size the work before submitting.** On Slurm, packing and allocation count follow directly from
    resource requirements. Check them with `torc slurm generate` and `torc slurm plan-allocations`
    before submitting; see `references/optimization.md`.
-5. **Verify from server state.** After a run, check `torc status`, `torc results list`, and job
+6. **Verify from server state.** After a run, check `torc status`, `torc results list`, and job
    status counts. A zero exit from `torc run` does not mean the jobs succeeded.
-6. **Report evidence.** Give the mode, exact commands, workflow ID, expanded counts, output
+7. **Report evidence.** Give the mode, exact commands, workflow ID, expanded counts, output
    directory, and observed job status counts.
 
 ## Critical behavior

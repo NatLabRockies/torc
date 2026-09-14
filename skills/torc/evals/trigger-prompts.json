@@ -21,9 +21,9 @@
     "Where do I set the Torc server URL so I stop passing --url?",
     "Turn on debug logging for torc run.",
     "Define a custom HPC profile for our internal cluster in Torc.",
-    "What checks do I need to pass before committing to the torc repository?",
-    "Add a new endpoint to the torc HTTP API and regenerate the clients.",
-    "Write an integration test for a new torc CLI command."
+    "Use the Torc MCP tools to figure out why these jobs failed.",
+    "Regroup my Torc job resource requirements based on what the jobs actually used.",
+    "Set up the Torc MCP server for Claude Code."
   ],
   "negative": [
     "Write a generic Slurm sbatch tutorial with no workflow tool.",
@@ -37,6 +37,9 @@
     "Teach me jq basics with no Torc output involved.",
     "Explain Rust ownership and borrowing.",
     "Design a Kubernetes deployment for an unrelated service.",
-    "Compare SQLite and PostgreSQL for a new project."
+    "Compare SQLite and PostgreSQL for a new project.",
+    "Add a new endpoint to the torc HTTP API and regenerate the clients.",
+    "What checks do I need to pass before committing to the torc repository?",
+    "Write an integration test for the torc CLI."
   ]
 }
