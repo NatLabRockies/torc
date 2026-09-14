@@ -27,7 +27,7 @@ cannot progress, or when only unclassified `pending_failed` jobs remain.
 exists but ready jobs do, and when accumulated retry jobs exceed `--auto-schedule-threshold`
 (default 5). It warns when run from a directory other than the recorded submission directory.
 
-Recovery behavior is covered in the `torc-workflows` skill's rerun reference.
+Recovery behavior is covered in `rerun-and-recovery.md`.
 
 ## torc tui
 
@@ -77,7 +77,7 @@ the one used during execution.
 `torc-dash` ships as a feature-gated binary. Build it with the `dash` feature
 (`cargo build --release --features dash`) or install with
 `cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"`. Dashboard settings live
-in `[dash]` in a config file; see the `torc-config` skill.
+in `[dash]` in a config file; see `settings.md`.
 
 ## torc events monitor
 

@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "local_run_exit_status",
+      "prompt": "My CI script runs `torc run workflow.yaml` and it always passes even when jobs fail. Why?",
+      "assertions": [
+        "states that torc run exits 0 even when jobs failed",
+        "recommends checking torc status or torc results list --failed",
+        "notes that torc exec exits non-zero on job failure"
+      ]
+    },
+    {
+      "name": "slurm_submission_path",
+      "prompt": "My workflow has resource_requirements but torc submit says it has no schedule_nodes action. What do I do?",
+      "assertions": [
+        "explains that torc submit requires a schedule_nodes action",
+        "uses torc slurm generate to produce an augmented spec",
+        "submits the generated spec rather than the original file",
+        "validates with torc create --dry-run before submitting"
+      ]
+    },
+    {
+      "name": "node_sharing_capacity",
+      "prompt": "Our nodes have 104 CPUs and 240 GB. Each run needs 8 CPUs and 100 GB. How many runs share a node?",
+      "assertions": [
+        "computes the minimum across CPU, memory, and GPU rather than CPU alone",
+        "identifies memory as the binding constraint giving 2 per node",
+        "notes that resource values are per node and integer division discards remainders",
+        "recommends verifying the declared memory against measured peak usage"
+      ]
+    },
+    {
+      "name": "split_by_memory_and_runtime",
+      "prompt": "My Torc workflow mixes 100 small 20-minute jobs with 4 jobs needing 120 GB for 3 hours, and Slurm usage is enormous. Fix it.",
+      "assertions": [
+        "explains that partition grouping sizes the group from the maximum of each dimension",
+        "splits the work with --group-by resource-requirements or per-job scheduler bindings",
+        "notes that the merged group forces the short jobs into the long walltime",
+        "quantifies or compares the resulting allocation counts",
+        "mentions strict_scheduler_match when a heavy job must not land on a light pool"
+      ]
+    },
+    {
+      "name": "jobs_per_node_versus_more_nodes",
+      "prompt": "Should I pack more Torc jobs onto each node or request more nodes?",
+      "assertions": [
+        "computes the per-node packing ceiling from resource requirements first",
+        "checks declared requirements against measured peak usage before adding nodes",
+        "checks whether the dependency graph is wide enough to use more nodes",
+        "warns that --max-parallel-jobs disables resource tracking entirely",
+        "recommends validating per-job runtime under the intended packing"
+      ]
+    },
+    {
+      "name": "walltime_strategy_tradeoff",
+      "prompt": "I have 12 full-node one-hour Torc jobs on a 4-hour partition. Why does Torc plan 12 allocations and how do I reduce that?",
+      "assertions": [
+        "explains time_slots as allocation walltime divided by job runtime",
+        "notes the default max-job-runtime strategy with a 1.5 multiplier yields one slot",
+        "recommends max-partition-time or a larger walltime multiplier",
+        "acknowledges the queue-priority tradeoff of a longer walltime"
+      ]
+    },
+    {
+      "name": "single_large_versus_many_small",
+      "prompt": "167 nodes of Torc work: one big Slurm allocation or many small ones?",
+      "assertions": [
+        "runs torc slurm plan-allocations instead of guessing",
+        "explains backfill priority and fair-share degradation",
+        "notes that the many-small estimate covers only the first allocation",
+        "applies the answer with or without --single-allocation"
+      ]
+    },
+    {
+      "name": "local_versus_remote_workers",
+      "prompt": "I want to spread this Torc workflow across three workstations over SSH. Anything to watch out for?",
+      "assertions": [
+        "states that the server URL must be reachable from the workers, not just locally",
+        "notes that a standalone -s server cannot serve remote workers",
+        "notes that remote resource flags apply uniformly to every worker",
+        "mentions per-host output directories and log collection",
+        "mentions the per-host torc version check"
+      ]
+    },
+    {
+      "name": "partial_rerun_choice",
+      "prompt": "Workflow 42 finished with 3 failed jobs out of 500 on Slurm. Rerun only those without redoing everything.",
+      "assertions": [
+        "chooses a targeted reset such as torc jobs reset-status or torc recover rather than a full workflow reset",
+        "uses --dry-run before applying changes",
+        "explains that downstream dependents are reset by torc workflows reinit",
+        "resubmits with torc submit after the reset"
+      ]
+    },
+    {
+      "name": "oom_diagnosis",
+      "prompt": "A Torc job on Slurm exited with 137. Diagnose it.",
+      "assertions": [
+        "identifies 137 as SIGKILL, typically out of memory",
+        "corroborates with torc workflows check-resources --include-failed",
+        "checks Slurm state via torc slurm sacct or the dmesg log",
+        "recommends raising memory or running torc workflows correct-resources",
+        "does not assert OOM from the exit code alone without corroborating evidence"
+      ]
+    },
+    {
+      "name": "runtime_blocked_packing",
+      "prompt": "Allocations are running with free CPUs but my ready Torc jobs never start.",
+      "assertions": [
+        "runs torc workflows diagnose",
+        "explains that a job whose runtime exceeds remaining walltime will not be started",
+        "suggests more allocations, longer walltime, or lower job runtime",
+        "does not require Slurm access for the diagnosis"
+      ]
+    },
+    {
+      "name": "json_parsing_shape",
+      "prompt": "My script runs `torc -f json jobs list` and jq fails with a parse error. Fix it.",
+      "assertions": [
+        "identifies that the omitted workflow ID makes the CLI print a selection table on stdout",
+        "passes the workflow ID explicitly",
+        "notes that list commands return an object with an items array"
+      ]
+    },
+    {
+      "name": "runner_log_filter",
+      "prompt": "RUST_LOG=torc=debug works for torc status but torc run ignores it.",
+      "assertions": [
+        "explains that torc run installs its own logger accepting only a bare level",
+        "notes the Invalid log level fallback to info",
+        "recommends --log-level debug or RUST_LOG=debug for the runner"
+      ]
+    },
+    {
+      "name": "api_change_chain",
+      "prompt": "I need to add a query parameter to an existing torc API endpoint.",
+      "assertions": [
+        "edits src/openapi_spec.rs rather than api/openapi.yaml",
+        "runs api/sync_openapi.sh to emit, check, and regenerate clients",
+        "bumps HTTP_API_VERSION in src/api_version.rs for a new optional parameter",
+        "does not hand-edit generated client code"
+      ]
+    },
+    {
+      "name": "pre_commit_gates",
+      "prompt": "What do I run before committing a Rust change to torc?",
+      "assertions": [
+        "runs cargo fmt -- --check",
+        "runs cargo clippy --all --all-targets --all-features -- -D warnings",
+        "runs dprint check",
+        "notes that --all-features requires a database or the .sqlx cache"
+      ]
+    }
+  ]
+}

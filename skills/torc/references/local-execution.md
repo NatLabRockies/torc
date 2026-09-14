@@ -113,7 +113,7 @@ In direct mode with `execution_config.limit_resources` (default true), the runne
 running jobs and kills those that exceed their limits, so an under-specified `memory` shows up as a
 killed job rather than a swapping machine.
 
-Defaults for these flags can live in `[client.run]` in a config file; see the `torc-config` skill.
+Defaults for these flags can live in `[client.run]` in a config file; see `settings.md`.
 
 ## Output directory layout
 
@@ -132,4 +132,4 @@ run produces:
 
 The same path must be passed to later commands that read logs
 (`torc results list --include-logs -o ...`, `torc logs bundle --output-dir ...`), otherwise they
-warn that log files are missing. See the `torc-debug` skill for the full log map.
+warn that log files are missing. See `log-map.md` for the full log map.

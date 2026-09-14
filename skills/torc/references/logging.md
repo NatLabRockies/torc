@@ -52,7 +52,7 @@ matters:
   the exact path at startup.
 
 Job stdout and stderr are separate from all of this and land in `<output-dir>/job_stdio/`, governed
-by `execution_config.stdio`. See the `torc-debug` skill's log map.
+by `execution_config.stdio`. See `log-map.md`.
 
 ## Server logging
 

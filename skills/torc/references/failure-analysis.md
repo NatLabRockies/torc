@@ -122,7 +122,7 @@ does not, look at the environment difference: module state, working directory, a
 | Only some parameterized jobs fail                     | Data-dependent bug                   | Compare failing and passing inputs; the sweep is not at fault      |
 
 After a resource fix, rerun with the narrowest tool: `torc recover` for Slurm OOM/timeout,
-`torc jobs reset-status <ids> --reinit` for a known set. See the `torc-workflows` rerun reference.
+`torc jobs reset-status <ids> --reinit` for a known set. See `rerun-and-recovery.md`.
 
 ## Unclassified failures
 

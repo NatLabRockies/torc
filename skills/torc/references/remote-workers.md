@@ -18,6 +18,8 @@ Choose remote workers for ad-hoc clusters of workstations or cloud VMs, environm
 scheduler, and rehearsing a distributed run before moving it to Slurm. Use Slurm when a scheduler
 exists: it handles queueing, accounting, and preemption that this mode does not.
 
+For the full mode comparison and how to size a pool, see `execution-modes.md`.
+
 ## Worker file format
 
 One host per line, `[user@]hostname[:port]`, with `#` comments. Each host may appear once;
@@ -58,6 +60,10 @@ Useful `run` options: `-o/--output-dir` (remote output directory, default `torc_
 `--max-parallel-jobs`, `--num-cpus`, `--memory-gb`, `--num-gpus` (all auto-detected per host when
 omitted), `-p/--poll-interval`, and `--max-parallel-ssh` (default 10, shared by the other
 subcommands).
+
+The resource flags are forwarded **identically to every worker**, so a single value has to be right
+for the smallest host in the pool. On a heterogeneous pool, omit them and let each host detect its
+own capacity, or start the small hosts in a separate invocation.
 
 `torc remote run` starts workers detached so they survive SSH disconnection, then returns. It does
 not block until completion. Monitor with `torc remote status`, `torc status`, or `torc watch`.
