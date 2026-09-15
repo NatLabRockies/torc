@@ -40,7 +40,7 @@ torc_output
 .dprint-cache/
 /tmp
 
-# LaTeX build artifacts
+# Paper build artifacts
 paper/*.aux
 paper/*.bbl
 paper/*.out
