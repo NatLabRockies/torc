@@ -23,7 +23,11 @@
     "Define a custom HPC profile for our internal cluster in Torc.",
     "Use the Torc MCP tools to figure out why these jobs failed.",
     "Regroup my Torc job resource requirements based on what the jobs actually used.",
-    "Set up the Torc MCP server for Claude Code."
+    "Set up the Torc MCP server for Claude Code.",
+    "Grant a team access to my Torc workflow.",
+    "Add 200 commands from a file as jobs in an existing Torc workflow.",
+    "What does torc workflows sync-status actually do?",
+    "Which torc command edits a workflow action after creation?"
   ],
   "negative": [
     "Write a generic Slurm sbatch tutorial with no workflow tool.",

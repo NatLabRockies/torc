@@ -160,6 +160,35 @@
         "tells the user to replace placeholder commands before running",
         "suggests only real commands such as torc run or torc submit"
       ]
+    },
+    {
+      "name": "cli_lookup_unfamiliar_command",
+      "prompt": "Grant the data-team group access to Torc workflow 42.",
+      "assertions": [
+        "uses torc access-groups add-workflow",
+        "notes that the command takes a group ID, not a group name",
+        "looks the ID up with torc access-groups list first",
+        "does not assume the spec access_groups field applies after creation"
+      ]
+    },
+    {
+      "name": "cli_bulk_job_creation",
+      "prompt": "I have a text file with 200 commands. Add them as jobs to an existing Torc workflow.",
+      "assertions": [
+        "uses torc jobs create-from-file",
+        "notes that names are assigned sequentially continuing from the current job count",
+        "notes that all created jobs share one resource requirement",
+        "notes that # comments and blank lines are skipped"
+      ]
+    },
+    {
+      "name": "blocked_missing_inputs",
+      "prompt": "Every job in my Torc workflow is blocked right after init and nothing is ready.",
+      "assertions": [
+        "checks required inputs with torc files list-required-existing or torc user-data list-missing",
+        "inspects the actual edges with torc job-dependencies or torc workflows execution-plan",
+        "does not immediately reset or reinitialize the workflow"
+      ]
     }
   ]
 }

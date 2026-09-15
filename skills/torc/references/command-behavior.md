@@ -1,36 +1,16 @@
 # Command behavior
 
-`torc <command> --help` is authoritative for flags. This file covers behavior that `--help` does not
-state: discovery, prompting, streams, exit codes, and pagination.
+`cli-reference.md` is the per-command index. This file covers the cross-cutting mechanics that apply
+to every command: prompting, streams, exit codes, pagination, versioning, and auth.
 
 ## Contents
 
-- [Finding commands](#finding-commands)
 - [Interactive prompting](#interactive-prompting)
 - [Streams and structured output](#streams-and-structured-output)
 - [Exit codes](#exit-codes)
 - [Pagination](#pagination)
 - [Version compatibility](#version-compatibility)
 - [Authentication and TLS](#authentication-and-tls)
-
-## Finding commands
-
-`torc --help` prints grouped headings (Workflow Lifecycle, Workflow Management, Scheduler & Compute,
-Analysis & Debugging, Server Administration, Configuration & Utilities), but most subcommand groups
-are marked hidden, so the top-level `Commands:` block lists only a couple of entries. The grouped
-listing under it is the real map.
-
-Consequences:
-
-- Discover a group's contents with `torc <group> --help` (`torc workflows --help`,
-  `torc slurm --help`, `torc remote --help`, ...). These also print grouped headings that list more
-  subcommands than the `Commands:` block.
-- Some commands exist only in the grouped listing (for example `torc workflows new`,
-  `torc workflows execution-plan`, `torc slurm regenerate`, `torc access-groups ...`).
-- Lifecycle commands are top level (`create`, `run`, `exec`, `submit`, `status`, `watch`, `recover`,
-  `cancel`, `delete`), not under `torc workflows`.
-
-Shell completion covers the hidden entries: `torc completions bash|zsh|fish`.
 
 ## Interactive prompting
 

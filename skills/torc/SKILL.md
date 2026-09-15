@@ -24,10 +24,18 @@ dry-run validation -> local standalone smoke test -> shared-server run -> Slurm 
 
 ## Task router
 
-Read only the reference that matches the task. Do not preload them.
+Three references are the primary lookups. Open the matching one before running an unfamiliar
+command, calling an MCP tool, or writing a spec field:
+
+- `references/cli-reference.md` — every command group and what `--help` does not tell you
+- `references/mcp-tools.md` — every MCP tool, its CLI equivalent, and what MCP will not do
+- `references/spec-authoring.md` — every workflow YAML option and its semantics
+
+The rest are task-scoped. Read only the one that matches; do not preload.
 
 | Task                                                                   | Read                               |
 | ---------------------------------------------------------------------- | ---------------------------------- |
+| Look up a command's preconditions, side effects, or gotchas            | `references/cli-reference.md`      |
 | Write or review a spec: dependencies, files, parameters, actions       | `references/spec-authoring.md`     |
 | Run locally, choose standalone vs shared server, use `torc exec`       | `references/local-execution.md`    |
 | Choose local, remote workers, or Slurm; size a machine or worker pool  | `references/execution-modes.md`    |
@@ -35,7 +43,7 @@ Read only the reference that matches the task. Do not preload them.
 | Pack jobs per node, size allocations, tune walltime and throughput     | `references/optimization.md`       |
 | Run jobs on SSH-reachable machines                                     | `references/remote-workers.md`     |
 | Rerun part of a workflow, reset state, recover from failures           | `references/rerun-and-recovery.md` |
-| Command preconditions, exit codes, stream routing, prompting           | `references/command-behavior.md`   |
+| Exit codes, stream routing, prompting, pagination, auth                | `references/command-behavior.md`   |
 | Query workflow, job, result, dependency, or resource state             | `references/query-map.md`          |
 | Parse output with jq or Nushell, build reports and CSV                 | `references/scripting.md`          |
 | Watch a live workflow: watch, TUI, dashboard, events, plots            | `references/live-monitoring.md`    |
