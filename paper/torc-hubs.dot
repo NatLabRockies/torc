@@ -1,0 +1,330 @@
+digraph torc_hubs {
+    graph [
+        layout=neato,
+        bgcolor="white",
+        outputorder=edgesfirst,
+        overlap=true,
+        splines=curved,
+        pad=0.25
+    ];
+
+    node [
+        fontname="Arial",
+        fontcolor="#172033",
+        fontsize=11,
+        shape=ellipse,
+        fixedsize=true,
+        style=filled,
+        penwidth=2
+    ];
+
+    edge [
+        fontname="Arial",
+        fontcolor="#334155",
+        fontsize=11,
+        color="#64748b",
+        penwidth=1.5,
+        arrowsize=0.8
+    ];
+
+    TL [pos="0,960!", shape=point, width=0.01, style=invis];
+    BR [pos="1600,-250!", shape=point, width=0.01, style=invis];
+
+    TITLE [
+        pos="800,930!",
+        shape=plain,
+        fixedsize=false,
+        fontsize=27,
+        label=<<B>Torc: one durable control loop, many execution environments</B>>
+    ];
+    SUBTITLE [
+        pos="800,890!",
+        shape=plain,
+        fixedsize=false,
+        fontsize=14,
+        fontcolor="#475569",
+        label="Each large hub owns the capabilities arranged around it"
+    ];
+    LEGEND [
+        pos="800,840!",
+        shape=plain,
+        fixedsize=false,
+        label=<
+            <TABLE BORDER="1" COLOR="#94a3b8" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8">
+                <TR>
+                    <TD><B>COLOR KEY</B></TD>
+                    <TD BGCOLOR="#e0f2fe"><FONT COLOR="#0369a1"><B>USER</B></FONT> inputs and interfaces</TD>
+                    <TD BGCOLOR="#f3e8ff"><FONT COLOR="#7e22ce"><B>SERVER</B></FONT> graph, state, and decisions</TD>
+                    <TD BGCOLOR="#dcfce7"><FONT COLOR="#15803d"><B>RUNNERS</B></FONT> execution and monitoring</TD>
+                    <TD BGCOLOR="#fef3c7"><FONT COLOR="#b45309"><B>FEEDBACK</B></FONT> results, evidence, and adaptation</TD>
+                    <TD><B>Thick arrows:</B> operating loop</TD>
+                    <TD><B>Thin lines:</B> capability belongs to hub</TD>
+                </TR>
+            </TABLE>
+        >
+    ];
+
+    USER [
+        pos="180,500!",
+        width=3.1,
+        height=1.45,
+        color="#0369a1",
+        fillcolor="#dbeafe",
+        penwidth=4,
+        fontsize=21,
+        label=<<B>USER</B><BR/><FONT POINT-SIZE="12">researcher + clients</FONT>>
+    ];
+    U_DESCRIBE [
+        pos="60,660!",
+        width=2.1,
+        height=0.8,
+        color="#0369a1",
+        fillcolor="#f0f9ff",
+        label=<<B>DESCRIBE</B><BR/><FONT POINT-SIZE="10">YAML | JSON | KDL</FONT><BR/><FONT POINT-SIZE="9">commands | parameters | resources</FONT>>
+    ];
+    U_OPERATE [
+        pos="230,775!",
+        width=2.3,
+        height=0.9,
+        color="#0369a1",
+        fillcolor="#f0f9ff",
+        label=<<B>AUTHOR + OPERATE</B><BR/><FONT POINT-SIZE="10">CLI | Python | Julia | HTTP</FONT><BR/><FONT POINT-SIZE="9">create | cancel | rerun | recover</FONT>>
+    ];
+    U_OBSERVE [
+        pos="410,660!",
+        width=2.0,
+        height=0.85,
+        color="#0369a1",
+        fillcolor="#f0f9ff",
+        label=<<B>OBSERVE + DEBUG</B><BR/><FONT POINT-SIZE="10">TUI | dashboard | MCP</FONT><BR/><FONT POINT-SIZE="9">reports | resource plots</FONT>>
+    ];
+    U_MODEL [
+        pos="180,315!",
+        width=2.8,
+        height=0.85,
+        color="#0369a1",
+        fillcolor="#f0f9ff",
+        label=<<B>ONE WORKFLOW MODEL</B><BR/><FONT POINT-SIZE="10">local | SSH remote | Slurm</FONT><BR/><FONT POINT-SIZE="9">command-oriented scientific jobs</FONT>>
+    ];
+
+    U_DESCRIBE -> USER [dir=none];
+    U_OPERATE -> USER [dir=none];
+    U_OBSERVE -> USER [dir=none];
+    U_MODEL -> USER [dir=none];
+
+    SERVER [
+        pos="700,500!",
+        width=3.5,
+        height=1.55,
+        color="#7e22ce",
+        fillcolor="#f3e8ff",
+        penwidth=4,
+        fontsize=21,
+        label=<<B>TORC SERVER</B><BR/><FONT POINT-SIZE="12">REST API + shared durable control plane</FONT>>
+    ];
+    S_DAG [
+        pos="500,690!",
+        width=2.5,
+        height=0.9,
+        color="#7e22ce",
+        fillcolor="#faf5ff",
+        label=<<B>UNIFIED GRAPH</B><BR/><FONT POINT-SIZE="10">explicit + file + JSON-data edges</FONT><BR/><FONT POINT-SIZE="9">blocked work becomes ready</FONT>>
+    ];
+    S_QUEUE [
+        pos="700,760!",
+        width=3.0,
+        height=0.95,
+        color="#1d4ed8",
+        fillcolor="#dbeafe",
+        label=<<B>SHARED READY-JOB QUEUE</B><BR/><FONT POINT-SIZE="10">all runners claim through one API</FONT><BR/><FONT POINT-SIZE="9">priority | scheduler | remaining time</FONT>>
+    ];
+    S_SQLITE [
+        pos="920,690!",
+        width=2.5,
+        height=0.9,
+        color="#1d4ed8",
+        fillcolor="#dbeafe",
+        label=<<B>DURABLE SQLITE STATE</B><BR/><FONT POINT-SIZE="10">no external database service</FONT><BR/><FONT POINT-SIZE="9">graph | claims | attempts | results</FONT>>
+    ];
+    S_CLAIMS [
+        pos="480,315!",
+        width=2.8,
+        height=0.9,
+        color="#1d4ed8",
+        fillcolor="#dbeafe",
+        label=<<B>ATOMIC RESOURCE CLAIMS</B><BR/><FONT POINT-SIZE="10">CPU | memory | GPU | nodes | runtime</FONT><BR/><FONT POINT-SIZE="9">one owner | fit | residual backfill</FONT>>
+    ];
+    S_DECISIONS [
+        pos="700,245!",
+        width=3.5,
+        height=1.15,
+        color="#b45309",
+        fillcolor="#fffbeb",
+        label=<<B>CONTROL DECISIONS</B><BR ALIGN="LEFT"/><FONT POINT-SIZE="9">complete -&gt; release downstream work</FONT><BR ALIGN="LEFT"/><FONT POINT-SIZE="9">spawn -&gt; extend graph + lineage</FONT><BR ALIGN="LEFT"/><FONT POINT-SIZE="9">OOM / timeout -&gt; correct + retry</FONT><BR ALIGN="LEFT"/><FONT POINT-SIZE="9">changed input -&gt; selective rerun</FONT>>
+    ];
+    S_OPERATIONS [
+        pos="930,315!",
+        width=2.7,
+        height=0.9,
+        color="#7e22ce",
+        fillcolor="#faf5ff",
+        label=<<B>DURABLE OPERATIONS</B><BR/><FONT POINT-SIZE="10">resume | actions | access control</FONT><BR/><FONT POINT-SIZE="9">backup | snapshots | queryable history</FONT>>
+    ];
+
+    S_DAG -> SERVER [dir=none];
+    S_QUEUE -> SERVER [dir=none];
+    S_SQLITE -> SERVER [dir=none];
+    S_CLAIMS -> SERVER [dir=none];
+    S_OPERATIONS -> SERVER [dir=none];
+    S_DECISIONS -> SERVER [dir=none, color="#b45309", penwidth=2.2];
+
+    RUNNERS [
+        pos="1260,500!",
+        width=3.5,
+        height=1.55,
+        color="#15803d",
+        fillcolor="#dcfce7",
+        penwidth=4,
+        fontsize=21,
+        label=<<B>TORC RUNNERS</B><BR/><FONT POINT-SIZE="12">pull | execute | measure | report</FONT>>
+    ];
+    R_LOCAL [
+        pos="1080,660!",
+        width=2.5,
+        height=0.9,
+        color="#15803d",
+        fillcolor="#f0fdf4",
+        label=<<B>LOCAL / SSH REMOTE</B><BR/><FONT POINT-SIZE="10">direct child processes</FONT><BR/><FONT POINT-SIZE="9">workstation | server | remote node</FONT>>
+    ];
+    R_ALLOC_A [
+        pos="1260,775!",
+        width=2.5,
+        height=0.95,
+        color="#15803d",
+        fillcolor="#f0fdf4",
+        label=<<B>SLURM ALLOCATION A</B><BR/><FONT POINT-SIZE="10">Runner A manages 1+ nodes</FONT><BR/><FONT POINT-SIZE="9">pulls from the shared queue</FONT>>
+    ];
+    R_ALLOC_B [
+        pos="1450,660!",
+        width=2.5,
+        height=0.9,
+        color="#15803d",
+        fillcolor="#f0fdf4",
+        label=<<B>SLURM ALLOCATION B</B><BR/><FONT POINT-SIZE="10">Runner B manages 1+ nodes</FONT><BR/><FONT POINT-SIZE="9">independent allocation, same queue</FONT>>
+    ];
+    R_MODE [
+        pos="1060,315!",
+        width=2.9,
+        height=0.95,
+        color="#0369a1",
+        fillcolor="#e0f2fe",
+        label=<<B>EXECUTION MODE</B><BR ALIGN="LEFT"/><FONT POINT-SIZE="10"><B>direct:</B> runner child process</FONT><BR ALIGN="LEFT"/><FONT POINT-SIZE="10"><B>slurm:</B> srun --exact job step</FONT>>
+    ];
+    R_WORK [
+        pos="1260,245!",
+        width=2.9,
+        height=0.95,
+        color="#15803d",
+        fillcolor="#f0fdf4",
+        label=<<B>RUNNER RESPONSIBILITIES</B><BR/><FONT POINT-SIZE="10">capacity accounting | concurrency</FONT><BR/><FONT POINT-SIZE="9">monitoring | offline journal</FONT>>
+    ];
+    R_TOPOLOGY [
+        pos="1450,315!",
+        width=2.6,
+        height=0.9,
+        color="#15803d",
+        fillcolor="#f0fdf4",
+        label=<<B>ALLOCATION TOPOLOGY</B><BR/><FONT POINT-SIZE="10">one runner per allocation by default</FONT><BR/><FONT POINT-SIZE="9">optional direct runner per node</FONT>>
+    ];
+
+    R_LOCAL -> RUNNERS [dir=none];
+    R_ALLOC_A -> RUNNERS [dir=none];
+    R_ALLOC_B -> RUNNERS [dir=none];
+    R_MODE -> RUNNERS [dir=none];
+    R_WORK -> RUNNERS [dir=none];
+    R_TOPOLOGY -> RUNNERS [dir=none];
+
+    FEEDBACK [
+        pos="700,55!",
+        width=3.8,
+        height=1.4,
+        color="#b45309",
+        fillcolor="#fef3c7",
+        penwidth=4,
+        fontsize=20,
+        label=<<B>RESULTS + FEEDBACK</B><BR/><FONT POINT-SIZE="11">measured execution becomes durable knowledge</FONT>>
+    ];
+    F_RESULTS [
+        pos="350,-90!",
+        width=2.4,
+        height=0.8,
+        color="#b45309",
+        fillcolor="#fffbeb",
+        label=<<B>RESULTS</B><BR/><FONT POINT-SIZE="10">status | exit code | logs | attempts</FONT>>
+    ];
+    F_RESOURCES [
+        pos="575,-135!",
+        width=2.9,
+        height=0.9,
+        color="#b45309",
+        fillcolor="#fffbeb",
+        label=<<B>RESOURCE OBSERVATIONS</B><BR/><FONT POINT-SIZE="10">CPU | peak memory | runtime | sacct</FONT><BR/><FONT POINT-SIZE="9">when monitoring/accounting is available</FONT>>
+    ];
+    F_ARTIFACTS [
+        pos="835,-135!",
+        width=2.9,
+        height=0.9,
+        color="#b45309",
+        fillcolor="#fffbeb",
+        label=<<B>SCIENTIFIC ARTIFACTS</B><BR/><FONT POINT-SIZE="10">files | JSON user data | logs</FONT><BR/><FONT POINT-SIZE="9">inputs/outputs can imply graph edges</FONT>>
+    ];
+    F_TRACE [
+        pos="1070,-90!",
+        width=2.7,
+        height=0.8,
+        color="#b45309",
+        fillcolor="#fffbeb",
+        label=<<B>TRACEABILITY</B><BR/><FONT POINT-SIZE="10">reports | resource plots | RO-Crate / PROV</FONT>>
+    ];
+
+    F_RESULTS -> FEEDBACK [dir=none];
+    F_RESOURCES -> FEEDBACK [dir=none];
+    F_ARTIFACTS -> FEEDBACK [dir=none];
+    F_TRACE -> FEEDBACK [dir=none];
+
+    USER -> SERVER [
+        dir=both,
+        color="#2563eb",
+        fontcolor="#1e3a8a",
+        penwidth=5,
+        label="create + control\nstatus + events"
+    ];
+    SERVER -> RUNNERS [
+        color="#7e22ce",
+        fontcolor="#581c87",
+        penwidth=5,
+        label="atomic claims\nready jobs"
+    ];
+
+    RF_RIGHT [pos="1570,500!", shape=point, width=0.01, style=invis];
+    RF_BOTTOM [pos="1570,65!", shape=point, width=0.01, style=invis];
+    RUNNERS -> RF_RIGHT [color="#15803d", penwidth=5, arrowhead=none];
+    RF_RIGHT -> RF_BOTTOM [color="#15803d", penwidth=5, arrowhead=none, label="results + observations"];
+    RF_BOTTOM -> FEEDBACK [color="#15803d", penwidth=5];
+
+    FEEDBACK -> S_DECISIONS [
+        color="#b45309",
+        fontcolor="#78350f",
+        penwidth=5,
+        label="persist outcomes\nrelease | extend | recover"
+    ];
+
+    CYCLE [
+        pos="800,-220!",
+        shape=plain,
+        fixedsize=false,
+        fontsize=16,
+        fontcolor="#1e3a8a",
+        label=<<B>CLAIM  -&gt;  EXECUTE  -&gt;  MEASURE  -&gt;  PERSIST  -&gt;  RELEASE | EXTEND | RECOVER</B>>
+    ];
+}

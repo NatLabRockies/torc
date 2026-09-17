@@ -1,0 +1,62 @@
+%% Torc architecture overview for the JOSS paper.
+%% Render with: mmdc -i architecture.mmd -o architecture.png -w 2200 -b white
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "fontSize": "18px",
+    "lineColor": "#475569",
+    "primaryTextColor": "#172033",
+    "edgeLabelBackground": "#ffffff"
+  },
+  "flowchart": {
+    "curve": "basis",
+    "htmlLabels": true,
+    "nodeSpacing": 42,
+    "rankSpacing": 64
+  }
+}}%%
+flowchart TB
+    SPEC["WORKFLOW SPECIFICATION<br/><small>YAML · JSON · JSON5 · KDL</small>"]
+    CLIENTS["AUTHOR & OPERATE<br/><small>CLI · Python · Julia · HTTP</small>"]
+    OBSERVE["MONITOR<br/><small>TUI · dashboard · MCP</small>"]
+
+    API["TORC SERVER<br/><small>versioned REST API</small>"]
+    COORD["WORKFLOW COORDINATION<br/><small>dependencies · atomic claims<br/>resources · recovery · events</small>"]
+    DB[("SQLITE<br/><small>authoritative state</small>")]
+
+    LOCAL["LOCAL RUNNER<br/><small>workstation or server</small>"]
+    REMOTE["REMOTE RUNNERS<br/><small>SSH-launched workers</small>"]
+    SLURM["SLURM ALLOCATION<br/><small>concurrent job steps across<br/>one or more compute nodes</small>"]
+
+    ARTIFACTS[("SCIENTIFIC ARTIFACTS<br/><small>files · JSON data · logs</small>")]
+    PROV["RESULTS & PROVENANCE<br/><small>resource observations · RO-Crate</small>"]
+
+    SPEC --> CLIENTS
+    CLIENTS -->|"create & control"| API
+    OBSERVE -->|"status & events"| API
+
+    API -->|"state transitions"| COORD
+    COORD -->|"read / write"| DB
+
+    API -->|"HTTP · workers pull claims / report results"| LOCAL
+    API --> REMOTE
+    API --> SLURM
+
+    LOCAL -.->|"read / write"| ARTIFACTS
+    REMOTE -.-> ARTIFACTS
+    SLURM -.-> ARTIFACTS
+    ARTIFACTS -.-> PROV
+    COORD -->|"results"| PROV
+
+    classDef userNode fill:#e0f2fe,stroke:#0369a1,stroke-width:2px,color:#172033;
+    classDef controlNode fill:#dbeafe,stroke:#1d4ed8,stroke-width:2.5px,color:#172033;
+    classDef executionNode fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#172033;
+    classDef dataNode fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#172033;
+    classDef outputNode fill:#f3e8ff,stroke:#7e22ce,stroke-width:2px,color:#172033;
+
+    class SPEC,CLIENTS,OBSERVE userNode;
+    class API,COORD,DB controlNode;
+    class LOCAL,REMOTE,SLURM executionNode;
+    class ARTIFACTS dataNode;
+    class PROV outputNode;

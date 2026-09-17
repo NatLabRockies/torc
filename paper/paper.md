@@ -85,6 +85,10 @@ database to remain on server-local storage while workers execute on other nodes.
 the horizontal write scalability of a distributed database for a control plane that is simple to
 deploy, back up, and inspect.
 
+![Torc separates user-facing tools, a durable SQLite-backed control plane, and pull-based execution
+across local, remote, and Slurm resources. Solid lines show control traffic; dashed lines show
+scientific artifact access.\label{fig:architecture}](architecture.png){ width=100% }
+
 Dependencies may be declared directly between jobs or inferred from producer and consumer
 relationships over files and JSON user data. During workflow initialization, Torc resolves these
 relationships into a common dependency graph. Workers atomically claim ready jobs and transition

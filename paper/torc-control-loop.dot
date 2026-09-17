@@ -1,0 +1,229 @@
+digraph torc_control_loop {
+    graph [bgcolor="white", pad=0.2];
+    node [fontname="Arial"];
+
+    FIGURE [shape=plain, label=<
+        <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="14" CELLPADDING="0">
+            <TR>
+                <TD COLSPAN="5" ALIGN="LEFT">
+                    <FONT POINT-SIZE="26"><B>Torc: a durable control loop for scientific workflows</B></FONT><BR ALIGN="LEFT"/>
+                    <FONT POINT-SIZE="14">One workflow model connects user tools, authoritative state, heterogeneous execution, and measured outcomes</FONT>
+                </TD>
+            </TR>
+
+            <TR>
+                <TD WIDTH="310" VALIGN="TOP" BORDER="3" COLOR="#0369a1" BGCOLOR="#f0f9ff" CELLPADDING="16">
+                    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="8" CELLPADDING="9">
+                        <TR>
+                            <TD ALIGN="LEFT">
+                                <FONT POINT-SIZE="19"><B>1. USER AND INTERFACES</B></FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">Describe, operate, and observe through the same API</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="1" COLOR="#0369a1" BGCOLOR="#e0f2fe" ALIGN="LEFT">
+                                <B>DESCRIBE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">YAML | JSON | JSON5 | KDL</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">commands | resources | parameters</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">explicit dependencies | files | JSON data</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="1" COLOR="#0369a1" BGCOLOR="#e0f2fe" ALIGN="LEFT">
+                                <B>AUTHOR AND OPERATE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">unified CLI | Python | Julia | HTTP</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">local standalone | remote | HPC submission</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="1" COLOR="#0369a1" BGCOLOR="#e0f2fe" ALIGN="LEFT">
+                                <B>MONITOR AND DEBUG</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">TUI | dashboard | reports | resource plots</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">MCP and AI-assisted operations</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="1" COLOR="#0369a1" BGCOLOR="#ffffff" ALIGN="LEFT">
+                                <B>ONE OPERATIONAL SURFACE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">create | inspect | cancel | rerun | recover</FONT>
+                            </TD>
+                        </TR>
+                    </TABLE>
+                </TD>
+
+                <TD WIDTH="90" ALIGN="CENTER">
+                    <FONT POINT-SIZE="20">&#8644;</FONT><BR/>
+                    <FONT POINT-SIZE="11"><B>HTTP API</B></FONT><BR/>
+                    <FONT POINT-SIZE="9">create + control</FONT><BR/>
+                    <FONT POINT-SIZE="9">status + events</FONT>
+                </TD>
+
+                <TD WIDTH="500" VALIGN="TOP" BORDER="3" COLOR="#7e22ce" BGCOLOR="#faf5ff" CELLPADDING="16">
+                    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="8" CELLPADDING="9">
+                        <TR>
+                            <TD COLSPAN="2" ALIGN="LEFT">
+                                <FONT POINT-SIZE="19"><B>2. TORC CONTROL PLANE</B></FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">The shared decision point for every client and runner</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="1" COLOR="#7e22ce" BGCOLOR="#f3e8ff" ALIGN="LEFT">
+                                <B>UNIFIED GRAPH</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">explicit + file + JSON-data edges</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">blocked work becomes ready as results arrive</FONT>
+                            </TD>
+                            <TD BORDER="1" COLOR="#1d4ed8" BGCOLOR="#dbeafe" ALIGN="LEFT">
+                                <B>SHARED READY-JOB QUEUE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">all runners claim through one API</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">priority + scheduler + remaining wall time</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" BORDER="2" COLOR="#1d4ed8" BGCOLOR="#dbeafe" ALIGN="LEFT">
+                                <B>ATOMIC HETEROGENEOUS CLAIMS</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">fit CPU + memory + GPU + node count + runtime in one transaction</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">one owner per job | residual backfill | no duplicate claims</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" BORDER="3" COLOR="#1d4ed8" BGCOLOR="#eff6ff" ALIGN="LEFT">
+                                <B>DURABLE SQLITE STATE - NO EXTERNAL DATABASE SERVICE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">workflows | jobs | lineage | claims | attempts | events | results</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">inspectable | resumable | snapshot-friendly | authoritative</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" BORDER="2" COLOR="#b45309" BGCOLOR="#fffbeb" ALIGN="LEFT">
+                                <B>SERVER-SIDE FEEDBACK LOOPS</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10"><B>complete</B> -&gt; release downstream work</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10"><B>spawn</B> -&gt; transactionally extend graph + lineage</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10"><B>OOM / timeout</B> -&gt; correct requirements + selectively retry</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10"><B>changed input</B> -&gt; reset only stale downstream work</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" ALIGN="LEFT">
+                                <FONT POINT-SIZE="10">REST service | authentication | access groups | workflow actions | backup and snapshots</FONT>
+                            </TD>
+                        </TR>
+                    </TABLE>
+                </TD>
+
+                <TD WIDTH="110" ALIGN="CENTER">
+                    <FONT POINT-SIZE="11"><B>atomic claims</B></FONT><BR/>
+                    <FONT POINT-SIZE="22">&#8594;</FONT><BR/>
+                    <BR/>
+                    <FONT POINT-SIZE="22">&#8592;</FONT><BR/>
+                    <FONT POINT-SIZE="10"><B>results +</B></FONT><BR/>
+                    <FONT POINT-SIZE="10"><B>observations</B></FONT>
+                </TD>
+
+                <TD WIDTH="620" VALIGN="TOP" BORDER="3" COLOR="#15803d" BGCOLOR="#f0fdf4" CELLPADDING="16">
+                    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="8" CELLPADDING="8">
+                        <TR>
+                            <TD COLSPAN="2" ALIGN="LEFT">
+                                <FONT POINT-SIZE="19"><B>3. TORC RUNNERS</B></FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11">Pull work, execute concurrently, measure, and report</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="2" COLOR="#15803d" BGCOLOR="#dcfce7" VALIGN="TOP" ALIGN="LEFT">
+                                <B>LOCAL / SSH REMOTE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">direct child processes</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">CPU and memory monitoring</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">workstation, server, or remote node</FONT>
+                            </TD>
+                            <TD BORDER="2" COLOR="#15803d" BGCOLOR="#dcfce7" VALIGN="TOP" ALIGN="LEFT">
+                                <B>RUNNER RESPONSIBILITIES</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">local capacity accounting</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">concurrent launch and completion</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">durable offline completion journal</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" BORDER="2" COLOR="#15803d" BGCOLOR="#ffffff" ALIGN="LEFT">
+                                <B>SLURM: MANY ALLOCATIONS CAN SHARE THE SAME QUEUE</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">Default topology: one Torc runner per allocation; one runner can manage one or more nodes.</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="2" COLOR="#15803d" BGCOLOR="#dcfce7" VALIGN="TOP" ALIGN="LEFT">
+                                <B>ALLOCATION A - RUNNER A</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">pulls from shared ready-job queue</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">packs fitting heterogeneous jobs</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">tracks remaining allocation time</FONT>
+                            </TD>
+                            <TD BORDER="2" COLOR="#15803d" BGCOLOR="#dcfce7" VALIGN="TOP" ALIGN="LEFT">
+                                <B>ALLOCATION B - RUNNER B</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">independent Slurm allocation</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">claims from the same workflow</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">coordinates through atomic ownership</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" BORDER="2" COLOR="#0369a1" BGCOLOR="#e0f2fe" ALIGN="LEFT">
+                                <B>EXECUTION MODE INSIDE AN ALLOCATION</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11"><B>direct:</B> user command is the runner's child process</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="11"><B>slurm:</B> runner launches an <B>srun --exact</B> job step</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">Optional topology: one direct-mode runner per node.</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD COLSPAN="2" BORDER="1" COLOR="#15803d" BGCOLOR="#ffffff" ALIGN="LEFT">
+                                <FONT POINT-SIZE="10"><B>Slurm retains:</B> allocation, placement, and step enforcement</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10"><B>Torc adds:</B> graph decisions, resource fit, ownership, and workflow history</FONT>
+                            </TD>
+                        </TR>
+                    </TABLE>
+                </TD>
+            </TR>
+
+            <TR>
+                <TD COLSPAN="5" BORDER="3" COLOR="#b45309" BGCOLOR="#fffbeb" CELLPADDING="15">
+                    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="8" CELLPADDING="7">
+                        <TR>
+                            <TD COLSPAN="4" ALIGN="LEFT">
+                                <FONT POINT-SIZE="19"><B>4. EVIDENCE, OUTPUTS, AND FEEDBACK</B></FONT>
+                                <FONT POINT-SIZE="11"> - measured execution becomes durable workflow knowledge</FONT>
+                            </TD>
+                        </TR>
+                        <TR>
+                            <TD BORDER="1" COLOR="#b45309" BGCOLOR="#fef3c7" ALIGN="LEFT">
+                                <B>RESULTS</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">status | exit code | logs | attempts</FONT>
+                            </TD>
+                            <TD BORDER="1" COLOR="#b45309" BGCOLOR="#fef3c7" ALIGN="LEFT">
+                                <B>RESOURCE OBSERVATIONS</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">CPU | peak memory | runtime | Slurm accounting</FONT><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="9">recorded when monitoring or accounting is available</FONT>
+                            </TD>
+                            <TD BORDER="1" COLOR="#b45309" BGCOLOR="#fef3c7" ALIGN="LEFT">
+                                <B>SCIENTIFIC ARTIFACTS</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">files | JSON user data | implicit dependency edges</FONT>
+                            </TD>
+                            <TD BORDER="1" COLOR="#b45309" BGCOLOR="#fef3c7" ALIGN="LEFT">
+                                <B>TRACEABILITY</B><BR ALIGN="LEFT"/>
+                                <FONT POINT-SIZE="10">queryable history | reports | RO-Crate / PROV</FONT>
+                            </TD>
+                        </TR>
+                    </TABLE>
+                </TD>
+            </TR>
+
+            <TR>
+                <TD COLSPAN="5" BORDER="3" COLOR="#1d4ed8" BGCOLOR="#dbeafe" CELLPADDING="16">
+                    <FONT POINT-SIZE="20"><B>CLAIM</B></FONT>
+                    <FONT POINT-SIZE="20"> &#8594; </FONT>
+                    <FONT POINT-SIZE="20"><B>EXECUTE</B></FONT>
+                    <FONT POINT-SIZE="20"> &#8594; </FONT>
+                    <FONT POINT-SIZE="20"><B>MEASURE</B></FONT>
+                    <FONT POINT-SIZE="20"> &#8594; </FONT>
+                    <FONT POINT-SIZE="20"><B>PERSIST</B></FONT>
+                    <FONT POINT-SIZE="20"> &#8594; </FONT>
+                    <FONT POINT-SIZE="20"><B>RELEASE, EXTEND, OR RECOVER</B></FONT><BR/>
+                    <FONT POINT-SIZE="12">The closed loop is Torc's central integration: durable graph state continuously drives heterogeneous work across local and HPC resources.</FONT>
+                </TD>
+            </TR>
+        </TABLE>
+    >];
+}
