@@ -790,7 +790,7 @@ pub fn build_results_report(
         result_records.push(JobResultRecord {
             job_id,
             job_name: job.name.clone(),
-            status: format!("{:?}", result.status),
+            status: result.status.to_string(),
             run_id: result.run_id,
             return_code: result.return_code,
             completion_time: result.completion_time.clone(),

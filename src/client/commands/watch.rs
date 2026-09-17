@@ -1,7 +1,7 @@
 //! Watch command for monitoring workflows with automatic failure recovery
 
 use env_logger::Builder;
-use log::{LevelFilter, debug, error, info, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -680,26 +680,11 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
         file: log_file,
     };
 
-    // Parse log level string to LevelFilter
-    let log_level_filter = match args.log_level.to_lowercase().as_str() {
-        "error" => LevelFilter::Error,
-        "warn" => LevelFilter::Warn,
-        "info" => LevelFilter::Info,
-        "debug" => LevelFilter::Debug,
-        "trace" => LevelFilter::Trace,
-        _ => {
-            eprintln!(
-                "Invalid log level '{}', defaulting to 'info'",
-                args.log_level
-            );
-            LevelFilter::Info
-        }
-    };
-
-    let mut builder = Builder::from_default_env();
+    // Accept a bare level ("debug") or module filters ("torc=debug"), like other commands.
+    let mut builder = Builder::new();
     builder
         .target(env_logger::Target::Pipe(Box::new(multi_writer)))
-        .filter_level(log_level_filter)
+        .parse_filters(&args.log_level)
         .try_init()
         .ok(); // Ignore error if logger is already initialized
 

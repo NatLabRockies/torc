@@ -11,7 +11,7 @@ mod unix_main {
     use chrono::Local;
     use clap::{Parser, builder::styling};
     use env_logger::Builder;
-    use log::{LevelFilter, debug, error, info, warn};
+    use log::{debug, error, info, warn};
     use signal_hook::consts::{SIGCHLD, SIGTERM};
     use signal_hook::iterator::Signals;
     use std::fs::File;
@@ -204,26 +204,11 @@ mod unix_main {
             .clone()
             .unwrap_or_else(|| file_config.client.log_level.clone());
 
-        let level_filter = match log_level_str.to_lowercase().as_str() {
-            "error" => LevelFilter::Error,
-            "warn" => LevelFilter::Warn,
-            "info" => LevelFilter::Info,
-            "debug" => LevelFilter::Debug,
-            "trace" => LevelFilter::Trace,
-            _ => {
-                eprintln!(
-                    "Warning: unknown log level '{}', defaulting to 'info'",
-                    log_level_str
-                );
-                LevelFilter::Info
-            }
-        };
-
-        // Initialize logger now that we have the log file
-        let mut builder = Builder::from_default_env();
+        // Initialize logger now that we have the log file. Accepts a bare level or module filters.
+        let mut builder = Builder::new();
         builder
             .target(env_logger::Target::Pipe(Box::new(log_file)))
-            .filter_level(level_filter)
+            .parse_filters(&log_level_str)
             .init();
 
         let hostname = hostname::get()

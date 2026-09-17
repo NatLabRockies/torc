@@ -99,8 +99,9 @@ pub struct Cli {
     #[arg(long, env = "RUST_LOG")]
     pub log_level: Option<String>,
     /// Output format (table, json, or csv). csv is supported for list commands.
-    #[arg(short, long, default_value = "table")]
-    pub format: String,
+    /// [default: table, or client.format from config]
+    #[arg(short, long)]
+    pub format: Option<String>,
     /// URL of torc server
     #[arg(long, env = "TORC_API_URL")]
     pub url: Option<String>,
@@ -762,8 +763,8 @@ SEE ALSO:
         #[arg(long, default_value = "1.5")]
         memory_multiplier: f64,
 
-        /// Runtime multiplier for timeout failures (default: 1.4 = 40% increase)
-        #[arg(long, default_value = "1.4")]
+        /// Runtime multiplier for timeout failures (default: 1.5 = 50% increase)
+        #[arg(long, default_value = "1.5")]
         runtime_multiplier: f64,
 
         /// Retry jobs with unknown failure causes (not OOM or timeout)

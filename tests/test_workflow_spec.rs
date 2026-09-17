@@ -2959,6 +2959,31 @@ fn test_validate_spec_with_scheduler_error() {
     );
 }
 
+/// Test that validate_spec (create --dry-run) rejects torc-managed keys in slurm_defaults,
+/// matching what workflow creation enforces
+#[test]
+fn test_validate_spec_rejects_managed_slurm_defaults() {
+    let temp_file = tempfile::Builder::new()
+        .suffix(".yaml")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        "name: w\njobs:\n  - name: a\n    command: echo a\nslurm_defaults:\n  qos: high\n  partition: debug\n",
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+
+    assert!(!result.valid, "Expected validation to fail");
+    let error_text = result.errors.join(" ");
+    assert!(
+        error_text.contains("partition"),
+        "Expected error about partition, got: {}",
+        error_text
+    );
+}
+
 /// Test that validate_spec reports file parse errors
 #[test]
 fn test_validate_spec_with_invalid_file() {
