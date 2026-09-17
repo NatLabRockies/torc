@@ -291,10 +291,12 @@ fn main() -> Result<()> {
         Some(Commands::Export { args }) => handle_export(args),
         None => {
             // Default: run server with default config
-            // We need to re-parse as "run" to get ServerConfig defaults from clap
-            let cli = Cli::parse_from(["torc-server", "run"]);
+            // Re-parse as "run" to get ServerConfig defaults from clap. Keep the matches so
+            // environment-backed values (e.g. RUST_LOG) still count as explicit.
+            let matches = Cli::command().get_matches_from(["torc-server", "run"]);
+            let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
             if let Some(Commands::Run { config }) = cli.command {
-                run_server(config, None)
+                run_server(config, matches.subcommand_matches("run"))
             } else {
                 unreachable!()
             }

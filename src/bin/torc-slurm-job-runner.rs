@@ -91,8 +91,8 @@ mod unix_main {
         #[arg(long, env = "TORC_PASSWORD", hide_env_values = true)]
         password: Option<String>,
 
-        /// Log level: error, warn, info, debug, trace
-        #[arg(long)]
+        /// Log level (error, warn, info, debug, trace) or module filters (e.g. torc=debug)
+        #[arg(long, env = "RUST_LOG")]
         log_level: Option<String>,
 
         /// Maximum startup delay in seconds for thundering herd mitigation.
@@ -197,7 +197,7 @@ mod unix_main {
             }
         };
 
-        // Resolve log level: CLI arg > config file > default ("info")
+        // Resolve log level: CLI arg > RUST_LOG > config file > default ("info")
         let file_config = TorcConfig::load().unwrap_or_default();
         let log_level_str = args
             .log_level
