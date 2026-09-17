@@ -87,8 +87,8 @@ pub fn check_resource_utilization(
         }
     };
 
-    // JSON/CSV fall through so they still emit their normal (empty) document.
-    if report.total_results == 0 && !matches!(format, "json" | "csv") {
+    // JSON falls through so it still emits its normal (empty) document.
+    if report.total_results == 0 && format != "json" {
         let msg = if include_failed {
             format!(
                 "No completed, failed, or terminated job results found for workflow {}",
