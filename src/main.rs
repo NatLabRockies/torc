@@ -693,7 +693,15 @@ fn main() {
                 let user = torc::get_username();
                 match WorkflowSpec::create_workflow_from_spec(&config, spec_path, &user, true) {
                     Ok(id) => {
-                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
+                        if format == "json" {
+                            print_workflow_message(
+                                &format,
+                                id,
+                                &format!("Created workflow {}", id),
+                            );
+                        } else {
+                            eprintln!("Created workflow {}", id);
+                        }
                         id
                     }
                     Err(e) => {
@@ -877,7 +885,11 @@ fn main() {
 
                 match WorkflowSpec::create_workflow_from_spec(&config, spec_path, &user, true) {
                     Ok(id) => {
-                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
+                        // Progress only: the submit result below is the single stdout document
+                        // (and carries workflow_id in JSON mode).
+                        if format != "json" {
+                            eprintln!("Created workflow {}", id);
+                        }
                         id
                     }
                     Err(e) => {
@@ -1164,7 +1176,7 @@ fn main() {
                                 Err(_) => println!("Would reset {} job(s) for retry.", n),
                             }
                         }
-                        println!("\nRun without --dry-run to apply these changes.");
+                        eprintln!("\nRun without --dry-run to apply these changes.");
                     } else {
                         println!("Recovery complete for workflow {}", workflow_id);
                         if result.oom_fixed > 0 {

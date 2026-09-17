@@ -336,11 +336,11 @@ pub fn handle_file_commands(config: &Configuration, command: &FileCommands, form
                             println!("File ID: {}", file_id);
                         }
                         println!("\nTotal missing files: {}", response.files.len());
-                        println!("\nNote: This includes:");
-                        println!(
+                        eprintln!("\nNote: This includes:");
+                        eprintln!(
                             "- Files needed by jobs but not produced by any job (user-provided)"
                         );
-                        println!(
+                        eprintln!(
                             "- Files that should have been produced by completed jobs but are missing"
                         );
                     }

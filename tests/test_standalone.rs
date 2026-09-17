@@ -34,7 +34,6 @@ fn standalone_exec_creates_and_runs_workflow() {
     // synthesize a one-job workflow, run it locally, then tear the server down.
     let out = run_torc_standalone_ok(work.path(), &db, &["exec", "-c", "echo hello-standalone"]);
 
-    let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("Started standalone torc-server"),
@@ -42,9 +41,9 @@ fn standalone_exec_creates_and_runs_workflow() {
         stderr
     );
     assert!(
-        stdout.contains("Created workflow"),
-        "stdout should announce workflow creation; got:\n{}",
-        stdout
+        stderr.contains("Created workflow"),
+        "stderr should announce workflow creation; got:\n{}",
+        stderr
     );
     assert!(db.exists(), "database at {:?} was not created", db);
 }
@@ -59,7 +58,7 @@ fn standalone_persists_workflow_across_invocations() {
     // First invocation creates and runs the workflow.
     let first = run_torc_standalone_ok(work.path(), &db, &["exec", "-c", "echo persist-me"]);
     assert!(
-        String::from_utf8_lossy(&first.stdout).contains("Created workflow"),
+        String::from_utf8_lossy(&first.stderr).contains("Created workflow"),
         "first invocation should create a workflow"
     );
 

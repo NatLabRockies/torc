@@ -168,7 +168,7 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
     };
 
     if args.format != "json" {
-        println!("Created workflow {}", workflow_id);
+        eprintln!("Created workflow {}", workflow_id);
     }
 
     let run_args = run_jobs_cmd::Args {
@@ -193,12 +193,7 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         tls_insecure: args.tls_insecure,
         cookie_header: args.cookie_header,
     };
-    let log_stream = if args.format == "json" {
-        run_jobs_cmd::LogStream::Stderr
-    } else {
-        run_jobs_cmd::LogStream::Stdout
-    };
-    let result = run_jobs_cmd::run_with_log_stream(&run_args, log_stream);
+    let result = run_jobs_cmd::run(&run_args);
     if args.format == "json" {
         println!(
             "{}",
