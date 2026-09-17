@@ -2772,6 +2772,12 @@ impl WorkflowSpec {
             errors.push(format!("Validation error: {}", e));
         }
 
+        if let Some(ref slurm_defaults) = spec.slurm_defaults
+            && let Err(e) = slurm_defaults.validate()
+        {
+            errors.push(e);
+        }
+
         // Check duplicates of names and identifiers after expansion. This was
         // missing from the dry-run path -- without it, a spec with two files
         // sharing an expanded identifier would pass `validate` and only fail

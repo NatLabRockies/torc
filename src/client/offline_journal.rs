@@ -124,7 +124,7 @@ impl OfflineJournal {
             )
             .map_err(|e| format!("Failed to journal completion: {e}"))?;
         debug!(
-            "Journaled completion job_id={} run_id={} status={:?}",
+            "Journaled completion job_id={} run_id={} status={}",
             entry.job_id, entry.run_id, entry.status
         );
         Ok(())

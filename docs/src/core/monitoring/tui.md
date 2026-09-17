@@ -104,7 +104,7 @@ confirms the recovery (Esc cancels).
 ### Recovery Prompt
 
 Pressing `V` or `v` opens a small modal that pre-fills the default `--memory-multiplier` (1.5) and
-`--runtime-multiplier` (1.4). Tab switches between the two fields, Enter applies them and launches
+`--runtime-multiplier` (1.5). Tab switches between the two fields, Enter applies them and launches
 the recovery (Esc cancels). The modal accepts only digits and a single decimal point; invalid input
 is reported inline.
 

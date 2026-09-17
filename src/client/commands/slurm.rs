@@ -5108,7 +5108,7 @@ fn handle_regenerate(
                 pending_jobs.extend(jobs);
             }
             Err(e) => {
-                print_error(&format!("listing {:?} jobs", status), &e);
+                print_error(&format!("listing {} jobs", status), &e);
                 std::process::exit(1);
             }
         }

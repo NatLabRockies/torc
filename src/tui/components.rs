@@ -153,7 +153,7 @@ impl RecoverPromptDialog {
             title: title.to_string(),
             message: message.to_string(),
             memory_input: "1.5".to_string(),
-            runtime_input: "1.4".to_string(),
+            runtime_input: "1.5".to_string(),
             active_field: 0,
             error: None,
             is_destructive,
@@ -748,10 +748,10 @@ impl JobDetailsPopup {
         f.render_widget(block, popup_area);
 
         let status_color = match self.status.as_str() {
-            "Completed" => Color::Green,
-            "Running" => Color::Yellow,
-            "Failed" => Color::Red,
-            "Canceled" => Color::Magenta,
+            "completed" => Color::Green,
+            "running" => Color::Yellow,
+            "failed" => Color::Red,
+            "canceled" => Color::Magenta,
             _ => Color::White,
         };
 

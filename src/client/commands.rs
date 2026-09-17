@@ -30,7 +30,7 @@ pub mod watch;
 pub mod workflow_export;
 pub mod workflows;
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
@@ -40,6 +40,24 @@ pub fn select_workflow_interactively(
     config: &Configuration,
     user: &str,
 ) -> Result<i64, Box<dyn std::error::Error>> {
+    if !io::stdin().is_terminal() {
+        // Many callers unwrap the result; exit cleanly like the other selection errors below.
+        eprintln!("Error: a workflow ID is required when stdin is not a terminal");
+        std::process::exit(1);
+    }
+    select_workflow(config, user, true)
+}
+
+/// Select a workflow for `user`. When `interactive` is false (stdin is not a terminal), refuse
+/// rather than guess: a script must not silently act on whichever workflow happens to exist.
+pub fn select_workflow(
+    config: &Configuration,
+    user: &str,
+    interactive: bool,
+) -> Result<i64, Box<dyn std::error::Error>> {
+    if !interactive {
+        return Err("a workflow ID is required when stdin is not a terminal".into());
+    }
     match apis::workflows_api::list_workflows(
         config,
         None,     // offset

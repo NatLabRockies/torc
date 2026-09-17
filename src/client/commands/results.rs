@@ -254,7 +254,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                                 peak_memory: format_memory(result.peak_memory_bytes),
                                 peak_cpu: format_cpu(result.peak_cpu_percent),
                                 completion_time: format_local_timestamp(&result.completion_time),
-                                status: format!("{:?}", result.status),
+                                status: result.status.to_string(),
                             })
                             .collect();
                         if format == "csv" {
@@ -304,7 +304,7 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
                         "  Completion Time: {}",
                         format_local_timestamp(&result.completion_time)
                     );
-                    println!("  Status: {:?}", result.status);
+                    println!("  Status: {}", result.status);
 
                     // Display resource metrics if available
                     if result.peak_memory_bytes.is_some()
