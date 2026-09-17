@@ -61,20 +61,20 @@ use crate::client::log_paths::get_watch_log_file;
 
 // Note: ORPHANED_JOB_RETURN_CODE is now imported from orphan_detection module
 
-/// A writer that writes to both stdout and a file
+/// A writer that writes to both stderr and a file
 struct MultiWriter {
-    stdout: std::io::Stdout,
+    stderr: std::io::Stderr,
     file: File,
 }
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.stdout.write_all(buf)?;
+        self.stderr.write_all(buf)?;
         self.file.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.stdout.flush()?;
+        self.stderr.flush()?;
         self.file.flush()
     }
 }
@@ -676,7 +676,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
     };
 
     let multi_writer = MultiWriter {
-        stdout: std::io::stdout(),
+        stderr: std::io::stderr(),
         file: log_file,
     };
 

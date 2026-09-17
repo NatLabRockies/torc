@@ -64,16 +64,16 @@ pub fn select_workflow_interactively(
                 return Ok(workflow_id);
             }
 
-            println!("Available workflows:");
-            println!(
+            eprintln!("Available workflows:");
+            eprintln!(
                 "{:<5} {:<30} {:<30} {:<20}",
                 "ID", "Name", "Description", "Created"
             );
-            println!("{}", "-".repeat(105));
+            eprintln!("{}", "-".repeat(105));
             for workflow in workflows.iter() {
                 let desc = workflow.description.as_deref().unwrap_or("");
                 let timestamp = workflow.timestamp.as_deref().unwrap_or("");
-                println!(
+                eprintln!(
                     "{:<5} {:<30} {:<30} {:<20}",
                     workflow.id.unwrap_or(-1),
                     truncate_string(&workflow.name, 30),
@@ -82,8 +82,8 @@ pub fn select_workflow_interactively(
                 );
             }
 
-            println!("\nEnter workflow ID: ");
-            io::stdout().flush().unwrap();
+            eprintln!("\nEnter workflow ID: ");
+            io::stderr().flush().unwrap();
             let mut input = String::new();
             match io::stdin().read_line(&mut input) {
                 Ok(_) => match input.trim().parse::<i64>() {

@@ -60,7 +60,7 @@ fn handle_wait(
                     "message": format!("Timeout waiting for task {}", task_id),
                     "task_id": task_id,
                 });
-                println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+                eprintln!("{}", serde_json::to_string_pretty(&payload).unwrap());
             } else {
                 eprintln!("Timeout waiting for task {}", task_id);
             }
@@ -74,7 +74,7 @@ fn handle_wait(
                     "message": format!("Error getting task {}: {}", task_id, msg),
                     "task_id": task_id,
                 });
-                println!("{}", serde_json::to_string_pretty(&payload).unwrap());
+                eprintln!("{}", serde_json::to_string_pretty(&payload).unwrap());
             } else {
                 eprintln!("Error getting task {}: {}", task_id, msg);
             }

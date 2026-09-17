@@ -112,18 +112,18 @@ fn update(args: &SelfUpdateArgs) -> Result<(), SelfUpdateError> {
     match updater.run_sync() {
         Ok(Some(result)) => {
             if let Some(old_version) = result.old_version {
-                eprintln!(
+                println!(
                     "Updated torc from v{old_version} to v{}.",
                     result.new_version
                 );
             } else {
-                eprintln!("Updated torc to v{}.", result.new_version);
+                println!("Updated torc to v{}.", result.new_version);
             }
             eprintln!("{}{}", RELEASE_URL_PREFIX, result.new_version_tag);
             Ok(())
         }
         Ok(None) => {
-            eprintln!(
+            println!(
                 "torc is already up to date (v{}).",
                 env!("CARGO_PKG_VERSION")
             );

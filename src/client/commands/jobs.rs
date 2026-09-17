@@ -807,7 +807,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                                 ) {
                                     Ok(_) => {
                                         if format != "json" {
-                                            println!(
+                                            eprintln!(
                                                 "Updated runtime to {} on resource requirements ID {}",
                                                 new_runtime, rr_id
                                             );
@@ -999,12 +999,12 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
 
                     // Confirm deletion
                     if !no_prompts && format != "json" {
-                        println!(
+                        eprintln!(
                             "About to delete {} job(s) from workflow ID: {}",
                             job_count, selected_workflow_id
                         );
-                        print!("Are you sure? (y/N): ");
-                        if let Err(e) = io::stdout().flush() {
+                        eprint!("Are you sure? (y/N): ");
+                        if let Err(e) = io::stderr().flush() {
                             eprintln!("Failed to write prompt: {}", e);
                             std::process::exit(1);
                         }
@@ -1016,7 +1016,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                         }
 
                         if !input.trim().eq_ignore_ascii_case("y") {
-                            println!("Deletion cancelled");
+                            eprintln!("Deletion cancelled");
                             return;
                         }
                     }
@@ -1125,7 +1125,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             };
 
-            if jobs.is_empty() {
+            // CSV falls through so an empty table renders like other list commands.
+            if jobs.is_empty() && format != "csv" {
                 if format == "json" {
                     println!("[]");
                 } else {
@@ -1245,7 +1246,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             };
 
-            if jobs.is_empty() {
+            // CSV falls through so an empty table renders like other list commands.
+            if jobs.is_empty() && format != "csv" {
                 if format == "json" {
                     println!("[]");
                 } else {
@@ -1941,12 +1943,12 @@ fn handle_reset_job_status(
 
         if !downstream_jobs.is_empty() {
             if reinit {
-                println!(
+                eprintln!(
                     "\nThe following downstream jobs will be reset now by the reinit step \
                      (a rerun job produces new outputs, so its consumers must rerun too):",
                 );
             } else {
-                println!(
+                eprintln!(
                     "\nThe following downstream jobs will be reset when you run \
                      'torc workflows reinit {}' (a rerun job produces new outputs, so its \
                      consumers must rerun too):",
@@ -1975,9 +1977,9 @@ fn handle_reset_job_status(
             });
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else {
-            println!("Dry run: no changes were made.");
+            eprintln!("Dry run: no changes were made.");
             if reinit {
-                println!("Dry run: the workflow would also be reinitialized.");
+                eprintln!("Dry run: the workflow would also be reinitialized.");
             }
         }
         return;
@@ -2008,8 +2010,8 @@ fn handle_reset_job_status(
             }
         }
         eprintln!("This is an idempotent operation and can be re-run if it partially fails.");
-        print!("Continue? (y/N): ");
-        io::stdout().flush().unwrap();
+        eprint!("Continue? (y/N): ");
+        io::stderr().flush().unwrap();
 
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
@@ -2161,7 +2163,7 @@ fn handle_reset_job_status(
         if reinit_applied {
             println!("Reinitialized workflow {}.", workflow_id);
         }
-        println!("{}", next_steps);
+        eprintln!("{}", next_steps);
     }
 }
 

@@ -208,7 +208,7 @@ fn select_slurm_scheduler_interactively(
 
             eprintln!("\nEnter scheduler ID: ");
             use std::io::{self, Write};
-            io::stdout().flush().unwrap();
+            io::stderr().flush().unwrap();
             let mut input = String::new();
             match io::stdin().read_line(&mut input) {
                 Ok(_) => match input.trim().parse::<i64>() {
@@ -1133,7 +1133,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     if print_if_json(format, &created, "Slurm scheduler") {
                         // JSON was printed
                     } else {
-                        eprintln!(
+                        println!(
                             "Added Slurm configuration '{}' (ID: {}) to workflow {}",
                             name,
                             created.id.unwrap_or(-1),
@@ -1231,7 +1231,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     if print_if_json(format, &updated, "Slurm scheduler") {
                         // JSON was printed
                     } else {
-                        eprintln!("Updated Slurm configuration {}", scheduler_id);
+                        println!("Updated Slurm configuration {}", scheduler_id);
                     }
                 }
                 Err(e) => {
@@ -1297,31 +1297,31 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     if print_if_json(format, &scheduler, "Slurm scheduler") {
                         // JSON was printed
                     } else {
-                        eprintln!("Slurm Config ID {}:", id);
-                        eprintln!("  Name: {}", scheduler.name.unwrap_or_default());
-                        eprintln!("  Workflow ID: {}", scheduler.workflow_id);
-                        eprintln!("  Account: {}", scheduler.account);
-                        eprintln!("  Nodes: {}", scheduler.nodes);
-                        eprintln!("  Walltime: {}", scheduler.walltime);
-                        eprintln!("  Partition: {}", scheduler.partition.unwrap_or_default());
-                        eprintln!("  QOS: {}", scheduler.qos.unwrap_or_default());
-                        eprintln!(
+                        println!("Slurm Config ID {}:", id);
+                        println!("  Name: {}", scheduler.name.unwrap_or_default());
+                        println!("  Workflow ID: {}", scheduler.workflow_id);
+                        println!("  Account: {}", scheduler.account);
+                        println!("  Nodes: {}", scheduler.nodes);
+                        println!("  Walltime: {}", scheduler.walltime);
+                        println!("  Partition: {}", scheduler.partition.unwrap_or_default());
+                        println!("  QOS: {}", scheduler.qos.unwrap_or_default());
+                        println!(
                             "  GRES: {}",
                             scheduler.gres.unwrap_or_else(|| "None".to_string())
                         );
-                        eprintln!(
+                        println!(
                             "  Memory: {}",
                             scheduler.mem.unwrap_or_else(|| "None".to_string())
                         );
-                        eprintln!(
+                        println!(
                             "  Tmp: {}",
                             scheduler.tmp.unwrap_or_else(|| "None".to_string())
                         );
-                        eprintln!(
+                        println!(
                             "  Extra: {}",
                             scheduler.extra.unwrap_or_else(|| "None".to_string())
                         );
-                        eprintln!(
+                        println!(
                             "  Serialize allocations: {}",
                             scheduler.serialize_allocations.unwrap_or(false)
                         );
@@ -1339,9 +1339,9 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     if print_if_json(format, &deleted_scheduler, "Slurm scheduler") {
                         // JSON was printed
                     } else {
-                        eprintln!("Successfully deleted Slurm config ID {}", id);
-                        eprintln!("  Name: {}", deleted_scheduler.name.unwrap_or_default());
-                        eprintln!("  Workflow ID: {}", deleted_scheduler.workflow_id);
+                        println!("Successfully deleted Slurm config ID {}", id);
+                        println!("  Name: {}", deleted_scheduler.name.unwrap_or_default());
+                        println!("  Workflow ID: {}", deleted_scheduler.workflow_id);
                     }
                 }
                 Err(e) => {
@@ -1471,7 +1471,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                 *claim_backoff_max_secs,
             ) {
                 Ok(()) => {
-                    eprintln!("Successfully running {} Slurm job(s)", num_hpc_jobs);
+                    println!("Successfully running {} Slurm job(s)", num_hpc_jobs);
                 }
                 Err(e) => {
                     eprintln!("Error scheduling Slurm nodes: {}", e);
@@ -3720,14 +3720,14 @@ pub fn run_sacct_for_workflow(
         }
 
         if !errors.is_empty() {
-            println!("\nErrors:");
+            eprintln!("\nErrors:");
             for err in &errors {
-                println!("  {}", err);
+                eprintln!("  {}", err);
             }
         }
 
         if save_json {
-            println!("\nFull JSON saved to: {}", output_dir.display());
+            eprintln!("\nFull JSON saved to: {}", output_dir.display());
         }
     }
 }
@@ -3800,16 +3800,16 @@ fn run_usage_for_workflow(config: &Configuration, workflow_id: i64, format: &str
         println!("Total CPU time:  {}", total_cpu_time);
 
         if unknown_node_count > 0 {
-            println!(
+            eprintln!(
                 "\nWarning: {} allocation(s) had unknown node count (excluded from totals)",
                 unknown_node_count
             );
         }
 
         if !errors.is_empty() {
-            println!("\nErrors:");
+            eprintln!("\nErrors:");
             for err in &errors {
-                println!("  {}", err);
+                eprintln!("  {}", err);
             }
         }
     }
@@ -4614,7 +4614,7 @@ fn handle_plan_allocations(
                             label, wait_str, completion_str
                         );
                         if est.strategy == "many-small" {
-                            println!(
+                            eprintln!(
                                 "        Note: estimate is for first job only; later jobs \
                                  delayed by fair-share"
                             );
@@ -4635,22 +4635,22 @@ fn handle_plan_allocations(
             println!();
             match rec.strategy.as_str() {
                 "single" if rec.total_nodes > 1 => {
-                    println!(
+                    eprintln!(
                         "    Suggested: torc slurm generate --account {} --single-allocation {}",
                         result.account, workflow_file_arg
                     );
                 }
                 "many-small" => {
-                    println!(
+                    eprintln!(
                         "    Suggested: torc slurm generate --account {} {}",
                         result.account, workflow_file_arg
                     );
                 }
                 "chunked" => {
-                    println!(
+                    eprintln!(
                         "    Note: Chunked allocations require manual configuration or multiple",
                     );
-                    println!(
+                    eprintln!(
                         "    schedulers. Use 'torc slurm generate' and adjust nodes per scheduler."
                     );
                 }
@@ -4660,9 +4660,9 @@ fn handle_plan_allocations(
         }
 
         if !result.warnings.is_empty() {
-            println!("Warnings:");
+            eprintln!("Warnings:");
             for warning in &result.warnings {
-                println!("  - {}", warning);
+                eprintln!("  - {}", warning);
             }
         }
 
@@ -4825,10 +4825,10 @@ fn handle_generate(
             println!("Profile: {} ({})", profile.display_name, profile.name);
 
             if !result.warnings.is_empty() {
-                println!();
-                println!("Warnings:");
+                eprintln!();
+                eprintln!("Warnings:");
                 for warning in &result.warnings {
-                    println!("  - {}", warning);
+                    eprintln!("  - {}", warning);
                 }
             }
         }
@@ -4865,10 +4865,10 @@ fn handle_generate(
                     );
 
                     if !result.warnings.is_empty() {
-                        println!();
-                        println!("Warnings:");
+                        eprintln!();
+                        eprintln!("Warnings:");
                         for warning in &result.warnings {
-                            println!("  - {}", warning);
+                            eprintln!("  - {}", warning);
                         }
                     }
                 }
@@ -5358,7 +5358,7 @@ fn handle_regenerate(
         } else {
             println!("No pending jobs with resource requirements found");
             for warning in &warnings {
-                println!("  Warning: {}", warning);
+                eprintln!("  Warning: {}", warning);
             }
         }
         return;
@@ -5432,10 +5432,10 @@ fn handle_regenerate(
             println!("Profile: {} ({})", profile.display_name, profile.name);
 
             if !warnings.is_empty() {
-                println!();
-                println!("Warnings:");
+                eprintln!();
+                eprintln!("Warnings:");
                 for warning in &warnings {
-                    println!("  - {}", warning);
+                    eprintln!("  - {}", warning);
                 }
             }
         }
@@ -5657,7 +5657,7 @@ fn handle_regenerate(
         // complete. Only report them here -- there is nothing to submit yet.
         for scheduler_info in &schedulers_created {
             if scheduler_info.has_dependencies {
-                println!(
+                eprintln!(
                     "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action when dependencies complete",
                     scheduler_info.name, scheduler_info.num_allocations
                 );
@@ -5738,10 +5738,10 @@ fn handle_regenerate(
         }
 
         if !result.warnings.is_empty() {
-            println!();
-            println!("Warnings:");
+            eprintln!();
+            eprintln!("Warnings:");
             for warning in &result.warnings {
-                println!("  - {}", warning);
+                eprintln!("  - {}", warning);
             }
         }
 
@@ -5756,9 +5756,9 @@ fn handle_regenerate(
                 println!("Allocations submitted successfully.");
             }
         } else if !result.schedulers_created.is_empty() {
-            println!();
-            println!("To submit the allocations, run:");
-            println!("  torc slurm regenerate {} --submit", workflow_id);
+            eprintln!();
+            eprintln!("To submit the allocations, run:");
+            eprintln!("  torc slurm regenerate {} --submit", workflow_id);
         }
     }
 }

@@ -115,9 +115,9 @@ fn collect_bundle(
         }
     };
 
-    println!("Collecting logs for workflow {} ({})", wf_id, workflow.name);
-    println!("Output directory: {}", output_dir.display());
-    println!("Bundle path: {}", bundle_path.display());
+    eprintln!("Collecting logs for workflow {} ({})", wf_id, workflow.name);
+    eprintln!("Output directory: {}", output_dir.display());
+    eprintln!("Bundle path: {}", bundle_path.display());
 
     // Create the tarball
     let tar_file = match File::create(&bundle_path) {
@@ -202,14 +202,14 @@ fn collect_bundle(
         }
     }
 
-    println!();
+    eprintln!();
     println!("Log bundle created successfully:");
     println!("  File: {}", bundle_path.display());
     println!("  Files collected: {}", files_collected);
     println!("  Total size: {} bytes", total_size);
-    println!();
-    println!("To analyze the bundle, run:");
-    println!("  torc logs analyze {}", bundle_path.display());
+    eprintln!();
+    eprintln!("To analyze the bundle, run:");
+    eprintln!("  torc logs analyze {}", bundle_path.display());
 }
 
 /// Collect files matching the workflow pattern from a directory
@@ -251,7 +251,7 @@ fn collect_matching_files<W: std::io::Write>(
                         };
 
                         if tar_builder.append_file(&archive_name, &mut file).is_ok() {
-                            println!("  Added: {}", archive_name);
+                            eprintln!("  Added: {}", archive_name);
                             count += 1;
                         }
                     }
@@ -311,7 +311,7 @@ fn collect_slurm_files<W: std::io::Write>(
                         };
 
                         if tar_builder.append_file(&archive_name, &mut file).is_ok() {
-                            println!("  Added: {}", archive_name);
+                            eprintln!("  Added: {}", archive_name);
                             count += 1;
                         }
                     }
@@ -683,8 +683,8 @@ fn analyze_path(path: &Path, workflow_id: Option<i64>) {
 
 /// Parse a log bundle tarball and extract error information
 fn analyze_bundle(bundle_path: &Path) {
-    println!("Analyzing log bundle: {}", bundle_path.display());
-    println!();
+    eprintln!("Analyzing log bundle: {}", bundle_path.display());
+    eprintln!();
 
     // Open and decompress the tarball
     let file = match File::open(bundle_path) {
@@ -828,7 +828,7 @@ fn analyze_directory(dir: &Path, workflow_id: Option<i64>) {
     };
 
     let wf_pattern = format!("wf{}", wf_id);
-    println!("Parsing log directory: {}", dir.display());
+    eprintln!("Parsing log directory: {}", dir.display());
     println!("Workflow ID: {}", wf_id);
     println!();
 

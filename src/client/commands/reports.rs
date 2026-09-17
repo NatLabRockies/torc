@@ -87,7 +87,8 @@ pub fn check_resource_utilization(
         }
     };
 
-    if report.total_results == 0 {
+    // JSON falls through so it still emits its normal (empty) document.
+    if report.total_results == 0 && format != "json" {
         let msg = if include_failed {
             format!(
                 "No completed, failed, or terminated job results found for workflow {}",
@@ -175,7 +176,7 @@ pub fn check_resource_utilization(
                 }
 
                 if !show_all {
-                    println!(
+                    eprintln!(
                         "\nNote: Use --all to see all jobs, including those that stayed within limits"
                     );
                 }
@@ -611,7 +612,6 @@ pub fn generate_results_report(
                 report.workflow_id, job_ids
             );
         }
-        std::process::exit(0);
     }
 
     print_json(&report, "results report");
@@ -937,8 +937,8 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
         // `torc workflows diagnose`.
         let runtime_blocked = report["runtime_blocked_ready_jobs"].as_u64().unwrap_or(0);
         if runtime_blocked > 0 {
-            println!();
-            print!(
+            eprintln!();
+            eprint!(
                 "⚠ {} ready job(s) runtime-blocked (need more walltime than any active allocation has left)",
                 runtime_blocked
             );
@@ -946,14 +946,14 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
                 report["longest_ready_runtime_seconds"].as_f64(),
                 report["max_allocation_remaining_seconds"].as_f64(),
             ) {
-                print!(
+                eprint!(
                     ": longest job {} vs {} remaining",
                     format_duration(longest),
                     format_duration(remaining)
                 );
             }
-            println!();
-            println!(
+            eprintln!();
+            eprintln!(
                 "  Run 'torc workflows diagnose {}' for details.",
                 workflow_id
             );

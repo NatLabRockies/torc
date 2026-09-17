@@ -4766,6 +4766,7 @@ async fn capture_api_event(
 /// `Err(response)` means the body could not be read and the middleware
 /// should short-circuit with the contained error response rather than
 /// silently substituting an empty body for the handler.
+#[allow(clippy::result_large_err)]
 async fn capture_request_body(
     request: Request,
     display_limit: usize,
@@ -4800,6 +4801,7 @@ async fn capture_request_body(
 /// means the handler's body errored mid-stream while we were buffering
 /// it for capture; we replace the broken response with a synthesized
 /// 502 rather than truncating it to an empty body.
+#[allow(clippy::result_large_err)]
 async fn capture_response_body(
     response: Response<Body>,
     display_limit: usize,
