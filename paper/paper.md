@@ -7,13 +7,26 @@ tags:
   - workflow orchestration
   - research software
 authors:
-  # Replace this placeholder with the final authors, affiliations, and ORCIDs.
-  - name: Author list to be finalized
+  - name: Daniel Thom
     corresponding: true
     affiliation: 1
+  - name: Nathan Keilbart
+    affiliation: 2
+  - name: Joseph McKinsey
+    affiliation: 1
+  - name: Pedro Andres Sanchez Perez
+    affiliation: 1
+  - name: Andrew Lai
+    affiliation: 2
+  - name: Kapil Duwadi
+    affiliation: 3
 affiliations:
-  - name: Affiliation to be finalized
+  - name: National Laboratory of the Rockies
     index: 1
+  - name: Lawrence Livermore National Laboratory
+    index: 2
+  - name: Pacific Northwest National Laboratory
+    index: 3
 date: 15 September 2026
 bibliography: paper.bib
 ---
@@ -25,8 +38,9 @@ It supports workflows ranging from independent parameter sweeps to dependency-ri
 campaigns with heterogeneous CPU, memory, GPU, node-count, and runtime requirements. Researchers can
 describe workflows declaratively, run them locally, and execute the same workflow through workers
 inside Slurm allocations. A REST service and SQLite database maintain durable workflow state, while
-a unified command-line interface supports creation, execution, monitoring, diagnosis, selective
-reruns, and recovery. Python and generated API clients provide programmatic access, while terminal
+a unified command-line interface supports creation, execution, monitoring, diagnosis,
+resource-usage analysis, selective reruns, and recovery. Python and generated API clients provide
+programmatic access, while terminal
 and web interfaces support interactive operation. Torc is intended for computational scientists who
 need a practical path from workstation-scale experiments to persistent high-performance computing
 campaigns.
@@ -148,16 +162,19 @@ separate monitoring stack.
 
 # Research impact statement
 
-<!-- Replace this section with specific evidence from at least two research deployments. Include
-the scientific purpose, workflow shape, approximate scale, execution environment, and realized
-impact. JOSS requires demonstrated research use rather than aspirational applications. -->
+At the National Energy Research Scientific Computing Center at Lawrence Berkeley National
+Laboratory, Torc orchestrated ExaEpi parameter sweeps for predicting epidemiological events,
+including COVID-19. The campaign ran three million simulations in batches of 100,000 on the
+Perlmutter system. Its Slurm workflow combined GPU-backed main simulations with CPU-backed setup and
+postprocessing jobs. Resource-aware scheduling reduced required walltime relative to the prior
+configuration and limited unused allocation capacity between the heterogeneous job stages.
 
-Torc has been used for computational simulation campaigns, multi-stage data-processing pipelines,
-and workflows with heterogeneous CPU and GPU requirements. These deployments motivate its emphasis
-on durable state, resource-aware Slurm execution, monitoring, and selective recovery. The final
-manuscript will describe the deployments for which publication permission and verifiable evidence
-are available. Descriptive impact claims will be distinguished from performance claims requiring
-released measurements and methods.
+At Lawrence Livermore National Laboratory's Livermore Computing Dane system, Torc ran year-long
+power-system production-cost simulations across varied input scenarios. These CPU-only workloads
+were longer lived than the ExaEpi jobs. Resource monitoring exposed CPU and memory use for debugging
+and allowed the team to tune resource requests for subsequent simulations.
+
+<!-- Add a documented Kestrel deployment after its scientific use, scale, and outcomes are confirmed. -->
 
 # Availability
 
