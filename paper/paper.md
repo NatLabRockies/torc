@@ -66,15 +66,22 @@ scientific campaigns [@jain2015fireworks; @salim2018balsam]. Pilot systems and h
 schedulers, including RADICAL-Pilot and Flux, execute many tasks within larger resource allocations
 [@merzky2018radicalpilot; @ahn2020flux].
 
-Torc was built rather than added to one of these systems to provide a compact, command-oriented path
-from local execution to Slurm without adopting a system-specific programming language or operating
-a separate database service. Torc does not claim to originate directed acyclic graph execution,
-data-derived dependencies, persistent workflow state, or task execution inside allocations. Its
-software contribution is the integration of declarative specifications, a unified command-line
-interface, durable SQLite-backed state, resource-aware local and Slurm workers, operational
-monitoring, recovery, and provenance behind one API and execution model. This design favors
-straightforward deployment and consistent campaign operation over the language ecosystems,
-portable standards, or specialized distributed runtimes offered by other systems.
+Torc does not claim to originate directed acyclic graph execution, data-derived dependencies,
+persistent workflow state, dynamic workflows, or task execution inside allocations. It was built to
+provide a different integrated design point: command-oriented workflows, a compact control plane
+that does not require an external database service, and one operational model from local execution
+through Slurm. Independent workers and allocations pull from the same durable queue, while measured
+outcomes feed monitoring, selective reruns, and resource-aware recovery. This combination addresses
+campaigns that have outgrown scripts and job arrays but do not require a specialized distributed
+runtime or a separately administered workflow service.
+
+This position differs from file-centered systems by allowing explicit dependencies and database-
+backed JSON relationships to coexist with file dataflow. It differs from Python-native runtimes by
+keeping existing executables and shell commands as the unit of work, while still providing Python
+and generated clients for orchestration. Compared with pilot and hierarchical schedulers, Torc adds
+the persistent workflow graph, user-facing lifecycle operations, and execution evidence around
+allocation-resident work. The contribution is therefore not any isolated primitive, but their
+coupling into a small operational system intended for scientific teams to run themselves.
 
 # Software design
 
@@ -85,30 +92,59 @@ database to remain on server-local storage while workers execute on other nodes.
 the horizontal write scalability of a distributed database for a control plane that is simple to
 deploy, back up, and inspect.
 
+SQLite is a deliberate operating boundary rather than an interchangeable implementation detail.
+Only the server opens the database; remote workers use HTTP, so a live database need not reside on a
+parallel filesystem or be exposed to compute nodes. A campaign can be started without provisioning
+a database service, resumed after process restarts, and archived by preserving one file. This favors
+the common case of one coordinating server and many execution workers. Workloads that exceed a
+single server's write capacity would require a different persistence architecture, a trade-off Torc
+makes in favor of deployability on institutional and leadership-class computing systems.
+
 ![Torc separates user-facing tools, a durable SQLite-backed control plane, and pull-based execution
 across local, remote, and Slurm resources. Solid lines show control traffic; dashed lines show
 scientific artifact access.\label{fig:architecture}](architecture.png){ width=100% }
 
-Dependencies may be declared directly between jobs or inferred from producer and consumer
-relationships over files and JSON user data. During workflow initialization, Torc resolves these
-relationships into a common dependency graph. Workers atomically claim ready jobs and transition
-them to a pending state, preventing concurrent workers from allocating the same job. Resource-aware
-claims consider available CPUs, memory, GPUs, node count, and remaining runtime. Slurm workers run
-inside allocations and can launch multiple resource-constrained job steps, enabling fine-grained
-workflow execution without submitting every task independently to the scheduler.
+Dependencies may be declared directly or inferred from producer and consumer relationships over
+files and JSON user data. Torc resolves these relationships into one graph so that the same state
+transitions apply regardless of how an edge was specified. A worker advertises its available CPUs,
+memory, GPUs, node count, and remaining runtime. The server selects fitting ready jobs and marks
+them pending in one transaction, preventing duplicate ownership when many workers request work
+concurrently. Priority ordering and residual backfill let smaller jobs use capacity left by larger
+claims. This is useful for heterogeneous campaigns in which several independently submitted Slurm
+allocations, each with its own runner by default, draw from the same workflow queue.
 
-Torc persists results and resource observations for later inspection. It supports failure handlers,
-selective workflow reinitialization, resource correction after memory or runtime failures, and
-offline completion journals when a worker temporarily loses access to the server. Optional RO-Crate
-generation records workflow, job, input, output, and software provenance
-[@soilandreyes2022rocrate]. Workflows can also extend their graphs at runtime through transactional
-job spawning for adaptive or iterative algorithms.
+Runners separate workflow coordination from process placement. Local and remote runners execute
+commands directly. Inside a Slurm allocation, a runner can execute commands directly or launch
+resource-constrained `srun --exact` job steps; one runner can manage one or more allocated nodes.
+Slurm therefore retains responsibility for allocations, placement, and enforcement, while Torc
+decides which dependency-ready job fits next. Researchers can develop a workflow on a workstation
+and move it to a cluster without changing its dependency or operational model.
+
+For adaptive algorithms, transactional spawning adds a batch of jobs, parent and explicit
+dependency edges, and lineage state together. Invalid batches are rolled back. An iterative method
+can therefore inspect an intermediate result, create only its next generation, and terminate by
+spawning nothing when convergence is reached. Lineage records identify each generation, while
+iteration limits and replay handling constrain runaway or repeated requests. For completed
+workflows, reinitialization detects changed files, user data, job definitions, or missing outputs
+and resets only affected jobs and their descendants. Both mechanisms avoid predeclaring unnecessary
+work or rerunning unaffected branches.
+
+Execution results include status, logs, attempts, and, when monitoring or scheduler accounting is
+available, CPU, memory, and runtime observations. These records support reports and resource plots,
+but they also close the control loop: likely memory and runtime failures can be diagnosed, resource
+requirements corrected, and selected work retried in replacement allocations. If the API becomes
+temporarily unavailable, workers can journal completions locally and reconcile them later rather
+than discard finished work or rerun expensive calculations. The same retained evidence lets users
+compare requested and observed resources after a campaign and tune later runs, even when automatic
+recovery is not used. Optional RO-Crate generation records workflow, job, input, output, and
+software provenance [@soilandreyes2022rocrate].
 
 Users interact with these capabilities through declarative workflow files and a unified `torc`
 command-line interface. The same API supports generated clients, a Python orchestration layer, a
 terminal interface, a web dashboard, and an MCP server. This layered design allows interactive and
 programmatic clients to share workflow semantics rather than independently implementing workflow
-state transitions.
+state transitions. It also exposes live status and historical resource evidence without requiring a
+separate monitoring stack.
 
 # Research impact statement
 
