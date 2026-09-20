@@ -37,14 +37,23 @@ pipelines safe.
 
 ## Job runner logging
 
-`torc run`, `torc exec`, `torc watch`, and the Slurm job runner install their own logger. Two things
-differ from an ordinary command:
+`torc run`, `torc exec`, `torc watch`, and the Slurm job runner install their own logger. Where the
+lines go depends on which one:
 
-- **Always duplicated to a file.** Every line goes to stderr _and_ to a log file:
-  `<output-dir>/job_runner_<hostname>_wf<id>_r<run>.log` (local `run`/`exec`),
-  `<output-dir>/job_runner_slurm_wf<id>_sl<slurm>_n<node>_pid<pid>.log` (Slurm), or
-  `<output-dir>/watch_<hostname>_wf<id>.log` (`watch`). The runner prints the exact path at startup.
-- **Console output is always stderr,** in every format, so `-f json` stdout stays parseable.
+| Command                 | Console     | Log file                                                              |
+| ----------------------- | ----------- | --------------------------------------------------------------------- |
+| `torc run`, `torc exec` | stderr      | `<output-dir>/job_runner_<hostname>_wf<id>_r<run>.log`                |
+| `torc watch`            | stderr      | `<output-dir>/watch_<hostname>_wf<id>.log`                            |
+| `torc-slurm-job-runner` | **nothing** | `<output-dir>/job_runner_slurm_wf<id>_sl<slurm>_n<node>_pid<pid>.log` |
+
+- **`run`, `exec` and `watch` duplicate every line** to stderr and to the file. Console output is
+  stderr in every format, so `-f json` stdout stays parseable. The runner prints the exact path at
+  startup.
+- **The Slurm job runner writes to the file only.** Its logger targets the log file and nothing
+  else, so do not expect runner output in the allocation's `slurm_output_wf<id>_sl<slurm>.e` -- that
+  file gets only whatever the process wrote before the logger was installed, plus output from the
+  jobs themselves. When a Slurm allocation looks silent, read `job_runner_slurm_*.log`, not the
+  Slurm stderr file.
 
 The filter syntax is the same as for any other command: these loggers call `parse_filters`, so
 `RUST_LOG=torc=debug torc run ...` and `--log-level torc::client::job_runner=debug` both work.

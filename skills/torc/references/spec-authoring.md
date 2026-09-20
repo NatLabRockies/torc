@@ -251,12 +251,28 @@ Use `on_workflow_complete` only for narrowly scoped cleanup.
 
 ## Execution config
 
-`execution_config.mode` selects `direct` (the default), `slurm`, or `auto`. Under `auto` the
-effective mode is resolved **by the runner from its own environment**: `slurm` when `SLURM_JOB_ID`
-is set, `direct` otherwise. It does not look at the spec's schedulers, so the same spec can run
-direct locally and under `srun` inside an allocation. The remaining fields are mode-gated, and
-setting one that does not match the effective mode is a validation error at creation, not a silently
-ignored value.
+`execution_config.mode` selects `direct` (the default), `slurm`, or `auto`. The remaining fields are
+mode-gated: setting one that does not match the mode is a validation error at creation, not a
+silently ignored value.
+
+Under `auto`, two different phases decide the mode and they can disagree:
+
+| Phase                    | How `auto` is resolved                                                |
+| ------------------------ | --------------------------------------------------------------------- |
+| Creation-time validation | `slurm` if the spec has a non-empty `slurm_schedulers`, else `direct` |
+| Runtime, in the runner   | `slurm` if `SLURM_JOB_ID` is set in its environment, else `direct`    |
+
+So the same spec can validate as one mode and execute as the other. An `auto` spec with no
+schedulers is validated as direct, so it rejects `srun_termination_signal` even though the job would
+pick slurm mode if run inside an allocation; an `auto` spec with schedulers is validated as slurm,
+so it rejects `limit_resources: false` and `termination_signal` even though a local run would use
+direct mode. Set `mode` explicitly when you need a mode-gated field and the two phases would not
+agree.
+
+Note that this gating runs at **creation**, not during `torc create --dry-run`: a spec that fails
+this check still reports `Validation: PASSED` offline and only errors when the workflow is actually
+created. Verified both ways -- the dry run passes and the create prints
+`srun_termination_signal is only supported in slurm mode`.
 
 | Field                      | Mode   | Default   | Purpose                                              |
 | -------------------------- | ------ | --------- | ---------------------------------------------------- |
@@ -342,7 +358,9 @@ so putting any of those in `slurm_defaults` is rejected with the offending keys 
 deliberately allowed there as a workflow-level default. Anything else valid for sbatch is accepted
 and not validated by Torc, so a typo surfaces as an sbatch rejection at submit time.
 
-`torc create --dry-run` runs this check too, so a clean dry-run does cover `slurm_defaults`.
+`torc create --dry-run` runs this check too, so a clean dry-run does cover `slurm_defaults`. It does
+**not** cover `execution_config` mode gating, which only runs at creation -- see
+[Execution config](#execution-config).
 
 ## Dynamic jobs
 
