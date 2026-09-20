@@ -35,16 +35,14 @@ status     workflow_id, workflow_name, workflow_user, total_jobs, jobs_by_status
            max_allocation_remaining_seconds
 ```
 
-Job status values are lowercase on every surface a script should read -- JSON, CSV, the table
-renderer, the TUI, the MCP server, and the runner's own lifecycle log lines
-(`Job completed ...
-status=completed`): `uninitialized`, `blocked`, `ready`, `pending`, `running`,
-`completed`, `failed`, `canceled`, `terminated`, `disabled`, `pending_failed`. Match on those exact
-strings.
+Job status values are lowercase everywhere -- JSON, CSV, the table renderer, the TUI, the MCP
+server, server API error messages, and log lines: `uninitialized`, `blocked`, `ready`, `pending`,
+`running`, `completed`, `failed`, `canceled`, `terminated`, `disabled`, `pending_failed`. Match on
+those exact strings.
 
-The guarantee stops at free-form diagnostics. A handful of server-side error and debug messages
-still format the enum with Rust's `{:?}` and emit `Completed` or `PendingFailed`, so never
-pattern-match a status out of arbitrary log text -- read it from `-f json` or the MCP tools.
+Prefer reading a status from `-f json` or an MCP tool over scraping it out of log text, but the
+casing is consistent either way: every surface formats the enum through its `Display` impl, so
+`status=completed` never appears as `status=Completed`.
 
 Memory in JSON is bytes; the table pre-formats it as `MB`. CPU is a percentage that can exceed 100
 for multi-threaded jobs.
