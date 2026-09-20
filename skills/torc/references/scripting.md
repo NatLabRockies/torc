@@ -28,9 +28,11 @@ results[]  id, job_id, job_name, workflow_id, run_id, attempt_id, return_code, s
 jobs[]     id, name, command, status, priority, workflow_id, attempt_id,
            resource_requirements_id, failure_handler_id, scheduler_id, invocation_script,
            cancel_on_blocking_job_failure, supports_termination
-status     jobs_by_status{...}, is_complete, is_canceled, active_compute_nodes,
-           active_scheduled_nodes, pending_scheduled_nodes, runtime_blocked_ready_jobs,
-           total_exec_time_formatted
+status     workflow_id, workflow_name, workflow_user, total_jobs, jobs_by_status{...},
+           total_exec_time_minutes, walltime_seconds, active_compute_nodes,
+           active_scheduled_nodes, pending_scheduled_nodes, is_complete, is_canceled,
+           runtime_blocked_ready_jobs, longest_ready_runtime_seconds,
+           max_allocation_remaining_seconds
 ```
 
 Job status values are lowercase everywhere -- JSON, CSV, the table renderer, the TUI, the MCP

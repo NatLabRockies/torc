@@ -63,9 +63,11 @@ which `torc` command to run next, which is the intended pattern.
 | `list_examples` / `get_example` | browse and read `examples/`                                 | `spec-authoring.md`     |
 | `get_docs`                      | read the published docs                                     | —                       |
 
-Filters mirror the CLI: `list_results` takes `failed_only`, `get_job_logs` takes a stream and an
-optional line count, and `list_jobs_by_status` takes the same status names documented in
-`query-map.md`.
+Filters mirror the CLI: `list_results` takes `job_id`, `run_id`, `return_code`, `failed_only` and
+`status`; `list_jobs_by_status` takes the same lowercase status names used everywhere else. Note
+that `get_job_logs` addresses one attempt rather than filtering: it requires `workflow_id`,
+`job_id`, `run_id` and `log_type` (`stdout` or `stderr`), defaults `attempt_id` to 1, and takes an
+optional `tail_lines`. Get the run and attempt from `list_results` first.
 
 ## MCP-only capabilities
 

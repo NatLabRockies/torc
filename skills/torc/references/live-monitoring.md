@@ -113,7 +113,9 @@ torc plot-resources <db> -f json           # data instead of HTML
 
 Output filenames are `job_<id>.html`, `summary.html`, and `system_timeline.html`, optionally
 prefixed with `-p`. `resource_monitor.generate_plots: true` produces them automatically when the
-runner exits.
+runner exits, writing them beside the database in `resource_utilization/` and prefixing each with
+the database's own label (`wf<wf>_h<host>_r<run>_job_4.html`) so runs sharing an output directory do
+not overwrite each other.
 
 For summary-only workflows there is no time-series database; use `torc workflows check-resources`
 and the peak columns in `torc results list` instead.

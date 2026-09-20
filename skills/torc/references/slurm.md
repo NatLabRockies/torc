@@ -33,9 +33,10 @@ torc hpc match --cpus 32 --memory 64g --walltime 2:00:00
 torc hpc generate                    # derive a profile from the live Slurm cluster
 ```
 
-`torc hpc detect` reports no known system on an unsupported cluster. Either request built-in support
-or define a custom profile under `client.hpc.custom_profiles` (see `hpc-profiles.md`), then pass
-`--profile <name>` explicitly.
+`torc hpc detect` falls back to live Slurm discovery when no built-in or custom profile matches, and
+prints `No known HPC system detected.` only when that also fails. In that case either request
+built-in support or define a custom profile under `client.hpc.custom_profiles` (see
+`hpc-profiles.md`), then pass `--profile <name>` to `torc slurm generate` explicitly.
 
 `torc slurm plan-allocations <spec>` analyzes the workflow's parallelism against live cluster state
 (`sinfo`, `squeue`, and `sbatch --test-only` probes) and recommends whether to use one large
@@ -168,6 +169,6 @@ torc jobs reset-status <id1> <id2> --reinit
 torc submit <workflow_id>
 ```
 
-An `on_workflow_start` `schedule_nodes` action survives reinitialize and cannot be re-fired by
-`torc submit`, which is why `on_jobs_ready` is the better trigger. Full rerun semantics live in
-`rerun-and-recovery.md`.
+A partial reinitialize leaves an `on_workflow_start` `schedule_nodes` action suppressed, so
+`torc submit` cannot re-fire it; only a full `torc workflows init` re-arms it. That is why
+`on_jobs_ready` is the better trigger. Full rerun semantics live in `rerun-and-recovery.md`.

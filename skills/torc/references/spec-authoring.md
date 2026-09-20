@@ -216,22 +216,31 @@ the workflow level it becomes `pending_failed` instead, awaiting classification.
 Actions react to state transitions. They are not dependency edges: an action failure does not block
 downstream jobs. If setup must gate downstream work, model it as a real job with an output file.
 
-| Field                                               | Notes                                                                            |
-| --------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `trigger_type`                                      | `on_workflow_start`, `on_workflow_complete`, `on_jobs_ready`, `on_jobs_complete` |
-| `action_type`                                       | `run_commands` or `schedule_nodes`                                               |
-| `jobs` / `job_name_regexes`                         | Which jobs a job-scoped trigger matches                                          |
-| `scheduler`, `num_allocations`, `max_parallel_jobs` | `schedule_nodes` parameters                                                      |
+| Field                                                                                              | Notes                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `trigger_type`                                                                                     | One of six: `on_workflow_start`, `on_workflow_complete`, `on_worker_start`, `on_worker_complete`, `on_jobs_ready`, `on_jobs_complete`. An unrecognized value is rejected at creation |
+| `action_type`                                                                                      | `run_commands` or `schedule_nodes`                                                                                                                                                   |
+| `jobs` / `job_name_regexes`                                                                        | Which jobs a job-scoped trigger matches                                                                                                                                              |
+| `commands`                                                                                         | `run_commands` payload                                                                                                                                                               |
+| `scheduler`, `scheduler_type`, `num_allocations`, `start_one_worker_per_node`, `max_parallel_jobs` | `schedule_nodes` parameters; `scheduler_type` is `slurm` or `local`                                                                                                                  |
+| `persistent`                                                                                       | `true` keeps the action claimable by multiple workers instead of firing once                                                                                                         |
 
 For `schedule_nodes`, prefer `on_jobs_ready` gated on the jobs the allocation runs, even for root
 jobs. Root jobs are ready at init, so the action still fires at the start, but tying it to jobs
-makes a selective rerun re-schedule only the reset jobs. An `on_workflow_start` `schedule_nodes`
-action is kept across reinitialize and `torc submit` cannot re-fire it.
+makes a selective rerun re-schedule only the reset jobs.
+
+How reinitialization re-arms actions is what makes that choice matter:
+
+| Trigger                                                         | After a partial reinit (`reinit`, `reset-status --reinit`, `recover`, `regenerate`, `watch`) |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `on_workflow_start`                                             | Stays suppressed -- `torc submit` cannot re-fire it                                          |
+| `on_jobs_ready` / `on_jobs_complete`                            | Re-armed iff its gating jobs are no longer all in a terminal state                           |
+| `on_workflow_complete`, `on_worker_start`, `on_worker_complete` | Always re-armed; these recur every run                                                       |
+
+A **full** `torc workflows init` resets every job and re-arms every action, including
+`on_workflow_start`. That is the only way to fire a start-time action a second time.
 
 Use `on_workflow_complete` only for narrowly scoped cleanup.
-
-Two more action fields: `scheduler_type` selects `slurm` or `local`, and `persistent: true` keeps
-the action claimable by multiple workers instead of firing once.
 
 ## Execution config
 
@@ -250,15 +259,16 @@ ignored value.
 | `oom_exit_code`            | direct | `137`     | Exit code recorded for OOM-killed jobs               |
 | `srun_termination_signal`  | slurm  | none      | Passed to `srun --signal=<value>`                    |
 | `enable_cpu_bind`          | slurm  | `false`   | Allow Slurm CPU binding (`--cpu-bind`)               |
-| `srun_mpi`                 | slurm  | none      | `srun --mpi=<value>` for worker-per-node launches    |
+| `srun_mpi`                 | either | none      | `srun --mpi=<value>` for worker-per-node launches    |
 | `sigkill_headroom_seconds` | both   | `60`      | Headroom before end time for SIGKILL / `srun --time` |
 | `timeout_exit_code`        | both   | `152`     | Exit code for timed-out jobs (matches Slurm TIMEOUT) |
 | `staggered_start`          | both   | `true`    | Stagger runner startup to avoid a thundering herd    |
 | `stdio`                    | both   | see below | Workflow-level stdout/stderr capture                 |
 
-`srun_mpi` applies only when `mode: direct` is combined with a `schedule_nodes` action setting
-`start_one_worker_per_node: true`, since that is the only path with an outer `srun` launching
-runners.
+`srun_mpi` is gated on the action, not on the mode: it requires a `schedule_nodes` action with
+`start_one_worker_per_node: true` and is a validation error without one, because it decorates the
+outer `srun` in the submission script that launches one job runner per node. Either execution mode
+can use it.
 
 `srun_termination_signal` (for example `"TERM@300"`) is what makes graceful checkpointing possible:
 the job catches SIGTERM, saves state, and exits 0. See `failure-analysis.md` for why that reads as
