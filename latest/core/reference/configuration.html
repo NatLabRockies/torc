@@ -341,7 +341,7 @@ shared = false
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>log_level</code></td><td>string</td><td><code>info</code></td><td>Log level</td></tr>
 <tr><td><code>https</code></td><td>bool</td><td><code>false</code></td><td>Enable HTTPS</td></tr>
-<tr><td><code>url</code></td><td>string</td><td><code>localhost</code></td><td>Hostname/IP to bind to</td></tr>
+<tr><td><code>host</code></td><td>string</td><td><code>0.0.0.0</code></td><td>Hostname/IP to bind to (<code>url</code> is accepted as an alias)</td></tr>
 <tr><td><code>port</code></td><td>int</td><td><code>8080</code></td><td>Port to listen on</td></tr>
 <tr><td><code>threads</code></td><td>int</td><td><code>1</code></td><td>Number of worker threads</td></tr>
 <tr><td><code>database</code></td><td>string</td><td>(none)</td><td>SQLite database path (falls back to <code>DATABASE_URL</code> env)</td></tr>
@@ -360,7 +360,7 @@ shared = false
 </div>
 <h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
 <pre><code class="language-toml">[server]
-url = "0.0.0.0"
+host = "0.0.0.0"
 port = 8080
 threads = 4
 database = "/var/lib/torc/torc.db"
@@ -387,6 +387,7 @@ json_logs = false
 <tr><td><code>torc_server_bin</code></td><td>string</td><td><code>torc-server</code></td><td>Path to torc-server binary</td></tr>
 <tr><td><code>standalone</code></td><td>bool</td><td><code>false</code></td><td>Auto-start torc-server</td></tr>
 <tr><td><code>server_port</code></td><td>int</td><td><code>0</code></td><td>Server port for standalone mode (0 = auto)</td></tr>
+<tr><td><code>server_host</code></td><td>string</td><td><code>0.0.0.0</code></td><td>Server bind address for standalone mode</td></tr>
 <tr><td><code>database</code></td><td>string</td><td>(none)</td><td>Database path for standalone mode</td></tr>
 <tr><td><code>completion_check_interval_secs</code></td><td>int</td><td><code>5</code></td><td>Completion check interval (standalone mode)</td></tr>
 </tbody></table>

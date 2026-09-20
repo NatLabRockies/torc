@@ -4314,7 +4314,7 @@ torc results list --include-logs &lt;workflow_id&gt; --job-id 15
 <pre><code>{
   "job_id": 15,
   "job_name": "work_2",
-  "status": "Failed",
+  "status": "failed",
   "run_id": 1,
   "return_code": 137,
   "completion_time": "2026-01-06T20:30:00.200Z",
@@ -7843,7 +7843,7 @@ multiplier prompt modal instead — pressing Enter in that modal both applies th
 confirms the recovery (Esc cancels).</p>
 <h3 id="recovery-prompt"><a class="header" href="#recovery-prompt">Recovery Prompt</a></h3>
 <p>Pressing <code>V</code> or <code>v</code> opens a small modal that pre-fills the default <code>--memory-multiplier</code> (1.5) and
-<code>--runtime-multiplier</code> (1.4). Tab switches between the two fields, Enter applies them and launches
+<code>--runtime-multiplier</code> (1.5). Tab switches between the two fields, Enter applies them and launches
 the recovery (Esc cancels). The modal accepts only digits and a single decimal point; invalid input
 is reported inline.</p>
 <h3 id="handling-existing-output-files"><a class="header" href="#handling-existing-output-files">Handling Existing Output Files</a></h3>
@@ -12736,7 +12736,7 @@ shared = false
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>log_level</code></td><td>string</td><td><code>info</code></td><td>Log level</td></tr>
 <tr><td><code>https</code></td><td>bool</td><td><code>false</code></td><td>Enable HTTPS</td></tr>
-<tr><td><code>url</code></td><td>string</td><td><code>localhost</code></td><td>Hostname/IP to bind to</td></tr>
+<tr><td><code>host</code></td><td>string</td><td><code>0.0.0.0</code></td><td>Hostname/IP to bind to (<code>url</code> is accepted as an alias)</td></tr>
 <tr><td><code>port</code></td><td>int</td><td><code>8080</code></td><td>Port to listen on</td></tr>
 <tr><td><code>threads</code></td><td>int</td><td><code>1</code></td><td>Number of worker threads</td></tr>
 <tr><td><code>database</code></td><td>string</td><td>(none)</td><td>SQLite database path (falls back to <code>DATABASE_URL</code> env)</td></tr>
@@ -12755,7 +12755,7 @@ shared = false
 </div>
 <h3 id="example-3"><a class="header" href="#example-3">Example</a></h3>
 <pre><code class="language-toml">[server]
-url = "0.0.0.0"
+host = "0.0.0.0"
 port = 8080
 threads = 4
 database = "/var/lib/torc/torc.db"
@@ -12782,6 +12782,7 @@ json_logs = false
 <tr><td><code>torc_server_bin</code></td><td>string</td><td><code>torc-server</code></td><td>Path to torc-server binary</td></tr>
 <tr><td><code>standalone</code></td><td>bool</td><td><code>false</code></td><td>Auto-start torc-server</td></tr>
 <tr><td><code>server_port</code></td><td>int</td><td><code>0</code></td><td>Server port for standalone mode (0 = auto)</td></tr>
+<tr><td><code>server_host</code></td><td>string</td><td><code>0.0.0.0</code></td><td>Server bind address for standalone mode</td></tr>
 <tr><td><code>database</code></td><td>string</td><td>(none)</td><td>Database path for standalone mode</td></tr>
 <tr><td><code>completion_check_interval_secs</code></td><td>int</td><td><code>5</code></td><td>Completion check interval (standalone mode)</td></tr>
 </tbody></table>
@@ -16747,8 +16748,8 @@ Timeout Failures (1 job):
   145      postprocess                    152    PT30M        29.8         sigxcpu_152
 
 OOM failures (3 jobs): [R]etry with 1.5x memory / [A]djust multiplier / [S]kip (default: R): r
-Timeout failures (1 job): [R]etry with 1.4x runtime / [A]djust multiplier / [S]kip (default: R): a
-  Enter runtime multiplier [default: 1.4]: 2.0
+Timeout failures (1 job): [R]etry with 1.5x runtime / [A]djust multiplier / [S]kip (default: R): a
+  Enter runtime multiplier [default: 1.5]: 2.0
 
 --- Recovery Plan ---
 
@@ -16798,7 +16799,7 @@ leaving jobs stuck in "running" status. This is done automatically before checki
 <h3 id="options-68"><a class="header" href="#options-68">Options</a></h3>
 <pre><code class="language-bash">torc recover &lt;workflow_id&gt; \
   --memory-multiplier 1.5 \     # Memory increase factor for OOM (default: 1.5)
-  --runtime-multiplier 1.4 \    # Runtime increase factor for timeout (default: 1.4)
+  --runtime-multiplier 1.5 \    # Runtime increase factor for timeout (default: 1.5)
   --retry-unknown \             # Also retry jobs with unknown failure causes
   --recovery-hook "bash fix.sh" \  # Custom script for unknown failures
   --dry-run \                   # Preview without making changes
