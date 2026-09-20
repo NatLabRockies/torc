@@ -20,6 +20,11 @@ use crate::config::TorcConfig;
 use crate::models;
 use tabled::Tabled;
 
+/// Every job status accepted by `JobStatus::from_str`, for error messages.
+/// Keep in sync with `models::JobStatus`.
+pub const VALID_JOB_STATUSES: &str = "uninitialized, blocked, ready, pending, running, \
+     completed, failed, canceled, terminated, disabled, pending_failed";
+
 #[derive(Tabled)]
 struct JobTableRow {
     #[tabled(rename = "ID")]
@@ -262,7 +267,7 @@ EXAMPLES:
         /// List jobs for this workflow (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// User to filter by (defaults to USER environment variable)
+        /// Filter by job status (e.g. ready, running, completed, failed, terminated)
         #[arg(short, long)]
         status: Option<String>,
         /// Filter by upstream job ID (jobs that depend on this job)
@@ -611,29 +616,22 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            // Convert string status to JobStatus enum if provided
-            let job_status = match status {
-                Some(status_str) => match status_str.to_lowercase().as_str() {
-                    "uninitialized" => Some(models::JobStatus::Uninitialized),
-                    "blocked" => Some(models::JobStatus::Blocked),
-                    "ready" => Some(models::JobStatus::Ready),
-                    "pending" => Some(models::JobStatus::Pending),
-                    "running" => Some(models::JobStatus::Running),
-                    "completed" => Some(models::JobStatus::Completed),
-                    "failed" => Some(models::JobStatus::Failed),
-                    "canceled" => Some(models::JobStatus::Canceled),
-                    "terminated" => Some(models::JobStatus::Terminated),
-                    "disabled" => Some(models::JobStatus::Disabled),
-                    _ => {
+            // Convert string status to JobStatus enum if provided. Parse through
+            // `JobStatus::FromStr` so every status the server knows about is accepted;
+            // a hand-rolled match here previously omitted `pending_failed`.
+            let job_status = status.as_ref().map(|status_str| {
+                status_str
+                    .trim()
+                    .to_lowercase()
+                    .parse::<models::JobStatus>()
+                    .unwrap_or_else(|_| {
                         eprintln!(
-                            "Invalid status: {}. Valid values are: uninitialized, blocked, ready, pending, running, completed, failed, canceled, terminated, disabled",
-                            status_str
+                            "Invalid status: {}. Valid values are: {}",
+                            status_str, VALID_JOB_STATUSES
                         );
                         std::process::exit(1);
-                    }
-                },
-                None => None,
-            };
+                    })
+            });
 
             let mut params = JobListParams::new()
                 .with_offset(*offset)
@@ -1657,10 +1655,9 @@ fn resolve_reset_targets_by_status(
             }
             Err(_) => {
                 eprintln!(
-                    "Error: invalid status '{}'. Valid values are: uninitialized, blocked, \
-                     ready, pending, running, completed, failed, canceled, terminated, disabled, \
-                     pending_failed.",
-                    raw.trim()
+                    "Error: invalid status '{}'. Valid values are: {}.",
+                    raw.trim(),
+                    VALID_JOB_STATUSES
                 );
                 std::process::exit(1);
             }

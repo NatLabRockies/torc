@@ -397,9 +397,6 @@ EXAMPLES:
         hide = true,
         after_long_help = "\
 EXAMPLES:
-    # Auto-schedule: match ready jobs to existing configs or regenerate
-    torc slurm schedule-nodes 123 --auto
-
     # Schedule 4 compute nodes with specific config
     torc slurm schedule-nodes 123 --scheduler-config-id 456 --num-hpc-jobs 4
 
@@ -411,17 +408,6 @@ EXAMPLES:
         /// Workflow ID
         #[arg()]
         workflow_id: Option<i64>,
-        /// Auto-match ready jobs to existing Slurm configs or regenerate new ones
-        ///
-        /// When enabled, the command:
-        /// 1. Finds jobs in ready status
-        /// 2. Matches them to existing Slurm scheduler configs
-        /// 3. If no matching configs exist, regenerates schedulers based on job requirements
-        /// 4. Schedules nodes accordingly
-        ///
-        /// This is the one-shot equivalent of what `torc watch --auto-schedule` does continuously.
-        #[arg(long, hide = true)]
-        auto: bool,
         /// Start one worker per allocated node.
         /// Use this for direct-mode single-node jobs sharing a multi-node allocation.
         #[arg(long, default_value = "false")]
@@ -454,7 +440,7 @@ EXAMPLES:
         /// own config (300 seconds out of the box).
         #[arg(long, value_parser = crate::client::utils::parse_finite_non_negative_secs)]
         claim_backoff_max_secs: Option<f64>,
-        /// Scheduler config ID (ignored if --auto is set)
+        /// Scheduler config ID (prompts for a scheduler when omitted)
         #[arg(long)]
         scheduler_config_id: Option<i64>,
         /// Mark the workflow's already-pending `schedule_nodes` actions executed before submitting,
@@ -1352,7 +1338,6 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
         }
         SlurmCommands::ScheduleNodes {
             workflow_id,
-            auto,
             start_one_worker_per_node,
             job_prefix,
             keep_submission_scripts,
@@ -1416,16 +1401,6 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
                     eprintln!("Error checking if workflow is uninitialized: {}", e);
                     std::process::exit(1);
                 }
-            }
-
-            // Handle --auto mode: regenerate schedulers and schedule all ready jobs
-            if *auto {
-                eprintln!(
-                    "Auto-scheduling is not yet implemented. \
-                     For now, use 'torc slurm regenerate' to create/update schedulers, \
-                     then 'torc slurm schedule-nodes' with --scheduler-config-id."
-                );
-                std::process::exit(1);
             }
 
             let sched_config_id = scheduler_config_id.unwrap_or_else(|| {
