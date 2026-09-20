@@ -585,17 +585,17 @@ fn draw_detail_table(f: &mut Frame, area: Rect, app: &mut App) {
 
 /// Status display label indexed by `JobStatus as usize`.
 const STATUS_LABELS: [&str; 11] = [
-    "Uninitialized",
-    "Blocked",
-    "Ready",
-    "Pending",
-    "Running",
-    "Completed",
-    "Failed",
-    "Canceled",
-    "Terminated",
-    "Disabled",
-    "PendingFailed",
+    "uninitialized",
+    "blocked",
+    "ready",
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    "canceled",
+    "terminated",
+    "disabled",
+    "pending_failed",
 ];
 
 fn status_color(status: JobStatus) -> Color {
@@ -909,7 +909,7 @@ fn draw_jobs_table(f: &mut Frame, area: Rect, app: &mut App) {
         );
         let name = job.name.clone();
         let (status_str, color) = match job.status {
-            Some(s) => (format!("{:?}", s), status_color(s)),
+            Some(s) => (s.to_string(), status_color(s)),
             None => (String::new(), Color::White),
         };
 
@@ -1405,7 +1405,7 @@ fn draw_results_table(f: &mut Frame, area: Rect, app: &mut App) {
         // for any result that predates the field.
         let name = result.job_name.clone().unwrap_or_else(|| "-".to_string());
         let return_code = result.return_code;
-        let status = format!("{:?}", result.status);
+        let status = result.status.to_string();
 
         let runtime = format!("{:.2}", result.exec_time_minutes);
 
@@ -2006,19 +2006,19 @@ fn draw_dag(f: &mut Frame, area: Rect, app: &App) {
 
                 // Determine color based on status
                 let color = match node_data.status.as_deref() {
-                    Some("Completed") => Color::Green,
-                    Some("Running") => Color::Yellow,
-                    Some("Failed") => Color::Red,
-                    Some("Canceled") => Color::Magenta,
+                    Some("completed") => Color::Green,
+                    Some("running") => Color::Yellow,
+                    Some("failed") => Color::Red,
+                    Some("canceled") => Color::Magenta,
                     _ => Color::Cyan,
                 };
 
                 // Create a status indicator
                 let status_char = match node_data.status.as_deref() {
-                    Some("Completed") => "✓",
-                    Some("Running") => "▶",
-                    Some("Failed") => "✗",
-                    Some("Canceled") => "○",
+                    Some("completed") => "✓",
+                    Some("running") => "▶",
+                    Some("failed") => "✗",
+                    Some("canceled") => "○",
                     _ => "◦",
                 };
 

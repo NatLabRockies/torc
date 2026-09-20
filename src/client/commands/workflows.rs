@@ -1182,15 +1182,15 @@ fn handle_list_actions(
                     display_table_with_count(&rows, "actions");
 
                     // Print a helpful legend
-                    println!();
-                    println!("Status legend:");
-                    println!(
+                    eprintln!();
+                    eprintln!("Status legend:");
+                    eprintln!(
                         "  Waiting  - trigger_count < required_triggers (action not yet triggered)"
                     );
-                    println!(
+                    eprintln!(
                         "  Pending  - trigger_count >= required_triggers (ready to be claimed and executed)"
                     );
-                    println!("  Executed - action has been claimed and executed");
+                    eprintln!("  Executed - action has been claimed and executed");
                 }
             }
         }
@@ -1340,13 +1340,13 @@ fn handle_delete_action(
         match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
             Ok(actions) => match actions.iter().find(|a| a.id == Some(action_id)) {
                 Some(action) => {
-                    println!("\nWarning: You are about to delete the following action:");
-                    println!("  ID: {}", action_id);
-                    println!("  Trigger: {}", action.trigger_type);
-                    println!("  Action: {}", action.action_type);
-                    println!("\nThis action cannot be undone.");
-                    print!("\nAre you sure you want to delete this action? (y/N): ");
-                    io::stdout().flush().unwrap();
+                    eprintln!("\nWarning: You are about to delete the following action:");
+                    eprintln!("  ID: {}", action_id);
+                    eprintln!("  Trigger: {}", action.trigger_type);
+                    eprintln!("  Action: {}", action.action_type);
+                    eprintln!("\nThis action cannot be undone.");
+                    eprint!("\nAre you sure you want to delete this action? (y/N): ");
+                    io::stderr().flush().unwrap();
 
                     let mut input = String::new();
                     if let Err(e) = io::stdin().read_line(&mut input) {
@@ -1355,7 +1355,7 @@ fn handle_delete_action(
                     }
                     let response = input.trim().to_lowercase();
                     if response != "y" && response != "yes" {
-                        println!("Deletion cancelled for action {}.", action_id);
+                        eprintln!("Deletion cancelled for action {}.", action_id);
                         return;
                     }
                 }
@@ -1711,8 +1711,8 @@ fn handle_correct_resources(
                 }
 
                 if dry_run {
-                    println!();
-                    println!("(dry-run mode - changes not applied)");
+                    eprintln!();
+                    eprintln!("(dry-run mode - changes not applied)");
                 } else {
                     println!();
                     println!("Resource requirements updated successfully");
@@ -1759,24 +1759,24 @@ pub fn handle_cancel(
             }
         };
 
-        println!("\nWarning: You are about to cancel the following workflow:");
-        println!("  ID: {}", selected_workflow_id);
-        println!("  Name: {}", workflow.name);
-        println!("  User: {}", workflow.user);
+        eprintln!("\nWarning: You are about to cancel the following workflow:");
+        eprintln!("  ID: {}", selected_workflow_id);
+        eprintln!("  Name: {}", workflow.name);
+        eprintln!("  User: {}", workflow.user);
         if let Some(desc) = &workflow.description {
-            println!("  Description: {}", desc);
+            eprintln!("  Description: {}", desc);
         }
-        println!("\nThis will cancel running jobs and any associated Slurm allocations.");
-        println!("Workflow state is preserved and can be resumed after reinitialization.");
-        print!("\nAre you sure you want to cancel this workflow? (y/N): ");
-        io::stdout().flush().unwrap();
+        eprintln!("\nThis will cancel running jobs and any associated Slurm allocations.");
+        eprintln!("Workflow state is preserved and can be resumed after reinitialization.");
+        eprint!("\nAre you sure you want to cancel this workflow? (y/N): ");
+        io::stderr().flush().unwrap();
 
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
             Ok(_) => {
                 let response = input.trim().to_lowercase();
                 if response != "y" && response != "yes" {
-                    println!(
+                    eprintln!(
                         "Cancellation aborted for workflow {}.",
                         selected_workflow_id
                     );
@@ -1793,7 +1793,7 @@ pub fn handle_cancel(
     match apis::workflows_api::cancel_workflow(config, selected_workflow_id) {
         Ok(_) => {
             if format != "json" {
-                eprintln!("Successfully canceled workflow {}", selected_workflow_id);
+                println!("Successfully canceled workflow {}", selected_workflow_id);
             }
         }
         Err(e) => {
@@ -1819,7 +1819,7 @@ pub fn handle_cancel(
             return;
         }
         match progress {
-            CancelProgress::Info(message) => println!("  {}", message),
+            CancelProgress::Info(message) => eprintln!("  {}", message),
             CancelProgress::Error(message) => eprintln!("  {}", message),
         }
     };
@@ -1893,8 +1893,8 @@ fn handle_reset_status(
         if force {
             eprintln!("Force mode is enabled (will ignore running/pending jobs check).");
         }
-        print!("\nDo you want to continue? (y/N): ");
-        io::stdout().flush().unwrap();
+        eprint!("\nDo you want to continue? (y/N): ");
+        io::stderr().flush().unwrap();
 
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
@@ -1926,7 +1926,7 @@ fn handle_reset_status(
         Ok(_) => {
             workflow_reset_success = true;
             if format != "json" {
-                eprintln!(
+                println!(
                     "Successfully reset workflow status for workflow {}",
                     selected_workflow_id
                 );
@@ -1946,12 +1946,12 @@ fn handle_reset_status(
             job_reset_success = true;
             if format != "json" {
                 if failed_only {
-                    eprintln!(
+                    println!(
                         "Successfully reset failed job status for workflow {}",
                         selected_workflow_id
                     );
                 } else {
-                    eprintln!(
+                    println!(
                         "Successfully reset all job status for workflow {}",
                         selected_workflow_id
                     );
@@ -1976,7 +1976,7 @@ fn handle_reset_status(
                     Ok(()) => {
                         reinitialize_success = true;
                         if format != "json" {
-                            eprintln!(
+                            println!(
                                 "Successfully reinitialized workflow {}",
                                 selected_workflow_id
                             );
@@ -2088,11 +2088,11 @@ fn print_async_task_handle(
         });
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
     } else {
-        eprintln!("{} task created:", operation_label);
+        println!("{} task created:", operation_label);
         println!("  Workflow ID: {}", workflow_id);
         println!("  Task ID: {}", task.id);
         println!("  Status: {}", task.status);
-        println!("  Next: torc tasks wait {}", task.id);
+        eprintln!("  Next: torc tasks wait {}", task.id);
     }
 }
 
@@ -2230,12 +2230,12 @@ pub fn handle_reinitialize(
                                 selected_workflow_id
                             );
                             if !check_result.missing_input_files.is_empty() {
-                                eprintln!(
+                                println!(
                                     "\n❌ Missing {} required input file(s):",
                                     check_result.missing_input_files.len()
                                 );
                                 for file in &check_result.missing_input_files {
-                                    eprintln!("  - {}", file);
+                                    println!("  - {}", file);
                                 }
                             }
                             if !check_result.existing_output_files.is_empty() {
@@ -2250,7 +2250,7 @@ pub fn handle_reinitialize(
                             if check_result.safe {
                                 println!("\n✅ Safe to reinitialize (no missing input files)");
                             } else {
-                                eprintln!("\n❌ Cannot reinitialize: missing required input files");
+                                println!("\n❌ Cannot reinitialize: missing required input files");
                             }
                         }
 
@@ -2313,7 +2313,7 @@ pub fn handle_reinitialize(
                     format,
                 );
                 if format != "json" {
-                    eprintln!(
+                    println!(
                         "Successfully reinitialized workflow {}",
                         selected_workflow_id
                     );
@@ -2371,12 +2371,12 @@ pub fn handle_initialize(
                                 selected_workflow_id
                             );
                             if !check_result.missing_input_files.is_empty() {
-                                eprintln!(
+                                println!(
                                     "\n❌ Missing {} required input file(s):",
                                     check_result.missing_input_files.len()
                                 );
                                 for file in &check_result.missing_input_files {
-                                    eprintln!("  - {}", file);
+                                    println!("  - {}", file);
                                 }
                             }
                             if !check_result.existing_output_files.is_empty() {
@@ -2391,7 +2391,7 @@ pub fn handle_initialize(
                             if check_result.safe {
                                 println!("\n✅ Safe to initialize (no missing input files)");
                             } else {
-                                eprintln!("\n❌ Cannot initialize: missing required input files");
+                                println!("\n❌ Cannot initialize: missing required input files");
                             }
                         }
 
@@ -2422,17 +2422,17 @@ pub fn handle_initialize(
                 match apis::workflows_api::is_workflow_uninitialized(config, selected_workflow_id) {
                     Ok(response) => {
                         if !response.is_uninitialized && !no_prompts && format != "json" {
-                            println!("\nWarning: This workflow has already been initialized.");
-                            println!("Some jobs already have initialized status.");
-                            print!("\nDo you want to continue? (y/N): ");
-                            io::stdout().flush().unwrap();
+                            eprintln!("\nWarning: This workflow has already been initialized.");
+                            eprintln!("Some jobs already have initialized status.");
+                            eprint!("\nDo you want to continue? (y/N): ");
+                            io::stderr().flush().unwrap();
 
                             let mut input = String::new();
                             match io::stdin().read_line(&mut input) {
                                 Ok(_) => {
                                     let response = input.trim().to_lowercase();
                                     if response != "y" && response != "yes" {
-                                        println!("Initialization cancelled.");
+                                        eprintln!("Initialization cancelled.");
                                         std::process::exit(0);
                                     }
                                 }
@@ -2482,7 +2482,7 @@ pub fn handle_initialize(
                     format,
                 );
                 if format != "json" {
-                    eprintln!("Successfully initialized workflow {}", selected_workflow_id);
+                    println!("Successfully initialized workflow {}", selected_workflow_id);
                 }
             }
         }
@@ -2632,27 +2632,27 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
 
         // If not skipping prompts, show what will be deleted and ask for confirmation
         if !no_prompts && format != "json" {
-            println!("\nWarning: You are about to delete the following workflow:");
-            println!("  ID: {}", workflow.id.unwrap_or(-1));
-            println!("  Name: {}", workflow.name);
-            println!("  User: {}", workflow.user);
+            eprintln!("\nWarning: You are about to delete the following workflow:");
+            eprintln!("  ID: {}", workflow.id.unwrap_or(-1));
+            eprintln!("  Name: {}", workflow.name);
+            eprintln!("  User: {}", workflow.user);
             if let Some(desc) = &workflow.description {
-                println!("  Description: {}", desc);
+                eprintln!("  Description: {}", desc);
             }
-            println!("\nThis will also delete:");
-            println!("  - {} job(s)", job_count);
-            println!("  - All associated files, user data, and results");
-            println!("  - All job dependencies and relationships");
-            println!("\nThis action cannot be undone.");
-            print!("\nAre you sure you want to delete this workflow? (y/N): ");
-            io::stdout().flush().unwrap();
+            eprintln!("\nThis will also delete:");
+            eprintln!("  - {} job(s)", job_count);
+            eprintln!("  - All associated files, user data, and results");
+            eprintln!("  - All job dependencies and relationships");
+            eprintln!("\nThis action cannot be undone.");
+            eprint!("\nAre you sure you want to delete this workflow? (y/N): ");
+            io::stderr().flush().unwrap();
 
             let mut input = String::new();
             match io::stdin().read_line(&mut input) {
                 Ok(_) => {
                     let response = input.trim().to_lowercase();
                     if response != "y" && response != "yes" {
-                        println!("Deletion cancelled for workflow {}.", selected_id);
+                        eprintln!("Deletion cancelled for workflow {}.", selected_id);
                         continue;
                     }
                 }
@@ -3172,7 +3172,7 @@ pub fn handle_create(
                     );
                 }
             } else {
-                eprintln!("Validation: FAILED");
+                println!("Validation: FAILED");
             }
         }
 
@@ -3346,7 +3346,7 @@ fn handle_sync_status(
                             result.total_jobs_failed()
                         );
                     }
-                    println!(
+                    eprintln!(
                         "\nYou can now run `torc recover {}` to retry failed jobs.",
                         workflow_id
                     );
@@ -3848,7 +3848,7 @@ fn handle_export(
                     })
                 );
             } else {
-                eprintln!(
+                println!(
                     "Exported workflow '{}' ({} jobs, {} files) to {}",
                     workflow_name, stats.jobs, stats.files, path
                 );
@@ -4362,6 +4362,6 @@ fn handle_import(
             summary.push_str(&format!(", {} results", imported_results));
         }
         summary.push_str(", status reset)");
-        eprintln!("{}", summary);
+        println!("{}", summary);
     }
 }

@@ -404,12 +404,12 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                     return;
                 }
 
-                println!(
+                eprintln!(
                     "About to delete {} user data record(s) from workflow ID: {}",
                     count, workflow_id
                 );
-                print!("Are you sure? (y/N): ");
-                if let Err(e) = io::stdout().flush() {
+                eprint!("Are you sure? (y/N): ");
+                if let Err(e) = io::stderr().flush() {
                     eprintln!("Failed to write prompt: {}", e);
                     std::process::exit(1);
                 }
@@ -421,7 +421,7 @@ pub fn handle_user_data_commands(config: &Configuration, command: &UserDataComma
                 }
 
                 if !input.trim().eq_ignore_ascii_case("y") {
-                    println!("Deletion cancelled");
+                    eprintln!("Deletion cancelled");
                     return;
                 }
             }
