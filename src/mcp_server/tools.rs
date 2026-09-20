@@ -49,7 +49,7 @@ pub fn get_workflow_status(
     let mut status_counts = std::collections::HashMap::new();
     for job in &jobs {
         if let Some(status) = &job.status {
-            let status_str = format!("{:?}", status);
+            let status_str = status.to_string();
             *status_counts.entry(status_str).or_insert(0) += 1;
         }
     }
@@ -94,7 +94,7 @@ pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolRe
         "workflow_id": job.workflow_id,
         "name": job.name,
         "command": job.command,
-        "status": format!("{:?}", job.status),
+        "status": job.status.map(|s| s.to_string()),
         "invocation_script": job.invocation_script,
         "supports_termination": job.supports_termination,
         "cancel_on_blocking_job_failure": job.cancel_on_blocking_job_failure,
@@ -958,7 +958,7 @@ pub fn analyze_workflow_logs(
                 "workflow_id": workflow_id,
                 "dry_run": true,
                 "memory_multiplier": 1.5,
-                "runtime_multiplier": 1.4,
+                "runtime_multiplier": 1.5,
             },
             "note": "Start with dry_run=true to preview changes"
         });
@@ -971,7 +971,7 @@ pub fn analyze_workflow_logs(
         }
         if timeout_count > 0 {
             recovery_info["timeout_fix"] = serde_json::json!(format!(
-                "{} job(s) exceeded time limit. Recovery will increase runtime by 1.4x (configurable).",
+                "{} job(s) exceeded time limit. Recovery will increase runtime by 1.5x (configurable).",
                 timeout_count
             ));
         }
@@ -1540,7 +1540,7 @@ pub fn classify_and_resolve_failures(
             results.push(serde_json::json!({
                 "job_id": job_id,
                 "status": "skipped",
-                "message": format!("Job is not in pending_failed status (current: {:?})", job.status),
+                "message": format!("Job is not in pending_failed status (current: {})", job.status.map(|s| s.to_string()).unwrap_or_default()),
             }));
             continue;
         }

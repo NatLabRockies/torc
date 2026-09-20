@@ -488,15 +488,11 @@ fn main() {
         env_logger::Builder::new().parse_filters(&log_level).init();
     }
 
-    // Resolve format with priority: CLI arg (non-default) > file config > CLI default
-    // Note: clap sets default to "table", so we check if user explicitly provided it
-    let format = if cli.format != "table" {
-        // User explicitly provided a format
-        cli.format.clone()
-    } else {
-        // Use file config if available, otherwise CLI default
-        file_config.client.format.clone()
-    };
+    // Resolve format with priority: CLI arg > file config (which defaults to "table")
+    let format = cli
+        .format
+        .clone()
+        .unwrap_or_else(|| file_config.client.format.clone());
 
     // Validate format option for API commands
     if !matches!(format.as_str(), "table" | "json" | "csv") {
@@ -1333,14 +1329,14 @@ fn main() {
         }
         Commands::Ping => match apis::system_api::ping(&config) {
             Ok(_) => {
-                if cli.format == "json" {
+                if format == "json" {
                     println!(r#"{{"status": "Server is running"}}"#);
                 } else {
                     println!("Server is running");
                 }
             }
             Err(e) => {
-                if cli.format == "json" {
+                if format == "json" {
                     println!(
                         r#"{{"status": "error", "message": "{}"}}"#,
                         e.to_string().replace('"', "\\\"")

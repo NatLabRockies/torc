@@ -1643,7 +1643,7 @@ impl JobRunner {
         if let Some(journal) = &self.offline_journal {
             match journal.append(entry) {
                 Ok(()) => info!(
-                    "Journaled completion (offline) workflow_id={} job_id={} run_id={} status={:?}",
+                    "Journaled completion (offline) workflow_id={} job_id={} run_id={} status={}",
                     self.workflow_id, job_id, entry.run_id, entry.status
                 ),
                 Err(e) => error!(
@@ -2043,7 +2043,7 @@ impl JobRunner {
                 self.run_id,
                 result.attempt_id.unwrap_or(1),
                 result.return_code,
-                format!("{:?}", result.status).to_lowercase(),
+                result.status,
                 result.exec_time_minutes * 60.0
             );
             to_report.push((job_id, result));
