@@ -41,20 +41,24 @@ The TUI is built for terminal-over-SSH work on HPC. It streams live job and comp
 SSE and can drive the full lifecycle.
 
 Navigation: arrows move within a table, `←`/`→` switch between the Workflows and Details panes,
-`Tab` cycles detail tabs (Jobs, Files, Events, Results, DAG), `Enter` loads details, `?` shows
-context-aware help, `q` closes a popup or quits.
+`Tab` cycles detail tabs (Summary, Jobs, Running, Results, Files, User Data, Events, Compute Nodes,
+Scheduled Nodes, Slurm Stats, DAG), `Enter` loads details, `e` jumps to Events, `?` shows
+context-aware help, `r` refreshes, `A` toggles auto-refresh, `q` closes a popup or quits.
 
 Workflow actions on the selected row: `n` new, `i` init, `I` reinit, `R` reset, `x` run, `s` submit,
 `W` watch, `V` recover, `v` recover dry-run, `C` cancel, `d` delete. Destructive actions confirm
-first; `V`/`v` open a multiplier modal (pre-filled 1.5 memory, 1.4 runtime) where Enter both applies
+first; `V`/`v` open a multiplier modal (pre-filled 1.5 memory, 1.5 runtime) where Enter both applies
 and confirms.
 
 Job actions in the Jobs tab: `Enter` details, `l` logs with stdout/stderr tabs and `/` search, `C`
-cancel, `t` terminate, `y` retry.
+cancel (on this tab only; elsewhere `C` cancels the workflow), `t` terminate, `y` retry, `U` reset
+to uninitialized, Space toggles selection for a multi-job reset.
 
 Filtering and sorting: `f` opens a filter for the focused pane, `=` filters to the selected row's
-value on that pane's primary column, `c` clears it. Active filters appear in the table title. Jobs
-sort with `1`/`2`/`3` (ID/Name/Status); Results sort with `m`/`p` (peak memory / peak CPU).
+value on that pane's primary column, `c` clears it. Active filters appear in the table title. Number
+keys sort the focused table by column, left to right, each press cycling none → descending →
+ascending: Workflows `1`/`2`/`3` (ID/Name/User), Jobs `1`/`2`/`3` (ID/Name/Status), Results `1`-`8`
+(ID, Job ID, Name, Return, Runtime, Completion, Peak Memory, Peak CPU), Compute Nodes `1`-`4`.
 
 An agent driving Torc should not use the TUI. It is a full-screen application with no
 non-interactive mode; use the CLI commands instead.
@@ -96,8 +100,9 @@ queries the stored history instead, which is the better choice for post-hoc anal
 
 Time-series monitoring must be enabled in the spec
 (`resource_monitor.jobs.granularity: time_series`, or the `compute_node` scope for node-level data).
-The database lands at
-`<output-dir>/resource_utilization/resource_metrics_<hostname>_<workflow_id>_<run_id>.db`.
+The database lands under `<output-dir>/resource_utilization/`, one per runner:
+`resource_metrics_wf<wf>_h<hostname>_r<run>.db` locally,
+`resource_metrics_wf<wf>_sl<slurm>_n<node>_p<pid>.db` on Slurm.
 
 ```bash
 torc plot-resources <db> -o ./reports

@@ -116,20 +116,22 @@
     },
     {
       "name": "json_parsing_shape",
-      "prompt": "My script runs `torc -f json jobs list` and jq fails with a parse error. Fix it.",
+      "prompt": "My script runs `torc -f json jobs list` and jq gets nothing. It works when I run it by hand. Fix it.",
       "assertions": [
-        "identifies that the omitted workflow ID makes the CLI print a selection table on stdout",
+        "identifies the omitted workflow ID as the cause",
+        "notes that without a TTY the command exits 1 rather than emitting JSON",
         "passes the workflow ID explicitly",
         "notes that list commands return an object with an items array"
       ]
     },
     {
-      "name": "runner_log_filter",
-      "prompt": "RUST_LOG=torc=debug works for torc status but torc run ignores it.",
+      "name": "runner_output_stream",
+      "prompt": "I ran `torc -f json run workflow.yaml | jq .` and jq got nothing useful. Where did the runner output go?",
       "assertions": [
-        "explains that torc run installs its own logger accepting only a bare level",
-        "notes the Invalid log level fallback to info",
-        "recommends --log-level debug or RUST_LOG=debug for the runner"
+        "explains that runner log lines go to stderr in every format, not stdout",
+        "notes that the same lines are duplicated to the runner log file under the output directory",
+        "notes that module filters such as RUST_LOG=torc=debug work for torc run",
+        "checks job outcomes from server state rather than from torc run's stdout or exit status"
       ]
     },
     {

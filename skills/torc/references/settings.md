@@ -135,8 +135,7 @@ Read by `torc-server`.
 | `disable_admin_sql_writes`       | `false`   | Read-only raw SQL; ignored when the above is set |
 
 The default bind is `0.0.0.0`, which is reachable from other machines as soon as the port is open.
-Note that documentation elsewhere lists `localhost`; the code default is `0.0.0.0`. Confirm with
-`torc config show`.
+Confirm the effective value with `torc config show`.
 
 Enabling `require_auth` without distributing credentials locks out every client, including running
 job runners. `completion_check_interval_secs` bounds how quickly downstream jobs unblock after a

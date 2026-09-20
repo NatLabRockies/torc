@@ -16,16 +16,16 @@ to every command: prompting, streams, exit codes, pagination, versioning, and au
 
 Many commands take the workflow ID as an optional positional argument. When it is omitted:
 
-- With exactly one non-archived workflow for the user, that workflow is selected silently.
-- With several, the command **prints a workflow table to stdout** and reads an ID from stdin.
-- On EOF or an invalid entry it exits 1.
+- **Without a TTY on stdin the command exits 1** with
+  `Error: a workflow ID is required when stdin is not a terminal`. It never prompts and never
+  guesses which workflow you meant.
+- On a TTY with exactly one non-archived workflow for the user, that workflow is selected silently.
+- On a TTY with several, the command prints a workflow table **on stderr** and reads an ID from
+  stdin. On EOF or an invalid entry it exits 1.
 
-Two problems follow for non-interactive use:
-
-1. The selection table is written to stdout, so it corrupts `-f json` output. An agent parsing JSON
-   sees a plain-text table instead and `jq` fails.
-2. Which workflow gets picked silently depends on how many exist, so a script can operate on the
-   wrong workflow.
+The stdout stream is never used for the table, so `-f json` stays parseable. The remaining hazard is
+the silent single-workflow selection on an interactive terminal: which workflow gets picked depends
+on how many exist, so an interactive script can still operate on the wrong one.
 
 Always pass the workflow ID explicitly. Where a command takes it as a flag, use `--workflow-id`.
 
@@ -41,21 +41,21 @@ Other prompts and their non-interactive behavior:
 
 ## Streams and structured output
 
-Default: data on stdout, log messages on stderr. `-f json` gives machine-readable stdout for most
-commands, and `-f csv` works for list commands.
+stdout carries only the command's actual result: tables, JSON, CSV, and result text. Log output,
+prompts, warnings, hints, notes, and progress messages all go to stderr. This holds for every
+command and every format, so `-f json` stdout is always a single parseable document.
 
-The runner commands invert part of this:
-
-- `torc run` and `torc exec` write runner log lines to **stdout** in table format, and to **stderr**
-  when `-f json`, so JSON stays parseable. They also always write the same lines to the runner log
-  file under the output directory.
+- `torc run`, `torc exec`, and `torc watch` write runner log lines to **stderr** regardless of `-f`,
+  and write the same lines to a log file under the output directory.
+- Progress lines such as `Created workflow N` from `run`/`submit`/`exec` with a spec go to stderr;
+  `torc create` prints its `Created workflow N` result on stdout.
 - In standalone mode (`-s`), the embedded server's own logs are prefixed `[torc-server]` and go to
   stderr.
 
 ```bash
 torc -f json status <id> | jq '.jobs_by_status.failed'      # clean JSON on stdout
 torc -f csv results list <id> > results.csv                  # spreadsheet export
-torc -f json run workflow.yaml 2>run.log                     # JSON out, logs aside
+torc run workflow.yaml -o out 2>run.log                      # runner logs aside
 ```
 
 `-f csv` is rejected with a clear error, and exit 1, for single-record commands (`jobs get`) and

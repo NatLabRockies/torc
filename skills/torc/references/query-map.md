@@ -114,10 +114,11 @@ and must run where Slurm commands work.
 | Named requirement blocks?               | `torc resource-requirements list <id>`                 |
 | Time-series CPU/memory plots?           | `torc plot-resources <db> -o <dir>`                    |
 
-Time-series data lives at
-`<output-dir>/resource_utilization/resource_metrics_<hostname>_<workflow_id>_<run_id>.db` and only
-exists when the workflow ran with `granularity: time_series`. `plot-resources` accepts several
-database paths at once, `-j <ids>` to limit jobs, and `-f json` to emit data instead of HTML.
+Time-series data lives under `<output-dir>/resource_utilization/`, named after the runner that wrote
+it: `resource_metrics_wf<wf>_h<hostname>_r<run>.db` for a local runner and
+`resource_metrics_wf<wf>_sl<slurm>_n<node>_p<pid>.db` for a Slurm one. It exists only when the
+workflow ran with `granularity: time_series`. `plot-resources` accepts several database paths at
+once, `-j <ids>` to limit jobs, and `-f json` to emit data instead of HTML.
 
 The SQLite schema is stable enough to query directly: `job_resource_samples` (`job_id`, `timestamp`,
 `cpu_percent`, `memory_bytes`, `num_processes`), `job_metadata` (`job_id`, `job_name`), and

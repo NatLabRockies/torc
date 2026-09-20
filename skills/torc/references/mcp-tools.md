@@ -109,7 +109,7 @@ Treat that as binding. Call with `dry_run: true`, present the before/after, get 
 call again with `dry_run: false`.
 
 `recover_workflow` accepts `memory_multiplier` (default 1.5 for OOM), `runtime_multiplier` (default
-1.4 for timeout), and `retry_unknown` (default false), matching `torc recover`. When updating
+1.5 for timeout), and `retry_unknown` (default false), matching `torc recover`. When updating
 resources after `check_resource_utilization`, update every over-utilized job rather than only the
 failed ones.
 

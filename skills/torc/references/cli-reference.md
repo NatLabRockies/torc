@@ -60,7 +60,7 @@ an empty database over your existing data.
 | Command                    | Behavior not in `--help`                                                     |
 | -------------------------- | ---------------------------------------------------------------------------- |
 | `torc create <spec>`       | `--dry-run` validates offline with no server and exits non-zero on failure   |
-| `torc run <spec-or-id>`    | **Exits 0 even when jobs fail.** Runner logs go to stdout unless `-f json`   |
+| `torc run <spec-or-id>`    | **Exits 0 even when jobs fail.** Runner logs go to stderr and to a log file  |
 | `torc exec`                | Exits 1 on any failed or terminated job, unlike `run`                        |
 | `torc submit <spec-or-id>` | Requires a `schedule_nodes` action; fires every pending one                  |
 | `torc status <id>`         | Cheapest full picture; `-f csv` is rejected (multi-section report)           |
@@ -107,7 +107,7 @@ State: `init`, `reinit`, `reset-status`, `is-complete`, `sync-status`, `reconcil
 
 | Command            | Behavior not in `--help`                                                                                                                                                              |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list`             | `-s/--status` filters server-side; `--include-relationships` costs extra queries                                                                                                      |
+| `list`             | `-s/--status` filters server-side; `--include-relationships` costs extra queries; `-x/--exclude` drops columns from table/CSV output                                                  |
 | `get`              | Includes the exact command, which is what you need to reproduce a failure                                                                                                             |
 | `running`          | Adds compute node and Slurm job ID, tying a job to its allocation                                                                                                                     |
 | `create-from-file` | One command per line, `#` comments skipped; names jobs `job<N>` continuing from the current count, and creates one shared resource requirement                                        |
@@ -156,15 +156,15 @@ Config: `create`, `update`, `list`, `get`, `delete`. Generation: `generate`, `re
 Execution: `schedule-nodes`. Planning: `plan-allocations`. Diagnostics: `parse-logs`, `sacct`,
 `stats`, `usage`.
 
-| Command            | Behavior not in `--help`                                                                                              |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `generate`         | Never edits in place: writes to stdout or `-o`. Submit the generated spec                                             |
-| `regenerate`       | For recovery: builds schedulers for uninitialized/ready/blocked jobs, reusing existing scheduler settings as defaults |
-| `schedule-nodes`   | Submits allocations directly, bypassing actions. `--job-prefix` is rejected on a `serialize_allocations` scheduler    |
-| `plan-allocations` | Runs `sbatch --test-only`; many-small estimate covers only the _first_ allocation                                     |
-| `sacct`            | Calls `sacct`, so it needs a node where Slurm commands work                                                           |
-| `stats`            | Reads the database instead, so it works anywhere                                                                      |
-| `parse-logs`       | Takes an output directory plus `--workflow-id`                                                                        |
+| Command            | Behavior not in `--help`                                                                                                                                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`         | Never edits in place: writes to stdout or `-o`. Submit the generated spec                                                                                                                                              |
+| `regenerate`       | For recovery: builds schedulers for uninitialized/ready/blocked jobs, reusing existing scheduler settings as defaults                                                                                                  |
+| `schedule-nodes`   | Submits allocations directly. `--suppress-actions` marks pending `schedule_nodes` actions executed first, so the new worker does not also fire them. `--job-prefix` is rejected on a `serialize_allocations` scheduler |
+| `plan-allocations` | Runs `sbatch --test-only`; many-small estimate covers only the _first_ allocation                                                                                                                                      |
+| `sacct`            | Calls `sacct`, so it needs a node where Slurm commands work                                                                                                                                                            |
+| `stats`            | Reads the database instead, so it works anywhere                                                                                                                                                                       |
+| `parse-logs`       | Takes an output directory plus `--workflow-id`                                                                                                                                                                         |
 
 Submit from a login node only.
 

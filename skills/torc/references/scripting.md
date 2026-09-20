@@ -33,9 +33,9 @@ status     jobs_by_status{...}, is_complete, is_canceled, active_compute_nodes,
            total_exec_time_formatted
 ```
 
-JSON `status` values are lowercase (`failed`, `completed`); the table renderer capitalizes them
-(`Failed`, `Completed`) and `--include-logs` reports capitalized names too. Match on the value from
-the exact command you are parsing, not on what another view displayed.
+Job status values are lowercase everywhere -- JSON, CSV, the table renderer, the TUI, the MCP
+server, and log lines: `uninitialized`, `blocked`, `ready`, `pending`, `running`, `completed`,
+`failed`, `canceled`, `terminated`, `disabled`, `pending_failed`. Match on those exact strings.
 
 Memory in JSON is bytes; the table pre-formats it as `MB`. CPU is a percentage that can exceed 100
 for multi-threaded jobs.
@@ -115,12 +115,13 @@ state.
 
 ## Pitfalls
 
-| Pitfall                                    | Consequence                                                                  |
-| ------------------------------------------ | ---------------------------------------------------------------------------- |
-| Omitting the workflow ID                   | A selection table is printed on stdout, breaking JSON parsing; exit 1 on EOF |
-| Assuming `results list` covers all runs    | Only the current `run_id` is returned; add `--all-runs`                      |
-| Trusting `torc run`'s exit status          | It exits 0 with failed jobs; check `status` or `results --failed`            |
-| Matching capitalized statuses against JSON | JSON uses lowercase; the table capitalizes                                   |
-| Parsing runner output from `torc run`      | Runner logs go to stdout in table mode; use `-f json` to move them to stderr |
-| Wrong `-o` with `--include-logs`           | Log paths resolve but the files do not exist; warnings go to stderr          |
-| Fetching everything then filtering locally | Extra round trips; use server-side filters                                   |
+| Pitfall                                     | Consequence                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Omitting the workflow ID in a script        | Exit 1 with "a workflow ID is required when stdin is not a terminal"                  |
+| Omitting it at an interactive prompt        | With exactly one workflow it is selected silently, which may not be the one you meant |
+| Assuming `results list` covers all runs     | Only the current `run_id` is returned; add `--all-runs`                               |
+| Trusting `torc run`'s exit status           | It exits 0 with failed jobs; check `status` or `results --failed`                     |
+| Expecting capitalized statuses              | Every surface emits lowercase (`failed`, `pending_failed`)                            |
+| Redirecting stdout to capture runner output | Runner logs are on stderr; redirect `2>` or read the runner log file                  |
+| Wrong `-o` with `--include-logs`            | Log paths resolve but the files do not exist; warnings go to stderr                   |
+| Fetching everything then filtering locally  | Extra round trips; use server-side filters                                            |

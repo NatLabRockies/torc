@@ -37,19 +37,20 @@ pipelines safe.
 
 ## Job runner logging
 
-`torc run`, `torc exec`, `torc watch`, and `torc tui` install their own logger, and the difference
-matters:
+`torc run`, `torc exec`, `torc watch`, and the Slurm job runner install their own logger. Two things
+differ from an ordinary command:
 
-- **Bare levels only.** The value is parsed as one of `error`, `warn`, `info`, `debug`, `trace`.
-  Anything else prints `Invalid log level '<value>', defaulting to 'info'`. So
-  `RUST_LOG=torc=debug torc run ...` silently drops to `info` for the runner's own filter level,
-  while the same variable works for `torc status`.
-- **Console destination flips with format.** Runner log lines go to **stdout** in table format and
-  to **stderr** with `-f json`, so JSON output stays parseable.
-- **Always duplicated to a file.** Every line is also written to
-  `<output-dir>/job_runner_<hostname>_wf<id>_r<run>.log` (local) or
-  `<output-dir>/job_runner_slurm_wf<id>_sl<slurm>_n<node>_pid<pid>.log` (Slurm). The runner prints
-  the exact path at startup.
+- **Always duplicated to a file.** Every line goes to stderr _and_ to a log file:
+  `<output-dir>/job_runner_<hostname>_wf<id>_r<run>.log` (local `run`/`exec`),
+  `<output-dir>/job_runner_slurm_wf<id>_sl<slurm>_n<node>_pid<pid>.log` (Slurm), or
+  `<output-dir>/watch_<hostname>_wf<id>.log` (`watch`). The runner prints the exact path at startup.
+- **Console output is always stderr,** in every format, so `-f json` stdout stays parseable.
+
+The filter syntax is the same as for any other command: these loggers call `parse_filters`, so
+`RUST_LOG=torc=debug torc run ...` and `--log-level torc::client::job_runner=debug` both work.
+
+`torc tui` installs no logger at all; it is a full-screen application and log output would corrupt
+the display.
 
 Job stdout and stderr are separate from all of this and land in `<output-dir>/job_stdio/`, governed
 by `execution_config.stdio`. See `log-map.md`.
@@ -137,15 +138,15 @@ raising the level for a targeted rerun rather than for a full campaign.
 ## Recipes
 
 ```bash
-# Debug why a runner is not claiming jobs (bare level required for run)
-torc --log-level debug run workflow.yaml -o out
+# Debug why a runner is not claiming jobs (module filters work here too)
+RUST_LOG=torc::client::job_runner=debug torc run workflow.yaml -o out
 grep -E "claim|ready|resource" out/job_runner_*.log
 
 # Debug API interactions for an ordinary command (module filter allowed)
 RUST_LOG=torc::client::apis=debug torc jobs list 123
 
-# Keep JSON parseable while capturing runner logs
-torc -f json run workflow.yaml -o out 2>run.log
+# Capture runner logs without touching stdout
+torc run workflow.yaml -o out 2>run.log
 jq . <<<"$(torc -f json status 123)"
 
 # Silence the embedded server in standalone mode

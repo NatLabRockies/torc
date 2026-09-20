@@ -104,7 +104,7 @@ torc recover <id>                 # interactive wizard (default)
 torc recover <id> --no-prompts    # apply heuristics automatically
 ```
 
-Defaults: memory x1.5 for OOM, runtime x1.4 for timeout. Jobs with unknown failure causes are
+Defaults: memory x1.5 for OOM, runtime x1.5 for timeout. Jobs with unknown failure causes are
 skipped, because retrying rarely fixes a script or data bug; `--retry-unknown` overrides that, and
 `--recovery-hook '<cmd>'` runs custom logic before resetting those jobs (the workflow ID arrives as
 an argument and as `TORC_WORKFLOW_ID`).
@@ -136,7 +136,7 @@ torc watch <id> --recover -m 3                   # cap recovery attempts
 status is meaningful: it exits 1 when the workflow finished with failures and `--recover` is off,
 when max retries are exceeded, when recovery cannot make progress, and when only unclassified
 `pending_failed` jobs remain. Multipliers are `--memory-multiplier` (1.5) and `--runtime-multiplier`
-(1.5), which differ from `recover`'s runtime default.
+(1.5), the same defaults `torc recover` and the MCP `recover_workflow` tool use.
 
 `watch` warns when run from a directory other than the recorded submission directory.
 

@@ -37,12 +37,14 @@ Both the local and Slurm cases are covered: Slurm results additionally carry `sl
     job_wf<wf>_j<job>_r<run>_a<attempt>.log      # combined mode
   job_runner_<hostname>_wf<wf>_r<run>.log        # local runner
   job_runner_slurm_wf<wf>_sl<slurm>_n<node>_pid<pid>.log
+  watch_<hostname>_wf<wf>.log                    # torc watch
   slurm_output_wf<wf>_sl<slurm>.o
   slurm_output_wf<wf>_sl<slurm>.e
   slurm_env_wf<wf>_sl<slurm>_n<node>_pid<pid>.log
   dmesg_slurm_wf<wf>_sl<slurm>_n<node>_pid<pid>.log
   resource_utilization/
-    resource_metrics_<hostname>_<wf>_<run>.db
+    resource_metrics_wf<wf>_h<hostname>_r<run>.db          # local runner
+    resource_metrics_wf<wf>_sl<slurm>_n<node>_p<pid>.db    # Slurm runner
   offline_journal/
     offline_results_wf<wf>_r<run>_<label>.db
 ```

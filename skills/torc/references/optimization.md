@@ -264,9 +264,10 @@ torc slurm plan-allocations --account <acct> --offline workflow.yaml           #
 
 This probes with `sbatch --test-only` for both shapes and reports estimated start and completion.
 Read the raw estimates, not only the recommendation: the many-small start time is for the _first_
-allocation, and the tool approximates later degradation as `first_wait * min(N, 10) + walltime`.
-Also compare `max_parallelism` against `ideal_nodes` in the analysis; a narrow DAG cannot use the
-nodes the arithmetic suggests.
+allocation, and the tool approximates the last one as
+`first_wait * min(ideal_nodes, 10) + (first_completion - first_wait)` -- a linear fair-share drain
+capped at 10x. Also compare `max_parallelism` against `ideal_nodes` in the analysis; a narrow DAG
+cannot use the nodes the arithmetic suggests.
 
 Apply the answer:
 
@@ -319,9 +320,13 @@ the payload self-limits through cgroups or its own thread pool.
 Mixed strategies are legitimate: run a resource-aware runner for large jobs and a queue-depth runner
 for a swarm of small ones against the same workflow, and the ready queue serves both.
 
-Claim order is `priority DESC`, then GPUs, runtime, memory, CPUs descending, then job ID. Raising
-`priority` on the largest jobs helps them claim space before small jobs fragment a node, which is
-the cheapest fix for a workflow where big jobs keep starving.
+Under resource-aware claiming the server orders ready jobs
+`priority DESC, num_gpus DESC, runtime DESC, memory DESC, num_cpus DESC, job_id ASC`, so the
+heaviest work is offered first. Under `--max-parallel-jobs` the order is only
+`priority DESC,
+job_id ASC` -- requirements are not consulted at all. Either way, raising `priority`
+on the largest jobs helps them claim space before small jobs fragment a node, which is the cheapest
+fix for a workflow where big jobs keep starving.
 
 ## Measure, then correct
 

@@ -66,11 +66,13 @@ Behavior worth knowing:
 - **Exit status ignores job failures.** `torc run` exits 0 even when jobs failed. The final log line
   reports `had_failures=true`, and the runner log records it, but the status is not propagated.
   Verify with `torc status <id>` or `torc results list <id> --failed`.
-- **Logs go to stdout.** In table format the runner writes its log lines to stdout and to the runner
-  log file. With `-f json` they go to stderr instead. Redirect accordingly when capturing output.
-- **The runner may wait.** After the last job finishes, the runner honors
-  `compute_node_wait_for_new_jobs_seconds` before exiting, so a short workflow can appear to hang
-  for up to that long. It is 90 seconds by default in local runs.
+- **Logs go to stderr.** The runner writes its log lines to stderr in every format, and to the
+  runner log file. Redirect stderr, not stdout, when capturing them.
+- **The runner may wait when the workflow is not finished.** It exits immediately once the server
+  reports the workflow complete. If it runs out of claimable work while the workflow is still
+  incomplete -- jobs blocked on another node, or an action that has yet to fire -- it stays idle for
+  `compute_node_wait_for_new_jobs_seconds` (90 by default for spec-created workflows) before giving
+  up, so a partial local run of a multi-node workflow can appear to hang for that long.
 - **`--time-limit` and `--end-time`** stop the runner, not the workflow. Jobs already running are
   terminated according to `execution_config`; remaining jobs stay ready for the next runner.
 - **`--skip-checks`** bypasses validation such as scheduler node requirements.

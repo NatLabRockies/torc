@@ -235,10 +235,12 @@ the action claimable by multiple workers instead of firing once.
 
 ## Execution config
 
-`execution_config.mode` selects `direct`, `slurm`, or `auto`. Under `auto`, the effective mode
-depends on whether the spec has Slurm schedulers. The remaining fields are mode-gated, and setting
-one that does not match the effective mode is a validation error at creation, not a silently ignored
-value.
+`execution_config.mode` selects `direct` (the default), `slurm`, or `auto`. Under `auto` the
+effective mode is resolved **by the runner from its own environment**: `slurm` when `SLURM_JOB_ID`
+is set, `direct` otherwise. It does not look at the spec's schedulers, so the same spec can run
+direct locally and under `srun` inside an allocation. The remaining fields are mode-gated, and
+setting one that does not match the effective mode is a validation error at creation, not a silently
+ignored value.
 
 | Field                      | Mode   | Default   | Purpose                                              |
 | -------------------------- | ------ | --------- | ---------------------------------------------------- |
@@ -323,8 +325,7 @@ so putting any of those in `slurm_defaults` is rejected with the offending keys 
 deliberately allowed there as a workflow-level default. Anything else valid for sbatch is accepted
 and not validated by Torc, so a typo surfaces as an sbatch rejection at submit time.
 
-Note that this particular check runs at create time rather than during `torc create --dry-run`, so a
-clean dry-run does not prove `slurm_defaults` is acceptable.
+`torc create --dry-run` runs this check too, so a clean dry-run does cover `slurm_defaults`.
 
 ## Dynamic jobs
 

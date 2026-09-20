@@ -83,11 +83,12 @@ The rest are task-scoped. Read only the one that matches; do not preload.
 - `torc run` exits 0 even when jobs failed. It logs `had_failures=true` but does not propagate that
   to the exit status. Confirm with `torc status <id>` or `torc results list <id> --failed`.
   `torc exec` and `torc watch` do exit non-zero.
-- `torc run` and `torc exec` write runner logs to **stdout** in table format, and to **stderr** with
-  `-f json` so JSON stays parseable. Every other command logs to stderr and prints data to stdout.
-- Commands that take an optional workflow ID prompt interactively when it is omitted, printing a
-  selection table to **stdout** that corrupts `-f json` output, and exit 1 on EOF. With exactly one
-  workflow, one is chosen silently. Always pass the ID explicitly.
+- Every command keeps stdout for its result and sends logs, prompts, warnings, hints, and progress
+  to stderr. Runner log lines from `torc run`, `torc exec`, and `torc watch` go to stderr and to the
+  runner log file, so `-f json` stdout stays parseable in every format.
+- Commands that take an optional workflow ID prompt interactively when it is omitted. Without a TTY
+  they exit 1 rather than prompting or guessing; on a TTY the selection table is printed on stderr,
+  and with exactly one workflow that one is chosen silently. Always pass the ID explicitly.
 - **All resource values are per node.** `num_cpus: 32` and `memory: 128g` describe what one node
   provides for that job, never a total across nodes.
 - `torc submit` requires a `schedule_nodes` action. A spec without one is local-only;
