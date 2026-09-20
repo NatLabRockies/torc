@@ -21,12 +21,16 @@ touch and whether they bump the run ID.
 | An input file or user data changed                     | `torc workflows reinit`                             |
 | A known set of jobs must rerun                         | `torc jobs reset-status <ids> --reinit`             |
 | Every job in a status or with a return code must rerun | `torc jobs reset-status --status` / `--return-code` |
-| All failed jobs, no resource change wanted             | `torc workflows reset-status --failed-only`         |
+| Every unsuccessful job, no resource change wanted      | `torc workflows reset-status --failed-only`         |
 | Slurm failures from OOM or timeout                     | `torc recover`                                      |
 | Unattended monitoring with self-healing                | `torc watch --recover`                              |
 | Requirements are wrong but nothing needs rerunning     | `torc workflows correct-resources`                  |
 
-Every one of these supports `--dry-run`. Use it first.
+Most of these support `--dry-run`; use it first where it exists. The exceptions are
+`torc workflows reset-status` and `torc watch --recover`, which have no preview mode -- reset-status
+gates on a confirmation prompt instead (`--no-prompts` to skip), and `watch --recover` starts
+applying recovery immediately, so preview with `torc recover <id> --dry-run` before handing the
+workflow to `watch`.
 
 ## Inputs changed: reinit
 
@@ -89,6 +93,11 @@ torc workflows reset-status <id> --force --no-prompts        # ignore active-job
 
 The flag is `--failed-only` and the reinit flag is `-r`/`--reinitialize`. Without `--failed-only`
 this resets the entire workflow.
+
+`--failed-only` is broader than its name: it resets every job in `failed`, `canceled`, `terminated`,
+or `pending_failed`, because status is the source of truth for "did not succeed" and canceled or
+terminated jobs may have no result record at all. If you want strictly the jobs whose status is
+`failed`, use `torc jobs reset-status --status failed --workflow-id <id>` instead.
 
 Then resume with `torc run <id>` locally or `torc submit <id>` on Slurm.
 

@@ -25,7 +25,8 @@ rest follows.
 ```text
 concurrent_jobs_per_node = max(1, min(node_cpus / job_cpus,
                                       node_mem  / job_mem,
-                                      node_gpus / job_gpus))   # integer division
+                                      job_gpus > 0 ? node_gpus / job_gpus
+                                                   : unlimited))   # integer division
 time_slots               = max(1, allocation_walltime / job_runtime)
 jobs_per_allocation      = concurrent_jobs_per_node * time_slots
 allocations              = ceil(job_count / jobs_per_allocation) * nodes_per_job
@@ -36,7 +37,9 @@ Walltime itself comes from the strategy: `max-job-runtime` (default) uses
 maximum; `max-partition-time` uses the partition maximum.
 
 Every dimension uses integer division, so the tightest one wins and remainders are wasted. A job
-asking for 40% of a node's memory gets 2 per node, not 2.5, and the other 20% is idle.
+asking for 40% of a node's memory gets 2 per node, not 2.5, and the other 20% is idle. A requirement
+with `num_gpus: 0` -- the usual CPU-only case -- drops out of the GPU term rather than dividing by
+zero, so only CPU and memory bind it.
 
 The generator also merges resource requirements that map to the same partition and takes the
 **maximum of each dimension** across the merged set. That single behavior causes most accidental

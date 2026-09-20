@@ -1,14 +1,13 @@
 # Live monitoring
 
-Four ways to watch a running workflow. Pick by whether a human is present and whether the
-environment is a terminal.
+Four ways to watch a running workflow. Only the two non-interactive ones are usable by an agent.
 
-| Interface             | Use when                                           | Interactive |
-| --------------------- | -------------------------------------------------- | ----------- |
-| `torc watch`          | Unattended monitoring, CI, meaningful exit status  | No          |
-| `torc tui`            | A person at a terminal, including over SSH         | Yes         |
-| `torc-dash`           | A person with a browser, visual DAG and log viewer | Yes         |
-| `torc events monitor` | Streaming a machine-readable event feed            | No          |
+| Interface             | Use when                                           | Agent-usable |
+| --------------------- | -------------------------------------------------- | ------------ |
+| `torc watch`          | Unattended monitoring, CI, meaningful exit status  | Yes          |
+| `torc events monitor` | Streaming a machine-readable event feed            | Yes          |
+| `torc tui`            | A person at a terminal, including over SSH         | No           |
+| `torc-dash`           | A person with a browser, visual DAG and log viewer | No           |
 
 ## torc watch
 
@@ -29,59 +28,16 @@ exists but ready jobs do, and when accumulated retry jobs exceed `--auto-schedul
 
 Recovery behavior is covered in `rerun-and-recovery.md`.
 
-## torc tui
+## torc tui and torc-dash (not for agents)
 
-```bash
-torc tui                            # connect to the configured server
-torc tui --standalone               # start a torc-server automatically
-torc tui --standalone --port 8090 --database /path/to/workflows.db
-```
+Both are human interfaces and an agent should not drive either. `torc tui` is a full-screen terminal
+application with no non-interactive mode; `torc-dash` is a web dashboard (default bind
+`127.0.0.1:8090`, feature-gated behind `--features dash`). Neither can be scripted, and anything
+they show is available from the CLI commands in `query-map.md`.
 
-The TUI is built for terminal-over-SSH work on HPC. It streams live job and compute-node events over
-SSE and can drive the full lifecycle.
-
-Navigation: arrows move within a table, `←`/`→` switch between the Workflows and Details panes,
-`Tab` cycles detail tabs (Summary, Jobs, Running, Results, Files, User Data, Events, Compute Nodes,
-Scheduled Nodes, Slurm Stats, DAG), `Enter` loads details, `e` jumps to Events, `?` shows
-context-aware help, `r` refreshes, `A` toggles auto-refresh, `q` closes a popup or quits.
-
-Workflow actions on the selected row: `n` new, `i` init, `I` reinit, `R` reset, `x` run, `s` submit,
-`W` watch, `V` recover, `v` recover dry-run, `C` cancel, `d` delete. Destructive actions confirm
-first; `V`/`v` open a multiplier modal (pre-filled 1.5 memory, 1.5 runtime) where Enter both applies
-and confirms.
-
-Job actions in the Jobs tab: `Enter` details, `l` logs with stdout/stderr tabs and `/` search, `C`
-cancel (on this tab only; elsewhere `C` cancels the workflow), `t` terminate, `y` retry, `U` reset
-to uninitialized, Space toggles selection for a multi-job reset.
-
-Filtering and sorting: `f` opens a filter for the focused pane, `=` filters to the selected row's
-value on that pane's primary column, `c` clears it. Active filters appear in the table title. Number
-keys sort the focused table by column, left to right, each press cycling none → descending →
-ascending: Workflows `1`/`2`/`3` (ID/Name/User), Jobs `1`/`2`/`3` (ID/Name/Status), Results `1`-`8`
-(ID, Job ID, Name, Return, Runtime, Completion, Peak Memory, Peak CPU), Compute Nodes `1`-`4`.
-
-An agent driving Torc should not use the TUI. It is a full-screen application with no
-non-interactive mode; use the CLI commands instead.
-
-## torc-dash
-
-```bash
-torc-dash --standalone                       # starts torc-server and the dashboard
-torc-dash                                     # connect to the default API URL
-torc-dash --api-url http://myserver:9000/torc-service/v1
-```
-
-Default bind is `127.0.0.1:8090`. It offers workflow and job monitoring with SSE updates, spec
-upload and run, an interactive DAG, a Debugging tab with a log viewer, and resource plots.
-
-The Debugging tab generates a job-results report with options for the output directory, all runs,
-and failed-only, then shows stdout and stderr for the selected job. The output directory must match
-the one used during execution.
-
-`torc-dash` ships as a feature-gated binary. Build it with the `dash` feature
-(`cargo build --release --features dash`) or install with
-`cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"`. Dashboard settings live
-in `[dash]` in a config file; see `settings.md`.
+Mention them only when the user is a person asking what to watch a workflow with. For everything
+else use `torc status`, `torc jobs running`, `torc results list`, `torc watch`, and
+`torc events monitor`.
 
 ## torc events monitor
 

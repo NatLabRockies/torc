@@ -39,10 +39,17 @@ filesystem (Lustre, GPFS, NFS). The trade-off is real: if the process is killed,
 the last snapshot is lost. `--snapshot-interval-seconds` adds periodic snapshots, which briefly
 serialize against writes.
 
-For a smoke test, combine both and point at a scratch directory:
+**`-o` and `--db` are independent.** `-o`/`--output-dir` moves only job logs and metrics; the
+standalone database stays at `--db`, which defaults to `./torc_output/torc.db` no matter what `-o`
+says. With `--in-memory` that default is also the _snapshot destination_, so a smoke test that sets
+only `-o` still writes over `./torc_output/torc.db` and whatever workflows were in it.
+
+For a smoke test, point both at the same scratch directory:
 
 ```bash
-torc -s --in-memory run workflow.yaml --max-parallel-jobs 1 -o "$(mktemp -d)"
+scratch=$(mktemp -d)
+torc -s --in-memory --db "$scratch/torc.db" run workflow.yaml --max-parallel-jobs 1 -o "$scratch"
+torc -s --db "$scratch/torc.db" status 1
 ```
 
 ## torc run
@@ -63,9 +70,11 @@ torc run workflow.yaml --time-limit PT1H   # or --end-time 2026-03-14T15:00:00Z
 
 Behavior worth knowing:
 
-- **Exit status ignores job failures.** `torc run` exits 0 even when jobs failed. The final log line
-  reports `had_failures=true`, and the runner log records it, but the status is not propagated.
-  Verify with `torc status <id>` or `torc results list <id> --failed`.
+- **Exit status describes the runner, not the jobs.** `torc run` exits 0 even when jobs failed --
+  deliberately, because a workflow may expect failures and handle them with failure handlers or a
+  later rerun. The final log line reports `had_failures=true`. Read job outcomes from server state
+  with `torc status <id>` or `torc results list <id> --failed`. Use `torc exec` or `torc watch` when
+  you need a meaningful exit status.
 - **Logs go to stderr.** The runner writes its log lines to stderr in every format, and to the
   runner log file. Redirect stderr, not stdout, when capturing them.
 - **The runner may wait when the workflow is not finished.** It exits immediately once the server

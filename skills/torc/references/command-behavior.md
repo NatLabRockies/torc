@@ -63,18 +63,28 @@ multi-section reports (`status`, `workflows check-resources`). Use `-f json` for
 
 ## Exit codes
 
-Torc uses 0 for success and 1 for failure; there is no richer taxonomy. What matters is which
-failures are actually reported.
+Torc uses 0 for success and 1 for failure; there is no richer taxonomy. The thing to understand is
+**what each command's exit status is a statement about**.
 
-| Command                               | Exit on job failure | Notes                                                   |
-| ------------------------------------- | ------------------- | ------------------------------------------------------- |
-| `torc run`                            | **0**               | Logs `had_failures=true` but does not propagate it      |
-| `torc exec`                           | 1                   | Exits 1 on any failed or terminated job                 |
-| `torc watch`                          | 1                   | Also 1 on max retries, stalled recovery, pending_failed |
-| `torc create --dry-run`               | 1 on invalid spec   | Fully offline, no server needed                         |
-| `torc jobs reset-status --status <s>` | 1 when no match     | Prevents silent no-ops in scripts                       |
+| Command                               | Exit on job failure | What the status means                                     |
+| ------------------------------------- | ------------------- | --------------------------------------------------------- |
+| `torc run`                            | **0**               | Whether the _runner_ worked, not whether the workload did |
+| `torc exec`                           | 1                   | Whether every inline command succeeded                    |
+| `torc watch`                          | 1                   | Also 1 on max retries, stalled recovery, pending_failed   |
+| `torc create --dry-run`               | 1 on invalid spec   | Fully offline, no server needed                           |
+| `torc jobs reset-status --status <s>` | 1 when no match     | Prevents silent no-ops in scripts                         |
 
-So the check after a local run is server state, not `$?`:
+`torc run` exiting 0 with failed jobs is deliberate, not an oversight. A workflow is a long-lived
+graph in which some failures are expected and are handled by failure handlers, recovery, or a later
+rerun; the runner reports that it claimed, executed, and recorded jobs without itself failing, and
+it logs `had_failures=true`. Job outcomes live in server state, which outlasts the process. Do not
+"fix" this by wrapping `torc run` in a status check that treats it as a bug.
+
+`torc exec` is the opposite case on purpose: it is a batch-of-commands tool in the mould of GNU
+Parallel, where the exit status is the whole point, so it exits 1 if any job failed or was
+terminated. Prefer `exec` in CI when you want `$?` to mean something.
+
+Either way, the authoritative check after a run is server state, not `$?`:
 
 ```bash
 torc run workflow.yaml -o out

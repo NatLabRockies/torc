@@ -112,18 +112,18 @@ fi
 ```
 
 Two details this handles that a naive loop does not: `is-complete` is the cheap predicate, and
-`torc run` exiting 0 does not mean the jobs succeeded, so the failure check must come from server
-state.
+`torc run` exiting 0 is a statement about the runner rather than the jobs, so the failure check must
+come from server state.
 
 ## Pitfalls
 
-| Pitfall                                     | Consequence                                                                           |
-| ------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Omitting the workflow ID in a script        | Exit 1 with "a workflow ID is required when stdin is not a terminal"                  |
-| Omitting it at an interactive prompt        | With exactly one workflow it is selected silently, which may not be the one you meant |
-| Assuming `results list` covers all runs     | Only the current `run_id` is returned; add `--all-runs`                               |
-| Trusting `torc run`'s exit status           | It exits 0 with failed jobs; check `status` or `results --failed`                     |
-| Expecting capitalized statuses              | Every surface emits lowercase (`failed`, `pending_failed`)                            |
-| Redirecting stdout to capture runner output | Runner logs are on stderr; redirect `2>` or read the runner log file                  |
-| Wrong `-o` with `--include-logs`            | Log paths resolve but the files do not exist; warnings go to stderr                   |
-| Fetching everything then filtering locally  | Extra round trips; use server-side filters                                            |
+| Pitfall                                     | Consequence                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Omitting the workflow ID in a script        | Exit 1 with "a workflow ID is required when stdin is not a terminal"                                    |
+| Omitting it at an interactive prompt        | With exactly one workflow it is selected silently, which may not be the one you meant                   |
+| Assuming `results list` covers all runs     | Only the current `run_id` is returned; add `--all-runs`                                                 |
+| Trusting `torc run`'s exit status           | By design it reports the runner, not the jobs; check `status` or `results --failed`, or use `torc exec` |
+| Expecting capitalized statuses              | Every surface emits lowercase (`failed`, `pending_failed`)                                              |
+| Redirecting stdout to capture runner output | Runner logs are on stderr; redirect `2>` or read the runner log file                                    |
+| Wrong `-o` with `--include-logs`            | Log paths resolve but the files do not exist; warnings go to stderr                                     |
+| Fetching everything then filtering locally  | Extra round trips; use server-side filters                                                              |

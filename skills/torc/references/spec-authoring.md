@@ -152,6 +152,13 @@ Values are literal strings. Nothing in `env` is evaluated by a shell, so `$(host
 and `${VAR:-default}` do not expand there. Put anything dynamic in the job command or in an
 `invocation_script`.
 
+**Never put secrets in `env`.** The merged map is persisted on the workflow and job records and is
+returned by every API read of the job -- `torc jobs get`, `-f json` output, `torc workflows export`,
+the dashboard, and the MCP tools -- so any secret is visible to everyone who can read the workflow,
+and it is also exported into every job's process environment. Supply credentials from the
+environment that launches the runner, or read them inside an `invocation_script` from a file only
+the owner can read.
+
 An `invocation_script` wraps the job command, which is the right place for module loads, conda
 activation, and interpreter selection. End the wrapper with `exec "$@"` so signals and exit codes
 reach the real process.

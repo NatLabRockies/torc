@@ -80,20 +80,24 @@ sized for something else; set it true when resource profiles must stay isolated.
 
 ## client.watch
 
-Defaults for `torc watch`, including its optional AI-assisted classification.
+**This section is currently inert.** The struct exists and `torc config show` prints it, but nothing
+outside `src/config/client.rs` reads it: `torc watch` takes its poll interval from the clap default
+of **60 seconds** and its retry count from `--max-retries`, with no config-file fallback. Setting
+these values changes nothing today.
 
-| Option                  | Default                    | Notes                                      |
-| ----------------------- | -------------------------- | ------------------------------------------ |
-| `poll_interval`         | `30`                       | Seconds between status polls               |
-| `max_retries`           | `3`                        | Recovery attempts                          |
-| `retry_cooldown`        | `60`                       | Seconds between retries                    |
-| `model`                 | `claude-sonnet-4-20250514` | Model for AI-assisted diagnosis            |
-| `rate_limit_per_minute` | `10`                       | Cap on AI API calls                        |
-| `cache_path`            | unset                      | Failure-pattern cache database             |
-| `audit_log_path`        | unset                      | Audit log for AI actions                   |
-| `api_key`               | unset                      | Fallback when `ANTHROPIC_API_KEY` is unset |
+| Option                  | Value in config            | What actually applies                            |
+| ----------------------- | -------------------------- | ------------------------------------------------ |
+| `poll_interval`         | `30`                       | Ignored; `torc watch -p` defaults to `60`        |
+| `max_retries`           | `3`                        | Ignored; `--max-retries` is unlimited when unset |
+| `retry_cooldown`        | `60`                       | Ignored                                          |
+| `model`                 | `claude-sonnet-4-20250514` | Ignored                                          |
+| `rate_limit_per_minute` | `10`                       | Ignored                                          |
+| `cache_path`            | unset                      | Ignored                                          |
+| `audit_log_path`        | unset                      | Ignored                                          |
+| `api_key`               | unset                      | Ignored; use `ANTHROPIC_API_KEY`                 |
 
-Prefer the environment variable to storing an API key in a config file.
+Pass the flags on the command line instead, and do not report a `[client.watch]` value as the
+effective setting.
 
 ## client.tls
 

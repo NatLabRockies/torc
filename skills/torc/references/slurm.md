@@ -157,7 +157,7 @@ torc slurm parse-logs --workflow-id <id> <output-dir>
 
 Login nodes are for inspection, module discovery, Git and worktree setup, spec validation, and
 submission. Do not run builds, installs, solvers, model runs, or payload smoke tests there. Move
-compute into a job, an `invocation_script`, or an interactive allocation.
+compute into a job or an interactive allocation.
 
 ## Re-running part of a Slurm workflow
 

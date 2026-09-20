@@ -208,7 +208,8 @@ stored history and is the better choice after the fact.
 ## compute-nodes and scheduled-compute-nodes
 
 `compute-nodes`: `list`, `get` — workers that ran jobs. `scheduled-compute-nodes`: `list`, `get`,
-`list-jobs` — allocations requested from a scheduler.
+`list-jobs` — allocations requested from a scheduler, including pending allocations that have not
+yet run.
 
 `scheduled-compute-nodes list-jobs <sched_id>` maps an allocation to what actually ran on it.
 
