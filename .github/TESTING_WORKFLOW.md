@@ -16,10 +16,10 @@ Go to: https://github.com/NatLabRockies/torc/actions/workflows/release.yml
 
 You should see 4 build jobs running in parallel:
 
-- ✅ Build aarch64-apple-darwin (macOS Apple Silicon)
-- ⚠️ Build x86_64-unknown-linux-musl (Linux static)
-- ✅ Build x86_64-unknown-linux-gnu (Linux glibc)
-- ✅ Build x86_64-pc-windows-msvc (Windows)
+- Build aarch64-apple-darwin (macOS Apple Silicon)
+- Build x86_64-unknown-linux-musl (Linux static, x86_64)
+- Build aarch64-unknown-linux-musl (Linux static, ARM 64-bit)
+- Build x86_64-pc-windows-msvc (Windows)
 
 ### 3. Check for failures
 

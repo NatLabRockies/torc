@@ -87,17 +87,6 @@ To also build for Intel Macs, add:
   use_cross: false
 ```
 
-### ARM64 Linux
-
-For ARM64 servers (like AWS Graviton), add:
-
-```yaml
-# Linux ARM64
-- os: ubuntu-latest
-  target: aarch64-unknown-linux-musl
-  use_cross: true
-```
-
 ## Troubleshooting
 
 ### Build fails with OpenSSL errors on Windows
