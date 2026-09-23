@@ -123,7 +123,7 @@ Check the glob patterns in `create-release` job:
 files: |
   artifacts/torc-aarch64-apple-darwin/*.tar.gz
   artifacts/torc-x86_64-unknown-linux-musl/*.tar.gz
-  artifacts/torc-x86_64-unknown-linux-gnu/*.tar.gz
+  artifacts/torc-aarch64-unknown-linux-musl/*.tar.gz
   artifacts/torc-x86_64-pc-windows-msvc/*.zip
 ```
 
