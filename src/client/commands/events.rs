@@ -342,7 +342,7 @@ pub fn handle_event_commands(config: &Configuration, command: &EventCommands, fo
                                     .unwrap_or_else(|_| "Unable to display data".to_string())
                             );
                         }
-                    } else {
+                    } else if !print_if_json(format, &serde_json::Value::Null, "event") {
                         println!("No events found for workflow {}", selected_workflow_id);
                     }
                 }
@@ -459,7 +459,7 @@ fn handle_monitor_events(
         if let Some(max_seconds) = duration_seconds
             && start_time.elapsed().as_secs() >= max_seconds as u64
         {
-            println!("\nMonitoring duration completed.");
+            eprintln!("\nMonitoring duration completed.");
             break;
         }
 

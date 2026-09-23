@@ -290,7 +290,7 @@ pub struct RecoverWorkflowParams {
     )]
     pub memory_multiplier: Option<f64>,
     #[schemars(
-        description = "Runtime multiplier for timeout failures (default: 1.4 = 40% increase). \
+        description = "Runtime multiplier for timeout failures (default: 1.5 = 50% increase). \
         Jobs that timed out will have their runtime increased by this factor."
     )]
     pub runtime_multiplier: Option<f64>,
@@ -871,7 +871,7 @@ USE CASES:
         \n4. Only if user confirms, call again with dry_run=false to execute \
         \n\nThe tool will: \
         \n- Diagnose OOM failures and increase memory (default: 1.5x) \
-        \n- Diagnose timeout failures and increase runtime (default: 1.4x) \
+        \n- Diagnose timeout failures and increase runtime (default: 1.5x) \
         \n- Reset failed jobs and reinitialize the workflow \
         \n- Regenerate Slurm schedulers and submit new allocations"
     )]
@@ -883,7 +883,7 @@ USE CASES:
         let workflow_id = params.workflow_id;
         let dry_run = params.dry_run;
         let memory_multiplier = params.memory_multiplier.unwrap_or(1.5);
-        let runtime_multiplier = params.runtime_multiplier.unwrap_or(1.4);
+        let runtime_multiplier = params.runtime_multiplier.unwrap_or(1.5);
         let retry_unknown = params.retry_unknown.unwrap_or(false);
         tokio::task::spawn_blocking(move || {
             tools::recover_workflow(

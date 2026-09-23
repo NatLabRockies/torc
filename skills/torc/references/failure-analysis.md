@@ -14,12 +14,12 @@
 
 The status separates three different situations before you look at any log:
 
-| Status           | Meaning                                                                     |
-| ---------------- | --------------------------------------------------------------------------- |
-| `failed`         | The job ran and exited non-zero                                             |
-| `terminated`     | The system stopped it: walltime, resource limit, node loss                  |
-| `canceled`       | It never ran (user cancel, or a blocking job failed with cancel-on-failure) |
-| `pending_failed` | Failed with no matching failure-handler rule, awaiting classification       |
+| Status           | Meaning                                                                                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `failed`         | The job ran and exited non-zero                                                                                                                                                                                     |
+| `terminated`     | The system stopped it: walltime, resource limit, node loss                                                                                                                                                          |
+| `canceled`       | Stopped by `torc cancel` or by a blocking job failing with cancel-on-failure. It may have been **running** at the time: cancellation moves both running and pending jobs to `canceled`, so partial output can exist |
+| `pending_failed` | Failed with no matching failure-handler rule, awaiting classification                                                                                                                                               |
 
 ```bash
 torc status <id>

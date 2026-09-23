@@ -63,9 +63,11 @@ which `torc` command to run next, which is the intended pattern.
 | `list_examples` / `get_example` | browse and read `examples/`                                 | `spec-authoring.md`     |
 | `get_docs`                      | read the published docs                                     | —                       |
 
-Filters mirror the CLI: `list_results` takes `failed_only`, `get_job_logs` takes a stream and an
-optional line count, and `list_jobs_by_status` takes the same status names documented in
-`query-map.md`.
+Filters mirror the CLI: `list_results` takes `job_id`, `run_id`, `return_code`, `failed_only` and
+`status`; `list_jobs_by_status` takes the same lowercase status names used everywhere else. Note
+that `get_job_logs` addresses one attempt rather than filtering: it requires `workflow_id`,
+`job_id`, `run_id` and `log_type` (`stdout` or `stderr`), defaults `attempt_id` to 1, and takes an
+optional `tail_lines`. Get the run and attempt from `list_results` first.
 
 ## MCP-only capabilities
 
@@ -109,7 +111,7 @@ Treat that as binding. Call with `dry_run: true`, present the before/after, get 
 call again with `dry_run: false`.
 
 `recover_workflow` accepts `memory_multiplier` (default 1.5 for OOM), `runtime_multiplier` (default
-1.4 for timeout), and `retry_unknown` (default false), matching `torc recover`. When updating
+1.5 for timeout), and `retry_unknown` (default false), matching `torc recover`. When updating
 resources after `check_resource_utilization`, update every over-utilized job rather than only the
 failed ones.
 

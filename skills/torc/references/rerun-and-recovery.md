@@ -21,12 +21,16 @@ touch and whether they bump the run ID.
 | An input file or user data changed                     | `torc workflows reinit`                             |
 | A known set of jobs must rerun                         | `torc jobs reset-status <ids> --reinit`             |
 | Every job in a status or with a return code must rerun | `torc jobs reset-status --status` / `--return-code` |
-| All failed jobs, no resource change wanted             | `torc workflows reset-status --failed-only`         |
+| Every unsuccessful job, no resource change wanted      | `torc workflows reset-status --failed-only`         |
 | Slurm failures from OOM or timeout                     | `torc recover`                                      |
 | Unattended monitoring with self-healing                | `torc watch --recover`                              |
 | Requirements are wrong but nothing needs rerunning     | `torc workflows correct-resources`                  |
 
-Every one of these supports `--dry-run`. Use it first.
+Most of these support `--dry-run`; use it first where it exists. The exceptions are
+`torc workflows reset-status` and `torc watch --recover`, which have no preview mode -- reset-status
+gates on a confirmation prompt instead (`--no-prompts` to skip), and `watch --recover` starts
+applying recovery immediately, so preview with `torc recover <id> --dry-run` before handing the
+workflow to `watch`.
 
 ## Inputs changed: reinit
 
@@ -90,6 +94,11 @@ torc workflows reset-status <id> --force --no-prompts        # ignore active-job
 The flag is `--failed-only` and the reinit flag is `-r`/`--reinitialize`. Without `--failed-only`
 this resets the entire workflow.
 
+`--failed-only` is broader than its name: it resets every job in `failed`, `canceled`, `terminated`,
+or `pending_failed`, because status is the source of truth for "did not succeed" and canceled or
+terminated jobs may have no result record at all. If you want strictly the jobs whose status is
+`failed`, use `torc jobs reset-status --status failed --workflow-id <id>` instead.
+
 Then resume with `torc run <id>` locally or `torc submit <id>` on Slurm.
 
 ## Resource failures: recover
@@ -104,7 +113,7 @@ torc recover <id>                 # interactive wizard (default)
 torc recover <id> --no-prompts    # apply heuristics automatically
 ```
 
-Defaults: memory x1.5 for OOM, runtime x1.4 for timeout. Jobs with unknown failure causes are
+Defaults: memory x1.5 for OOM, runtime x1.5 for timeout. Jobs with unknown failure causes are
 skipped, because retrying rarely fixes a script or data bug; `--retry-unknown` overrides that, and
 `--recovery-hook '<cmd>'` runs custom logic before resetting those jobs (the workflow ID arrives as
 an argument and as `TORC_WORKFLOW_ID`).
@@ -136,7 +145,7 @@ torc watch <id> --recover -m 3                   # cap recovery attempts
 status is meaningful: it exits 1 when the workflow finished with failures and `--recover` is off,
 when max retries are exceeded, when recovery cannot make progress, and when only unclassified
 `pending_failed` jobs remain. Multipliers are `--memory-multiplier` (1.5) and `--runtime-multiplier`
-(1.5), which differ from `recover`'s runtime default.
+(1.5), the same defaults `torc recover` and the MCP `recover_workflow` tool use.
 
 `watch` warns when run from a directory other than the recorded submission directory.
 

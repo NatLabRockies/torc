@@ -25,7 +25,8 @@ rest follows.
 ```text
 concurrent_jobs_per_node = max(1, min(node_cpus / job_cpus,
                                       node_mem  / job_mem,
-                                      node_gpus / job_gpus))   # integer division
+                                      job_gpus > 0 ? node_gpus / job_gpus
+                                                   : unlimited))   # integer division
 time_slots               = max(1, allocation_walltime / job_runtime)
 jobs_per_allocation      = concurrent_jobs_per_node * time_slots
 allocations              = ceil(job_count / jobs_per_allocation) * nodes_per_job
@@ -36,7 +37,9 @@ Walltime itself comes from the strategy: `max-job-runtime` (default) uses
 maximum; `max-partition-time` uses the partition maximum.
 
 Every dimension uses integer division, so the tightest one wins and remainders are wasted. A job
-asking for 40% of a node's memory gets 2 per node, not 2.5, and the other 20% is idle.
+asking for 40% of a node's memory gets 2 per node, not 2.5, and the other 20% is idle. A requirement
+with `num_gpus: 0` -- the usual CPU-only case -- drops out of the GPU term rather than dividing by
+zero, so only CPU and memory bind it.
 
 The generator also merges resource requirements that map to the same partition and takes the
 **maximum of each dimension** across the merged set. That single behavior causes most accidental
@@ -264,9 +267,10 @@ torc slurm plan-allocations --account <acct> --offline workflow.yaml           #
 
 This probes with `sbatch --test-only` for both shapes and reports estimated start and completion.
 Read the raw estimates, not only the recommendation: the many-small start time is for the _first_
-allocation, and the tool approximates later degradation as `first_wait * min(N, 10) + walltime`.
-Also compare `max_parallelism` against `ideal_nodes` in the analysis; a narrow DAG cannot use the
-nodes the arithmetic suggests.
+allocation, and the tool approximates the last one as
+`first_wait * min(ideal_nodes, 10) + (first_completion - first_wait)` -- a linear fair-share drain
+capped at 10x. Also compare `max_parallelism` against `ideal_nodes` in the analysis; a narrow DAG
+cannot use the nodes the arithmetic suggests.
 
 Apply the answer:
 
@@ -319,9 +323,13 @@ the payload self-limits through cgroups or its own thread pool.
 Mixed strategies are legitimate: run a resource-aware runner for large jobs and a queue-depth runner
 for a swarm of small ones against the same workflow, and the ready queue serves both.
 
-Claim order is `priority DESC`, then GPUs, runtime, memory, CPUs descending, then job ID. Raising
-`priority` on the largest jobs helps them claim space before small jobs fragment a node, which is
-the cheapest fix for a workflow where big jobs keep starving.
+Under resource-aware claiming the server orders ready jobs
+`priority DESC, num_gpus DESC, runtime DESC, memory DESC, num_cpus DESC, job_id ASC`, so the
+heaviest work is offered first. Under `--max-parallel-jobs` the order is only
+`priority DESC,
+job_id ASC` -- requirements are not consulted at all. Either way, raising `priority`
+on the largest jobs helps them claim space before small jobs fragment a node, which is the cheapest
+fix for a workflow where big jobs keep starving.
 
 ## Measure, then correct
 

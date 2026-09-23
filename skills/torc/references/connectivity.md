@@ -61,13 +61,18 @@ flags: `--port`, `--threads`, `--database`, plus auth and TLS options.
 
 ## Authentication and TLS failures
 
-| Symptom                                  | Cause and fix                                                                |
-| ---------------------------------------- | ---------------------------------------------------------------------------- |
-| 401 Unauthorized                         | Server has `require_auth`; set `TORC_PASSWORD` or `--password`               |
-| 403 Forbidden                            | Access control on and the workflow is not yours; check access groups         |
-| Certificate verification failure         | Pass the internal CA with `--tls-ca-cert` / `TORC_TLS_CA_CERT`               |
-| Works with `--tls-insecure` only         | Certificate or CA trust is genuinely wrong; fix the CA, do not ship insecure |
-| Auth works interactively, fails in a job | Job environment lacks `TORC_PASSWORD`; export it in the workflow `env`       |
+| Symptom                                  | Cause and fix                                                                                                                                                                                                                                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401 Unauthorized                         | Server has `require_auth`; set `TORC_PASSWORD` or `--password`                                                                                                                                                                                                                  |
+| 403 Forbidden                            | Access control on and the workflow is not yours; check access groups                                                                                                                                                                                                            |
+| Certificate verification failure         | Pass the internal CA with `--tls-ca-cert` / `TORC_TLS_CA_CERT`                                                                                                                                                                                                                  |
+| Works with `--tls-insecure` only         | Certificate or CA trust is genuinely wrong; fix the CA, do not ship insecure                                                                                                                                                                                                    |
+| Auth works interactively, fails in a job | The job's execution environment has no credentials. Provide them from outside the spec: export `TORC_PASSWORD` in the shell or batch environment that launches the runner, or read it from a user-only-readable file in an `invocation_script`. **Never put a secret in `env`** |
+
+Workflow and job `env` maps are stored in the database and returned by every API read of the job:
+`torc jobs get`, any `-f json` output, `torc workflows export`, the dashboard, and the MCP tools.
+Anyone who can read the workflow can read the values, and they land in every job's process
+environment. Secrets do not belong there.
 
 The username comes from `TORC_USERNAME`, falling back to `USER`/`USERNAME`, and determines workflow
 ownership. A mismatch is why `torc workflows list` can look empty while the workflow exists: it

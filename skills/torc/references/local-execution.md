@@ -39,10 +39,17 @@ filesystem (Lustre, GPFS, NFS). The trade-off is real: if the process is killed,
 the last snapshot is lost. `--snapshot-interval-seconds` adds periodic snapshots, which briefly
 serialize against writes.
 
-For a smoke test, combine both and point at a scratch directory:
+**`-o` and `--db` are independent.** `-o`/`--output-dir` moves only job logs and metrics; the
+standalone database stays at `--db`, which defaults to `./torc_output/torc.db` no matter what `-o`
+says. With `--in-memory` that default is also the _snapshot destination_, so a smoke test that sets
+only `-o` still writes over `./torc_output/torc.db` and whatever workflows were in it.
+
+For a smoke test, point both at the same scratch directory:
 
 ```bash
-torc -s --in-memory run workflow.yaml --max-parallel-jobs 1 -o "$(mktemp -d)"
+scratch=$(mktemp -d)
+torc -s --in-memory --db "$scratch/torc.db" run workflow.yaml --max-parallel-jobs 1 -o "$scratch"
+torc -s --db "$scratch/torc.db" status 1
 ```
 
 ## torc run
@@ -63,14 +70,18 @@ torc run workflow.yaml --time-limit PT1H   # or --end-time 2026-03-14T15:00:00Z
 
 Behavior worth knowing:
 
-- **Exit status ignores job failures.** `torc run` exits 0 even when jobs failed. The final log line
-  reports `had_failures=true`, and the runner log records it, but the status is not propagated.
-  Verify with `torc status <id>` or `torc results list <id> --failed`.
-- **Logs go to stdout.** In table format the runner writes its log lines to stdout and to the runner
-  log file. With `-f json` they go to stderr instead. Redirect accordingly when capturing output.
-- **The runner may wait.** After the last job finishes, the runner honors
-  `compute_node_wait_for_new_jobs_seconds` before exiting, so a short workflow can appear to hang
-  for up to that long. It is 90 seconds by default in local runs.
+- **Exit status describes the runner, not the jobs.** `torc run` exits 0 even when jobs failed --
+  deliberately, because a workflow may expect failures and handle them with failure handlers or a
+  later rerun. The final log line reports `had_failures=true`. Read job outcomes from server state
+  with `torc status <id>` or `torc results list <id> --failed`. Use `torc exec` or `torc watch` when
+  you need a meaningful exit status.
+- **Logs go to stderr.** The runner writes its log lines to stderr in every format, and to the
+  runner log file. Redirect stderr, not stdout, when capturing them.
+- **The runner may wait when the workflow is not finished.** It exits immediately once the server
+  reports the workflow complete. If it runs out of claimable work while the workflow is still
+  incomplete -- jobs blocked on another node, or an action that has yet to fire -- it stays idle for
+  `compute_node_wait_for_new_jobs_seconds` (90 by default for spec-created workflows) before giving
+  up, so a partial local run of a multi-node workflow can appear to hang for that long.
 - **`--time-limit` and `--end-time`** stop the runner, not the workflow. Jobs already running are
   terminated according to `execution_config`; remaining jobs stay ready for the next runner.
 - **`--skip-checks`** bypasses validation such as scheduler node requirements.

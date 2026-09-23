@@ -46,7 +46,7 @@ The rest are task-scoped. Read only the one that matches; do not preload.
 | Exit codes, stream routing, prompting, pagination, auth                | `references/command-behavior.md`   |
 | Query workflow, job, result, dependency, or resource state             | `references/query-map.md`          |
 | Parse output with jq or Nushell, build reports and CSV                 | `references/scripting.md`          |
-| Watch a live workflow: watch, TUI, dashboard, events, plots            | `references/live-monitoring.md`    |
+| Watch a live workflow: watch, events, resource plots                   | `references/live-monitoring.md`    |
 | Diagnose a failed or killed job                                        | `references/failure-analysis.md`   |
 | Find logs, bundle them, scan for error patterns                        | `references/log-map.md`            |
 | Nothing is progressing: blocked, unclaimed, orphaned, or empty results | `references/stuck-workflows.md`    |
@@ -80,14 +80,17 @@ The rest are task-scoped. Read only the one that matches; do not preload.
 
 ## Critical behavior
 
-- `torc run` exits 0 even when jobs failed. It logs `had_failures=true` but does not propagate that
-  to the exit status. Confirm with `torc status <id>` or `torc results list <id> --failed`.
-  `torc exec` and `torc watch` do exit non-zero.
-- `torc run` and `torc exec` write runner logs to **stdout** in table format, and to **stderr** with
-  `-f json` so JSON stays parseable. Every other command logs to stderr and prints data to stdout.
-- Commands that take an optional workflow ID prompt interactively when it is omitted, printing a
-  selection table to **stdout** that corrupts `-f json` output, and exit 1 on EOF. With exactly one
-  workflow, one is chosen silently. Always pass the ID explicitly.
+- `torc run` exits 0 even when jobs failed, by design: its status reports whether the runner worked,
+  not whether the workload did, since expected failures are normal in a workflow. It logs
+  `had_failures=true`. Get job outcomes from server state -- `torc status <id>` or
+  `torc results list <id> --failed`. `torc exec` and `torc watch` do exit non-zero, so prefer `exec`
+  when a script needs `$?` to be meaningful.
+- Every command keeps stdout for its result and sends logs, prompts, warnings, hints, and progress
+  to stderr. Runner log lines from `torc run`, `torc exec`, and `torc watch` go to stderr and to the
+  runner log file, so `-f json` stdout stays parseable in every format.
+- Commands that take an optional workflow ID prompt interactively when it is omitted. Without a TTY
+  they exit 1 rather than prompting or guessing; on a TTY the selection table is printed on stderr,
+  and with exactly one workflow that one is chosen silently. Always pass the ID explicitly.
 - **All resource values are per node.** `num_cpus: 32` and `memory: 128g` describe what one node
   provides for that job, never a total across nodes.
 - `torc submit` requires a `schedule_nodes` action. A spec without one is local-only;
@@ -148,7 +151,10 @@ trade-offs and sizing are in `references/execution-modes.md`.
 Three numbers decide Slurm cost and time-to-solution, and all follow from resource requirements:
 
 ```text
-concurrent_jobs_per_node = max(1, min(node_cpus / job_cpus, node_mem / job_mem, node_gpus / job_gpus))
+# the GPU term is skipped entirely when job_gpus == 0 (the CPU-only case)
+concurrent_jobs_per_node = max(1, min(node_cpus / job_cpus,
+                                      node_mem  / job_mem,
+                                      job_gpus > 0 ? node_gpus / job_gpus : unlimited))
 time_slots               = max(1, allocation_walltime / job_runtime)
 allocations              = ceil(job_count / (concurrent_jobs_per_node * time_slots)) * nodes_per_job
 ```

@@ -28,14 +28,21 @@ results[]  id, job_id, job_name, workflow_id, run_id, attempt_id, return_code, s
 jobs[]     id, name, command, status, priority, workflow_id, attempt_id,
            resource_requirements_id, failure_handler_id, scheduler_id, invocation_script,
            cancel_on_blocking_job_failure, supports_termination
-status     jobs_by_status{...}, is_complete, is_canceled, active_compute_nodes,
-           active_scheduled_nodes, pending_scheduled_nodes, runtime_blocked_ready_jobs,
-           total_exec_time_formatted
+status     workflow_id, workflow_name, workflow_user, total_jobs, jobs_by_status{...},
+           total_exec_time_minutes, walltime_seconds, active_compute_nodes,
+           active_scheduled_nodes, pending_scheduled_nodes, is_complete, is_canceled,
+           runtime_blocked_ready_jobs, longest_ready_runtime_seconds,
+           max_allocation_remaining_seconds
 ```
 
-JSON `status` values are lowercase (`failed`, `completed`); the table renderer capitalizes them
-(`Failed`, `Completed`) and `--include-logs` reports capitalized names too. Match on the value from
-the exact command you are parsing, not on what another view displayed.
+Job status values are lowercase everywhere -- JSON, CSV, the table renderer, the TUI, the MCP
+server, server API error messages, and log lines: `uninitialized`, `blocked`, `ready`, `pending`,
+`running`, `completed`, `failed`, `canceled`, `terminated`, `disabled`, `pending_failed`. Match on
+those exact strings.
+
+Prefer reading a status from `-f json` or an MCP tool over scraping it out of log text, but the
+casing is consistent either way: every surface formats the enum through its `Display` impl, so
+`status=completed` never appears as `status=Completed`.
 
 Memory in JSON is bytes; the table pre-formats it as `MB`. CPU is a percentage that can exceed 100
 for multi-threaded jobs.
@@ -110,17 +117,18 @@ fi
 ```
 
 Two details this handles that a naive loop does not: `is-complete` is the cheap predicate, and
-`torc run` exiting 0 does not mean the jobs succeeded, so the failure check must come from server
-state.
+`torc run` exiting 0 is a statement about the runner rather than the jobs, so the failure check must
+come from server state.
 
 ## Pitfalls
 
-| Pitfall                                    | Consequence                                                                  |
-| ------------------------------------------ | ---------------------------------------------------------------------------- |
-| Omitting the workflow ID                   | A selection table is printed on stdout, breaking JSON parsing; exit 1 on EOF |
-| Assuming `results list` covers all runs    | Only the current `run_id` is returned; add `--all-runs`                      |
-| Trusting `torc run`'s exit status          | It exits 0 with failed jobs; check `status` or `results --failed`            |
-| Matching capitalized statuses against JSON | JSON uses lowercase; the table capitalizes                                   |
-| Parsing runner output from `torc run`      | Runner logs go to stdout in table mode; use `-f json` to move them to stderr |
-| Wrong `-o` with `--include-logs`           | Log paths resolve but the files do not exist; warnings go to stderr          |
-| Fetching everything then filtering locally | Extra round trips; use server-side filters                                   |
+| Pitfall                                     | Consequence                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Omitting the workflow ID in a script        | Exit 1 with "a workflow ID is required when stdin is not a terminal"                                    |
+| Omitting it at an interactive prompt        | With exactly one workflow it is selected silently, which may not be the one you meant                   |
+| Assuming `results list` covers all runs     | Only the current `run_id` is returned; add `--all-runs`                                                 |
+| Trusting `torc run`'s exit status           | By design it reports the runner, not the jobs; check `status` or `results --failed`, or use `torc exec` |
+| Expecting capitalized statuses              | Every surface emits lowercase (`failed`, `pending_failed`)                                              |
+| Redirecting stdout to capture runner output | Runner logs are on stderr; redirect `2>` or read the runner log file                                    |
+| Wrong `-o` with `--include-logs`            | Log paths resolve but the files do not exist; warnings go to stderr                                     |
+| Fetching everything then filtering locally  | Extra round trips; use server-side filters                                                              |

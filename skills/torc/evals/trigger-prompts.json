@@ -31,19 +31,20 @@
   ],
   "negative": [
     "Write a generic Slurm sbatch tutorial with no workflow tool.",
-    "Explain SSH key authentication in general.",
-    "Explain how the Linux OOM killer works.",
-    "Compare Nextflow and Snakemake feature sets.",
-    "Write a Python script to parse CSV files.",
-    "Explain TOML syntax in general.",
+    "What does sacct -j 12345 tell me about my Slurm job?",
     "Set up my HPC account and allocation request.",
-    "Optimize this linear program formulation.",
+    "Explain how the Linux OOM killer works.",
+    "Explain SSH key authentication in general.",
+    "How do I set up passwordless SSH between two compute nodes?",
+    "Run these 200 commands in parallel with xargs -P 8.",
     "Teach me jq basics with no Torc output involved.",
-    "Explain Rust ownership and borrowing.",
-    "Design a Kubernetes deployment for an unrelated service.",
-    "Compare SQLite and PostgreSQL for a new project.",
+    "Explain TOML syntax in general.",
+    "Compare Nextflow and Snakemake feature sets.",
+    "Port this Makefile to a Nextflow pipeline.",
     "Add a new endpoint to the torc HTTP API and regenerate the clients.",
     "What checks do I need to pass before committing to the torc repository?",
-    "Write an integration test for the torc CLI."
+    "Write an integration test for the torc CLI.",
+    "Why is the torc-server SQLite migration failing on startup?",
+    "Bump the torc crate version and cut a release."
   ]
 }

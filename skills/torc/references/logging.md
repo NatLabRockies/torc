@@ -37,19 +37,29 @@ pipelines safe.
 
 ## Job runner logging
 
-`torc run`, `torc exec`, `torc watch`, and `torc tui` install their own logger, and the difference
-matters:
+`torc run`, `torc exec`, `torc watch`, and the Slurm job runner install their own logger. Where the
+lines go depends on which one:
 
-- **Bare levels only.** The value is parsed as one of `error`, `warn`, `info`, `debug`, `trace`.
-  Anything else prints `Invalid log level '<value>', defaulting to 'info'`. So
-  `RUST_LOG=torc=debug torc run ...` silently drops to `info` for the runner's own filter level,
-  while the same variable works for `torc status`.
-- **Console destination flips with format.** Runner log lines go to **stdout** in table format and
-  to **stderr** with `-f json`, so JSON output stays parseable.
-- **Always duplicated to a file.** Every line is also written to
-  `<output-dir>/job_runner_<hostname>_wf<id>_r<run>.log` (local) or
-  `<output-dir>/job_runner_slurm_wf<id>_sl<slurm>_n<node>_pid<pid>.log` (Slurm). The runner prints
-  the exact path at startup.
+| Command                 | Console     | Log file                                                              |
+| ----------------------- | ----------- | --------------------------------------------------------------------- |
+| `torc run`, `torc exec` | stderr      | `<output-dir>/job_runner_<hostname>_wf<id>_r<run>.log`                |
+| `torc watch`            | stderr      | `<output-dir>/watch_<hostname>_wf<id>.log`                            |
+| `torc-slurm-job-runner` | **nothing** | `<output-dir>/job_runner_slurm_wf<id>_sl<slurm>_n<node>_pid<pid>.log` |
+
+- **`run`, `exec` and `watch` duplicate every line** to stderr and to the file. Console output is
+  stderr in every format, so `-f json` stdout stays parseable. The runner prints the exact path at
+  startup.
+- **The Slurm job runner writes to the file only.** Its logger targets the log file and nothing
+  else, so do not expect runner output in the allocation's `slurm_output_wf<id>_sl<slurm>.e` -- that
+  file gets only whatever the process wrote before the logger was installed, plus output from the
+  jobs themselves. When a Slurm allocation looks silent, read `job_runner_slurm_*.log`, not the
+  Slurm stderr file.
+
+The filter syntax is the same as for any other command: these loggers call `parse_filters`, so
+`RUST_LOG=torc=debug torc run ...` and `--log-level torc::client::job_runner=debug` both work.
+
+`torc tui` installs no logger at all; it is a full-screen application and log output would corrupt
+the display.
 
 Job stdout and stderr are separate from all of this and land in `<output-dir>/job_stdio/`, governed
 by `execution_config.stdio`. See `log-map.md`.
@@ -137,15 +147,15 @@ raising the level for a targeted rerun rather than for a full campaign.
 ## Recipes
 
 ```bash
-# Debug why a runner is not claiming jobs (bare level required for run)
-torc --log-level debug run workflow.yaml -o out
+# Debug why a runner is not claiming jobs (module filters work here too)
+RUST_LOG=torc::client::job_runner=debug torc run workflow.yaml -o out
 grep -E "claim|ready|resource" out/job_runner_*.log
 
 # Debug API interactions for an ordinary command (module filter allowed)
 RUST_LOG=torc::client::apis=debug torc jobs list 123
 
-# Keep JSON parseable while capturing runner logs
-torc -f json run workflow.yaml -o out 2>run.log
+# Capture runner logs without touching stdout
+torc run workflow.yaml -o out 2>run.log
 jq . <<<"$(torc -f json status 123)"
 
 # Silence the embedded server in standalone mode

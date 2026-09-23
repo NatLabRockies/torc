@@ -7,7 +7,8 @@
       "assertions": [
         "states that torc run exits 0 even when jobs failed",
         "recommends checking torc status or torc results list --failed",
-        "notes that torc exec exits non-zero on job failure"
+        "notes that torc exec exits non-zero on job failure",
+        "prefers -f json for output it needs to parse rather than the table renderer"
       ]
     },
     {
@@ -22,7 +23,7 @@
     },
     {
       "name": "node_sharing_capacity",
-      "prompt": "Our nodes have 104 CPUs and 240 GB. Each run needs 8 CPUs and 100 GB. How many runs share a node?",
+      "prompt": "Our nodes have 104 CPUs and 240 GB. Each job needs 8 CPUs and 100 GB. How many jobs share a node?",
       "assertions": [
         "computes the minimum across CPU, memory, and GPU rather than CPU alone",
         "identifies memory as the binding constraint giving 2 per node",
@@ -38,7 +39,8 @@
         "splits the work with --group-by resource-requirements or per-job scheduler bindings",
         "notes that the merged group forces the short jobs into the long walltime",
         "quantifies or compares the resulting allocation counts",
-        "mentions strict_scheduler_match when a heavy job must not land on a light pool"
+        "mentions strict_scheduler_match when a heavy job must not land on a light pool",
+        "prefers -f json for output it needs to parse rather than the table renderer"
       ]
     },
     {
@@ -90,7 +92,8 @@
         "chooses a targeted reset such as torc jobs reset-status or torc recover rather than a full workflow reset",
         "uses --dry-run before applying changes",
         "explains that downstream dependents are reset by torc workflows reinit",
-        "resubmits with torc submit after the reset"
+        "resubmits with torc submit after the reset",
+        "prefers -f json for output it needs to parse rather than the table renderer"
       ]
     },
     {
@@ -101,7 +104,8 @@
         "corroborates with torc workflows check-resources --include-failed",
         "checks Slurm state via torc slurm sacct or the dmesg log",
         "recommends raising memory or running torc workflows correct-resources",
-        "does not assert OOM from the exit code alone without corroborating evidence"
+        "does not assert OOM from the exit code alone without corroborating evidence",
+        "prefers -f json for output it needs to parse rather than the table renderer"
       ]
     },
     {
@@ -111,25 +115,29 @@
         "runs torc workflows diagnose",
         "explains that a job whose runtime exceeds remaining walltime will not be started",
         "suggests more allocations, longer walltime, or lower job runtime",
-        "does not require Slurm access for the diagnosis"
+        "does not require Slurm access for the diagnosis",
+        "prefers -f json for output it needs to parse rather than the table renderer"
       ]
     },
     {
       "name": "json_parsing_shape",
-      "prompt": "My script runs `torc -f json jobs list` and jq fails with a parse error. Fix it.",
+      "prompt": "My script runs `torc -f json jobs list` and jq gets nothing. It works when I run it by hand. Fix it.",
       "assertions": [
-        "identifies that the omitted workflow ID makes the CLI print a selection table on stdout",
+        "identifies the omitted workflow ID as the cause",
+        "notes that without a TTY the command exits 1 rather than emitting JSON",
         "passes the workflow ID explicitly",
-        "notes that list commands return an object with an items array"
+        "notes that list commands return an object with an items array",
+        "prefers -f json for output it needs to parse rather than the table renderer"
       ]
     },
     {
-      "name": "runner_log_filter",
-      "prompt": "RUST_LOG=torc=debug works for torc status but torc run ignores it.",
+      "name": "runner_output_stream",
+      "prompt": "I ran `torc -f json run workflow.yaml | jq .` and jq got nothing useful. Where did the runner output go?",
       "assertions": [
-        "explains that torc run installs its own logger accepting only a bare level",
-        "notes the Invalid log level fallback to info",
-        "recommends --log-level debug or RUST_LOG=debug for the runner"
+        "explains that runner log lines go to stderr in every format, not stdout",
+        "notes that the same lines are duplicated to the runner log file under the output directory",
+        "notes that module filters such as RUST_LOG=torc=debug work for torc run",
+        "checks job outcomes from server state rather than from torc run's stdout or exit status"
       ]
     },
     {

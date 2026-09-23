@@ -20,8 +20,10 @@ torc hpc detect                # what matches this system
 torc hpc partitions slurm      # partitions discovered from the live cluster
 ```
 
-Torc falls back to dynamic Slurm detection when no profile matches, and `--profile slurm` forces it.
-If `torc hpc partitions slurm` shows correct partitions, no custom profile is needed. Only write one
+Torc falls back to dynamic Slurm detection when no profile matches, and the reserved profile name
+`slurm` forces it -- as a positional on `torc hpc show`/`partitions`/`match`, or as
+`--profile slurm` on `torc slurm generate`/`regenerate`/`plan-allocations`. If
+`torc hpc partitions slurm` shows correct partitions, no custom profile is needed. Only write one
 when detection is wrong, the cluster is private, or specific partitions must be excluded or
 annotated.
 

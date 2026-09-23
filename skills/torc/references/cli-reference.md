@@ -60,7 +60,7 @@ an empty database over your existing data.
 | Command                    | Behavior not in `--help`                                                     |
 | -------------------------- | ---------------------------------------------------------------------------- |
 | `torc create <spec>`       | `--dry-run` validates offline with no server and exits non-zero on failure   |
-| `torc run <spec-or-id>`    | **Exits 0 even when jobs fail.** Runner logs go to stdout unless `-f json`   |
+| `torc run <spec-or-id>`    | **Exits 0 even when jobs fail.** Runner logs go to stderr and to a log file  |
 | `torc exec`                | Exits 1 on any failed or terminated job, unlike `run`                        |
 | `torc submit <spec-or-id>` | Requires a `schedule_nodes` action; fires every pending one                  |
 | `torc status <id>`         | Cheapest full picture; `-f csv` is rejected (multi-section report)           |
@@ -80,25 +80,25 @@ State: `init`, `reinit`, `reset-status`, `is-complete`, `sync-status`, `reconcil
 `update`, `archive`, `check-resources`, `correct-resources`, `diagnose`. Transfer: `export`,
 `import`.
 
-| Command             | Behavior not in `--help`                                                              |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| `init`              | Run automatically by `run` and `submit`; `--force` proceeds with missing data         |
-| `reinit`            | **Increments `run_id`**, which log filenames embed. Resets jobs whose inputs changed  |
-| `reset-status`      | Flag is `--failed-only`; without it the whole workflow resets                         |
-| `is-complete`       | Returns only `is_complete` and `is_canceled`; the cheap wait predicate                |
-| `sync-status`       | Queries `squeue`; failed orphans get return code `-128`                               |
-| `reconcile`         | Takes `<workflow_id> <run_id>`; `--base-dir` for journals across nodes                |
-| `list`              | Filters to your user by default; `-a` for all users, `--include-archived`             |
-| `execution-plan`    | Accepts a spec path or an ID, so it previews before anything is created               |
-| `list-actions`      | Shows action IDs and fire status; the way to see why an action did not fire           |
-| `update-action`     | Partial merge of only the fields you pass; `schedule_nodes` only                      |
-| `new`               | Creates an _empty_ workflow; jobs are added separately                                |
-| `update`            | Metadata only (name, description, owner), not jobs                                    |
-| `archive`           | Argument order is `archive <true\|false> <id>...`                                     |
-| `check-resources`   | **Excludes failed jobs by default**; pass `--include-failed` when diagnosing          |
-| `correct-resources` | Adjusts requirements without resetting or rerunning; downsizes unless `--no-downsize` |
-| `diagnose`          | Runtime-versus-remaining-walltime packing check, from persisted state only            |
-| `export` / `import` | Import remaps all IDs and resets statuses to uninitialized                            |
+| Command             | Behavior not in `--help`                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| `init`              | Run automatically by `run` and `submit`; `--force` proceeds with missing data                            |
+| `reinit`            | **Increments `run_id`**, which log filenames embed. Resets jobs whose inputs changed                     |
+| `reset-status`      | Flag is `--failed-only`; without it the whole workflow resets                                            |
+| `is-complete`       | Returns only `is_complete` and `is_canceled`; the cheap wait predicate                                   |
+| `sync-status`       | Queries `squeue`; failed orphans get return code `-128`                                                  |
+| `reconcile`         | Takes `<workflow_id> <run_id>`; `--base-dir` for journals across nodes                                   |
+| `list`              | Filters to your user by default; `-a` for all users, `--include-archived`                                |
+| `execution-plan`    | Accepts a spec path or an ID, so it previews before anything is created                                  |
+| `list-actions`      | Shows action IDs and fire status; the way to see why an action did not fire                              |
+| `update-action`     | Partial merge of only the fields you pass; `schedule_nodes` only                                         |
+| `new`               | Creates an _empty_ workflow; jobs are added separately                                                   |
+| `update`            | Workflow metadata only: `--name`, `--description`, `--owner-user`, `--project`, `--metadata`. Never jobs |
+| `archive`           | Argument order is `archive <true\|false> <id>...`                                                        |
+| `check-resources`   | **Excludes failed jobs by default**; pass `--include-failed` when diagnosing                             |
+| `correct-resources` | Adjusts requirements without resetting or rerunning; downsizes unless `--no-downsize`                    |
+| `diagnose`          | Runtime-versus-remaining-walltime packing check, from persisted state only                               |
+| `export` / `import` | Import remaps all IDs and resets statuses to uninitialized                                               |
 
 ## jobs
 
@@ -107,7 +107,7 @@ State: `init`, `reinit`, `reset-status`, `is-complete`, `sync-status`, `reconcil
 
 | Command            | Behavior not in `--help`                                                                                                                                                              |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list`             | `-s/--status` filters server-side; `--include-relationships` costs extra queries                                                                                                      |
+| `list`             | `-s/--status` filters server-side; `--include-relationships` costs extra queries; `-x/--exclude` drops columns from table/CSV output                                                  |
 | `get`              | Includes the exact command, which is what you need to reproduce a failure                                                                                                             |
 | `running`          | Adds compute node and Slurm job ID, tying a job to its allocation                                                                                                                     |
 | `create-from-file` | One command per line, `#` comments skipped; names jobs `job<N>` continuing from the current count, and creates one shared resource requirement                                        |
@@ -156,15 +156,15 @@ Config: `create`, `update`, `list`, `get`, `delete`. Generation: `generate`, `re
 Execution: `schedule-nodes`. Planning: `plan-allocations`. Diagnostics: `parse-logs`, `sacct`,
 `stats`, `usage`.
 
-| Command            | Behavior not in `--help`                                                                                              |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `generate`         | Never edits in place: writes to stdout or `-o`. Submit the generated spec                                             |
-| `regenerate`       | For recovery: builds schedulers for uninitialized/ready/blocked jobs, reusing existing scheduler settings as defaults |
-| `schedule-nodes`   | Submits allocations directly, bypassing actions. `--job-prefix` is rejected on a `serialize_allocations` scheduler    |
-| `plan-allocations` | Runs `sbatch --test-only`; many-small estimate covers only the _first_ allocation                                     |
-| `sacct`            | Calls `sacct`, so it needs a node where Slurm commands work                                                           |
-| `stats`            | Reads the database instead, so it works anywhere                                                                      |
-| `parse-logs`       | Takes an output directory plus `--workflow-id`                                                                        |
+| Command            | Behavior not in `--help`                                                                                                                                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`         | Never edits in place: writes to stdout or `-o`. Submit the generated spec                                                                                                                                              |
+| `regenerate`       | For recovery: builds schedulers for uninitialized/ready/blocked jobs, reusing existing scheduler settings as defaults                                                                                                  |
+| `schedule-nodes`   | Submits allocations directly. `--suppress-actions` marks pending `schedule_nodes` actions executed first, so the new worker does not also fire them. `--job-prefix` is rejected on a `serialize_allocations` scheduler |
+| `plan-allocations` | Runs `sbatch --test-only`; many-small estimate covers only the _first_ allocation                                                                                                                                      |
+| `sacct`            | Calls `sacct`, so it needs a node where Slurm commands work                                                                                                                                                            |
+| `stats`            | Reads the database instead, so it works anywhere                                                                                                                                                                       |
+| `parse-logs`       | Takes an output directory plus `--workflow-id`                                                                                                                                                                         |
 
 Submit from a login node only.
 
@@ -172,10 +172,13 @@ Submit from a login node only.
 
 `detect`, `list`, `show`, `partitions`, `match`, `generate`.
 
-`detect` reports no known system on an unsupported cluster; `--profile slurm` forces dynamic
-discovery from the live cluster. `match --cpus --memory --walltime` is the direct test of which
-partition a requirement will select. `generate` derives a profile snippet from `sinfo`/`scontrol`.
-See `hpc-profiles.md`.
+`detect` matches built-in and custom profiles first, then falls back to querying the live Slurm
+cluster; it prints `No known HPC system detected.` only when both fail. `show <name>` and
+`partitions [name]` take the profile as a **positional** argument, and the reserved name `slurm`
+selects live discovery instead of a stored profile. The commands that build on a profile
+(`slurm generate`, `slurm regenerate`, `slurm plan-allocations`) take `--profile <name>` instead.
+`match --cpus --memory --walltime [name]` is the direct test of which partition a requirement will
+select. `generate` derives a profile snippet from `sinfo`/`scontrol`. See `hpc-profiles.md`.
 
 ## remote
 
@@ -205,7 +208,8 @@ stored history and is the better choice after the fact.
 ## compute-nodes and scheduled-compute-nodes
 
 `compute-nodes`: `list`, `get` — workers that ran jobs. `scheduled-compute-nodes`: `list`, `get`,
-`list-jobs` — allocations requested from a scheduler.
+`list-jobs` — allocations requested from a scheduler, including pending allocations that have not
+yet run.
 
 `scheduled-compute-nodes list-jobs <sched_id>` maps an allocation to what actually ran on it.
 

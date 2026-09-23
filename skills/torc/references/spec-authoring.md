@@ -152,6 +152,13 @@ Values are literal strings. Nothing in `env` is evaluated by a shell, so `$(host
 and `${VAR:-default}` do not expand there. Put anything dynamic in the job command or in an
 `invocation_script`.
 
+**Never put secrets in `env`.** The merged map is persisted on the workflow and job records and is
+returned by every API read of the job -- `torc jobs get`, `-f json` output, `torc workflows export`,
+the dashboard, and the MCP tools -- so any secret is visible to everyone who can read the workflow,
+and it is also exported into every job's process environment. Supply credentials from the
+environment that launches the runner, or read them inside an `invocation_script` from a file only
+the owner can read.
+
 An `invocation_script` wraps the job command, which is the right place for module loads, conda
 activation, and interpreter selection. End the wrapper with `exec "$@"` so signals and exit codes
 reach the real process.
@@ -216,29 +223,56 @@ the workflow level it becomes `pending_failed` instead, awaiting classification.
 Actions react to state transitions. They are not dependency edges: an action failure does not block
 downstream jobs. If setup must gate downstream work, model it as a real job with an output file.
 
-| Field                                               | Notes                                                                            |
-| --------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `trigger_type`                                      | `on_workflow_start`, `on_workflow_complete`, `on_jobs_ready`, `on_jobs_complete` |
-| `action_type`                                       | `run_commands` or `schedule_nodes`                                               |
-| `jobs` / `job_name_regexes`                         | Which jobs a job-scoped trigger matches                                          |
-| `scheduler`, `num_allocations`, `max_parallel_jobs` | `schedule_nodes` parameters                                                      |
+| Field                                                                                              | Notes                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `trigger_type`                                                                                     | One of six: `on_workflow_start`, `on_workflow_complete`, `on_worker_start`, `on_worker_complete`, `on_jobs_ready`, `on_jobs_complete`. An unrecognized value is rejected at creation |
+| `action_type`                                                                                      | `run_commands` or `schedule_nodes`                                                                                                                                                   |
+| `jobs` / `job_name_regexes`                                                                        | Which jobs a job-scoped trigger matches                                                                                                                                              |
+| `commands`                                                                                         | `run_commands` payload                                                                                                                                                               |
+| `scheduler`, `scheduler_type`, `num_allocations`, `start_one_worker_per_node`, `max_parallel_jobs` | `schedule_nodes` parameters; `scheduler_type` is `slurm` or `local`                                                                                                                  |
+| `persistent`                                                                                       | `true` keeps the action claimable by multiple workers instead of firing once                                                                                                         |
 
 For `schedule_nodes`, prefer `on_jobs_ready` gated on the jobs the allocation runs, even for root
 jobs. Root jobs are ready at init, so the action still fires at the start, but tying it to jobs
-makes a selective rerun re-schedule only the reset jobs. An `on_workflow_start` `schedule_nodes`
-action is kept across reinitialize and `torc submit` cannot re-fire it.
+makes a selective rerun re-schedule only the reset jobs.
+
+How reinitialization re-arms actions is what makes that choice matter:
+
+| Trigger                                                         | After a partial reinit (`reinit`, `reset-status --reinit`, `recover`, `regenerate`, `watch`) |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `on_workflow_start`                                             | Stays suppressed -- `torc submit` cannot re-fire it                                          |
+| `on_jobs_ready` / `on_jobs_complete`                            | Re-armed iff its gating jobs are no longer all in a terminal state                           |
+| `on_workflow_complete`, `on_worker_start`, `on_worker_complete` | Always re-armed; these recur every run                                                       |
+
+A **full** `torc workflows init` resets every job and re-arms every action, including
+`on_workflow_start`. That is the only way to fire a start-time action a second time.
 
 Use `on_workflow_complete` only for narrowly scoped cleanup.
 
-Two more action fields: `scheduler_type` selects `slurm` or `local`, and `persistent: true` keeps
-the action claimable by multiple workers instead of firing once.
-
 ## Execution config
 
-`execution_config.mode` selects `direct`, `slurm`, or `auto`. Under `auto`, the effective mode
-depends on whether the spec has Slurm schedulers. The remaining fields are mode-gated, and setting
-one that does not match the effective mode is a validation error at creation, not a silently ignored
-value.
+`execution_config.mode` selects `direct` (the default), `slurm`, or `auto`. The remaining fields are
+mode-gated: setting one that does not match the mode is a validation error at creation, not a
+silently ignored value.
+
+Under `auto`, two different phases decide the mode and they can disagree:
+
+| Phase                    | How `auto` is resolved                                                |
+| ------------------------ | --------------------------------------------------------------------- |
+| Creation-time validation | `slurm` if the spec has a non-empty `slurm_schedulers`, else `direct` |
+| Runtime, in the runner   | `slurm` if `SLURM_JOB_ID` is set in its environment, else `direct`    |
+
+So the same spec can validate as one mode and execute as the other. An `auto` spec with no
+schedulers is validated as direct, so it rejects `srun_termination_signal` even though the job would
+pick slurm mode if run inside an allocation; an `auto` spec with schedulers is validated as slurm,
+so it rejects `limit_resources: false` and `termination_signal` even though a local run would use
+direct mode. Set `mode` explicitly when you need a mode-gated field and the two phases would not
+agree.
+
+Note that this gating runs at **creation**, not during `torc create --dry-run`: a spec that fails
+this check still reports `Validation: PASSED` offline and only errors when the workflow is actually
+created. Verified both ways -- the dry run passes and the create prints
+`srun_termination_signal is only supported in slurm mode`.
 
 | Field                      | Mode   | Default   | Purpose                                              |
 | -------------------------- | ------ | --------- | ---------------------------------------------------- |
@@ -248,15 +282,16 @@ value.
 | `oom_exit_code`            | direct | `137`     | Exit code recorded for OOM-killed jobs               |
 | `srun_termination_signal`  | slurm  | none      | Passed to `srun --signal=<value>`                    |
 | `enable_cpu_bind`          | slurm  | `false`   | Allow Slurm CPU binding (`--cpu-bind`)               |
-| `srun_mpi`                 | slurm  | none      | `srun --mpi=<value>` for worker-per-node launches    |
+| `srun_mpi`                 | either | none      | `srun --mpi=<value>` for worker-per-node launches    |
 | `sigkill_headroom_seconds` | both   | `60`      | Headroom before end time for SIGKILL / `srun --time` |
 | `timeout_exit_code`        | both   | `152`     | Exit code for timed-out jobs (matches Slurm TIMEOUT) |
 | `staggered_start`          | both   | `true`    | Stagger runner startup to avoid a thundering herd    |
 | `stdio`                    | both   | see below | Workflow-level stdout/stderr capture                 |
 
-`srun_mpi` applies only when `mode: direct` is combined with a `schedule_nodes` action setting
-`start_one_worker_per_node: true`, since that is the only path with an outer `srun` launching
-runners.
+`srun_mpi` is gated on the action, not on the mode: it requires a `schedule_nodes` action with
+`start_one_worker_per_node: true` and is a validation error without one, because it decorates the
+outer `srun` in the submission script that launches one job runner per node. Either execution mode
+can use it.
 
 `srun_termination_signal` (for example `"TERM@300"`) is what makes graceful checkpointing possible:
 the job catches SIGTERM, saves state, and exits 0. See `failure-analysis.md` for why that reads as
@@ -323,8 +358,9 @@ so putting any of those in `slurm_defaults` is rejected with the offending keys 
 deliberately allowed there as a workflow-level default. Anything else valid for sbatch is accepted
 and not validated by Torc, so a typo surfaces as an sbatch rejection at submit time.
 
-Note that this particular check runs at create time rather than during `torc create --dry-run`, so a
-clean dry-run does not prove `slurm_defaults` is acceptable.
+`torc create --dry-run` runs this check too, so a clean dry-run does cover `slurm_defaults`. It does
+**not** cover `execution_config` mode gating, which only runs at creation -- see
+[Execution config](#execution-config).
 
 ## Dynamic jobs
 
