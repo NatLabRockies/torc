@@ -1247,7 +1247,7 @@ where
         log_call!(
             debug,
             context,
-            "manage_status_change({}, {:?}, {})",
+            "manage_status_change({}, {}, {})",
             id,
             status,
             run_id,
@@ -1410,11 +1410,11 @@ where
             }
             Some(status) => {
                 error!(
-                    "start_job: Invalid job status for job_id={}. Expected SubmittedPending, got {:?}",
+                    "start_job: Invalid job status for job_id={}. Expected SubmittedPending, got {}",
                     id, status
                 );
                 return Err(ApiError(format!(
-                    "job_id={} has invalid status={:?}. Expected SubmittedPending for job start.",
+                    "job_id={} has invalid status={}. Expected SubmittedPending for job start.",
                     id, status
                 )));
             }
@@ -1493,7 +1493,7 @@ where
         log_call!(
             debug,
             context,
-            "complete_job({}, {:?}, {}, {:?})",
+            "complete_job({}, {}, {}, {:?})",
             id,
             status,
             run_id,
@@ -1564,13 +1564,13 @@ where
             && current_status.is_complete()
         {
             error!(
-                "job_id={} is already complete with status={:?}",
+                "job_id={} is already complete with status={}",
                 id, current_status
             );
             return Err(CompletionMutationError::Response(Box::new(
                 CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
                     format!(
-                        "job_id={} is already complete with status={:?}",
+                        "job_id={} is already complete with status={}",
                         id, current_status
                     ),
                 )),
@@ -1761,7 +1761,7 @@ where
             return Err(CompletionMutationError::Response(Box::new(
                 CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
                     format!(
-                        "job_id={} is already complete with status={:?}",
+                        "job_id={} is already complete with status={}",
                         id, current_status
                     ),
                 )),
@@ -1932,14 +1932,14 @@ where
                         return Err(CompletionMutationError::Response(Box::new(
                             CompleteJobResponse::UnprocessableContentErrorResponse(
                                 message_error_response(format!(
-                                    "job_id={} is already complete with status={:?}",
+                                    "job_id={} is already complete with status={}",
                                     id, current_status
                                 )),
                             ),
                         )));
                     }
                     return Err(CompletionMutationError::Transport(ApiError(format!(
-                        "job_id={} is in unexpected status={:?}",
+                        "job_id={} is in unexpected status={}",
                         id, current_status
                     ))));
                 }

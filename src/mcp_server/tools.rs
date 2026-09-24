@@ -535,7 +535,7 @@ pub fn create_workflow(
                 "scheduler_names": validation_result.summary.scheduler_names,
             },
             "next_steps": if validation_result.valid {
-                "Validation passed! Call this tool again with action='create_workflow' to create the workflow."
+                "Validation passed. Use save_spec_file for a draft. Use create_workflow only for explicitly authorized server-side creation. This does not run jobs or submit Slurm allocations."
             } else {
                 "Please fix the errors listed above and call validate again."
             }

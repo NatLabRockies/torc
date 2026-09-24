@@ -83,7 +83,7 @@ pub enum ResultCommands {
         /// Show only failed jobs (non-zero return code)
         #[arg(long)]
         failed: bool,
-        /// Filter by job status (uninitialized, blocked, canceled, terminated, done, ready, scheduled, running, pending, disabled)
+        /// Filter by job status (uninitialized, blocked, ready, pending, running, completed, failed, canceled, terminated, disabled, pending_failed)
         #[arg(short, long)]
         status: Option<String>,
         /// Maximum number of results to return (default: all)
@@ -184,25 +184,18 @@ pub fn handle_result_commands(config: &Configuration, command: &ResultCommands, 
 
             if let Some(status_str) = status {
                 // Parse string to JobStatus
-                let status_val = match status_str.as_str() {
-                    "uninitialized" => models::JobStatus::Uninitialized,
-                    "blocked" => models::JobStatus::Blocked,
-                    "ready" => models::JobStatus::Ready,
-                    "pending" => models::JobStatus::Pending,
-                    "running" => models::JobStatus::Running,
-                    "completed" => models::JobStatus::Completed,
-                    "failed" => models::JobStatus::Failed,
-                    "canceled" => models::JobStatus::Canceled,
-                    "terminated" => models::JobStatus::Terminated,
-                    "disabled" => models::JobStatus::Disabled,
-                    _ => {
+                let status_val = status_str
+                    .trim()
+                    .to_lowercase()
+                    .parse::<models::JobStatus>()
+                    .unwrap_or_else(|_| {
                         eprintln!(
-                            "Invalid status: {}. Valid values are: uninitialized, blocked, ready, pending, running, completed, failed, canceled, terminated, disabled",
-                            status_str
+                            "Invalid status: {}. Valid values are: {}",
+                            status_str,
+                            crate::client::commands::jobs::VALID_JOB_STATUSES
                         );
                         std::process::exit(1);
-                    }
-                };
+                    });
                 params = params.with_status(status_val);
             }
 
