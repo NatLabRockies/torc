@@ -137,7 +137,7 @@ run produces:
   job_stdio/
     job_wf<id>_j<job>_r<run>_a<attempt>.o
     job_wf<id>_j<job>_r<run>_a<attempt>.e
-  resource_utilization/        # only with --generate-plots
+  resource_utilization/        # when time-series monitoring is enabled (plots are optional)
   offline_journal/             # only after an offline drain
 ```
 

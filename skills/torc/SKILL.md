@@ -7,166 +7,90 @@ description: >
   and recovery, status/results/log queries, JSON and CSV scripting, MCP tools, configuration, and log
   levels. Do not use for generic Slurm, SSH, or shell questions with no Torc workflow involved, or
   for contributing to the Torc codebase itself.
-license: BSD-3-Clause
 ---
 
 # Torc
 
-Torc turns one declarative spec into a dependency graph of jobs that runners claim and execute. The
-server owns all state in SQLite; the CLI is a client. Nothing runs until a workflow exists on a
-server and has been initialized.
+Torc turns a declarative spec into a dependency graph of jobs. The server owns workflow state in
+SQLite. Runners claim and execute jobs. Use the least costly execution mode that meets the request.
+Do not progress through every mode or launch work just because it is possible.
 
-Add control in layers and stop at the first layer that solves the problem:
+## Find the relevant guidance
 
-```text
-dry-run validation -> local standalone smoke test -> shared-server run -> Slurm submit -> tuned allocations
-```
+Read the smallest relevant reference. Do not preload the reference library. Follow links only when a
+task needs them.
 
-## Task router
+| Task                                                       | Reference                                                         |
+| ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| Write, review, or validate a workflow spec                 | `references/spec-authoring.md`                                    |
+| Choose an execution mode                                   | `references/execution-modes.md`                                   |
+| Run locally or use `torc exec`                             | `references/local-execution.md`                                   |
+| Generate schedulers, submit, or diagnose Slurm allocations | `references/slurm.md`                                             |
+| Tune packing, walltime, or allocation count                | `references/optimization.md`                                      |
+| Configure SSH workers                                      | `references/remote-workers.md`                                    |
+| Query workflow, job, result, dependency, or resource state | `references/query-map.md`                                         |
+| Watch live work or plot resources                          | `references/live-monitoring.md`                                   |
+| Diagnose failures or stalled work                          | `references/failure-analysis.md`, `references/stuck-workflows.md` |
+| Rerun, reset, or recover work                              | `references/rerun-and-recovery.md`                                |
+| Find, collect, or analyze logs                             | `references/log-map.md`                                           |
+| Script Torc output                                         | `references/scripting.md`                                         |
+| Exit codes, streams, prompts, pagination, or auth          | `references/command-behavior.md`                                  |
+| Configure the CLI, server, or logging                      | `references/settings.md`, `references/logging.md`                 |
+| Troubleshoot server access or outages                      | `references/connectivity.md`                                      |
+| Define an HPC profile                                      | `references/hpc-profiles.md`                                      |
+| Use Torc from MCP                                          | `references/mcp-tools.md`                                         |
+| Find CLI commands and behavior not shown by help           | `references/cli-reference.md`                                     |
 
-Three references are the primary lookups. Open the matching one before running an unfamiliar
-command, calling an MCP tool, or writing a spec field:
+For current CLI syntax and flags, use `torc <command> --help`. Use `torc <group> --help` to list a
+group's commands. Consult `cli-reference.md` for hidden command groups and behavior that help does
+not explain. For MCP, use the connected tool schema and read `mcp-tools.md` for capability
+boundaries and mutation procedures.
 
-- `references/cli-reference.md` — every command group and what `--help` does not tell you
-- `references/mcp-tools.md` — every MCP tool, its CLI equivalent, and what MCP will not do
-- `references/spec-authoring.md` — every workflow YAML option and its semantics
+## Agent workflow
 
-The rest are task-scoped. Read only the one that matches; do not preload.
+1. Classify the request. Distinguish authoring, inspection, execution, tuning, recovery, and
+   configuration. Do not turn a question or diagnosis into a workflow mutation.
+2. Choose the available surface. When Torc MCP tools are connected, use them for capabilities they
+   provide. Do not shell out for the same operation. Use the CLI for starting work, standalone
+   scheduler generation/submission, remote workers, and CLI configuration. MCP spec creation can
+   include scheduler generation but cannot submit allocations. If MCP is unavailable, use the CLI.
+3. Establish the target and evidence. For server operations, identify the configured endpoint and an
+   explicit workflow ID. Inspect current state before proposing a change. Use `torc ping` to check
+   connectivity when needed. Standalone local validation does not require a shared server. Prefer
+   read-only queries over asking the user for facts the available tools can retrieve.
+4. Ask only for missing inputs. Resolve local versus Slurm, account, paths, and commands from the
+   request or current configuration where possible. Ask when a necessary choice cannot be inferred
+   or safely discovered. Never invent payload commands or assume placeholder commands are runnable.
+5. Take the smallest appropriate step. Validate a spec offline with `torc create --dry-run` or the
+   MCP `validate` action before creating it. Preview a proposed change with `--dry-run` when
+   supported. For MCP mutations, follow `mcp-tools.md`. Show the impact and get confirmation where
+   required. Verify the exact workflow and side effects before forced resets or irreversible
+   actions. Smoke-test unvalidated payloads in scratch output before scaling. Do not run a test when
+   the user only asked for a draft or inspection.
+6. Verify the requested outcome. Check server state after execution or recovery. Use explicit IDs
+   and JSON for scripted queries. Report the relevant command/tool calls, observed result, and
+   remaining blocker. Distinguish observations from inferences and keep the report proportional to
+   the request.
 
-| Task                                                                   | Read                               |
-| ---------------------------------------------------------------------- | ---------------------------------- |
-| Look up a command's preconditions, side effects, or gotchas            | `references/cli-reference.md`      |
-| Write or review a spec: dependencies, files, parameters, actions       | `references/spec-authoring.md`     |
-| Run locally, choose standalone vs shared server, use `torc exec`       | `references/local-execution.md`    |
-| Choose local, remote workers, or Slurm; size a machine or worker pool  | `references/execution-modes.md`    |
-| Generate schedulers, submit to Slurm, understand exit codes            | `references/slurm.md`              |
-| Pack jobs per node, size allocations, tune walltime and throughput     | `references/optimization.md`       |
-| Run jobs on SSH-reachable machines                                     | `references/remote-workers.md`     |
-| Rerun part of a workflow, reset state, recover from failures           | `references/rerun-and-recovery.md` |
-| Exit codes, stream routing, prompting, pagination, auth                | `references/command-behavior.md`   |
-| Query workflow, job, result, dependency, or resource state             | `references/query-map.md`          |
-| Parse output with jq or Nushell, build reports and CSV                 | `references/scripting.md`          |
-| Watch a live workflow: watch, events, resource plots                   | `references/live-monitoring.md`    |
-| Diagnose a failed or killed job                                        | `references/failure-analysis.md`   |
-| Find logs, bundle them, scan for error patterns                        | `references/log-map.md`            |
-| Nothing is progressing: blocked, unclaimed, orphaned, or empty results | `references/stuck-workflows.md`    |
-| Server unreachable, auth or TLS failure, results lost to an outage     | `references/connectivity.md`       |
-| Configure settings: files, precedence, environment variables           | `references/settings.md`           |
-| Set log levels or find log destinations                                | `references/logging.md`            |
-| Define or override an HPC profile for a cluster                        | `references/hpc-profiles.md`       |
-| Drive Torc from an AI assistant over MCP                               | `references/mcp-tools.md`          |
+## Non-obvious behavior
 
-## Core loop
+- `torc run` exits 0 even when jobs fail. Its status describes the runner, not the workload. Verify
+  job outcomes with `torc status <id>` or `torc results list <id> --failed`. `torc exec` and
+  `torc watch` have meaningful non-zero failure statuses.
+- Runner logs from `torc run`, `torc exec`, and `torc watch` go to stderr and a runner log file.
+  Structured command output stays on stdout. Use `references/command-behavior.md` for stream and
+  exit-code details.
+- Pass workflow IDs explicitly. Commands that permit an omitted ID may prompt on a TTY or fail
+  without one. Interactive single-workflow selection can still choose the wrong target.
+- Resource requirements describe one job's needs on one node. They determine packing and Slurm
+  sizing. Use `references/optimization.md` for the calculations.
+- `torc submit` needs a `schedule_nodes` action. A spec without one is local-only. Validate with
+  `torc create --dry-run` before submitting.
 
-1. **Pick the surface.** If Torc MCP tools are connected, prefer them for inspection, log reading,
-   resource analysis, and recovery, and do not shell out to `torc` for what a tool already does. MCP
-   cannot start work, generate schedulers, or drive remote workers, so those stay on the CLI. See
-   `references/mcp-tools.md`.
-2. **Confirm the target.** Identify the server (`torc ping`), the workflow spec or ID, and the
-   execution mode. `torc --help` groups commands, but most subcommand groups are hidden from the
-   top-level list, so use `torc <group> --help` for the real inventory.
-3. **Validate offline first.** `torc create --dry-run <spec>` parses the spec, expands parameters,
-   and reports resulting job/file/action counts without a server. It exits non-zero on failure.
-   Always check the expanded job count before creating a sweep.
-4. **Smoke test small.** Run locally with `-s` into a scratch output directory and a low
-   `--max-parallel-jobs` before scaling. Never smoke test into a directory holding real artifacts.
-5. **Size the work before submitting.** On Slurm, packing and allocation count follow directly from
-   resource requirements. Check them with `torc slurm generate` and `torc slurm plan-allocations`
-   before submitting; see `references/optimization.md`.
-6. **Verify from server state.** After a run, check `torc status`, `torc results list`, and job
-   status counts. A zero exit from `torc run` does not mean the jobs succeeded.
-7. **Report evidence.** Give the mode, exact commands, workflow ID, expanded counts, output
-   directory, and observed job status counts.
+## Execution modes
 
-## Critical behavior
-
-- `torc run` exits 0 even when jobs failed, by design: its status reports whether the runner worked,
-  not whether the workload did, since expected failures are normal in a workflow. It logs
-  `had_failures=true`. Get job outcomes from server state -- `torc status <id>` or
-  `torc results list <id> --failed`. `torc exec` and `torc watch` do exit non-zero, so prefer `exec`
-  when a script needs `$?` to be meaningful.
-- Every command keeps stdout for its result and sends logs, prompts, warnings, hints, and progress
-  to stderr. Runner log lines from `torc run`, `torc exec`, and `torc watch` go to stderr and to the
-  runner log file, so `-f json` stdout stays parseable in every format.
-- Commands that take an optional workflow ID prompt interactively when it is omitted. Without a TTY
-  they exit 1 rather than prompting or guessing; on a TTY the selection table is printed on stderr,
-  and with exactly one workflow that one is chosen silently. Always pass the ID explicitly.
-- **All resource values are per node.** `num_cpus: 32` and `memory: 128g` describe what one node
-  provides for that job, never a total across nodes.
-- `torc submit` requires a `schedule_nodes` action. A spec without one is local-only;
-  `torc create --dry-run` says which case applies.
-- `torc workflows reinit` increments `run_id`, and log filenames embed it. Collect logs before
-  reinitializing, or query with `--all-runs`.
-- Torc records the submission directory and exposes it as `TORC_WORKFLOW_SUBMISSION_DIR`. Relative
-  paths in job commands resolve against the runner's working directory, not that one.
-
-## Spec fundamentals
-
-A minimal spec needs only `name` and `jobs`:
-
-```yaml
-name: sweep
-jobs:
-  - name: prepare
-    command: python prepare.py --out /data/config.json
-    output_files: [config]
-  - name: simulate_{temp}
-    command: ./sim --config /data/config.json --temp {temp}
-    input_files: [config]
-    parameters:
-      temp: "250:400:50"
-files:
-  - name: config
-    path: /data/config.json
-```
-
-- Dependencies come from `depends_on` or from file and user-data edges. Prefer artifact edges: they
-  document intent, drive change detection, and let Torc rerun only affected jobs.
-- `{name}` tokens are workflow `variables` (constants, substituted once) or `parameters` (sweep
-  dimensions that expand the graph). An undefined `{name}` is rejected as a typo.
-- Workflow-level and job-level `env` values are literal strings. They never see a shell, so `$(...)`
-  and `${VAR:-default}` do not expand. Put shell logic in the command or an `invocation_script`
-  ending in `exec "$@"`.
-- Resource requirements are named blocks referenced by jobs. They drive local packing, Slurm
-  scheduler generation, node packing, and OOM/timeout recovery. A job with none cannot be
-  auto-recovered.
-
-## Choosing an execution mode
-
-| Situation                                               | Mode                                                           |
-| ------------------------------------------------------- | -------------------------------------------------------------- |
-| One machine, no server, quick validation                | `torc -s run spec.yaml`                                        |
-| One machine, shared server, durable history             | `torc run spec.yaml`                                           |
-| Ad-hoc commands or a parallel batch, no spec file       | `torc -s exec -c '<cmd>' -j <n>`                               |
-| Slurm cluster, spec already has `slurm_schedulers`      | `torc submit spec.yaml`                                        |
-| Slurm cluster, portable spec with resource requirements | `torc slurm generate --account <a> spec.yaml \| torc submit -` |
-| SSH-reachable machines, no scheduler                    | `torc remote add-workers` then `torc remote run`               |
-
-Submit from a login node only. Login nodes are for spec validation, discovery (`torc hpc detect`,
-`torc hpc partitions`), and submission, never builds, solvers, or payload smoke tests. Mode
-trade-offs and sizing are in `references/execution-modes.md`.
-
-## Optimizing throughput
-
-Three numbers decide Slurm cost and time-to-solution, and all follow from resource requirements:
-
-```text
-# the GPU term is skipped entirely when job_gpus == 0 (the CPU-only case)
-concurrent_jobs_per_node = max(1, min(node_cpus / job_cpus,
-                                      node_mem  / job_mem,
-                                      job_gpus > 0 ? node_gpus / job_gpus : unlimited))
-time_slots               = max(1, allocation_walltime / job_runtime)
-allocations              = ceil(job_count / (concurrent_jobs_per_node * time_slots)) * nodes_per_job
-```
-
-So a memory-heavy job caps how many runs share a node, a long walltime trades queue wait for more
-sequential reuse of each allocation, and mixing dissimilar jobs in one partition group inflates
-allocation counts because the generator takes the maximum of each dimension. Read
-`references/optimization.md` before sizing a large campaign; it covers node sharing, splitting by
-memory and time-to-solution, jobs-per-node versus more nodes, and the verification commands.
-
-## Output
-
-Report the execution mode, the commands run, the workflow ID and expanded job/file counts, the
-output directory, the final job status counts from server state, and any blocker with the evidence
-that identified it. Distinguish observations from inferences.
+Use standalone `torc -s` for local, short-lived-server work. Use a shared server for durable history
+or multiple runners, remote workers for SSH-reachable machines without a scheduler, and Slurm where
+a scheduler manages compute. Login nodes are for validation and submission, not payload smoke tests.
+See `references/execution-modes.md` for trade-offs and `references/local-execution.md` or
+`references/slurm.md` for the selected path.

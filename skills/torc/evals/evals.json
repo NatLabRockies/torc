@@ -154,8 +154,9 @@
       "name": "mcp_cannot_submit",
       "prompt": "Using only the Torc MCP tools, start this workflow on Slurm.",
       "assertions": [
-        "states that MCP cannot submit work or generate schedulers",
-        "directs the user to the CLI for torc slurm generate and torc submit",
+        "states that MCP cannot start or submit work",
+        "directs the user to the CLI for torc submit and torc slurm generate when standalone generation is needed",
+        "does not treat create_workflow as starting or submitting the workflow",
         "does not invent an MCP tool that submits workflows"
       ]
     },

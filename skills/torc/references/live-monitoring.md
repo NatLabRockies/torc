@@ -1,13 +1,7 @@
 # Live monitoring
 
-Four ways to watch a running workflow. Only the two non-interactive ones are usable by an agent.
-
-| Interface             | Use when                                           | Agent-usable |
-| --------------------- | -------------------------------------------------- | ------------ |
-| `torc watch`          | Unattended monitoring, CI, meaningful exit status  | Yes          |
-| `torc events monitor` | Streaming a machine-readable event feed            | Yes          |
-| `torc tui`            | A person at a terminal, including over SSH         | No           |
-| `torc-dash`           | A person with a browser, visual DAG and log viewer | No           |
+Use `torc watch` for blocking monitoring with a meaningful exit status. Use `torc events monitor`
+for a live event stream.
 
 ## torc watch
 
@@ -27,17 +21,6 @@ exists but ready jobs do, and when accumulated retry jobs exceed `--auto-schedul
 (default 5). It warns when run from a directory other than the recorded submission directory.
 
 Recovery behavior is covered in `rerun-and-recovery.md`.
-
-## torc tui and torc-dash (not for agents)
-
-Both are human interfaces and an agent should not drive either. `torc tui` is a full-screen terminal
-application with no non-interactive mode; `torc-dash` is a web dashboard (default bind
-`127.0.0.1:8090`, feature-gated behind `--features dash`). Neither can be scripted, and anything
-they show is available from the CLI commands in `query-map.md`.
-
-Mention them only when the user is a person asking what to watch a workflow with. For everything
-else use `torc status`, `torc jobs running`, `torc results list`, `torc watch`, and
-`torc events monitor`.
 
 ## torc events monitor
 

@@ -23,14 +23,18 @@ someone driving the CLI.
 Covered: inspection, log reading, resource analysis, failure diagnosis, recovery, allocation
 planning, and spec authoring.
 
-Not covered, and CLI-only:
+MCP cannot start work or manage remote workers, and it has no stand-alone scheduler-generation
+action. Use the CLI for:
 
 - Starting work: `torc run`, `torc submit`, `torc exec`.
-- Scheduler generation and submission: `torc slurm generate`, `schedule-nodes`, `regenerate`.
+- Stand-alone scheduler operations: `torc slurm generate`, `schedule-nodes`, `regenerate`.
+- Remote workers: the whole `torc remote` group.
 - State transitions other than recovery: `init`, `reinit`, `reset-status`, `jobs reset-status`,
   `cancel`, `delete`.
-- Remote workers: the whole `torc remote` group.
 - Configuration, HPC profiles, export/import, RO-Crate, and admin.
+
+The spec tool can generate scheduler config while saving or creating a Slurm workflow, but it cannot
+submit allocations.
 
 An assistant holding only MCP tools can diagnose and adjust a workflow but cannot start one. Say
 that plainly instead of implying a tool exists; several tool descriptions end by telling the user
@@ -102,18 +106,22 @@ through this tool. Pair it with `list_pending_failed_jobs`, which returns the jo
 
 ## Mutating tools and dry_run
 
-Four tools change workflow state: `update_job_resources`, `recover_workflow`,
-`regroup_job_resources`, and `classify_and_resolve_failures`. The last three take a required
-`dry_run`, and their descriptions are explicit that the first call should always be `dry_run: true`,
-with the diff shown to the user before applying.
+Workflow creation is covered in [Creating specs](#creating-specs). For changes to an existing
+workflow:
 
-Treat that as binding. Call with `dry_run: true`, present the before/after, get confirmation, then
-call again with `dry_run: false`.
+- `recover_workflow`, `regroup_job_resources`, and `classify_and_resolve_failures` require
+  `dry_run`. Call with `dry_run: true` first, show the proposed changes, ask for confirmation, then
+  call with `dry_run: false` only after approval.
+- `update_job_resources` has no dry-run and changes state immediately. It updates the resource
+  requirement record referenced by the given job, so every job sharing that requirement is affected.
+  Inspect that scope and the before/after values, then get confirmation before applying unless the
+  user has already authorized this exact change. Update each shared requirement once, not once per
+  job.
 
 `recover_workflow` accepts `memory_multiplier` (default 1.5 for OOM), `runtime_multiplier` (default
-1.5 for timeout), and `retry_unknown` (default false), matching `torc recover`. When updating
-resources after `check_resource_utilization`, update every over-utilized job rather than only the
-failed ones.
+1.5 for timeout), and `retry_unknown` (default false), matching `torc recover`. When adjusting
+resources from `check_resource_utilization`, account for every over-utilized job, not only failed
+ones. Consider all jobs affected by a shared requirement update.
 
 ## Creating specs
 
@@ -125,14 +133,21 @@ failed ones.
 | `save_spec_file`  | Write the spec to a file for the user to edit |
 | `create_workflow` | Create it in the database                     |
 
-Default to `save_spec_file`. A generated spec is a template with placeholder commands that the user
-must customize, so creating it immediately is usually wrong. Reserve `create_workflow` for an
-explicit "run", "submit", or "execute".
+`save_spec_file` requires `output_path` and writes to the MCP server's filesystem. If no path is
+specified, choose an unused `<workflow_name>.json` in the server's working directory, tell the user
+where it will be saved, and do not overwrite an existing file without approval.
 
-Ask whether the target is local or Slurm before generating, because `workflow_type` depends on it
-and Slurm additionally needs `account` (and possibly `hpc_profile` if detection fails). After
-saving, tell the user to replace the placeholder commands, confirm the input files exist, and run
-`torc run <file>` for local or `torc submit <file>` for Slurm. Do not invent commands or flags.
+Default to `save_spec_file`. A generated spec is a template with placeholder commands that the user
+must customize, so creating it immediately is usually wrong. Use `create_workflow` only when the
+user explicitly authorizes creating a server-side workflow record. This action does not start local
+work or submit Slurm allocations. For a request to run or submit, use the CLI for execution. If only
+MCP is available, explain the limitation rather than implying that creation started the work.
+
+Infer local versus Slurm from the request when clear. Ask only when the target is not specified or
+cannot be discovered. `workflow_type` depends on that choice, and Slurm also needs an `account` (and
+possibly `hpc_profile` if detection fails). After saving, tell the user to replace placeholder
+commands, confirm input files exist, and use `torc run <file>` locally or `torc submit <file>` on
+Slurm. Do not invent commands or flags.
 
 When the request mentions files or data flow, express it as a `files` section with `input_files` and
 `output_files` on the jobs rather than as ordering, for the reasons in `spec-authoring.md`.

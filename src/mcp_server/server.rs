@@ -437,17 +437,17 @@ impl TorcMcpServer {
 
 IMPORTANT - DEFAULT TO SAVING FILES, NOT CREATING WORKFLOWS:
 - AI-generated specs are TEMPLATES with placeholder commands - users must customize them
-- ALWAYS use action="save_spec_file" unless user explicitly says "run", "submit", or "execute"
+- Use action="save_spec_file" for drafts. Use action="create_workflow" only when the user explicitly authorizes creating a server-side record.
 - "create a workflow" or "create a workflow file" -> save_spec_file (user wants a file to edit)
-- "run this workflow" or "submit to slurm" -> create_workflow (user wants immediate execution)
-- Ask user for output filename if not specified (suggest: workflow_name.json in current directory)
+- Requests to run or submit work: do not treat create_workflow as execution. It only creates a database record. Use the CLI to run or submit. If only MCP is available, explain this limitation.
+- If no path is specified, use <workflow_name>.json in the MCP server's working directory when available. Tell the user where it will be saved. Never overwrite an existing file without approval.
 
 CRITICAL: When user mentions FILES or DATA FLOW -> use "files" section with input_files/output_files on jobs.
 
 ACTIONS:
 - "validate" - Check spec for errors without saving/creating (use first to catch issues)
 - "save_spec_file" - DEFAULT: Save spec to a .json file for user to review/edit before running
-- "create_workflow" - ONLY when user explicitly wants to run/submit immediately
+- "create_workflow" - Create a server-side record only when explicitly authorized. It does NOT start jobs or submit allocations.
 
 BEFORE CREATING THE SPEC - ask the user:
 - "Will you run this on a Slurm HPC cluster or locally?" (if not already clear from context)
@@ -1215,12 +1215,11 @@ impl ServerHandler for TorcMcpServer {
                  WORKFLOW CREATION - SAVE FILES BY DEFAULT:\n\
                  - When user asks to 'create a workflow', save a spec FILE (action=save_spec_file)\n\
                  - AI-generated specs have placeholder commands - users must customize before running\n\
-                 - Only use action=create_workflow when user explicitly says 'run' or 'submit'\n\
-                 - IMPORTANT: Ask the user whether they will run on Slurm or locally before creating \
+                 - Only use action=create_workflow when the user explicitly authorizes creating a server-side record. It does not run or submit work\n\
+                 - IMPORTANT: When unclear, ask whether they will run on Slurm or locally before creating \
                  the workflow. This determines the workflow_type and the CLI commands to suggest.\n\n\
                  DOCUMENTATION & EXAMPLES:\n\
-                 - Use get_docs to retrieve documentation on any topic before creating workflows\n\
-                 - Use list_examples + get_example to find and adapt example workflow specs\n\
+                 - Use get_docs, list_examples, or get_example when details or examples are needed. Do not fetch documentation for every workflow\n\
                  - For the checkpointing/graceful termination pattern, use get_docs with topic='checkpointing'\n\
                  - Resources are also available at torc://docs/{topic} and torc://examples/{name}\n\n\
                  FILE-BASED DEPENDENCIES:\n\

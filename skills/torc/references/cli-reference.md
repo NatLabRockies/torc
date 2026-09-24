@@ -1,10 +1,12 @@
 # CLI reference
 
-`torc <command> --help` is authoritative for flags and arguments. This file is a lookup index: it
-lists every command group so you can find the right command by name, and documents the behavior
-`--help` does not state — preconditions, side effects, prompting, and what a command does _not_ do.
+`torc <command> --help` is authoritative for current flags and arguments. `torc <group> --help`
+shows a group's command inventory. This file is a lookup index for hidden command groups and
+behavior `--help` does not state: preconditions, side effects, prompting, and what a command does
+_not_ do.
 
-Read the entry for a command before running it for the first time in a session.
+Use it when you need to discover a command or understand its non-obvious behavior. Routine,
+read-only queries do not require loading this whole index first.
 
 ## Contents
 
