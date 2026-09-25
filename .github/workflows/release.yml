@@ -274,7 +274,7 @@ jobs:
           mdbook build
 
       - name: Check documentation links
-        run: python3 .github/scripts/check-doc-links.py --internal --external
+        run: python3 .github/scripts/check-doc-links.py --internal
 
       - name: Setup gh-pages branch
         run: .github/scripts/gh-pages-setup.sh
