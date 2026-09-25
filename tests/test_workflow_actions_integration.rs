@@ -58,7 +58,9 @@ actions:
       - "mkdir -p {}"
       - "echo 'Workflow started' > {}/startup.txt"
       - "date > {}/timestamp.txt"
+      - "env | grep '^TORC_' | sort > {}/action_env.txt"
 "#,
+        output_dir.display(),
         output_dir.display(),
         output_dir.display(),
         output_dir.display()
@@ -167,6 +169,25 @@ actions:
     let startup_content =
         fs::read_to_string(output_dir.join("startup.txt")).expect("Failed to read startup.txt");
     assert!(startup_content.contains("Workflow started"));
+
+    // Action commands get the workflow-scoped Torc environment variables, same as job commands.
+    let action_env = fs::read_to_string(output_dir.join("action_env.txt"))
+        .expect("Failed to read action_env.txt");
+    for expected in [
+        format!("TORC_WORKFLOW_ID={}", workflow_id),
+        "TORC_RUN_ID=1".to_string(),
+        format!("TORC_API_URL={}", config.base_path),
+        format!("TORC_OUTPUT_DIR={}", output_dir.display()),
+        format!(
+            "TORC_WORKFLOW_SUBMISSION_DIR={}",
+            std::env::current_dir().unwrap().display()
+        ),
+    ] {
+        assert!(
+            action_env.lines().any(|line| line == expected),
+            "missing {expected} in action environment:\n{action_env}"
+        );
+    }
 }
 
 #[rstest]
