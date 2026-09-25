@@ -3625,11 +3625,23 @@ impl JobRunner {
 
                     info!("Executing command: {}", command);
 
-                    // Execute the command using cross-platform shell
-                    let output = crate::client::utils::shell_command()
-                        .arg(command)
+                    // Execute the command using cross-platform shell. Actions have no job
+                    // context, so only the workflow-scoped variables are set (no TORC_JOB_ID /
+                    // TORC_JOB_NAME / TORC_ATTEMPT_ID).
+                    let mut cmd = crate::client::utils::shell_command();
+                    cmd.arg(command)
                         .current_dir(&self.output_dir)
-                        .output()?;
+                        .env("TORC_WORKFLOW_ID", self.workflow_id.to_string())
+                        .env("TORC_RUN_ID", self.run_id.to_string())
+                        .env("TORC_API_URL", &self.config.base_path)
+                        .env(
+                            "TORC_OUTPUT_DIR",
+                            self.output_dir.to_string_lossy().to_string(),
+                        );
+                    if let Some(ref dir) = self.workflow.submission_directory {
+                        cmd.env("TORC_WORKFLOW_SUBMISSION_DIR", dir);
+                    }
+                    let output = cmd.output()?;
 
                     if output.status.success() {
                         let stdout = String::from_utf8_lossy(&output.stdout);

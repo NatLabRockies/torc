@@ -188,6 +188,22 @@ esac
 exit 0  # Exit 0 to proceed with retry, non-zero to abort
 ```
 
+## Variables Set During `run_commands` Action Execution
+
+Workflow actions with `action_type: run_commands` are executed by a worker and receive the
+workflow-scoped variables: `TORC_WORKFLOW_ID`, `TORC_RUN_ID`, `TORC_API_URL`, `TORC_OUTPUT_DIR`, and
+`TORC_WORKFLOW_SUBMISSION_DIR` (when recorded). Actions are not tied to a single job, so
+`TORC_JOB_ID`, `TORC_JOB_NAME`, and `TORC_ATTEMPT_ID` are **not** set.
+
+```yaml
+actions:
+  - trigger_type: "on_workflow_complete"
+    action_type: "run_commands"
+    commands:
+      - "mkdir -p /data/archive/workflow_${TORC_WORKFLOW_ID}/run_${TORC_RUN_ID}"
+      - "cp ${TORC_OUTPUT_DIR}/*.log /data/archive/workflow_${TORC_WORKFLOW_ID}/run_${TORC_RUN_ID}/"
+```
+
 ## Complete Example
 
 Here's a complete example of a job that uses the environment variables:
@@ -223,17 +239,17 @@ jobs:
 
 ## Summary Table
 
-| Variable                       | Type    | Available In           | Description                                             |
-| ------------------------------ | ------- | ---------------------- | ------------------------------------------------------- |
-| `TORC_WORKFLOW_ID`             | Integer | Jobs, Recovery Scripts | Workflow identifier                                     |
-| `TORC_RUN_ID`                  | Integer | Jobs, Recovery Scripts | Workflow run number (1, 2, 3...)                        |
-| `TORC_JOB_ID`                  | Integer | Jobs, Recovery Scripts | Job identifier                                          |
-| `TORC_JOB_NAME`                | String  | Jobs, Recovery Scripts | Job name from workflow spec                             |
-| `TORC_API_URL`                 | URL     | Jobs, Recovery Scripts | Torc server API endpoint                                |
-| `TORC_OUTPUT_DIR`              | Path    | Jobs, Recovery Scripts | Output directory for logs/artifacts                     |
-| `TORC_WORKFLOW_SUBMISSION_DIR` | Path    | Jobs, Recovery Scripts | Directory the workflow was submitted from (if recorded) |
-| `TORC_ATTEMPT_ID`              | Integer | Jobs, Recovery Scripts | Current attempt number (1, 2, 3...)                     |
-| `TORC_RETURN_CODE`             | Integer | Recovery Scripts only  | Exit code that triggered recovery                       |
+| Variable                       | Type    | Available In                    | Description                                             |
+| ------------------------------ | ------- | ------------------------------- | ------------------------------------------------------- |
+| `TORC_WORKFLOW_ID`             | Integer | Jobs, Recovery Scripts, Actions | Workflow identifier                                     |
+| `TORC_RUN_ID`                  | Integer | Jobs, Recovery Scripts, Actions | Workflow run number (1, 2, 3...)                        |
+| `TORC_JOB_ID`                  | Integer | Jobs, Recovery Scripts          | Job identifier                                          |
+| `TORC_JOB_NAME`                | String  | Jobs, Recovery Scripts          | Job name from workflow spec                             |
+| `TORC_API_URL`                 | URL     | Jobs, Recovery Scripts, Actions | Torc server API endpoint                                |
+| `TORC_OUTPUT_DIR`              | Path    | Jobs, Recovery Scripts, Actions | Output directory for logs/artifacts                     |
+| `TORC_WORKFLOW_SUBMISSION_DIR` | Path    | Jobs, Recovery Scripts, Actions | Directory the workflow was submitted from (if recorded) |
+| `TORC_ATTEMPT_ID`              | Integer | Jobs, Recovery Scripts          | Current attempt number (1, 2, 3...)                     |
+| `TORC_RETURN_CODE`             | Integer | Recovery Scripts only           | Exit code that triggered recovery                       |
 
 ## Notes
 
