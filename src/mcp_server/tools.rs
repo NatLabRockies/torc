@@ -2,7 +2,7 @@
 
 use rmcp::{
     ErrorData as McpError,
-    model::{CallToolResult, RawResource, Resource, ResourceContents},
+    model::{CallToolResult, Resource, ResourceContents},
 };
 use std::fs;
 use std::path::Path;
@@ -63,9 +63,9 @@ pub fn get_workflow_status(
         "job_counts_by_status": status_counts,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&result).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&result).unwrap_or_default()),
+    ]))
 }
 
 /// Get detailed job information.
@@ -116,9 +116,11 @@ pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolRe
         })),
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Read job logs.
@@ -152,9 +154,9 @@ pub fn get_job_logs(
         content
     };
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        output,
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(output),
+    ]))
 }
 
 /// List failed jobs in a workflow.
@@ -186,9 +188,9 @@ pub fn list_failed_jobs(
         "failed_jobs": failed_jobs,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&result).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&result).unwrap_or_default()),
+    ]))
 }
 
 /// List jobs by status.
@@ -227,9 +229,9 @@ pub fn list_jobs_by_status(
         "jobs": job_list,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&result).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&result).unwrap_or_default()),
+    ]))
 }
 
 /// Check resource utilization for a workflow.
@@ -293,9 +295,9 @@ pub fn check_resource_utilization(
         }
     }
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        response,
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(response),
+    ]))
 }
 
 /// Update job resource requirements.
@@ -370,9 +372,9 @@ pub fn update_job_resources(
         }
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&result).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&result).unwrap_or_default()),
+    ]))
 }
 
 /// Create a workflow from a JSON specification.
@@ -414,9 +416,11 @@ pub fn create_workflow(
             "action_required": "Please ask the user: What Slurm account should be used for this workflow? (This is typically a project or allocation name like 'myproject' or 'research-gpu')",
             "then": "Call this tool again with the account parameter set to the user's response."
         });
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&prompt_msg).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&prompt_msg).unwrap_or_default(),
+            ),
+        ]));
     }
 
     // Validate save_spec_file requirements
@@ -494,9 +498,11 @@ pub fn create_workflow(
                 }
             });
 
-            return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                serde_json::to_string_pretty(&error_msg).unwrap_or_default(),
-            )]));
+            return Ok(CallToolResult::success(vec![
+                rmcp::model::ContentBlock::text(
+                    serde_json::to_string_pretty(&error_msg).unwrap_or_default(),
+                ),
+            ]));
         }
     }
 
@@ -541,9 +547,11 @@ pub fn create_workflow(
             }
         });
 
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&result).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&result).unwrap_or_default(),
+            ),
+        ]));
     }
 
     match (action, workflow_type) {
@@ -564,9 +572,11 @@ pub fn create_workflow(
                 "message": format!("Created local workflow '{}' with ID {}", name, workflow_id),
             });
 
-            Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                serde_json::to_string_pretty(&result).unwrap_or_default(),
-            )]))
+            Ok(CallToolResult::success(vec![
+                rmcp::model::ContentBlock::text(
+                    serde_json::to_string_pretty(&result).unwrap_or_default(),
+                ),
+            ]))
         }
         ("create_workflow", "slurm") => {
             // Create slurm workflow: first generate schedulers, then create
@@ -627,9 +637,11 @@ pub fn create_workflow(
                 })
             };
 
-            Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                serde_json::to_string_pretty(&result).unwrap_or_default(),
-            )]))
+            Ok(CallToolResult::success(vec![
+                rmcp::model::ContentBlock::text(
+                    serde_json::to_string_pretty(&result).unwrap_or_default(),
+                ),
+            ]))
         }
         ("save_spec_file", "local") => {
             // Save the spec as JSON to the output path
@@ -645,9 +657,11 @@ pub fn create_workflow(
                 "output_path": output_path,
             });
 
-            Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                serde_json::to_string_pretty(&result).unwrap_or_default(),
-            )]))
+            Ok(CallToolResult::success(vec![
+                rmcp::model::ContentBlock::text(
+                    serde_json::to_string_pretty(&result).unwrap_or_default(),
+                ),
+            ]))
         }
         ("save_spec_file", "slurm") => {
             // Generate slurm schedulers and save as JSON
@@ -682,9 +696,11 @@ pub fn create_workflow(
                 "output_path": output_path,
             });
 
-            Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                serde_json::to_string_pretty(&result).unwrap_or_default(),
-            )]))
+            Ok(CallToolResult::success(vec![
+                rmcp::model::ContentBlock::text(
+                    serde_json::to_string_pretty(&result).unwrap_or_default(),
+                ),
+            ]))
         }
         _ => Err(invalid_params("Invalid action/workflow_type combination")),
     }
@@ -780,9 +796,11 @@ pub fn get_execution_plan(
             "events": events_json,
         });
 
-        Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&result).unwrap_or_default(),
-        )]))
+        Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&result).unwrap_or_default(),
+            ),
+        ]))
     } else {
         // Try to parse as JSON workflow specification
         // Write spec to a temp file for WorkflowSpec::from_spec_file
@@ -850,9 +868,11 @@ pub fn get_execution_plan(
             "events": events_json,
         });
 
-        Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&result).unwrap_or_default(),
-        )]))
+        Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&result).unwrap_or_default(),
+            ),
+        ]))
     }
 }
 
@@ -979,9 +999,11 @@ pub fn analyze_workflow_logs(
         response["recovery"] = recovery_info;
     }
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Detect offline-drain journals for a workflow and advise whether
@@ -1011,9 +1033,11 @@ pub fn check_offline_journals(
             "reconcile_needed": false,
             "summary": summary,
         });
-        Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&response).unwrap_or_default(),
-        )]))
+        Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+        ]))
     };
 
     // Resolve the run_id to match journals against. Default to the workflow's
@@ -1097,9 +1121,11 @@ pub fn check_offline_journals(
                 run_id
             ),
         });
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&response).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+        ]));
     }
 
     let reconcile_command = format!(
@@ -1137,9 +1163,11 @@ pub fn check_offline_journals(
         ],
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Quote a string for safe inclusion in a copy-pasteable POSIX shell command.
@@ -1165,9 +1193,9 @@ pub fn get_workflow_summary(
         build_workflow_summary_report(config, Some(workflow_id)).map_err(internal_error)?;
     let stdout = serde_json::to_string_pretty(&report)
         .map_err(|e| internal_error(format!("Failed to serialize workflow summary: {}", e)))?;
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        stdout,
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(stdout),
+    ]))
 }
 
 /// List job results with filtering options.
@@ -1222,9 +1250,9 @@ pub fn list_results(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        stdout.to_string(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(stdout.to_string()),
+    ]))
 }
 
 /// Get Slurm sacct accounting data for a workflow with walltime summary.
@@ -1267,9 +1295,9 @@ pub fn get_slurm_sacct(workflow_id: i64) -> Result<CallToolResult, McpError> {
         }
     }
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        response,
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(response),
+    ]))
 }
 
 /// Parse elapsed time string (e.g., "2h 15m", "45m 30s", "1d 2h 30m") to seconds.
@@ -1365,9 +1393,11 @@ pub fn recover_workflow(
         );
     }
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// List jobs with pending_failed status in a workflow.
@@ -1456,9 +1486,9 @@ pub fn list_pending_failed_jobs(
         },
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&result).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&result).unwrap_or_default()),
+    ]))
 }
 
 /// Classification decision for a pending_failed job.
@@ -1729,9 +1759,11 @@ pub fn classify_and_resolve_failures(
         },
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Compute summary statistics for a slice of f64 values.
@@ -1930,9 +1962,11 @@ pub fn analyze_resource_usage(
         "jobs_without_results": jobs_without_results,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// A resource group definition for regrouping jobs.
@@ -1999,9 +2033,11 @@ pub fn regroup_job_resources(
             "success": false,
             "errors": errors,
         });
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&response).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+        ]));
     }
 
     // === Build preview ===
@@ -2070,9 +2106,11 @@ pub fn regroup_job_resources(
             "total_jobs_affected": all_job_ids.len(),
             "next_steps": "Review the proposed regrouping. If it looks correct, call again with dry_run=false to apply.",
         });
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&response).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+        ]));
     }
 
     // === Apply ===
@@ -2180,9 +2218,11 @@ pub fn regroup_job_resources(
         "errors": apply_errors,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 // --- Documentation and Examples Tools ---
@@ -2636,9 +2676,11 @@ pub fn list_examples(examples_dir: Option<&Path>) -> Result<CallToolResult, McpE
         "hint": "Use get_example with a name to retrieve the full specification",
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Get a specific example workflow specification.
@@ -2662,9 +2704,11 @@ pub fn get_example(
         "content": content,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Get documentation on a specific topic.
@@ -2698,9 +2742,11 @@ pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, 
             "content": content,
         });
 
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&response).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+        ]));
     }
 
     // Partial/fuzzy match - find topics containing the search term
@@ -2722,9 +2768,11 @@ pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, 
             "suggestions": suggestions,
         });
 
-        return Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-            serde_json::to_string_pretty(&response).unwrap_or_default(),
-        )]));
+        return Ok(CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(
+                serde_json::to_string_pretty(&response).unwrap_or_default(),
+            ),
+        ]));
     }
 
     // No match at all - list all topics
@@ -2738,9 +2786,11 @@ pub fn get_docs(docs_dir: Option<&Path>, topic: &str) -> Result<CallToolResult, 
         "available_topics": all_topics,
     });
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        serde_json::to_string_pretty(&response).unwrap_or_default(),
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        ),
+    ]))
 }
 
 /// Analyze a workflow spec and recommend Slurm allocation strategy.
@@ -2818,9 +2868,9 @@ pub fn plan_allocations(
     let json_output = serde_json::to_string_pretty(&response)
         .map_err(|e| internal_error(format!("Failed to serialize response: {}", e)))?;
 
-    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-        json_output,
-    )]))
+    Ok(CallToolResult::success(vec![
+        rmcp::model::ContentBlock::text(json_output),
+    ]))
 }
 
 // --- MCP Resources ---
@@ -2834,20 +2884,13 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
     for (topic, rel_path, description) in doc_topic_mapping() {
         let size = docs_dir
             .and_then(|dir| fs::metadata(dir.join(rel_path)).ok())
-            .map(|m| m.len() as u32);
-        resources.push(Resource::new(
-            RawResource {
-                uri: format!("torc://docs/{}", topic),
-                name: format!("docs/{}", topic),
-                description: Some(description.to_string()),
-                mime_type: Some("text/markdown".to_string()),
-                size,
-                title: None,
-                icons: None,
-                meta: None,
-            },
-            None,
-        ));
+            .map(|m| m.len());
+        let mut resource =
+            Resource::new(format!("torc://docs/{}", topic), format!("docs/{}", topic))
+                .with_description(description)
+                .with_mime_type("text/markdown");
+        resource.size = size;
+        resources.push(resource);
     }
 
     // Add example resources (always listed — fetched from GitHub if not local)
@@ -2857,24 +2900,19 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
             for (subdir, ext) in &[("yaml", "yaml"), ("json", "json5"), ("kdl", "kdl")] {
                 let path = dir.join(subdir).join(format!("{}.{}", name, ext));
                 if let Ok(m) = fs::metadata(&path) {
-                    return Some(m.len() as u32);
+                    return Some(m.len());
                 }
             }
             None
         });
-        resources.push(Resource::new(
-            RawResource {
-                uri: format!("torc://examples/{}", name),
-                name: format!("examples/{}", name),
-                description: Some(description.to_string()),
-                mime_type: Some("text/plain".to_string()),
-                size,
-                title: None,
-                icons: None,
-                meta: None,
-            },
-            None,
-        ));
+        let mut resource = Resource::new(
+            format!("torc://examples/{}", name),
+            format!("examples/{}", name),
+        )
+        .with_description(description)
+        .with_mime_type("text/plain");
+        resource.size = size;
+        resources.push(resource);
     }
 
     resources

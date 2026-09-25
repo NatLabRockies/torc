@@ -5,7 +5,8 @@ use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
         CallToolResult, Implementation, PaginatedRequestParams, ProtocolVersion,
-        ReadResourceRequestParams, ReadResourceResult, ServerCapabilities, ServerInfo,
+        ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, ServerCapabilities,
+        ServerConfig,
     },
     schemars, tool, tool_handler, tool_router,
 };
@@ -1201,8 +1202,8 @@ so they can make an informed decision."#
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for TorcMcpServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_resources()
@@ -1272,7 +1273,7 @@ impl ServerHandler for TorcMcpServer {
         &self,
         request: ReadResourceRequestParams,
         _context: rmcp::service::RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<ReadResourceResult, McpError>> + Send + '_ {
+    ) -> impl std::future::Future<Output = Result<ReadResourceResponse, McpError>> + Send + '_ {
         let docs_dir = self.docs_dir.clone();
         let examples_dir = self.examples_dir.clone();
         let uri = request.uri;
@@ -1283,7 +1284,7 @@ impl ServerHandler for TorcMcpServer {
             .await
             .map_err(|e| McpError::internal_error(format!("Task join error: {}", e), None))??;
 
-            Ok(ReadResourceResult::new(vec![contents]))
+            Ok(ReadResourceResult::new(vec![contents]).into())
         }
     }
 }
