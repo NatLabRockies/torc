@@ -81,7 +81,7 @@ jobs:
         run: python3 .github/scripts/test_check_doc_links.py
 
       - name: Check documentation links
-        run: python3 .github/scripts/check-doc-links.py --internal
+        run: python3 .github/scripts/check-doc-links.py --internal --external
 
       - name: Run shellcheck
         run: |
