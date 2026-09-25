@@ -50,7 +50,7 @@ clap_complete = "4.6"
 axoupdater = { version = "0.10.0", default-features = false, features = ["blocking", "github_releases"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
 url = "2.5"
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 mime = "0.3"
 futures = "0.3"
 bcrypt = "0.19"
