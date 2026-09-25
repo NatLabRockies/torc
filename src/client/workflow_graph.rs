@@ -81,20 +81,48 @@ pub struct WorkflowGraph {
 /// names -- so pattern-based declarations (`input_file_regexes`, `output_file_regexes`,
 /// `input_user_data_regexes`, `output_user_data_regexes`) participate in dependency
 /// detection alongside the exact-name forms.
+///
+/// A pattern that matches nothing is an error, matching what
+/// `WorkflowSpec::resolve_names_and_regexes` enforces at creation time: silently
+/// resolving it to nothing would drop the job's dependencies and make it look like a
+/// root job, producing a plan the workflow could never actually run under.
+///
+/// Exact names are not checked against `universe`, because a job may legitimately name
+/// an input file that no job produces (an input that already exists on disk).
 fn resolve_artifact_names(
     explicit: Option<&Vec<String>>,
     regexes: Option<&Vec<String>>,
     universe: &[&str],
+    resource_type: &str,
+    job_name: &str,
 ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
     let mut names: HashSet<String> = explicit.into_iter().flatten().cloned().collect();
     for pattern in regexes.into_iter().flatten() {
-        let re = Regex::new(pattern)?;
-        names.extend(
-            universe
-                .iter()
-                .filter(|name| re.is_match(name))
-                .map(|name| name.to_string()),
-        );
+        let re = Regex::new(pattern).map_err(|e| {
+            format!(
+                "Invalid regex '{}' for {} in job '{}': {}",
+                pattern,
+                resource_type.to_lowercase(),
+                job_name,
+                e
+            )
+        })?;
+
+        let matched: Vec<String> = universe
+            .iter()
+            .filter(|name| re.is_match(name))
+            .map(|name| name.to_string())
+            .collect();
+
+        if matched.is_empty() {
+            return Err(format!(
+                "{} regex '{}' did not match any names for job '{}'",
+                resource_type, pattern, job_name
+            )
+            .into());
+        }
+
+        names.extend(matched);
     }
     Ok(names)
 }
@@ -161,11 +189,15 @@ impl WorkflowGraph {
                         job.input_files.as_ref(),
                         job.input_file_regexes.as_ref(),
                         &file_names,
+                        "Input file",
+                        &job.name,
                     )?,
                     resolve_artifact_names(
                         job.input_user_data.as_ref(),
                         job.input_user_data_regexes.as_ref(),
                         &user_data_names,
+                        "Input user data",
+                        &job.name,
                     )?,
                 ),
             );
@@ -176,11 +208,15 @@ impl WorkflowGraph {
                         job.output_files.as_ref(),
                         job.output_file_regexes.as_ref(),
                         &file_names,
+                        "Output file",
+                        &job.name,
                     )?,
                     resolve_artifact_names(
                         job.output_user_data.as_ref(),
                         job.output_user_data_regexes.as_ref(),
                         &user_data_names,
+                        "Output user data",
+                        &job.name,
                     )?,
                 ),
             );
@@ -912,6 +948,35 @@ mod tests {
             serde_json::from_str(r#"{"name": "table_1"}"#).unwrap(),
         ]);
         assert_consumer_depends_on_producer(&WorkflowGraph::from_spec(&spec).unwrap());
+    }
+
+    /// A pattern that matches nothing must fail loudly. Resolving it to an empty set
+    /// would drop the job's dependencies and make it look like a root job -- a plan the
+    /// workflow could never run under, since creation rejects the same spec.
+    #[test]
+    fn test_unmatched_regex_is_rejected() {
+        let err = WorkflowGraph::from_spec(&fan_in_spec(|producer, consumer| {
+            producer.output_files = Some(vec!["out_1".to_string()]);
+            consumer.input_file_regexes = Some(vec![r"^nomatch_\d+$".to_string()]);
+        }))
+        .expect_err("unmatched input_file_regexes should be rejected");
+
+        let message = err.to_string();
+        assert!(message.contains("Input file regex"), "{message}");
+        assert!(message.contains("nomatch_"), "{message}");
+        assert!(message.contains("consumer"), "{message}");
+    }
+
+    /// An input file that no job produces is legitimate -- it exists on disk before the
+    /// workflow runs -- so exact names must not be range-checked.
+    #[test]
+    fn test_unproduced_exact_input_file_is_allowed() {
+        let graph = WorkflowGraph::from_spec(&fan_in_spec(|_producer, consumer| {
+            consumer.input_files = Some(vec!["preexisting".to_string()]);
+        }))
+        .unwrap();
+
+        assert!(!graph.has_dependencies("consumer"));
     }
 
     #[test]
