@@ -75,6 +75,30 @@ pub struct WorkflowGraph {
     components: Option<Vec<WorkflowComponent>>,
 }
 
+/// Resolve explicitly named artifacts plus any regex patterns into one concrete name set.
+///
+/// Patterns are matched against `universe` -- the workflow's declared file or user_data
+/// names -- so pattern-based declarations (`input_file_regexes`, `output_file_regexes`,
+/// `input_user_data_regexes`, `output_user_data_regexes`) participate in dependency
+/// detection alongside the exact-name forms.
+fn resolve_artifact_names(
+    explicit: Option<&Vec<String>>,
+    regexes: Option<&Vec<String>>,
+    universe: &[&str],
+) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+    let mut names: HashSet<String> = explicit.into_iter().flatten().cloned().collect();
+    for pattern in regexes.into_iter().flatten() {
+        let re = Regex::new(pattern)?;
+        names.extend(
+            universe
+                .iter()
+                .filter(|name| re.is_match(name))
+                .map(|name| name.to_string()),
+        );
+    }
+    Ok(names)
+}
+
 impl WorkflowGraph {
     /// Create a new empty graph
     pub fn new() -> Self {
@@ -111,6 +135,57 @@ impl WorkflowGraph {
             graph.depended_by.insert(job.name.clone(), HashSet::new());
         }
 
+        // Resolve every job's input/output artifacts once, expanding regex declarations
+        // against the workflow's declared file and user_data names.
+        let file_names: Vec<&str> = spec
+            .files
+            .iter()
+            .flatten()
+            .map(|f| f.name.as_str())
+            .collect();
+        let user_data_names: Vec<&str> = spec
+            .user_data
+            .iter()
+            .flatten()
+            .filter_map(|d| d.name.as_deref())
+            .collect();
+
+        type ArtifactSets = (HashSet<String>, HashSet<String>);
+        let mut job_inputs: HashMap<&str, ArtifactSets> = HashMap::new();
+        let mut job_outputs: HashMap<&str, ArtifactSets> = HashMap::new();
+        for job in &spec.jobs {
+            job_inputs.insert(
+                job.name.as_str(),
+                (
+                    resolve_artifact_names(
+                        job.input_files.as_ref(),
+                        job.input_file_regexes.as_ref(),
+                        &file_names,
+                    )?,
+                    resolve_artifact_names(
+                        job.input_user_data.as_ref(),
+                        job.input_user_data_regexes.as_ref(),
+                        &user_data_names,
+                    )?,
+                ),
+            );
+            job_outputs.insert(
+                job.name.as_str(),
+                (
+                    resolve_artifact_names(
+                        job.output_files.as_ref(),
+                        job.output_file_regexes.as_ref(),
+                        &file_names,
+                    )?,
+                    resolve_artifact_names(
+                        job.output_user_data.as_ref(),
+                        job.output_user_data_regexes.as_ref(),
+                        &user_data_names,
+                    )?,
+                ),
+            );
+        }
+
         // Second pass: build dependency edges
         for job in &spec.jobs {
             let mut dependencies = HashSet::new();
@@ -136,31 +211,18 @@ impl WorkflowGraph {
                 }
             }
 
-            // Implicit dependencies from input files
-            if let Some(ref input_files) = job.input_files {
-                for input_file in input_files {
-                    for other_job in &spec.jobs {
-                        if let Some(ref output_files) = other_job.output_files
-                            && output_files.contains(input_file)
-                            && other_job.name != job.name
-                        {
-                            dependencies.insert(other_job.name.clone());
-                        }
-                    }
+            // Implicit dependencies from input files and input user data. Regex forms
+            // (`input_file_regexes` and friends) are already resolved to concrete names,
+            // so a fan-in job that declares inputs by pattern gets the same edges as one
+            // that lists them explicitly.
+            let (in_files, in_data) = &job_inputs[job.name.as_str()];
+            for other_job in &spec.jobs {
+                if other_job.name == job.name {
+                    continue;
                 }
-            }
-
-            // Implicit dependencies from input user data
-            if let Some(ref input_data) = job.input_user_data {
-                for input_datum in input_data {
-                    for other_job in &spec.jobs {
-                        if let Some(ref output_data) = other_job.output_user_data
-                            && output_data.contains(input_datum)
-                            && other_job.name != job.name
-                        {
-                            dependencies.insert(other_job.name.clone());
-                        }
-                    }
+                let (out_files, out_data) = &job_outputs[other_job.name.as_str()];
+                if !in_files.is_disjoint(out_files) || !in_data.is_disjoint(out_data) {
+                    dependencies.insert(other_job.name.clone());
                 }
             }
 
@@ -725,6 +787,7 @@ fn build_job_name_pattern(name: &str, is_parameterized: bool, instance_count: us
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::workflow_spec::FileSpec;
     use std::collections::HashMap;
 
     fn create_test_spec() -> WorkflowSpec {
@@ -759,6 +822,96 @@ mod tests {
             ],
             ..Default::default()
         }
+    }
+
+    /// Two-job fan-in spec: `producer` writes `out_1`, `consumer` reads it.
+    /// `apply` decides how each side declares the file (exact names vs. regexes).
+    fn fan_in_spec(apply: impl FnOnce(&mut JobSpec, &mut JobSpec)) -> WorkflowSpec {
+        let mut producer = JobSpec {
+            name: "producer".to_string(),
+            command: "produce.sh".to_string(),
+            resource_requirements: Some("small".to_string()),
+            ..Default::default()
+        };
+        let mut consumer = JobSpec {
+            name: "consumer".to_string(),
+            command: "aggregate.sh".to_string(),
+            resource_requirements: Some("small".to_string()),
+            ..Default::default()
+        };
+        apply(&mut producer, &mut consumer);
+
+        WorkflowSpec {
+            name: "fan_in".to_string(),
+            files: Some(vec![FileSpec::new(
+                "out_1".to_string(),
+                "out_1.csv".to_string(),
+            )]),
+            jobs: vec![producer, consumer],
+            ..Default::default()
+        }
+    }
+
+    fn assert_consumer_depends_on_producer(graph: &WorkflowGraph) {
+        assert!(graph.has_dependencies("consumer"));
+        assert!(
+            graph
+                .dependencies_of("consumer")
+                .unwrap()
+                .contains("producer")
+        );
+        assert_eq!(graph.roots(), vec!["producer"]);
+    }
+
+    /// A job declaring inputs via `input_file_regexes` (the recommended fan-in
+    /// pattern) must get the same edges as one listing them exactly. Regression:
+    /// the regex form was ignored, so fan-in jobs looked like root jobs, which
+    /// skewed scheduler generation, allocation planning and execution plans.
+    #[test]
+    fn test_input_file_regexes_create_dependencies() {
+        let explicit = WorkflowGraph::from_spec(&fan_in_spec(|producer, consumer| {
+            producer.output_files = Some(vec!["out_1".to_string()]);
+            consumer.input_files = Some(vec!["out_1".to_string()]);
+        }))
+        .unwrap();
+        let by_regex = WorkflowGraph::from_spec(&fan_in_spec(|producer, consumer| {
+            producer.output_files = Some(vec!["out_1".to_string()]);
+            consumer.input_file_regexes = Some(vec![r"^out_\d+$".to_string()]);
+        }))
+        .unwrap();
+
+        assert_consumer_depends_on_producer(&explicit);
+        assert_consumer_depends_on_producer(&by_regex);
+    }
+
+    /// The other three pattern-based declarations resolve the same way.
+    #[test]
+    fn test_remaining_regex_declarations_create_dependencies() {
+        // Producer declares its outputs by pattern.
+        let output_regex = WorkflowGraph::from_spec(&fan_in_spec(|producer, consumer| {
+            producer.output_file_regexes = Some(vec![r"^out_\d+$".to_string()]);
+            consumer.input_files = Some(vec!["out_1".to_string()]);
+        }))
+        .unwrap();
+        assert_consumer_depends_on_producer(&output_regex);
+
+        // Both sides by pattern.
+        let both_regex = WorkflowGraph::from_spec(&fan_in_spec(|producer, consumer| {
+            producer.output_file_regexes = Some(vec![r"^out_\d+$".to_string()]);
+            consumer.input_file_regexes = Some(vec![r"^out_\d+$".to_string()]);
+        }))
+        .unwrap();
+        assert_consumer_depends_on_producer(&both_regex);
+
+        // User data, by pattern on both sides.
+        let mut spec = fan_in_spec(|producer, consumer| {
+            producer.output_user_data_regexes = Some(vec![r"^table_\d+$".to_string()]);
+            consumer.input_user_data_regexes = Some(vec![r"^table_\d+$".to_string()]);
+        });
+        spec.user_data = Some(vec![
+            serde_json::from_str(r#"{"name": "table_1"}"#).unwrap(),
+        ]);
+        assert_consumer_depends_on_producer(&WorkflowGraph::from_spec(&spec).unwrap());
     }
 
     #[test]
