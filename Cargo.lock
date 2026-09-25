@@ -1618,7 +1618,7 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28aef0f9aa070bce60767c12ba9cb41efeaf1a2bc6427f87b7d83f11239a16d7"
 dependencies = [
- "frunk_core",
+ "frunk_core 0.4.4",
  "frunk_derives",
  "frunk_proc_macros",
  "serde",
@@ -1656,6 +1656,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "frunk_core"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bd3c9ba2e323e8b19e77f15873f60974a7d82f89b80e50c53be44b8b92927c1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "frunk_derives"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1672,7 +1681,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1952b802269f2db12ab7c0bd328d0ae8feaabf19f352a7b0af7bb0c5693abfce"
 dependencies = [
- "frunk_core",
+ "frunk_core 0.4.4",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -1684,7 +1693,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3462f590fa236005bd7ca4847f81438bd6fe0febd4d04e11968d4c2e96437e78"
 dependencies = [
- "frunk_core",
+ "frunk_core 0.4.4",
  "frunk_proc_macro_helpers",
  "quote",
  "syn 2.0.117",
@@ -5678,7 +5687,7 @@ dependencies = [
  "frunk",
  "frunk-enum-core",
  "frunk-enum-derive",
- "frunk_core",
+ "frunk_core 0.5.0",
  "frunk_derives",
  "futures",
  "hdrhistogram",
