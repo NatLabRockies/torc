@@ -1,0 +1,32 @@
+.version-selector {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+#version-select {
+  appearance: auto;
+  background-color: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--sidebar-active);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.85em;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+#version-select:hover {
+  border-color: var(--links);
+  background-color: var(--sidebar-bg);
+}
+
+#version-select:focus {
+  outline: 2px solid var(--sidebar-active);
+  outline-offset: 1px;
+}
+
+#version-select option {
+  background-color: var(--bg);
+  color: var(--fg);
+}
