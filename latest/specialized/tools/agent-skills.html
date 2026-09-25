@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Tools &amp; Integrations - Torc Documentation</title>
+        <title>Installing the Agent Skill - Torc Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -150,7 +150,7 @@
                         <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/tools/index.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/tools/agent-skills.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -184,32 +184,65 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="tools--integrations"><a class="header" href="#tools--integrations">Tools &amp; Integrations</a></h1>
-<p>Additional tools and third-party integrations.</p>
+                        <h1 id="installing-the-torc-agent-skill"><a class="header" href="#installing-the-torc-agent-skill">Installing the Torc Agent Skill</a></h1>
+<p>Torc ships an agent skill that teaches AI coding assistants (Claude Code, Codex, Copilot, and other
+tools that support the <a href="https://agentskills.io">Agent Skills</a> format) how to author, run, inspect,
+and debug Torc workflows. The skill lives in the repository at
+<a href="https://github.com/NatLabRockies/torc/tree/main/skills/torc"><code>skills/torc/</code></a>.</p>
+<h2 id="skill-vs-mcp-server"><a class="header" href="#skill-vs-mcp-server">Skill vs. MCP Server</a></h2>
+<p>The skill and the <a href="./ai-assistants.html">MCP server</a> are complementary:</p>
 <ul>
-<li><a href="./workflow-wizard.html">Workflow Wizard</a> - Interactive workflow creation</li>
-<li><a href="./configuration.html">Configuration Files Tutorial</a> - Working with config files</li>
-<li><a href="./dashboard-deployment.html">Dashboard Deployment</a> - Deploying the web dashboard</li>
-<li><a href="./ai-assistants.html">Configuring AI Assistants</a> - Setting up AI integration</li>
-<li><a href="./agent-skills.html">Installing the Agent Skill</a> - Teaching AI assistants to use Torc</li>
+<li><strong>Skill</strong>: instructions and reference material. The assistant learns Torc's spec format, execution
+modes, Slurm sizing, recovery steps, and which <code>torc</code> CLI commands to run. No extra binary or
+server configuration is required.</li>
+<li><strong>MCP server</strong>: tools the assistant calls directly against the Torc API.</li>
+</ul>
+<p>The skill works on its own through the <code>torc</code> CLI, and it uses the MCP tools when they are
+configured.</p>
+<h2 id="install-with-the-skills-cli"><a class="header" href="#install-with-the-skills-cli">Install with the <code>skills</code> CLI</a></h2>
+<p>The <a href="https://github.com/vercel-labs/skills"><code>skills</code></a> CLI installs skills from GitHub into any
+supported agent:</p>
+<pre><code class="language-bash"># Install into the current project
+npx skills add NatLabRockies/torc --skill torc
+
+# Install for your user account (all projects)
+npx skills add NatLabRockies/torc --skill torc -g
+</code></pre>
+<p>The CLI prompts for which agents to install into. Rerun the command to pick up a newer version of
+the skill.</p>
+<h2 id="install-manually"><a class="header" href="#install-manually">Install Manually</a></h2>
+<p>Copy the <code>skills/torc</code> directory into your agent's skills directory. For Claude Code:</p>
+<pre><code class="language-bash">git clone --depth 1 https://github.com/NatLabRockies/torc.git /tmp/torc
+
+# User-level (all projects)
+mkdir -p ~/.claude/skills
+cp -r /tmp/torc/skills/torc ~/.claude/skills/
+
+# Or project-level
+mkdir -p .claude/skills
+cp -r /tmp/torc/skills/torc .claude/skills/
+</code></pre>
+<p>Other agents use their own directories (for example, <code>.agents/skills/</code> or <code>~/.agents/skills/</code>); see
+your agent's documentation.</p>
+<h2 id="verify"><a class="header" href="#verify">Verify</a></h2>
+<p>Start a new session and ask something Torc-specific, such as "Write a torc workflow spec that runs
+10 parameterized jobs on Slurm." In Claude Code, the skill also appears in the list shown by
+<code>/skills</code> and can be invoked directly with <code>/torc</code>.</p>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./ai-assistants.html">Configuring AI Assistants</a> - Set up the Torc MCP server</li>
 <li><a href="./ai-assistant.html">AI-Assisted Workflow Management</a> - Using AI for workflow management</li>
-<li><a href="./datasight.html">Analyzing Workflows with datasight</a> - Natural-language SQL exploration of the
-torc database</li>
-<li><a href="./map_python_function_across_workers.html">Map Python Functions Across Workers</a> - Python
-integration</li>
-<li><a href="./filtering-with-nushell.html">Filtering CLI Output with Nushell</a> - Advanced CLI usage</li>
-<li><a href="./shell-completions.html">Shell Completions</a> - Tab completion setup</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../specialized/admin/security.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../specialized/tools/ai-assistants.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../specialized/tools/workflow-wizard.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../specialized/tools/ai-assistant.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -219,11 +252,11 @@ integration</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../specialized/admin/security.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../specialized/tools/ai-assistants.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../specialized/tools/workflow-wizard.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../specialized/tools/ai-assistant.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
