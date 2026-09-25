@@ -283,5 +283,6 @@ remains in Torc's database.
 ## See Also
 
 - [AI-Assisted Workflow Management Tutorial](./ai-assistant.md)
+- [Installing the Agent Skill](./agent-skills.md)
 - [Configuration Reference](../../core/reference/configuration.md)
 - [HPC Deployment](../hpc/hpc-deployment.md)

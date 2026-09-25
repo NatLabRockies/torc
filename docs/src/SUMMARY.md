@@ -113,6 +113,7 @@
   - [Configuration Files Tutorial](./specialized/tools/configuration.md)
   - [Dashboard Deployment](./specialized/tools/dashboard-deployment.md)
   - [Configuring AI Assistants](./specialized/tools/ai-assistants.md)
+  - [Installing the Agent Skill](./specialized/tools/agent-skills.md)
   - [AI-Assisted Workflow Management](./specialized/tools/ai-assistant.md)
   - [Analyzing Workflows with datasight](./specialized/tools/datasight.md)
   - [Map Python Functions Across Workers](./specialized/tools/map_python_function_across_workers.md)
