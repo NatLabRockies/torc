@@ -2884,12 +2884,12 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
     for (topic, rel_path, description) in doc_topic_mapping() {
         let size = docs_dir
             .and_then(|dir| fs::metadata(dir.join(rel_path)).ok())
-            .map(|m| m.len() as u32);
+            .map(|m| m.len());
         let mut resource =
             Resource::new(format!("torc://docs/{}", topic), format!("docs/{}", topic))
                 .with_description(description)
                 .with_mime_type("text/markdown");
-        resource.size = size.map(u64::from);
+        resource.size = size;
         resources.push(resource);
     }
 
@@ -2900,7 +2900,7 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
             for (subdir, ext) in &[("yaml", "yaml"), ("json", "json5"), ("kdl", "kdl")] {
                 let path = dir.join(subdir).join(format!("{}.{}", name, ext));
                 if let Ok(m) = fs::metadata(&path) {
-                    return Some(m.len() as u32);
+                    return Some(m.len());
                 }
             }
             None
@@ -2911,7 +2911,7 @@ pub fn list_mcp_resources(docs_dir: Option<&Path>, examples_dir: Option<&Path>) 
         )
         .with_description(description)
         .with_mime_type("text/plain");
-        resource.size = size.map(u64::from);
+        resource.size = size;
         resources.push(resource);
     }
 
