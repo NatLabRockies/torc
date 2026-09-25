@@ -341,6 +341,18 @@ esac
 
 exit 0  # Exit 0 to proceed with retry, non-zero to abort
 </code></pre>
+<h2 id="variables-set-during-run_commands-action-execution"><a class="header" href="#variables-set-during-run_commands-action-execution">Variables Set During <code>run_commands</code> Action Execution</a></h2>
+<p>Workflow actions with <code>action_type: run_commands</code> are executed by a worker and receive the
+workflow-scoped variables: <code>TORC_WORKFLOW_ID</code>, <code>TORC_RUN_ID</code>, <code>TORC_API_URL</code>, <code>TORC_OUTPUT_DIR</code>, and
+<code>TORC_WORKFLOW_SUBMISSION_DIR</code> (when recorded). Actions are not tied to a single job, so
+<code>TORC_JOB_ID</code>, <code>TORC_JOB_NAME</code>, and <code>TORC_ATTEMPT_ID</code> are <strong>not</strong> set.</p>
+<pre><code class="language-yaml">actions:
+  - trigger_type: "on_workflow_complete"
+    action_type: "run_commands"
+    commands:
+      - "mkdir -p /data/archive/workflow_${TORC_WORKFLOW_ID}/run_${TORC_RUN_ID}"
+      - "cp ${TORC_OUTPUT_DIR}/*.log /data/archive/workflow_${TORC_WORKFLOW_ID}/run_${TORC_RUN_ID}/"
+</code></pre>
 <h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
 <p>Here's a complete example of a job that uses the environment variables:</p>
 <pre><code class="language-yaml">name: "Environment Variables Demo"
@@ -372,13 +384,13 @@ jobs:
 </code></pre>
 <h2 id="summary-table"><a class="header" href="#summary-table">Summary Table</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Type</th><th>Available In</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>TORC_WORKFLOW_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Workflow identifier</td></tr>
-<tr><td><code>TORC_RUN_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Workflow run number (1, 2, 3...)</td></tr>
+<tr><td><code>TORC_WORKFLOW_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts, Actions</td><td>Workflow identifier</td></tr>
+<tr><td><code>TORC_RUN_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts, Actions</td><td>Workflow run number (1, 2, 3...)</td></tr>
 <tr><td><code>TORC_JOB_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Job identifier</td></tr>
 <tr><td><code>TORC_JOB_NAME</code></td><td>String</td><td>Jobs, Recovery Scripts</td><td>Job name from workflow spec</td></tr>
-<tr><td><code>TORC_API_URL</code></td><td>URL</td><td>Jobs, Recovery Scripts</td><td>Torc server API endpoint</td></tr>
-<tr><td><code>TORC_OUTPUT_DIR</code></td><td>Path</td><td>Jobs, Recovery Scripts</td><td>Output directory for logs/artifacts</td></tr>
-<tr><td><code>TORC_WORKFLOW_SUBMISSION_DIR</code></td><td>Path</td><td>Jobs, Recovery Scripts</td><td>Directory the workflow was submitted from (if recorded)</td></tr>
+<tr><td><code>TORC_API_URL</code></td><td>URL</td><td>Jobs, Recovery Scripts, Actions</td><td>Torc server API endpoint</td></tr>
+<tr><td><code>TORC_OUTPUT_DIR</code></td><td>Path</td><td>Jobs, Recovery Scripts, Actions</td><td>Output directory for logs/artifacts</td></tr>
+<tr><td><code>TORC_WORKFLOW_SUBMISSION_DIR</code></td><td>Path</td><td>Jobs, Recovery Scripts, Actions</td><td>Directory the workflow was submitted from (if recorded)</td></tr>
 <tr><td><code>TORC_ATTEMPT_ID</code></td><td>Integer</td><td>Jobs, Recovery Scripts</td><td>Current attempt number (1, 2, 3...)</td></tr>
 <tr><td><code>TORC_RETURN_CODE</code></td><td>Integer</td><td>Recovery Scripts only</td><td>Exit code that triggered recovery</td></tr>
 </tbody></table>
