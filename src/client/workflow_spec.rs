@@ -2973,11 +2973,18 @@ impl WorkflowSpec {
             // Validate input_file_regexes
             if let Some(ref regexes) = job.input_file_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &file_names,
+                            "Input file",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid input_file_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -2997,11 +3004,18 @@ impl WorkflowSpec {
             // Validate output_file_regexes
             if let Some(ref regexes) = job.output_file_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &file_names,
+                            "Output file",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid output_file_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -3021,11 +3035,18 @@ impl WorkflowSpec {
             // Validate input_user_data_regexes
             if let Some(ref regexes) = job.input_user_data_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &user_data_names,
+                            "Input user data",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid input_user_data_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -3045,11 +3066,18 @@ impl WorkflowSpec {
             // Validate output_user_data_regexes
             if let Some(ref regexes) = job.output_user_data_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &user_data_names,
+                            "Output user data",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid output_user_data_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -4183,6 +4211,29 @@ impl WorkflowSpec {
         }
 
         Ok(ids)
+    }
+
+    /// Error text for a pattern that matches none of the workflow's declared names.
+    ///
+    /// `resolve_names_and_regexes` rejects this case when the workflow is created, so
+    /// validation has to reject it too -- otherwise `--dry-run` reports PASSED for a spec
+    /// that `torc create` refuses. The wording is kept identical to the creation-time
+    /// error so both paths report the same thing.
+    fn unmatched_regex_error(
+        re: &Regex,
+        pattern: &str,
+        universe: &HashSet<String>,
+        resource_type: &str,
+        job_name: &str,
+    ) -> Option<String> {
+        if universe.iter().any(|name| re.is_match(name)) {
+            None
+        } else {
+            Some(format!(
+                "{} regex '{}' did not match any names for job '{}'",
+                resource_type, pattern, job_name
+            ))
+        }
     }
 
     /// Topologically sort jobs into levels based on dependencies

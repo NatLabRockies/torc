@@ -2540,6 +2540,94 @@ fn test_scheduler_node_validation_passes_with_single_node_scheduler(start_server
 // Tests for validate_spec (dry-run functionality)
 // =============================================================================
 
+/// A pattern that matches nothing is rejected when the workflow is created, so
+/// `--dry-run` must report it too instead of PASSED. Regression: validation only checked
+/// that these patterns compiled, so a spec `torc create` refuses passed the dry run.
+#[test]
+fn test_validate_spec_rejects_unmatched_regexes() {
+    let workflow_data = serde_json::json!({
+        "name": "unmatched_regexes",
+        "files": [{"name": "out_1", "path": "out_1.csv"}],
+        "user_data": [{"name": "table_1", "data": {}}],
+        "jobs": [
+            {"name": "producer", "command": "produce.sh", "output_files": ["out_1"]},
+            {
+                "name": "consumer",
+                "command": "aggregate.sh",
+                "input_file_regexes": ["^nomatch_\\d+$"],
+                "output_file_regexes": ["^also_nomatch_\\d+$"],
+                "input_user_data_regexes": ["^nomatch_table_\\d+$"],
+                "output_user_data_regexes": ["^nomatch_out_table_\\d+$"]
+            }
+        ]
+    });
+
+    let temp_file = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        serde_json::to_string_pretty(&workflow_data).unwrap(),
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+
+    assert!(!result.valid, "Expected validation to fail");
+    for expected in [
+        "Input file regex '^nomatch_\\d+$' did not match any names for job 'consumer'",
+        "Output file regex '^also_nomatch_\\d+$' did not match any names for job 'consumer'",
+        "Input user data regex '^nomatch_table_\\d+$' did not match any names for job 'consumer'",
+        "Output user data regex '^nomatch_out_table_\\d+$' did not match any names for job 'consumer'",
+    ] {
+        assert!(
+            result.errors.iter().any(|e| e == expected),
+            "missing error {expected:?}, got {:?}",
+            result.errors
+        );
+    }
+}
+
+/// Patterns that do match stay valid -- the fan-in pattern the docs recommend.
+#[test]
+fn test_validate_spec_accepts_matched_regexes() {
+    let workflow_data = serde_json::json!({
+        "name": "matched_regexes",
+        "files": [
+            {"name": "out_1", "path": "out_1.csv"},
+            {"name": "summary", "path": "summary.json"}
+        ],
+        "jobs": [
+            {"name": "producer", "command": "produce.sh", "output_files": ["out_1"]},
+            {
+                "name": "consumer",
+                "command": "aggregate.sh",
+                "input_file_regexes": ["^out_\\d+$"],
+                "output_files": ["summary"]
+            }
+        ]
+    });
+
+    let temp_file = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        serde_json::to_string_pretty(&workflow_data).unwrap(),
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+
+    assert!(
+        result.valid,
+        "Expected validation to pass: {:?}",
+        result.errors
+    );
+}
+
 /// Test that validate_spec returns correct summary for a simple workflow
 #[test]
 fn test_validate_spec_basic_workflow() {
