@@ -121,6 +121,8 @@
   - [Shell Completions](./specialized/tools/shell-completions.md)
 - [Design & Architecture](./specialized/design/index.md)
   - [Client Architecture](./specialized/design/client.md)
+  - [RDP Bootstrap for Windows Workers](./specialized/design/rdp-windows-workers.md)
+  - [Worker Enrollment](./specialized/design/worker-enrollment.md)
   - [HTTP API Design](./specialized/design/http-api.md)
   - [Workflow Actions](./specialized/design/workflow-actions.md)
   - [Web Dashboard Design](./specialized/design/dashboard.md)
