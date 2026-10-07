@@ -176,8 +176,9 @@ fn count_ready_unplanned_jobs(
         None,
         None,
         None,
-        None, // name
-        None, // command
+        None,     // name
+        None,     // command
+        Some(""), // label: unlabeled jobs only
     )
     .map_err(|e| format!("Failed to count ready jobs: {}", e))?
     .total_count;
@@ -195,20 +196,14 @@ fn count_ready_unplanned_jobs(
         None,
         None,
         Some(true),
-        None, // name
-        None, // command
+        None,     // name
+        None,     // command
+        Some(""), // label: unlabeled jobs only
     )
     .map_err(|e| format!("Failed to count unplanned ready jobs: {}", e))?
     .total_count;
 
-    let labeled_ready = apis::workflows_api::get_workflow_status(config, workflow_id)
-        .map_err(|e| format!("Failed to count labeled ready jobs: {}", e))?
-        .labeled_ready_jobs;
-    let total_ready = (total_ready - labeled_ready).max(0);
-    // ponytail: the unplanned count cannot be filtered by label, so it is only capped
-    // at the unlabeled total; add a label filter to list_jobs if labeled retries or
-    // spawned jobs ever trigger auto-scheduling too eagerly.
-    Ok((total_ready, unplanned_count.min(total_ready)))
+    Ok((total_ready, unplanned_count))
 }
 
 // Note: fail_orphaned_slurm_jobs and cleanup_dead_pending_slurm_jobs

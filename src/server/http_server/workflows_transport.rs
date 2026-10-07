@@ -1,6 +1,7 @@
 use super::*;
 use crate::server::api::{
     EventsApi, FailureHandlersApi, ResourceRequirementsApi, WorkflowActionsApi, WorkflowsApi,
+    message_error_response,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -602,6 +603,14 @@ where
         );
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
+
+        if let Some(Err(err)) = body.label.as_deref().map(models::parse_label) {
+            return Ok(
+                ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                    message_error_response(err),
+                ),
+            );
+        }
 
         let workflow = match self.get_workflow(id, context).await {
             Ok(GetWorkflowResponse::SuccessfulResponse(workflow)) => workflow,

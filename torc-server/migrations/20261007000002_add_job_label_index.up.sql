@@ -4,3 +4,8 @@
 
 CREATE INDEX idx_job_workflow_status_label_priority
     ON job(workflow_id, status, label, priority DESC);
+
+-- Every priority-ordered query now filters on label too, so the new index
+-- supersedes this one; keeping both would double the index writes on every
+-- job status change.
+DROP INDEX IF EXISTS idx_job_workflow_status_priority;

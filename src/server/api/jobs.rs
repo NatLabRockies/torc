@@ -155,6 +155,7 @@ pub trait JobsApi<C> {
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -1870,10 +1871,11 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -1887,6 +1889,7 @@ where
             origin_is_set,
             name,
             command,
+            label,
             context.get().0.clone()
         );
 
@@ -1939,6 +1942,11 @@ where
         if command.is_some() {
             where_conditions.push("command LIKE ? ESCAPE '\\'".to_string());
         }
+        // Exact label match; an empty filter binds NULL and matches unlabeled jobs.
+        let label_filter = label.as_deref().map(|l| Some(l).filter(|l| !l.is_empty()));
+        if label_filter.is_some() {
+            where_conditions.push("label IS ?".to_string());
+        }
 
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
@@ -1984,6 +1992,9 @@ where
         }
         if let Some(ref c) = command {
             sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
+        }
+        if let Some(l) = label_filter {
+            sqlx_query = sqlx_query.bind(l);
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -2079,6 +2090,9 @@ where
         }
         if let Some(ref c) = command {
             count_sqlx_query = count_sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
+        }
+        if let Some(l) = label_filter {
+            count_sqlx_query = count_sqlx_query.bind(l);
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {

@@ -547,6 +547,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -1479,6 +1485,16 @@ paths:
         description: |-
           Substring filter on the job command (SQL `LIKE %value%`, case-insensitive
           for ASCII).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: label
+        in: query
+        description: |-
+          Exact-match filter on the routing label. An empty value returns only
+          unlabeled jobs.
         required: false
         schema:
           type:
@@ -8318,12 +8334,6 @@ components:
           type: boolean
         jobs_by_status:
           $ref: '#/components/schemas/JobStatusCounts'
-        labeled_ready_jobs:
-          type: integer
-          format: int64
-          description: |-
-            Ready jobs that carry a label. Slurm runners launched by Torc never claim
-            these, so auto-scheduling leaves them out.
         longest_ready_runtime_seconds:
           type:
           - integer

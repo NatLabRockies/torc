@@ -299,6 +299,7 @@ fn test_jobs_list_name_command_filter(start_server: &ServerProcess) {
             None, // origin_is_set
             name,
             command,
+            None, // label
         )
         .expect("list_jobs failed")
     };
@@ -1085,6 +1086,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs before deletion");
     assert_eq!(
@@ -1119,6 +1121,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs after deletion");
     assert_eq!(

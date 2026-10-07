@@ -491,6 +491,7 @@ pub fn list_jobs(
     origin_is_set: Option<bool>,
     name: Option<&str>,
     command: Option<&str>,
+    label: Option<&str>,
 ) -> Result<models::ListJobsResponse, Error<ListJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
@@ -506,6 +507,7 @@ pub fn list_jobs(
     let p_query_origin_is_set = origin_is_set;
     let p_query_name = name;
     let p_query_command = command;
+    let p_query_label = label;
 
     let uri_str = format!("{}/jobs", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -546,6 +548,9 @@ pub fn list_jobs(
     }
     if let Some(ref param_value) = p_query_command {
         req_builder = req_builder.query(&[("command", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_label {
+        req_builder = req_builder.query(&[("label", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

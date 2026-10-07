@@ -38,7 +38,6 @@ use std::time::{Duration, Instant};
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::async_cli_command::AsyncCliCommand;
-use crate::client::commands::pagination::{JobListParams, paginate_jobs};
 use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, SystemMetricsSummary};
@@ -891,27 +890,50 @@ impl JobRunner {
     /// Whether the workflow still has jobs this runner could claim, now or later:
     /// jobs with its label (or unlabeled, when it has none) that are not finished.
     /// Errs on the side of `true` so a persistent runner never exits on a failed check.
-    // ponytail: lists every job in the workflow once per idle window; add a
-    // server-side label filter to list_jobs if that gets slow on huge workflows.
     fn has_unfinished_jobs_for_label(&self) -> bool {
         if self.offline {
             return true;
         }
-        match paginate_jobs(&self.config, self.workflow_id, JobListParams::new()) {
-            Ok(jobs) => jobs.iter().any(|job| {
-                job.label == self.resources.label
-                    && !job
-                        .status
-                        .is_some_and(|s| s.is_complete() || s == JobStatus::Disabled)
-            }),
-            Err(e) => {
-                warn!(
-                    "Failed to list jobs for persistent runner check workflow_id={}: {}",
-                    self.workflow_id, e
-                );
-                true
+        // An empty label filter selects unlabeled jobs.
+        let label = self.resources.label.as_deref().unwrap_or("");
+        // Count-only requests (limit=1), most likely statuses first.
+        [
+            JobStatus::Blocked,
+            JobStatus::Ready,
+            JobStatus::Pending,
+            JobStatus::Running,
+            JobStatus::Uninitialized,
+            JobStatus::PendingFailed,
+        ]
+        .into_iter()
+        .any(|status| {
+            match apis::jobs_api::list_jobs(
+                &self.config,
+                self.workflow_id,
+                Some(status),
+                None,
+                None,
+                Some(0),
+                Some(1),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None, // name
+                None, // command
+                Some(label),
+            ) {
+                Ok(response) => response.total_count > 0,
+                Err(e) => {
+                    warn!(
+                        "Failed to count jobs for persistent runner check workflow_id={}: {}",
+                        self.workflow_id, e
+                    );
+                    true
+                }
             }
-        }
+        })
     }
 
     /// Override the claim-backoff cap loaded from config, e.g. from a CLI flag.

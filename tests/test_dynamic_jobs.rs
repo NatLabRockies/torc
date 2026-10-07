@@ -383,6 +383,7 @@ fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .unwrap()
     .items
@@ -444,6 +445,7 @@ fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .unwrap()
     .items
@@ -686,6 +688,7 @@ fn test_runner_flow_continuation_and_convergence(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
+            None, // label
         )
         .expect("list_jobs")
         .items
@@ -842,6 +845,7 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .unwrap()
     .items
@@ -863,6 +867,7 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .unwrap()
     .items
@@ -937,6 +942,7 @@ fn test_idempotent_replay(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
+            None, // label
         )
         .unwrap()
         .items
@@ -1028,6 +1034,7 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .unwrap()
     .items
@@ -1049,6 +1056,7 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .unwrap()
     .items

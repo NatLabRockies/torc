@@ -190,8 +190,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_jobs**
-> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
+> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, label=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, label=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -218,6 +218,7 @@ Name | Type | Description  | Notes
  **origin_is_set** | **Bool** | When set, filters by job provenance: &#x60;true&#x60; returns only jobs with &#x60;origin IS NOT NULL&#x60; (failure-handler retries and &#x60;spawn_jobs&#x60; children); &#x60;false&#x60; returns only originally-declared jobs. Used by &#x60;torc watch --auto-schedule&#x60; to count jobs needing unplanned Slurm allocations with &#x60;limit&#x3D;1&#x60; (the response&#39;s &#x60;total_count&#x60; suffices — no rows downloaded). | [default to nothing]
  **name** | **String** | Substring filter on the job name (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
  **command** | **String** | Substring filter on the job command (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
+ **label** | **String** | Exact-match filter on the routing label. An empty value returns only unlabeled jobs. | [default to nothing]
 
 ### Return type
 

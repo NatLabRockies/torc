@@ -122,12 +122,6 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
     };
     assert_eq!(unserved().get("windows"), Some(&2));
     assert_eq!(unserved().len(), 1);
-    let labeled_ready = || {
-        apis::workflows_api::get_workflow_status(config, workflow_id)
-            .expect("Failed to get workflow status")
-            .labeled_ready_jobs
-    };
-    assert_eq!(labeled_ready(), 2);
 
     let mut node = models::ComputeNodeModel::new(
         workflow_id,
@@ -146,8 +140,6 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
     apis::compute_nodes_api::create_compute_node(config, node)
         .expect("Failed to create compute node");
     assert!(unserved().is_empty());
-    // Served labeled jobs still count as labeled: Slurm runners never claim them.
-    assert_eq!(labeled_ready(), 2);
 }
 
 #[rstest]
@@ -193,6 +185,87 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
     let job_id = job.id.unwrap();
     job.label = Some("windows ".to_string());
     assert!(apis::jobs_api::update_job(config, job_id, job).is_err());
+}
+
+/// A runner label that can never match a job is rejected rather than silently
+/// claiming nothing.
+#[rstest]
+fn test_invalid_runner_labels_are_rejected(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_labeled_workflow(config, "label_invalid_runner");
+
+    for bad in ["", " ", "windows ", " windows"] {
+        assert!(
+            apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), Some(bad)).is_err(),
+            "label {bad:?} should be rejected by claim_next_jobs"
+        );
+
+        let mut resources = models::ComputeNodesResources::new(8, 16.0, 0, 1);
+        resources.label = Some(bad.to_string());
+        assert!(
+            apis::workflows_api::claim_jobs_based_on_resources(
+                config,
+                workflow_id,
+                10,
+                resources,
+                None
+            )
+            .is_err(),
+            "label {bad:?} should be rejected by claim_jobs_based_on_resources"
+        );
+
+        let mut node = models::ComputeNodeModel::new(
+            workflow_id,
+            "host".to_string(),
+            1,
+            "2026-01-01T00:00:00Z".to_string(),
+            1,
+            1.0,
+            0,
+            1,
+            "local".to_string(),
+            None,
+        );
+        node.label = Some(bad.to_string());
+        assert!(
+            apis::compute_nodes_api::create_compute_node(config, node).is_err(),
+            "label {bad:?} should be rejected by create_compute_node"
+        );
+    }
+}
+
+/// `list_jobs` filters by exact label; an empty filter selects unlabeled jobs.
+#[rstest]
+fn test_list_jobs_filters_by_label(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_labeled_workflow(config, "label_list_jobs");
+    let list = |label: Option<&str>| {
+        let response = apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            Some(models::JobStatus::Ready),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None, // name
+            None, // command
+            label,
+        )
+        .expect("list_jobs should succeed");
+        assert_eq!(response.total_count as usize, response.items.len());
+        names(Some(response.items))
+    };
+
+    assert_eq!(list(None).len(), 4);
+    assert_eq!(list(Some("windows")), set(&["windows_1", "windows_2"]));
+    assert_eq!(list(Some("")), set(&["plain_1", "plain_2"]));
+    assert!(list(Some("gpu")).is_empty());
 }
 
 /// A persistent runner exits once no unfinished jobs with its label remain, even though

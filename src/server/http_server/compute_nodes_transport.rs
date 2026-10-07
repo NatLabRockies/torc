@@ -1,5 +1,5 @@
 use super::*;
-use crate::server::api::ComputeNodesApi;
+use crate::server::api::{ComputeNodesApi, message_error_response};
 
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
@@ -12,6 +12,14 @@ where
         context: &C,
     ) -> Result<CreateComputeNodeResponse, ApiError> {
         authorize_workflow!(self, body.workflow_id, context, CreateComputeNodeResponse);
+
+        if let Some(Err(err)) = body.label.as_deref().map(models::parse_label) {
+            return Ok(
+                CreateComputeNodeResponse::UnprocessableContentErrorResponse(
+                    message_error_response(err),
+                ),
+            );
+        }
 
         let result = self
             .compute_nodes_api

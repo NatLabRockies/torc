@@ -1034,6 +1034,7 @@ fn test_concurrent_claim_and_complete(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // label
     )
     .expect("list_jobs failed");
     assert_eq!(
@@ -1080,6 +1081,7 @@ fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None, // label
     )
     .expect("list_jobs")
     .items

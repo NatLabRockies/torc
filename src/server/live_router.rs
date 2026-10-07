@@ -1228,6 +1228,7 @@ pub async fn list_compute_nodes(
         (status = 200, description = "Successful response", body = models::ComputeNodeModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2320,6 +2321,10 @@ pub struct JobsListQuery {
     /// for ASCII).
     #[param(nullable = true)]
     pub command: Option<String>,
+    /// Exact-match filter on the routing label. An empty value returns only
+    /// unlabeled jobs.
+    #[param(nullable = true)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2366,6 +2371,7 @@ pub async fn list_jobs(
             query.origin_is_set,
             query.name,
             query.command,
+            query.label,
             &context,
         )
         .await

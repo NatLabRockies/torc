@@ -1079,6 +1079,7 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -1104,6 +1105,7 @@ where
                 origin_is_set,
                 name,
                 command,
+                label,
                 context,
             )
             .await
@@ -1144,9 +1146,22 @@ where
         label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        log_call!(debug, context, "claim_next_jobs({}, {:?})", id, limit);
+        log_call!(
+            debug,
+            context,
+            "claim_next_jobs({}, {:?}, label={:?})",
+            id,
+            limit,
+            label
+        );
 
         authorize_workflow!(self, id, context, ClaimNextJobsResponse);
+
+        if let Some(Err(err)) = label.as_deref().map(models::parse_label) {
+            return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(err),
+            ));
+        }
 
         let requested_limit = limit.unwrap_or(10);
         self.jobs_api
