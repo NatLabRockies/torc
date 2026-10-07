@@ -95,6 +95,7 @@ pub fn get_job_details(config: &Configuration, job_id: i64) -> Result<CallToolRe
         "name": job.name,
         "command": job.command,
         "status": job.status.map(|s| s.to_string()),
+        "label": job.label,
         "invocation_script": job.invocation_script,
         "supports_termination": job.supports_termination,
         "cancel_on_blocking_job_failure": job.cancel_on_blocking_job_failure,
@@ -178,6 +179,7 @@ pub fn list_failed_jobs(
                 "job_id": job.id,
                 "name": job.name,
                 "command": job.command,
+                "label": job.label,
             })
         })
         .collect();
@@ -218,6 +220,7 @@ pub fn list_jobs_by_status(
                 "job_id": job.id,
                 "name": job.name,
                 "command": job.command,
+                "label": job.label,
             })
         })
         .collect();
