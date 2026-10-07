@@ -8350,6 +8350,16 @@ components:
         total_jobs:
           type: integer
           format: int64
+        unserved_ready_labels:
+          type: object
+          description: |-
+            Ready-job count per label that no active compute node was started with.
+            These jobs stay ready until a runner is started with a matching `--label`.
+          additionalProperties:
+            type: integer
+            format: int64
+          propertyNames:
+            type: string
         walltime_seconds:
           type:
           - number

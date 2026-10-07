@@ -1496,6 +1496,29 @@ where
             longest_ready_runtime_seconds = blocked_row.get::<Option<i64>, _>("longest");
         }
 
+        // Labeled ready jobs that no active runner serves: a job is claimed only by
+        // a runner started with the identical label, so these are stranded until
+        // one appears. Pending Slurm allocations are ignored; their runners are
+        // always unlabeled.
+        let mut unserved_ready_labels = std::collections::BTreeMap::new();
+        if counts.ready > 0 {
+            let rows = sqlx::query(
+                "SELECT label, COUNT(*) AS cnt FROM job \
+                 WHERE workflow_id = ?1 AND status = ?2 AND label IS NOT NULL \
+                 AND label NOT IN (SELECT label FROM compute_node \
+                     WHERE workflow_id = ?1 AND is_active = 1 AND label IS NOT NULL) \
+                 GROUP BY label",
+            )
+            .bind(id)
+            .bind(models::JobStatus::Ready.to_int())
+            .fetch_all(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to count unserved labeled jobs"))?;
+            for row in &rows {
+                unserved_ready_labels.insert(row.get::<String, _>("label"), row.get("cnt"));
+            }
+        }
+
         Ok(GetWorkflowStatusResponse::SuccessfulResponse(
             models::WorkflowStatusResponse {
                 workflow_id: id,
@@ -1513,6 +1536,7 @@ where
                 runtime_blocked_ready_jobs,
                 longest_ready_runtime_seconds,
                 max_allocation_remaining_seconds,
+                unserved_ready_labels,
             },
         ))
     }

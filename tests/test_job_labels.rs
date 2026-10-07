@@ -109,6 +109,38 @@ fn test_update_job_sets_label(start_server: &ServerProcess) {
     assert_eq!(updated.label.as_deref(), Some("windows"));
 }
 
+/// Workflow status flags labeled ready jobs until an active runner has that label.
+#[rstest]
+fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_labeled_workflow(config, "label_status");
+    let unserved = || {
+        apis::workflows_api::get_workflow_status(config, workflow_id)
+            .expect("Failed to get workflow status")
+            .unserved_ready_labels
+    };
+    assert_eq!(unserved().get("windows"), Some(&2));
+    assert_eq!(unserved().len(), 1);
+
+    let mut node = models::ComputeNodeModel::new(
+        workflow_id,
+        "winbox".to_string(),
+        1,
+        "2026-10-07T00:00:00Z".to_string(),
+        1,
+        1.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    node.is_active = Some(true);
+    node.label = Some("windows".to_string());
+    apis::compute_nodes_api::create_compute_node(config, node)
+        .expect("Failed to create compute node");
+    assert!(unserved().is_empty());
+}
+
 #[rstest]
 fn test_update_job_clears_label(start_server: &ServerProcess) {
     let config = &start_server.config;

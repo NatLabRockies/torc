@@ -89,9 +89,14 @@ Each runner records the label it was started with on its compute node:
 torc compute-nodes list <workflow_id>
 ```
 
-The `Label` column is empty for runners that claim unlabeled jobs. Compare it with the labels on
-your jobs (`torc jobs list <workflow_id> -f json` includes `label` for labeled jobs) to spot a label
-that no active runner serves.
+The `Label` column is empty for runners that claim unlabeled jobs.
+
+`torc status <workflow_id>` warns when ready jobs carry a label that no active runner was started
+with, and `-f json` reports the counts per label in `unserved_ready_labels`:
+
+```text
+⚠ 2 ready job(s) with label 'windows' but no active runner has that label
+```
 
 ## Label Dynamically Spawned Jobs
 
@@ -125,7 +130,8 @@ including case.
 ## Things to Watch For
 
 - **A label that no runner uses strands the job.** It stays `ready` and the workflow never
-  completes. Torc does not check that a runner exists for each label, so watch for typos.
+  completes. `torc status` warns about ready jobs whose label has no active runner, so check it if a
+  workflow stalls.
 - **Slurm runners launched by Torc have no label.** Leave the jobs meant for them unlabeled. Labeled
   jobs are left out when Torc sizes Slurm allocations (`torc slurm generate`,
   `torc slurm regenerate`, `torc watch --auto-schedule`).

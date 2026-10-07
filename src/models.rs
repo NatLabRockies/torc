@@ -2537,6 +2537,10 @@ pub struct WorkflowStatusResponse {
     /// allocations. None when no active allocation reports an end time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_allocation_remaining_seconds: Option<i64>,
+    /// Ready-job count per label that no active compute node was started with.
+    /// These jobs stay ready until a runner is started with a matching `--label`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub unserved_ready_labels: std::collections::BTreeMap<String, i64>,
 }
 
 /// One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
