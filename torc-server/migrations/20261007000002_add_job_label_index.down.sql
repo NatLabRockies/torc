@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_job_workflow_status_label_priority;
