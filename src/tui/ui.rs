@@ -686,9 +686,9 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         return;
     };
 
-    // Vertical layout: header (3) | progress (1) | tripwire (0 or 2) | status
-    // table (flex) | description (3). The runtime-blocked tripwire only takes
-    // space when the condition exists.
+    // Vertical layout: header (3) | progress (1) | tripwire (0 or 2) | unserved
+    // labels (one line each) | status table (flex) | description (3). The
+    // warnings only take space when their condition exists.
     let tripwire_height: u16 = if summary.runtime_blocked_ready_jobs > 0 {
         2
     } else {
@@ -701,6 +701,7 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
             Constraint::Length(3),
             Constraint::Length(1),
             Constraint::Length(tripwire_height),
+            Constraint::Length(summary.unserved_ready_labels.len() as u16),
             Constraint::Min(3),
             Constraint::Length(3),
         ])
@@ -793,6 +794,22 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         f.render_widget(tripwire, chunks[2]);
     }
 
+    // --- Labeled ready jobs that no active runner will claim ---
+    let unserved_lines: Vec<Line> = summary
+        .unserved_ready_labels
+        .iter()
+        .map(|(label, count)| {
+            Line::from(Span::styled(
+                format!(
+                    "⚠ {} ready job(s) with label '{}' but no active runner has that label",
+                    count, label
+                ),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ))
+        })
+        .collect();
+    f.render_widget(Paragraph::new(unserved_lines), chunks[3]);
+
     // --- Per-status counts table (skip rows with count 0) ---
     let header_style = Style::default()
         .fg(Color::Yellow)
@@ -837,7 +854,7 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         ],
     )
     .header(header);
-    f.render_widget(counts_table, chunks[3]);
+    f.render_widget(counts_table, chunks[4]);
 
     // --- Description (optional) ---
     let desc_text = summary.description.as_deref().unwrap_or("—");
@@ -849,7 +866,7 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         Line::from(Span::styled(desc_text, Style::default().fg(Color::White))),
     ])
     .wrap(Wrap { trim: true });
-    f.render_widget(desc, chunks[4]);
+    f.render_widget(desc, chunks[5]);
 }
 
 /// Format a duration in seconds as a compact "3d 1h" / "45m" string for the
