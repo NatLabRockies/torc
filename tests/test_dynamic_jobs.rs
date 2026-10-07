@@ -158,6 +158,7 @@ fn spawn_job(name: &str, deps: &[&str], priority: i64) -> models::SpawnJobModel 
         } else {
             Some(deps.iter().map(|s| s.to_string()).collect())
         },
+        label: None,
     }
 }
 
@@ -454,6 +455,34 @@ fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
         Some("spawn"),
         "spawned job must have origin='spawn'"
     );
+}
+
+/// A label on a spawned job is stored, so only a runner started with that
+/// label can claim it.
+#[rstest]
+fn test_spawned_job_keeps_label(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_label", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    let response = apis::jobs_api::spawn_jobs(
+        config,
+        orch,
+        models::SpawnJobsRequest {
+            lineage: Some("L".to_string()),
+            jobs: vec![models::SpawnJobModel {
+                label: Some("windows".to_string()),
+                ..spawn_job("labeled_worker", &[], 1)
+            }],
+            state: None,
+        },
+    )
+    .unwrap();
+
+    let spawned = apis::jobs_api::get_job(config, response.spawned_job_ids[0]).unwrap();
+    assert_eq!(spawned.label.as_deref(), Some("windows"));
 }
 
 /// `retry_job` tags the resurrected row with `origin = "retry"`, so the same

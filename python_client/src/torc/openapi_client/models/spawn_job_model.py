@@ -29,11 +29,12 @@ class SpawnJobModel(BaseModel):
     cancel_on_blocking_job_failure: Optional[StrictBool] = None
     command: StrictStr
     depends_on: Optional[List[StrictStr]] = Field(default=None, description="Job names this job depends on (existing jobs or siblings in this batch).")
+    label: Optional[StrictStr] = Field(default=None, description="Routing label; only runners started with the same label claim this job.")
     name: StrictStr
     priority: Optional[StrictInt] = None
     resource_requirements: Optional[StrictStr] = Field(default=None, description="Name of an existing resource_requirements record in the workflow.")
     additional_properties: Dict[str, Any] = {}
-    __properties: ClassVar[List[str]] = ["cancel_on_blocking_job_failure", "command", "depends_on", "name", "priority", "resource_requirements"]
+    __properties: ClassVar[List[str]] = ["cancel_on_blocking_job_failure", "command", "depends_on", "label", "name", "priority", "resource_requirements"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -96,6 +97,7 @@ class SpawnJobModel(BaseModel):
             "cancel_on_blocking_job_failure": obj.get("cancel_on_blocking_job_failure"),
             "command": obj.get("command"),
             "depends_on": obj.get("depends_on"),
+            "label": obj.get("label"),
             "name": obj.get("name"),
             "priority": obj.get("priority"),
             "resource_requirements": obj.get("resource_requirements")

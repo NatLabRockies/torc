@@ -560,6 +560,9 @@ pub struct JobRunner {
     /// only a local completion can move an action toward its trigger threshold
     /// from this node, so the grace window is measured from that event.
     last_completion_time: Option<Instant>,
+    /// When true, never exit for lack of claimable jobs; run until the
+    /// workflow is complete or canceled (or `end_time` is reached).
+    persistent: bool,
     /// Actions this runner has already executed in this process. Persistent
     /// actions keep `executed = 0` on the server so every worker gets a turn,
     /// so the server flag alone cannot tell us we are done with one.
@@ -795,6 +798,7 @@ impl JobRunner {
             num_nodes: resources.num_nodes,
             time_limit: resources.time_limit.clone(),
             scheduler_config_id: resources.scheduler_config_id,
+            label: resources.label.clone(),
         };
 
         // Initialize resource monitoring if configured
@@ -862,6 +866,7 @@ impl JobRunner {
             wakeup: Wakeup::new(),
             last_job_claimed_time: None,
             last_completion_time: None,
+            persistent: false,
             executed_action_ids: HashSet::new(),
             had_failures: false,
             had_terminations: false,
@@ -885,6 +890,12 @@ impl JobRunner {
     /// `Duration::from_secs_f64` from panicking later — CLI parsing already
     /// rejects these, this is a defense-in-depth guard for config-sourced
     /// values that bypass the CLI parser.
+    /// Keep the runner alive while idle instead of exiting after
+    /// `compute_node_wait_for_new_jobs_seconds` without a claimed job.
+    pub fn set_persistent(&mut self, persistent: bool) {
+        self.persistent = persistent;
+    }
+
     pub fn override_claim_backoff_max_secs(&mut self, secs: Option<f64>) {
         if let Some(s) = secs
             && s.is_finite()
@@ -1337,7 +1348,9 @@ impl JobRunner {
             }
 
             // Check if we should exit due to no new jobs being claimed for too long
-            if self.rules.compute_node_wait_for_new_jobs_seconds > 0 && self.running_jobs.is_empty()
+            if !self.persistent
+                && self.rules.compute_node_wait_for_new_jobs_seconds > 0
+                && self.running_jobs.is_empty()
             {
                 // Initialize the time if this is the first check
                 if self.last_job_claimed_time.is_none() {
@@ -2835,6 +2848,7 @@ impl JobRunner {
             ComputeNodesResources::new(cpus, memory_gb, gpus, self.resources.num_nodes);
         per_node.scheduler_config_id = self.resources.scheduler_config_id;
         per_node.time_limit.clone_from(&self.resources.time_limit);
+        per_node.label.clone_from(&self.resources.label);
         per_node
     }
 
@@ -3007,6 +3021,7 @@ impl JobRunner {
             );
             r.scheduler_config_id = self.resources.scheduler_config_id;
             r.time_limit.clone_from(&self.resources.time_limit);
+            r.label.clone_from(&self.resources.label);
             r
         } else {
             self.resources_per_node()
@@ -3194,6 +3209,7 @@ impl JobRunner {
                 &self.config,
                 self.workflow_id,
                 Some(limit),
+                self.resources.label.as_deref(),
             ))
         }) {
             Ok(response) => {

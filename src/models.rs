@@ -290,6 +290,10 @@ pub struct JobModel {
     /// originally-declared workload).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// Routing label. A runner started with a label claims only jobs with
+    /// that label; a runner with no label claims only unlabeled jobs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -414,6 +418,9 @@ pub struct SpawnJobModel {
     /// Job names this job depends on (existing jobs or siblings in this batch).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
+    /// Routing label; only runners started with the same label claim this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// Add a batch of new jobs to an initialized workflow, all blocked on the
@@ -1005,6 +1012,9 @@ pub struct ComputeNodesResources {
     pub time_limit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_config_id: Option<i64>,
+    /// Runner label; only jobs with an identical label (or none, when unset) are claimed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1482,6 +1492,7 @@ impl ComputeNodesResources {
             num_nodes,
             time_limit: None,
             scheduler_config_id: None,
+            label: None,
         }
     }
 }
@@ -1649,6 +1660,7 @@ impl JobModel {
             attempt_id: Some(1),
             priority: None,
             origin: None,
+            label: None,
         }
     }
 }
@@ -2680,6 +2692,7 @@ mod tests {
             attempt_id: Some(1),
             priority: Some(0),
             origin: None,
+            label: None,
         };
         let result = ResultModel {
             id: Some(1),
@@ -2769,6 +2782,7 @@ mod tests {
             num_nodes: 1,
             time_limit: None,
             scheduler_config_id: None,
+            label: None,
         };
         let claim = ClaimJobsBasedOnResources {
             jobs: Some(vec![]),

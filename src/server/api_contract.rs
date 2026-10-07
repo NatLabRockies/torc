@@ -946,6 +946,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         limit: Option<i64>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 

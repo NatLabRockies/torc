@@ -16,6 +16,7 @@
         input_file_ids=nothing,
         input_user_data_ids=nothing,
         invocation_script=nothing,
+        label=nothing,
         name=nothing,
         origin=nothing,
         output_file_ids=nothing,
@@ -41,6 +42,7 @@
     - input_file_ids::Vector{Int64}
     - input_user_data_ids::Vector{Int64}
     - invocation_script::String
+    - label::String : Routing label. A runner started with a label claims only jobs with that label; a runner with no label claims only unlabeled jobs.
     - name::String
     - origin::String : Provenance marker: NULL for jobs declared at workflow creation, &#x60;\&quot;retry\&quot;&#x60; for jobs resurrected by failure-handler retries, &#x60;\&quot;spawn\&quot;&#x60; for jobs added at runtime by &#x60;spawn_jobs&#x60;. &#x60;torc watch --auto-schedule&#x60; uses this to detect jobs that need unplanned Slurm allocations (deferred &#x60;schedule_nodes&#x60; actions only account for the originally-declared workload).
     - output_file_ids::Vector{Int64}
@@ -66,6 +68,7 @@ Base.@kwdef mutable struct JobModel <: OpenAPI.APIModel
     input_file_ids::Union{Nothing, Vector{Int64}} = nothing
     input_user_data_ids::Union{Nothing, Vector{Int64}} = nothing
     invocation_script::Union{Nothing, String} = nothing
+    label::Union{Nothing, String} = nothing
     name::Union{Nothing, String} = nothing
     origin::Union{Nothing, String} = nothing
     output_file_ids::Union{Nothing, Vector{Int64}} = nothing
@@ -79,14 +82,14 @@ Base.@kwdef mutable struct JobModel <: OpenAPI.APIModel
     supports_termination::Union{Nothing, Bool} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function JobModel(attempt_id, cancel_on_blocking_job_failure, command, compute_node_id, depends_on_job_ids, env, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, name, origin, output_file_ids, output_user_data_ids, priority, resource_requirements_id, schedule_compute_nodes, scheduler_id, start_time, status, supports_termination, workflow_id, )
-        o = new(attempt_id, cancel_on_blocking_job_failure, command, compute_node_id, depends_on_job_ids, env, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, name, origin, output_file_ids, output_user_data_ids, priority, resource_requirements_id, schedule_compute_nodes, scheduler_id, start_time, status, supports_termination, workflow_id, )
+    function JobModel(attempt_id, cancel_on_blocking_job_failure, command, compute_node_id, depends_on_job_ids, env, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, label, name, origin, output_file_ids, output_user_data_ids, priority, resource_requirements_id, schedule_compute_nodes, scheduler_id, start_time, status, supports_termination, workflow_id, )
+        o = new(attempt_id, cancel_on_blocking_job_failure, command, compute_node_id, depends_on_job_ids, env, failure_handler_id, id, input_file_ids, input_user_data_ids, invocation_script, label, name, origin, output_file_ids, output_user_data_ids, priority, resource_requirements_id, schedule_compute_nodes, scheduler_id, start_time, status, supports_termination, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobModel
 
-const _property_types_JobModel = Dict{Symbol,String}(Symbol("attempt_id")=>"Int64", Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("command")=>"String", Symbol("compute_node_id")=>"Int64", Symbol("depends_on_job_ids")=>"Vector{Int64}", Symbol("env")=>"Dict{String, String}", Symbol("failure_handler_id")=>"Int64", Symbol("id")=>"Int64", Symbol("input_file_ids")=>"Vector{Int64}", Symbol("input_user_data_ids")=>"Vector{Int64}", Symbol("invocation_script")=>"String", Symbol("name")=>"String", Symbol("origin")=>"String", Symbol("output_file_ids")=>"Vector{Int64}", Symbol("output_user_data_ids")=>"Vector{Int64}", Symbol("priority")=>"Int64", Symbol("resource_requirements_id")=>"Int64", Symbol("schedule_compute_nodes")=>"ComputeNodeSchedule", Symbol("scheduler_id")=>"Int64", Symbol("start_time")=>"String", Symbol("status")=>"JobStatus", Symbol("supports_termination")=>"Bool", Symbol("workflow_id")=>"Int64", )
+const _property_types_JobModel = Dict{Symbol,String}(Symbol("attempt_id")=>"Int64", Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("command")=>"String", Symbol("compute_node_id")=>"Int64", Symbol("depends_on_job_ids")=>"Vector{Int64}", Symbol("env")=>"Dict{String, String}", Symbol("failure_handler_id")=>"Int64", Symbol("id")=>"Int64", Symbol("input_file_ids")=>"Vector{Int64}", Symbol("input_user_data_ids")=>"Vector{Int64}", Symbol("invocation_script")=>"String", Symbol("label")=>"String", Symbol("name")=>"String", Symbol("origin")=>"String", Symbol("output_file_ids")=>"Vector{Int64}", Symbol("output_user_data_ids")=>"Vector{Int64}", Symbol("priority")=>"Int64", Symbol("resource_requirements_id")=>"Int64", Symbol("schedule_compute_nodes")=>"ComputeNodeSchedule", Symbol("scheduler_id")=>"Int64", Symbol("start_time")=>"String", Symbol("status")=>"JobStatus", Symbol("supports_termination")=>"Bool", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ JobModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobModel[name]))}
 
 function OpenAPI.check_required(o::JobModel)
@@ -108,6 +111,7 @@ function OpenAPI.validate_properties(o::JobModel)
     OpenAPI.validate_property(JobModel, Symbol("input_file_ids"), o.input_file_ids)
     OpenAPI.validate_property(JobModel, Symbol("input_user_data_ids"), o.input_user_data_ids)
     OpenAPI.validate_property(JobModel, Symbol("invocation_script"), o.invocation_script)
+    OpenAPI.validate_property(JobModel, Symbol("label"), o.label)
     OpenAPI.validate_property(JobModel, Symbol("name"), o.name)
     OpenAPI.validate_property(JobModel, Symbol("origin"), o.origin)
     OpenAPI.validate_property(JobModel, Symbol("output_file_ids"), o.output_file_ids)
@@ -143,6 +147,7 @@ function OpenAPI.validate_property(::Type{ JobModel }, name::Symbol, val)
     if name === Symbol("id")
         OpenAPI.validate_param(name, "JobModel", :format, val, "int64")
     end
+
 
 
 

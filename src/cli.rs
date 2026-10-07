@@ -283,6 +283,13 @@ SEE ALSO:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
+        /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
+        #[arg(long)]
+        label: Option<String>,
+        /// Keep running while no jobs are available; exit only when the workflow
+        /// is complete or canceled (or the end time is reached).
+        #[arg(long)]
+        persistent: bool,
     },
     /// Run inline commands as a synthesized workflow (no spec file required).
     ///

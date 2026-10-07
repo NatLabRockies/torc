@@ -188,6 +188,7 @@ pub trait JobsApi<C> {
         &self,
         id: i64,
         requested_job_count: i64,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 
@@ -406,7 +407,7 @@ impl JobsApiImpl {
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id, priority, origin,
+                       failure_handler_id, attempt_id, priority, origin, label,
                        start_time, compute_node_id
                 FROM job
                 WHERE id = ?
@@ -584,6 +585,7 @@ impl JobsApiImpl {
             attempt_id: record.try_get("attempt_id").ok(),
             priority: record.try_get("priority").ok(),
             origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
+            label: record.try_get::<Option<String>, _>("label").ok().flatten(),
         })
     }
 
@@ -1303,9 +1305,10 @@ where
                 status,
                 scheduler_id,
                 failure_handler_id,
-                priority
+                priority,
+                label
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -1321,6 +1324,7 @@ where
         .bind(job.scheduler_id)
         .bind(job.failure_handler_id)
         .bind(priority)
+        .bind(&job.label)
         .fetch_one(&mut *tx)
         .await
         {
@@ -1570,7 +1574,7 @@ where
                 "INSERT INTO job (\
                     workflow_id, name, command, cancel_on_blocking_job_failure, \
                     supports_termination, resource_requirements_id, invocation_script, \
-                    env, status, scheduler_id, failure_handler_id, priority\
+                    env, status, scheduler_id, failure_handler_id, priority, label\
                 ) ",
             );
             qb.push_values(chunk, |mut row, prep| {
@@ -1585,7 +1589,8 @@ where
                     .push_bind(prep.status_int)
                     .push_bind(prep.job.scheduler_id)
                     .push_bind(prep.job.failure_handler_id)
-                    .push_bind(prep.priority);
+                    .push_bind(prep.priority)
+                    .push_bind(prep.job.label.as_deref());
             });
             qb.push(" RETURNING id, name");
             let rows = match qb.build().fetch_all(&mut *transaction).await {
@@ -1875,7 +1880,7 @@ where
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, start_time, compute_node_id FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, label, start_time, compute_node_id FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -2034,6 +2039,7 @@ where
                     attempt_id: record.try_get("attempt_id").ok(),
                     priority: record.try_get("priority").ok(),
                     origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
+                    label: record.try_get::<Option<String>, _>("label").ok().flatten(),
                 });
             }
         }
@@ -2293,6 +2299,7 @@ where
                 ,resource_requirements_id = COALESCE(?, resource_requirements_id)
                 ,scheduler_id = COALESCE(?, scheduler_id)
                 ,priority = COALESCE(?, priority)
+                ,label = COALESCE(?, label)
             WHERE id = ?
         "#,
         )
@@ -2305,6 +2312,7 @@ where
         .bind(body.resource_requirements_id)
         .bind(body.scheduler_id)
         .bind(body.priority)
+        .bind(body.label)
         .bind(id)
         .execute(self.context.pool.as_ref())
         .await
@@ -2429,6 +2437,7 @@ where
         &self,
         id: i64,
         requested_job_count: i64,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
@@ -2486,16 +2495,19 @@ where
                 resource_requirements_id,
                 failure_handler_id,
                 attempt_id,
-                priority
+                priority,
+                origin,
+                label
             FROM job
-            WHERE workflow_id = $1 AND status = $2
+            WHERE workflow_id = $1 AND status = $2 AND label IS $3
             ORDER BY priority DESC, id ASC
-            LIMIT $3
+            LIMIT $4
             "#;
 
         let rows = match sqlx::query(query)
             .bind(id)
             .bind(ready_status)
+            .bind(label)
             .bind(requested_job_count)
             .fetch_all(&mut *conn)
             .await
@@ -2545,6 +2557,7 @@ where
                 attempt_id: row.get("attempt_id"),
                 priority: row.try_get("priority").ok(),
                 origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
+                label: row.try_get::<Option<String>, _>("label").ok().flatten(),
             };
 
             selected_jobs.push(job);
@@ -2955,7 +2968,7 @@ where
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
-                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin,
+                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin, j.label,
                    w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
@@ -3152,6 +3165,7 @@ where
             // previously-spawned row keeps origin='spawn'; a fresh retry of
             // a statically-declared job becomes 'retry'.
             origin: Some(existing_origin.unwrap_or_else(|| "retry".to_string())),
+            label: job_record.try_get("label").ok().flatten(),
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

@@ -331,8 +331,8 @@ async fn insert_spawned_job_rows(
             INSERT INTO job
             (workflow_id, name, command, cancel_on_blocking_job_failure,
              supports_termination, resource_requirements_id, status, priority, env,
-             origin)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'spawn')
+             label, origin)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'spawn')
             RETURNING id
             "#,
         )
@@ -345,6 +345,7 @@ async fn insert_spawned_job_rows(
         .bind(blocked_int)
         .bind(job.priority.unwrap_or(0))
         .bind(&lineage_env)
+        .bind(&job.label)
         .fetch_one(&mut **tx)
         .await
         .map_err(|e| db_error(e, "Failed to insert spawned job"))?
@@ -712,6 +713,7 @@ struct BackfillClaimParams {
     time_limit_seconds: i64,
     scheduler_config_id: Option<i64>,
     use_scheduler_filter: bool,
+    label: Option<String>,
     claim_limit: usize,
 }
 
@@ -770,6 +772,7 @@ fn claim_candidate_row(
         attempt_id: row.get("attempt_id"),
         priority: Some(row.get("priority")),
         origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
+        label: row.try_get::<Option<String>, _>("label").ok().flatten(),
     });
 
     Ok(true)
@@ -808,6 +811,7 @@ async fn claim_backfill_jobs(
             job.attempt_id,
             job.priority,
             job.origin,
+            job.label,
             rr.id AS resource_requirements_id,
             rr.memory_bytes,
             rr.num_cpus,
@@ -838,7 +842,9 @@ async fn claim_backfill_jobs(
         .push(" AND rr.num_nodes <= ")
         .push_bind(remaining.nodes)
         .push(" AND rr.runtime_s <= ")
-        .push_bind(params.time_limit_seconds);
+        .push_bind(params.time_limit_seconds)
+        .push(" AND job.label IS ")
+        .push_bind(params.label.as_deref());
 
     if params.use_scheduler_filter {
         builder
@@ -1132,6 +1138,7 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         log_call!(debug, context, "claim_next_jobs({}, {:?})", id, limit);
@@ -1140,7 +1147,7 @@ where
 
         let requested_limit = limit.unwrap_or(10);
         self.jobs_api
-            .claim_next_jobs(id, requested_limit, context)
+            .claim_next_jobs(id, requested_limit, label, context)
             .await
     }
 
@@ -1981,6 +1988,7 @@ where
             attempt_id: None,
             priority: None,
             origin: None,
+            label: None,
         };
 
         Ok(CompletedJobRecord {
@@ -2528,6 +2536,7 @@ where
             AND rr.num_gpus <= $5
             AND rr.num_nodes <= $6
             AND rr.runtime_s <= $7
+            AND job.label IS $8
             LIMIT 1
             "#,
         )
@@ -2538,6 +2547,7 @@ where
         .bind(resources.num_gpus)
         .bind(resources.num_nodes)
         .bind(time_limit_seconds)
+        .bind(resources.label.as_deref())
         .fetch_optional(&mut *conn)
         .await
         .map_err(|e| {
@@ -2576,6 +2586,8 @@ where
                 job.failure_handler_id,
                 job.attempt_id,
                 job.priority,
+                job.origin,
+                job.label,
                 rr.id AS resource_requirements_id,
                 rr.memory_bytes,
                 rr.num_cpus,
@@ -2592,8 +2604,9 @@ where
             AND rr.num_nodes <= $6
             AND rr.runtime_s <= $7
             AND (job.scheduler_id IS NULL OR job.scheduler_id = $8)
+            AND job.label IS $9
             {}
-            LIMIT $9
+            LIMIT $10
             "#,
             RESOURCE_CLAIM_ORDER_BY
         );
@@ -2608,6 +2621,7 @@ where
             .bind(resources.num_nodes)
             .bind(time_limit_seconds)
             .bind(resources.scheduler_config_id)
+            .bind(resources.label.as_deref())
             .bind(limit)
             .fetch_all(&mut *conn)
             .await
@@ -2636,6 +2650,8 @@ where
                     job.failure_handler_id,
                     job.attempt_id,
                     job.priority,
+                    job.origin,
+                    job.label,
                     rr.id AS resource_requirements_id,
                     rr.memory_bytes,
                     rr.num_cpus,
@@ -2651,8 +2667,9 @@ where
                 AND rr.num_gpus <= $5
                 AND rr.num_nodes <= $6
                 AND rr.runtime_s <= $7
+                AND job.label IS $8
                 {}
-                LIMIT $8
+                LIMIT $9
                 "#,
                 RESOURCE_CLAIM_ORDER_BY
             );
@@ -2665,6 +2682,7 @@ where
                 .bind(resources.num_gpus)
                 .bind(resources.num_nodes)
                 .bind(time_limit_seconds)
+                .bind(resources.label.as_deref())
                 .bind(limit)
                 .fetch_all(&mut *conn)
                 .await
@@ -2728,6 +2746,7 @@ where
             time_limit_seconds,
             scheduler_config_id: resources.scheduler_config_id,
             use_scheduler_filter: used_scheduler_filter,
+            label: resources.label.clone(),
             claim_limit,
         };
         if let Err(e) = claim_backfill_jobs(

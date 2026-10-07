@@ -512,6 +512,9 @@ pub struct ClaimJobsBasedOnResourcesQuery {
 pub struct ClaimNextJobsQuery {
     #[param(nullable = true)]
     pub limit: Option<i64>,
+    /// Runner label; only jobs with an identical label (or none, when unset) are claimed.
+    #[param(nullable = true)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -4100,7 +4103,7 @@ pub async fn claim_next_jobs(
 ) -> Response<Body> {
     match state
         .server
-        .claim_next_jobs(id, query.limit, &context)
+        .claim_next_jobs(id, query.limit, query.label, &context)
         .await
     {
         Ok(response) => claim_next_jobs_response(response),

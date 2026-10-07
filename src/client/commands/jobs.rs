@@ -323,6 +323,9 @@ EXAMPLES:
 
     # Set scheduling priority (higher = submitted first)
     torc jobs update 456 --priority 10
+
+    # Route the job to runners started with --label windows
+    torc jobs update 456 --label windows
 ")]
     Update {
         /// ID of the job to update
@@ -346,6 +349,9 @@ EXAMPLES:
         /// Scheduling priority (0 or higher; higher = submitted first)
         #[arg(long)]
         priority: Option<i64>,
+        /// Routing label; only runners started with the same --label claim this job
+        #[arg(long)]
+        label: Option<String>,
     },
     /// Delete one or more jobs
     #[command(after_long_help = "\
@@ -715,6 +721,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     println!("  Workflow ID: {}", job.workflow_id);
                     println!("  Status: {}", status);
                     println!("  Priority: {}", job.priority.unwrap_or(0));
+                    println!("  Label: {}", job.label.as_deref().unwrap_or("None"));
                     println!(
                         "  Compute Node: {}",
                         job.compute_node_id
@@ -763,6 +770,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             runtime,
             resource_requirements_id,
             priority,
+            label,
         } => {
             // First get the existing job
             match apis::jobs_api::get_job(config, *id) {
@@ -779,6 +787,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
                     if let Some(p) = priority {
                         job.priority = Some(*p);
+                    }
+                    if let Some(new_label) = label {
+                        job.label = Some(new_label.clone());
                     }
 
                     // Handle runtime update (requires updating resource requirements)

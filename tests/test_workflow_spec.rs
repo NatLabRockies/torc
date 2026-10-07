@@ -1403,6 +1403,7 @@ fn test_json_field_name_compatibility() {
         failure_handler: None,
         stdio: None,
         priority: None,
+        label: None,
     };
 
     let json = serde_json::to_value(&job).expect("Failed to serialize to JSON value");
@@ -4540,6 +4541,30 @@ fn test_slurm_scheduler_serialize_allocations_kdl_roundtrip() {
     assert_eq!(schedulers[0].serialize_allocations, Some(true));
     // An omitted value stays omitted rather than round-tripping to Some(false).
     assert_eq!(schedulers[1].serialize_allocations, None);
+}
+
+/// A job `label` survives the YAML -> KDL -> spec round trip; the KDL reader and writer
+/// each list job fields by hand, so an omission would silently drop it.
+#[test]
+fn test_job_label_kdl_roundtrip() {
+    let yaml = r#"
+        name: label_roundtrip_test
+        user: test_user
+        jobs:
+          - name: plain
+            command: "echo plain"
+          - name: labeled
+            command: "echo labeled"
+            label: windows
+    "#;
+    let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
+
+    let kdl_str = spec.to_kdl_str();
+    let roundtripped =
+        WorkflowSpec::from_spec_file_content(&kdl_str, "kdl").expect("Failed to parse KDL");
+
+    assert_eq!(roundtripped.jobs[0].label, None);
+    assert_eq!(roundtripped.jobs[1].label.as_deref(), Some("windows"));
 }
 
 /// The shipped chained-allocations example (referenced from the docs) parses and

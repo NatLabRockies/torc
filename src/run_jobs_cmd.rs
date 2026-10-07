@@ -85,6 +85,13 @@ pub struct Args {
     /// Scheduler config ID
     #[arg(long)]
     pub scheduler_config_id: Option<i64>,
+    /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
+    #[arg(long)]
+    pub label: Option<String>,
+    /// Keep running while no jobs are available; exit only when the workflow
+    /// is complete or canceled (or the end time is reached).
+    #[arg(long)]
+    pub persistent: bool,
     /// Log prefix
     #[arg(long)]
     pub log_prefix: Option<String>,
@@ -276,6 +283,7 @@ pub fn run(args: &Args) -> WorkerResult {
         args.num_nodes.unwrap_or(1),
     );
     resources.time_limit.clone_from(&args.time_limit);
+    resources.label.clone_from(&args.label);
     let pid = 1; // TODO
     let unique_label = format!("wf{}_h{}_r{}", workflow_id, hostname, run_id);
 
@@ -321,6 +329,7 @@ pub fn run(args: &Args) -> WorkerResult {
         None, // No per-node tracking for local runner
     );
     job_runner.override_claim_backoff_max_secs(args.claim_backoff_max_secs);
+    job_runner.set_persistent(args.persistent);
 
     register_sigchld_wakeup(&job_runner);
 

@@ -1,0 +1,46 @@
+# Route jobs to specific runners with labels.
+#
+# A job with a `label` is claimed only by a runner started with the same
+# `--label`. Jobs without a label are claimed only by runners without one.
+# The server enforces the match when a runner claims jobs.
+#
+# This workflow has two kinds of work:
+#   - `simulate_*` jobs have no label. Any ordinary runner takes them, for
+#     example Slurm compute nodes started by `torc submit`.
+#   - `postprocess` has `label: windows`. Only a runner started with
+#     `--label windows` takes it, for example a long-lived Windows VM.
+#
+# Try it on one machine with two terminals:
+#   torc create examples/yaml/labeled_jobs.yaml     # prints the workflow ID
+#
+#   # Terminal 1: the dedicated runner. `--persistent` keeps it alive while
+#   # it has nothing to do, until the workflow is complete.
+#   torc run <workflow_id> --label windows --persistent
+#
+#   # Terminal 2: an ordinary runner. It runs the simulate jobs and exits.
+#   torc run <workflow_id>
+#
+# See `docs/src/core/how-to/route-jobs-with-labels.md`.
+
+name: labeled_jobs
+description: Route jobs to dedicated runners with labels
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M
+
+jobs:
+  - name: simulate_{i}
+    command: echo "simulating case {i}"
+    resource_requirements: small
+    parameters:
+      i: "1:4"
+
+  - name: postprocess
+    command: echo "post-processing all cases"
+    resource_requirements: small
+    label: windows
+    depends_on_regexes:
+      - "^simulate_\\d+$"

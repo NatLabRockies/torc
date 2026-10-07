@@ -6,6 +6,7 @@
 
     ComputeNodesResources(;
         id=nothing,
+        label=nothing,
         memory_gb=nothing,
         num_cpus=nothing,
         num_gpus=nothing,
@@ -15,6 +16,7 @@
     )
 
     - id::Int64
+    - label::String : Runner label; only jobs with an identical label (or none, when unset) are claimed.
     - memory_gb::Float64
     - num_cpus::Int64
     - num_gpus::Int64
@@ -24,6 +26,7 @@
 """
 Base.@kwdef mutable struct ComputeNodesResources <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
+    label::Union{Nothing, String} = nothing
     memory_gb::Union{Nothing, Float64} = nothing
     num_cpus::Union{Nothing, Int64} = nothing
     num_gpus::Union{Nothing, Int64} = nothing
@@ -31,14 +34,14 @@ Base.@kwdef mutable struct ComputeNodesResources <: OpenAPI.APIModel
     scheduler_config_id::Union{Nothing, Int64} = nothing
     time_limit::Union{Nothing, String} = nothing
 
-    function ComputeNodesResources(id, memory_gb, num_cpus, num_gpus, num_nodes, scheduler_config_id, time_limit, )
-        o = new(id, memory_gb, num_cpus, num_gpus, num_nodes, scheduler_config_id, time_limit, )
+    function ComputeNodesResources(id, label, memory_gb, num_cpus, num_gpus, num_nodes, scheduler_config_id, time_limit, )
+        o = new(id, label, memory_gb, num_cpus, num_gpus, num_nodes, scheduler_config_id, time_limit, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ComputeNodesResources
 
-const _property_types_ComputeNodesResources = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("memory_gb")=>"Float64", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("scheduler_config_id")=>"Int64", Symbol("time_limit")=>"String", )
+const _property_types_ComputeNodesResources = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("label")=>"String", Symbol("memory_gb")=>"Float64", Symbol("num_cpus")=>"Int64", Symbol("num_gpus")=>"Int64", Symbol("num_nodes")=>"Int64", Symbol("scheduler_config_id")=>"Int64", Symbol("time_limit")=>"String", )
 OpenAPI.property_type(::Type{ ComputeNodesResources }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ComputeNodesResources[name]))}
 
 function OpenAPI.check_required(o::ComputeNodesResources)
@@ -51,6 +54,7 @@ end
 
 function OpenAPI.validate_properties(o::ComputeNodesResources)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("id"), o.id)
+    OpenAPI.validate_property(ComputeNodesResources, Symbol("label"), o.label)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("memory_gb"), o.memory_gb)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("num_cpus"), o.num_cpus)
     OpenAPI.validate_property(ComputeNodesResources, Symbol("num_gpus"), o.num_gpus)
@@ -64,6 +68,7 @@ function OpenAPI.validate_property(::Type{ ComputeNodesResources }, name::Symbol
     if name === Symbol("id")
         OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "int64")
     end
+
 
     if name === Symbol("memory_gb")
         OpenAPI.validate_param(name, "ComputeNodesResources", :format, val, "double")

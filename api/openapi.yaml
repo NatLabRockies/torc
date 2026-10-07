@@ -4756,6 +4756,14 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: label
+        in: query
+        description: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: ''
@@ -6033,6 +6041,11 @@ components:
           - integer
           - 'null'
           format: int64
+        label:
+          type:
+          - string
+          - 'null'
+          description: Runner label; only jobs with an identical label (or none, when unset) are claimed.
         memory_gb:
           type: number
           format: double
@@ -6513,6 +6526,13 @@ components:
           type:
           - string
           - 'null'
+        label:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Routing label. A runner started with a label claims only jobs with
+            that label; a runner with no label claims only unlabeled jobs.
         name:
           type: string
         origin:
@@ -7843,6 +7863,11 @@ components:
           items:
             type: string
           description: Job names this job depends on (existing jobs or siblings in this batch).
+        label:
+          type:
+          - string
+          - 'null'
+          description: Routing label; only runners started with the same label claim this job.
         name:
           type: string
         priority:

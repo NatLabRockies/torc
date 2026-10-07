@@ -2357,9 +2357,11 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        self.transport_claim_next_jobs(id, limit, context).await
+        self.transport_claim_next_jobs(id, limit, label, context)
+            .await
     }
 
     /// Check for changed job inputs and update status accordingly.
