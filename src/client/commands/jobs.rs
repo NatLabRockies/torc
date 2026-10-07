@@ -326,6 +326,9 @@ EXAMPLES:
 
     # Route the job to runners started with --label windows
     torc jobs update 456 --label windows
+
+    # Remove the label so unlabeled runners claim the job
+    torc jobs update 456 --clear-label
 ")]
     Update {
         /// ID of the job to update
@@ -350,8 +353,11 @@ EXAMPLES:
         #[arg(long)]
         priority: Option<i64>,
         /// Routing label; only runners started with the same --label claim this job
-        #[arg(long)]
+        #[arg(long, value_parser = models::parse_label, conflicts_with = "clear_label")]
         label: Option<String>,
+        /// Remove the routing label so runners without --label claim this job
+        #[arg(long)]
+        clear_label: bool,
     },
     /// Delete one or more jobs
     #[command(after_long_help = "\
@@ -771,6 +777,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             resource_requirements_id,
             priority,
             label,
+            clear_label,
         } => {
             // First get the existing job
             match apis::jobs_api::get_job(config, *id) {
@@ -790,6 +797,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
                     if let Some(new_label) = label {
                         job.label = Some(new_label.clone());
+                    } else if *clear_label {
+                        // The server treats an empty label as "clear".
+                        job.label = Some(String::new());
                     }
 
                     // Handle runtime update (requires updating resource requirements)

@@ -76,8 +76,10 @@ Start that runner with `--persistent`:
 torc run <workflow_id> --label windows --persistent
 ```
 
-A persistent runner ignores the idle timeout. It exits when the workflow is complete or canceled, or
-when its `--end-time` or `--time-limit` is reached.
+A persistent runner ignores the idle timeout while the workflow still has unfinished jobs with its
+label (or unlabeled jobs, for a runner with no `--label`). Once none remain it exits like any other
+runner. It also exits when the workflow is complete or canceled, or when its `--end-time` or
+`--time-limit` is reached.
 
 ## Label Dynamically Spawned Jobs
 
@@ -99,14 +101,20 @@ See [Dynamic Jobs](../tutorials/dynamic-jobs.md) for the orchestrator pattern.
 ```console
 torc jobs get <job_id>
 torc jobs update <job_id> --label windows
+torc jobs update <job_id> --clear-label
 ```
 
-`torc jobs update` can set or replace a label but cannot remove one.
+`--clear-label` removes the label, so runners without `--label` claim the job. Through the API,
+update the job with an empty `label` to clear it.
+
+A label must be non-empty with no leading or trailing whitespace. Labels are matched exactly,
+including case.
 
 ## Things to Watch For
 
 - **A label that no runner uses strands the job.** It stays `ready` and the workflow never
   completes. Torc does not check that a runner exists for each label, so watch for typos.
-- **Slurm runners launched by Torc have no label.** Leave the jobs meant for them unlabeled.
-- **`torc watch --auto-schedule` does not consider labels.** It can request Slurm allocations for
-  ready labeled jobs that no Slurm runner will claim.
+- **Slurm runners launched by Torc have no label.** Leave the jobs meant for them unlabeled. Labeled
+  jobs are left out when Torc sizes Slurm allocations (`torc slurm generate`,
+  `torc slurm regenerate`, `torc watch --auto-schedule`).
+- **Parameters work in labels.** `label: "{os}"` expands along with the job name and command.

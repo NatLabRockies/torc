@@ -94,8 +94,8 @@ Run a workflow locally (create from spec file or stdin, or run existing workflow
 - `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
   Default: `false`
 - `--label <LABEL>` — Only claim jobs with this label. Without it, only unlabeled jobs are claimed
-- `--persistent` — Keep running while no jobs are available; exit only when the workflow is complete
-  or canceled (or the end time is reached)
+- `--persistent` — Ignore the idle timeout while the workflow still has unfinished jobs this runner
+  can claim (same label, or unlabeled when no --label is given)
 
 ## `torc submit`
 

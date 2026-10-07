@@ -38,6 +38,7 @@ use std::time::{Duration, Instant};
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::async_cli_command::AsyncCliCommand;
+use crate::client::commands::pagination::{JobListParams, paginate_jobs};
 use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
 use crate::client::resource_correction::format_duration_iso8601;
 use crate::client::resource_monitor::{ResourceMonitor, SystemMetricsSummary};
@@ -560,8 +561,8 @@ pub struct JobRunner {
     /// only a local completion can move an action toward its trigger threshold
     /// from this node, so the grace window is measured from that event.
     last_completion_time: Option<Instant>,
-    /// When true, never exit for lack of claimable jobs; run until the
-    /// workflow is complete or canceled (or `end_time` is reached).
+    /// When true, ignore the idle timeout while the workflow still has
+    /// unfinished jobs with this runner's label.
     persistent: bool,
     /// Actions this runner has already executed in this process. Persistent
     /// actions keep `executed = 0` on the server so every worker gets a turn,
@@ -881,6 +882,38 @@ impl JobRunner {
         }
     }
 
+    /// Keep the runner alive past `compute_node_wait_for_new_jobs_seconds` for as
+    /// long as the workflow has unfinished jobs with this runner's label.
+    pub fn set_persistent(&mut self, persistent: bool) {
+        self.persistent = persistent;
+    }
+
+    /// Whether the workflow still has jobs this runner could claim, now or later:
+    /// jobs with its label (or unlabeled, when it has none) that are not finished.
+    /// Errs on the side of `true` so a persistent runner never exits on a failed check.
+    // ponytail: lists every job in the workflow once per idle window; add a
+    // server-side label filter to list_jobs if that gets slow on huge workflows.
+    fn has_unfinished_jobs_for_label(&self) -> bool {
+        if self.offline {
+            return true;
+        }
+        match paginate_jobs(&self.config, self.workflow_id, JobListParams::new()) {
+            Ok(jobs) => jobs.iter().any(|job| {
+                job.label == self.resources.label
+                    && !job
+                        .status
+                        .is_some_and(|s| s.is_complete() || s == JobStatus::Disabled)
+            }),
+            Err(e) => {
+                warn!(
+                    "Failed to list jobs for persistent runner check workflow_id={}: {}",
+                    self.workflow_id, e
+                );
+                true
+            }
+        }
+    }
+
     /// Override the claim-backoff cap loaded from config, e.g. from a CLI flag.
     ///
     /// `None` leaves the value loaded from `client.run.claim_backoff_max_secs`
@@ -890,12 +923,6 @@ impl JobRunner {
     /// `Duration::from_secs_f64` from panicking later — CLI parsing already
     /// rejects these, this is a defense-in-depth guard for config-sourced
     /// values that bypass the CLI parser.
-    /// Keep the runner alive while idle instead of exiting after
-    /// `compute_node_wait_for_new_jobs_seconds` without a claimed job.
-    pub fn set_persistent(&mut self, persistent: bool) {
-        self.persistent = persistent;
-    }
-
     pub fn override_claim_backoff_max_secs(&mut self, secs: Option<f64>) {
         if let Some(s) = secs
             && s.is_finite()
@@ -1348,9 +1375,7 @@ impl JobRunner {
             }
 
             // Check if we should exit due to no new jobs being claimed for too long
-            if !self.persistent
-                && self.rules.compute_node_wait_for_new_jobs_seconds > 0
-                && self.running_jobs.is_empty()
+            if self.rules.compute_node_wait_for_new_jobs_seconds > 0 && self.running_jobs.is_empty()
             {
                 // Initialize the time if this is the first check
                 if self.last_job_claimed_time.is_none() {
@@ -1365,6 +1390,12 @@ impl JobRunner {
                     .unwrap_or(0);
 
                 if idle_seconds >= self.rules.compute_node_wait_for_new_jobs_seconds {
+                    // A persistent runner outlives the idle limit while jobs with its
+                    // label remain; once none do, it exits like any other runner.
+                    if self.persistent && self.has_unfinished_jobs_for_label() {
+                        self.last_job_claimed_time = Some(Instant::now());
+                        continue;
+                    }
                     // Before exiting, check for actions we could still execute.
                     // Actions like schedule_nodes might add more compute capacity.
                     // A triggered action is ready to run now, so wait for it. An

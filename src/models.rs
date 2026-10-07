@@ -1704,6 +1704,19 @@ impl std::str::FromStr for JobStatus {
     }
 }
 
+/// Validate a routing label: non-empty with no leading or trailing whitespace.
+/// Labels are matched exactly, so a stray space would silently strand the job.
+/// Doubles as a clap `value_parser` for `--label`.
+pub fn parse_label(label: &str) -> Result<String, String> {
+    if label.is_empty() || label.trim() != label {
+        return Err(format!(
+            "label must be non-empty with no leading or trailing whitespace, got {:?}",
+            label
+        ));
+    }
+    Ok(label.to_string())
+}
+
 impl JobStatus {
     pub fn is_terminal(&self) -> bool {
         matches!(

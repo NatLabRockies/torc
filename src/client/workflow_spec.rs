@@ -844,6 +844,10 @@ impl JobSpec {
                 new_spec.scheduler = Some(substitute_parameters(sched_name, &combo));
             }
 
+            if let Some(ref label) = self.label {
+                new_spec.label = Some(substitute_parameters(label, &combo));
+            }
+
             // Substitute parameters in name vectors
             if let Some(ref names) = self.depends_on {
                 new_spec.depends_on = Some(

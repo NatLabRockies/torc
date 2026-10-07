@@ -284,10 +284,10 @@ SEE ALSO:
         #[arg(long, default_value = "false")]
         skip_checks: bool,
         /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
-        #[arg(long)]
+        #[arg(long, value_parser = crate::models::parse_label)]
         label: Option<String>,
-        /// Keep running while no jobs are available; exit only when the workflow
-        /// is complete or canceled (or the end time is reached).
+        /// Ignore the idle timeout while the workflow still has unfinished jobs this
+        /// runner can claim (same label, or unlabeled when no --label is given).
         #[arg(long)]
         persistent: bool,
     },

@@ -86,10 +86,10 @@ pub struct Args {
     #[arg(long)]
     pub scheduler_config_id: Option<i64>,
     /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
-    #[arg(long)]
+    #[arg(long, value_parser = crate::models::parse_label)]
     pub label: Option<String>,
-    /// Keep running while no jobs are available; exit only when the workflow
-    /// is complete or canceled (or the end time is reached).
+    /// Ignore the idle timeout while the workflow still has unfinished jobs this
+    /// runner can claim (same label, or unlabeled when no --label is given).
     #[arg(long)]
     pub persistent: bool,
     /// Log prefix

@@ -1264,6 +1264,11 @@ where
                 )),
             ));
         }
+        if let Some(Err(err)) = job.label.as_deref().map(models::parse_label) {
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!("{} for job '{}'", err, job.name)),
+            ));
+        }
         if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(err.0),
@@ -1543,6 +1548,12 @@ where
                         "priority must be >= 0, got {} for job '{}'",
                         priority, job.name
                     )),
+                ));
+            }
+            if let Some(Err(err)) = job.label.as_deref().map(models::parse_label) {
+                let _ = transaction.rollback().await;
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!("{} for job '{}'", err, job.name)),
                 ));
             }
             let status = JobStatus::Uninitialized;
@@ -2286,6 +2297,19 @@ where
             ));
         }
 
+        // An empty label clears the label (see the NULLIF below); anything else
+        // must be a valid label.
+        if let Some(Err(err)) = body
+            .label
+            .as_deref()
+            .filter(|l| !l.is_empty())
+            .map(models::parse_label)
+        {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(err),
+            ));
+        }
+
         let result = match sqlx::query(
             r#"
             UPDATE job
@@ -2299,7 +2323,7 @@ where
                 ,resource_requirements_id = COALESCE(?, resource_requirements_id)
                 ,scheduler_id = COALESCE(?, scheduler_id)
                 ,priority = COALESCE(?, priority)
-                ,label = COALESCE(?, label)
+                ,label = NULLIF(COALESCE(?, label), '')
             WHERE id = ?
         "#,
         )

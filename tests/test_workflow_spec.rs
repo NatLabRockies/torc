@@ -2741,6 +2741,32 @@ fn test_parameters_file_csv_expands_jobs() {
     assert!(names.contains(&"train_vit_bs16"));
 }
 
+/// `label` takes parameter substitution like `name` and `command`; a literal `{os}` label
+/// would match no runner and strand every expanded job.
+#[test]
+fn test_job_label_parameter_substitution() {
+    let workflow_data = serde_json::json!({
+        "name": "label_param_test",
+        "user": "test_user",
+        "jobs": [
+            {
+                "name": "build_{os}",
+                "command": "echo {os}",
+                "label": "{os}",
+                "parameters": {"os": ["windows", "linux"]},
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    spec.expand_parameters().expect("expand_parameters failed");
+
+    let mut labels: Vec<_> = spec.jobs.iter().map(|j| j.label.as_deref()).collect();
+    labels.sort();
+    assert_eq!(labels, [Some("linux"), Some("windows")]);
+}
+
 /// A job with `parameters_file` pointing at a JSON array expands to one job per object,
 /// preserving native numeric types (so float format specifiers like {lr:.4f} work).
 #[test]

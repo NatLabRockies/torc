@@ -123,6 +123,9 @@ fn validate_spawn_request_shape(jobs: &[models::SpawnJobModel]) -> Result<(), Sp
                 job.name, p
             )));
         }
+        if let Some(Err(err)) = job.label.as_deref().map(models::parse_label) {
+            return Err(reject(format!("spawn job '{}': {}", job.name, err)));
+        }
     }
     Ok(())
 }
