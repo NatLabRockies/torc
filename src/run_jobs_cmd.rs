@@ -300,6 +300,7 @@ pub fn run(args: &Args) -> WorkerResult {
         None,
     );
     compute_node_model.is_active = Some(true);
+    compute_node_model.label.clone_from(&args.label);
 
     let compute_node =
         match apis::compute_nodes_api::create_compute_node(&config, compute_node_model) {

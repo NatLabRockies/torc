@@ -81,6 +81,18 @@ label (or unlabeled jobs, for a runner with no `--label`). Once none remain it e
 runner. It also exits when the workflow is complete or canceled, or when its `--end-time` or
 `--time-limit` is reached.
 
+## See Which Runners Serve Which Labels
+
+Each runner records the label it was started with on its compute node:
+
+```console
+torc compute-nodes list <workflow_id>
+```
+
+The `Label` column is empty for runners that claim unlabeled jobs. Compare it with the labels on
+your jobs (`torc jobs list <workflow_id> -f json` includes `label` for labeled jobs) to spot a label
+that no active runner serves.
+
 ## Label Dynamically Spawned Jobs
 
 Jobs added at runtime by an orchestrator accept the same field. With the Python client:

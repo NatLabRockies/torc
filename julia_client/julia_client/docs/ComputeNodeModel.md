@@ -12,6 +12,7 @@ Name | Type | Description | Notes
 **hostname** | **String** |  | [default to nothing]
 **id** | **Int64** |  | [optional] [default to nothing]
 **is_active** | **Bool** |  | [optional] [default to nothing]
+**label** | **String** | Label the runner was started with; it claims only jobs with this label (or only unlabeled jobs, when unset). | [optional] [default to nothing]
 **memory_gb** | **Float64** |  | [default to nothing]
 **num_cpus** | **Int64** |  | [default to nothing]
 **num_gpus** | **Int64** |  | [default to nothing]

@@ -5945,6 +5945,13 @@ components:
           type:
           - boolean
           - 'null'
+        label:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Label the runner was started with; it claims only jobs with this label
+            (or only unlabeled jobs, when unset).
         memory_gb:
           type: number
           format: double

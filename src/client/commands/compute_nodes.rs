@@ -21,6 +21,8 @@ struct ComputeNodeTableRow {
     scheduler_type: String,
     #[tabled(rename = "Scheduler Job ID")]
     scheduler_job_id: String,
+    #[tabled(rename = "Label")]
+    label: String,
     #[tabled(rename = "PID")]
     pid: i64,
     #[tabled(rename = "CPUs")]
@@ -59,6 +61,7 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
             hostname: node.hostname.clone(),
             scheduler_type: node.compute_node_type.clone(),
             scheduler_job_id: format_scheduler_job_id(node),
+            label: node.label.clone().unwrap_or_default(),
             pid: node.pid,
             num_cpus: node.num_cpus,
             memory_gb: format!("{:.2}", node.memory_gb),

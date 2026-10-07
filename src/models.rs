@@ -131,6 +131,10 @@ pub struct ComputeNodeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_config_id: Option<i64>,
     pub compute_node_type: String,
+    /// Label the runner was started with; it claims only jobs with this label
+    /// (or only unlabeled jobs, when unset).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1456,6 +1460,7 @@ impl ComputeNodeModel {
             time_limit: None,
             scheduler_config_id: None,
             compute_node_type,
+            label: None,
             scheduler,
             sample_count: None,
             peak_cpu_percent: None,
@@ -2674,6 +2679,7 @@ mod tests {
             time_limit: Some("PT1H".into()),
             scheduler_config_id: Some(3),
             compute_node_type: "local".into(),
+            label: None,
             scheduler: Some(json!({"kind": "local"})),
             sample_count: Some(2),
             peak_cpu_percent: Some(50.0),

@@ -204,6 +204,23 @@ fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProc
     let status = |id| apis::jobs_api::get_job(config, id).unwrap().status;
     assert_eq!(status(ids[0]), Some(models::JobStatus::Ready));
     assert_eq!(status(ids[1]), Some(models::JobStatus::Completed));
+
+    // The runner's compute node records the label it was started with.
+    let nodes = apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list compute nodes")
+    .items;
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].label.as_deref(), Some("windows"));
 }
 
 /// An unlabeled runner and a persistent labeled runner share one workflow. The labeled job
