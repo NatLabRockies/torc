@@ -1053,6 +1053,7 @@ fn main() {
             ai_agent,
             partition,
             walltime,
+            persistent,
         } => {
             let args = WatchArgs {
                 workflow_id: *workflow_id,
@@ -1074,6 +1075,7 @@ fn main() {
                 ai_agent: ai_agent.clone(),
                 partition: partition.clone(),
                 walltime: walltime.clone(),
+                persistent: *persistent,
             };
             run_watch(&config, &args);
         }

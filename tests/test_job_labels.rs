@@ -1,7 +1,8 @@
 mod common;
 
 use common::{
-    ServerProcess, create_test_resource_requirements, run_jobs_cli_command, start_server,
+    ServerProcess, create_test_resource_requirements, run_cli_command, run_jobs_cli_command,
+    start_server,
 };
 use rstest::rstest;
 use std::collections::HashSet;
@@ -121,6 +122,12 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
     };
     assert_eq!(unserved().get("windows"), Some(&2));
     assert_eq!(unserved().len(), 1);
+    let labeled_ready = || {
+        apis::workflows_api::get_workflow_status(config, workflow_id)
+            .expect("Failed to get workflow status")
+            .labeled_ready_jobs
+    };
+    assert_eq!(labeled_ready(), 2);
 
     let mut node = models::ComputeNodeModel::new(
         workflow_id,
@@ -139,6 +146,8 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
     apis::compute_nodes_api::create_compute_node(config, node)
         .expect("Failed to create compute node");
     assert!(unserved().is_empty());
+    // Served labeled jobs still count as labeled: Slurm runners never claim them.
+    assert_eq!(labeled_ready(), 2);
 }
 
 #[rstest]
@@ -323,4 +332,79 @@ fn test_persistent_labeled_runner_waits_for_its_job(start_server: &ServerProcess
         let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
         assert_eq!(job.status, Some(models::JobStatus::Completed));
     }
+}
+
+/// `torc watch --persistent` keeps watching a workflow that has no Slurm allocations
+/// while a labeled runner works, and returns once the workflow completes. Without the
+/// flag, watch refuses to start (or gives up) when it sees no allocations.
+#[rstest]
+fn test_watch_persistent_waits_for_labeled_runner(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let mut workflow =
+        models::WorkflowModel::new("label_watch".to_string(), "test_user".to_string());
+    workflow.compute_node_wait_for_new_jobs_seconds = Some(1);
+    let workflow_id = apis::workflows_api::create_workflow(config, workflow)
+        .expect("Failed to create workflow")
+        .id
+        .unwrap();
+    let rr = create_test_resource_requirements(config, workflow_id, "small", 1, 0, 1, "1g", "PT1M");
+    let mut job = models::JobModel::new(workflow_id, "windows".to_string(), "sleep 6".to_string());
+    job.resource_requirements_id = rr.id;
+    job.label = Some("windows".to_string());
+    let job_id = apis::jobs_api::create_job(config, job)
+        .expect("Failed to create job")
+        .id
+        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let output_dir = temp_dir.path().to_str().unwrap();
+    let workflow_id_str = workflow_id.to_string();
+
+    assert!(
+        run_cli_command(
+            &["watch", &workflow_id_str, "-o", output_dir, "-p", "1"],
+            start_server,
+            None
+        )
+        .is_err(),
+        "watch without --persistent should refuse a workflow with no allocations"
+    );
+
+    std::thread::scope(|scope| {
+        let runner = scope.spawn(|| {
+            run_jobs_cli_command(
+                &[
+                    &workflow_id_str,
+                    "--output-dir",
+                    output_dir,
+                    "--poll-interval",
+                    "0.2",
+                    "--label",
+                    "windows",
+                ],
+                start_server,
+            )
+            .map_err(|e| e.to_string())
+        });
+        run_cli_command(
+            &[
+                "watch",
+                &workflow_id_str,
+                "-o",
+                output_dir,
+                "-p",
+                "1",
+                "--persistent",
+            ],
+            start_server,
+            None,
+        )
+        .expect("watch --persistent failed");
+        runner.join().unwrap().expect("Labeled runner failed");
+    });
+
+    let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
+    assert_eq!(job.status, Some(models::JobStatus::Completed));
 }

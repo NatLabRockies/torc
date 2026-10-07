@@ -32,6 +32,7 @@ class WorkflowStatusResponse(BaseModel):
     is_canceled: StrictBool
     is_complete: StrictBool
     jobs_by_status: JobStatusCounts
+    labeled_ready_jobs: Optional[StrictInt] = Field(default=None, description="Ready jobs that carry a label. Slurm runners launched by Torc never claim these, so auto-scheduling leaves them out.")
     longest_ready_runtime_seconds: Optional[StrictInt] = Field(default=None, description="Longest required runtime (seconds) among ready jobs. Only populated when some ready jobs are runtime-blocked.")
     max_allocation_remaining_seconds: Optional[StrictInt] = Field(default=None, description="Greatest remaining walltime (seconds) across active walltime-bounded allocations. None when no active allocation reports an end time.")
     pending_scheduled_nodes: StrictInt
@@ -43,7 +44,7 @@ class WorkflowStatusResponse(BaseModel):
     workflow_id: StrictInt
     workflow_name: StrictStr
     workflow_user: StrictStr
-    __properties: ClassVar[List[str]] = ["active_compute_nodes", "active_scheduled_nodes", "is_canceled", "is_complete", "jobs_by_status", "longest_ready_runtime_seconds", "max_allocation_remaining_seconds", "pending_scheduled_nodes", "runtime_blocked_ready_jobs", "total_exec_time_minutes", "total_jobs", "unserved_ready_labels", "walltime_seconds", "workflow_id", "workflow_name", "workflow_user"]
+    __properties: ClassVar[List[str]] = ["active_compute_nodes", "active_scheduled_nodes", "is_canceled", "is_complete", "jobs_by_status", "labeled_ready_jobs", "longest_ready_runtime_seconds", "max_allocation_remaining_seconds", "pending_scheduled_nodes", "runtime_blocked_ready_jobs", "total_exec_time_minutes", "total_jobs", "unserved_ready_labels", "walltime_seconds", "workflow_id", "workflow_name", "workflow_user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -119,6 +120,7 @@ class WorkflowStatusResponse(BaseModel):
             "is_canceled": obj.get("is_canceled"),
             "is_complete": obj.get("is_complete"),
             "jobs_by_status": JobStatusCounts.from_dict(obj["jobs_by_status"]) if obj.get("jobs_by_status") is not None else None,
+            "labeled_ready_jobs": obj.get("labeled_ready_jobs"),
             "longest_ready_runtime_seconds": obj.get("longest_ready_runtime_seconds"),
             "max_allocation_remaining_seconds": obj.get("max_allocation_remaining_seconds"),
             "pending_scheduled_nodes": obj.get("pending_scheduled_nodes"),

@@ -8318,6 +8318,12 @@ components:
           type: boolean
         jobs_by_status:
           $ref: '#/components/schemas/JobStatusCounts'
+        labeled_ready_jobs:
+          type: integer
+          format: int64
+          description: |-
+            Ready jobs that carry a label. Slurm runners launched by Torc never claim
+            these, so auto-scheduling leaves them out.
         longest_ready_runtime_seconds:
           type:
           - integer

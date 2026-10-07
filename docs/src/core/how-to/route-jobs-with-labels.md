@@ -98,6 +98,19 @@ with, and `-f json` reports the counts per label in `unserved_ready_labels`:
 ⚠ 2 ready job(s) with label 'windows' but no active runner has that label
 ```
 
+## Watch a Workflow That Mixes Slurm and Labeled Runners
+
+`torc watch` normally exits when there are no Slurm allocations and no ready jobs, because nothing
+it manages can make progress. That is wrong while a labeled runner on another machine is still
+working. Add `--persistent` so it waits for the workflow to complete:
+
+```console
+torc watch <workflow_id> --persistent --auto-schedule
+```
+
+With `--auto-schedule`, watch submits new Slurm allocations when the labeled work finishes and
+unblocks unlabeled jobs. Labeled ready jobs never trigger auto-scheduling.
+
 ## Label Dynamically Spawned Jobs
 
 Jobs added at runtime by an orchestrator accept the same field. With the Python client:

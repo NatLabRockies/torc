@@ -1501,12 +1501,14 @@ where
         // one appears. Pending Slurm allocations are ignored; their runners are
         // always unlabeled.
         let mut unserved_ready_labels = std::collections::BTreeMap::new();
+        let mut labeled_ready_jobs: i64 = 0;
         if counts.ready > 0 {
             let rows = sqlx::query(
-                "SELECT label, COUNT(*) AS cnt FROM job \
+                "SELECT label, COUNT(*) AS cnt, \
+                 label IN (SELECT label FROM compute_node \
+                     WHERE workflow_id = ?1 AND is_active = 1 AND label IS NOT NULL) AS served \
+                 FROM job \
                  WHERE workflow_id = ?1 AND status = ?2 AND label IS NOT NULL \
-                 AND label NOT IN (SELECT label FROM compute_node \
-                     WHERE workflow_id = ?1 AND is_active = 1 AND label IS NOT NULL) \
                  GROUP BY label",
             )
             .bind(id)
@@ -1515,7 +1517,11 @@ where
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to count unserved labeled jobs"))?;
             for row in &rows {
-                unserved_ready_labels.insert(row.get::<String, _>("label"), row.get("cnt"));
+                let cnt: i64 = row.get("cnt");
+                labeled_ready_jobs += cnt;
+                if !row.get::<bool, _>("served") {
+                    unserved_ready_labels.insert(row.get::<String, _>("label"), cnt);
+                }
             }
         }
 
@@ -1537,6 +1543,7 @@ where
                 longest_ready_runtime_seconds,
                 max_allocation_remaining_seconds,
                 unserved_ready_labels,
+                labeled_ready_jobs,
             },
         ))
     }

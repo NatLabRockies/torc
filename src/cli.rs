@@ -619,6 +619,15 @@ SEE ALSO:
         #[arg(short, long)]
         show_job_counts: bool,
 
+        /// Keep watching until the workflow completes
+        ///
+        /// By default, watch exits when there are no Slurm allocations and no ready
+        /// jobs, because nothing it manages can make progress. Use this when runners
+        /// outside Slurm are still working, such as a `torc run --label` runner on a
+        /// dedicated machine.
+        #[arg(long)]
+        persistent: bool,
+
         /// Automatically schedule new compute nodes when needed
         ///
         /// When enabled, the watch command will automatically regenerate and submit

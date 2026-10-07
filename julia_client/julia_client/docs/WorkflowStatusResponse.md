@@ -9,6 +9,7 @@ Name | Type | Description | Notes
 **is_canceled** | **Bool** |  | [default to nothing]
 **is_complete** | **Bool** |  | [default to nothing]
 **jobs_by_status** | [***JobStatusCounts**](JobStatusCounts.md) |  | [default to nothing]
+**labeled_ready_jobs** | **Int64** | Ready jobs that carry a label. Slurm runners launched by Torc never claim these, so auto-scheduling leaves them out. | [optional] [default to nothing]
 **longest_ready_runtime_seconds** | **Int64** | Longest required runtime (seconds) among ready jobs. Only populated when some ready jobs are runtime-blocked. | [optional] [default to nothing]
 **max_allocation_remaining_seconds** | **Int64** | Greatest remaining walltime (seconds) across active walltime-bounded allocations. None when no active allocation reports an end time. | [optional] [default to nothing]
 **pending_scheduled_nodes** | **Int64** |  | [default to nothing]

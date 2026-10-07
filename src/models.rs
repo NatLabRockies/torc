@@ -2541,6 +2541,10 @@ pub struct WorkflowStatusResponse {
     /// These jobs stay ready until a runner is started with a matching `--label`.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub unserved_ready_labels: std::collections::BTreeMap<String, i64>,
+    /// Ready jobs that carry a label. Slurm runners launched by Torc never claim
+    /// these, so auto-scheduling leaves them out.
+    #[serde(default)]
+    pub labeled_ready_jobs: i64,
 }
 
 /// One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given

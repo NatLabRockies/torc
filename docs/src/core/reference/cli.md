@@ -197,6 +197,15 @@ resource requirements, and resubmits jobs.
    that rely on either mechanism, since deferred `schedule_nodes` actions only account for the
    originally-declared workload.
 
+4. **With runners outside Slurm** (`--persistent`):
+
+   ```bash
+   torc watch 123 --persistent
+   ```
+
+   Keeps watching until the workflow completes, even when there are no Slurm allocations and no
+   ready jobs. Use it when a `torc run --label` runner on a dedicated machine is still working.
+
 ### Arguments
 
 - `<WORKFLOW_ID>` — Workflow ID to watch
@@ -209,6 +218,7 @@ resource requirements, and resubmits jobs.
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for job files. Default: `output`
 - `-s`, `--show-job-counts` — Show job counts by status during polling. WARNING: Can cause high
   server load for large workflows.
+- `--persistent` — Keep watching until the workflow completes, even with no Slurm allocations
 
 **Recovery:**
 
