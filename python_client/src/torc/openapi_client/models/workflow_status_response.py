@@ -38,11 +38,12 @@ class WorkflowStatusResponse(BaseModel):
     runtime_blocked_ready_jobs: StrictInt = Field(description="Ready jobs whose required runtime exceeds the remaining walltime of every active allocation, so they cannot start until a fresh allocation appears. 0 when there are no walltime-bounded allocations. See `torc workflows diagnose`.")
     total_exec_time_minutes: Union[StrictFloat, StrictInt]
     total_jobs: StrictInt
+    unserved_ready_labels: Optional[Dict[str, StrictInt]] = Field(default=None, description="Ready-job count per label that no active compute node was started with. These jobs stay ready until a runner is started with a matching `--label`.")
     walltime_seconds: Optional[Union[StrictFloat, StrictInt]] = None
     workflow_id: StrictInt
     workflow_name: StrictStr
     workflow_user: StrictStr
-    __properties: ClassVar[List[str]] = ["active_compute_nodes", "active_scheduled_nodes", "is_canceled", "is_complete", "jobs_by_status", "longest_ready_runtime_seconds", "max_allocation_remaining_seconds", "pending_scheduled_nodes", "runtime_blocked_ready_jobs", "total_exec_time_minutes", "total_jobs", "walltime_seconds", "workflow_id", "workflow_name", "workflow_user"]
+    __properties: ClassVar[List[str]] = ["active_compute_nodes", "active_scheduled_nodes", "is_canceled", "is_complete", "jobs_by_status", "longest_ready_runtime_seconds", "max_allocation_remaining_seconds", "pending_scheduled_nodes", "runtime_blocked_ready_jobs", "total_exec_time_minutes", "total_jobs", "unserved_ready_labels", "walltime_seconds", "workflow_id", "workflow_name", "workflow_user"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -124,6 +125,7 @@ class WorkflowStatusResponse(BaseModel):
             "runtime_blocked_ready_jobs": obj.get("runtime_blocked_ready_jobs"),
             "total_exec_time_minutes": obj.get("total_exec_time_minutes"),
             "total_jobs": obj.get("total_jobs"),
+            "unserved_ready_labels": obj.get("unserved_ready_labels"),
             "walltime_seconds": obj.get("walltime_seconds"),
             "workflow_id": obj.get("workflow_id"),
             "workflow_name": obj.get("workflow_name"),

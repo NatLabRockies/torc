@@ -155,6 +155,7 @@ pub trait JobsApi<C> {
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -188,6 +189,7 @@ pub trait JobsApi<C> {
         &self,
         id: i64,
         requested_job_count: i64,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 
@@ -406,7 +408,7 @@ impl JobsApiImpl {
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id, priority, origin,
+                       failure_handler_id, attempt_id, priority, origin, label,
                        start_time, compute_node_id
                 FROM job
                 WHERE id = ?
@@ -584,6 +586,7 @@ impl JobsApiImpl {
             attempt_id: record.try_get("attempt_id").ok(),
             priority: record.try_get("priority").ok(),
             origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
+            label: record.try_get::<Option<String>, _>("label").ok().flatten(),
         })
     }
 
@@ -1262,6 +1265,11 @@ where
                 )),
             ));
         }
+        if let Err(err) = models::validate_label(job.label.as_deref()) {
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!("{} for job '{}'", err, job.name)),
+            ));
+        }
         if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(err.0),
@@ -1303,9 +1311,10 @@ where
                 status,
                 scheduler_id,
                 failure_handler_id,
-                priority
+                priority,
+                label
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -1321,6 +1330,7 @@ where
         .bind(job.scheduler_id)
         .bind(job.failure_handler_id)
         .bind(priority)
+        .bind(&job.label)
         .fetch_one(&mut *tx)
         .await
         {
@@ -1541,6 +1551,12 @@ where
                     )),
                 ));
             }
+            if let Err(err) = models::validate_label(job.label.as_deref()) {
+                let _ = transaction.rollback().await;
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!("{} for job '{}'", err, job.name)),
+                ));
+            }
             let status = JobStatus::Uninitialized;
             let status_int = status.to_int();
             job.status = Some(status);
@@ -1570,7 +1586,7 @@ where
                 "INSERT INTO job (\
                     workflow_id, name, command, cancel_on_blocking_job_failure, \
                     supports_termination, resource_requirements_id, invocation_script, \
-                    env, status, scheduler_id, failure_handler_id, priority\
+                    env, status, scheduler_id, failure_handler_id, priority, label\
                 ) ",
             );
             qb.push_values(chunk, |mut row, prep| {
@@ -1585,7 +1601,8 @@ where
                     .push_bind(prep.status_int)
                     .push_bind(prep.job.scheduler_id)
                     .push_bind(prep.job.failure_handler_id)
-                    .push_bind(prep.priority);
+                    .push_bind(prep.priority)
+                    .push_bind(prep.job.label.as_deref());
             });
             qb.push(" RETURNING id, name");
             let rows = match qb.build().fetch_all(&mut *transaction).await {
@@ -1854,10 +1871,11 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -1871,11 +1889,12 @@ where
             origin_is_set,
             name,
             command,
+            label,
             context.get().0.clone()
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, start_time, compute_node_id FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, label, start_time, compute_node_id FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1923,6 +1942,11 @@ where
         if command.is_some() {
             where_conditions.push("command LIKE ? ESCAPE '\\'".to_string());
         }
+        // Exact label match; an empty filter binds NULL and matches unlabeled jobs.
+        let label_filter = label.as_deref().map(|l| Some(l).filter(|l| !l.is_empty()));
+        if label_filter.is_some() {
+            where_conditions.push("label IS ?".to_string());
+        }
 
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
@@ -1968,6 +1992,9 @@ where
         }
         if let Some(ref c) = command {
             sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
+        }
+        if let Some(l) = label_filter {
+            sqlx_query = sqlx_query.bind(l);
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -2034,6 +2061,7 @@ where
                     attempt_id: record.try_get("attempt_id").ok(),
                     priority: record.try_get("priority").ok(),
                     origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
+                    label: record.try_get::<Option<String>, _>("label").ok().flatten(),
                 });
             }
         }
@@ -2062,6 +2090,9 @@ where
         }
         if let Some(ref c) = command {
             count_sqlx_query = count_sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
+        }
+        if let Some(l) = label_filter {
+            count_sqlx_query = count_sqlx_query.bind(l);
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
@@ -2280,6 +2311,14 @@ where
             ));
         }
 
+        // An empty label clears the label (see the NULLIF below); anything else
+        // must be a valid label.
+        if let Err(err) = models::validate_label(body.label.as_deref().filter(|l| !l.is_empty())) {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(err),
+            ));
+        }
+
         let result = match sqlx::query(
             r#"
             UPDATE job
@@ -2293,6 +2332,7 @@ where
                 ,resource_requirements_id = COALESCE(?, resource_requirements_id)
                 ,scheduler_id = COALESCE(?, scheduler_id)
                 ,priority = COALESCE(?, priority)
+                ,label = NULLIF(COALESCE(?, label), '')
             WHERE id = ?
         "#,
         )
@@ -2305,6 +2345,7 @@ where
         .bind(body.resource_requirements_id)
         .bind(body.scheduler_id)
         .bind(body.priority)
+        .bind(body.label)
         .bind(id)
         .execute(self.context.pool.as_ref())
         .await
@@ -2429,6 +2470,7 @@ where
         &self,
         id: i64,
         requested_job_count: i64,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
@@ -2486,16 +2528,19 @@ where
                 resource_requirements_id,
                 failure_handler_id,
                 attempt_id,
-                priority
+                priority,
+                origin,
+                label
             FROM job
-            WHERE workflow_id = $1 AND status = $2
+            WHERE workflow_id = $1 AND status = $2 AND label IS $3
             ORDER BY priority DESC, id ASC
-            LIMIT $3
+            LIMIT $4
             "#;
 
         let rows = match sqlx::query(query)
             .bind(id)
             .bind(ready_status)
+            .bind(label)
             .bind(requested_job_count)
             .fetch_all(&mut *conn)
             .await
@@ -2545,6 +2590,7 @@ where
                 attempt_id: row.get("attempt_id"),
                 priority: row.try_get("priority").ok(),
                 origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
+                label: row.try_get::<Option<String>, _>("label").ok().flatten(),
             };
 
             selected_jobs.push(job);
@@ -2955,7 +3001,7 @@ where
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
-                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin,
+                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin, j.label,
                    w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
@@ -3152,6 +3198,7 @@ where
             // previously-spawned row keeps origin='spawn'; a fresh retry of
             // a statically-declared job becomes 'retry'.
             origin: Some(existing_origin.unwrap_or_else(|| "retry".to_string())),
+            label: job_record.try_get("label").ok().flatten(),
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

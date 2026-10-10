@@ -1861,7 +1861,7 @@ fn test_get_running_jobs(start_server: &ServerProcess) {
     let compute_node_id = compute_node.id.unwrap();
 
     // Move the job to Running on that node.
-    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1)).expect("claim job");
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None).expect("claim job");
     apis::jobs_api::start_job(config, job_id, run_id, compute_node_id).expect("start job");
 
     let response = apis::workflows_api::get_running_jobs(config, workflow_id, None, None)

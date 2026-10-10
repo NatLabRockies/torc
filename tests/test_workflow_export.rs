@@ -189,6 +189,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list imported jobs");
     let imported_jobs = jobs_response.items;
@@ -625,6 +626,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs 1")
     .items;
@@ -644,6 +646,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs 2")
     .items;
@@ -797,6 +800,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list imported jobs");
     let imported_jobs = jobs_response.items;

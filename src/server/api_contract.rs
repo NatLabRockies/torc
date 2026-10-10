@@ -537,6 +537,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -946,6 +947,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         limit: Option<i64>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 

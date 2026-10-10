@@ -9,6 +9,7 @@ One job to add atomically as part of &#x60;spawn_jobs&#x60;.  &#x60;depends_on&#
         cancel_on_blocking_job_failure=nothing,
         command=nothing,
         depends_on=nothing,
+        label=nothing,
         name=nothing,
         priority=nothing,
         resource_requirements=nothing,
@@ -17,6 +18,7 @@ One job to add atomically as part of &#x60;spawn_jobs&#x60;.  &#x60;depends_on&#
     - cancel_on_blocking_job_failure::Bool
     - command::String
     - depends_on::Vector{String} : Job names this job depends on (existing jobs or siblings in this batch).
+    - label::String : Routing label; only runners started with the same label claim this job.
     - name::String
     - priority::Int64
     - resource_requirements::String : Name of an existing resource_requirements record in the workflow.
@@ -25,18 +27,19 @@ Base.@kwdef mutable struct SpawnJobModel <: OpenAPI.APIModel
     cancel_on_blocking_job_failure::Union{Nothing, Bool} = nothing
     command::Union{Nothing, String} = nothing
     depends_on::Union{Nothing, Vector{String}} = nothing
+    label::Union{Nothing, String} = nothing
     name::Union{Nothing, String} = nothing
     priority::Union{Nothing, Int64} = nothing
     resource_requirements::Union{Nothing, String} = nothing
 
-    function SpawnJobModel(cancel_on_blocking_job_failure, command, depends_on, name, priority, resource_requirements, )
-        o = new(cancel_on_blocking_job_failure, command, depends_on, name, priority, resource_requirements, )
+    function SpawnJobModel(cancel_on_blocking_job_failure, command, depends_on, label, name, priority, resource_requirements, )
+        o = new(cancel_on_blocking_job_failure, command, depends_on, label, name, priority, resource_requirements, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type SpawnJobModel
 
-const _property_types_SpawnJobModel = Dict{Symbol,String}(Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("command")=>"String", Symbol("depends_on")=>"Vector{String}", Symbol("name")=>"String", Symbol("priority")=>"Int64", Symbol("resource_requirements")=>"String", )
+const _property_types_SpawnJobModel = Dict{Symbol,String}(Symbol("cancel_on_blocking_job_failure")=>"Bool", Symbol("command")=>"String", Symbol("depends_on")=>"Vector{String}", Symbol("label")=>"String", Symbol("name")=>"String", Symbol("priority")=>"Int64", Symbol("resource_requirements")=>"String", )
 OpenAPI.property_type(::Type{ SpawnJobModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_SpawnJobModel[name]))}
 
 function OpenAPI.check_required(o::SpawnJobModel)
@@ -49,12 +52,14 @@ function OpenAPI.validate_properties(o::SpawnJobModel)
     OpenAPI.validate_property(SpawnJobModel, Symbol("cancel_on_blocking_job_failure"), o.cancel_on_blocking_job_failure)
     OpenAPI.validate_property(SpawnJobModel, Symbol("command"), o.command)
     OpenAPI.validate_property(SpawnJobModel, Symbol("depends_on"), o.depends_on)
+    OpenAPI.validate_property(SpawnJobModel, Symbol("label"), o.label)
     OpenAPI.validate_property(SpawnJobModel, Symbol("name"), o.name)
     OpenAPI.validate_property(SpawnJobModel, Symbol("priority"), o.priority)
     OpenAPI.validate_property(SpawnJobModel, Symbol("resource_requirements"), o.resource_requirements)
 end
 
 function OpenAPI.validate_property(::Type{ SpawnJobModel }, name::Symbol, val)
+
 
 
 

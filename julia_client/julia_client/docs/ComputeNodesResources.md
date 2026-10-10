@@ -5,6 +5,7 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **id** | **Int64** |  | [optional] [default to nothing]
+**label** | **String** | Runner label; only jobs with an identical label (or none, when unset) are claimed. | [optional] [default to nothing]
 **memory_gb** | **Float64** |  | [default to nothing]
 **num_cpus** | **Int64** |  | [default to nothing]
 **num_gpus** | **Int64** |  | [default to nothing]

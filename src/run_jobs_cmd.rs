@@ -85,6 +85,13 @@ pub struct Args {
     /// Scheduler config ID
     #[arg(long)]
     pub scheduler_config_id: Option<i64>,
+    /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
+    #[arg(long, value_parser = crate::models::parse_label)]
+    pub label: Option<String>,
+    /// Ignore the idle timeout while the workflow still has unfinished jobs this
+    /// runner can claim (same label, or unlabeled when no --label is given).
+    #[arg(long)]
+    pub persistent: bool,
     /// Log prefix
     #[arg(long)]
     pub log_prefix: Option<String>,
@@ -276,6 +283,7 @@ pub fn run(args: &Args) -> WorkerResult {
         args.num_nodes.unwrap_or(1),
     );
     resources.time_limit.clone_from(&args.time_limit);
+    resources.label.clone_from(&args.label);
     let pid = 1; // TODO
     let unique_label = format!("wf{}_h{}_r{}", workflow_id, hostname, run_id);
 
@@ -292,6 +300,7 @@ pub fn run(args: &Args) -> WorkerResult {
         None,
     );
     compute_node_model.is_active = Some(true);
+    compute_node_model.label.clone_from(&args.label);
 
     let compute_node =
         match apis::compute_nodes_api::create_compute_node(&config, compute_node_model) {
@@ -321,6 +330,7 @@ pub fn run(args: &Args) -> WorkerResult {
         None, // No per-node tracking for local runner
     );
     job_runner.override_claim_backoff_max_secs(args.claim_backoff_max_secs);
+    job_runner.set_persistent(args.persistent);
 
     register_sigchld_wakeup(&job_runner);
 

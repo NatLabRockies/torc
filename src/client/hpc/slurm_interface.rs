@@ -433,10 +433,8 @@ impl HpcInterface for SlurmInterface {
     }
 
     fn get_local_scratch(&self) -> Result<String> {
-        for key in &["TMPDIR"] {
-            if let Ok(value) = env::var(key) {
-                return Ok(value);
-            }
+        if let Ok(value) = env::var("TMPDIR") {
+            return Ok(value);
         }
 
         Ok(env::temp_dir().to_string_lossy().to_string())

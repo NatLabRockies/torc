@@ -108,6 +108,8 @@ pub struct WatchArgs {
     pub partition: Option<String>,
     /// Fixed Slurm walltime for regenerated schedulers (bypasses auto-calculation)
     pub walltime: Option<String>,
+    /// Keep watching until the workflow completes, even with no Slurm allocations
+    pub persistent: bool,
 }
 
 /// Get job counts by status for a workflow.
@@ -151,6 +153,9 @@ fn get_job_counts(
 /// the watch loop pays the cost of two tiny HTTP responses instead of
 /// downloading every ready job on every poll.
 ///
+/// Labeled jobs are left out: only runners started with a matching `--label`
+/// claim them, never the Slurm runners this count is used to schedule.
+///
 /// Returns `(total_ready, unplanned_ready)`.
 fn count_ready_unplanned_jobs(
     config: &Configuration,
@@ -171,8 +176,9 @@ fn count_ready_unplanned_jobs(
         None,
         None,
         None,
-        None, // name
-        None, // command
+        None,     // name
+        None,     // command
+        Some(""), // label: unlabeled jobs only
     )
     .map_err(|e| format!("Failed to count ready jobs: {}", e))?
     .total_count;
@@ -190,8 +196,9 @@ fn count_ready_unplanned_jobs(
         None,
         None,
         Some(true),
-        None, // name
-        None, // command
+        None,     // name
+        None,     // command
+        Some(""), // label: unlabeled jobs only
     )
     .map_err(|e| format!("Failed to count unplanned ready jobs: {}", e))?
     .total_count;
@@ -390,6 +397,7 @@ fn poll_until_complete(
     poll_interval: u64,
     show_job_counts: bool,
     auto_schedule: &AutoScheduleOptions,
+    persistent: bool,
 ) -> Result<HashMap<String, i64>, String> {
     use std::time::Instant;
 
@@ -614,10 +622,12 @@ fn poll_until_complete(
                                 }
                                 Err(e) => {
                                     warn!("Auto-schedule failed: {}", e);
-                                    warn!(
-                                        "Workflow cannot make progress without active allocations"
-                                    );
-                                    break;
+                                    if !persistent {
+                                        warn!(
+                                            "Workflow cannot make progress without active allocations"
+                                        );
+                                        break;
+                                    }
                                 }
                             }
                         } else {
@@ -626,8 +636,16 @@ fn poll_until_complete(
                                 "{} ready jobs with no schedulers. Use --auto-schedule to regenerate.",
                                 total_ready
                             );
-                            break;
+                            if !persistent {
+                                break;
+                            }
                         }
+                    } else if persistent {
+                        // Runners outside Slurm (e.g. a labeled runner on a dedicated
+                        // machine) may still be working; keep watching.
+                        debug!(
+                            "No Slurm allocations and no ready jobs for them; waiting for the workflow to complete"
+                        );
                     } else {
                         // No ready jobs and no schedulers - workflow is stuck
                         warn!("No pending or active scheduled compute nodes found");
@@ -637,8 +655,10 @@ fn poll_until_complete(
                 }
                 Err(e) => {
                     warn!("Failed to count ready jobs: {}", e);
-                    warn!("No pending or active scheduled compute nodes found");
-                    break;
+                    if !persistent {
+                        warn!("No pending or active scheduled compute nodes found");
+                        break;
+                    }
                 }
             }
         }
@@ -701,7 +721,8 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
     // Early check: verify this workflow has scheduled compute nodes
     // The watch command is designed for Slurm/scheduler-based workflows.
     // For workflows run with `torc run` or `torc remote run`, use those commands directly.
-    if !has_any_scheduled_compute_nodes(config, args.workflow_id) {
+    // With --persistent the user expects runners outside Slurm, so skip the check.
+    if !args.persistent && !has_any_scheduled_compute_nodes(config, args.workflow_id) {
         error!(
             "No scheduled compute nodes found for workflow {}.",
             args.workflow_id
@@ -772,6 +793,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
             args.poll_interval,
             args.show_job_counts,
             &auto_schedule_opts,
+            args.persistent,
         ) {
             Ok(c) => c,
             Err(e) => {

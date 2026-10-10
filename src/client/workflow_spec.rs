@@ -758,6 +758,10 @@ pub struct JobSpec {
     /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i64>,
+    /// Routing label. Only runners started with the same `--label` claim this job;
+    /// unlabeled jobs are claimed only by runners with no label.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 impl JobSpec {
@@ -791,6 +795,7 @@ impl JobSpec {
             use_parameters_file: None,
             stdio: None,
             priority: None,
+            label: None,
         }
     }
 
@@ -837,6 +842,10 @@ impl JobSpec {
 
             if let Some(ref sched_name) = self.scheduler {
                 new_spec.scheduler = Some(substitute_parameters(sched_name, &combo));
+            }
+
+            if let Some(ref label) = self.label {
+                new_spec.label = Some(substitute_parameters(label, &combo));
             }
 
             // Substitute parameters in name vectors
@@ -4494,6 +4503,7 @@ impl WorkflowSpec {
                     }
                     job_model.priority = Some(p);
                 }
+                job_model.label.clone_from(&job_spec.label);
 
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);
@@ -4715,6 +4725,15 @@ impl WorkflowSpec {
                         {
                             obj.insert(
                                 "scheduler".to_string(),
+                                serde_json::Value::String(v.to_string()),
+                            );
+                        }
+                    }
+                    "label" => {
+                        if let Some(v) = child.entries().first().and_then(|e| e.value().as_string())
+                        {
+                            obj.insert(
+                                "label".to_string(),
                                 serde_json::Value::String(v.to_string()),
                             );
                         }
@@ -6318,6 +6337,9 @@ impl WorkflowSpec {
         if let Some(ref sched) = job.scheduler {
             lines.push(format!("    scheduler {}", escape(sched)));
         }
+        if let Some(ref label) = job.label {
+            lines.push(format!("    label {}", escape(label)));
+        }
         if let Some(ref params) = job.parameters
             && !params.is_empty()
         {
@@ -7709,6 +7731,7 @@ user_data:
                 failure_handler: None,
                 stdio: None,
                 priority: None,
+                label: None,
             }],
             files: Some(vec![{
                 let mut file =

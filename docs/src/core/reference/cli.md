@@ -93,6 +93,9 @@ Run a workflow locally (create from spec file or stdin, or run existing workflow
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for jobs
 - `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
   Default: `false`
+- `--label <LABEL>` — Only claim jobs with this label. Without it, only unlabeled jobs are claimed
+- `--persistent` — Ignore the idle timeout while the workflow still has unfinished jobs this runner
+  can claim (same label, or unlabeled when no --label is given)
 
 ## `torc submit`
 
@@ -194,6 +197,15 @@ resource requirements, and resubmits jobs.
    that rely on either mechanism, since deferred `schedule_nodes` actions only account for the
    originally-declared workload.
 
+4. **With runners outside Slurm** (`--persistent`):
+
+   ```bash
+   torc watch 123 --persistent
+   ```
+
+   Keeps watching until the workflow completes, even when there are no Slurm allocations and no
+   ready jobs. Use it when a `torc run --label` runner on a dedicated machine is still working.
+
 ### Arguments
 
 - `<WORKFLOW_ID>` — Workflow ID to watch
@@ -206,6 +218,7 @@ resource requirements, and resubmits jobs.
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for job files. Default: `output`
 - `-s`, `--show-job-counts` — Show job counts by status during polling. WARNING: Can cause high
   server load for large workflows.
+- `--persistent` — Keep watching until the workflow completes, even with no Slurm allocations
 
 **Recovery:**
 

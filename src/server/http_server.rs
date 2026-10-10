@@ -1691,6 +1691,7 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1707,6 +1708,7 @@ where
             origin_is_set,
             name,
             command,
+            label,
             context,
         )
         .await
@@ -2357,9 +2359,11 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        self.transport_claim_next_jobs(id, limit, context).await
+        self.transport_claim_next_jobs(id, limit, label, context)
+            .await
     }
 
     /// Check for changed job inputs and update status accordingly.

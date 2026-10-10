@@ -185,6 +185,8 @@ pub fn run(args: ExecArgs, config: &Configuration, user: &str) {
         num_gpus: None,
         num_nodes: None,
         scheduler_config_id: None,
+        label: None,
+        persistent: false,
         log_prefix: None,
         cpu_affinity_cpus_per_job: None,
         log_level: args.log_level,

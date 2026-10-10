@@ -677,6 +677,8 @@ pub struct WorkflowSummary {
     pub longest_ready_runtime_seconds: Option<i64>,
     /// Greatest remaining walltime (seconds) across active bounded allocations.
     pub max_allocation_remaining_seconds: Option<i64>,
+    /// Ready-job count per label that no active runner was started with.
+    pub unserved_ready_labels: std::collections::BTreeMap<String, i64>,
 }
 
 pub struct App {
@@ -1380,6 +1382,7 @@ impl App {
                             longest_ready_runtime_seconds: status.longest_ready_runtime_seconds,
                             max_allocation_remaining_seconds: status
                                 .max_allocation_remaining_seconds,
+                            unserved_ready_labels: status.unserved_ready_labels,
                         });
                     }
                     DetailViewType::Jobs => {

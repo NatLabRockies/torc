@@ -547,6 +547,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -1479,6 +1485,16 @@ paths:
         description: |-
           Substring filter on the job command (SQL `LIKE %value%`, case-insensitive
           for ASCII).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: label
+        in: query
+        description: |-
+          Exact-match filter on the routing label. An empty value returns only
+          unlabeled jobs.
         required: false
         schema:
           type:
@@ -4735,6 +4751,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimJobsBasedOnResources'
+        '422':
+          description: Unprocessable content (invalid label)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/claim_next_jobs:
     post:
       tags:
@@ -4756,6 +4778,14 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: label
+        in: query
+        description: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: ''
@@ -4763,6 +4793,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimNextJobsResponse'
+        '422':
+          description: Unprocessable content (invalid label)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/failure_handlers:
     get:
       tags:
@@ -5937,6 +5973,13 @@ components:
           type:
           - boolean
           - 'null'
+        label:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Label the runner was started with; it claims only jobs with this label
+            (or only unlabeled jobs, when unset).
         memory_gb:
           type: number
           format: double
@@ -6033,6 +6076,11 @@ components:
           - integer
           - 'null'
           format: int64
+        label:
+          type:
+          - string
+          - 'null'
+          description: Runner label; only jobs with an identical label (or none, when unset) are claimed.
         memory_gb:
           type: number
           format: double
@@ -6513,6 +6561,13 @@ components:
           type:
           - string
           - 'null'
+        label:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Routing label. A runner started with a label claims only jobs with
+            that label; a runner with no label claims only unlabeled jobs.
         name:
           type: string
         origin:
@@ -7843,6 +7898,11 @@ components:
           items:
             type: string
           description: Job names this job depends on (existing jobs or siblings in this batch).
+        label:
+          type:
+          - string
+          - 'null'
+          description: Routing label; only runners started with the same label claim this job.
         name:
           type: string
         priority:
@@ -8318,6 +8378,16 @@ components:
         total_jobs:
           type: integer
           format: int64
+        unserved_ready_labels:
+          type: object
+          description: |-
+            Ready-job count per label that no active compute node was started with.
+            These jobs stay ready until a runner is started with a matching `--label`.
+          additionalProperties:
+            type: integer
+            format: int64
+          propertyNames:
+            type: string
         walltime_seconds:
           type:
           - number
