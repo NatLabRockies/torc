@@ -4751,6 +4751,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimJobsBasedOnResources'
+        '422':
+          description: Unprocessable content (invalid label)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/claim_next_jobs:
     post:
       tags:
@@ -4787,6 +4793,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimNextJobsResponse'
+        '422':
+          description: Unprocessable content (invalid label)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/failure_handlers:
     get:
       tags:

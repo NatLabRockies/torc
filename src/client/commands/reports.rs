@@ -965,10 +965,7 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
         {
             eprintln!();
             for (label, count) in unserved {
-                eprintln!(
-                    "⚠ {} ready job(s) with label '{}' but no active runner has that label",
-                    count, label
-                );
+                eprintln!("{}", models::unserved_label_warning(count, label));
             }
             eprintln!(
                 "  Start one with 'torc run {} --label <LABEL>', or see 'torc compute-nodes list {}'.",

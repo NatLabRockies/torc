@@ -4074,7 +4074,10 @@ pub async fn reset_job_status(
         ("limit" = i64, Path, description = "Maximum number of jobs to claim")
     ),
     request_body = models::ComputeNodesResources,
-    responses((status = 200, body = models::ClaimJobsBasedOnResources))
+    responses(
+        (status = 200, body = models::ClaimJobsBasedOnResources),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse)
+    )
 )]
 pub async fn claim_jobs_based_on_resources(
     State(state): State<LiveRouterState>,
@@ -4099,7 +4102,10 @@ pub async fn claim_jobs_based_on_resources(
     path = "/workflows/{id}/claim_next_jobs",
     operation_id = "claim_next_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), ClaimNextJobsQuery),
-    responses((status = 200, body = models::ClaimNextJobsResponse))
+    responses(
+        (status = 200, body = models::ClaimNextJobsResponse),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse)
+    )
 )]
 pub async fn claim_next_jobs(
     State(state): State<LiveRouterState>,

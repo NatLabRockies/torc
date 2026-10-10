@@ -963,6 +963,7 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResources",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1041,6 +1042,7 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResources",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1119,6 +1121,7 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResources",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1276,6 +1279,7 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1350,6 +1354,7 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1424,6 +1429,7 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '422': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,

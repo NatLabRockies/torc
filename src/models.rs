@@ -1722,6 +1722,20 @@ pub fn parse_label(label: &str) -> Result<String, String> {
     Ok(label.to_string())
 }
 
+/// Validate an optional routing label; `None` is always valid.
+pub fn validate_label(label: Option<&str>) -> Result<(), String> {
+    label.map_or(Ok(()), |label| parse_label(label).map(drop))
+}
+
+/// Warning shown by `torc status` and the TUI for ready jobs whose label no
+/// active runner serves.
+pub fn unserved_label_warning(count: impl std::fmt::Display, label: &str) -> String {
+    format!(
+        "⚠ {} ready job(s) with label '{}' but no active runner has that label",
+        count, label
+    )
+}
+
 impl JobStatus {
     pub fn is_terminal(&self) -> bool {
         matches!(

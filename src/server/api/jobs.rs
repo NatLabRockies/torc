@@ -1265,7 +1265,7 @@ where
                 )),
             ));
         }
-        if let Some(Err(err)) = job.label.as_deref().map(models::parse_label) {
+        if let Err(err) = models::validate_label(job.label.as_deref()) {
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(format!("{} for job '{}'", err, job.name)),
             ));
@@ -1551,7 +1551,7 @@ where
                     )),
                 ));
             }
-            if let Some(Err(err)) = job.label.as_deref().map(models::parse_label) {
+            if let Err(err) = models::validate_label(job.label.as_deref()) {
                 let _ = transaction.rollback().await;
                 return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
                     message_error_response(format!("{} for job '{}'", err, job.name)),
@@ -2313,12 +2313,7 @@ where
 
         // An empty label clears the label (see the NULLIF below); anything else
         // must be a valid label.
-        if let Some(Err(err)) = body
-            .label
-            .as_deref()
-            .filter(|l| !l.is_empty())
-            .map(models::parse_label)
-        {
+        if let Err(err) = models::validate_label(body.label.as_deref().filter(|l| !l.is_empty())) {
             return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(err),
             ));

@@ -99,6 +99,7 @@ end
 
 const _returntypes_claim_jobs_based_on_resources_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ClaimJobsBasedOnResources,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing)
@@ -131,6 +132,7 @@ end
 
 const _returntypes_claim_next_jobs_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ClaimNextJobsResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
 )
 
 function _oacinternal_claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, label=nothing, _mediaType=nothing)

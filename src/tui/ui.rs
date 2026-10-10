@@ -800,10 +800,7 @@ fn draw_summary(f: &mut Frame, area: Rect, app: &mut App) {
         .iter()
         .map(|(label, count)| {
             Line::from(Span::styled(
-                format!(
-                    "⚠ {} ready job(s) with label '{}' but no active runner has that label",
-                    count, label
-                ),
+                crate::models::unserved_label_warning(count, label),
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ))
         })

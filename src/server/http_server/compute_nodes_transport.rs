@@ -13,7 +13,7 @@ where
     ) -> Result<CreateComputeNodeResponse, ApiError> {
         authorize_workflow!(self, body.workflow_id, context, CreateComputeNodeResponse);
 
-        if let Some(Err(err)) = body.label.as_deref().map(models::parse_label) {
+        if let Err(err) = models::validate_label(body.label.as_deref()) {
             return Ok(
                 CreateComputeNodeResponse::UnprocessableContentErrorResponse(
                     message_error_response(err),

@@ -123,7 +123,7 @@ fn validate_spawn_request_shape(jobs: &[models::SpawnJobModel]) -> Result<(), Sp
                 job.name, p
             )));
         }
-        if let Some(Err(err)) = job.label.as_deref().map(models::parse_label) {
+        if let Err(err) = models::validate_label(job.label.as_deref()) {
             return Err(reject(format!("spawn job '{}': {}", job.name, err)));
         }
     }
@@ -1157,7 +1157,7 @@ where
 
         authorize_workflow!(self, id, context, ClaimNextJobsResponse);
 
-        if let Some(Err(err)) = label.as_deref().map(models::parse_label) {
+        if let Err(err) = models::validate_label(label.as_deref()) {
             return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
                 message_error_response(err),
             ));
