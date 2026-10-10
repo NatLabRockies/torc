@@ -177,7 +177,48 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
             apis::jobs_api::create_job(config, job).is_err(),
             "label {bad:?} should be rejected on create"
         );
+
+        // Bulk create validates on its own path; one bad label rejects the batch.
+        let good = models::JobModel::new(workflow_id, format!("good_{bad:?}"), "echo".to_string());
+        let mut bad_job =
+            models::JobModel::new(workflow_id, format!("bulk_bad_{bad:?}"), "echo".to_string());
+        bad_job.label = Some(bad.to_string());
+        assert!(
+            apis::jobs_api::create_jobs(
+                config,
+                models::JobsModel {
+                    jobs: vec![good, bad_job]
+                }
+            )
+            .is_err(),
+            "label {bad:?} should be rejected on bulk create"
+        );
     }
+    let job_names = names(Some(
+        apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None, // status
+            None, // offset
+            None, // limit
+            None, // sort_by
+            None, // reverse_sort
+            None, // job_ids
+            None, // resource_requirements_id
+            None, // include_relationships
+            None, // active_compute_node_id
+            None, // origin_is_set
+            None, // name
+            None, // command
+            None, // label
+        )
+        .expect("Failed to list jobs")
+        .items,
+    ));
+    assert!(
+        !job_names.iter().any(|name| name.starts_with("good_")),
+        "a rejected batch must not create any of its jobs, got {job_names:?}"
+    );
 
     let response = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
         .expect("claim_next_jobs should succeed");

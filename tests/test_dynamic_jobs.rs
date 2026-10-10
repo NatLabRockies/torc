@@ -487,6 +487,33 @@ fn test_spawned_job_keeps_label(start_server: &ServerProcess) {
     assert_eq!(spawned.label.as_deref(), Some("windows"));
 }
 
+/// Spawn validates labels like create does: an empty or whitespace-padded
+/// label would never match a runner.
+#[rstest]
+fn test_spawn_rejects_invalid_label(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, _cn) = setup(config, "dyn_bad_label", Some(5));
+    let orch = seed_and_init(config, workflow_id, "orch_seed");
+    let run_id = run_id_of(config, workflow_id);
+    claim_and_mark_running(config, workflow_id, run_id, orch);
+
+    for bad in ["", " ", "windows ", " windows"] {
+        let result = apis::jobs_api::spawn_jobs(
+            config,
+            orch,
+            models::SpawnJobsRequest {
+                lineage: Some("L".to_string()),
+                jobs: vec![models::SpawnJobModel {
+                    label: Some(bad.to_string()),
+                    ..spawn_job("bad_label_worker", &[], 1)
+                }],
+                state: None,
+            },
+        );
+        assert!(result.is_err(), "label {bad:?} should be rejected on spawn");
+    }
+}
+
 /// `retry_job` tags the resurrected row with `origin = "retry"`, so the same
 /// watch detector that picks up spawned jobs also picks up retries.
 #[rstest]
