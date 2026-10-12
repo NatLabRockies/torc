@@ -391,6 +391,7 @@ const _returntypes_update_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 

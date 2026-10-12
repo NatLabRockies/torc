@@ -2465,6 +2465,7 @@ pub async fn get_job(
         (status = 200, description = "Successful response", body = models::JobModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
