@@ -896,26 +896,20 @@ impl JobRunner {
         }
         // An empty label filter selects unlabeled jobs.
         let label = self.resources.label.as_deref().unwrap_or("");
-        // Count-only requests (limit=1), most likely statuses first.
-        [
-            JobStatus::Blocked,
-            JobStatus::Ready,
-            JobStatus::Pending,
-            JobStatus::Running,
-            JobStatus::Uninitialized,
-            JobStatus::PendingFailed,
-        ]
-        .into_iter()
-        .any(|status| {
-            match apis::jobs_api::list_jobs(
+        // One request: sorted by status, the first job has the lowest status, and
+        // every status below Completed is unfinished. PendingFailed sorts above
+        // the finished statuses, so it gets its own count, but only workflows
+        // with `use_pending_failed` can have such jobs.
+        let list = |status, sort_by| {
+            apis::jobs_api::list_jobs(
                 &self.config,
                 self.workflow_id,
-                Some(status),
+                status,
                 None,
                 None,
                 Some(0),
                 Some(1),
-                None,
+                sort_by,
                 None,
                 None,
                 None,
@@ -923,17 +917,28 @@ impl JobRunner {
                 None, // name
                 None, // command
                 Some(label),
-            ) {
-                Ok(response) => response.total_count > 0,
-                Err(e) => {
-                    warn!(
-                        "Failed to count jobs for persistent runner check workflow_id={}: {}",
-                        self.workflow_id, e
-                    );
-                    true
-                }
-            }
-        })
+            )
+            .map_err(|e| {
+                warn!(
+                    "Failed to count jobs for persistent runner check workflow_id={}: {}",
+                    self.workflow_id, e
+                )
+            })
+            .ok()
+        };
+        let Some(lowest) = list(None, Some("status")) else {
+            return true;
+        };
+        if lowest
+            .items
+            .first()
+            .and_then(|job| job.status)
+            .is_some_and(|status| status.to_int() < JobStatus::Completed.to_int())
+        {
+            return true;
+        }
+        self.workflow.use_pending_failed.unwrap_or(false)
+            && list(Some(JobStatus::PendingFailed), None).is_none_or(|r| r.total_count > 0)
     }
 
     /// Override the claim-backoff cap loaded from config, e.g. from a CLI flag.

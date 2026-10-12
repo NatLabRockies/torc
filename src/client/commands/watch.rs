@@ -408,6 +408,8 @@ fn poll_until_complete(
     // runs after multiple consecutive misses to avoid racing with Slurm jobs that
     // are just starting up (squeue may not reflect the new job immediately).
     let mut consecutive_no_allocation: u32 = 0;
+    // Last stall warning logged by a persistent watch, so it is not repeated every poll.
+    let mut last_stall_warning = String::new();
     const ORPHAN_DETECTION_THRESHOLD: u32 = 3;
 
     loop {
@@ -631,11 +633,14 @@ fn poll_until_complete(
                                 }
                             }
                         } else {
-                            warn!("No pending or active scheduled compute nodes found");
-                            warn!(
-                                "{} ready jobs with no schedulers. Use --auto-schedule to regenerate.",
-                                total_ready
-                            );
+                            if last_stall_warning != "no schedulers" {
+                                warn!("No pending or active scheduled compute nodes found");
+                                warn!(
+                                    "{} ready jobs with no schedulers. Use --auto-schedule to regenerate.",
+                                    total_ready
+                                );
+                                last_stall_warning = "no schedulers".to_string();
+                            }
                             if !persistent {
                                 break;
                             }
@@ -646,6 +651,24 @@ fn poll_until_complete(
                         debug!(
                             "No Slurm allocations and no ready jobs for them; waiting for the workflow to complete"
                         );
+                        // Ready labeled jobs that no active runner serves wait forever;
+                        // say so, once per change.
+                        let warning = apis::workflows_api::get_workflow_status(config, workflow_id)
+                            .map(|status| {
+                                status
+                                    .unserved_ready_labels
+                                    .iter()
+                                    .map(|(label, count)| {
+                                        crate::models::unserved_label_warning(count, label)
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            })
+                            .unwrap_or_default();
+                        if !warning.is_empty() && warning != last_stall_warning {
+                            warn!("{}", warning);
+                            last_stall_warning = warning;
+                        }
                     } else {
                         // No ready jobs and no schedulers - workflow is stuck
                         warn!("No pending or active scheduled compute nodes found");

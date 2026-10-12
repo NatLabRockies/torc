@@ -147,5 +147,6 @@ including case.
   workflow stalls.
 - **Slurm runners launched by Torc have no label.** Leave the jobs meant for them unlabeled. Labeled
   jobs are left out when Torc sizes Slurm allocations (`torc slurm generate`,
-  `torc slurm regenerate`, `torc watch --auto-schedule`).
+  `torc slurm regenerate`, `torc watch --auto-schedule`). A job that sets both `label` and
+  `scheduler` is rejected when the spec is validated.
 - **Parameters work in labels.** `label: "{os}"` expands along with the job name and command.

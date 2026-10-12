@@ -4600,6 +4600,22 @@ fn test_job_label_kdl_roundtrip() {
     assert_eq!(roundtripped.jobs[1].label.as_deref(), Some("windows"));
 }
 
+/// A non-string KDL `label` is an error; dropping it would create the job unlabeled and
+/// let ordinary runners claim it.
+#[test]
+fn test_job_label_kdl_rejects_non_string() {
+    let kdl = r#"
+        name "label_bad"
+        user "test_user"
+        job "labeled" {
+            command "echo labeled"
+            label 1
+        }
+    "#;
+    let err = WorkflowSpec::from_spec_file_content(kdl, "kdl").expect_err("label 1 must fail");
+    assert!(err.to_string().contains("label"), "{}", err);
+}
+
 /// The shipped chained-allocations example (referenced from the docs) parses and
 /// carries `serialize_allocations` on its scheduler.
 #[test]

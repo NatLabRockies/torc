@@ -1830,6 +1830,26 @@ impl WorkflowSpec {
         Ok(())
     }
 
+    /// Check job labels after parameter expansion, so a bad label fails here
+    /// rather than as a server 422 partway through creation. A labeled job with
+    /// a `scheduler` is rejected because that scheduler's runners are unlabeled
+    /// and would never claim it.
+    fn validate_job_labels(&self) -> Result<(), Box<dyn std::error::Error>> {
+        for job in &self.jobs {
+            crate::models::validate_label(job.label.as_deref())
+                .map_err(|err| format!("Job '{}': {}", job.name, err))?;
+            if let (Some(label), Some(scheduler)) = (&job.label, &job.scheduler) {
+                return Err(format!(
+                    "Job '{}' sets both label '{}' and scheduler '{}'; runners for a scheduler \
+                     are unlabeled and never claim labeled jobs",
+                    job.name, label, scheduler
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
     /// Verify that `dynamic_jobs.max_iterations`, if set, is a positive
     /// integer. `0` would silently disable spawning for the entire workflow
     /// — the first `spawn_jobs` call would be rejected with a confusing
@@ -2594,6 +2614,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_job_labels()?;
         spec.validate_dynamic_jobs()?;
         // The returned spec must stay unsubstituted -- `create_from_validated_spec`
         // substitutes again -- so this helper does the substitute-then-validate
@@ -2635,6 +2656,10 @@ impl WorkflowSpec {
             std::process::exit(1);
         }
         if let Err(e) = spec.validate_env_maps() {
+            eprintln!("Validation error: {}", e);
+            std::process::exit(1);
+        }
+        if let Err(e) = spec.validate_job_labels() {
             eprintln!("Validation error: {}", e);
             std::process::exit(1);
         }
@@ -2775,6 +2800,10 @@ impl WorkflowSpec {
 
         if let Err(e) = spec.validate_env_maps() {
             errors.push(format!("Environment validation failed: {}", e));
+        }
+
+        if let Err(e) = spec.validate_job_labels() {
+            errors.push(format!("Validation error: {}", e));
         }
 
         if let Err(e) = spec.validate_dynamic_jobs() {
@@ -3262,6 +3291,7 @@ impl WorkflowSpec {
             });
         }
         spec.validate_env_maps()?;
+        spec.validate_job_labels()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
         // Identifier validation runs AFTER substitution so jobs that declare
@@ -3295,6 +3325,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_job_labels()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
         // After substitution: input_files / output_files populated from
@@ -4730,13 +4761,16 @@ impl WorkflowSpec {
                         }
                     }
                     "label" => {
-                        if let Some(v) = child.entries().first().and_then(|e| e.value().as_string())
-                        {
-                            obj.insert(
-                                "label".to_string(),
-                                serde_json::Value::String(v.to_string()),
-                            );
-                        }
+                        // A dropped label would let unlabeled runners claim the job.
+                        let v = child
+                            .entries()
+                            .first()
+                            .and_then(|e| e.value().as_string())
+                            .ok_or("job label must have a string value")?;
+                        obj.insert(
+                            "label".to_string(),
+                            serde_json::Value::String(v.to_string()),
+                        );
                     }
                     "parameters" => {
                         if let Some(params) = Self::kdl_parameters_to_json(child)? {
@@ -7898,6 +7932,35 @@ user_data:
             .validate_env_maps()
             .expect_err("expected validation error");
         assert!(err.to_string().contains("BAD-NAME"));
+    }
+
+    #[test]
+    fn test_validate_job_labels() {
+        let mut job = JobSpec::new("job".to_string(), "echo hi".to_string());
+        let spec_with = |job: &JobSpec| {
+            WorkflowSpec::new(
+                "wf".to_string(),
+                "user".to_string(),
+                None,
+                vec![job.clone()],
+            )
+        };
+
+        job.label = Some("windows".to_string());
+        spec_with(&job).validate_job_labels().expect("valid label");
+
+        for bad in ["", " win"] {
+            job.label = Some(bad.to_string());
+            let err = spec_with(&job).validate_job_labels().expect_err(bad);
+            assert!(err.to_string().contains("Job 'job'"), "{}", err);
+        }
+
+        job.label = Some("windows".to_string());
+        job.scheduler = Some("gpu_sched".to_string());
+        let err = spec_with(&job)
+            .validate_job_labels()
+            .expect_err("label with scheduler");
+        assert!(err.to_string().contains("gpu_sched"), "{}", err);
     }
 
     #[test]
