@@ -963,6 +963,10 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResources",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '422': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1041,6 +1045,10 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResources",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '422': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1119,6 +1127,10 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimJobsBasedOnResources",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '422': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1219,6 +1231,7 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
+        label: Annotated[Optional[StrictStr], Field(description="Runner label; only jobs with an identical label (or none, when unset) are claimed.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1239,6 +1252,8 @@ class WorkflowsApi:
         :type id: int
         :param limit:
         :type limit: int
+        :param label: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+        :type label: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1264,6 +1279,7 @@ class WorkflowsApi:
         _param = self._claim_next_jobs_serialize(
             id=id,
             limit=limit,
+            label=label,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1272,6 +1288,10 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '422': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1289,6 +1309,7 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
+        label: Annotated[Optional[StrictStr], Field(description="Runner label; only jobs with an identical label (or none, when unset) are claimed.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1309,6 +1330,8 @@ class WorkflowsApi:
         :type id: int
         :param limit:
         :type limit: int
+        :param label: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+        :type label: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1334,6 +1357,7 @@ class WorkflowsApi:
         _param = self._claim_next_jobs_serialize(
             id=id,
             limit=limit,
+            label=label,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1342,6 +1366,10 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '422': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1359,6 +1387,7 @@ class WorkflowsApi:
         self,
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
+        label: Annotated[Optional[StrictStr], Field(description="Runner label; only jobs with an identical label (or none, when unset) are claimed.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1379,6 +1408,8 @@ class WorkflowsApi:
         :type id: int
         :param limit:
         :type limit: int
+        :param label: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+        :type label: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1404,6 +1435,7 @@ class WorkflowsApi:
         _param = self._claim_next_jobs_serialize(
             id=id,
             limit=limit,
+            label=label,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1412,6 +1444,10 @@ class WorkflowsApi:
 
         _response_types_map: Dict[str, Optional[str]] = {
             '200': "ClaimNextJobsResponse",
+            '403': "ErrorResponse",
+            '404': "ErrorResponse",
+            '422': "ErrorResponse",
+            '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1424,6 +1460,7 @@ class WorkflowsApi:
         self,
         id,
         limit,
+        label,
         _request_auth,
         _content_type,
         _headers,
@@ -1451,6 +1488,10 @@ class WorkflowsApi:
         if limit is not None:
             
             _query_params.append(('limit', limit))
+            
+        if label is not None:
+            
+            _query_params.append(('label', label))
             
         # process the header parameters
         # process the form parameters

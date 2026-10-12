@@ -17,6 +17,7 @@ Aggregated status summary for a workflow, computed server-side.
         runtime_blocked_ready_jobs=nothing,
         total_exec_time_minutes=nothing,
         total_jobs=nothing,
+        unserved_ready_labels=nothing,
         walltime_seconds=nothing,
         workflow_id=nothing,
         workflow_name=nothing,
@@ -34,6 +35,7 @@ Aggregated status summary for a workflow, computed server-side.
     - runtime_blocked_ready_jobs::Int64 : Ready jobs whose required runtime exceeds the remaining walltime of every active allocation, so they cannot start until a fresh allocation appears. 0 when there are no walltime-bounded allocations. See &#x60;torc workflows diagnose&#x60;.
     - total_exec_time_minutes::Float64
     - total_jobs::Int64
+    - unserved_ready_labels::Dict{String, Int64} : Ready-job count per label that no active compute node was started with. These jobs stay ready until a runner is started with a matching &#x60;--label&#x60;.
     - walltime_seconds::Float64
     - workflow_id::Int64
     - workflow_name::String
@@ -51,19 +53,20 @@ Base.@kwdef mutable struct WorkflowStatusResponse <: OpenAPI.APIModel
     runtime_blocked_ready_jobs::Union{Nothing, Int64} = nothing
     total_exec_time_minutes::Union{Nothing, Float64} = nothing
     total_jobs::Union{Nothing, Int64} = nothing
+    unserved_ready_labels::Union{Nothing, Dict{String, Int64}} = nothing
     walltime_seconds::Union{Nothing, Float64} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
     workflow_name::Union{Nothing, String} = nothing
     workflow_user::Union{Nothing, String} = nothing
 
-    function WorkflowStatusResponse(active_compute_nodes, active_scheduled_nodes, is_canceled, is_complete, jobs_by_status, longest_ready_runtime_seconds, max_allocation_remaining_seconds, pending_scheduled_nodes, runtime_blocked_ready_jobs, total_exec_time_minutes, total_jobs, walltime_seconds, workflow_id, workflow_name, workflow_user, )
-        o = new(active_compute_nodes, active_scheduled_nodes, is_canceled, is_complete, jobs_by_status, longest_ready_runtime_seconds, max_allocation_remaining_seconds, pending_scheduled_nodes, runtime_blocked_ready_jobs, total_exec_time_minutes, total_jobs, walltime_seconds, workflow_id, workflow_name, workflow_user, )
+    function WorkflowStatusResponse(active_compute_nodes, active_scheduled_nodes, is_canceled, is_complete, jobs_by_status, longest_ready_runtime_seconds, max_allocation_remaining_seconds, pending_scheduled_nodes, runtime_blocked_ready_jobs, total_exec_time_minutes, total_jobs, unserved_ready_labels, walltime_seconds, workflow_id, workflow_name, workflow_user, )
+        o = new(active_compute_nodes, active_scheduled_nodes, is_canceled, is_complete, jobs_by_status, longest_ready_runtime_seconds, max_allocation_remaining_seconds, pending_scheduled_nodes, runtime_blocked_ready_jobs, total_exec_time_minutes, total_jobs, unserved_ready_labels, walltime_seconds, workflow_id, workflow_name, workflow_user, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowStatusResponse
 
-const _property_types_WorkflowStatusResponse = Dict{Symbol,String}(Symbol("active_compute_nodes")=>"Int64", Symbol("active_scheduled_nodes")=>"Int64", Symbol("is_canceled")=>"Bool", Symbol("is_complete")=>"Bool", Symbol("jobs_by_status")=>"JobStatusCounts", Symbol("longest_ready_runtime_seconds")=>"Int64", Symbol("max_allocation_remaining_seconds")=>"Int64", Symbol("pending_scheduled_nodes")=>"Int64", Symbol("runtime_blocked_ready_jobs")=>"Int64", Symbol("total_exec_time_minutes")=>"Float64", Symbol("total_jobs")=>"Int64", Symbol("walltime_seconds")=>"Float64", Symbol("workflow_id")=>"Int64", Symbol("workflow_name")=>"String", Symbol("workflow_user")=>"String", )
+const _property_types_WorkflowStatusResponse = Dict{Symbol,String}(Symbol("active_compute_nodes")=>"Int64", Symbol("active_scheduled_nodes")=>"Int64", Symbol("is_canceled")=>"Bool", Symbol("is_complete")=>"Bool", Symbol("jobs_by_status")=>"JobStatusCounts", Symbol("longest_ready_runtime_seconds")=>"Int64", Symbol("max_allocation_remaining_seconds")=>"Int64", Symbol("pending_scheduled_nodes")=>"Int64", Symbol("runtime_blocked_ready_jobs")=>"Int64", Symbol("total_exec_time_minutes")=>"Float64", Symbol("total_jobs")=>"Int64", Symbol("unserved_ready_labels")=>"Dict{String, Int64}", Symbol("walltime_seconds")=>"Float64", Symbol("workflow_id")=>"Int64", Symbol("workflow_name")=>"String", Symbol("workflow_user")=>"String", )
 OpenAPI.property_type(::Type{ WorkflowStatusResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowStatusResponse[name]))}
 
 function OpenAPI.check_required(o::WorkflowStatusResponse)
@@ -94,6 +97,7 @@ function OpenAPI.validate_properties(o::WorkflowStatusResponse)
     OpenAPI.validate_property(WorkflowStatusResponse, Symbol("runtime_blocked_ready_jobs"), o.runtime_blocked_ready_jobs)
     OpenAPI.validate_property(WorkflowStatusResponse, Symbol("total_exec_time_minutes"), o.total_exec_time_minutes)
     OpenAPI.validate_property(WorkflowStatusResponse, Symbol("total_jobs"), o.total_jobs)
+    OpenAPI.validate_property(WorkflowStatusResponse, Symbol("unserved_ready_labels"), o.unserved_ready_labels)
     OpenAPI.validate_property(WorkflowStatusResponse, Symbol("walltime_seconds"), o.walltime_seconds)
     OpenAPI.validate_property(WorkflowStatusResponse, Symbol("workflow_id"), o.workflow_id)
     OpenAPI.validate_property(WorkflowStatusResponse, Symbol("workflow_name"), o.workflow_name)
@@ -136,6 +140,7 @@ function OpenAPI.validate_property(::Type{ WorkflowStatusResponse }, name::Symbo
     if name === Symbol("total_jobs")
         OpenAPI.validate_param(name, "WorkflowStatusResponse", :format, val, "int64")
     end
+
 
     if name === Symbol("walltime_seconds")
         OpenAPI.validate_param(name, "WorkflowStatusResponse", :format, val, "double")

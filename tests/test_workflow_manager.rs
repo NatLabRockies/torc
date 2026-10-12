@@ -379,6 +379,7 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs");
     let job_items = &jobs.items;
@@ -1537,6 +1538,7 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs");
     let job_items = &jobs.items;

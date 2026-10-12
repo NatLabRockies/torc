@@ -512,6 +512,9 @@ pub struct ClaimJobsBasedOnResourcesQuery {
 pub struct ClaimNextJobsQuery {
     #[param(nullable = true)]
     pub limit: Option<i64>,
+    /// Runner label; only jobs with an identical label (or none, when unset) are claimed.
+    #[param(nullable = true)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -1225,6 +1228,7 @@ pub async fn list_compute_nodes(
         (status = 200, description = "Successful response", body = models::ComputeNodeModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2317,6 +2321,10 @@ pub struct JobsListQuery {
     /// for ASCII).
     #[param(nullable = true)]
     pub command: Option<String>,
+    /// Exact-match filter on the routing label. An empty value returns only
+    /// unlabeled jobs.
+    #[param(nullable = true)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2363,6 +2371,7 @@ pub async fn list_jobs(
             query.origin_is_set,
             query.name,
             query.command,
+            query.label,
             &context,
         )
         .await
@@ -2566,7 +2575,7 @@ pub async fn batch_complete_jobs(
         (status = 200, description = "Jobs added blocked on the caller", body = models::SpawnJobsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Job or workflow not found", body = models::ErrorResponse),
-        (status = 422, description = "Validation error: caller job not Running, duplicate names in the batch, negative priority, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded", body = models::ErrorResponse),
+        (status = 422, description = "Validation error: caller job not Running, duplicate names in the batch, negative priority, invalid label, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -4065,7 +4074,13 @@ pub async fn reset_job_status(
         ("limit" = i64, Path, description = "Maximum number of jobs to claim")
     ),
     request_body = models::ComputeNodesResources,
-    responses((status = 200, body = models::ClaimJobsBasedOnResources))
+    responses(
+        (status = 200, body = models::ClaimJobsBasedOnResources),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn claim_jobs_based_on_resources(
     State(state): State<LiveRouterState>,
@@ -4090,7 +4105,13 @@ pub async fn claim_jobs_based_on_resources(
     path = "/workflows/{id}/claim_next_jobs",
     operation_id = "claim_next_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), ClaimNextJobsQuery),
-    responses((status = 200, body = models::ClaimNextJobsResponse))
+    responses(
+        (status = 200, body = models::ClaimNextJobsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn claim_next_jobs(
     State(state): State<LiveRouterState>,
@@ -4100,7 +4121,7 @@ pub async fn claim_next_jobs(
 ) -> Response<Body> {
     match state
         .server
-        .claim_next_jobs(id, query.limit, &context)
+        .claim_next_jobs(id, query.limit, query.label, &context)
         .await
     {
         Ok(response) => claim_next_jobs_response(response),

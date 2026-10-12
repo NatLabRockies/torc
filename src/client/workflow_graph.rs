@@ -32,6 +32,8 @@ pub struct JobNode {
     pub scheduler: Option<String>,
     /// Original job spec reference data
     pub command: String,
+    /// Routing label; labeled jobs are never claimed by Torc-launched Slurm runners
+    pub label: Option<String>,
 }
 
 /// Represents a group of jobs that share scheduling characteristics
@@ -156,6 +158,7 @@ impl WorkflowGraph {
                 name_pattern,
                 scheduler: job.scheduler.clone(),
                 command: job.command.clone(),
+                label: job.label.clone(),
             };
 
             graph.nodes.insert(job.name.clone(), node);
@@ -317,6 +320,7 @@ impl WorkflowGraph {
                 name_pattern: regex::escape(&job.name), // Exact match for expanded jobs
                 scheduler: None,                        // Not tracked from database models
                 command: job.command.clone(),
+                label: job.label.clone(),
             };
 
             graph.nodes.insert(job.name.clone(), node);
@@ -627,6 +631,11 @@ impl WorkflowGraph {
         let mut groups: HashMap<(String, bool), SchedulerGroup> = HashMap::new();
 
         for (name, node) in &self.nodes {
+            // Slurm runners launched by Torc have no label and never claim labeled
+            // jobs, so sizing allocations for them would request idle nodes.
+            if node.label.is_some() {
+                continue;
+            }
             let rr_name = match &node.resource_requirements {
                 Some(rr) => rr.clone(),
                 None => continue, // Skip jobs without resource requirements
@@ -1110,6 +1119,20 @@ mod tests {
             .unwrap();
         assert_eq!(work_group.job_count, 10); // Parameterized
         assert!(work_group.has_dependencies);
+    }
+
+    /// Labeled jobs are never claimed by Torc-launched Slurm runners, so they
+    /// must not be sized into Slurm allocations.
+    #[test]
+    fn test_scheduler_groups_skip_labeled_jobs() {
+        let mut spec = create_test_spec();
+        spec.jobs[1].label = Some("windows".to_string());
+        let graph = WorkflowGraph::from_spec(&spec).unwrap();
+
+        let groups = graph.scheduler_groups();
+
+        assert_eq!(groups.len(), 2);
+        assert!(groups.iter().all(|g| g.resource_requirements == "small"));
     }
 
     #[test]

@@ -13,6 +13,7 @@ ignore = [
     { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 via tabled and validator - no safe upgrade available yet" },
     { id = "RUSTSEC-2026-0194", reason = "quick-xml O(N²) DoS via plist/service-manager - no upstream upgrade available" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml NsReader heap DoS via plist/service-manager - no upstream upgrade available" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via serde_yaml - unmaintained, no safe upgrade; replace serde_yaml separately" },
 ]
 
 # License compliance - permissive allow-list

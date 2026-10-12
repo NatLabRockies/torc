@@ -904,6 +904,15 @@ pub fn generate_schedulers_for_workflow(
         }
     }
 
+    let labeled = spec.jobs.iter().filter(|j| j.label.is_some()).count();
+    if labeled > 0 {
+        warnings.push(format!(
+            "{} job(s) have a label and are excluded from Slurm allocations; \
+             start a runner for them with `torc run --label <label>`",
+            labeled
+        ));
+    }
+
     // Generate the scheduler plan using shared logic
     let plan = generate_scheduler_plan(
         &graph,
@@ -1973,6 +1982,7 @@ pub fn review_submit_pending_actions(
         None,
         None,
         None,
+        None, // label
     ) {
         Ok(resp) => resp
             .items

@@ -15,6 +15,7 @@ Name | Type | Description | Notes
 **runtime_blocked_ready_jobs** | **Int64** | Ready jobs whose required runtime exceeds the remaining walltime of every active allocation, so they cannot start until a fresh allocation appears. 0 when there are no walltime-bounded allocations. See &#x60;torc workflows diagnose&#x60;. | [default to nothing]
 **total_exec_time_minutes** | **Float64** |  | [default to nothing]
 **total_jobs** | **Int64** |  | [default to nothing]
+**unserved_ready_labels** | **Dict{String, Int64}** | Ready-job count per label that no active compute node was started with. These jobs stay ready until a runner is started with a matching &#x60;--label&#x60;. | [optional] [default to nothing]
 **walltime_seconds** | **Float64** |  | [optional] [default to nothing]
 **workflow_id** | **Int64** |  | [default to nothing]
 **workflow_name** | **String** |  | [default to nothing]

@@ -17,7 +17,7 @@ world outward.
 
 ```bash
 torc status <id>
-torc -f json status <id> | jq '{jobs_by_status, active_compute_nodes, active_scheduled_nodes, pending_scheduled_nodes, runtime_blocked_ready_jobs, is_complete, is_canceled}'
+torc -f json status <id> | jq '{jobs_by_status, active_compute_nodes, active_scheduled_nodes, pending_scheduled_nodes, runtime_blocked_ready_jobs, unserved_ready_labels, is_complete, is_canceled}'
 ```
 
 The pattern in these fields names the problem:
@@ -27,6 +27,7 @@ The pattern in these fields names the problem:
 | Everything `blocked`, nothing `ready`                       | [Everything blocked](#everything-blocked)                                             |
 | `ready` > 0, `active_compute_nodes` = 0                     | [Ready but never claimed](#ready-but-never-claimed)                                   |
 | `ready` > 0, nodes active, `runtime_blocked_ready_jobs` > 0 | [Ready jobs that will not start](#ready-jobs-on-live-allocations-that-will-not-start) |
+| `unserved_ready_labels` present                             | [Ready but never claimed](#ready-but-never-claimed)                                   |
 | `running`/`pending` > 0 with no active nodes                | [Stuck in running or pending](#stuck-in-running-or-pending)                           |
 | Everything `uninitialized`                                  | Workflow was never initialized: `torc workflows init <id>`                            |
 
@@ -75,6 +76,12 @@ If runners are alive but claim nothing, compare each ready job's requirements ag
 runner detected. The runner's startup log line records its resources, `max_parallel_jobs`, and
 execution mode. A job asking for more CPU, memory, or GPUs than a worker has will never be claimed
 by that worker.
+
+Labels are the other reason runners claim nothing. A job with a `label` is claimed only by a runner
+started with the same `--label`, and unlabeled jobs only by runners without one. `torc status` warns
+about ready jobs whose label has no active runner, and the JSON output lists them in
+`unserved_ready_labels` (label to ready-job count; omitted when empty). Start one with
+`torc run <id> --label <label>`, adding `--persistent` if more of its jobs become ready later.
 
 ## Ready jobs on live allocations that will not start
 

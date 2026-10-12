@@ -31,6 +31,7 @@ fn job_statuses(
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list jobs");
 

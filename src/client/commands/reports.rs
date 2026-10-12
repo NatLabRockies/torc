@@ -958,6 +958,20 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
                 workflow_id
             );
         }
+
+        // Labeled ready jobs that no active runner will claim.
+        if let Some(unserved) = report["unserved_ready_labels"].as_object()
+            && !unserved.is_empty()
+        {
+            eprintln!();
+            for (label, count) in unserved {
+                eprintln!("{}", models::unserved_label_warning(count, label));
+            }
+            eprintln!(
+                "  Start one with 'torc run {} --label <LABEL>', or see 'torc compute-nodes list {}'.",
+                workflow_id, workflow_id
+            );
+        }
     }
 }
 
@@ -1011,6 +1025,7 @@ pub fn build_workflow_summary_report(
         "is_complete": status.is_complete,
         "is_canceled": status.is_canceled,
         "runtime_blocked_ready_jobs": status.runtime_blocked_ready_jobs,
+        "unserved_ready_labels": status.unserved_ready_labels,
     });
 
     if let Some(walltime) = status.walltime_seconds {

@@ -131,6 +131,10 @@ pub struct ComputeNodeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_config_id: Option<i64>,
     pub compute_node_type: String,
+    /// Label the runner was started with; it claims only jobs with this label
+    /// (or only unlabeled jobs, when unset).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -290,6 +294,10 @@ pub struct JobModel {
     /// originally-declared workload).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// Routing label. A runner started with a label claims only jobs with
+    /// that label; a runner with no label claims only unlabeled jobs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -414,6 +422,9 @@ pub struct SpawnJobModel {
     /// Job names this job depends on (existing jobs or siblings in this batch).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
+    /// Routing label; only runners started with the same label claim this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// Add a batch of new jobs to an initialized workflow, all blocked on the
@@ -1005,6 +1016,9 @@ pub struct ComputeNodesResources {
     pub time_limit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_config_id: Option<i64>,
+    /// Runner label; only jobs with an identical label (or none, when unset) are claimed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1446,6 +1460,7 @@ impl ComputeNodeModel {
             time_limit: None,
             scheduler_config_id: None,
             compute_node_type,
+            label: None,
             scheduler,
             sample_count: None,
             peak_cpu_percent: None,
@@ -1482,6 +1497,7 @@ impl ComputeNodesResources {
             num_nodes,
             time_limit: None,
             scheduler_config_id: None,
+            label: None,
         }
     }
 }
@@ -1649,6 +1665,7 @@ impl JobModel {
             attempt_id: Some(1),
             priority: None,
             origin: None,
+            label: None,
         }
     }
 }
@@ -1690,6 +1707,33 @@ impl std::str::FromStr for JobStatus {
             _ => Err(format!("Value not valid: {}", s)),
         }
     }
+}
+
+/// Validate a routing label: non-empty with no leading or trailing whitespace.
+/// Labels are matched exactly, so a stray space would silently strand the job.
+/// Doubles as a clap `value_parser` for `--label`.
+pub fn parse_label(label: &str) -> Result<String, String> {
+    if label.is_empty() || label.trim() != label {
+        return Err(format!(
+            "label must be non-empty with no leading or trailing whitespace, got {:?}",
+            label
+        ));
+    }
+    Ok(label.to_string())
+}
+
+/// Validate an optional routing label; `None` is always valid.
+pub fn validate_label(label: Option<&str>) -> Result<(), String> {
+    label.map_or(Ok(()), |label| parse_label(label).map(drop))
+}
+
+/// Warning shown by `torc status` and the TUI for ready jobs whose label no
+/// active runner serves.
+pub fn unserved_label_warning(count: impl std::fmt::Display, label: &str) -> String {
+    format!(
+        "⚠ {} ready job(s) with label '{}' but no active runner has that label",
+        count, label
+    )
 }
 
 impl JobStatus {
@@ -2507,6 +2551,10 @@ pub struct WorkflowStatusResponse {
     /// allocations. None when no active allocation reports an end time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_allocation_remaining_seconds: Option<i64>,
+    /// Ready-job count per label that no active compute node was started with.
+    /// These jobs stay ready until a runner is started with a matching `--label`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub unserved_ready_labels: std::collections::BTreeMap<String, i64>,
 }
 
 /// One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
@@ -2649,6 +2697,7 @@ mod tests {
             time_limit: Some("PT1H".into()),
             scheduler_config_id: Some(3),
             compute_node_type: "local".into(),
+            label: None,
             scheduler: Some(json!({"kind": "local"})),
             sample_count: Some(2),
             peak_cpu_percent: Some(50.0),
@@ -2680,6 +2729,7 @@ mod tests {
             attempt_id: Some(1),
             priority: Some(0),
             origin: None,
+            label: None,
         };
         let result = ResultModel {
             id: Some(1),
@@ -2769,6 +2819,7 @@ mod tests {
             num_nodes: 1,
             time_limit: None,
             scheduler_config_id: None,
+            label: None,
         };
         let claim = ClaimJobsBasedOnResources {
             jobs: Some(vec![]),

@@ -66,6 +66,7 @@ torc run workflow.yaml -o /scratch/out     # output directory
 torc run workflow.yaml --max-parallel-jobs 4
 torc run workflow.yaml --num-cpus 8 --memory-gb 32 --num-gpus 2
 torc run workflow.yaml --time-limit PT1H   # or --end-time 2026-03-14T15:00:00Z
+torc run 123 --label windows --persistent  # dedicated runner for jobs with `label: windows`
 ```
 
 Behavior worth knowing:
@@ -85,6 +86,12 @@ Behavior worth knowing:
 - **`--time-limit` and `--end-time`** stop the runner, not the workflow. Jobs already running are
   terminated according to `execution_config`; remaining jobs stay ready for the next runner.
 - **`--skip-checks`** bypasses validation such as scheduler node requirements.
+- **`--label <label>`** makes the runner claim only jobs whose spec `label` matches exactly; a
+  runner without it claims only unlabeled jobs. Use it for jobs that must run on one particular
+  machine while the rest of the workflow runs elsewhere (for example on Slurm).
+- **`--persistent`** keeps the runner alive past the idle timeout for as long as the workflow has
+  unfinished jobs it could claim (its label's jobs, or unlabeled jobs when it has no label). Pair it
+  with `--label` when the labeled jobs become ready late in the workflow.
 
 Running the same workflow ID from several machines is how Torc distributes work: each runner claims
 ready jobs from the server. Nothing coordinates the output directory, so give shared-filesystem

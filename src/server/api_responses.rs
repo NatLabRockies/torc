@@ -18,6 +18,8 @@ pub enum CreateComputeNodeResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -1295,6 +1297,8 @@ pub enum ClaimNextJobsResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

@@ -668,6 +668,8 @@ fn main() {
             time_limit,
             end_time,
             skip_checks,
+            label,
+            persistent,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Resolve the spec source once (handles `-` reading from stdin) so
@@ -739,6 +741,8 @@ fn main() {
                 num_gpus: num_gpus.or(run_config.num_gpus),
                 num_nodes: None,
                 scheduler_config_id: None,
+                label: label.clone(),
+                persistent: *persistent,
                 log_prefix: None,
                 cpu_affinity_cpus_per_job: None,
                 log_level: log_level.clone(),
@@ -1049,6 +1053,7 @@ fn main() {
             ai_agent,
             partition,
             walltime,
+            persistent,
         } => {
             let args = WatchArgs {
                 workflow_id: *workflow_id,
@@ -1070,6 +1075,7 @@ fn main() {
                 ai_agent: ai_agent.clone(),
                 partition: partition.clone(),
                 walltime: walltime.clone(),
+                persistent: *persistent,
             };
             run_watch(&config, &args);
         }
