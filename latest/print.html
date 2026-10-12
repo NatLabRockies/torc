@@ -4200,6 +4200,7 @@ management in active projects where historical data is valuable but visual clutt
 <li><a href="core/how-to/./check-resource-utilization.html">Check Resource Utilization</a> - Monitoring resource usage</li>
 <li><a href="core/how-to/./view-resource-plots.html">View Resource Plots</a> - Visualizing resource metrics</li>
 <li><a href="core/how-to/./prioritize-jobs.html">Prioritize Jobs</a> - Ordering ready work with job priority</li>
+<li><a href="core/how-to/./route-jobs-with-labels.html">Route Jobs with Labels</a> - Sending jobs to dedicated runners</li>
 <li><a href="core/how-to/./parameterize-with-files.html">Parameterize Jobs with Files</a> - Using file-based parameters</li>
 <li><a href="core/how-to/./use-invocation-script.html">Use Invocation Scripts</a> - Setting up job environments</li>
 <li><a href="core/how-to/./ro-crate-metadata.html">Add RO-Crate Metadata</a> - Storing provenance with RO-Crate</li>
@@ -4885,6 +4886,119 @@ within that eligible set.</p>
 <li>Reserve very high priorities for urgent or user-facing work</li>
 <li>Keep most jobs at <code>0</code> unless you need explicit ordering</li>
 <li>Use <code>scheduler</code> for placement constraints and <code>priority</code> for ordering</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="route-jobs-with-labels"><a class="header" href="#route-jobs-with-labels">Route Jobs with Labels</a></h1>
+<p>Use a job <code>label</code> when some jobs must run on particular machines and the rest must stay off them.</p>
+<p>This is useful when:</p>
+<ul>
+<li>One step needs software that exists only on a dedicated machine, such as a Windows VM</li>
+<li>Most jobs run on short-lived Slurm compute nodes, but a few must run on a long-lived server</li>
+<li>Several kinds of runners share one workflow and each should take only its own work</li>
+</ul>
+<h2 id="how-labels-work"><a class="header" href="#how-labels-work">How Labels Work</a></h2>
+<p>A job has an optional <code>label</code>. A runner has an optional <code>--label</code>. When a runner asks for work, the
+server returns only jobs whose label is identical to the runner's.</p>
+<div class="table-wrapper"><table><thead><tr><th>Runner started with</th><th>Jobs it claims</th></tr></thead><tbody>
+<tr><td>no <code>--label</code></td><td>jobs with no label</td></tr>
+<tr><td><code>--label windows</code></td><td>jobs with <code>label: windows</code></td></tr>
+<tr><td><code>--label license-server</code></td><td>jobs with <code>label: license-server</code> (no others)</td></tr>
+</tbody></table>
+</div>
+<p>The match is exact and enforced by the server, so a runner cannot claim another runner's jobs by
+mistake. A labeled job must still fit the runner's resources, and <code>priority</code> still orders the jobs a
+runner is allowed to claim.</p>
+<p>Labels name a particular machine, not a kind of hardware. To send jobs to machines with GPUs, set
+<code>num_gpus</code> in the job's resource requirements instead of using a label; runners claim those jobs
+based on the GPUs they have free.</p>
+<h2 id="label-jobs-in-a-workflow-spec"><a class="header" href="#label-jobs-in-a-workflow-spec">Label Jobs in a Workflow Spec</a></h2>
+<pre><code class="language-yaml">name: labeled_jobs
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M
+
+jobs:
+  - name: simulate_{i}
+    command: ./simulate.sh {i}
+    resource_requirements: small
+    parameters:
+      i: "1:4"
+
+  - name: postprocess
+    command: postprocess.exe
+    resource_requirements: small
+    label: windows
+    depends_on_regexes:
+      - "^simulate_\\d+$"
+</code></pre>
+<p>The <code>simulate_*</code> jobs have no label, so ordinary runners take them. Only a runner started with
+<code>--label windows</code> takes <code>postprocess</code>. A complete example is in <code>examples/yaml/labeled_jobs.yaml</code>.</p>
+<p>In KDL, add <code>label "windows"</code> inside the <code>job</code> block.</p>
+<h2 id="start-a-labeled-runner"><a class="header" href="#start-a-labeled-runner">Start a Labeled Runner</a></h2>
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows
+</code></pre>
+<p>Runners started without <code>--label</code>, including the Slurm runners that <code>torc submit</code> launches, claim
+only unlabeled jobs.</p>
+<h2 id="keep-a-runner-alive-with---persistent"><a class="header" href="#keep-a-runner-alive-with---persistent">Keep a Runner Alive with <code>--persistent</code></a></h2>
+<p>A runner normally exits when it has been idle for the workflow's
+<code>compute_node_wait_for_new_jobs_seconds</code>. That suits Slurm nodes, which should release their
+allocation when there is nothing to do. It does not suit a dedicated machine whose jobs become ready
+only after long-running work elsewhere.</p>
+<p>Start that runner with <code>--persistent</code>:</p>
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows --persistent
+</code></pre>
+<p>A persistent runner ignores the idle timeout while the workflow still has unfinished jobs with its
+label (or unlabeled jobs, for a runner with no <code>--label</code>). Once none remain it exits like any other
+runner. It also exits when the workflow is complete or canceled, or when its <code>--end-time</code> or
+<code>--time-limit</code> is reached.</p>
+<h2 id="see-which-runners-serve-which-labels"><a class="header" href="#see-which-runners-serve-which-labels">See Which Runners Serve Which Labels</a></h2>
+<p>Each runner records the label it was started with on its compute node:</p>
+<pre><code class="language-console">torc compute-nodes list &lt;workflow_id&gt;
+</code></pre>
+<p>The <code>Label</code> column is empty for runners that claim unlabeled jobs.</p>
+<p><code>torc status &lt;workflow_id&gt;</code> warns when ready jobs carry a label that no active runner was started
+with, and <code>-f json</code> reports the counts per label in <code>unserved_ready_labels</code>:</p>
+<pre><code class="language-text">⚠ 2 ready job(s) with label 'windows' but no active runner has that label
+</code></pre>
+<h2 id="watch-a-workflow-that-mixes-slurm-and-labeled-runners"><a class="header" href="#watch-a-workflow-that-mixes-slurm-and-labeled-runners">Watch a Workflow That Mixes Slurm and Labeled Runners</a></h2>
+<p><code>torc watch</code> normally exits when there are no Slurm allocations and no ready jobs, because nothing
+it manages can make progress. That is wrong while a labeled runner on another machine is still
+working. Add <code>--persistent</code> so it waits for the workflow to complete:</p>
+<pre><code class="language-console">torc watch &lt;workflow_id&gt; --persistent --auto-schedule
+</code></pre>
+<p>With <code>--auto-schedule</code>, watch submits new Slurm allocations when the labeled work finishes and
+unblocks unlabeled jobs. Labeled ready jobs never trigger auto-scheduling.</p>
+<h2 id="label-dynamically-spawned-jobs"><a class="header" href="#label-dynamically-spawned-jobs">Label Dynamically Spawned Jobs</a></h2>
+<p>Jobs added at runtime by an orchestrator accept the same field. With the Python client:</p>
+<pre><code class="language-python">SpawnJobModel(
+    name="postprocess_i03",
+    command="postprocess.exe 3",
+    resource_requirements="small",
+    label="windows",
+)
+</code></pre>
+<p>See <a href="core/how-to/../tutorials/dynamic-jobs.html">Dynamic Jobs</a> for the orchestrator pattern.</p>
+<h2 id="check-or-change-a-label"><a class="header" href="#check-or-change-a-label">Check or Change a Label</a></h2>
+<pre><code class="language-console">torc jobs get &lt;job_id&gt;
+torc jobs update &lt;job_id&gt; --label windows
+torc jobs update &lt;job_id&gt; --clear-label
+</code></pre>
+<p><code>--clear-label</code> removes the label, so runners without <code>--label</code> claim the job. Through the API,
+update the job with an empty <code>label</code> to clear it.</p>
+<p>A label must be non-empty with no leading or trailing whitespace. Labels are matched exactly,
+including case.</p>
+<h2 id="things-to-watch-for"><a class="header" href="#things-to-watch-for">Things to Watch For</a></h2>
+<ul>
+<li><strong>A label that no runner uses strands the job.</strong> It stays <code>ready</code> and the workflow never
+completes. <code>torc status</code> warns about ready jobs whose label has no active runner, so check it if a
+workflow stalls.</li>
+<li><strong>Slurm runners launched by Torc have no label.</strong> Leave the jobs meant for them unlabeled. Labeled
+jobs are left out when Torc sizes Slurm allocations (<code>torc slurm generate</code>,
+<code>torc slurm regenerate</code>, <code>torc watch --auto-schedule</code>). A job that sets both <code>label</code> and
+<code>scheduler</code> is rejected when the spec is validated.</li>
+<li><strong>Parameters work in labels.</strong> <code>label: "{os}"</code> expands along with the job name and command.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-parameterize-jobs-with-files"><a class="header" href="#how-to-parameterize-jobs-with-files">How to Parameterize Jobs with Files</a></h1>
 <p>Process multiple input files by combining parameterization with file path templating.</p>
@@ -9177,6 +9291,9 @@ read the spec from stdin</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for jobs</li>
 <li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
 Default: <code>false</code></li>
+<li><code>--label &lt;LABEL&gt;</code> — Only claim jobs with this label. Without it, only unlabeled jobs are claimed</li>
+<li><code>--persistent</code> — Ignore the idle timeout while the workflow still has unfinished jobs this runner
+can claim (same label, or unlabeled when no --label is given)</li>
 </ul>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
 <p>Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)</p>
@@ -9247,6 +9364,13 @@ retries and <code>spawn_jobs</code> children (anything with <code>origin IS NOT 
 that rely on either mechanism, since deferred <code>schedule_nodes</code> actions only account for the
 originally-declared workload.</p>
 </li>
+<li>
+<p><strong>With runners outside Slurm</strong> (<code>--persistent</code>):</p>
+<pre><code class="language-bash">torc watch 123 --persistent
+</code></pre>
+<p>Keeps watching until the workflow completes, even when there are no Slurm allocations and no
+ready jobs. Use it when a <code>torc run --label</code> runner on a dedicated machine is still working.</p>
+</li>
 </ol>
 <h3 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h3>
 <ul>
@@ -9259,6 +9383,7 @@ originally-declared workload.</p>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job files. Default: <code>output</code></li>
 <li><code>-s</code>, <code>--show-job-counts</code> — Show job counts by status during polling. WARNING: Can cause high
 server load for large workflows.</li>
+<li><code>--persistent</code> — Keep watching until the workflow completes, even with no Slurm allocations</li>
 </ul>
 <p><strong>Recovery:</strong></p>
 <ul>
@@ -10940,6 +11065,7 @@ ongoing-management API.</p>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the job</td></tr>
 <tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
 <tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
+<tr><td><code>label</code></td><td>string</td><td>none</td><td>Routing label; only runners started with the same <code>--label</code> claim it</td></tr>
 <tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
 <tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for this job</td></tr>
 <tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="core/reference/workflow-spec.html#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>
@@ -16311,7 +16437,7 @@ doesn't resolve on your cluster either, fall back to the HSN name (next section)
 grep $(hostname -s) /etc/hosts    # often shows the HSN alias explicitly
 getent hosts $(hostname -s)       # canonical address lookup
 </code></pre>
-<p>On NREL Kestrel, for example, the HSN hostname follows the pattern
+<p>On NLR Kestrel, for example, the HSN hostname follows the pattern
 <code>&lt;shortname&gt;.hsn.cm.kestrel.hpc.nrel.gov</code>. See
 <a href="specialized/hpc/./hpc-deployment.html#finding-the-internal-hostname">HPC Deployment → Finding the Internal Hostname</a>
 for cluster-specific hostnames and
@@ -26937,8 +27063,8 @@ writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</c
 release is tagged.</p>
 <h2 id="cutting-a-release"><a class="header" href="#cutting-a-release">Cutting a Release</a></h2>
 <p>Releases are driven by <a href="https://github.com/crate-ci/cargo-release"><code>cargo-release</code></a> with the
-configuration in <a href="https://github.com/NREL/torc/blob/main/release.toml"><code>release.toml</code></a>. The tool
-bumps the version in every place it needs to be kept in sync (<code>Cargo.toml</code>, <code>Cargo.lock</code>,
+configuration in <a href="https://github.com/NatLabRockies/torc/blob/main/release.toml"><code>release.toml</code></a>. The
+tool bumps the version in every place it needs to be kept in sync (<code>Cargo.toml</code>, <code>Cargo.lock</code>,
 <code>Dockerfile</code>, <code>python_client/pyproject.toml</code>, and the install snippets in
 <code>docs/src/getting-started/installation.md</code>) and creates a single "chore: Release" commit.</p>
 <p>Prerequisite: <code>cargo install cargo-release</code> (see step 5 of <a href="contributing.html#development-setup">Development Setup</a>).</p>
@@ -26956,14 +27082,14 @@ cargo release minor --no-publish --no-push --no-tag --execute   # 0.30.2 -&gt; 0
 cargo release major --no-publish --no-push --no-tag --execute   # 0.30.2 -&gt; 1.0.0
 </code></pre>
 <p>After the bump commit lands on <code>main</code>, tag it and push the tag to trigger the
-<a href="https://github.com/NREL/torc/blob/main/.github/workflows/release.yml">release workflow</a>, which
-builds binaries for all supported platforms and creates a draft GitHub release:</p>
+<a href="https://github.com/NatLabRockies/torc/blob/main/.github/workflows/release.yml">release workflow</a>,
+which builds binaries for all supported platforms and creates a draft GitHub release:</p>
 <pre><code class="language-bash">git push origin main
 git tag v0.30.3
 git push origin v0.30.3
 </code></pre>
-<p>See <a href="https://github.com/NREL/torc/blob/main/.github/RELEASE.md"><code>.github/RELEASE.md</code></a> for details on
-which binaries are produced, supported platforms, and how to publish the draft release.</p>
+<p>See <a href="https://github.com/NatLabRockies/torc/blob/main/.github/RELEASE.md"><code>.github/RELEASE.md</code></a> for
+details on which binaries are produced, supported platforms, and how to publish the draft release.</p>
 <h2 id="rebuilding-the-readme-tui-demo-gif"><a class="header" href="#rebuilding-the-readme-tui-demo-gif">Rebuilding the README TUI Demo GIF</a></h2>
 <p>The animated TUI screencast in <code>README.md</code> is regenerated from a script:</p>
 <pre><code class="language-bash">./docs/assets/record_tui_demo.sh

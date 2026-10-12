@@ -271,6 +271,9 @@ read the spec from stdin</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for jobs</li>
 <li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
 Default: <code>false</code></li>
+<li><code>--label &lt;LABEL&gt;</code> — Only claim jobs with this label. Without it, only unlabeled jobs are claimed</li>
+<li><code>--persistent</code> — Ignore the idle timeout while the workflow still has unfinished jobs this runner
+can claim (same label, or unlabeled when no --label is given)</li>
 </ul>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
 <p>Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)</p>
@@ -341,6 +344,13 @@ retries and <code>spawn_jobs</code> children (anything with <code>origin IS NOT 
 that rely on either mechanism, since deferred <code>schedule_nodes</code> actions only account for the
 originally-declared workload.</p>
 </li>
+<li>
+<p><strong>With runners outside Slurm</strong> (<code>--persistent</code>):</p>
+<pre><code class="language-bash">torc watch 123 --persistent
+</code></pre>
+<p>Keeps watching until the workflow completes, even when there are no Slurm allocations and no
+ready jobs. Use it when a <code>torc run --label</code> runner on a dedicated machine is still working.</p>
+</li>
 </ol>
 <h3 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h3>
 <ul>
@@ -353,6 +363,7 @@ originally-declared workload.</p>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for job files. Default: <code>output</code></li>
 <li><code>-s</code>, <code>--show-job-counts</code> — Show job counts by status during polling. WARNING: Can cause high
 server load for large workflows.</li>
+<li><code>--persistent</code> — Keep watching until the workflow completes, even with no Slurm allocations</li>
 </ul>
 <p><strong>Recovery:</strong></p>
 <ul>
