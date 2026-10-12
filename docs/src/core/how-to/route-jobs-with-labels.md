@@ -13,15 +13,19 @@ This is useful when:
 A job has an optional `label`. A runner has an optional `--label`. When a runner asks for work, the
 server returns only jobs whose label is identical to the runner's.
 
-| Runner started with | Jobs it claims                     |
-| ------------------- | ---------------------------------- |
-| no `--label`        | jobs with no label                 |
-| `--label windows`   | jobs with `label: windows`         |
-| `--label gpu`       | jobs with `label: gpu` (no others) |
+| Runner started with      | Jobs it claims                                |
+| ------------------------ | --------------------------------------------- |
+| no `--label`             | jobs with no label                            |
+| `--label windows`        | jobs with `label: windows`                    |
+| `--label license-server` | jobs with `label: license-server` (no others) |
 
 The match is exact and enforced by the server, so a runner cannot claim another runner's jobs by
 mistake. A labeled job must still fit the runner's resources, and `priority` still orders the jobs a
 runner is allowed to claim.
+
+Labels name a particular machine, not a kind of hardware. To send jobs to machines with GPUs, set
+`num_gpus` in the job's resource requirements instead of using a label; runners claim those jobs
+based on the GPUs they have free.
 
 ## Label Jobs in a Workflow Spec
 
