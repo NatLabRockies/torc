@@ -42,7 +42,10 @@ pub enum CancelWorkflowError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ClaimJobsBasedOnResourcesError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
     Status422(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
@@ -50,7 +53,10 @@ pub enum ClaimJobsBasedOnResourcesError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ClaimNextJobsError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
     Status422(models::ErrorResponse),
+    Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 

@@ -2575,7 +2575,7 @@ pub async fn batch_complete_jobs(
         (status = 200, description = "Jobs added blocked on the caller", body = models::SpawnJobsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Job or workflow not found", body = models::ErrorResponse),
-        (status = 422, description = "Validation error: caller job not Running, duplicate names in the batch, negative priority, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded", body = models::ErrorResponse),
+        (status = 422, description = "Validation error: caller job not Running, duplicate names in the batch, negative priority, invalid label, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -4076,7 +4076,10 @@ pub async fn reset_job_status(
     request_body = models::ComputeNodesResources,
     responses(
         (status = 200, body = models::ClaimJobsBasedOnResources),
-        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse)
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn claim_jobs_based_on_resources(
@@ -4104,7 +4107,10 @@ pub async fn claim_jobs_based_on_resources(
     params(("id" = i64, Path, description = "Workflow ID"), ClaimNextJobsQuery),
     responses(
         (status = 200, body = models::ClaimNextJobsResponse),
-        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse)
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Workflow not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn claim_next_jobs(

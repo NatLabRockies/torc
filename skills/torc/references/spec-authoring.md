@@ -11,6 +11,7 @@ semantics that decide whether a spec behaves as intended.
 - [Parameter tables from CSV or JSON](#parameter-tables-from-csv-or-json)
 - [Environment and invocation scripts](#environment-and-invocation-scripts)
 - [Resource requirements](#resource-requirements)
+- [Job labels](#job-labels)
 - [Failure handlers](#failure-handlers)
 - [Workflow actions](#workflow-actions)
 - [Execution config](#execution-config)
@@ -193,6 +194,25 @@ Resource requirements matter beyond bookkeeping:
   requirements cannot be auto-recovered.
 
 A local-only workflow generally needs no resource requirements at all.
+
+## Job labels
+
+```yaml
+jobs:
+  - name: sign_installer
+    command: sign.bat
+    label: windows
+```
+
+A job's `label` routes it to particular runners: only a runner started with the identical
+`torc run <id> --label windows` claims it, and unlabeled jobs are claimed only by runners with no
+label. Matching is exact, so the label must be non-empty with no leading or trailing whitespace.
+
+- Slurm runners launched by Torc are unlabeled. Labeled jobs are left out when Torc sizes Slurm
+  allocations, and a job that sets both `label` and `scheduler` is rejected at validation.
+- Parameters work in labels (`label: "{os}"`).
+- Labels are for routing to a specific machine, not for resources: use resource requirements for
+  CPUs, memory, and GPUs.
 
 ## Failure handlers
 

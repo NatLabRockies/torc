@@ -10,6 +10,7 @@ torc watch <id>                     # poll until complete, then report
 torc watch <id> -p 30               # poll interval in seconds (default 60)
 torc watch <id> --recover           # recover from failures each round
 torc watch <id> --recover --auto-schedule
+torc watch <id> --persistent        # keep watching with no Slurm allocations
 ```
 
 This is the right choice for automation: it blocks until the workflow finishes and exits 1 when the
@@ -19,6 +20,11 @@ cannot progress, or when only unclassified `pending_failed` jobs remain.
 `--auto-schedule` regenerates and submits Slurm schedulers when no active or pending scheduler
 exists but ready jobs do, and when accumulated retry jobs exceed `--auto-schedule-threshold`
 (default 5). It warns when run from a directory other than the recorded submission directory.
+
+`--persistent` is for workflows with runners outside Slurm, such as a `torc run --label` runner on a
+dedicated machine. Without it, watch exits when there are no Slurm allocations and no ready jobs for
+them, because it assumes nothing can make progress. With it, watch keeps polling until the workflow
+completes, and warns about ready labeled jobs that no active runner serves.
 
 Recovery behavior is covered in `rerun-and-recovery.md`.
 
