@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Torc system map</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 3rem 1.5rem; color: #172033; font: 16px Inter, ui-sans-serif, system-ui, sans-serif; background: #f8fafc; }
+    main { max-width: 1280px; margin: auto; }
+    h1 { margin: 0; font-size: clamp(2.4rem, 5vw, 4.6rem); letter-spacing: -0.06em; }
+    header p { max-width: 42rem; color: #475569; font-size: 1.15rem; line-height: 1.45; }
+    .map { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 1rem; margin-top: 2rem; }
+    section { padding: 1.25rem; border: 2px solid var(--ink); border-radius: 1.25rem; background: var(--soft); }
+    h2 { margin: 0; color: var(--ink); }
+    .user { --ink: #0369a1; --soft: #e0f2fe; }
+    .server { --ink: #6d28d9; --soft: #f3e8ff; }
+    .runners { --ink: #15803d; --soft: #dcfce7; }
+    .feedback { --ink: #b45309; --soft: #fef3c7; grid-column: 1 / -1; }
+    .cards { display: grid; gap: .7rem; margin-top: 1rem; }
+    .server .cards, .feedback .cards { grid-template-columns: repeat(2, 1fr); }
+    article { padding: .8rem; border: 1px solid var(--ink); border-radius: .7rem; background: #fff; }
+    article b { color: var(--ink); font-size: .8rem; letter-spacing: .06em; }
+    article p { margin: .3rem 0 0; color: #475569; font-size: .84rem; line-height: 1.35; }
+    .flow { grid-column: 1 / -1; display: flex; justify-content: center; gap: .7rem; margin: 1rem 0 0; color: #334155; font-weight: bold; font-size: .82rem; letter-spacing: .06em; }
+    @media (max-width: 760px) { .map { grid-template-columns: 1fr; } .feedback { grid-column: auto; } .server .cards, .feedback .cards { grid-template-columns: 1fr; } }
+  </style>
+  <main>
+    <header><h1>One durable center.<br>Many places to work.</h1><p>Researchers operate shared workflow state while independent workers pull fitting jobs.</p></header>
+    <div class="map">
+      <section class="user"><h2>Researcher + Clients</h2><div class="cards"><article><b>DESCRIBE</b><p>YAML, JSON, KDL specifications for jobs, dependencies, and resources.</p></article><article><b>AUTHOR + OPERATE</b><p>CLI, Python, Julia, HTTP: create, cancel, rerun, recover.</p></article><article><b>OBSERVE + DEBUG</b><p>TUI, dashboard, MCP, reports, and resource plots.</p></article></div></section>
+      <section class="server"><h2>Torc Server</h2><div class="cards"><article><b>UNIFIED GRAPH</b><p>Explicit, file, and JSON-data relationships.</p></article><article><b>DURABLE SQLITE STATE</b><p>Claims, attempts, results, events.</p></article><article><b>READY-JOB QUEUE</b><p>Shared, priority-aware, resource-matched work.</p></article><article><b>CONTROL DECISIONS</b><p>Release, extend, recover, selectively rerun.</p></article></div></section>
+      <section class="runners"><h2>Torc Runners</h2><div class="cards"><article><b>LOCAL + REMOTE</b><p>Direct processes on workstations and SSH hosts.</p></article><article><b>SLURM ALLOCATIONS</b><p>Independent workers, one shared queue.</p></article><article><b>MEASURE + REPORT</b><p>Results, logs, capacity, and observations.</p></article></div></section>
+      <section class="feedback"><h2>Results + Feedback</h2><div class="cards"><article><b>RESULTS</b><p>Status, exit code, logs, attempts.</p></article><article><b>RESOURCE OBSERVATIONS</b><p>CPU, peak memory, runtime, accounting.</p></article><article><b>SCIENTIFIC ARTIFACTS</b><p>Files and JSON data establish relationships.</p></article><article><b>TRACEABILITY</b><p>Reports, plots, and RO-Crate.</p></article></div></section>
+    </div>
+    <div class="flow">CREATE + CONTROL → CLAIM → EXECUTE → MEASURE → PERSIST → RELEASE | EXTEND | RECOVER</div>
+  </main>
+</html>

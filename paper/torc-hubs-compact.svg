@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <style>
+    text { font-family: Inter, ui-sans-serif, system-ui, sans-serif; fill: #172033; }
+    .title { font-size: 31px; font-weight: 700; }
+    .subtitle { font-size: 15px; fill: #475569; }
+    .group { font-size: 20px; font-weight: 700; }
+    .user-title { fill: #0369a1; }
+    .server-title { fill: #6d28d9; }
+    .runner-title { fill: #15803d; }
+    .feedback-title { fill: #b45309; }
+    .body { font-size: 13px; }
+    .small { font-size: 11px; fill: #475569; }
+    .hub { font-size: 23px; font-weight: 700; }
+    .card { fill: #fff; stroke-width: 1.5; }
+    .flow { fill: none; stroke-width: 5; }
+    .flow-label { font-size: 12px; font-weight: 700; }
+  </style>
+  <defs>
+    <marker id="blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#2563eb"/></marker>
+    <marker id="purple" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6d28d9"/></marker>
+    <marker id="green" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#15803d"/></marker>
+    <marker id="amber" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b45309"/></marker>
+  </defs>
+
+  <rect width="1600" height="900" fill="#f8fafc"/>
+  <text x="800" y="52" text-anchor="middle" class="title">Torc: one durable control loop, many execution environments</text>
+  <text x="800" y="79" text-anchor="middle" class="subtitle">Researchers operate shared workflow state while independent workers pull fitting jobs.</text>
+
+  <rect x="55" y="130" width="410" height="420" rx="20" fill="#e0f2fe" stroke="#0369a1" stroke-width="3"/>
+  <text x="80" y="165" class="group user-title">USER + CLIENTS</text>
+  <text x="80" y="188" class="subtitle">Describe, operate, and observe one workflow model.</text>
+  <rect x="80" y="220" width="360" height="76" rx="12" class="card" stroke="#0369a1"/>
+  <text x="100" y="247" class="body" font-weight="700">DESCRIBE</text><text x="100" y="270" class="small">YAML, JSON, KDL: commands, parameters, dependencies, resources</text>
+  <rect x="80" y="315" width="360" height="76" rx="12" class="card" stroke="#0369a1"/>
+  <text x="100" y="342" class="body" font-weight="700">AUTHOR + OPERATE</text><text x="100" y="365" class="small">CLI, Python, Julia, HTTP: create, cancel, rerun, recover</text>
+  <rect x="80" y="410" width="360" height="76" rx="12" class="card" stroke="#0369a1"/>
+  <text x="100" y="437" class="body" font-weight="700">OBSERVE + DEBUG</text><text x="100" y="460" class="small">TUI, dashboard, MCP, reports, and resource plots</text>
+  <ellipse cx="260" cy="595" rx="165" ry="53" fill="#dbeafe" stroke="#0369a1" stroke-width="4"/>
+  <text x="260" y="590" text-anchor="middle" class="hub">USER</text><text x="260" y="615" text-anchor="middle" class="body">researcher + clients</text>
+
+  <rect x="510" y="130" width="580" height="420" rx="20" fill="#f3e8ff" stroke="#6d28d9" stroke-width="3"/>
+  <text x="535" y="165" class="group server-title">TORC SERVER</text>
+  <text x="535" y="188" class="subtitle">Shared REST API and durable control plane.</text>
+  <rect x="535" y="220" width="250" height="76" rx="12" class="card" stroke="#6d28d9"/>
+  <text x="555" y="247" class="body" font-weight="700">UNIFIED GRAPH</text><text x="555" y="270" class="small">explicit, file, and JSON-data relationships</text>
+  <rect x="815" y="220" width="250" height="76" rx="12" class="card" stroke="#2563eb"/>
+  <text x="835" y="247" class="body" font-weight="700">DURABLE SQLITE STATE</text><text x="835" y="270" class="small">graph, claims, attempts, results, events</text>
+  <rect x="535" y="315" width="530" height="76" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="555" y="342" class="body" font-weight="700">SHARED READY-JOB QUEUE</text><text x="555" y="365" class="small">all runners claim through one API: priority, scheduler, remaining time</text>
+  <rect x="535" y="410" width="250" height="76" rx="12" class="card" stroke="#2563eb"/>
+  <text x="555" y="437" class="body" font-weight="700">RESOURCE CLAIMS</text><text x="555" y="460" class="small">CPU, memory, GPU, nodes, runtime</text>
+  <rect x="815" y="410" width="250" height="76" rx="12" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
+  <text x="835" y="437" class="body" font-weight="700">CONTROL DECISIONS</text><text x="835" y="460" class="small">release, extend, recover, selective rerun</text>
+  <ellipse cx="800" cy="595" rx="205" ry="53" fill="#f3e8ff" stroke="#6d28d9" stroke-width="4"/>
+  <text x="800" y="590" text-anchor="middle" class="hub">TORC SERVER</text><text x="800" y="615" text-anchor="middle" class="body">REST API + shared durable control plane</text>
+
+  <rect x="1135" y="130" width="410" height="420" rx="20" fill="#dcfce7" stroke="#15803d" stroke-width="3"/>
+  <text x="1160" y="165" class="group runner-title">TORC RUNNERS</text>
+  <text x="1160" y="188" class="subtitle">Pull, execute, measure, and report.</text>
+  <rect x="1160" y="220" width="360" height="76" rx="12" class="card" stroke="#15803d"/>
+  <text x="1180" y="247" class="body" font-weight="700">LOCAL + SSH REMOTE</text><text x="1180" y="270" class="small">direct child processes on workstations and remote hosts</text>
+  <rect x="1160" y="315" width="360" height="76" rx="12" class="card" stroke="#15803d"/>
+  <text x="1180" y="342" class="body" font-weight="700">SLURM ALLOCATIONS</text><text x="1180" y="365" class="small">independent allocations pull from the shared queue</text>
+  <rect x="1160" y="410" width="360" height="76" rx="12" class="card" stroke="#15803d"/>
+  <text x="1180" y="437" class="body" font-weight="700">CAPACITY + RESILIENCE</text><text x="1180" y="460" class="small">monitoring, concurrency, execution modes, offline journal</text>
+  <ellipse cx="1340" cy="595" rx="165" ry="53" fill="#dcfce7" stroke="#15803d" stroke-width="4"/>
+  <text x="1340" y="590" text-anchor="middle" class="hub">TORC RUNNERS</text><text x="1340" y="615" text-anchor="middle" class="body">independent workers, one shared queue</text>
+
+  <path d="M425 595 L585 595" class="flow" stroke="#2563eb" marker-end="url(#blue)"/><text x="505" y="575" text-anchor="middle" class="flow-label" fill="#1e3a8a">create + control</text>
+  <path d="M1008 595 L1170 595" class="flow" stroke="#6d28d9" marker-end="url(#purple)"/><text x="1088" y="575" text-anchor="middle" class="flow-label" fill="#581c87">atomic claims</text>
+
+  <rect x="180" y="700" width="1240" height="150" rx="20" fill="#fef3c7" stroke="#b45309" stroke-width="3"/>
+  <text x="210" y="735" class="group feedback-title">RESULTS + FEEDBACK</text><text x="210" y="758" class="subtitle">Measured execution becomes durable knowledge.</text>
+  <text x="210" y="790" class="body" font-weight="700">RESULTS</text><text x="210" y="812" class="small">status, exit code, logs, attempts</text>
+  <text x="500" y="790" class="body" font-weight="700">RESOURCE OBSERVATIONS</text><text x="500" y="812" class="small">CPU, peak memory, runtime, scheduler accounting</text>
+  <text x="850" y="790" class="body" font-weight="700">SCIENTIFIC ARTIFACTS</text><text x="850" y="812" class="small">files, JSON user data, logs</text>
+  <text x="1140" y="790" class="body" font-weight="700">TRACEABILITY</text><text x="1140" y="812" class="small">reports, resource plots, RO-Crate</text>
+  <path d="M1340 648 L1240 698" class="flow" stroke="#15803d" marker-end="url(#green)"/><text x="1325" y="690" class="flow-label" fill="#166534">results + observations</text>
+  <path d="M800 698 L800 650" class="flow" stroke="#b45309" marker-end="url(#amber)"/><text x="820" y="680" class="flow-label" fill="#78350f">persist outcomes</text>
+</svg>
