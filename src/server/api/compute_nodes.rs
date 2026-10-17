@@ -14,7 +14,10 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
+use super::{
+    ApiContext, SqlQueryBuilder, database_error_with_msg, labels_column,
+    resource_not_found_response,
+};
 
 /// Trait defining compute node-related API operations
 #[async_trait]
@@ -91,7 +94,7 @@ const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "time_limit",
     "scheduler_config_id",
     "compute_node_type",
-    "label",
+    "labels",
     "end_time",
     "sample_count",
     "peak_cpu_percent",
@@ -150,7 +153,7 @@ where
                 ,peak_memory_bytes
                 ,avg_memory_bytes
                 ,end_time
-                ,label
+                ,labels
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING id
             "#,
@@ -175,7 +178,7 @@ where
         .bind(body.peak_memory_bytes)
         .bind(body.avg_memory_bytes)
         .bind(&body.end_time)
-        .bind(&body.label)
+        .bind(models::labels_to_json(body.labels.as_deref()))
         .fetch_one(self.context.pool.as_ref())
         .await
         {
@@ -247,7 +250,7 @@ where
                    num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id,
                    compute_node_type, scheduler, sample_count,
                    peak_cpu_percent, avg_cpu_percent,
-                   peak_memory_bytes, avg_memory_bytes, end_time, label
+                   peak_memory_bytes, avg_memory_bytes, end_time, labels
             FROM compute_node
             WHERE id = $1
             "#,
@@ -295,7 +298,7 @@ where
             time_limit,
             scheduler_config_id: record.get("scheduler_config_id"),
             compute_node_type: record.get("compute_node_type"),
-            label: record.get("label"),
+            labels: labels_column(&record, "labels"),
             scheduler,
             sample_count: record.get("sample_count"),
             peak_cpu_percent: record.get("peak_cpu_percent"),
@@ -359,7 +362,7 @@ where
                 ,peak_memory_bytes
                 ,avg_memory_bytes
                 ,end_time
-                ,label
+                ,labels
             FROM compute_node"
             .to_string();
 
@@ -452,7 +455,7 @@ where
                 time_limit,
                 scheduler_config_id: record.get("scheduler_config_id"),
                 compute_node_type: record.get("compute_node_type"),
-                label: record.get("label"),
+                labels: labels_column(&record, "labels"),
                 scheduler,
                 sample_count: record.get("sample_count"),
                 peak_cpu_percent: record.get("peak_cpu_percent"),

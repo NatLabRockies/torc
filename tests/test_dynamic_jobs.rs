@@ -158,7 +158,7 @@ fn spawn_job(name: &str, deps: &[&str], priority: i64) -> models::SpawnJobModel 
         } else {
             Some(deps.iter().map(|s| s.to_string()).collect())
         },
-        label: None,
+        labels: None,
     }
 }
 
@@ -383,7 +383,7 @@ fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .unwrap()
     .items
@@ -445,7 +445,7 @@ fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .unwrap()
     .items
@@ -459,8 +459,8 @@ fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
     );
 }
 
-/// A label on a spawned job is stored, so only a runner started with that
-/// label can claim it.
+/// Labels on a spawned job are stored (sorted), so only a runner started with
+/// all of them can claim it.
 #[rstest]
 fn test_spawned_job_keeps_label(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -475,7 +475,7 @@ fn test_spawned_job_keeps_label(start_server: &ServerProcess) {
         models::SpawnJobsRequest {
             lineage: Some("L".to_string()),
             jobs: vec![models::SpawnJobModel {
-                label: Some("windows".to_string()),
+                labels: Some(vec!["windows".to_string(), "gpu".to_string()]),
                 ..spawn_job("labeled_worker", &[], 1)
             }],
             state: None,
@@ -484,7 +484,10 @@ fn test_spawned_job_keeps_label(start_server: &ServerProcess) {
     .unwrap();
 
     let spawned = apis::jobs_api::get_job(config, response.spawned_job_ids[0]).unwrap();
-    assert_eq!(spawned.label.as_deref(), Some("windows"));
+    assert_eq!(
+        spawned.labels,
+        Some(vec!["gpu".to_string(), "windows".to_string()])
+    );
 }
 
 /// Spawn validates labels like create does: an empty or whitespace-padded
@@ -497,14 +500,14 @@ fn test_spawn_rejects_invalid_label(start_server: &ServerProcess) {
     let run_id = run_id_of(config, workflow_id);
     claim_and_mark_running(config, workflow_id, run_id, orch);
 
-    for bad in ["", " ", "windows ", " windows"] {
+    for bad in ["", " ", "windows ", " windows", "a,b"] {
         let result = apis::jobs_api::spawn_jobs(
             config,
             orch,
             models::SpawnJobsRequest {
                 lineage: Some("L".to_string()),
                 jobs: vec![models::SpawnJobModel {
-                    label: Some(bad.to_string()),
+                    labels: Some(vec![bad.to_string()]),
                     ..spawn_job("bad_label_worker", &[], 1)
                 }],
                 state: None,
@@ -715,7 +718,7 @@ fn test_runner_flow_continuation_and_convergence(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
-            None, // label
+            None, // labels
         )
         .expect("list_jobs")
         .items
@@ -872,7 +875,7 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .unwrap()
     .items
@@ -894,7 +897,7 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .unwrap()
     .items
@@ -969,7 +972,7 @@ fn test_idempotent_replay(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
-            None, // label
+            None, // labels
         )
         .unwrap()
         .items
@@ -1061,7 +1064,7 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .unwrap()
     .items
@@ -1083,7 +1086,7 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .unwrap()
     .items

@@ -1691,7 +1691,7 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
-        label: Option<String>,
+        labels: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1708,7 +1708,7 @@ where
             origin_is_set,
             name,
             command,
-            label,
+            labels,
             context,
         )
         .await
@@ -2359,10 +2359,10 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
-        label: Option<String>,
+        labels: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        self.transport_claim_next_jobs(id, limit, label, context)
+        self.transport_claim_next_jobs(id, limit, labels, context)
             .await
     }
 

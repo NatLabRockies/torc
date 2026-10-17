@@ -131,10 +131,10 @@ pub struct ComputeNodeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_config_id: Option<i64>,
     pub compute_node_type: String,
-    /// Label the runner was started with; it claims only jobs with this label
-    /// (or only unlabeled jobs, when unset).
+    /// Labels the runner was started with; it claims only jobs whose every
+    /// label it has (or only unlabeled jobs, when unset).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub labels: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -294,10 +294,10 @@ pub struct JobModel {
     /// originally-declared workload).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
-    /// Routing label. A runner started with a label claims only jobs with
-    /// that label; a runner with no label claims only unlabeled jobs.
+    /// Routing labels. A labeled runner claims only labeled jobs whose every
+    /// label it has; a runner with no labels claims only unlabeled jobs.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub labels: Option<Vec<String>>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -422,9 +422,9 @@ pub struct SpawnJobModel {
     /// Job names this job depends on (existing jobs or siblings in this batch).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
-    /// Routing label; only runners started with the same label claim this job.
+    /// Routing labels; only runners started with all of them claim this job.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub labels: Option<Vec<String>>,
 }
 
 /// Add a batch of new jobs to an initialized workflow, all blocked on the
@@ -1016,9 +1016,10 @@ pub struct ComputeNodesResources {
     pub time_limit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler_config_id: Option<i64>,
-    /// Runner label; only jobs with an identical label (or none, when unset) are claimed.
+    /// Runner labels; only labeled jobs whose every label is in this set (or
+    /// unlabeled jobs, when unset) are claimed.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub labels: Option<Vec<String>>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1460,7 +1461,7 @@ impl ComputeNodeModel {
             time_limit: None,
             scheduler_config_id: None,
             compute_node_type,
-            label: None,
+            labels: None,
             scheduler,
             sample_count: None,
             peak_cpu_percent: None,
@@ -1497,7 +1498,7 @@ impl ComputeNodesResources {
             num_nodes,
             time_limit: None,
             scheduler_config_id: None,
-            label: None,
+            labels: None,
         }
     }
 }
@@ -1665,7 +1666,7 @@ impl JobModel {
             attempt_id: Some(1),
             priority: None,
             origin: None,
-            label: None,
+            labels: None,
         }
     }
 }
@@ -1709,30 +1710,59 @@ impl std::str::FromStr for JobStatus {
     }
 }
 
-/// Validate a routing label: non-empty with no leading or trailing whitespace.
-/// Labels are matched exactly, so a stray space would silently strand the job.
+/// Validate one routing label: non-empty, no leading or trailing whitespace,
+/// no comma (label sets travel comma-separated in query strings). Labels are
+/// matched exactly, so a stray space would silently strand the job.
 /// Doubles as a clap `value_parser` for `--label`.
 pub fn parse_label(label: &str) -> Result<String, String> {
-    if label.is_empty() || label.trim() != label {
+    if label.is_empty() || label.trim() != label || label.contains(',') {
         return Err(format!(
-            "label must be non-empty with no leading or trailing whitespace, got {:?}",
+            "label must be non-empty with no comma and no leading or trailing whitespace, got {:?}",
             label
         ));
     }
     Ok(label.to_string())
 }
 
-/// Validate an optional routing label; `None` is always valid.
-pub fn validate_label(label: Option<&str>) -> Result<(), String> {
-    label.map_or(Ok(()), |label| parse_label(label).map(drop))
+/// Validate an optional label set; `None` and an empty set are always valid.
+pub fn validate_labels(labels: Option<&[String]>) -> Result<(), String> {
+    labels
+        .unwrap_or_default()
+        .iter()
+        .try_for_each(|label| parse_label(label).map(drop))
 }
 
-/// Warning shown by `torc status` and the TUI for ready jobs whose label no
-/// active runner serves.
-pub fn unserved_label_warning(count: impl std::fmt::Display, label: &str) -> String {
+/// Canonical database form of a label set: a sorted, deduplicated JSON array,
+/// or `None` for no labels. Equal sets always serialize identically, so the
+/// server can group jobs by their label set.
+pub fn labels_to_json(labels: Option<&[String]>) -> Option<String> {
+    let mut labels = labels.unwrap_or_default().to_vec();
+    labels.sort();
+    labels.dedup();
+    (!labels.is_empty()).then(|| serde_json::to_string(&labels).expect("strings serialize"))
+}
+
+/// Inverse of [`labels_to_json`].
+pub fn labels_from_json(json: Option<&str>) -> Option<Vec<String>> {
+    json.and_then(|json| serde_json::from_str(json).ok())
+}
+
+/// Parse the comma-separated `labels` query parameter; an empty string is an
+/// empty set (the runner has no labels).
+pub fn labels_from_query(labels: &str) -> Vec<String> {
+    labels
+        .split(',')
+        .filter(|label| !label.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Warning shown by `torc status` and the TUI for ready jobs whose label set no
+/// active runner covers. `labels` is the comma-joined set.
+pub fn unserved_label_warning(count: impl std::fmt::Display, labels: &str) -> String {
     format!(
-        "⚠ {} ready job(s) with label '{}' but no active runner has that label",
-        count, label
+        "⚠ {} ready job(s) with labels '{}' but no active runner has all of them",
+        count, labels
     )
 }
 
@@ -2551,8 +2581,8 @@ pub struct WorkflowStatusResponse {
     /// allocations. None when no active allocation reports an end time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_allocation_remaining_seconds: Option<i64>,
-    /// Ready-job count per label that no active compute node was started with.
-    /// These jobs stay ready until a runner is started with a matching `--label`.
+    /// Ready-job count per label set (comma-joined) that no active compute node
+    /// covers. These jobs stay ready until a runner is started with every label.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub unserved_ready_labels: std::collections::BTreeMap<String, i64>,
 }
@@ -2697,7 +2727,7 @@ mod tests {
             time_limit: Some("PT1H".into()),
             scheduler_config_id: Some(3),
             compute_node_type: "local".into(),
-            label: None,
+            labels: None,
             scheduler: Some(json!({"kind": "local"})),
             sample_count: Some(2),
             peak_cpu_percent: Some(50.0),
@@ -2729,7 +2759,7 @@ mod tests {
             attempt_id: Some(1),
             priority: Some(0),
             origin: None,
-            label: None,
+            labels: None,
         };
         let result = ResultModel {
             id: Some(1),
@@ -2819,7 +2849,7 @@ mod tests {
             num_nodes: 1,
             time_limit: None,
             scheduler_config_id: None,
-            label: None,
+            labels: None,
         };
         let claim = ClaimJobsBasedOnResources {
             jobs: Some(vec![]),

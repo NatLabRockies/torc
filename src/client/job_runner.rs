@@ -798,7 +798,7 @@ impl JobRunner {
             num_nodes: resources.num_nodes,
             time_limit: resources.time_limit.clone(),
             scheduler_config_id: resources.scheduler_config_id,
-            label: resources.label.clone(),
+            labels: resources.labels.clone(),
         };
 
         // Initialize resource monitoring if configured
@@ -888,14 +888,15 @@ impl JobRunner {
     }
 
     /// Whether the workflow still has jobs this runner could claim, now or later:
-    /// jobs with its label (or unlabeled, when it has none) that are not finished.
-    /// Errs on the side of `true` so a persistent runner never exits on a failed check.
-    fn has_unfinished_jobs_for_label(&self) -> bool {
+    /// jobs it has every label for (or unlabeled, when it has none) that are not
+    /// finished. Errs on the side of `true` so a persistent runner never exits on
+    /// a failed check.
+    fn has_unfinished_jobs_for_labels(&self) -> bool {
         if self.offline {
             return true;
         }
-        // An empty label filter selects unlabeled jobs.
-        let label = self.resources.label.as_deref().unwrap_or("");
+        // An empty labels filter selects unlabeled jobs.
+        let labels = self.labels_query();
         // One request: sorted by status, the first job has the lowest status, and
         // every status below Completed is unfinished. PendingFailed sorts above
         // the finished statuses, so it gets its own count, but only workflows
@@ -916,7 +917,7 @@ impl JobRunner {
                 None,
                 None, // name
                 None, // command
-                Some(label),
+                Some(&labels),
             )
             .map_err(|e| {
                 warn!(
@@ -939,6 +940,16 @@ impl JobRunner {
         }
         self.workflow.use_pending_failed.unwrap_or(false)
             && list(Some(JobStatus::PendingFailed), None).is_none_or(|r| r.total_count > 0)
+    }
+
+    /// This runner's labels as the comma-separated `labels` query parameter
+    /// (empty when it has none, which selects unlabeled jobs).
+    fn labels_query(&self) -> String {
+        self.resources
+            .labels
+            .as_deref()
+            .unwrap_or_default()
+            .join(",")
     }
 
     /// Override the claim-backoff cap loaded from config, e.g. from a CLI flag.
@@ -1419,7 +1430,7 @@ impl JobRunner {
                 if idle_seconds >= self.rules.compute_node_wait_for_new_jobs_seconds {
                     // A persistent runner outlives the idle limit while jobs with its
                     // label remain; once none do, it exits like any other runner.
-                    if self.persistent && self.has_unfinished_jobs_for_label() {
+                    if self.persistent && self.has_unfinished_jobs_for_labels() {
                         self.last_job_claimed_time = Some(Instant::now());
                         continue;
                     }
@@ -2906,7 +2917,7 @@ impl JobRunner {
             ComputeNodesResources::new(cpus, memory_gb, gpus, self.resources.num_nodes);
         per_node.scheduler_config_id = self.resources.scheduler_config_id;
         per_node.time_limit.clone_from(&self.resources.time_limit);
-        per_node.label.clone_from(&self.resources.label);
+        per_node.labels.clone_from(&self.resources.labels);
         per_node
     }
 
@@ -3079,7 +3090,7 @@ impl JobRunner {
             );
             r.scheduler_config_id = self.resources.scheduler_config_id;
             r.time_limit.clone_from(&self.resources.time_limit);
-            r.label.clone_from(&self.resources.label);
+            r.labels.clone_from(&self.resources.labels);
             r
         } else {
             self.resources_per_node()
@@ -3267,7 +3278,7 @@ impl JobRunner {
                 &self.config,
                 self.workflow_id,
                 Some(limit),
-                self.resources.label.as_deref(),
+                Some(&self.labels_query()),
             ))
         }) {
             Ok(response) => {

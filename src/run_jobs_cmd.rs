@@ -85,11 +85,12 @@ pub struct Args {
     /// Scheduler config ID
     #[arg(long)]
     pub scheduler_config_id: Option<i64>,
-    /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
-    #[arg(long, value_parser = crate::models::parse_label)]
-    pub label: Option<String>,
+    /// Only claim jobs whose every label is in this set. Repeat the flag or
+    /// separate labels with commas. Without it, only unlabeled jobs are claimed.
+    #[arg(long = "label", value_delimiter = ',', value_parser = crate::models::parse_label)]
+    pub labels: Vec<String>,
     /// Ignore the idle timeout while the workflow still has unfinished jobs this
-    /// runner can claim (same label, or unlabeled when no --label is given).
+    /// runner can claim (its labels, or unlabeled when no --label is given).
     #[arg(long)]
     pub persistent: bool,
     /// Log prefix
@@ -283,7 +284,8 @@ pub fn run(args: &Args) -> WorkerResult {
         args.num_nodes.unwrap_or(1),
     );
     resources.time_limit.clone_from(&args.time_limit);
-    resources.label.clone_from(&args.label);
+    let labels = (!args.labels.is_empty()).then(|| args.labels.clone());
+    resources.labels.clone_from(&labels);
     let pid = 1; // TODO
     let unique_label = format!("wf{}_h{}_r{}", workflow_id, hostname, run_id);
 
@@ -300,7 +302,7 @@ pub fn run(args: &Args) -> WorkerResult {
         None,
     );
     compute_node_model.is_active = Some(true);
-    compute_node_model.label.clone_from(&args.label);
+    compute_node_model.labels = labels;
 
     let compute_node =
         match apis::compute_nodes_api::create_compute_node(&config, compute_node_model) {

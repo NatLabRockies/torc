@@ -1490,11 +1490,11 @@ paths:
           type:
           - string
           - 'null'
-      - name: label
+      - name: labels
         in: query
         description: |-
-          Exact-match filter on the routing label. An empty value returns only
-          unlabeled jobs.
+          Comma-separated runner labels: returns the jobs a runner started with
+          these labels would claim. An empty value returns only unlabeled jobs.
         required: false
         schema:
           type:
@@ -4802,9 +4802,11 @@ paths:
           - integer
           - 'null'
           format: int64
-      - name: label
+      - name: labels
         in: query
-        description: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+        description: |-
+          Comma-separated runner labels. Only labeled jobs whose every label is in
+          this set are claimed; when unset or empty, only unlabeled jobs are.
         required: false
         schema:
           type:
@@ -6015,13 +6017,15 @@ components:
           type:
           - boolean
           - 'null'
-        label:
+        labels:
           type:
-          - string
+          - array
           - 'null'
+          items:
+            type: string
           description: |-
-            Label the runner was started with; it claims only jobs with this label
-            (or only unlabeled jobs, when unset).
+            Labels the runner was started with; it claims only jobs whose every
+            label it has (or only unlabeled jobs, when unset).
         memory_gb:
           type: number
           format: double
@@ -6118,11 +6122,15 @@ components:
           - integer
           - 'null'
           format: int64
-        label:
+        labels:
           type:
-          - string
+          - array
           - 'null'
-          description: Runner label; only jobs with an identical label (or none, when unset) are claimed.
+          items:
+            type: string
+          description: |-
+            Runner labels; only labeled jobs whose every label is in this set (or
+            unlabeled jobs, when unset) are claimed.
         memory_gb:
           type: number
           format: double
@@ -6603,13 +6611,15 @@ components:
           type:
           - string
           - 'null'
-        label:
+        labels:
           type:
-          - string
+          - array
           - 'null'
+          items:
+            type: string
           description: |-
-            Routing label. A runner started with a label claims only jobs with
-            that label; a runner with no label claims only unlabeled jobs.
+            Routing labels. A labeled runner claims only labeled jobs whose every
+            label it has; a runner with no labels claims only unlabeled jobs.
         name:
           type: string
         origin:
@@ -7940,11 +7950,13 @@ components:
           items:
             type: string
           description: Job names this job depends on (existing jobs or siblings in this batch).
-        label:
+        labels:
           type:
-          - string
+          - array
           - 'null'
-          description: Routing label; only runners started with the same label claim this job.
+          items:
+            type: string
+          description: Routing labels; only runners started with all of them claim this job.
         name:
           type: string
         priority:
@@ -8423,8 +8435,8 @@ components:
         unserved_ready_labels:
           type: object
           description: |-
-            Ready-job count per label that no active compute node was started with.
-            These jobs stay ready until a runner is started with a matching `--label`.
+            Ready-job count per label set (comma-joined) that no active compute node
+            covers. These jobs stay ready until a runner is started with every label.
           additionalProperties:
             type: integer
             format: int64

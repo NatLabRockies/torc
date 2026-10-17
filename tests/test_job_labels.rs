@@ -10,8 +10,8 @@ use torc::client::Configuration;
 use torc::client::apis;
 use torc::models;
 
-/// Create a workflow with two unlabeled jobs and two jobs labeled `windows`.
-/// Returns the workflow ID.
+/// Create a workflow with two unlabeled jobs, two jobs labeled `windows`, and
+/// one labeled both `windows` and `gpu`. Returns the workflow ID.
 fn create_labeled_workflow(config: &Configuration, name: &str) -> i64 {
     let workflow = models::WorkflowModel::new(name.to_string(), "test_user".to_string());
     let workflow_id = apis::workflows_api::create_workflow(config, workflow)
@@ -20,11 +20,12 @@ fn create_labeled_workflow(config: &Configuration, name: &str) -> i64 {
         .unwrap();
     let rr = create_test_resource_requirements(config, workflow_id, "small", 1, 0, 1, "1g", "PT1M");
 
-    for (job_name, label) in [
-        ("plain_1", None),
-        ("plain_2", None),
-        ("windows_1", Some("windows")),
-        ("windows_2", Some("windows")),
+    for (job_name, labels) in [
+        ("plain_1", &[][..]),
+        ("plain_2", &[]),
+        ("windows_1", &["windows"]),
+        ("windows_2", &["windows"]),
+        ("windows_gpu", &["windows", "gpu"]),
     ] {
         let mut job = models::JobModel::new(
             workflow_id,
@@ -32,9 +33,12 @@ fn create_labeled_workflow(config: &Configuration, name: &str) -> i64 {
             format!("echo {job_name}"),
         );
         job.resource_requirements_id = rr.id;
-        job.label = label.map(str::to_string);
+        job.labels = (!labels.is_empty()).then(|| labels.iter().map(|l| l.to_string()).collect());
         let created = apis::jobs_api::create_job(config, job).expect("Failed to create job");
-        assert_eq!(created.label.as_deref(), label);
+        // Stored sorted, so equal sets compare equal.
+        let mut expected: Vec<String> = labels.iter().map(|l| l.to_string()).collect();
+        expected.sort();
+        assert_eq!(created.labels.unwrap_or_default(), expected);
     }
 
     apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
@@ -63,10 +67,11 @@ fn test_claim_next_jobs_filters_by_label(start_server: &ServerProcess) {
         names(response.jobs)
     };
 
-    // A label that no job has claims nothing, even though jobs are ready.
+    // A runner missing one of a job's labels never claims it, even though jobs are ready.
     assert!(claim(Some("gpu")).is_empty());
-    // A labeled runner claims only jobs with its label.
+    // A labeled runner claims only labeled jobs whose every label it has.
     assert_eq!(claim(Some("windows")), set(&["windows_1", "windows_2"]));
+    assert_eq!(claim(Some("gpu,windows")), set(&["windows_gpu"]));
     // An unlabeled runner claims only unlabeled jobs.
     assert_eq!(claim(None), set(&["plain_1", "plain_2"]));
 }
@@ -75,9 +80,10 @@ fn test_claim_next_jobs_filters_by_label(start_server: &ServerProcess) {
 fn test_claim_jobs_based_on_resources_filters_by_label(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_claim_resources");
-    let claim = |label: Option<&str>| {
+    let claim = |labels: &[&str]| {
         let mut resources = models::ComputeNodesResources::new(8, 16.0, 0, 1);
-        resources.label = label.map(str::to_string);
+        resources.labels =
+            (!labels.is_empty()).then(|| labels.iter().map(|l| l.to_string()).collect());
         let response = apis::workflows_api::claim_jobs_based_on_resources(
             config,
             workflow_id,
@@ -89,9 +95,13 @@ fn test_claim_jobs_based_on_resources_filters_by_label(start_server: &ServerProc
         names(response.jobs)
     };
 
-    assert!(claim(Some("gpu")).is_empty());
-    assert_eq!(claim(Some("windows")), set(&["windows_1", "windows_2"]));
-    assert_eq!(claim(None), set(&["plain_1", "plain_2"]));
+    assert!(claim(&["gpu"]).is_empty());
+    // A runner with a superset of labels claims every labeled job it covers.
+    assert_eq!(
+        claim(&["gpu", "windows", "fast"]),
+        set(&["windows_1", "windows_2", "windows_gpu"])
+    );
+    assert_eq!(claim(&[]), set(&["plain_1", "plain_2"]));
 }
 
 #[rstest]
@@ -101,16 +111,23 @@ fn test_update_job_sets_label(start_server: &ServerProcess) {
     let response = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
         .expect("claim_next_jobs should succeed");
     let mut job = response.jobs.unwrap().remove(0);
-    assert_eq!(job.label, None);
+    assert_eq!(job.labels, None);
 
     let job_id = job.id.unwrap();
-    job.label = Some("windows".to_string());
+    job.labels = Some(vec![
+        "windows".to_string(),
+        "gpu".to_string(),
+        "gpu".to_string(),
+    ]);
     apis::jobs_api::update_job(config, job_id, job).expect("Failed to update job");
     let updated = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
-    assert_eq!(updated.label.as_deref(), Some("windows"));
+    assert_eq!(
+        updated.labels,
+        Some(vec!["gpu".to_string(), "windows".to_string()])
+    );
 }
 
-/// Workflow status flags labeled ready jobs until an active runner has that label.
+/// Workflow status flags labeled ready jobs until an active runner has every label.
 #[rstest]
 fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -121,7 +138,8 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
             .unserved_ready_labels
     };
     assert_eq!(unserved().get("windows"), Some(&2));
-    assert_eq!(unserved().len(), 1);
+    assert_eq!(unserved().get("gpu,windows"), Some(&1));
+    assert_eq!(unserved().len(), 2);
 
     let mut node = models::ComputeNodeModel::new(
         workflow_id,
@@ -136,7 +154,18 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
         None,
     );
     node.is_active = Some(true);
-    node.label = Some("windows".to_string());
+    node.labels = Some(vec!["windows".to_string()]);
+    apis::compute_nodes_api::create_compute_node(config, node.clone())
+        .expect("Failed to create compute node");
+    // A `windows` runner covers the `windows` jobs but not the `windows`+`gpu` one.
+    assert_eq!(unserved().get("gpu,windows"), Some(&1));
+    assert_eq!(unserved().len(), 1);
+
+    node.labels = Some(vec![
+        "gpu".to_string(),
+        "windows".to_string(),
+        "fast".to_string(),
+    ]);
     apis::compute_nodes_api::create_compute_node(config, node)
         .expect("Failed to create compute node");
     assert!(unserved().is_empty());
@@ -152,27 +181,28 @@ fn test_update_job_clears_label(start_server: &ServerProcess) {
     let mut job = response.jobs.unwrap().remove(0);
     let job_id = job.id.unwrap();
 
-    // Sending the job back unchanged keeps its label; an empty label clears it.
+    // Sending the job back unchanged keeps its labels; an empty set clears them.
     apis::jobs_api::update_job(config, job_id, job.clone()).expect("Failed to update job");
     let unchanged = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
-    assert_eq!(unchanged.label.as_deref(), Some("windows"));
+    assert_eq!(unchanged.labels, Some(vec!["windows".to_string()]));
 
-    job.label = Some(String::new());
+    job.labels = Some(Vec::new());
     apis::jobs_api::update_job(config, job_id, job).expect("Failed to update job");
     let cleared = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
-    assert_eq!(cleared.label, None);
+    assert_eq!(cleared.labels, None);
 }
 
-/// Labels match exactly, so an empty or whitespace-padded label would strand the job.
+/// Labels match exactly, so an empty or whitespace-padded label would strand the job;
+/// a comma would be split by the `labels` query parameter.
 #[rstest]
 fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_invalid");
 
-    for bad in ["", " ", "windows ", " windows"] {
+    for bad in ["", " ", "windows ", " windows", "a,b"] {
         let mut job =
             models::JobModel::new(workflow_id, format!("bad_{bad:?}"), "echo".to_string());
-        job.label = Some(bad.to_string());
+        job.labels = Some(vec!["windows".to_string(), bad.to_string()]);
         assert!(
             apis::jobs_api::create_job(config, job).is_err(),
             "label {bad:?} should be rejected on create"
@@ -182,7 +212,7 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
         let good = models::JobModel::new(workflow_id, format!("good_{bad:?}"), "echo".to_string());
         let mut bad_job =
             models::JobModel::new(workflow_id, format!("bulk_bad_{bad:?}"), "echo".to_string());
-        bad_job.label = Some(bad.to_string());
+        bad_job.labels = Some(vec![bad.to_string()]);
         assert!(
             apis::jobs_api::create_jobs(
                 config,
@@ -210,7 +240,7 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
-            None, // label
+            None, // labels
         )
         .expect("Failed to list jobs")
         .items,
@@ -224,7 +254,7 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
         .expect("claim_next_jobs should succeed");
     let mut job = response.jobs.unwrap().remove(0);
     let job_id = job.id.unwrap();
-    job.label = Some("windows ".to_string());
+    job.labels = Some(vec!["windows ".to_string()]);
     assert!(apis::jobs_api::update_job(config, job_id, job).is_err());
 }
 
@@ -235,14 +265,17 @@ fn test_invalid_runner_labels_are_rejected(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_invalid_runner");
 
-    for bad in ["", " ", "windows ", " windows"] {
+    for bad in [" ", "windows ", " windows"] {
+        // Comma-separated in the query string, so a blank entry is a padded label.
+        let query = format!("windows,{bad}");
         assert!(
-            apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), Some(bad)).is_err(),
+            apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), Some(&query))
+                .is_err(),
             "label {bad:?} should be rejected by claim_next_jobs"
         );
 
         let mut resources = models::ComputeNodesResources::new(8, 16.0, 0, 1);
-        resources.label = Some(bad.to_string());
+        resources.labels = Some(vec![bad.to_string()]);
         assert!(
             apis::workflows_api::claim_jobs_based_on_resources(
                 config,
@@ -267,7 +300,7 @@ fn test_invalid_runner_labels_are_rejected(start_server: &ServerProcess) {
             "local".to_string(),
             None,
         );
-        node.label = Some(bad.to_string());
+        node.labels = Some(vec!["windows".to_string(), bad.to_string()]);
         assert!(
             apis::compute_nodes_api::create_compute_node(config, node).is_err(),
             "label {bad:?} should be rejected by create_compute_node"
@@ -275,12 +308,13 @@ fn test_invalid_runner_labels_are_rejected(start_server: &ServerProcess) {
     }
 }
 
-/// `list_jobs` filters by exact label; an empty filter selects unlabeled jobs.
+/// `list_jobs` filters to the jobs a runner with the given labels would claim; an
+/// empty filter selects unlabeled jobs.
 #[rstest]
 fn test_list_jobs_filters_by_label(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_list_jobs");
-    let list = |label: Option<&str>| {
+    let list = |labels: Option<&str>| {
         let response = apis::jobs_api::list_jobs(
             config,
             workflow_id,
@@ -296,20 +330,24 @@ fn test_list_jobs_filters_by_label(start_server: &ServerProcess) {
             None,
             None, // name
             None, // command
-            label,
+            labels,
         )
         .expect("list_jobs should succeed");
         assert_eq!(response.total_count as usize, response.items.len());
         names(Some(response.items))
     };
 
-    assert_eq!(list(None).len(), 4);
+    assert_eq!(list(None).len(), 5);
     assert_eq!(list(Some("windows")), set(&["windows_1", "windows_2"]));
+    assert_eq!(
+        list(Some("windows,gpu")),
+        set(&["windows_1", "windows_2", "windows_gpu"])
+    );
     assert_eq!(list(Some("")), set(&["plain_1", "plain_2"]));
     assert!(list(Some("gpu")).is_empty());
 }
 
-/// A persistent runner exits once no unfinished jobs with its label remain, even though
+/// A persistent runner exits once no unfinished jobs it covers remain, even though
 /// the workflow is not complete (an unlabeled job that nobody runs stays `ready`).
 #[rstest]
 fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProcess) {
@@ -324,10 +362,10 @@ fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProc
     let rr = create_test_resource_requirements(config, workflow_id, "small", 1, 0, 1, "1g", "PT1M");
 
     let mut ids = Vec::new();
-    for (name, label) in [("plain", None), ("windows", Some("windows"))] {
+    for (name, labels) in [("plain", None), ("windows", Some(vec!["windows", "gpu"]))] {
         let mut job = models::JobModel::new(workflow_id, name.to_string(), "echo hi".to_string());
         job.resource_requirements_id = rr.id;
-        job.label = label.map(str::to_string);
+        job.labels = labels.map(|l| l.into_iter().map(str::to_string).collect());
         ids.push(
             apis::jobs_api::create_job(config, job)
                 .expect("Failed to create job")
@@ -349,7 +387,7 @@ fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProc
             "--poll-interval",
             "0.2",
             "--label",
-            "windows",
+            "gpu,windows",
             "--persistent",
         ],
         start_server,
@@ -360,7 +398,7 @@ fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProc
     assert_eq!(status(ids[0]), Some(models::JobStatus::Ready));
     assert_eq!(status(ids[1]), Some(models::JobStatus::Completed));
 
-    // The runner's compute node records the label it was started with.
+    // The runner's compute node records the labels it was started with.
     let nodes = apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
@@ -375,7 +413,10 @@ fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProc
     .expect("Failed to list compute nodes")
     .items;
     assert_eq!(nodes.len(), 1);
-    assert_eq!(nodes[0].label.as_deref(), Some("windows"));
+    assert_eq!(
+        nodes[0].labels,
+        Some(vec!["gpu".to_string(), "windows".to_string()])
+    );
 }
 
 /// An unlabeled runner and a persistent labeled runner share one workflow. The labeled job
@@ -406,7 +447,7 @@ fn test_persistent_labeled_runner_waits_for_its_job(start_server: &ServerProcess
         "echo windows".to_string(),
     );
     second.resource_requirements_id = rr.id;
-    second.label = Some("windows".to_string());
+    second.labels = Some(vec!["windows".to_string()]);
     second.depends_on_job_ids = Some(vec![first_id]);
     let second_id = apis::jobs_api::create_job(config, second)
         .expect("Failed to create job")
@@ -430,7 +471,7 @@ fn test_persistent_labeled_runner_waits_for_its_job(start_server: &ServerProcess
     std::thread::scope(|scope| {
         let labeled = scope.spawn(|| {
             let mut args = common_args.to_vec();
-            args.extend(["--label", "windows", "--persistent"]);
+            args.extend(["--label", "windows", "--label", "gpu", "--persistent"]);
             run_jobs_cli_command(&args, start_server).map_err(|e| e.to_string())
         });
         let mut args = common_args.to_vec();
@@ -464,7 +505,7 @@ fn test_watch_persistent_waits_for_labeled_runner(start_server: &ServerProcess) 
     let rr = create_test_resource_requirements(config, workflow_id, "small", 1, 0, 1, "1g", "PT1M");
     let mut job = models::JobModel::new(workflow_id, "windows".to_string(), "sleep 6".to_string());
     job.resource_requirements_id = rr.id;
-    job.label = Some("windows".to_string());
+    job.labels = Some(vec!["windows".to_string()]);
     let job_id = apis::jobs_api::create_job(config, job)
         .expect("Failed to create job")
         .id

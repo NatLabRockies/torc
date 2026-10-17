@@ -112,32 +112,32 @@ ongoing-management API.
 
 Defines a single computational task within a workflow.
 
-| Name                             | Type                        | Default     | Description                                                            |
-| -------------------------------- | --------------------------- | ----------- | ---------------------------------------------------------------------- |
-| `name`                           | string                      | _required_  | Name of the job                                                        |
-| `command`                        | string                      | _required_  | Command to execute for this job                                        |
-| `priority`                       | integer                     | `0`         | Scheduling priority; higher values are claimed before lower values     |
-| `label`                          | string                      | none        | Routing label; only runners started with the same `--label` claim it   |
-| `invocation_script`              | string                      | none        | Optional script for job invocation                                     |
-| `env`                            | map\<string, string\>       | none        | Environment variables exported for this job                            |
-| `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |
-| `failure_handler`                | string                      | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use             |
-| `scheduler`                      | string                      | none        | Name of the scheduler to use for this job                              |
-| `cancel_on_blocking_job_failure` | boolean                     | false       | Cancel this job if a blocking job fails                                |
-| `depends_on`                     | [string]                    | none        | Job names that must complete before this job runs (exact matches)      |
-| `depends_on_regexes`             | [string]                    | none        | Regex patterns for job dependencies                                    |
-| `input_files`                    | [string]                    | none        | File names this job reads (exact matches)                              |
-| `input_file_regexes`             | [string]                    | none        | Regex patterns for input files                                         |
-| `output_files`                   | [string]                    | none        | File names this job produces (exact matches)                           |
-| `output_file_regexes`            | [string]                    | none        | Regex patterns for output files                                        |
-| `input_user_data`                | [string]                    | none        | User data names this job reads (exact matches)                         |
-| `input_user_data_regexes`        | [string]                    | none        | Regex patterns for input user data                                     |
-| `output_user_data`               | [string]                    | none        | User data names this job produces (exact matches)                      |
-| `output_user_data_regexes`       | [string]                    | none        | Regex patterns for output user data                                    |
-| `parameters`                     | map\<string, string\>       | none        | Local parameters for generating multiple jobs                          |
-| `parameter_mode`                 | string                      | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`          |
-| `use_parameters`                 | [string]                    | none        | Workflow parameter names to use for this job                           |
-| `stdio`                          | [StdioConfig](#stdioconfig) | none        | Per-job override for stdout/stderr capture (overrides workflow-level)  |
+| Name                             | Type                        | Default     | Description                                                                |
+| -------------------------------- | --------------------------- | ----------- | -------------------------------------------------------------------------- |
+| `name`                           | string                      | _required_  | Name of the job                                                            |
+| `command`                        | string                      | _required_  | Command to execute for this job                                            |
+| `priority`                       | integer                     | `0`         | Scheduling priority; higher values are claimed before lower values         |
+| `labels`                         | list of strings             | none        | Routing labels; only runners started with all of them (`--label`) claim it |
+| `invocation_script`              | string                      | none        | Optional script for job invocation                                         |
+| `env`                            | map\<string, string\>       | none        | Environment variables exported for this job                                |
+| `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use     |
+| `failure_handler`                | string                      | none        | Name of a [FailureHandlerSpec](#failurehandlerspec) to use                 |
+| `scheduler`                      | string                      | none        | Name of the scheduler to use for this job                                  |
+| `cancel_on_blocking_job_failure` | boolean                     | false       | Cancel this job if a blocking job fails                                    |
+| `depends_on`                     | [string]                    | none        | Job names that must complete before this job runs (exact matches)          |
+| `depends_on_regexes`             | [string]                    | none        | Regex patterns for job dependencies                                        |
+| `input_files`                    | [string]                    | none        | File names this job reads (exact matches)                                  |
+| `input_file_regexes`             | [string]                    | none        | Regex patterns for input files                                             |
+| `output_files`                   | [string]                    | none        | File names this job produces (exact matches)                               |
+| `output_file_regexes`            | [string]                    | none        | Regex patterns for output files                                            |
+| `input_user_data`                | [string]                    | none        | User data names this job reads (exact matches)                             |
+| `input_user_data_regexes`        | [string]                    | none        | Regex patterns for input user data                                         |
+| `output_user_data`               | [string]                    | none        | User data names this job produces (exact matches)                          |
+| `output_user_data_regexes`       | [string]                    | none        | Regex patterns for output user data                                        |
+| `parameters`                     | map\<string, string\>       | none        | Local parameters for generating multiple jobs                              |
+| `parameter_mode`                 | string                      | `"product"` | How to combine parameters: `"product"` (Cartesian) or `"zip"`              |
+| `use_parameters`                 | [string]                    | none        | Workflow parameter names to use for this job                               |
+| `stdio`                          | [StdioConfig](#stdioconfig) | none        | Per-job override for stdout/stderr capture (overrides workflow-level)      |
 
 When both workflow-level and job-level `env` maps are present, Torc merges them when the job is
 created and stores the effective environment on the job. Job-level values win on key conflicts. Torc

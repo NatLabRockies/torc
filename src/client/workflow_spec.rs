@@ -758,13 +758,18 @@ pub struct JobSpec {
     /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i64>,
-    /// Routing label. Only runners started with the same `--label` claim this job;
-    /// unlabeled jobs are claimed only by runners with no label.
+    /// Routing labels. Only runners started with every one of them (`--label`)
+    /// claim this job; unlabeled jobs are claimed only by runners with no labels.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
+    pub labels: Option<Vec<String>>,
 }
 
 impl JobSpec {
+    /// Whether the job carries at least one routing label.
+    pub fn has_labels(&self) -> bool {
+        self.labels.as_deref().is_some_and(|l| !l.is_empty())
+    }
+
     /// Create a new JobSpec with only required fields
     #[allow(dead_code)]
     pub fn new(name: String, command: String) -> JobSpec {
@@ -795,7 +800,7 @@ impl JobSpec {
             use_parameters_file: None,
             stdio: None,
             priority: None,
-            label: None,
+            labels: None,
         }
     }
 
@@ -844,8 +849,13 @@ impl JobSpec {
                 new_spec.scheduler = Some(substitute_parameters(sched_name, &combo));
             }
 
-            if let Some(ref label) = self.label {
-                new_spec.label = Some(substitute_parameters(label, &combo));
+            if let Some(ref labels) = self.labels {
+                new_spec.labels = Some(
+                    labels
+                        .iter()
+                        .map(|label| substitute_parameters(label, &combo))
+                        .collect(),
+                );
             }
 
             // Substitute parameters in name vectors
@@ -1836,13 +1846,15 @@ impl WorkflowSpec {
     /// and would never claim it.
     fn validate_job_labels(&self) -> Result<(), Box<dyn std::error::Error>> {
         for job in &self.jobs {
-            crate::models::validate_label(job.label.as_deref())
+            crate::models::validate_labels(job.labels.as_deref())
                 .map_err(|err| format!("Job '{}': {}", job.name, err))?;
-            if let (Some(label), Some(scheduler)) = (&job.label, &job.scheduler) {
+            if let (true, Some(scheduler)) = (job.has_labels(), &job.scheduler) {
                 return Err(format!(
-                    "Job '{}' sets both label '{}' and scheduler '{}'; runners for a scheduler \
+                    "Job '{}' sets both labels {:?} and scheduler '{}'; runners for a scheduler \
                      are unlabeled and never claim labeled jobs",
-                    job.name, label, scheduler
+                    job.name,
+                    job.labels.as_deref().unwrap_or_default(),
+                    scheduler
                 )
                 .into());
             }
@@ -4534,7 +4546,7 @@ impl WorkflowSpec {
                     }
                     job_model.priority = Some(p);
                 }
-                job_model.label.clone_from(&job_spec.label);
+                job_model.labels.clone_from(&job_spec.labels);
 
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);
@@ -4760,17 +4772,19 @@ impl WorkflowSpec {
                             );
                         }
                     }
-                    "label" => {
+                    "labels" => {
                         // A dropped label would let unlabeled runners claim the job.
-                        let v = child
+                        let values = child
                             .entries()
-                            .first()
-                            .and_then(|e| e.value().as_string())
-                            .ok_or("job label must have a string value")?;
-                        obj.insert(
-                            "label".to_string(),
-                            serde_json::Value::String(v.to_string()),
-                        );
+                            .iter()
+                            .map(|e| {
+                                e.value()
+                                    .as_string()
+                                    .map(|v| serde_json::Value::String(v.to_string()))
+                                    .ok_or("job labels must be string values")
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        obj.insert("labels".to_string(), serde_json::Value::Array(values));
                     }
                     "parameters" => {
                         if let Some(params) = Self::kdl_parameters_to_json(child)? {
@@ -6371,8 +6385,11 @@ impl WorkflowSpec {
         if let Some(ref sched) = job.scheduler {
             lines.push(format!("    scheduler {}", escape(sched)));
         }
-        if let Some(ref label) = job.label {
-            lines.push(format!("    label {}", escape(label)));
+        if let Some(ref labels) = job.labels
+            && !labels.is_empty()
+        {
+            let labels: Vec<String> = labels.iter().map(|l| escape(l)).collect();
+            lines.push(format!("    labels {}", labels.join(" ")));
         }
         if let Some(ref params) = job.parameters
             && !params.is_empty()
@@ -7765,7 +7782,7 @@ user_data:
                 failure_handler: None,
                 stdio: None,
                 priority: None,
-                label: None,
+                labels: None,
             }],
             files: Some(vec![{
                 let mut file =
@@ -7946,16 +7963,16 @@ user_data:
             )
         };
 
-        job.label = Some("windows".to_string());
-        spec_with(&job).validate_job_labels().expect("valid label");
+        job.labels = Some(vec!["windows".to_string(), "gpu".to_string()]);
+        spec_with(&job).validate_job_labels().expect("valid labels");
 
-        for bad in ["", " win"] {
-            job.label = Some(bad.to_string());
+        for bad in ["", " win", "a,b"] {
+            job.labels = Some(vec!["windows".to_string(), bad.to_string()]);
             let err = spec_with(&job).validate_job_labels().expect_err(bad);
             assert!(err.to_string().contains("Job 'job'"), "{}", err);
         }
 
-        job.label = Some("windows".to_string());
+        job.labels = Some(vec!["windows".to_string()]);
         job.scheduler = Some("gpu_sched".to_string());
         let err = spec_with(&job)
             .validate_job_labels()

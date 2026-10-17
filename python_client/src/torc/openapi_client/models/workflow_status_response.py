@@ -38,7 +38,7 @@ class WorkflowStatusResponse(BaseModel):
     runtime_blocked_ready_jobs: StrictInt = Field(description="Ready jobs whose required runtime exceeds the remaining walltime of every active allocation, so they cannot start until a fresh allocation appears. 0 when there are no walltime-bounded allocations. See `torc workflows diagnose`.")
     total_exec_time_minutes: Union[StrictFloat, StrictInt]
     total_jobs: StrictInt
-    unserved_ready_labels: Optional[Dict[str, StrictInt]] = Field(default=None, description="Ready-job count per label that no active compute node was started with. These jobs stay ready until a runner is started with a matching `--label`.")
+    unserved_ready_labels: Optional[Dict[str, StrictInt]] = Field(default=None, description="Ready-job count per label set (comma-joined) that no active compute node covers. These jobs stay ready until a runner is started with every label.")
     walltime_seconds: Optional[Union[StrictFloat, StrictInt]] = None
     workflow_id: StrictInt
     workflow_name: StrictStr

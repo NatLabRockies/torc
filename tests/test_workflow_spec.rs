@@ -1403,7 +1403,7 @@ fn test_json_field_name_compatibility() {
         failure_handler: None,
         stdio: None,
         priority: None,
-        label: None,
+        labels: None,
     };
 
     let json = serde_json::to_value(&job).expect("Failed to serialize to JSON value");
@@ -1572,7 +1572,7 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
         None,       // origin_is_set
         None,       // name
         None,       // command
-        None,       // label
+        None,       // labels
     )
     .expect("Failed to list jobs");
 
@@ -1669,7 +1669,7 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
         None,       // origin_is_set
         None,       // name
         None,       // command
-        None,       // label
+        None,       // labels
     )
     .expect("Failed to list jobs");
 
@@ -1759,7 +1759,7 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
         None,       // origin_is_set
         None,       // name
         None,       // command
-        None,       // label
+        None,       // labels
     )
     .expect("Failed to list jobs");
 
@@ -1852,7 +1852,7 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
         None,       // origin_is_set
         None,       // name
         None,       // command
-        None,       // label
+        None,       // labels
     )
     .expect("Failed to list jobs");
 
@@ -2745,7 +2745,7 @@ fn test_parameters_file_csv_expands_jobs() {
     assert!(names.contains(&"train_vit_bs16"));
 }
 
-/// `label` takes parameter substitution like `name` and `command`; a literal `{os}` label
+/// `labels` take parameter substitution like `name` and `command`; a literal `{os}` label
 /// would match no runner and strand every expanded job.
 #[test]
 fn test_job_label_parameter_substitution() {
@@ -2756,7 +2756,7 @@ fn test_job_label_parameter_substitution() {
             {
                 "name": "build_{os}",
                 "command": "echo {os}",
-                "label": "{os}",
+                "labels": ["{os}", "fast"],
                 "parameters": {"os": ["windows", "linux"]},
             }
         ]
@@ -2766,9 +2766,13 @@ fn test_job_label_parameter_substitution() {
         WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
     spec.expand_parameters().expect("expand_parameters failed");
 
-    let mut labels: Vec<_> = spec.jobs.iter().map(|j| j.label.as_deref()).collect();
+    let mut labels: Vec<_> = spec
+        .jobs
+        .iter()
+        .map(|j| j.labels.clone().unwrap())
+        .collect();
     labels.sort();
-    assert_eq!(labels, [Some("linux"), Some("windows")]);
+    assert_eq!(labels, [vec!["linux", "fast"], vec!["windows", "fast"]]);
 }
 
 /// A job with `parameters_file` pointing at a JSON array expands to one job per object,
@@ -4119,7 +4123,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
-            None, // label
+            None, // labels
         )
         .expect("Failed to list jobs");
 
@@ -4281,7 +4285,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,       // origin_is_set
         None,       // name
         None,       // command
-        None,       // label
+        None,       // labels
     )
     .expect("Failed to list jobs")
     .items;
@@ -4452,7 +4456,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,       // origin_is_set
         None,       // name
         None,       // command
-        None,       // label
+        None,       // labels
     )
     .expect("Failed to list jobs")
     .items;
@@ -4576,7 +4580,7 @@ fn test_slurm_scheduler_serialize_allocations_kdl_roundtrip() {
     assert_eq!(schedulers[1].serialize_allocations, None);
 }
 
-/// A job `label` survives the YAML -> KDL -> spec round trip; the KDL reader and writer
+/// Job `labels` survive the YAML -> KDL -> spec round trip; the KDL reader and writer
 /// each list job fields by hand, so an omission would silently drop it.
 #[test]
 fn test_job_label_kdl_roundtrip() {
@@ -4588,7 +4592,7 @@ fn test_job_label_kdl_roundtrip() {
             command: "echo plain"
           - name: labeled
             command: "echo labeled"
-            label: windows
+            labels: [windows, gpu]
     "#;
     let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
 
@@ -4596,8 +4600,12 @@ fn test_job_label_kdl_roundtrip() {
     let roundtripped =
         WorkflowSpec::from_spec_file_content(&kdl_str, "kdl").expect("Failed to parse KDL");
 
-    assert_eq!(roundtripped.jobs[0].label, None);
-    assert_eq!(roundtripped.jobs[1].label.as_deref(), Some("windows"));
+    assert!(kdl_str.contains(r#"labels "windows" "gpu""#), "{kdl_str}");
+    assert_eq!(roundtripped.jobs[0].labels, None);
+    assert_eq!(
+        roundtripped.jobs[1].labels,
+        Some(vec!["windows".to_string(), "gpu".to_string()])
+    );
 }
 
 /// A non-string KDL `label` is an error; dropping it would create the job unlabeled and
@@ -4609,7 +4617,7 @@ fn test_job_label_kdl_rejects_non_string() {
         user "test_user"
         job "labeled" {
             command "echo labeled"
-            label 1
+            labels "windows" 1
         }
     "#;
     let err = WorkflowSpec::from_spec_file_content(kdl, "kdl").expect_err("label 1 must fail");

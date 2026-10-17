@@ -1749,7 +1749,7 @@ fn test_get_workflow_status_runtime_blocked_ignores_other_labels(start_server: &
     let add_job = |name: &str, label: Option<&str>| {
         let mut job = models::JobModel::new(workflow_id, name.to_string(), "echo".to_string());
         job.resource_requirements_id = Some(rr.id.unwrap());
-        job.label = label.map(str::to_string);
+        job.labels = label.map(|l| vec![l.to_string()]);
         apis::jobs_api::create_job(config, job).expect("Failed to create job");
     };
     add_job("labeled_job", Some("windows"));
@@ -1776,7 +1776,7 @@ fn test_get_workflow_status_runtime_blocked_ignores_other_labels(start_server: &
         None,
     );
     labeled.is_active = Some(true);
-    labeled.label = Some("windows".to_string());
+    labeled.labels = Some(vec!["windows".to_string()]);
     apis::compute_nodes_api::create_compute_node(config, labeled)
         .expect("Failed to create labeled worker");
     add_job("unlabeled_job", None);

@@ -95,7 +95,7 @@ fn verify_diamond_workflow_completion(
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs");
 
@@ -420,7 +420,7 @@ fn verify_many_jobs_completion(
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs");
 
@@ -610,7 +610,7 @@ resource_requirements:
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs");
 
@@ -726,7 +726,7 @@ resource_requirements:
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs after reset");
 
@@ -803,7 +803,7 @@ resource_requirements:
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs after second run");
 
@@ -1000,7 +1000,7 @@ resource_requirements:
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs");
 
@@ -1074,7 +1074,7 @@ resource_requirements:
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs after reinitialize");
 
@@ -1147,7 +1147,7 @@ resource_requirements:
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs after second run");
 
@@ -1736,7 +1736,7 @@ fn get_job_statuses(
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs");
 

@@ -201,16 +201,17 @@ A local-only workflow generally needs no resource requirements at all.
 jobs:
   - name: sign_installer
     command: sign.bat
-    label: windows
+    labels: [windows, gpu]
 ```
 
-A job's `label` routes it to particular runners: only a runner started with the identical
-`torc run <id> --label windows` claims it, and unlabeled jobs are claimed only by runners with no
-label. Matching is exact, so the label must be non-empty with no leading or trailing whitespace.
+A job's `labels` route it to particular runners: only a runner started with every one of them, e.g.
+`torc run <id> --label windows,gpu`, claims it, and unlabeled jobs are claimed only by runners with
+no labels. Each label is matched exactly, so it must be non-empty with no comma and no leading or
+trailing whitespace.
 
 - Slurm runners launched by Torc are unlabeled. Labeled jobs are left out when Torc sizes Slurm
-  allocations, and a job that sets both `label` and `scheduler` is rejected at validation.
-- Parameters work in labels (`label: "{os}"`).
+  allocations, and a job that sets both `labels` and `scheduler` is rejected at validation.
+- Parameters work in labels (`labels: ["{os}"]`).
 - Labels are for routing to a specific machine, not for resources: use resource requirements for
   CPUs, memory, and GPUs.
 

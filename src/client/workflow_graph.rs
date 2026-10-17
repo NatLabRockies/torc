@@ -32,8 +32,8 @@ pub struct JobNode {
     pub scheduler: Option<String>,
     /// Original job spec reference data
     pub command: String,
-    /// Routing label; labeled jobs are never claimed by Torc-launched Slurm runners
-    pub label: Option<String>,
+    /// Routing labels; labeled jobs are never claimed by Torc-launched Slurm runners
+    pub labels: Option<Vec<String>>,
 }
 
 /// Represents a group of jobs that share scheduling characteristics
@@ -158,7 +158,7 @@ impl WorkflowGraph {
                 name_pattern,
                 scheduler: job.scheduler.clone(),
                 command: job.command.clone(),
-                label: job.label.clone(),
+                labels: job.labels.clone(),
             };
 
             graph.nodes.insert(job.name.clone(), node);
@@ -320,7 +320,7 @@ impl WorkflowGraph {
                 name_pattern: regex::escape(&job.name), // Exact match for expanded jobs
                 scheduler: None,                        // Not tracked from database models
                 command: job.command.clone(),
-                label: job.label.clone(),
+                labels: job.labels.clone(),
             };
 
             graph.nodes.insert(job.name.clone(), node);
@@ -633,7 +633,7 @@ impl WorkflowGraph {
         for (name, node) in &self.nodes {
             // Slurm runners launched by Torc have no label and never claim labeled
             // jobs, so sizing allocations for them would request idle nodes.
-            if node.label.is_some() {
+            if node.labels.as_deref().is_some_and(|l| !l.is_empty()) {
                 continue;
             }
             let rr_name = match &node.resource_requirements {
@@ -1126,7 +1126,7 @@ mod tests {
     #[test]
     fn test_scheduler_groups_skip_labeled_jobs() {
         let mut spec = create_test_spec();
-        spec.jobs[1].label = Some("windows".to_string());
+        spec.jobs[1].labels = Some(vec!["windows".to_string()]);
         let graph = WorkflowGraph::from_spec(&spec).unwrap();
 
         let groups = graph.scheduler_groups();
