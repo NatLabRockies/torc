@@ -5,9 +5,15 @@
 --
 -- RENAME COLUMN keeps the existing index on job(workflow_id, status, labels,
 -- priority DESC) intact and avoids the rename-recreate pattern (see CLAUDE.md).
+--
+-- The single-label schema accepted commas, and its `labels=a,b` query already
+-- treated them as separators, so a legacy 'a,b' becomes '["a","b"]': json_quote
+-- escapes the value, then each comma becomes a JSON element boundary.
 
 ALTER TABLE job RENAME COLUMN label TO labels;
-UPDATE job SET labels = json_array(labels) WHERE labels IS NOT NULL;
+UPDATE job SET labels = '[' || replace(json_quote(labels), ',', '","') || ']'
+WHERE labels IS NOT NULL;
 
 ALTER TABLE compute_node RENAME COLUMN label TO labels;
-UPDATE compute_node SET labels = json_array(labels) WHERE labels IS NOT NULL;
+UPDATE compute_node SET labels = '[' || replace(json_quote(labels), ',', '","') || ']'
+WHERE labels IS NOT NULL;
