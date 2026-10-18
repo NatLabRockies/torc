@@ -743,19 +743,20 @@ fn plot_system_timeline(metrics: &SystemMetrics, output_path: &Path, format: &st
     // timestamp; group by source in first-seen order so concurrent nodes never
     // interleave into a single zigzag line.
     let mut sources: Vec<&str> = Vec::new();
+    let mut by_source: HashMap<&str, Vec<&SystemResourceSample>> = HashMap::new();
     for s in &metrics.samples {
-        if !sources.contains(&s.source.as_str()) {
-            sources.push(&s.source);
-        }
+        by_source
+            .entry(s.source.as_str())
+            .or_insert_with(|| {
+                sources.push(&s.source);
+                Vec::new()
+            })
+            .push(s);
     }
     let single_source = sources.len() == 1;
 
     for source in sources {
-        let node: Vec<&SystemResourceSample> = metrics
-            .samples
-            .iter()
-            .filter(|s| s.source == source)
-            .collect();
+        let node = &by_source[source];
         let times: Vec<f64> = node
             .iter()
             .map(|s| (s.timestamp - start_time) as f64)
