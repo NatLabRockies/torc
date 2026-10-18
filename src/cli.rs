@@ -1091,6 +1091,7 @@ EXAMPLES:
     /// Monitor compute-node CPU/memory on this host without running jobs
     #[command(
         name = "monitor-node",
+        hide = true,
         after_long_help = "\
 EXAMPLES:
     # Sample this node for workflow 42 until SIGTERM; writes to torc_output/resource_utilization/
