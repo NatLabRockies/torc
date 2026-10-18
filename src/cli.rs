@@ -86,6 +86,7 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
   \x1b[1;36mtasks\x1b[0m                    Wait for async tasks
   \x1b[1;36mplot-resources\x1b[0m           Generate HTML resource plots
+  \x1b[1;36mmonitor-node\x1b[0m             Record compute-node CPU/memory without running jobs
   \x1b[1;36mself\x1b[0m                     Manage the local torc executable
   \x1b[1;36mcompletions\x1b[0m              Generate shell completions
   \x1b[1;36mhelp\x1b[0m                     Print help for a subcommand
@@ -1088,7 +1089,18 @@ EXAMPLES:
     )]
     PlotResources(plot_resources_cmd::Args),
     /// Monitor compute-node CPU/memory on this host without running jobs
-    #[command(name = "monitor-node", hide = true)]
+    #[command(
+        name = "monitor-node",
+        after_long_help = "\
+EXAMPLES:
+    # Sample this node for workflow 42 until SIGTERM; writes to torc_output/resource_utilization/
+    torc monitor-node 42
+    torc monitor-node 42 --output-dir /scratch/run1
+
+Torc launches this automatically on the non-head nodes of a single-runner Slurm allocation
+when resource_monitor.compute_node is enabled.
+"
+    )]
     MonitorNode(monitor_node_cmd::Args),
     /// Manage the local torc executable
     #[command(name = "self")]
