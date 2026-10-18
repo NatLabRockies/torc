@@ -227,6 +227,7 @@ impl HpcInterface for SlurmInterface {
         tls_insecure: bool,
         startup_delay_seconds: u64,
         claim_backoff_max_secs: Option<f64>,
+        monitor_idle_nodes: bool,
     ) -> Result<()> {
         let mut script = format!(
             "#!/bin/bash\n\
@@ -318,8 +319,42 @@ impl HpcInterface for SlurmInterface {
                 script.push_str(&format!("--mpi={} ", mpi_mode.trim()));
             }
         }
+        if monitor_idle_nodes {
+            // One sampler per non-head node. --overlap: the step reserves no CPUs/memory,
+            // so job steps (srun --exact, MPI launches) still get whole nodes. The head
+            // node is excluded because the runner already monitors itself there.
+            let mut monitor = format!("torc --url {}", server_url);
+            if let Some(ca_cert) = tls_ca_cert {
+                let escaped = ca_cert.replace('\'', "'\\''");
+                monitor.push_str(&format!(" --tls-ca-cert '{}'", escaped));
+            }
+            if tls_insecure {
+                monitor.push_str(" --tls-insecure");
+            }
+            monitor.push_str(&format!(
+                " monitor-node {} --output-dir {}",
+                workflow_id, output_path
+            ));
+            script.push_str(&format!(
+                "if [ \"${{SLURM_JOB_NUM_NODES:-1}}\" -gt 1 ]; then\n    \
+                 srun --overlap --nodes=$((SLURM_JOB_NUM_NODES - 1)) --ntasks-per-node=1 \
+                 --exclude=\"$SLURMD_NODENAME\" --job-name=torc-monitor-node \
+                 --wait=0 --kill-on-bad-exit=0 {} &\n    \
+                 TORC_MONITOR_PID=$!\nfi\n",
+                monitor
+            ));
+        }
         script.push_str(&command);
         script.push('\n');
+        if monitor_idle_nodes {
+            script.push_str(
+                "TORC_RC=$?\n\
+                 if [ -n \"${TORC_MONITOR_PID:-}\" ]; then\n    \
+                 kill -TERM \"$TORC_MONITOR_PID\" 2>/dev/null\n    \
+                 wait \"$TORC_MONITOR_PID\"\nfi\n\
+                 exit $TORC_RC\n",
+            );
+        }
 
         fs::write(filename, script)
             .with_context(|| format!("Failed to write submission script to {:?}", filename))?;

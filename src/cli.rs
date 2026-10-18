@@ -27,6 +27,7 @@ use crate::client::commands::slurm::SlurmCommands;
 use crate::client::commands::tasks::TasksCommands;
 use crate::client::commands::user_data::UserDataCommands;
 use crate::client::commands::workflows::WorkflowCommands;
+use crate::monitor_node_cmd;
 use crate::plot_resources_cmd;
 use crate::tui_runner;
 
@@ -1086,6 +1087,9 @@ EXAMPLES:
 "
     )]
     PlotResources(plot_resources_cmd::Args),
+    /// Monitor compute-node CPU/memory on this host without running jobs
+    #[command(name = "monitor-node", hide = true)]
+    MonitorNode(monitor_node_cmd::Args),
     /// Manage the local torc executable
     #[command(name = "self")]
     SelfCommand {

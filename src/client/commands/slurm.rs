@@ -2225,6 +2225,13 @@ pub fn schedule_slurm_nodes(
         );
     }
 
+    // A single runner per allocation only samples its own node; put a monitor on the rest.
+    let monitor_idle_nodes = !start_one_worker_per_node
+        && workflow
+            .resource_monitor_config
+            .as_ref()
+            .is_some_and(|c| c.compute_node_config().is_some());
+
     let slurm_interface = match crate::client::hpc::slurm_interface::SlurmInterface::new() {
         Ok(interface) => interface,
         Err(e) => {
@@ -2351,6 +2358,7 @@ pub fn schedule_slurm_nodes(
             tls_insecure,
             startup_delay_seconds,
             claim_backoff_max_secs,
+            monitor_idle_nodes,
         ) {
             error!("Error creating submission script: {}", e);
             return Err(e.into());

@@ -41,6 +41,7 @@ use torc::client::workflow_spec::WorkflowSpec;
 
 // Import the binary command modules from the library
 use torc::exec_cmd;
+use torc::monitor_node_cmd;
 use torc::plot_resources_cmd;
 use torc::run_jobs_cmd;
 use torc::tui_runner;
@@ -1332,6 +1333,9 @@ fn main() {
                 eprintln!("Error generating plots: {}", e);
                 std::process::exit(1);
             }
+        }
+        Commands::MonitorNode(args) => {
+            std::process::exit(monitor_node_cmd::run(&config, args));
         }
         Commands::Ping => match apis::system_api::ping(&config) {
             Ok(_) => {

@@ -695,7 +695,7 @@ fn run_monitoring_loop(
             let has_local_jobs = monitored_jobs
                 .values()
                 .any(|j| matches!(j.source, MonitorJobSource::Local { .. }));
-            if has_local_jobs || compute_node_config.is_some() {
+            if has_local_jobs {
                 sys.refresh_processes_specifics(
                     ProcessesToUpdate::All,
                     true,

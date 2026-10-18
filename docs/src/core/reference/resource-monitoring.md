@@ -58,6 +58,17 @@ mode stores peak and average values for the runner lifetime on the compute node 
 mode also stores per-sample values. The current compute-node monitor records CPU and memory; GPU
 monitoring is reserved for a future extension.
 
+The monitor samples the node the job runner is running on. In a multi-node Slurm allocation with a
+single runner (`start_one_worker_per_node: false`), Torc also launches `torc monitor-node` on every
+other node of the allocation via `srun --overlap`, so their CPU and memory are recorded as well.
+Each node writes its own `resource_metrics_monitor_wf<id>_h<hostname>_r<run>.db` under
+`<output_dir>/resource_utilization/`; nothing is attached to the compute node record for those
+nodes. Pass all the files to `torc plot-resources` to plot the whole allocation:
+
+```bash
+torc plot-resources torc_output/resource_utilization/*.db
+```
+
 ### Granularity Modes
 
 **Summary mode** (`"summary"`):
