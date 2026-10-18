@@ -25,7 +25,7 @@ pub struct Args {
     #[arg(short, long, default_value = "torc_output")]
     pub output_dir: PathBuf,
     /// Seconds between samples (no workflow only)
-    #[arg(long, default_value_t = 10)]
+    #[arg(short = 'i', long, default_value_t = 10)]
     pub sample_interval_seconds: i32,
     /// Seconds between SQLite flushes (no workflow only)
     #[arg(long, default_value_t = 300)]

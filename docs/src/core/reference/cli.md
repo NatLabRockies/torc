@@ -2188,7 +2188,7 @@ the job runner's resource monitor, readable by `torc plot-resources`. Runs until
   (the flags below are then ignored). Omit to sample without a Torc workflow
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory (same as the job runner's). Default:
   `torc_output`
-- `--sample-interval-seconds <N>` — Seconds between samples (no workflow only). Default: `10`
+- `-i`, `--sample-interval-seconds <N>` — Seconds between samples (no workflow only). Default: `10`
 - `--flush-interval-seconds <N>` — Seconds between SQLite flushes (no workflow only). Default: `300`
 - `--summary-only` — Store only the lifetime summary, not every sample (no workflow only)
 

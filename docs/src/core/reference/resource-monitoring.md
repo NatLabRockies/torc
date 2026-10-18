@@ -70,7 +70,7 @@ torc plot-resources torc_output/resource_utilization/*.db
 ```
 
 `torc monitor-node` also works outside a workflow: run it with no workflow ID and it samples the
-local host with `--sample-interval-seconds` / `--flush-interval-seconds` (or `--summary-only`),
+local host with `-i/--sample-interval-seconds` / `--flush-interval-seconds` (or `--summary-only`),
 without contacting the server, writing `resource_metrics_monitor_h<hostname>.db`.
 
 ### Granularity Modes

@@ -170,7 +170,7 @@ during work that Torc does not manage:
 
 ```bash
 # Sample every 5 seconds until Ctrl-C or SIGTERM
-torc monitor-node --sample-interval-seconds 5 -o node_metrics
+torc monitor-node -i 5 -o node_metrics
 
 # Plot the result
 torc plot-resources node_metrics/resource_utilization/*.db -o plots/
