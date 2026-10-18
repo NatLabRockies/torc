@@ -101,7 +101,7 @@ serde_yaml = "0.9"
 tabled = "0.21"
 kdl = "6.5"
 rusqlite = { version = "0.32", features = ["bundled"] }
-nvml-wrapper = "0.12"
+nvml-wrapper = "0.13"
 shlex = "2.0"
 flate2 = "1.0"
 tar = "0.4"
