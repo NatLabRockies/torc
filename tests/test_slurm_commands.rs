@@ -2888,5 +2888,5 @@ fn test_create_submission_script_with_idle_node_monitor() {
         script.ends_with("exit $TORC_RC\n"),
         "runner exit code preserved"
     );
-    assert!(script.contains("kill -TERM \"$TORC_MONITOR_PID\""));
+    assert!(script.contains("kill -USR1 \"$TORC_MONITOR_PID\""));
 }

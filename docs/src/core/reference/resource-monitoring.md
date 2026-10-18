@@ -61,8 +61,10 @@ monitoring is reserved for a future extension.
 The monitor samples the node the job runner is running on. In a multi-node Slurm allocation with a
 single runner (`start_one_worker_per_node: false`), Torc also launches `torc monitor-node` on every
 other node of the allocation via `srun --overlap`, so their CPU and memory are recorded as well.
-Each node writes its own `resource_metrics_monitor_wf<id>_h<hostname>_r<run>_sl<slurm_job_id>.db`
-under `<output_dir>/resource_utilization/`; nothing is attached to the compute node record for those
+When the runner exits, the script stops the samplers with SIGUSR1 (which `srun` forwards unchanged,
+unlike SIGTERM) so they flush their final samples and summary. Each node writes its own
+`resource_metrics_monitor_wf<id>_h<hostname>_r<run>_sl<slurm_job_id>.db` under
+`<output_dir>/resource_utilization/`; nothing is attached to the compute node record for those
 nodes. Pass all the files to `torc plot-resources` to plot the whole allocation; the system timeline
 draws one CPU and one memory trace per node:
 

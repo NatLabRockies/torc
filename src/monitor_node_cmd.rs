@@ -4,7 +4,8 @@
 //! own (`start_one_worker_per_node=false`), so their CPU and memory utilization is
 //! still recorded. Also usable outside Torc as a plain node sampler. Writes the same
 //! SQLite layout as the job runner's monitor, under a distinct label, and exits on
-//! SIGTERM/SIGINT after a final flush.
+//! SIGTERM/SIGINT/SIGUSR1 after a final flush. SIGUSR1 is what the sbatch script
+//! sends, because `srun` forwards it unchanged but converts SIGTERM to SIGKILL.
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
@@ -143,9 +144,9 @@ pub fn run(config: &Configuration, args: &Args) -> i32 {
 
 #[cfg(unix)]
 fn wait_for_termination() {
-    use signal_hook::consts::{SIGINT, SIGTERM};
+    use signal_hook::consts::{SIGINT, SIGTERM, SIGUSR1};
     use signal_hook::iterator::Signals;
-    match Signals::new([SIGTERM, SIGINT]) {
+    match Signals::new([SIGTERM, SIGINT, SIGUSR1]) {
         Ok(mut signals) => {
             signals.forever().next();
         }

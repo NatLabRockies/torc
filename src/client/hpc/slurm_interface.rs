@@ -348,10 +348,12 @@ impl HpcInterface for SlurmInterface {
         script.push_str(&command);
         script.push('\n');
         if monitor_idle_nodes {
+            // srun turns SIGTERM/SIGHUP into SIGKILL for its tasks but forwards any
+            // other signal as-is, so SIGUSR1 is what lets monitor-node flush and exit.
             script.push_str(
                 "TORC_RC=$?\n\
                  if [ -n \"${TORC_MONITOR_PID:-}\" ]; then\n    \
-                 kill -TERM \"$TORC_MONITOR_PID\" 2>/dev/null\n    \
+                 kill -USR1 \"$TORC_MONITOR_PID\" 2>/dev/null\n    \
                  wait \"$TORC_MONITOR_PID\"\nfi\n\
                  exit $TORC_RC\n",
             );
