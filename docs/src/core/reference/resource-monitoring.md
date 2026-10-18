@@ -63,7 +63,8 @@ single runner (`start_one_worker_per_node: false`), Torc also launches `torc mon
 other node of the allocation via `srun --overlap`, so their CPU and memory are recorded as well.
 Each node writes its own `resource_metrics_monitor_wf<id>_h<hostname>_r<run>_sl<slurm_job_id>.db`
 under `<output_dir>/resource_utilization/`; nothing is attached to the compute node record for those
-nodes. Pass all the files to `torc plot-resources` to plot the whole allocation:
+nodes. Pass all the files to `torc plot-resources` to plot the whole allocation; the system timeline
+draws one CPU and one memory trace per node:
 
 ```bash
 torc plot-resources torc_output/resource_utilization/*.db
