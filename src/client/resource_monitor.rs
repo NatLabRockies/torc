@@ -1323,6 +1323,18 @@ fn store_job_metadata(conn: &impl SqlExecutor, job_id: i64, job_name: &str) -> S
 }
 
 /// Store summary statistics for overall compute-node resource usage.
+/// Persist a final compute-node summary to the metrics database for `unique_label`,
+/// creating it if needed. Used by sampler-only nodes (`torc monitor-node`) in summary
+/// mode, which have no compute node record to attach the summary to.
+pub fn write_system_summary(
+    output_dir: &Path,
+    unique_label: &str,
+    summary: &SystemMetricsSummary,
+) -> SqliteResult<()> {
+    let conn = init_timeseries_db(output_dir, unique_label)?;
+    store_system_summary(&conn, summary)
+}
+
 fn store_system_summary(
     conn: &impl SqlExecutor,
     summary: &SystemMetricsSummary,

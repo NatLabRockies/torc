@@ -337,7 +337,8 @@ impl HpcInterface for SlurmInterface {
             ));
             script.push_str(&format!(
                 "if [ \"${{SLURM_JOB_NUM_NODES:-1}}\" -gt 1 ]; then\n    \
-                 srun --overlap --nodes=$((SLURM_JOB_NUM_NODES - 1)) --ntasks-per-node=1 \
+                 srun --overlap --nodes=$((SLURM_JOB_NUM_NODES - 1)) \
+                 --ntasks=$((SLURM_JOB_NUM_NODES - 1)) --ntasks-per-node=1 \
                  --exclude=\"$SLURMD_NODENAME\" --job-name=torc-monitor-node \
                  --wait=0 --kill-on-bad-exit=0 {} &\n    \
                  TORC_MONITOR_PID=$!\nfi\n",

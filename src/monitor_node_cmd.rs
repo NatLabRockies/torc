@@ -7,7 +7,7 @@
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::resource_monitor::ResourceMonitor;
+use crate::client::resource_monitor::{ResourceMonitor, write_system_summary};
 use crate::models::JobMonitorConfig;
 use clap::Parser;
 use log::{error, info};
@@ -53,13 +53,20 @@ pub fn run(config: &Configuration, args: &Args) -> i32 {
     monitor_config.jobs = Some(JobMonitorConfig::default());
     monitor_config.generate_plots = false;
 
-    let label = format!(
+    // The Slurm job id keeps a later allocation on the same host from overwriting
+    // this one's summary row.
+    let mut label = format!(
         "monitor_wf{}_h{}_r{}",
         args.workflow_id,
         hostname,
         workflow.run_id.unwrap_or(0)
     );
-    let monitor = match ResourceMonitor::new(monitor_config, args.output_dir.clone(), label) {
+    if let Ok(slurm_job_id) = std::env::var("SLURM_JOB_ID") {
+        label.push_str(&format!("_sl{}", slurm_job_id));
+    }
+    let has_timeseries_db = monitor_config.has_timeseries_db();
+    let monitor = match ResourceMonitor::new(monitor_config, args.output_dir.clone(), label.clone())
+    {
         Ok(m) => m,
         Err(e) => {
             error!("Failed to start resource monitor: {}", e);
@@ -74,7 +81,16 @@ pub fn run(config: &Configuration, args: &Args) -> i32 {
     wait_for_termination();
 
     info!("Stopping compute-node monitor on {}", hostname);
-    monitor.shutdown();
+    let summary = monitor.shutdown();
+    // In time-series mode the monitor thread already stored the summary alongside
+    // the samples; in summary mode nothing else persists it.
+    if !has_timeseries_db
+        && let Some(summary) = summary
+        && let Err(e) = write_system_summary(&args.output_dir, &label, &summary)
+    {
+        error!("Failed to store compute-node summary: {}", e);
+        return 1;
+    }
     0
 }
 
