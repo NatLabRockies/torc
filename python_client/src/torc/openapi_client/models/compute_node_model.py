@@ -34,7 +34,7 @@ class ComputeNodeModel(BaseModel):
     hostname: StrictStr
     id: Optional[StrictInt] = None
     is_active: Optional[StrictBool] = None
-    label: Optional[StrictStr] = Field(default=None, description="Label the runner was started with; it claims only jobs with this label (or only unlabeled jobs, when unset).")
+    labels: Optional[List[StrictStr]] = Field(default=None, description="Labels the runner was started with; it claims only jobs whose every label it has (or only unlabeled jobs, when unset).")
     memory_gb: Union[StrictFloat, StrictInt]
     num_cpus: StrictInt
     num_gpus: StrictInt
@@ -48,7 +48,7 @@ class ComputeNodeModel(BaseModel):
     start_time: StrictStr
     time_limit: Optional[StrictStr] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "end_time", "hostname", "id", "is_active", "label", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "end_time", "hostname", "id", "is_active", "labels", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -119,10 +119,10 @@ class ComputeNodeModel(BaseModel):
         if self.is_active is None and "is_active" in self.model_fields_set:
             _dict['is_active'] = None
 
-        # set to None if label (nullable) is None
+        # set to None if labels (nullable) is None
         # and model_fields_set contains the field
-        if self.label is None and "label" in self.model_fields_set:
-            _dict['label'] = None
+        if self.labels is None and "labels" in self.model_fields_set:
+            _dict['labels'] = None
 
         # set to None if peak_cpu_percent (nullable) is None
         # and model_fields_set contains the field
@@ -174,7 +174,7 @@ class ComputeNodeModel(BaseModel):
             "hostname": obj.get("hostname"),
             "id": obj.get("id"),
             "is_active": obj.get("is_active"),
-            "label": obj.get("label"),
+            "labels": obj.get("labels"),
             "memory_gb": obj.get("memory_gb"),
             "num_cpus": obj.get("num_cpus"),
             "num_gpus": obj.get("num_gpus"),

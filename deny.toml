@@ -14,6 +14,9 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "quick-xml O(N²) DoS via plist/service-manager - no upstream upgrade available" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml NsReader heap DoS via plist/service-manager - no upstream upgrade available" },
     { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via serde_yaml - unmaintained, no safe upgrade; replace serde_yaml separately" },
+    { id = "RUSTSEC-2026-0367", reason = "zip 7.x build-dep of plotly_kaleido (extracts kaleido binary at build time); fix requires zip 9, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
 ]
 
 # License compliance - permissive allow-list

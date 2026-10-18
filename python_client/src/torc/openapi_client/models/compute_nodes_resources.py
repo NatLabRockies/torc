@@ -27,14 +27,14 @@ class ComputeNodesResources(BaseModel):
     ComputeNodesResources
     """ # noqa: E501
     id: Optional[StrictInt] = None
-    label: Optional[StrictStr] = Field(default=None, description="Runner label; only jobs with an identical label (or none, when unset) are claimed.")
+    labels: Optional[List[StrictStr]] = Field(default=None, description="Runner labels; only labeled jobs whose every label is in this set (or unlabeled jobs, when unset) are claimed.")
     memory_gb: Union[StrictFloat, StrictInt]
     num_cpus: StrictInt
     num_gpus: StrictInt
     num_nodes: StrictInt
     scheduler_config_id: Optional[StrictInt] = None
     time_limit: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["id", "label", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "scheduler_config_id", "time_limit"]
+    __properties: ClassVar[List[str]] = ["id", "labels", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "scheduler_config_id", "time_limit"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -80,10 +80,10 @@ class ComputeNodesResources(BaseModel):
         if self.id is None and "id" in self.model_fields_set:
             _dict['id'] = None
 
-        # set to None if label (nullable) is None
+        # set to None if labels (nullable) is None
         # and model_fields_set contains the field
-        if self.label is None and "label" in self.model_fields_set:
-            _dict['label'] = None
+        if self.labels is None and "labels" in self.model_fields_set:
+            _dict['labels'] = None
 
         # set to None if scheduler_config_id (nullable) is None
         # and model_fields_set contains the field
@@ -108,7 +108,7 @@ class ComputeNodesResources(BaseModel):
 
         _obj = cls.model_validate({
             "id": obj.get("id"),
-            "label": obj.get("label"),
+            "labels": obj.get("labels"),
             "memory_gb": obj.get("memory_gb"),
             "num_cpus": obj.get("num_cpus"),
             "num_gpus": obj.get("num_gpus"),

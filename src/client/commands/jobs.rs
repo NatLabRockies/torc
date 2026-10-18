@@ -324,11 +324,11 @@ EXAMPLES:
     # Set scheduling priority (higher = submitted first)
     torc jobs update 456 --priority 10
 
-    # Route the job to runners started with --label windows
-    torc jobs update 456 --label windows
+    # Route the job to runners started with --label windows --label gpu
+    torc jobs update 456 --label windows,gpu
 
-    # Remove the label so unlabeled runners claim the job
-    torc jobs update 456 --clear-label
+    # Remove the labels so unlabeled runners claim the job
+    torc jobs update 456 --clear-labels
 ")]
     Update {
         /// ID of the job to update
@@ -352,12 +352,13 @@ EXAMPLES:
         /// Scheduling priority (0 or higher; higher = submitted first)
         #[arg(long)]
         priority: Option<i64>,
-        /// Routing label; only runners started with the same --label claim this job
-        #[arg(long, value_parser = models::parse_label, conflicts_with = "clear_label")]
-        label: Option<String>,
-        /// Remove the routing label so runners without --label claim this job
+        /// Replace the routing labels; only runners started with all of them claim
+        /// this job. Repeat the flag or separate labels with commas.
+        #[arg(long = "label", value_delimiter = ',', value_parser = models::parse_label, conflicts_with = "clear_labels")]
+        labels: Vec<String>,
+        /// Remove the routing labels so runners without --label claim this job
         #[arg(long)]
-        clear_label: bool,
+        clear_labels: bool,
     },
     /// Delete one or more jobs
     #[command(after_long_help = "\
@@ -727,7 +728,13 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     println!("  Workflow ID: {}", job.workflow_id);
                     println!("  Status: {}", status);
                     println!("  Priority: {}", job.priority.unwrap_or(0));
-                    println!("  Label: {}", job.label.as_deref().unwrap_or("None"));
+                    println!(
+                        "  Labels: {}",
+                        job.labels
+                            .as_deref()
+                            .filter(|l| !l.is_empty())
+                            .map_or("None".to_string(), |l| l.join(", "))
+                    );
                     println!(
                         "  Compute Node: {}",
                         job.compute_node_id
@@ -776,8 +783,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             runtime,
             resource_requirements_id,
             priority,
-            label,
-            clear_label,
+            labels,
+            clear_labels,
         } => {
             // First get the existing job
             match apis::jobs_api::get_job(config, *id) {
@@ -795,11 +802,11 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     if let Some(p) = priority {
                         job.priority = Some(*p);
                     }
-                    if let Some(new_label) = label {
-                        job.label = Some(new_label.clone());
-                    } else if *clear_label {
-                        // The server treats an empty label as "clear".
-                        job.label = Some(String::new());
+                    if !labels.is_empty() {
+                        job.labels = Some(labels.clone());
+                    } else if *clear_labels {
+                        // The server treats an empty label set as "clear".
+                        job.labels = Some(Vec::new());
                     }
 
                     // Handle runtime update (requires updating resource requirements)

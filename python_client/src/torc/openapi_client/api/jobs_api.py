@@ -1751,7 +1751,7 @@ class JobsApi:
         origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
-        label: Annotated[Optional[StrictStr], Field(description="Exact-match filter on the routing label. An empty value returns only unlabeled jobs.")] = None,
+        labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1794,8 +1794,8 @@ class JobsApi:
         :type name: str
         :param command: Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type command: str
-        :param label: Exact-match filter on the routing label. An empty value returns only unlabeled jobs.
-        :type label: str
+        :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
+        :type labels: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1832,7 +1832,7 @@ class JobsApi:
             origin_is_set=origin_is_set,
             name=name,
             command=command,
-            label=label,
+            labels=labels,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1872,7 +1872,7 @@ class JobsApi:
         origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
-        label: Annotated[Optional[StrictStr], Field(description="Exact-match filter on the routing label. An empty value returns only unlabeled jobs.")] = None,
+        labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1915,8 +1915,8 @@ class JobsApi:
         :type name: str
         :param command: Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type command: str
-        :param label: Exact-match filter on the routing label. An empty value returns only unlabeled jobs.
-        :type label: str
+        :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
+        :type labels: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1953,7 +1953,7 @@ class JobsApi:
             origin_is_set=origin_is_set,
             name=name,
             command=command,
-            label=label,
+            labels=labels,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1993,7 +1993,7 @@ class JobsApi:
         origin_is_set: Annotated[Optional[StrictBool], Field(description="When set, filters by job provenance: `true` returns only jobs with `origin IS NOT NULL` (failure-handler retries and `spawn_jobs` children); `false` returns only originally-declared jobs. Used by `torc watch --auto-schedule` to count jobs needing unplanned Slurm allocations with `limit=1` (the response's `total_count` suffices — no rows downloaded).")] = None,
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
-        label: Annotated[Optional[StrictStr], Field(description="Exact-match filter on the routing label. An empty value returns only unlabeled jobs.")] = None,
+        labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2036,8 +2036,8 @@ class JobsApi:
         :type name: str
         :param command: Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).
         :type command: str
-        :param label: Exact-match filter on the routing label. An empty value returns only unlabeled jobs.
-        :type label: str
+        :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
+        :type labels: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2074,7 +2074,7 @@ class JobsApi:
             origin_is_set=origin_is_set,
             name=name,
             command=command,
-            label=label,
+            labels=labels,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2109,7 +2109,7 @@ class JobsApi:
         origin_is_set,
         name,
         command,
-        label,
+        labels,
         _request_auth,
         _content_type,
         _headers,
@@ -2184,9 +2184,9 @@ class JobsApi:
             
             _query_params.append(('command', command))
             
-        if label is not None:
+        if labels is not None:
             
-            _query_params.append(('label', label))
+            _query_params.append(('labels', labels))
             
         # process the header parameters
         # process the form parameters

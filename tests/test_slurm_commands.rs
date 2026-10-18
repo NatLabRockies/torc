@@ -1839,7 +1839,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
-        None, // label
+        None, // labels
     )
     .expect("Failed to list jobs");
 
@@ -2260,7 +2260,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
         None,      // origin_is_set
         None,      // name
         None,      // command
-        None,      // label
+        None,      // labels
     )
     .expect("Failed to list jobs");
 

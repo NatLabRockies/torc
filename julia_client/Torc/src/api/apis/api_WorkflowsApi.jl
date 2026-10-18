@@ -141,11 +141,11 @@ const _returntypes_claim_next_jobs_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, label=nothing, _mediaType=nothing)
+function _oacinternal_claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_claim_next_jobs_WorkflowsApi, "/workflows/{id}/claim_next_jobs", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "label", label; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "labels", labels; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -154,17 +154,17 @@ end
 @doc raw"""Params:
 - id::Int64 (required)
 - limit::Int64
-- label::String
+- labels::String
 
 Return: ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse
 """
-function claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, label=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, label=label, _mediaType=_mediaType)
+function claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, labels=labels, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, label=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, label=label, _mediaType=_mediaType)
+function claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, labels=labels, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

@@ -77,11 +77,12 @@ runner detected. The runner's startup log line records its resources, `max_paral
 execution mode. A job asking for more CPU, memory, or GPUs than a worker has will never be claimed
 by that worker.
 
-Labels are the other reason runners claim nothing. A job with a `label` is claimed only by a runner
-started with the same `--label`, and unlabeled jobs only by runners without one. `torc status` warns
-about ready jobs whose label has no active runner, and the JSON output lists them in
-`unserved_ready_labels` (label to ready-job count; omitted when empty). Start one with
-`torc run <id> --label <label>`, adding `--persistent` if more of its jobs become ready later.
+Labels are the other reason runners claim nothing. A job with `labels` is claimed only by a runner
+started with every one of them (`--label`), and unlabeled jobs only by runners without any.
+`torc status` warns about ready jobs whose label set no active runner covers, and the JSON output
+lists them in `unserved_ready_labels` (comma-joined label set to ready-job count; omitted when
+empty). Start one with `torc run <id> --label <labels>`, adding `--persistent` if more of its jobs
+become ready later.
 
 ## Ready jobs on live allocations that will not start
 

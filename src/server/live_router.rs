@@ -512,9 +512,10 @@ pub struct ClaimJobsBasedOnResourcesQuery {
 pub struct ClaimNextJobsQuery {
     #[param(nullable = true)]
     pub limit: Option<i64>,
-    /// Runner label; only jobs with an identical label (or none, when unset) are claimed.
+    /// Comma-separated runner labels. Only labeled jobs whose every label is in
+    /// this set are claimed; when unset or empty, only unlabeled jobs are.
     #[param(nullable = true)]
-    pub label: Option<String>,
+    pub labels: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2321,10 +2322,10 @@ pub struct JobsListQuery {
     /// for ASCII).
     #[param(nullable = true)]
     pub command: Option<String>,
-    /// Exact-match filter on the routing label. An empty value returns only
-    /// unlabeled jobs.
+    /// Comma-separated runner labels: returns the jobs a runner started with
+    /// these labels would claim. An empty value returns only unlabeled jobs.
     #[param(nullable = true)]
-    pub label: Option<String>,
+    pub labels: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2371,7 +2372,7 @@ pub async fn list_jobs(
             query.origin_is_set,
             query.name,
             query.command,
-            query.label,
+            query.labels,
             &context,
         )
         .await
@@ -4122,7 +4123,7 @@ pub async fn claim_next_jobs(
 ) -> Response<Body> {
     match state
         .server
-        .claim_next_jobs(id, query.limit, query.label, &context)
+        .claim_next_jobs(id, query.limit, query.labels, &context)
         .await
     {
         Ok(response) => claim_next_jobs_response(response),

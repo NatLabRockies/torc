@@ -1432,10 +1432,10 @@ where
         // runners never claim.
         let compute_node_row = sqlx::query(
             "SELECT COUNT(*) AS cnt, \
-             COALESCE(SUM(CASE WHEN end_time IS NULL AND label IS NULL THEN 1 ELSE 0 END), 0) \
+             COALESCE(SUM(CASE WHEN end_time IS NULL AND labels IS NULL THEN 1 ELSE 0 END), 0) \
                  AS unlabeled_unlimited_cnt, \
              (MAX(julianday(end_time)) - julianday('now')) * 86400.0 AS max_remaining_s, \
-             (MAX(CASE WHEN label IS NULL THEN julianday(end_time) END) - julianday('now')) \
+             (MAX(CASE WHEN labels IS NULL THEN julianday(end_time) END) - julianday('now')) \
                  * 86400.0 AS unlabeled_max_remaining_s \
              FROM compute_node WHERE workflow_id = ? AND is_active = 1",
         )
@@ -1496,7 +1496,7 @@ where
                  MAX(rr.runtime_s) AS longest \
                  FROM job j \
                  JOIN resource_requirements rr ON j.resource_requirements_id = rr.id \
-                 WHERE j.workflow_id = ? AND j.status = ? AND j.label IS NULL",
+                 WHERE j.workflow_id = ? AND j.status = ? AND j.labels IS NULL",
             )
             .bind(threshold)
             .bind(id)
@@ -1509,18 +1509,21 @@ where
         }
 
         // Labeled ready jobs that no active runner serves: a job is claimed only by
-        // a runner started with the identical label, so these are stranded until
-        // one appears. Pending Slurm allocations are ignored; their runners are
+        // a runner started with every one of its labels, so these are stranded
+        // until one appears. Label sets are sorted JSON arrays, so GROUP BY groups
+        // equal sets. Pending Slurm allocations are ignored; their runners are
         // always unlabeled.
         let mut unserved_ready_labels = std::collections::BTreeMap::new();
         if counts.ready > 0 {
             let rows = sqlx::query(
-                "SELECT label, COUNT(*) AS cnt, \
-                 label IN (SELECT label FROM compute_node \
-                     WHERE workflow_id = ?1 AND is_active = 1 AND label IS NOT NULL) AS served \
+                "SELECT labels, COUNT(*) AS cnt, \
+                 EXISTS (SELECT 1 FROM compute_node cn \
+                     WHERE cn.workflow_id = ?1 AND cn.is_active = 1 AND cn.labels IS NOT NULL \
+                     AND NOT EXISTS (SELECT 1 FROM json_each(job.labels) \
+                         WHERE value NOT IN (SELECT value FROM json_each(cn.labels)))) AS served \
                  FROM job \
-                 WHERE workflow_id = ?1 AND status = ?2 AND label IS NOT NULL \
-                 GROUP BY label",
+                 WHERE workflow_id = ?1 AND status = ?2 AND labels IS NOT NULL \
+                 GROUP BY labels",
             )
             .bind(id)
             .bind(models::JobStatus::Ready.to_int())
@@ -1529,7 +1532,8 @@ where
             .map_err(|e| database_error_with_msg(e, "Failed to count unserved labeled jobs"))?;
             for row in &rows {
                 if !row.get::<bool, _>("served") {
-                    unserved_ready_labels.insert(row.get::<String, _>("label"), row.get("cnt"));
+                    let labels = super::labels_column(row, "labels").unwrap_or_default();
+                    unserved_ready_labels.insert(labels.join(","), row.get("cnt"));
                 }
             }
         }

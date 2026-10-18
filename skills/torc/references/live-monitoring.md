@@ -24,7 +24,7 @@ exists but ready jobs do, and when accumulated retry jobs exceed `--auto-schedul
 `--persistent` is for workflows with runners outside Slurm, such as a `torc run --label` runner on a
 dedicated machine. Without it, watch exits when there are no Slurm allocations and no ready jobs for
 them, because it assumes nothing can make progress. With it, watch keeps polling until the workflow
-completes, and warns about ready labeled jobs that no active runner serves.
+completes, and warns about ready labeled jobs whose label set no active runner covers.
 
 Recovery behavior is covered in `rerun-and-recovery.md`.
 

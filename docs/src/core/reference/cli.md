@@ -93,9 +93,10 @@ Run a workflow locally (create from spec file or stdin, or run existing workflow
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for jobs
 - `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
   Default: `false`
-- `--label <LABEL>` — Only claim jobs with this label. Without it, only unlabeled jobs are claimed
+- `--label <LABELS>` — Only claim jobs whose every label is in this set (repeat the flag or separate
+  with commas). Without it, only unlabeled jobs are claimed
 - `--persistent` — Ignore the idle timeout while the workflow still has unfinished jobs this runner
-  can claim (same label, or unlabeled when no --label is given)
+  can claim (its labels, or unlabeled when no --label is given)
 
 ## `torc submit`
 

@@ -35,7 +35,7 @@ Aggregated status summary for a workflow, computed server-side.
     - runtime_blocked_ready_jobs::Int64 : Ready jobs whose required runtime exceeds the remaining walltime of every active allocation, so they cannot start until a fresh allocation appears. 0 when there are no walltime-bounded allocations. See &#x60;torc workflows diagnose&#x60;.
     - total_exec_time_minutes::Float64
     - total_jobs::Int64
-    - unserved_ready_labels::Dict{String, Int64} : Ready-job count per label that no active compute node was started with. These jobs stay ready until a runner is started with a matching &#x60;--label&#x60;.
+    - unserved_ready_labels::Dict{String, Int64} : Ready-job count per label set (comma-joined) that no active compute node covers. These jobs stay ready until a runner is started with every label.
     - walltime_seconds::Float64
     - workflow_id::Int64
     - workflow_name::String

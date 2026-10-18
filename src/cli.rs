@@ -283,11 +283,12 @@ SEE ALSO:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
-        /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
-        #[arg(long, value_parser = crate::models::parse_label)]
-        label: Option<String>,
+        /// Only claim jobs whose every label is in this set. Repeat the flag or
+        /// separate labels with commas. Without it, only unlabeled jobs are claimed.
+        #[arg(long = "label", value_delimiter = ',', value_parser = crate::models::parse_label)]
+        labels: Vec<String>,
         /// Ignore the idle timeout while the workflow still has unfinished jobs this
-        /// runner can claim (same label, or unlabeled when no --label is given).
+        /// runner can claim (its labels, or unlabeled when no --label is given).
         #[arg(long)]
         persistent: bool,
     },

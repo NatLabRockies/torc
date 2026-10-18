@@ -158,6 +158,39 @@ pub fn message_error_response(message: impl Into<String>) -> models::ErrorRespon
     models::ErrorResponse::new(serde_json::json!({"message": message.into()}))
 }
 
+/// SQL predicate, with exactly one `placeholder`, selecting the jobs a runner
+/// started with `labels` may claim, plus the value to bind for it. A runner
+/// with no labels claims only unlabeled jobs (`labels IS NULL`, served by the
+/// labels index); a labeled runner claims only labeled jobs whose every label
+/// it has. `column` is the job labels column (a sorted JSON array or NULL).
+pub fn claimable_labels_sql(
+    labels: &[String],
+    column: &str,
+    placeholder: &str,
+) -> (String, Option<String>) {
+    match models::labels_to_json(Some(labels)) {
+        None => (format!("{column} IS {placeholder}"), None),
+        Some(json) => (
+            format!(
+                "{column} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM json_each({column}) \
+                 WHERE value NOT IN (SELECT value FROM json_each({placeholder})))"
+            ),
+            Some(json),
+        ),
+    }
+}
+
+/// Read a JSON-array labels column into a label set (`None` when NULL or absent).
+pub fn labels_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<Vec<String>> {
+    use sqlx::Row;
+    models::labels_from_json(
+        row.try_get::<Option<String>, _>(column)
+            .ok()
+            .flatten()
+            .as_deref(),
+    )
+}
+
 /// Build a `"<resource> not found with ID: <id>"` error response.
 ///
 /// `resource` is the human-readable resource name (e.g., `"Workflow"`, `"Job"`).

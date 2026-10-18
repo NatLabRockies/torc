@@ -1,21 +1,24 @@
 # Route jobs to specific runners with labels.
 #
-# A job with a `label` is claimed only by a runner started with the same
-# `--label`. Jobs without a label are claimed only by runners without one.
-# The server enforces the match when a runner claims jobs.
+# A job with `labels` is claimed only by a runner started with every one of
+# them (`--label`). Jobs without labels are claimed only by runners without
+# any. The server enforces the match when a runner claims jobs.
 #
-# This workflow has two kinds of work:
-#   - `simulate_*` jobs have no label. Any ordinary runner takes them, for
+# This workflow has three kinds of work:
+#   - `simulate_*` jobs have no labels. Any ordinary runner takes them, for
 #     example Slurm compute nodes started by `torc submit`.
-#   - `postprocess` has `label: windows`. Only a runner started with
+#   - `postprocess` has `labels: [windows]`. A runner started with
 #     `--label windows` takes it, for example a long-lived Windows VM.
+#   - `render` has `labels: [windows, gpu]`. Only a runner that has both
+#     labels takes it; a plain `--label windows` runner leaves it alone.
 #
 # Try it on one machine with two terminals:
 #   torc create examples/yaml/labeled_jobs.yaml     # prints the workflow ID
 #
 #   # Terminal 1: the dedicated runner. `--persistent` keeps it alive while
-#   # it has nothing to do, until the workflow is complete.
-#   torc run <workflow_id> --label windows --persistent
+#   # it has nothing to do, until the workflow is complete. Its two labels
+#   # cover both `postprocess` and `render`.
+#   torc run <workflow_id> --label windows,gpu --persistent
 #
 #   # Terminal 2: an ordinary runner. It runs the simulate jobs and exits.
 #   torc run <workflow_id>
@@ -41,6 +44,12 @@ jobs:
   - name: postprocess
     command: echo "post-processing all cases"
     resource_requirements: small
-    label: windows
+    labels: [windows]
     depends_on_regexes:
       - "^simulate_\\d+$"
+
+  - name: render
+    command: echo "rendering on the GPU"
+    resource_requirements: small
+    labels: [windows, gpu]
+    depends_on: [postprocess]

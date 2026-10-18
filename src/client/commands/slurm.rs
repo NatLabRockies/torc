@@ -904,11 +904,11 @@ pub fn generate_schedulers_for_workflow(
         }
     }
 
-    let labeled = spec.jobs.iter().filter(|j| j.label.is_some()).count();
+    let labeled = spec.jobs.iter().filter(|j| j.has_labels()).count();
     if labeled > 0 {
         warnings.push(format!(
-            "{} job(s) have a label and are excluded from Slurm allocations; \
-             start a runner for them with `torc run --label <label>`",
+            "{} job(s) have labels and are excluded from Slurm allocations; \
+             start a runner for them with `torc run --label <labels>`",
             labeled
         ));
     }

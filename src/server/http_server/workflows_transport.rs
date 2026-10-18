@@ -604,7 +604,7 @@ where
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
 
-        if let Err(err) = models::validate_label(body.label.as_deref()) {
+        if let Err(err) = models::validate_labels(body.labels.as_deref()) {
             return Ok(
                 ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
                     message_error_response(err),

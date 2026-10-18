@@ -968,7 +968,7 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
                 eprintln!("{}", models::unserved_label_warning(count, label));
             }
             eprintln!(
-                "  Start one with 'torc run {} --label <LABEL>', or see 'torc compute-nodes list {}'.",
+                "  Start one with 'torc run {} --label <LABELS>', or see 'torc compute-nodes list {}'.",
                 workflow_id, workflow_id
             );
         }
