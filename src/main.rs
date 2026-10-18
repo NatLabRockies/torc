@@ -565,6 +565,10 @@ fn main() {
             | Commands::Hpc { .. }
             | Commands::SelfCommand { .. }
             | Commands::Exec { dry_run: true, .. }
+            | Commands::MonitorNode(monitor_node_cmd::Args {
+                workflow_id: None,
+                ..
+            })
     );
 
     // --in-memory snapshots the empty DB over the on-disk path on exit, which

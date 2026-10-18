@@ -1094,9 +1094,14 @@ EXAMPLES:
         hide = true,
         after_long_help = "\
 EXAMPLES:
-    # Sample this node for workflow 42 until SIGTERM; writes to torc_output/resource_utilization/
+    # Sample this node using workflow 42's resource_monitor.compute_node config until SIGTERM;
+    # writes to torc_output/resource_utilization/
     torc monitor-node 42
     torc monitor-node 42 --output-dir /scratch/run1
+
+    # No workflow: sample every 5 seconds, no server needed
+    torc monitor-node --sample-interval-seconds 5 -o /scratch/node_metrics
+    torc plot-resources /scratch/node_metrics/resource_utilization/*.db
 
 Torc launches this automatically on the non-head nodes of a single-runner Slurm allocation
 when resource_monitor.compute_node is enabled.
