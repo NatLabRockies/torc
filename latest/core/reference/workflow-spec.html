@@ -282,7 +282,7 @@ ongoing-management API.</p>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the job</td></tr>
 <tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
 <tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
-<tr><td><code>label</code></td><td>string</td><td>none</td><td>Routing label; only runners started with the same <code>--label</code> claim it</td></tr>
+<tr><td><code>labels</code></td><td>list of strings</td><td>none</td><td>Routing labels; only runners started with all of them (<code>--label</code>) claim it</td></tr>
 <tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
 <tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for this job</td></tr>
 <tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>

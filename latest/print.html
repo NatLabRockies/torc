@@ -4888,7 +4888,7 @@ within that eligible set.</p>
 <li>Use <code>scheduler</code> for placement constraints and <code>priority</code> for ordering</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="route-jobs-with-labels"><a class="header" href="#route-jobs-with-labels">Route Jobs with Labels</a></h1>
-<p>Use a job <code>label</code> when some jobs must run on particular machines and the rest must stay off them.</p>
+<p>Use job <code>labels</code> when some jobs must run on particular machines and the rest must stay off them.</p>
 <p>This is useful when:</p>
 <ul>
 <li>One step needs software that exists only on a dedicated machine, such as a Windows VM</li>
@@ -4896,20 +4896,23 @@ within that eligible set.</p>
 <li>Several kinds of runners share one workflow and each should take only its own work</li>
 </ul>
 <h2 id="how-labels-work"><a class="header" href="#how-labels-work">How Labels Work</a></h2>
-<p>A job has an optional <code>label</code>. A runner has an optional <code>--label</code>. When a runner asks for work, the
-server returns only jobs whose label is identical to the runner's.</p>
+<p>A job has an optional set of <code>labels</code>. A runner has an optional set of <code>--label</code> values. When a
+runner asks for work, the server returns only jobs whose every label the runner has. A job with no
+labels goes only to a runner with no labels.</p>
 <div class="table-wrapper"><table><thead><tr><th>Runner started with</th><th>Jobs it claims</th></tr></thead><tbody>
-<tr><td>no <code>--label</code></td><td>jobs with no label</td></tr>
-<tr><td><code>--label windows</code></td><td>jobs with <code>label: windows</code></td></tr>
-<tr><td><code>--label license-server</code></td><td>jobs with <code>label: license-server</code> (no others)</td></tr>
+<tr><td>no <code>--label</code></td><td>jobs with no labels</td></tr>
+<tr><td><code>--label windows</code></td><td>jobs labeled <code>[windows]</code></td></tr>
+<tr><td><code>--label windows,gpu</code></td><td>jobs labeled <code>[windows]</code>, <code>[gpu]</code>, or <code>[windows, gpu]</code></td></tr>
+<tr><td><code>--label license-server</code></td><td>jobs labeled <code>[license-server]</code> (not <code>[license-server, windows]</code>)</td></tr>
 </tbody></table>
 </div>
-<p>The match is exact and enforced by the server, so a runner cannot claim another runner's jobs by
-mistake. A labeled job must still fit the runner's resources, and <code>priority</code> still orders the jobs a
-runner is allowed to claim.</p>
-<p>Labels name a particular machine, not a kind of hardware. To send jobs to machines with GPUs, set
-<code>num_gpus</code> in the job's resource requirements instead of using a label; runners claim those jobs
-based on the GPUs they have free.</p>
+<p>A job's labels are requirements: it lists everything a runner must have. A runner's labels are
+capabilities: it lists everything it offers. The match is enforced by the server, so a runner cannot
+claim another runner's jobs by mistake. A labeled job must still fit the runner's resources, and
+<code>priority</code> still orders the jobs a runner is allowed to claim.</p>
+<p>Labels name a particular machine or capability, not a kind of hardware. To send jobs to machines
+with GPUs, set <code>num_gpus</code> in the job's resource requirements instead of using a label; runners claim
+those jobs based on the GPUs they have free.</p>
 <h2 id="label-jobs-in-a-workflow-spec"><a class="header" href="#label-jobs-in-a-workflow-spec">Label Jobs in a Workflow Spec</a></h2>
 <pre><code class="language-yaml">name: labeled_jobs
 
@@ -4929,15 +4932,26 @@ jobs:
   - name: postprocess
     command: postprocess.exe
     resource_requirements: small
-    label: windows
+    labels: [windows]
     depends_on_regexes:
       - "^simulate_\\d+$"
+
+  - name: render
+    command: render.exe
+    resource_requirements: small
+    labels: [windows, gpu]
+    depends_on: [postprocess]
 </code></pre>
-<p>The <code>simulate_*</code> jobs have no label, so ordinary runners take them. Only a runner started with
-<code>--label windows</code> takes <code>postprocess</code>. A complete example is in <code>examples/yaml/labeled_jobs.yaml</code>.</p>
-<p>In KDL, add <code>label "windows"</code> inside the <code>job</code> block.</p>
+<p>The <code>simulate_*</code> jobs have no labels, so ordinary runners take them. A runner started with
+<code>--label windows</code> takes <code>postprocess</code>. Only a runner that has both <code>windows</code> and <code>gpu</code> takes
+<code>render</code>. A complete example is in <code>examples/yaml/labeled_jobs.yaml</code>.</p>
+<p>In KDL, add <code>labels "windows" "gpu"</code> inside the <code>job</code> block.</p>
 <h2 id="start-a-labeled-runner"><a class="header" href="#start-a-labeled-runner">Start a Labeled Runner</a></h2>
 <pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows
+</code></pre>
+<p>Give a runner several labels by repeating the flag or separating them with commas:</p>
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows --label gpu
+torc run &lt;workflow_id&gt; --label windows,gpu
 </code></pre>
 <p>Runners started without <code>--label</code>, including the Slurm runners that <code>torc submit</code> launches, claim
 only unlabeled jobs.</p>
@@ -4947,20 +4961,21 @@ only unlabeled jobs.</p>
 allocation when there is nothing to do. It does not suit a dedicated machine whose jobs become ready
 only after long-running work elsewhere.</p>
 <p>Start that runner with <code>--persistent</code>:</p>
-<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows --persistent
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows,gpu --persistent
 </code></pre>
-<p>A persistent runner ignores the idle timeout while the workflow still has unfinished jobs with its
-label (or unlabeled jobs, for a runner with no <code>--label</code>). Once none remain it exits like any other
-runner. It also exits when the workflow is complete or canceled, or when its <code>--end-time</code> or
-<code>--time-limit</code> is reached.</p>
+<p>A persistent runner ignores the idle timeout while the workflow still has unfinished jobs it could
+claim (jobs it has every label for, or unlabeled jobs for a runner with no <code>--label</code>). Once none
+remain it exits like any other runner. It also exits when the workflow is complete or canceled, or
+when its <code>--end-time</code> or <code>--time-limit</code> is reached.</p>
 <h2 id="see-which-runners-serve-which-labels"><a class="header" href="#see-which-runners-serve-which-labels">See Which Runners Serve Which Labels</a></h2>
-<p>Each runner records the label it was started with on its compute node:</p>
+<p>Each runner records the labels it was started with on its compute node:</p>
 <pre><code class="language-console">torc compute-nodes list &lt;workflow_id&gt;
 </code></pre>
-<p>The <code>Label</code> column is empty for runners that claim unlabeled jobs.</p>
-<p><code>torc status &lt;workflow_id&gt;</code> warns when ready jobs carry a label that no active runner was started
-with, and <code>-f json</code> reports the counts per label in <code>unserved_ready_labels</code>:</p>
-<pre><code class="language-text">⚠ 2 ready job(s) with label 'windows' but no active runner has that label
+<p>The <code>Labels</code> column is empty for runners that claim unlabeled jobs.</p>
+<p><code>torc status &lt;workflow_id&gt;</code> warns when ready jobs carry a label set that no active runner covers,
+and <code>-f json</code> reports the counts per label set in <code>unserved_ready_labels</code>, keyed by the comma-joined
+labels:</p>
+<pre><code class="language-text">⚠ 1 ready job(s) with labels 'gpu,windows' but no active runner has all of them
 </code></pre>
 <h2 id="watch-a-workflow-that-mixes-slurm-and-labeled-runners"><a class="header" href="#watch-a-workflow-that-mixes-slurm-and-labeled-runners">Watch a Workflow That Mixes Slurm and Labeled Runners</a></h2>
 <p><code>torc watch</code> normally exits when there are no Slurm allocations and no ready jobs, because nothing
@@ -4976,29 +4991,31 @@ unblocks unlabeled jobs. Labeled ready jobs never trigger auto-scheduling.</p>
     name="postprocess_i03",
     command="postprocess.exe 3",
     resource_requirements="small",
-    label="windows",
+    labels=["windows"],
 )
 </code></pre>
 <p>See <a href="core/how-to/../tutorials/dynamic-jobs.html">Dynamic Jobs</a> for the orchestrator pattern.</p>
-<h2 id="check-or-change-a-label"><a class="header" href="#check-or-change-a-label">Check or Change a Label</a></h2>
+<h2 id="check-or-change-labels"><a class="header" href="#check-or-change-labels">Check or Change Labels</a></h2>
 <pre><code class="language-console">torc jobs get &lt;job_id&gt;
-torc jobs update &lt;job_id&gt; --label windows
-torc jobs update &lt;job_id&gt; --clear-label
+torc jobs update &lt;job_id&gt; --label windows,gpu
+torc jobs update &lt;job_id&gt; --clear-labels
 </code></pre>
-<p><code>--clear-label</code> removes the label, so runners without <code>--label</code> claim the job. Through the API,
-update the job with an empty <code>label</code> to clear it.</p>
-<p>A label must be non-empty with no leading or trailing whitespace. Labels are matched exactly,
-including case.</p>
+<p><code>--label</code> replaces the whole set. <code>--clear-labels</code> removes every label, so runners without <code>--label</code>
+claim the job. Through the API, update the job with an empty <code>labels</code> list to clear them; omit the
+field to leave them unchanged.</p>
+<p>Each label must be non-empty with no comma and no leading or trailing whitespace. Labels are matched
+exactly, including case. The server stores a job's labels sorted and without duplicates, so
+<code>[windows, gpu]</code> and <code>[gpu, windows]</code> are the same set.</p>
 <h2 id="things-to-watch-for"><a class="header" href="#things-to-watch-for">Things to Watch For</a></h2>
 <ul>
-<li><strong>A label that no runner uses strands the job.</strong> It stays <code>ready</code> and the workflow never
-completes. <code>torc status</code> warns about ready jobs whose label has no active runner, so check it if a
-workflow stalls.</li>
-<li><strong>Slurm runners launched by Torc have no label.</strong> Leave the jobs meant for them unlabeled. Labeled
-jobs are left out when Torc sizes Slurm allocations (<code>torc slurm generate</code>,
-<code>torc slurm regenerate</code>, <code>torc watch --auto-schedule</code>). A job that sets both <code>label</code> and
+<li><strong>A label set that no runner covers strands the job.</strong> It stays <code>ready</code> and the workflow never
+completes. <code>torc status</code> warns about ready jobs whose labels no active runner has, so check it if
+a workflow stalls.</li>
+<li><strong>Slurm runners launched by Torc have no labels.</strong> Leave the jobs meant for them unlabeled.
+Labeled jobs are left out when Torc sizes Slurm allocations (<code>torc slurm generate</code>,
+<code>torc slurm regenerate</code>, <code>torc watch --auto-schedule</code>). A job that sets both <code>labels</code> and
 <code>scheduler</code> is rejected when the spec is validated.</li>
-<li><strong>Parameters work in labels.</strong> <code>label: "{os}"</code> expands along with the job name and command.</li>
+<li><strong>Parameters work in labels.</strong> <code>labels: ["{os}"]</code> expands along with the job name and command.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="how-to-parameterize-jobs-with-files"><a class="header" href="#how-to-parameterize-jobs-with-files">How to Parameterize Jobs with Files</a></h1>
 <p>Process multiple input files by combining parameterization with file path templating.</p>
@@ -9291,9 +9308,10 @@ read the spec from stdin</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for jobs</li>
 <li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
 Default: <code>false</code></li>
-<li><code>--label &lt;LABEL&gt;</code> — Only claim jobs with this label. Without it, only unlabeled jobs are claimed</li>
+<li><code>--label &lt;LABELS&gt;</code> — Only claim jobs whose every label is in this set (repeat the flag or separate
+with commas). Without it, only unlabeled jobs are claimed</li>
 <li><code>--persistent</code> — Ignore the idle timeout while the workflow still has unfinished jobs this runner
-can claim (same label, or unlabeled when no --label is given)</li>
+can claim (its labels, or unlabeled when no --label is given)</li>
 </ul>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
 <p>Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)</p>
@@ -11065,7 +11083,7 @@ ongoing-management API.</p>
 <tr><td><code>name</code></td><td>string</td><td><em>required</em></td><td>Name of the job</td></tr>
 <tr><td><code>command</code></td><td>string</td><td><em>required</em></td><td>Command to execute for this job</td></tr>
 <tr><td><code>priority</code></td><td>integer</td><td><code>0</code></td><td>Scheduling priority; higher values are claimed before lower values</td></tr>
-<tr><td><code>label</code></td><td>string</td><td>none</td><td>Routing label; only runners started with the same <code>--label</code> claim it</td></tr>
+<tr><td><code>labels</code></td><td>list of strings</td><td>none</td><td>Routing labels; only runners started with all of them (<code>--label</code>) claim it</td></tr>
 <tr><td><code>invocation_script</code></td><td>string</td><td>none</td><td>Optional script for job invocation</td></tr>
 <tr><td><code>env</code></td><td>map&lt;string, string&gt;</td><td>none</td><td>Environment variables exported for this job</td></tr>
 <tr><td><code>resource_requirements</code></td><td>string</td><td>none</td><td>Name of a <a href="core/reference/workflow-spec.html#resourcerequirementsspec">ResourceRequirementsSpec</a> to use</td></tr>

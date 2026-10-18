@@ -271,9 +271,10 @@ read the spec from stdin</li>
 <li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory for jobs</li>
 <li><code>--skip-checks</code> — Skip validation checks (e.g., scheduler node requirements). Use with caution.
 Default: <code>false</code></li>
-<li><code>--label &lt;LABEL&gt;</code> — Only claim jobs with this label. Without it, only unlabeled jobs are claimed</li>
+<li><code>--label &lt;LABELS&gt;</code> — Only claim jobs whose every label is in this set (repeat the flag or separate
+with commas). Without it, only unlabeled jobs are claimed</li>
 <li><code>--persistent</code> — Ignore the idle timeout while the workflow still has unfinished jobs this runner
-can claim (same label, or unlabeled when no --label is given)</li>
+can claim (its labels, or unlabeled when no --label is given)</li>
 </ul>
 <h2 id="torc-submit"><a class="header" href="#torc-submit"><code>torc submit</code></a></h2>
 <p>Submit a workflow to scheduler (create from spec file or stdin, or submit existing workflow by ID)</p>
