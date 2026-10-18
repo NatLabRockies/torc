@@ -27,6 +27,7 @@ This document contains the help content for the `torc` command-line program.
 - [`torc config`](#torc-config)
 - [`torc tui`](#torc-tui)
 - [`torc plot-resources`](#torc-plot-resources)
+- [`torc monitor-node`](#torc-monitor-node)
 - [`torc completions`](#torc-completions)
 
 ## `torc`
@@ -59,6 +60,7 @@ Torc workflow orchestration system
 - `config` — Manage configuration files and settings
 - `tui` — Interactive terminal UI for managing workflows
 - `plot-resources` — Generate interactive HTML plots from resource monitoring data
+- `monitor-node` — Record compute-node CPU/memory on this host without running jobs
 - `completions` — Generate shell completions
 
 ###### **Options:**
@@ -2172,6 +2174,23 @@ Generate interactive HTML plots from resource monitoring data
 - `-j`, `--job-ids <JOB_IDS>` — Only plot specific job IDs (comma-separated)
 - `-p`, `--prefix <PREFIX>` — Prefix for output filenames. Default: `resource_plot`
 - `-f`, `--format <FORMAT>` — Output format: html or json. Default: `html`
+
+## `torc monitor-node`
+
+Record compute-node CPU/memory on this host without running jobs. Writes the same SQLite layout as
+the job runner's resource monitor, readable by `torc plot-resources`. Runs until SIGTERM or Ctrl-C.
+
+**Usage:** `torc monitor-node [OPTIONS]`
+
+###### **Options:**
+
+- `-w`, `--workflow-id <WORKFLOW_ID>` — Use this workflow's `resource_monitor.compute_node` config
+  (the flags below are then ignored). Omit to sample without a Torc workflow
+- `-o`, `--output-dir <OUTPUT_DIR>` — Output directory (same as the job runner's). Default:
+  `torc_output`
+- `--sample-interval-seconds <N>` — Seconds between samples (no workflow only). Default: `10`
+- `--flush-interval-seconds <N>` — Seconds between SQLite flushes (no workflow only). Default: `300`
+- `--summary-only` — Store only the lifetime summary, not every sample (no workflow only)
 
 ## `torc completions`
 

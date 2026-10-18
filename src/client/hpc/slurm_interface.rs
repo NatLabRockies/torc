@@ -332,7 +332,7 @@ impl HpcInterface for SlurmInterface {
                 monitor.push_str(" --tls-insecure");
             }
             monitor.push_str(&format!(
-                " monitor-node {} --output-dir {}",
+                " monitor-node -w {} --output-dir {}",
                 workflow_id, output_path
             ));
             script.push_str(&format!(

@@ -1096,8 +1096,8 @@ EXAMPLES:
 EXAMPLES:
     # Sample this node using workflow 42's resource_monitor.compute_node config until SIGTERM;
     # writes to torc_output/resource_utilization/
-    torc monitor-node 42
-    torc monitor-node 42 --output-dir /scratch/run1
+    torc monitor-node -w 42
+    torc monitor-node -w 42 --output-dir /scratch/run1
 
     # No workflow: sample every 5 seconds, no server needed
     torc monitor-node --sample-interval-seconds 5 -o /scratch/node_metrics

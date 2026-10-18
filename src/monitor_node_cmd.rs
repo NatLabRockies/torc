@@ -17,8 +17,9 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(about = "Monitor compute-node CPU/memory on this host (no job execution)")]
 pub struct Args {
-    /// Workflow ID. When given, the workflow's resource_monitor.compute_node config is
-    /// used and the flags below are ignored. Omit to sample without a Torc workflow.
+    /// Use this workflow's resource_monitor.compute_node config (the flags below are
+    /// then ignored). Omit to sample without a Torc workflow.
+    #[arg(short = 'w', long)]
     pub workflow_id: Option<i64>,
     /// Output directory (same as the job runner's)
     #[arg(short, long, default_value = "torc_output")]

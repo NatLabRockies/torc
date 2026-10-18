@@ -2872,7 +2872,7 @@ fn test_create_submission_script_with_idle_node_monitor() {
         "--nodes=$((SLURM_JOB_NUM_NODES - 1))",
         "--ntasks=$((SLURM_JOB_NUM_NODES - 1)) --ntasks-per-node=1",
         "--exclude=\"$SLURMD_NODENAME\"",
-        "torc --url http://localhost:8080/torc-service/v1 --tls-insecure monitor-node 11111 --output-dir /tmp/output &",
+        "torc --url http://localhost:8080/torc-service/v1 --tls-insecure monitor-node -w 11111 --output-dir /tmp/output &",
     ] {
         assert!(
             monitor_line.contains(needle),
