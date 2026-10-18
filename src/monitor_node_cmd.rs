@@ -9,10 +9,15 @@
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::resource_monitor::{ResourceMonitor, write_system_summary};
+use crate::client::utils;
 use crate::models::{ComputeNodeMonitorConfig, MonitorGranularity, ResourceMonitorConfig};
 use clap::Parser;
 use log::{error, info};
 use std::path::PathBuf;
+
+/// Same startup budget as the job runner: 500 samplers starting at once must not
+/// give up on a server that is merely busy.
+const WAIT_FOR_HEALTHY_DATABASE_MINUTES: u64 = 20;
 
 #[derive(Parser, Debug)]
 #[command(about = "Monitor compute-node CPU/memory on this host (no job execution)")]
@@ -37,6 +42,11 @@ pub struct Args {
 
 /// Returns the process exit code.
 pub fn run(config: &Configuration, args: &Args) -> i32 {
+    if !cfg!(unix) {
+        // Clean shutdown relies on SIGTERM/SIGINT; without it buffered samples are lost.
+        error!("torc monitor-node is only supported on Unix systems");
+        return 1;
+    }
     let hostname = hostname::get()
         .ok()
         .and_then(|h| h.into_string().ok())
@@ -44,7 +54,11 @@ pub fn run(config: &Configuration, args: &Args) -> i32 {
 
     let (mut monitor_config, mut label) = match args.workflow_id {
         Some(workflow_id) => {
-            let workflow = match apis::workflows_api::get_workflow(config, workflow_id) {
+            let workflow = match utils::send_with_retries(
+                config,
+                || apis::workflows_api::get_workflow(config, workflow_id),
+                WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+            ) {
                 Ok(w) => w,
                 Err(e) => {
                     error!("Error getting workflow: {}", e);
@@ -112,13 +126,15 @@ pub fn run(config: &Configuration, args: &Args) -> i32 {
     wait_for_termination();
 
     info!("Stopping compute-node monitor on {}", hostname);
-    let summary = monitor.shutdown();
+    // The shutdown sample guarantees a summary whenever the monitor thread is alive,
+    // so None means the thread died and nothing was recorded.
+    let Some(summary) = monitor.shutdown() else {
+        error!("Resource monitor thread produced no metrics");
+        return 1;
+    };
     // In time-series mode the monitor thread already stored the summary alongside
     // the samples; in summary mode nothing else persists it.
-    if !has_timeseries_db
-        && let Some(summary) = summary
-        && let Err(e) = write_system_summary(&args.output_dir, &label, &summary)
-    {
+    if !has_timeseries_db && let Err(e) = write_system_summary(&args.output_dir, &label, &summary) {
         error!("Failed to store compute-node summary: {}", e);
         return 1;
     }
@@ -139,5 +155,5 @@ fn wait_for_termination() {
 
 #[cfg(not(unix))]
 fn wait_for_termination() {
-    let _ = std::io::stdin().read_line(&mut String::new());
+    // Unreachable: `run` rejects non-Unix platforms before starting the monitor.
 }
