@@ -286,10 +286,15 @@ impl ResourceMonitor {
         let db_path = config
             .has_timeseries_db()
             .then(|| timeseries_db_path(&output_dir, &unique_label));
+        // Open the database here rather than in the thread, so an unwritable output
+        // path fails the constructor instead of silently killing the monitor thread.
+        let db_conn = db_path
+            .as_ref()
+            .map(|_| init_timeseries_db(&output_dir, &unique_label))
+            .transpose()?;
 
         let handle = thread::spawn(move || {
-            if let Err(e) = run_monitoring_loop(config_clone, output_dir, unique_label, rx, oom_tx)
-            {
+            if let Err(e) = run_monitoring_loop(config_clone, db_conn, rx, oom_tx) {
                 error!("Resource monitoring thread failed: {}", e);
             }
         });
@@ -471,8 +476,7 @@ impl ResourceMonitor {
 /// Main monitoring loop that runs in a background thread
 fn run_monitoring_loop(
     config: ResourceMonitorConfig,
-    output_dir: PathBuf,
-    unique_label: String,
+    mut db_conn: Option<Connection>,
     rx: Receiver<MonitorCommand>,
     oom_tx: Sender<OomViolation>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -509,15 +513,11 @@ fn run_monitoring_loop(
     // Allow tests to substitute a fake sstat binary via TORC_FAKE_SSTAT.
     let sstat_binary = std::env::var("TORC_FAKE_SSTAT").unwrap_or_else(|_| "sstat".to_string());
 
-    // Initialize database if job time series or compute-node monitoring needs durable storage.
+    // `db_conn` is Some exactly when job time series or compute-node time series
+    // needs durable storage (see `ResourceMonitor::new`).
     let compute_node_time_series = compute_node_config
         .as_ref()
         .is_some_and(|c| matches!(c.granularity, MonitorGranularity::TimeSeries));
-    let mut db_conn = if jobs_time_series || compute_node_time_series {
-        Some(init_timeseries_db(&output_dir, &unique_label)?)
-    } else {
-        None
-    };
 
     info!(
         "Resource monitoring started: jobs_enabled={}, jobs_granularity={:?}, \
@@ -695,7 +695,7 @@ fn run_monitoring_loop(
             let has_local_jobs = monitored_jobs
                 .values()
                 .any(|j| matches!(j.source, MonitorJobSource::Local { .. }));
-            if has_local_jobs || compute_node_config.is_some() {
+            if has_local_jobs {
                 sys.refresh_processes_specifics(
                     ProcessesToUpdate::All,
                     true,
@@ -1323,6 +1323,18 @@ fn store_job_metadata(conn: &impl SqlExecutor, job_id: i64, job_name: &str) -> S
 }
 
 /// Store summary statistics for overall compute-node resource usage.
+/// Persist a final compute-node summary to the metrics database for `unique_label`,
+/// creating it if needed. Used by sampler-only nodes (`torc monitor-node`) in summary
+/// mode, which have no compute node record to attach the summary to.
+pub fn write_system_summary(
+    output_dir: &Path,
+    unique_label: &str,
+    summary: &SystemMetricsSummary,
+) -> SqliteResult<()> {
+    let conn = init_timeseries_db(output_dir, unique_label)?;
+    store_system_summary(&conn, summary)
+}
+
 fn store_system_summary(
     conn: &impl SqlExecutor,
     summary: &SystemMetricsSummary,

@@ -383,6 +383,7 @@ fn test_create_submission_script() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -464,6 +465,7 @@ fn test_create_submission_script_with_extra() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -518,6 +520,7 @@ fn test_create_submission_script_with_singleton_dependency() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -621,6 +624,7 @@ fn test_create_submission_script_without_srun() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -678,6 +682,7 @@ fn test_create_submission_script_with_srun() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -728,6 +733,7 @@ fn test_create_submission_script_with_srun_mpi() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -775,6 +781,7 @@ fn test_create_submission_script_with_invalid_srun_mpi_rejected() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(result.is_err(), "Expected invalid srun_mpi to be rejected");
@@ -836,6 +843,7 @@ fn test_create_submission_script_with_startup_delay() {
         false,
         30,
         None,
+        false,
     );
 
     assert!(
@@ -881,6 +889,7 @@ fn test_create_submission_script_without_startup_delay() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -926,6 +935,7 @@ fn test_create_submission_script_with_claim_backoff_max_secs() {
         false,
         0,
         Some(600.0),
+        false,
     );
 
     assert!(
@@ -971,6 +981,7 @@ fn test_create_submission_script_without_claim_backoff_max_secs() {
         false,
         0,
         None,
+        false,
     );
 
     assert!(
@@ -2815,4 +2826,67 @@ fn test_slurm_generate_no_merge_large_allocations() {
     );
 
     // Temp file is automatically cleaned up when workflow_file goes out of scope
+}
+
+#[test]
+fn test_create_submission_script_with_idle_node_monitor() {
+    let interface = SlurmInterface::new().expect("Failed to create SlurmInterface");
+
+    let temp_dir = env::temp_dir();
+    let script_path = temp_dir.join("test_submission_script_idle_node_monitor.sh");
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("account".to_string(), "test_account".to_string());
+    config.insert("walltime".to_string(), "01:00:00".to_string());
+    config.insert("nodes".to_string(), "4".to_string());
+
+    interface
+        .create_submission_script(
+            "test_monitor_job",
+            "http://localhost:8080/torc-service/v1",
+            11111,
+            "/tmp/output",
+            5,
+            None,
+            &script_path,
+            &config,
+            false,
+            None,
+            None,
+            true,
+            0,
+            None,
+            true,
+        )
+        .expect("Failed to create submission script");
+
+    let script = fs::read_to_string(&script_path).expect("Failed to read submission script");
+    let _ = fs::remove_file(&script_path);
+
+    let monitor_line = script
+        .lines()
+        .find(|l| l.contains("monitor-node"))
+        .expect("Should launch torc monitor-node");
+    for needle in [
+        "srun --overlap",
+        "--nodes=$((SLURM_JOB_NUM_NODES - 1))",
+        "--ntasks=$((SLURM_JOB_NUM_NODES - 1)) --ntasks-per-node=1",
+        "--exclude=\"$SLURMD_NODENAME\"",
+        "torc --url http://localhost:8080/torc-service/v1 --tls-insecure monitor-node -w 11111 --output-dir /tmp/output &",
+    ] {
+        assert!(
+            monitor_line.contains(needle),
+            "missing {needle:?} in {monitor_line:?}"
+        );
+    }
+    let runner_pos = script.find("\ntorc-slurm-job-runner").expect("runner line");
+    assert!(
+        script.find("monitor-node").unwrap() < runner_pos,
+        "monitor starts before runner"
+    );
+    assert!(
+        script.ends_with("exit $TORC_RC\n"),
+        "runner exit code preserved"
+    );
+    assert!(script.contains("kill -USR1 \"$TORC_MONITOR_PID\""));
 }

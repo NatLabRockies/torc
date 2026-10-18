@@ -27,6 +27,7 @@ use crate::client::commands::slurm::SlurmCommands;
 use crate::client::commands::tasks::TasksCommands;
 use crate::client::commands::user_data::UserDataCommands;
 use crate::client::commands::workflows::WorkflowCommands;
+use crate::monitor_node_cmd;
 use crate::plot_resources_cmd;
 use crate::tui_runner;
 
@@ -85,6 +86,7 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
   \x1b[1;36mtasks\x1b[0m                    Wait for async tasks
   \x1b[1;36mplot-resources\x1b[0m           Generate HTML resource plots
+  \x1b[1;36mmonitor-node\x1b[0m             Record compute-node CPU/memory without running jobs
   \x1b[1;36mself\x1b[0m                     Manage the local torc executable
   \x1b[1;36mcompletions\x1b[0m              Generate shell completions
   \x1b[1;36mhelp\x1b[0m                     Print help for a subcommand
@@ -1086,6 +1088,26 @@ EXAMPLES:
 "
     )]
     PlotResources(plot_resources_cmd::Args),
+    /// Monitor compute-node CPU/memory on this host without running jobs
+    #[command(
+        name = "monitor-node",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Sample this node using workflow 42's resource_monitor.compute_node config until SIGTERM;
+    # writes to torc_output/resource_utilization/
+    torc monitor-node -w 42
+    torc monitor-node -w 42 --output-dir /scratch/run1
+
+    # No workflow: sample every 5 seconds, no server needed
+    torc monitor-node -i 5 -o /scratch/node_metrics
+    torc plot-resources /scratch/node_metrics/resource_utilization/*.db
+
+Torc launches this automatically on the non-head nodes of a single-runner Slurm allocation
+when resource_monitor.compute_node is enabled.
+"
+    )]
+    MonitorNode(monitor_node_cmd::Args),
     /// Manage the local torc executable
     #[command(name = "self")]
     SelfCommand {
