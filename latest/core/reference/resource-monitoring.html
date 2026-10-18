@@ -229,6 +229,20 @@ compute-node monitor supports <code>granularity: "summary"</code> and <code>gran
 mode stores peak and average values for the runner lifetime on the compute node record. Time-series
 mode also stores per-sample values. The current compute-node monitor records CPU and memory; GPU
 monitoring is reserved for a future extension.</p>
+<p>The monitor samples the node the job runner is running on. In a multi-node Slurm allocation with a
+single runner (<code>start_one_worker_per_node: false</code>), Torc also launches <code>torc monitor-node</code> on every
+other node of the allocation via <code>srun --overlap</code>, so their CPU and memory are recorded as well.
+When the runner exits, the script stops the samplers with SIGUSR1 (which <code>srun</code> forwards unchanged,
+unlike SIGTERM) so they flush their final samples and summary. Each node writes its own
+<code>resource_metrics_monitor_wf&lt;id&gt;_h&lt;hostname&gt;_r&lt;run&gt;_sl&lt;slurm_job_id&gt;.db</code> under
+<code>&lt;output_dir&gt;/resource_utilization/</code>; nothing is attached to the compute node record for those
+nodes. Pass all the files to <code>torc plot-resources</code> to plot the whole allocation; the system timeline
+draws one CPU and one memory trace per node:</p>
+<pre><code class="language-bash">torc plot-resources torc_output/resource_utilization/*.db
+</code></pre>
+<p><code>torc monitor-node</code> also works outside a workflow: run it with no workflow ID and it samples the
+local host with <code>-i/--sample-interval-seconds</code> / <code>--flush-interval-seconds</code> (or <code>--summary-only</code>),
+without contacting the server, writing <code>resource_metrics_monitor_h&lt;hostname&gt;.db</code>.</p>
 <h3 id="granularity-modes"><a class="header" href="#granularity-modes">Granularity Modes</a></h3>
 <p><strong>Summary mode</strong> (<code>"summary"</code>):</p>
 <ul>

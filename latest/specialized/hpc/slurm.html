@@ -349,6 +349,9 @@ actions:
 <li>Single queue wait</li>
 <li>Full per-step <code>sacct</code> accounting and cgroup enforcement</li>
 <li>Slurm handles node placement automatically via <code>srun --exact</code></li>
+<li>With <code>resource_monitor.compute_node</code> enabled, every non-head node runs <code>torc monitor-node</code> so its
+CPU and memory utilization is recorded (see
+<a href="../../core/reference/resource-monitoring.html">Resource Monitoring</a>)</li>
 </ul>
 <p><strong>Drawbacks:</strong></p>
 <ul>

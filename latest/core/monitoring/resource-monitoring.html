@@ -302,6 +302,22 @@ ORDER BY timestamp;
 -- View job metadata
 SELECT * FROM job_metadata;
 </code></pre>
+<h2 id="monitor-a-node-without-a-workflow"><a class="header" href="#monitor-a-node-without-a-workflow">Monitor a Node Without a Workflow</a></h2>
+<p><code>torc monitor-node</code> runs only the compute-node sampler (CPU and memory for the whole host, no job
+tracking). It needs no server and no workflow, so it can baseline a node or record utilization
+during work that Torc does not manage:</p>
+<pre><code class="language-bash"># Sample every 5 seconds until Ctrl-C or SIGTERM
+torc monitor-node -i 5 -o node_metrics
+
+# Plot the result
+torc plot-resources node_metrics/resource_utilization/*.db -o plots/
+</code></pre>
+<p>Pass <code>--summary-only</code> to keep just the lifetime peak/average instead of every sample. Pass
+<code>-w &lt;workflow_id&gt;</code> to use a workflow's <code>resource_monitor.compute_node</code> settings instead of the
+flags.</p>
+<p>Torc also launches this command itself on the non-head nodes of a multi-node Slurm allocation that
+has a single job runner, so every node in the allocation is recorded. See
+<a href="../reference/resource-monitoring.html#compute-node-monitoring">Resource Monitoring Database</a>.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="no-metrics-recorded"><a class="header" href="#no-metrics-recorded">No metrics recorded</a></h3>
 <ul>

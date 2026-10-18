@@ -8406,6 +8406,22 @@ ORDER BY timestamp;
 -- View job metadata
 SELECT * FROM job_metadata;
 </code></pre>
+<h2 id="monitor-a-node-without-a-workflow"><a class="header" href="#monitor-a-node-without-a-workflow">Monitor a Node Without a Workflow</a></h2>
+<p><code>torc monitor-node</code> runs only the compute-node sampler (CPU and memory for the whole host, no job
+tracking). It needs no server and no workflow, so it can baseline a node or record utilization
+during work that Torc does not manage:</p>
+<pre><code class="language-bash"># Sample every 5 seconds until Ctrl-C or SIGTERM
+torc monitor-node -i 5 -o node_metrics
+
+# Plot the result
+torc plot-resources node_metrics/resource_utilization/*.db -o plots/
+</code></pre>
+<p>Pass <code>--summary-only</code> to keep just the lifetime peak/average instead of every sample. Pass
+<code>-w &lt;workflow_id&gt;</code> to use a workflow's <code>resource_monitor.compute_node</code> settings instead of the
+flags.</p>
+<p>Torc also launches this command itself on the non-head nodes of a multi-node Slurm allocation that
+has a single job runner, so every node in the allocation is recorded. See
+<a href="core/monitoring/../reference/resource-monitoring.html#compute-node-monitoring">Resource Monitoring Database</a>.</p>
 <h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
 <h3 id="no-metrics-recorded"><a class="header" href="#no-metrics-recorded">No metrics recorded</a></h3>
 <ul>
@@ -9248,6 +9264,7 @@ Single-record commands (e.g. <code>jobs get</code>) and multi-section reports (<
 <li><a href="core/reference/cli.html#torc-config"><code>torc config</code></a></li>
 <li><a href="core/reference/cli.html#torc-tui"><code>torc tui</code></a></li>
 <li><a href="core/reference/cli.html#torc-plot-resources"><code>torc plot-resources</code></a></li>
+<li><a href="core/reference/cli.html#torc-monitor-node"><code>torc monitor-node</code></a></li>
 <li><a href="core/reference/cli.html#torc-completions"><code>torc completions</code></a></li>
 </ul>
 <h2 id="torc"><a class="header" href="#torc"><code>torc</code></a></h2>
@@ -9277,6 +9294,7 @@ ID)</li>
 <li><code>config</code> — Manage configuration files and settings</li>
 <li><code>tui</code> — Interactive terminal UI for managing workflows</li>
 <li><code>plot-resources</code> — Generate interactive HTML plots from resource monitoring data</li>
+<li><code>monitor-node</code> — Record compute-node CPU/memory on this host without running jobs</li>
 <li><code>completions</code> — Generate shell completions</li>
 </ul>
 <h6 id="options"><a class="header" href="#options"><strong>Options:</strong></a></h6>
@@ -10974,6 +10992,20 @@ directory). Default: <code>.</code></li>
 <li><code>-p</code>, <code>--prefix &lt;PREFIX&gt;</code> — Prefix for output filenames. Default: <code>resource_plot</code></li>
 <li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format: html or json. Default: <code>html</code></li>
 </ul>
+<h2 id="torc-monitor-node"><a class="header" href="#torc-monitor-node"><code>torc monitor-node</code></a></h2>
+<p>Record compute-node CPU/memory on this host without running jobs. Writes the same SQLite layout as
+the job runner's resource monitor, readable by <code>torc plot-resources</code>. Runs until SIGTERM or Ctrl-C.</p>
+<p><strong>Usage:</strong> <code>torc monitor-node [OPTIONS]</code></p>
+<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-w</code>, <code>--workflow-id &lt;WORKFLOW_ID&gt;</code> — Use this workflow's <code>resource_monitor.compute_node</code> config
+(the flags below are then ignored). Omit to sample without a Torc workflow</li>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory (same as the job runner's). Default:
+<code>torc_output</code></li>
+<li><code>-i</code>, <code>--sample-interval-seconds &lt;N&gt;</code> — Seconds between samples (no workflow only). Default: <code>10</code></li>
+<li><code>--flush-interval-seconds &lt;N&gt;</code> — Seconds between SQLite flushes (no workflow only). Default: <code>300</code></li>
+<li><code>--summary-only</code> — Store only the lifetime summary, not every sample (no workflow only)</li>
+</ul>
 <h2 id="torc-completions"><a class="header" href="#torc-completions"><code>torc completions</code></a></h2>
 <p>Generate shell completions</p>
 <p><strong>Usage:</strong> <code>torc completions &lt;SHELL&gt;</code></p>
@@ -12473,6 +12505,20 @@ compute-node monitor supports <code>granularity: "summary"</code> and <code>gran
 mode stores peak and average values for the runner lifetime on the compute node record. Time-series
 mode also stores per-sample values. The current compute-node monitor records CPU and memory; GPU
 monitoring is reserved for a future extension.</p>
+<p>The monitor samples the node the job runner is running on. In a multi-node Slurm allocation with a
+single runner (<code>start_one_worker_per_node: false</code>), Torc also launches <code>torc monitor-node</code> on every
+other node of the allocation via <code>srun --overlap</code>, so their CPU and memory are recorded as well.
+When the runner exits, the script stops the samplers with SIGUSR1 (which <code>srun</code> forwards unchanged,
+unlike SIGTERM) so they flush their final samples and summary. Each node writes its own
+<code>resource_metrics_monitor_wf&lt;id&gt;_h&lt;hostname&gt;_r&lt;run&gt;_sl&lt;slurm_job_id&gt;.db</code> under
+<code>&lt;output_dir&gt;/resource_utilization/</code>; nothing is attached to the compute node record for those
+nodes. Pass all the files to <code>torc plot-resources</code> to plot the whole allocation; the system timeline
+draws one CPU and one memory trace per node:</p>
+<pre><code class="language-bash">torc plot-resources torc_output/resource_utilization/*.db
+</code></pre>
+<p><code>torc monitor-node</code> also works outside a workflow: run it with no workflow ID and it samples the
+local host with <code>-i/--sample-interval-seconds</code> / <code>--flush-interval-seconds</code> (or <code>--summary-only</code>),
+without contacting the server, writing <code>resource_metrics_monitor_h&lt;hostname&gt;.db</code>.</p>
 <h3 id="granularity-modes"><a class="header" href="#granularity-modes">Granularity Modes</a></h3>
 <p><strong>Summary mode</strong> (<code>"summary"</code>):</p>
 <ul>
@@ -14035,7 +14081,7 @@ jobs:
     command: python process.py
     resource_requirements: standard
 </code></pre>
-<h2 id="options-67"><a class="header" href="#options-67">Options</a></h2>
+<h2 id="options-68"><a class="header" href="#options-68">Options</a></h2>
 <pre><code class="language-bash"># See all options
 torc slurm generate --help
 torc submit --help
@@ -14647,6 +14693,9 @@ actions:
 <li>Single queue wait</li>
 <li>Full per-step <code>sacct</code> accounting and cgroup enforcement</li>
 <li>Slurm handles node placement automatically via <code>srun --exact</code></li>
+<li>With <code>resource_monitor.compute_node</code> enabled, every non-head node runs <code>torc monitor-node</code> so its
+CPU and memory utilization is recorded (see
+<a href="specialized/hpc/../../core/reference/resource-monitoring.html">Resource Monitoring</a>)</li>
 </ul>
 <p><strong>Drawbacks:</strong></p>
 <ul>
@@ -16952,7 +17001,7 @@ for scripting or when you want the default behavior without interaction:</p>
 <p><strong>Note:</strong> Orphan cleanup handles the case where Slurm terminated an allocation unexpectedly,
 leaving jobs stuck in "running" status. This is done automatically before checking preconditions.</p>
 </blockquote>
-<h3 id="options-68"><a class="header" href="#options-68">Options</a></h3>
+<h3 id="options-69"><a class="header" href="#options-69">Options</a></h3>
 <pre><code class="language-bash">torc recover &lt;workflow_id&gt; \
   --memory-multiplier 1.5 \     # Memory increase factor for OOM (default: 1.5)
   --runtime-multiplier 1.5 \    # Runtime increase factor for timeout (default: 1.5)
@@ -16974,7 +17023,7 @@ leaving jobs stuck in "running" status. This is done automatically before checki
 <li>Resume monitoring</li>
 <li>Repeat until success (or max retries exceeded, if <code>--max-retries</code> is set)</li>
 </ol>
-<h3 id="options-69"><a class="header" href="#options-69">Options</a></h3>
+<h3 id="options-70"><a class="header" href="#options-70">Options</a></h3>
 <pre><code class="language-bash">torc watch &lt;workflow_id&gt; \
   -r \                          # Enable automatic recovery (--recover)
   -m 5 \                        # Optional: limit recovery attempts (--max-retries)
@@ -17633,7 +17682,7 @@ than the stranded timeout, schedulers are submitted anyway. This prevents jobs f
 stranded indefinitely when not enough failures occur to reach the threshold.</p>
 </li>
 </ol>
-<h3 id="options-70"><a class="header" href="#options-70">Options</a></h3>
+<h3 id="options-71"><a class="header" href="#options-71">Options</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>--auto-schedule</code></td><td>false</td><td>Enable automatic scheduling for stranded jobs</td></tr>
 <tr><td><code>--auto-schedule-threshold</code></td><td>5</td><td>Minimum retry jobs before scheduling (when active)</td></tr>

@@ -211,6 +211,7 @@
 <li><a href="#torc-config"><code>torc config</code></a></li>
 <li><a href="#torc-tui"><code>torc tui</code></a></li>
 <li><a href="#torc-plot-resources"><code>torc plot-resources</code></a></li>
+<li><a href="#torc-monitor-node"><code>torc monitor-node</code></a></li>
 <li><a href="#torc-completions"><code>torc completions</code></a></li>
 </ul>
 <h2 id="torc"><a class="header" href="#torc"><code>torc</code></a></h2>
@@ -240,6 +241,7 @@ ID)</li>
 <li><code>config</code> — Manage configuration files and settings</li>
 <li><code>tui</code> — Interactive terminal UI for managing workflows</li>
 <li><code>plot-resources</code> — Generate interactive HTML plots from resource monitoring data</li>
+<li><code>monitor-node</code> — Record compute-node CPU/memory on this host without running jobs</li>
 <li><code>completions</code> — Generate shell completions</li>
 </ul>
 <h6 id="options"><a class="header" href="#options"><strong>Options:</strong></a></h6>
@@ -1936,6 +1938,20 @@ directory). Default: <code>.</code></li>
 <li><code>-j</code>, <code>--job-ids &lt;JOB_IDS&gt;</code> — Only plot specific job IDs (comma-separated)</li>
 <li><code>-p</code>, <code>--prefix &lt;PREFIX&gt;</code> — Prefix for output filenames. Default: <code>resource_plot</code></li>
 <li><code>-f</code>, <code>--format &lt;FORMAT&gt;</code> — Output format: html or json. Default: <code>html</code></li>
+</ul>
+<h2 id="torc-monitor-node"><a class="header" href="#torc-monitor-node"><code>torc monitor-node</code></a></h2>
+<p>Record compute-node CPU/memory on this host without running jobs. Writes the same SQLite layout as
+the job runner's resource monitor, readable by <code>torc plot-resources</code>. Runs until SIGTERM or Ctrl-C.</p>
+<p><strong>Usage:</strong> <code>torc monitor-node [OPTIONS]</code></p>
+<h6 id="options-67"><a class="header" href="#options-67"><strong>Options:</strong></a></h6>
+<ul>
+<li><code>-w</code>, <code>--workflow-id &lt;WORKFLOW_ID&gt;</code> — Use this workflow's <code>resource_monitor.compute_node</code> config
+(the flags below are then ignored). Omit to sample without a Torc workflow</li>
+<li><code>-o</code>, <code>--output-dir &lt;OUTPUT_DIR&gt;</code> — Output directory (same as the job runner's). Default:
+<code>torc_output</code></li>
+<li><code>-i</code>, <code>--sample-interval-seconds &lt;N&gt;</code> — Seconds between samples (no workflow only). Default: <code>10</code></li>
+<li><code>--flush-interval-seconds &lt;N&gt;</code> — Seconds between SQLite flushes (no workflow only). Default: <code>300</code></li>
+<li><code>--summary-only</code> — Store only the lifetime summary, not every sample (no workflow only)</li>
 </ul>
 <h2 id="torc-completions"><a class="header" href="#torc-completions"><code>torc completions</code></a></h2>
 <p>Generate shell completions</p>
