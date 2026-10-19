@@ -1,0 +1,373 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Route Jobs with Labels - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/tree/v0.42.0/docs/src/core/how-to/route-jobs-with-labels.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="route-jobs-with-labels"><a class="header" href="#route-jobs-with-labels">Route Jobs with Labels</a></h1>
+<p>Use job <code>labels</code> when some jobs must run on particular machines and the rest must stay off them.</p>
+<p>This is useful when:</p>
+<ul>
+<li>One step needs software that exists only on a dedicated machine, such as a Windows VM</li>
+<li>Most jobs run on short-lived Slurm compute nodes, but a few must run on a long-lived server</li>
+<li>Several kinds of runners share one workflow and each should take only its own work</li>
+</ul>
+<h2 id="how-labels-work"><a class="header" href="#how-labels-work">How Labels Work</a></h2>
+<p>A job has an optional set of <code>labels</code>. A runner has an optional set of <code>--label</code> values. When a
+runner asks for work, the server returns only jobs whose every label the runner has. A job with no
+labels goes only to a runner with no labels.</p>
+<div class="table-wrapper"><table><thead><tr><th>Runner started with</th><th>Jobs it claims</th></tr></thead><tbody>
+<tr><td>no <code>--label</code></td><td>jobs with no labels</td></tr>
+<tr><td><code>--label windows</code></td><td>jobs labeled <code>[windows]</code></td></tr>
+<tr><td><code>--label windows,gpu</code></td><td>jobs labeled <code>[windows]</code>, <code>[gpu]</code>, or <code>[windows, gpu]</code></td></tr>
+<tr><td><code>--label license-server</code></td><td>jobs labeled <code>[license-server]</code> (not <code>[license-server, windows]</code>)</td></tr>
+</tbody></table>
+</div>
+<p>A job's labels are requirements: it lists everything a runner must have. A runner's labels are
+capabilities: it lists everything it offers. The match is enforced by the server, so a runner cannot
+claim another runner's jobs by mistake. A labeled job must still fit the runner's resources, and
+<code>priority</code> still orders the jobs a runner is allowed to claim.</p>
+<p>Labels name a particular machine or capability, not a kind of hardware. To send jobs to machines
+with GPUs, set <code>num_gpus</code> in the job's resource requirements instead of using a label; runners claim
+those jobs based on the GPUs they have free.</p>
+<h2 id="label-jobs-in-a-workflow-spec"><a class="header" href="#label-jobs-in-a-workflow-spec">Label Jobs in a Workflow Spec</a></h2>
+<pre><code class="language-yaml">name: labeled_jobs
+
+resource_requirements:
+  - name: small
+    num_cpus: 1
+    memory: 256m
+    runtime: PT5M
+
+jobs:
+  - name: simulate_{i}
+    command: ./simulate.sh {i}
+    resource_requirements: small
+    parameters:
+      i: "1:4"
+
+  - name: postprocess
+    command: postprocess.exe
+    resource_requirements: small
+    labels: [windows]
+    depends_on_regexes:
+      - "^simulate_\\d+$"
+
+  - name: render
+    command: render.exe
+    resource_requirements: small
+    labels: [windows, gpu]
+    depends_on: [postprocess]
+</code></pre>
+<p>The <code>simulate_*</code> jobs have no labels, so ordinary runners take them. A runner started with
+<code>--label windows</code> takes <code>postprocess</code>. Only a runner that has both <code>windows</code> and <code>gpu</code> takes
+<code>render</code>. A complete example is in <code>examples/yaml/labeled_jobs.yaml</code>.</p>
+<p>In KDL, add <code>labels "windows" "gpu"</code> inside the <code>job</code> block.</p>
+<h2 id="start-a-labeled-runner"><a class="header" href="#start-a-labeled-runner">Start a Labeled Runner</a></h2>
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows
+</code></pre>
+<p>Give a runner several labels by repeating the flag or separating them with commas:</p>
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows --label gpu
+torc run &lt;workflow_id&gt; --label windows,gpu
+</code></pre>
+<p>Runners started without <code>--label</code>, including the Slurm runners that <code>torc submit</code> launches, claim
+only unlabeled jobs.</p>
+<h2 id="keep-a-runner-alive-with---persistent"><a class="header" href="#keep-a-runner-alive-with---persistent">Keep a Runner Alive with <code>--persistent</code></a></h2>
+<p>A runner normally exits when it has been idle for the workflow's
+<code>compute_node_wait_for_new_jobs_seconds</code>. That suits Slurm nodes, which should release their
+allocation when there is nothing to do. It does not suit a dedicated machine whose jobs become ready
+only after long-running work elsewhere.</p>
+<p>Start that runner with <code>--persistent</code>:</p>
+<pre><code class="language-console">torc run &lt;workflow_id&gt; --label windows,gpu --persistent
+</code></pre>
+<p>A persistent runner ignores the idle timeout while the workflow still has unfinished jobs it could
+claim (jobs it has every label for, or unlabeled jobs for a runner with no <code>--label</code>). Once none
+remain it exits like any other runner. It also exits when the workflow is complete or canceled, or
+when its <code>--end-time</code> or <code>--time-limit</code> is reached.</p>
+<h2 id="see-which-runners-serve-which-labels"><a class="header" href="#see-which-runners-serve-which-labels">See Which Runners Serve Which Labels</a></h2>
+<p>Each runner records the labels it was started with on its compute node:</p>
+<pre><code class="language-console">torc compute-nodes list &lt;workflow_id&gt;
+</code></pre>
+<p>The <code>Labels</code> column is empty for runners that claim unlabeled jobs.</p>
+<p><code>torc status &lt;workflow_id&gt;</code> warns when ready jobs carry a label set that no active runner covers,
+and <code>-f json</code> reports the counts per label set in <code>unserved_ready_labels</code>, keyed by the comma-joined
+labels:</p>
+<pre><code class="language-text">⚠ 1 ready job(s) with labels 'gpu,windows' but no active runner has all of them
+</code></pre>
+<h2 id="watch-a-workflow-that-mixes-slurm-and-labeled-runners"><a class="header" href="#watch-a-workflow-that-mixes-slurm-and-labeled-runners">Watch a Workflow That Mixes Slurm and Labeled Runners</a></h2>
+<p><code>torc watch</code> normally exits when there are no Slurm allocations and no ready jobs, because nothing
+it manages can make progress. That is wrong while a labeled runner on another machine is still
+working. Add <code>--persistent</code> so it waits for the workflow to complete:</p>
+<pre><code class="language-console">torc watch &lt;workflow_id&gt; --persistent --auto-schedule
+</code></pre>
+<p>With <code>--auto-schedule</code>, watch submits new Slurm allocations when the labeled work finishes and
+unblocks unlabeled jobs. Labeled ready jobs never trigger auto-scheduling.</p>
+<h2 id="label-dynamically-spawned-jobs"><a class="header" href="#label-dynamically-spawned-jobs">Label Dynamically Spawned Jobs</a></h2>
+<p>Jobs added at runtime by an orchestrator accept the same field. With the Python client:</p>
+<pre><code class="language-python">SpawnJobModel(
+    name="postprocess_i03",
+    command="postprocess.exe 3",
+    resource_requirements="small",
+    labels=["windows"],
+)
+</code></pre>
+<p>See <a href="../tutorials/dynamic-jobs.html">Dynamic Jobs</a> for the orchestrator pattern.</p>
+<h2 id="check-or-change-labels"><a class="header" href="#check-or-change-labels">Check or Change Labels</a></h2>
+<pre><code class="language-console">torc jobs get &lt;job_id&gt;
+torc jobs update &lt;job_id&gt; --label windows,gpu
+torc jobs update &lt;job_id&gt; --clear-labels
+</code></pre>
+<p><code>--label</code> replaces the whole set. <code>--clear-labels</code> removes every label, so runners without <code>--label</code>
+claim the job. Through the API, update the job with an empty <code>labels</code> list to clear them; omit the
+field to leave them unchanged.</p>
+<p>Each label must be non-empty with no comma and no leading or trailing whitespace. Labels are matched
+exactly, including case. The server stores a job's labels sorted and without duplicates, so
+<code>[windows, gpu]</code> and <code>[gpu, windows]</code> are the same set.</p>
+<h2 id="things-to-watch-for"><a class="header" href="#things-to-watch-for">Things to Watch For</a></h2>
+<ul>
+<li><strong>A label set that no runner covers strands the job.</strong> It stays <code>ready</code> and the workflow never
+completes. <code>torc status</code> warns about ready jobs whose labels no active runner has, so check it if
+a workflow stalls.</li>
+<li><strong>Slurm runners launched by Torc have no labels.</strong> Leave the jobs meant for them unlabeled.
+Labeled jobs are left out when Torc sizes Slurm allocations (<code>torc slurm generate</code>,
+<code>torc slurm regenerate</code>, <code>torc watch --auto-schedule</code>). A job that sets both <code>labels</code> and
+<code>scheduler</code> is rejected when the spec is validated.</li>
+<li><strong>Parameters work in labels.</strong> <code>labels: ["{os}"]</code> expands along with the job name and command.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/how-to/prioritize-jobs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/how-to/parameterize-with-files.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/how-to/prioritize-jobs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/how-to/parameterize-with-files.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
