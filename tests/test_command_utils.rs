@@ -4,7 +4,7 @@ use common::{ServerProcess, create_test_workflow, delete_all_workflows, start_se
 use rstest::rstest;
 use serial_test::serial;
 
-use torc::client::commands::select_workflow_interactively;
+use torc::client::commands::select_workflow;
 
 #[rstest]
 #[serial(workflow_delete)]
@@ -19,10 +19,15 @@ fn test_select_workflow_interactively_single_workflow(start_server: &ServerProce
     let user = workflow.user.clone();
 
     // Test that the function auto-selects when there's only one workflow
-    let selected_id = select_workflow_interactively(config, &user)
+    let selected_id = select_workflow(config, &user, true)
         .expect("Should successfully auto-select single workflow");
 
     assert_eq!(selected_id, workflow_id);
+
+    // Without a terminal, never guess, even when only one workflow exists
+    let err = select_workflow(config, &user, false)
+        .expect_err("Should refuse to select a workflow without a terminal");
+    assert!(err.to_string().contains("workflow ID is required"));
 }
 
 #[rstest]
@@ -46,7 +51,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
         .expect("Failed to create workflow for user2");
 
     // Test that user1 only sees their own workflow (and gets auto-selected)
-    let selected_id1 = select_workflow_interactively(config, &user1)
+    let selected_id1 = select_workflow(config, &user1, true)
         .expect("Should successfully auto-select workflow for user1");
 
     assert_eq!(selected_id1, created_workflow1.id.unwrap());
@@ -83,7 +88,7 @@ fn test_select_workflow_interactively_user_isolation(start_server: &ServerProces
     }
 
     // Test that user2 also gets auto-selected for their single workflow
-    let selected_id2 = select_workflow_interactively(config, &user2)
+    let selected_id2 = select_workflow(config, &user2, true)
         .expect("Should successfully auto-select workflow for user2");
 
     assert_eq!(selected_id2, created_workflow2.id.unwrap());

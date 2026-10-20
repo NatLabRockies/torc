@@ -15,6 +15,7 @@ Name | Type | Description | Notes
 **input_file_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
 **input_user_data_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
 **invocation_script** | **String** |  | [optional] [default to nothing]
+**label** | **String** | Routing label. A runner started with a label claims only jobs with that label; a runner with no label claims only unlabeled jobs. | [optional] [default to nothing]
 **name** | **String** |  | [default to nothing]
 **origin** | **String** | Provenance marker: NULL for jobs declared at workflow creation, &#x60;\&quot;retry\&quot;&#x60; for jobs resurrected by failure-handler retries, &#x60;\&quot;spawn\&quot;&#x60; for jobs added at runtime by &#x60;spawn_jobs&#x60;. &#x60;torc watch --auto-schedule&#x60; uses this to detect jobs that need unplanned Slurm allocations (deferred &#x60;schedule_nodes&#x60; actions only account for the originally-declared workload). | [optional] [default to nothing]
 **output_file_ids** | **Vector{Int64}** |  | [optional] [default to nothing]

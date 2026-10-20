@@ -48,7 +48,7 @@ impl ServiceConfig {
     /// Default completion check interval for services (5 seconds)
     pub const DEFAULT_SERVICE_INTERVAL_SECS: f64 = 5.0;
 
-    /// Default credential cache TTL in seconds (must match clap default in ServerConfig)
+    /// Default credential cache TTL in seconds
     pub const DEFAULT_CREDENTIAL_CACHE_TTL_SECS: u64 = 60;
 
     /// Create default configuration for system-level service
@@ -106,69 +106,13 @@ impl ServiceConfig {
         }
     }
 
-    /// Merge user-provided configuration with defaults
-    /// User-provided values take precedence, but we fill in sensible defaults.
-    /// Non-Option fields are compared against known clap defaults to determine
-    /// if the user explicitly provided a value or if the clap default should be
-    /// replaced with the service-appropriate default.
-    fn merge_with_defaults(user_config: &ServiceConfig, user_level: bool) -> Self {
-        let defaults = if user_level {
+    /// Default configuration for a user-level or system-level service. Callers apply
+    /// explicitly provided options on top of this.
+    pub fn defaults(user_level: bool) -> Self {
+        if user_level {
             Self::default_user()
         } else {
             Self::default_system()
-        };
-
-        Self {
-            // Option fields: use user config if provided, otherwise use service default
-            log_dir: user_config.log_dir.clone().or(defaults.log_dir),
-            database: user_config.database.clone().or(defaults.database),
-            auth_file: user_config.auth_file.clone().or(defaults.auth_file),
-            tls_cert: user_config.tls_cert.clone().or(defaults.tls_cert),
-            tls_key: user_config.tls_key.clone().or(defaults.tls_key),
-            completion_check_interval_secs: user_config.completion_check_interval_secs,
-            // Non-Option fields: fall back to service defaults when clap defaults are detected
-            host: if user_config.host != "0.0.0.0" {
-                user_config.host.clone()
-            } else {
-                defaults.host
-            },
-            port: if user_config.port != 8080 {
-                user_config.port
-            } else {
-                defaults.port
-            },
-            threads: if user_config.threads != 1 {
-                user_config.threads
-            } else {
-                defaults.threads
-            },
-            log_level: if user_config.log_level != "info" {
-                user_config.log_level.clone()
-            } else {
-                defaults.log_level
-            },
-            credential_cache_ttl_secs: if user_config.credential_cache_ttl_secs
-                != ServiceConfig::DEFAULT_CREDENTIAL_CACHE_TTL_SECS
-            {
-                user_config.credential_cache_ttl_secs
-            } else {
-                defaults.credential_cache_ttl_secs
-            },
-            // Boolean fields: true if either user or defaults enable it
-            require_auth: user_config.require_auth || defaults.require_auth,
-            enforce_access_control: user_config.enforce_access_control
-                || defaults.enforce_access_control,
-            json_logs: user_config.json_logs || defaults.json_logs,
-            https: user_config.https || defaults.https,
-            disable_admin_sql: user_config.disable_admin_sql || defaults.disable_admin_sql,
-            disable_admin_sql_writes: user_config.disable_admin_sql_writes
-                || defaults.disable_admin_sql_writes,
-            // Vec fields: use user config if non-empty
-            admin_users: if user_config.admin_users.is_empty() {
-                defaults.admin_users
-            } else {
-                user_config.admin_users.clone()
-            },
         }
     }
 }
@@ -262,10 +206,8 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
         args.push("--require-auth".into());
     }
 
-    if config.credential_cache_ttl_secs != ServiceConfig::DEFAULT_CREDENTIAL_CACHE_TTL_SECS {
-        args.push("--credential-cache-ttl-secs".into());
-        args.push(config.credential_cache_ttl_secs.to_string().into());
-    }
+    args.push("--credential-cache-ttl-secs".into());
+    args.push(config.credential_cache_ttl_secs.to_string().into());
 
     if config.enforce_access_control {
         args.push("--enforce-access-control".into());
@@ -470,15 +412,11 @@ pub fn execute_service_command(
 ) -> Result<()> {
     match command {
         ServiceCommand::Install => {
-            // Merge user-provided config with appropriate defaults
-            let merged_config = if let Some(user_config) = config {
-                ServiceConfig::merge_with_defaults(user_config, user_level)
-            } else if user_level {
-                ServiceConfig::default_user()
-            } else {
-                ServiceConfig::default_system()
-            };
-            install_service(&merged_config, user_level)
+            // The caller has already applied user-provided options on top of the defaults
+            let config = config
+                .cloned()
+                .unwrap_or_else(|| ServiceConfig::defaults(user_level));
+            install_service(&config, user_level)
         }
         ServiceCommand::Uninstall => uninstall_service(user_level),
         ServiceCommand::Start => start_service(user_level),

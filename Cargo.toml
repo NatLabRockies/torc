@@ -5,7 +5,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.40.0"
+version = "0.41.0"
 authors = [
   "Daniel Thom",
   "Joseph McKinsey",
@@ -21,7 +21,7 @@ description = "Workflow management system"
 
 [workspace.dependencies]
 # Self-reference for sub-crates (version only specified here)
-torc = { version = "0.40.0", path = "." }
+torc = { version = "0.41.0", path = "." }
 
 # Shared dependencies
 serde = { version = "1.0", features = ["derive"] }
@@ -50,7 +50,7 @@ clap_complete = "4.6"
 axoupdater = { version = "0.10.0", default-features = false, features = ["blocking", "github_releases"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
 url = "2.5"
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 mime = "0.3"
 futures = "0.3"
 bcrypt = "0.19"
@@ -86,10 +86,10 @@ anyhow = "1"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 dotenvy = "0.15.7"
 iso8601 = "0.6"
-jsonwebtoken = "10.4.0"
+jsonwebtoken = "11.1.0"
 sha2 = "0.11"
 hex = "0.4"
-base64 = "0.22"
+base64 = "0.23"
 
 # Client-specific
 rayon = "1.12"
@@ -118,7 +118,7 @@ hyper-openssl = "0.10.2"
 openssl = "0.10"
 
 # MCP server
-rmcp = { version = "1.7", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
+rmcp = { version = "3.4", features = ["server", "client", "macros", "transport-io", "transport-child-process"] }
 schemars = "1.0"
 
 # Dashboard-specific

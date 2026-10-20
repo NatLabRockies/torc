@@ -12,46 +12,15 @@ use crate::time_utils::duration_string_to_seconds;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use env_logger::Builder;
-use log::{LevelFilter, error, info};
+use log::{error, info};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
-pub enum LogStream {
-    Stdout,
-    Stderr,
-}
-
-enum ConsoleWriter {
-    Stdout(std::io::Stdout),
-    Stderr(std::io::Stderr),
-}
-
-impl Write for ConsoleWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            ConsoleWriter::Stdout(stdout) => {
-                stdout.write_all(buf)?;
-            }
-            ConsoleWriter::Stderr(stderr) => {
-                stderr.write_all(buf)?;
-            }
-        }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            ConsoleWriter::Stdout(stdout) => stdout.flush(),
-            ConsoleWriter::Stderr(stderr) => stderr.flush(),
-        }
-    }
-}
-
-/// A writer that writes to a console stream and a file.
+/// A writer that writes to stderr and a file.
 struct MultiWriter {
-    console: ConsoleWriter,
+    console: std::io::Stderr,
     file: File,
 }
 
@@ -116,6 +85,13 @@ pub struct Args {
     /// Scheduler config ID
     #[arg(long)]
     pub scheduler_config_id: Option<i64>,
+    /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
+    #[arg(long, value_parser = crate::models::parse_label)]
+    pub label: Option<String>,
+    /// Ignore the idle timeout while the workflow still has unfinished jobs this
+    /// runner can claim (same label, or unlabeled when no --label is given).
+    #[arg(long)]
+    pub persistent: bool,
     /// Log prefix
     #[arg(long)]
     pub log_prefix: Option<String>,
@@ -159,11 +135,7 @@ fn resolve_end_time(
     Ok(None)
 }
 
-pub fn run(args: &Args) {
-    let _ = run_with_log_stream(args, LogStream::Stdout);
-}
-
-pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
+pub fn run(args: &Args) -> WorkerResult {
     let hostname = hostname::get()
         .expect("Failed to get hostname")
         .into_string()
@@ -265,35 +237,16 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         }
     };
 
-    let console = match log_stream {
-        LogStream::Stdout => ConsoleWriter::Stdout(std::io::stdout()),
-        LogStream::Stderr => ConsoleWriter::Stderr(std::io::stderr()),
-    };
     let multi_writer = MultiWriter {
-        console,
+        console: std::io::stderr(),
         file: log_file,
     };
 
-    // Parse log level string to LevelFilter
-    let log_level_filter = match args.log_level.to_lowercase().as_str() {
-        "error" => LevelFilter::Error,
-        "warn" => LevelFilter::Warn,
-        "info" => LevelFilter::Info,
-        "debug" => LevelFilter::Debug,
-        "trace" => LevelFilter::Trace,
-        _ => {
-            eprintln!(
-                "Invalid log level '{}', defaulting to 'info'",
-                args.log_level
-            );
-            LevelFilter::Info
-        }
-    };
-
-    let mut builder = Builder::from_default_env();
+    // Accept a bare level ("debug") or module filters ("torc=debug"), like other commands.
+    let mut builder = Builder::new();
     builder
         .target(env_logger::Target::Pipe(Box::new(multi_writer)))
-        .filter_level(log_level_filter)
+        .parse_filters(&args.log_level)
         .try_init()
         .ok(); // Ignore error if logger is already initialized
 
@@ -330,6 +283,7 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         args.num_nodes.unwrap_or(1),
     );
     resources.time_limit.clone_from(&args.time_limit);
+    resources.label.clone_from(&args.label);
     let pid = 1; // TODO
     let unique_label = format!("wf{}_h{}_r{}", workflow_id, hostname, run_id);
 
@@ -346,6 +300,7 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         None,
     );
     compute_node_model.is_active = Some(true);
+    compute_node_model.label.clone_from(&args.label);
 
     let compute_node =
         match apis::compute_nodes_api::create_compute_node(&config, compute_node_model) {
@@ -375,6 +330,7 @@ pub fn run_with_log_stream(args: &Args, log_stream: LogStream) -> WorkerResult {
         None, // No per-node tracking for local runner
     );
     job_runner.override_claim_backoff_max_secs(args.claim_backoff_max_secs);
+    job_runner.set_persistent(args.persistent);
 
     register_sigchld_wakeup(&job_runner);
 

@@ -779,8 +779,9 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
             None,         // origin_is_set
             None,         // name
             None,         // command
+            None,         // label
         )
-        .map_err(|e| format!("Failed to list {:?} jobs: {}", status, e))?;
+        .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
         if jobs.total_count > 0 {
             has_recoverable_jobs = true;
             break;
@@ -948,8 +949,9 @@ fn count_jobs_with_status(
         None,    // origin_is_set
         None,    // name
         None,    // command
+        None,    // label
     )
-    .map_err(|e| format!("Failed to list {:?} jobs: {}", status, e))?;
+    .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
 
     Ok(jobs.total_count)
 }
@@ -1232,8 +1234,9 @@ pub fn reset_failed_jobs(
             Some(status) if recoverable_statuses.contains(&status) => {}
             other => {
                 not_reset.push(format!(
-                    "job {}: status {:?} is not recoverable; skipped",
-                    job_id, other
+                    "job {}: status {} is not recoverable; skipped",
+                    job_id,
+                    other.map(|s| s.to_string()).unwrap_or_default()
                 ));
                 continue;
             }

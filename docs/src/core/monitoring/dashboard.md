@@ -278,7 +278,7 @@ LLM_PROVIDER=github GITHUB_MODELS_MODEL=Meta-Llama-3.1-70B-Instruct torc-dash
 ```
 
 Available models include `gpt-4o`, `gpt-4o-mini`, `Meta-Llama-3.1-70B-Instruct`, and others. See
-[GitHub Models](https://github.com/marketplace/models) for the full list.
+[GitHub Models](https://github.com/marketplace?type=models) for the full list.
 
 **Runtime Configuration:**
 

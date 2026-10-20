@@ -11,7 +11,7 @@ mod unix_main {
     use chrono::Local;
     use clap::{Parser, builder::styling};
     use env_logger::Builder;
-    use log::{LevelFilter, debug, error, info, warn};
+    use log::{debug, error, info, warn};
     use signal_hook::consts::{SIGCHLD, SIGTERM};
     use signal_hook::iterator::Signals;
     use std::fs::File;
@@ -91,8 +91,8 @@ mod unix_main {
         #[arg(long, env = "TORC_PASSWORD", hide_env_values = true)]
         password: Option<String>,
 
-        /// Log level: error, warn, info, debug, trace
-        #[arg(long)]
+        /// Log level (error, warn, info, debug, trace) or module filters (e.g. torc=debug)
+        #[arg(long, env = "RUST_LOG")]
         log_level: Option<String>,
 
         /// Maximum startup delay in seconds for thundering herd mitigation.
@@ -197,33 +197,18 @@ mod unix_main {
             }
         };
 
-        // Resolve log level: CLI arg > config file > default ("info")
+        // Resolve log level: CLI arg > RUST_LOG > config file > default ("info")
         let file_config = TorcConfig::load().unwrap_or_default();
         let log_level_str = args
             .log_level
             .clone()
             .unwrap_or_else(|| file_config.client.log_level.clone());
 
-        let level_filter = match log_level_str.to_lowercase().as_str() {
-            "error" => LevelFilter::Error,
-            "warn" => LevelFilter::Warn,
-            "info" => LevelFilter::Info,
-            "debug" => LevelFilter::Debug,
-            "trace" => LevelFilter::Trace,
-            _ => {
-                eprintln!(
-                    "Warning: unknown log level '{}', defaulting to 'info'",
-                    log_level_str
-                );
-                LevelFilter::Info
-            }
-        };
-
-        // Initialize logger now that we have the log file
-        let mut builder = Builder::from_default_env();
+        // Initialize logger now that we have the log file. Accepts a bare level or module filters.
+        let mut builder = Builder::new();
         builder
             .target(env_logger::Target::Pipe(Box::new(log_file)))
-            .filter_level(level_filter)
+            .parse_filters(&log_level_str)
             .init();
 
         let hostname = hostname::get()

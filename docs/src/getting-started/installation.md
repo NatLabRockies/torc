@@ -4,19 +4,19 @@
 
 1. Download the appropriate archive for your platform from the
    [releases page](https://github.com/NatLabRockies/torc/releases):
-   - **Linux**: `torc-<version>-x86_64-unknown-linux-gnu.tar.gz`
-   - **macOS (Intel)**: `torc-<version>-x86_64-apple-darwin.tar.gz`
-   - **macOS (Apple Silicon)**: `torc-<version>-aarch64-apple-darwin.tar.gz`
-   - **Windows**: `torc-<version>-x86_64-pc-windows-msvc.zip`
+   - **Linux (x86_64)**: `torc-x86_64-unknown-linux-musl.tar.gz`
+   - **Linux (ARM 64-bit, e.g. Raspberry Pi OS 64-bit)**: `torc-aarch64-unknown-linux-musl.tar.gz`
+   - **macOS (Apple Silicon)**: `torc-aarch64-apple-darwin.tar.gz`
+   - **Windows**: `torc-x86_64-pc-windows-msvc.zip`
 
 2. Extract the archive:
 
    ```bash
    # For .tar.gz files
-   tar -xzf torc-<version>-<platform>.tar.gz
+   tar -xzf torc-<platform>.tar.gz
 
    # For .zip files
-   unzip torc-<version>-<platform>.zip
+   unzip torc-<platform>.zip
    ```
 
 3. Add the binaries to a directory in your system PATH:
@@ -67,9 +67,9 @@ listed below.
 
 ```
 /scratch/dthom/torc/
-├── 0.40.0/
+├── 0.41.0/
 ├── ...
-└── latest -> 0.40.0  (symlink to current version)
+└── latest -> 0.41.0  (symlink to current version)
 ```
 
 > **Recommended**: Use the `latest` directory. Torc maintains backwards compatibility, so you'll

@@ -40,6 +40,7 @@ class JobModel(BaseModel):
     input_file_ids: Optional[List[StrictInt]] = None
     input_user_data_ids: Optional[List[StrictInt]] = None
     invocation_script: Optional[StrictStr] = None
+    label: Optional[StrictStr] = Field(default=None, description="Routing label. A runner started with a label claims only jobs with that label; a runner with no label claims only unlabeled jobs.")
     name: StrictStr
     origin: Optional[StrictStr] = Field(default=None, description="Provenance marker: NULL for jobs declared at workflow creation, `\"retry\"` for jobs resurrected by failure-handler retries, `\"spawn\"` for jobs added at runtime by `spawn_jobs`. `torc watch --auto-schedule` uses this to detect jobs that need unplanned Slurm allocations (deferred `schedule_nodes` actions only account for the originally-declared workload).")
     output_file_ids: Optional[List[StrictInt]] = None
@@ -52,7 +53,7 @@ class JobModel(BaseModel):
     status: Optional[JobStatus] = None
     supports_termination: Optional[StrictBool] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "compute_node_id", "depends_on_job_ids", "env", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "name", "origin", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "start_time", "status", "supports_termination", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["attempt_id", "cancel_on_blocking_job_failure", "command", "compute_node_id", "depends_on_job_ids", "env", "failure_handler_id", "id", "input_file_ids", "input_user_data_ids", "invocation_script", "label", "name", "origin", "output_file_ids", "output_user_data_ids", "priority", "resource_requirements_id", "schedule_compute_nodes", "scheduler_id", "start_time", "status", "supports_termination", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -141,6 +142,11 @@ class JobModel(BaseModel):
         if self.invocation_script is None and "invocation_script" in self.model_fields_set:
             _dict['invocation_script'] = None
 
+        # set to None if label (nullable) is None
+        # and model_fields_set contains the field
+        if self.label is None and "label" in self.model_fields_set:
+            _dict['label'] = None
+
         # set to None if origin (nullable) is None
         # and model_fields_set contains the field
         if self.origin is None and "origin" in self.model_fields_set:
@@ -204,6 +210,7 @@ class JobModel(BaseModel):
             "input_file_ids": obj.get("input_file_ids"),
             "input_user_data_ids": obj.get("input_user_data_ids"),
             "invocation_script": obj.get("invocation_script"),
+            "label": obj.get("label"),
             "name": obj.get("name"),
             "origin": obj.get("origin"),
             "output_file_ids": obj.get("output_file_ids"),

@@ -758,6 +758,10 @@ pub struct JobSpec {
     /// Scheduling priority; higher values are submitted to workers first. Minimum 0, default 0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<i64>,
+    /// Routing label. Only runners started with the same `--label` claim this job;
+    /// unlabeled jobs are claimed only by runners with no label.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 impl JobSpec {
@@ -791,6 +795,7 @@ impl JobSpec {
             use_parameters_file: None,
             stdio: None,
             priority: None,
+            label: None,
         }
     }
 
@@ -837,6 +842,10 @@ impl JobSpec {
 
             if let Some(ref sched_name) = self.scheduler {
                 new_spec.scheduler = Some(substitute_parameters(sched_name, &combo));
+            }
+
+            if let Some(ref label) = self.label {
+                new_spec.label = Some(substitute_parameters(label, &combo));
             }
 
             // Substitute parameters in name vectors
@@ -1821,6 +1830,26 @@ impl WorkflowSpec {
         Ok(())
     }
 
+    /// Check job labels after parameter expansion, so a bad label fails here
+    /// rather than as a server 422 partway through creation. A labeled job with
+    /// a `scheduler` is rejected because that scheduler's runners are unlabeled
+    /// and would never claim it.
+    fn validate_job_labels(&self) -> Result<(), Box<dyn std::error::Error>> {
+        for job in &self.jobs {
+            crate::models::validate_label(job.label.as_deref())
+                .map_err(|err| format!("Job '{}': {}", job.name, err))?;
+            if let (Some(label), Some(scheduler)) = (&job.label, &job.scheduler) {
+                return Err(format!(
+                    "Job '{}' sets both label '{}' and scheduler '{}'; runners for a scheduler \
+                     are unlabeled and never claim labeled jobs",
+                    job.name, label, scheduler
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
     /// Verify that `dynamic_jobs.max_iterations`, if set, is a positive
     /// integer. `0` would silently disable spawning for the entire workflow
     /// — the first `spawn_jobs` call would be rejected with a confusing
@@ -2585,6 +2614,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_job_labels()?;
         spec.validate_dynamic_jobs()?;
         // The returned spec must stay unsubstituted -- `create_from_validated_spec`
         // substitutes again -- so this helper does the substitute-then-validate
@@ -2626,6 +2656,10 @@ impl WorkflowSpec {
             std::process::exit(1);
         }
         if let Err(e) = spec.validate_env_maps() {
+            eprintln!("Validation error: {}", e);
+            std::process::exit(1);
+        }
+        if let Err(e) = spec.validate_job_labels() {
             eprintln!("Validation error: {}", e);
             std::process::exit(1);
         }
@@ -2768,8 +2802,18 @@ impl WorkflowSpec {
             errors.push(format!("Environment validation failed: {}", e));
         }
 
+        if let Err(e) = spec.validate_job_labels() {
+            errors.push(format!("Validation error: {}", e));
+        }
+
         if let Err(e) = spec.validate_dynamic_jobs() {
             errors.push(format!("Validation error: {}", e));
+        }
+
+        if let Some(ref slurm_defaults) = spec.slurm_defaults
+            && let Err(e) = slurm_defaults.validate()
+        {
+            errors.push(e);
         }
 
         // Check duplicates of names and identifiers after expansion. This was
@@ -2967,11 +3011,18 @@ impl WorkflowSpec {
             // Validate input_file_regexes
             if let Some(ref regexes) = job.input_file_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &file_names,
+                            "Input file",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid input_file_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -2991,11 +3042,18 @@ impl WorkflowSpec {
             // Validate output_file_regexes
             if let Some(ref regexes) = job.output_file_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &file_names,
+                            "Output file",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid output_file_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -3015,11 +3073,18 @@ impl WorkflowSpec {
             // Validate input_user_data_regexes
             if let Some(ref regexes) = job.input_user_data_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &user_data_names,
+                            "Input user data",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid input_user_data_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -3039,11 +3104,18 @@ impl WorkflowSpec {
             // Validate output_user_data_regexes
             if let Some(ref regexes) = job.output_user_data_regexes {
                 for regex_str in regexes {
-                    if let Err(e) = Regex::new(regex_str) {
-                        errors.push(format!(
+                    match Regex::new(regex_str) {
+                        Ok(re) => errors.extend(Self::unmatched_regex_error(
+                            &re,
+                            regex_str,
+                            &user_data_names,
+                            "Output user data",
+                            &job.name,
+                        )),
+                        Err(e) => errors.push(format!(
                             "Job '{}' has invalid output_user_data_regexes '{}': {}",
                             job.name, regex_str, e
-                        ));
+                        )),
                     }
                 }
             }
@@ -3219,6 +3291,7 @@ impl WorkflowSpec {
             });
         }
         spec.validate_env_maps()?;
+        spec.validate_job_labels()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
         // Identifier validation runs AFTER substitution so jobs that declare
@@ -3252,6 +3325,7 @@ impl WorkflowSpec {
         spec.expand_parameters()?;
         spec.validate_unique_names_after_expansion()?;
         spec.validate_env_maps()?;
+        spec.validate_job_labels()?;
         spec.validate_actions()?;
         spec.substitute_variables()?;
         // After substitution: input_files / output_files populated from
@@ -4179,6 +4253,29 @@ impl WorkflowSpec {
         Ok(ids)
     }
 
+    /// Error text for a pattern that matches none of the workflow's declared names.
+    ///
+    /// `resolve_names_and_regexes` rejects this case when the workflow is created, so
+    /// validation has to reject it too -- otherwise `--dry-run` reports PASSED for a spec
+    /// that `torc create` refuses. The wording is kept identical to the creation-time
+    /// error so both paths report the same thing.
+    fn unmatched_regex_error(
+        re: &Regex,
+        pattern: &str,
+        universe: &HashSet<String>,
+        resource_type: &str,
+        job_name: &str,
+    ) -> Option<String> {
+        if universe.iter().any(|name| re.is_match(name)) {
+            None
+        } else {
+            Some(format!(
+                "{} regex '{}' did not match any names for job '{}'",
+                resource_type, pattern, job_name
+            ))
+        }
+    }
+
     /// Topologically sort jobs into levels based on dependencies
     /// Returns a vector of levels, where each level contains jobs that can be created together
     fn topological_sort_jobs<'a>(
@@ -4437,6 +4534,7 @@ impl WorkflowSpec {
                     }
                     job_model.priority = Some(p);
                 }
+                job_model.label.clone_from(&job_spec.label);
 
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);
@@ -4661,6 +4759,18 @@ impl WorkflowSpec {
                                 serde_json::Value::String(v.to_string()),
                             );
                         }
+                    }
+                    "label" => {
+                        // A dropped label would let unlabeled runners claim the job.
+                        let v = child
+                            .entries()
+                            .first()
+                            .and_then(|e| e.value().as_string())
+                            .ok_or("job label must have a string value")?;
+                        obj.insert(
+                            "label".to_string(),
+                            serde_json::Value::String(v.to_string()),
+                        );
                     }
                     "parameters" => {
                         if let Some(params) = Self::kdl_parameters_to_json(child)? {
@@ -6261,6 +6371,9 @@ impl WorkflowSpec {
         if let Some(ref sched) = job.scheduler {
             lines.push(format!("    scheduler {}", escape(sched)));
         }
+        if let Some(ref label) = job.label {
+            lines.push(format!("    label {}", escape(label)));
+        }
         if let Some(ref params) = job.parameters
             && !params.is_empty()
         {
@@ -7652,6 +7765,7 @@ user_data:
                 failure_handler: None,
                 stdio: None,
                 priority: None,
+                label: None,
             }],
             files: Some(vec![{
                 let mut file =
@@ -7818,6 +7932,35 @@ user_data:
             .validate_env_maps()
             .expect_err("expected validation error");
         assert!(err.to_string().contains("BAD-NAME"));
+    }
+
+    #[test]
+    fn test_validate_job_labels() {
+        let mut job = JobSpec::new("job".to_string(), "echo hi".to_string());
+        let spec_with = |job: &JobSpec| {
+            WorkflowSpec::new(
+                "wf".to_string(),
+                "user".to_string(),
+                None,
+                vec![job.clone()],
+            )
+        };
+
+        job.label = Some("windows".to_string());
+        spec_with(&job).validate_job_labels().expect("valid label");
+
+        for bad in ["", " win"] {
+            job.label = Some(bad.to_string());
+            let err = spec_with(&job).validate_job_labels().expect_err(bad);
+            assert!(err.to_string().contains("Job 'job'"), "{}", err);
+        }
+
+        job.label = Some("windows".to_string());
+        job.scheduler = Some("gpu_sched".to_string());
+        let err = spec_with(&job)
+            .validate_job_labels()
+            .expect_err("label with scheduler");
+        assert!(err.to_string().contains("gpu_sched"), "{}", err);
     }
 
     #[test]

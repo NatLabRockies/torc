@@ -156,8 +156,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **claim_next_jobs**
-> claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, _mediaType=nothing) -> ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, _mediaType=nothing) -> Channel{ ClaimNextJobsResponse }, OpenAPI.Clients.ApiResponse
+> claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, label=nothing, _mediaType=nothing) -> ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, label=nothing, _mediaType=nothing) -> Channel{ ClaimNextJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -173,6 +173,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **limit** | **Int64** |  | [default to nothing]
+ **label** | **String** | Runner label; only jobs with an identical label (or none, when unset) are claimed. | [default to nothing]
 
 ### Return type
 

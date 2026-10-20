@@ -176,6 +176,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         None, // origin_is_set
         None, // name
         None, // command
+        None, // label
     )
     .expect("Failed to list pending_failed jobs");
 

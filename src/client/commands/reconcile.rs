@@ -37,7 +37,7 @@ pub fn reconcile(
     format: &str,
 ) -> Result<ReconcileSummary, Box<dyn std::error::Error>> {
     let files = OfflineJournal::discover(base_dir, workflow_id, run_id);
-    if files.is_empty() {
+    if files.is_empty() && format != "json" {
         println!(
             "No offline journals found for workflow_id={} run_id={} under {}",
             workflow_id,
@@ -122,7 +122,7 @@ pub fn reconcile(
             summary.rejected
         );
         if summary.rejected > 0 {
-            println!(
+            eprintln!(
                 "Rejected completions are usually from a superseded run (run_id no longer \
                  current after a manual retry/reset); this is expected and safe."
             );

@@ -408,7 +408,7 @@ fn list_audit_log(config: &Configuration, limit: Option<i64>, offset: i64, forma
         response.offset
     );
     if response.has_more {
-        println!(
+        eprintln!(
             "More available: --offset {} to continue.",
             response.offset + response.count
         );

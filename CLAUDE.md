@@ -299,8 +299,10 @@ a single specification:
 
 List endpoints support `offset` and `limit` query parameters:
 
-- Default limit: 10,000 records
-- Maximum limit: 10,000 records (enforced)
+- A single response is capped at `MAX_RECORD_TRANSFER_COUNT` (100,000 records, `src/lib.rs`); the
+  server rejects a request asking for more and echoes the cap back as `max_limit`.
+- The CLI's `-l/--limit` defaults to all records and paginates transparently, issuing as many
+  requests as needed, so a large value is not an error at the CLI level.
 
 ### Job Completion and Unblocking
 

@@ -426,7 +426,7 @@ fn handle_run(
         };
 
         // Add only valid workers to the database
-        println!("Adding {} worker(s) to database...", valid_workers.len());
+        eprintln!("Adding {} worker(s) to database...", valid_workers.len());
 
         match apis::remote_workers_api::create_remote_workers(config, workflow_id, valid_workers) {
             Ok(created) => {
@@ -453,7 +453,7 @@ fn handle_run(
         std::process::exit(1);
     }
 
-    println!(
+    eprintln!(
         "Found {} worker(s) for workflow {}",
         workers.len(),
         workflow_id
@@ -480,7 +480,7 @@ fn handle_run(
     initialize_workflow_if_needed(config, workflow_id);
 
     // Start workers
-    println!("Starting workers...");
+    eprintln!("Starting workers...");
 
     let api_url = config.base_path.clone();
     let output_dir_owned = output_dir.to_string();
@@ -854,7 +854,7 @@ fn handle_stop(
 
     let output_dir_owned = output_dir.to_string();
 
-    println!(
+    eprintln!(
         "Stopping workers (signal: {})...",
         if force { "SIGKILL" } else { "SIGTERM" }
     );
@@ -965,7 +965,7 @@ fn handle_collect_logs(
     } else {
         "Collecting"
     };
-    println!(
+    eprintln!(
         "{} logs from {} worker(s) to {}...",
         action,
         workers.len(),
@@ -1114,7 +1114,7 @@ fn handle_delete_logs(
         std::process::exit(1);
     }
 
-    println!("Deleting logs from {} worker(s)...", workers.len());
+    eprintln!("Deleting logs from {} worker(s)...", workers.len());
 
     let remote_dir = remote_output_dir.to_string();
 
@@ -1227,13 +1227,13 @@ fn validate_workers_ssh(
     source: Option<&str>,
 ) -> Result<Vec<String>, String> {
     if let Some(src) = source {
-        println!(
+        eprintln!(
             "Checking SSH connectivity for {} worker(s) from {}...",
             workers.len(),
             src
         );
     } else {
-        println!(
+        eprintln!(
             "Checking SSH connectivity for {} worker(s)...",
             workers.len()
         );
@@ -1271,7 +1271,7 @@ fn validate_workers_ssh(
         return Err("No workers passed SSH connectivity check".to_string());
     }
 
-    println!(
+    eprintln!(
         "{}/{} workers passed SSH check",
         valid_workers.len(),
         workers.len()

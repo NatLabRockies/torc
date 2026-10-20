@@ -15,7 +15,7 @@ Output includes:
 {
   "job_id": 15,
   "job_name": "work_2",
-  "status": "Failed",
+  "status": "failed",
   "run_id": 1,
   "return_code": 137,
   "completion_time": "2026-01-06T20:30:00.200Z",

@@ -345,14 +345,9 @@ fn test_events_get_latest_event_empty_workflow(start_server: &ServerProcess) {
     // Test the CLI get-latest-event command on empty workflow
     let args = ["events", "get-latest-event", &workflow_id.to_string()];
 
-    let result = run_cli_with_json(&args, start_server, None);
-    // This might succeed with empty output or fail - both are acceptable behaviors
-    // The command should handle empty workflows gracefully
-    if let Ok(json_output) = result {
-        // If it succeeds, it should return valid JSON (even if empty/null)
-        assert!(json_output.is_null() || json_output.is_object());
-    }
-    // If it fails, that's also acceptable for an empty workflow
+    let json_output = run_cli_with_json(&args, start_server, None)
+        .expect("get-latest-event should succeed on a workflow with no events");
+    assert_eq!(json_output, serde_json::Value::Null);
 }
 
 #[rstest]

@@ -99,8 +99,9 @@ pub struct Cli {
     #[arg(long, env = "RUST_LOG")]
     pub log_level: Option<String>,
     /// Output format (table, json, or csv). csv is supported for list commands.
-    #[arg(short, long, default_value = "table")]
-    pub format: String,
+    /// [default: table, or client.format from config]
+    #[arg(short, long)]
+    pub format: Option<String>,
     /// URL of torc server
     #[arg(long, env = "TORC_API_URL")]
     pub url: Option<String>,
@@ -282,6 +283,13 @@ SEE ALSO:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
+        /// Only claim jobs with this label. Without it, only unlabeled jobs are claimed.
+        #[arg(long, value_parser = crate::models::parse_label)]
+        label: Option<String>,
+        /// Ignore the idle timeout while the workflow still has unfinished jobs this
+        /// runner can claim (same label, or unlabeled when no --label is given).
+        #[arg(long)]
+        persistent: bool,
     },
     /// Run inline commands as a synthesized workflow (no spec file required).
     ///
@@ -611,6 +619,15 @@ SEE ALSO:
         #[arg(short, long)]
         show_job_counts: bool,
 
+        /// Keep watching until the workflow completes
+        ///
+        /// By default, watch exits when there are no Slurm allocations and no ready
+        /// jobs, because nothing it manages can make progress. Use this when runners
+        /// outside Slurm are still working, such as a `torc run --label` runner on a
+        /// dedicated machine.
+        #[arg(long)]
+        persistent: bool,
+
         /// Automatically schedule new compute nodes when needed
         ///
         /// When enabled, the watch command will automatically regenerate and submit
@@ -762,8 +779,8 @@ SEE ALSO:
         #[arg(long, default_value = "1.5")]
         memory_multiplier: f64,
 
-        /// Runtime multiplier for timeout failures (default: 1.4 = 40% increase)
-        #[arg(long, default_value = "1.4")]
+        /// Runtime multiplier for timeout failures (default: 1.5 = 50% increase)
+        #[arg(long, default_value = "1.5")]
         runtime_multiplier: f64,
 
         /// Retry jobs with unknown failure causes (not OOM or timeout)

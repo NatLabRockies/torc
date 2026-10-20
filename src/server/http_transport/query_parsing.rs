@@ -179,11 +179,6 @@ pub(super) struct ClaimJobsBasedOnResourcesQuery {
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) struct ClaimNextJobsQuery {
-    pub(super) limit: Option<i64>,
-}
-
-#[derive(Debug, PartialEq)]
 pub(super) struct ProcessChangedJobInputsQuery {
     pub(super) dry_run: Option<bool>,
 }
@@ -451,15 +446,6 @@ pub(super) fn parse_claim_jobs_based_on_resources_query(
     let params = parse_params(query);
     Ok(ClaimJobsBasedOnResourcesQuery {
         strict_scheduler_match: parse_optional_bool(&params, "strict_scheduler_match")?,
-    })
-}
-
-pub(super) fn parse_claim_next_jobs_query(
-    query: Option<&str>,
-) -> Result<ClaimNextJobsQuery, String> {
-    let params = parse_params(query);
-    Ok(ClaimNextJobsQuery {
-        limit: parse_optional_i64(&params, "limit")?,
     })
 }
 

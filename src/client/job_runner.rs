@@ -560,6 +560,9 @@ pub struct JobRunner {
     /// only a local completion can move an action toward its trigger threshold
     /// from this node, so the grace window is measured from that event.
     last_completion_time: Option<Instant>,
+    /// When true, ignore the idle timeout while the workflow still has
+    /// unfinished jobs with this runner's label.
+    persistent: bool,
     /// Actions this runner has already executed in this process. Persistent
     /// actions keep `executed = 0` on the server so every worker gets a turn,
     /// so the server flag alone cannot tell us we are done with one.
@@ -795,6 +798,7 @@ impl JobRunner {
             num_nodes: resources.num_nodes,
             time_limit: resources.time_limit.clone(),
             scheduler_config_id: resources.scheduler_config_id,
+            label: resources.label.clone(),
         };
 
         // Initialize resource monitoring if configured
@@ -862,6 +866,7 @@ impl JobRunner {
             wakeup: Wakeup::new(),
             last_job_claimed_time: None,
             last_completion_time: None,
+            persistent: false,
             executed_action_ids: HashSet::new(),
             had_failures: false,
             had_terminations: false,
@@ -874,6 +879,66 @@ impl JobRunner {
             last_drain_ping: None,
             server_reachable_probe: default_server_reachable_probe,
         }
+    }
+
+    /// Keep the runner alive past `compute_node_wait_for_new_jobs_seconds` for as
+    /// long as the workflow has unfinished jobs with this runner's label.
+    pub fn set_persistent(&mut self, persistent: bool) {
+        self.persistent = persistent;
+    }
+
+    /// Whether the workflow still has jobs this runner could claim, now or later:
+    /// jobs with its label (or unlabeled, when it has none) that are not finished.
+    /// Errs on the side of `true` so a persistent runner never exits on a failed check.
+    fn has_unfinished_jobs_for_label(&self) -> bool {
+        if self.offline {
+            return true;
+        }
+        // An empty label filter selects unlabeled jobs.
+        let label = self.resources.label.as_deref().unwrap_or("");
+        // One request: sorted by status, the first job has the lowest status, and
+        // every status below Completed is unfinished. PendingFailed sorts above
+        // the finished statuses, so it gets its own count, but only workflows
+        // with `use_pending_failed` can have such jobs.
+        let list = |status, sort_by| {
+            apis::jobs_api::list_jobs(
+                &self.config,
+                self.workflow_id,
+                status,
+                None,
+                None,
+                Some(0),
+                Some(1),
+                sort_by,
+                None,
+                None,
+                None,
+                None,
+                None, // name
+                None, // command
+                Some(label),
+            )
+            .map_err(|e| {
+                warn!(
+                    "Failed to count jobs for persistent runner check workflow_id={}: {}",
+                    self.workflow_id, e
+                )
+            })
+            .ok()
+        };
+        let Some(lowest) = list(None, Some("status")) else {
+            return true;
+        };
+        if lowest
+            .items
+            .first()
+            .and_then(|job| job.status)
+            .is_some_and(|status| status.to_int() < JobStatus::Completed.to_int())
+        {
+            return true;
+        }
+        self.workflow.use_pending_failed.unwrap_or(false)
+            && list(Some(JobStatus::PendingFailed), None).is_none_or(|r| r.total_count > 0)
     }
 
     /// Override the claim-backoff cap loaded from config, e.g. from a CLI flag.
@@ -1352,6 +1417,12 @@ impl JobRunner {
                     .unwrap_or(0);
 
                 if idle_seconds >= self.rules.compute_node_wait_for_new_jobs_seconds {
+                    // A persistent runner outlives the idle limit while jobs with its
+                    // label remain; once none do, it exits like any other runner.
+                    if self.persistent && self.has_unfinished_jobs_for_label() {
+                        self.last_job_claimed_time = Some(Instant::now());
+                        continue;
+                    }
                     // Before exiting, check for actions we could still execute.
                     // Actions like schedule_nodes might add more compute capacity.
                     // A triggered action is ready to run now, so wait for it. An
@@ -1643,7 +1714,7 @@ impl JobRunner {
         if let Some(journal) = &self.offline_journal {
             match journal.append(entry) {
                 Ok(()) => info!(
-                    "Journaled completion (offline) workflow_id={} job_id={} run_id={} status={:?}",
+                    "Journaled completion (offline) workflow_id={} job_id={} run_id={} status={}",
                     self.workflow_id, job_id, entry.run_id, entry.status
                 ),
                 Err(e) => error!(
@@ -2043,7 +2114,7 @@ impl JobRunner {
                 self.run_id,
                 result.attempt_id.unwrap_or(1),
                 result.return_code,
-                format!("{:?}", result.status).to_lowercase(),
+                result.status,
                 result.exec_time_minutes * 60.0
             );
             to_report.push((job_id, result));
@@ -2835,6 +2906,7 @@ impl JobRunner {
             ComputeNodesResources::new(cpus, memory_gb, gpus, self.resources.num_nodes);
         per_node.scheduler_config_id = self.resources.scheduler_config_id;
         per_node.time_limit.clone_from(&self.resources.time_limit);
+        per_node.label.clone_from(&self.resources.label);
         per_node
     }
 
@@ -3007,6 +3079,7 @@ impl JobRunner {
             );
             r.scheduler_config_id = self.resources.scheduler_config_id;
             r.time_limit.clone_from(&self.resources.time_limit);
+            r.label.clone_from(&self.resources.label);
             r
         } else {
             self.resources_per_node()
@@ -3194,6 +3267,7 @@ impl JobRunner {
                 &self.config,
                 self.workflow_id,
                 Some(limit),
+                self.resources.label.as_deref(),
             ))
         }) {
             Ok(response) => {
@@ -3625,11 +3699,23 @@ impl JobRunner {
 
                     info!("Executing command: {}", command);
 
-                    // Execute the command using cross-platform shell
-                    let output = crate::client::utils::shell_command()
-                        .arg(command)
+                    // Execute the command using cross-platform shell. Actions have no job
+                    // context, so only the workflow-scoped variables are set (no TORC_JOB_ID /
+                    // TORC_JOB_NAME / TORC_ATTEMPT_ID).
+                    let mut cmd = crate::client::utils::shell_command();
+                    cmd.arg(command)
                         .current_dir(&self.output_dir)
-                        .output()?;
+                        .env("TORC_WORKFLOW_ID", self.workflow_id.to_string())
+                        .env("TORC_RUN_ID", self.run_id.to_string())
+                        .env("TORC_API_URL", &self.config.base_path)
+                        .env(
+                            "TORC_OUTPUT_DIR",
+                            self.output_dir.to_string_lossy().to_string(),
+                        );
+                    if let Some(ref dir) = self.workflow.submission_directory {
+                        cmd.env("TORC_WORKFLOW_SUBMISSION_DIR", dir);
+                    }
+                    let output = cmd.output()?;
 
                     if output.status.success() {
                         let stdout = String::from_utf8_lossy(&output.stdout);

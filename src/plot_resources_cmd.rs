@@ -93,12 +93,12 @@ pub fn run(args: &Args) -> Result<()> {
     let mut system_summaries: Vec<SystemSummary> = Vec::new();
 
     for db_path in &args.db_paths {
-        println!("Loading data from: {}", db_path.display());
+        eprintln!("Loading data from: {}", db_path.display());
         let samples = load_samples(db_path)?;
         let names = load_job_names(db_path)?;
         let loaded_system_samples = load_system_samples(db_path)?;
         let loaded_system_summary = load_system_summary(db_path)?;
-        println!(
+        eprintln!(
             "  Loaded {} job samples, {} job names, {} system samples",
             samples.len(),
             names.len(),
@@ -127,7 +127,7 @@ pub fn run(args: &Args) -> Result<()> {
     let system_metrics = calculate_system_metrics(system_samples, system_summaries);
 
     if jobs_to_plot.is_empty() && system_metrics.is_none() {
-        println!("No resource data found to plot");
+        eprintln!("No resource data found to plot");
         return Ok(());
     }
 
@@ -146,7 +146,7 @@ pub fn run(args: &Args) -> Result<()> {
                 format!("Job {}", metrics.job_id)
             };
 
-            println!(
+            eprintln!(
                 "{}: {} samples, {:.1}s duration, peak CPU: {:.1}%, peak mem: {:.2} GB",
                 job_display,
                 samples.len(),
@@ -167,7 +167,7 @@ pub fn run(args: &Args) -> Result<()> {
     };
 
     // Generate plots
-    println!("\nGenerating plots...");
+    eprintln!("\nGenerating plots...");
     let mut total_plots = 0;
     let filename = |stem: &str| -> String {
         if args.prefix.is_empty() {
@@ -183,7 +183,7 @@ pub fn run(args: &Args) -> Result<()> {
             .output_dir
             .join(filename(&format!("job_{}", metrics.job_id)));
         plot_job_timeline(metrics, &output_path, &args.format)?;
-        println!("  Created: {}", output_path.display());
+        eprintln!("  Created: {}", output_path.display());
         total_plots += 1;
     }
 
@@ -191,12 +191,12 @@ pub fn run(args: &Args) -> Result<()> {
     if job_metrics.len() > 1 {
         let cpu_output_path = args.output_dir.join(filename("cpu_all_jobs"));
         plot_all_jobs_cpu_overview(&job_metrics, &cpu_output_path, &args.format)?;
-        println!("  Created: {}", cpu_output_path.display());
+        eprintln!("  Created: {}", cpu_output_path.display());
         total_plots += 1;
 
         let memory_output_path = args.output_dir.join(filename("memory_all_jobs"));
         plot_all_jobs_memory_overview(&job_metrics, &memory_output_path, &args.format)?;
-        println!("  Created: {}", memory_output_path.display());
+        eprintln!("  Created: {}", memory_output_path.display());
         total_plots += 1;
     }
 
@@ -204,7 +204,7 @@ pub fn run(args: &Args) -> Result<()> {
     if !job_metrics.is_empty() {
         let output_path = args.output_dir.join(filename("summary"));
         plot_summary_dashboard(&job_metrics, &output_path, &args.format)?;
-        println!("  Created: {}", output_path.display());
+        eprintln!("  Created: {}", output_path.display());
         total_plots += 1;
     }
 
@@ -213,19 +213,19 @@ pub fn run(args: &Args) -> Result<()> {
         if !metrics.samples.is_empty() {
             let output_path = args.output_dir.join(filename("system_timeline"));
             plot_system_timeline(metrics, &output_path, &args.format)?;
-            println!("  Created: {}", output_path.display());
+            eprintln!("  Created: {}", output_path.display());
             total_plots += 1;
         }
 
         if metrics.summary.is_some() {
             let output_path = args.output_dir.join(filename("system_summary"));
             plot_system_summary(metrics, &output_path, &args.format)?;
-            println!("  Created: {}", output_path.display());
+            eprintln!("  Created: {}", output_path.display());
             total_plots += 1;
         }
     }
 
-    println!("\nDone! Generated {} plot(s)", total_plots);
+    eprintln!("\nDone! Generated {} plot(s)", total_plots);
 
     Ok(())
 }

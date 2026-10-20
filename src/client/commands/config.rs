@@ -145,15 +145,16 @@ fn show_paths() {
     };
     println!("  Local:   {} ({})", paths.local.display(), local_status);
 
-    println!();
-    println!("Environment variables (highest priority):");
-    println!("  Use double underscore (__) to separate nested keys:");
-    println!("    TORC_CLIENT__API_URL, TORC_CLIENT__FORMAT, TORC_SERVER__PORT, etc.");
-    println!();
+    eprintln!();
+    eprintln!("Environment variables (highest priority):");
+    eprintln!("  Use double underscore (__) to separate nested keys:");
+    eprintln!("    TORC_CLIENT__API_URL, TORC_CLIENT__FORMAT, TORC_SERVER__PORT, etc.");
+    eprintln!();
 
     let existing = paths.existing_paths();
     if existing.is_empty() {
-        println!("No configuration files found. Run 'torc config init --user' to create one.");
+        println!("No configuration files found.");
+        eprintln!("Run 'torc config init --user' to create one.");
     } else {
         println!(
             "Active configuration files: {}",
@@ -206,7 +207,7 @@ fn write_config_file(path: &PathBuf, force: bool) {
         && !parent.exists()
     {
         match fs::create_dir_all(parent) {
-            Ok(_) => println!("Created directory: {}", parent.display()),
+            Ok(_) => eprintln!("Created directory: {}", parent.display()),
             Err(e) => {
                 eprintln!("Error creating directory {}: {}", parent.display(), e);
                 std::process::exit(1);
@@ -220,9 +221,9 @@ fn write_config_file(path: &PathBuf, force: bool) {
         Ok(mut file) => match file.write_all(content.as_bytes()) {
             Ok(_) => {
                 println!("Created configuration file: {}", path.display());
-                println!();
-                println!("Edit this file to customize your Torc settings.");
-                println!("Run 'torc config show' to see the effective configuration.");
+                eprintln!();
+                eprintln!("Edit this file to customize your Torc settings.");
+                eprintln!("Run 'torc config show' to see the effective configuration.");
             }
             Err(e) => {
                 eprintln!("Error writing to {}: {}", path.display(), e);
@@ -243,20 +244,20 @@ fn write_config_file(path: &PathBuf, force: bool) {
 fn validate_config() {
     let paths = ConfigPaths::new();
 
-    println!("Validating configuration...");
-    println!();
+    eprintln!("Validating configuration...");
+    eprintln!();
 
     // Show which files are being loaded
     let existing = paths.existing_paths();
     if existing.is_empty() {
-        println!("No configuration files found (using defaults)");
+        eprintln!("No configuration files found (using defaults)");
     } else {
-        println!("Loading configuration from:");
+        eprintln!("Loading configuration from:");
         for path in &existing {
-            println!("  - {}", path.display());
+            eprintln!("  - {}", path.display());
         }
     }
-    println!();
+    eprintln!();
 
     // Load and validate
     let config = match TorcConfig::load() {

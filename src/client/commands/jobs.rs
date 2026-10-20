@@ -20,6 +20,11 @@ use crate::config::TorcConfig;
 use crate::models;
 use tabled::Tabled;
 
+/// Every job status accepted by `JobStatus::from_str`, for error messages.
+/// Keep in sync with `models::JobStatus`.
+pub const VALID_JOB_STATUSES: &str = "uninitialized, blocked, ready, pending, running, \
+     completed, failed, canceled, terminated, disabled, pending_failed";
+
 #[derive(Tabled)]
 struct JobTableRow {
     #[tabled(rename = "ID")]
@@ -262,7 +267,7 @@ EXAMPLES:
         /// List jobs for this workflow (optional - will prompt if not provided)
         #[arg()]
         workflow_id: Option<i64>,
-        /// User to filter by (defaults to USER environment variable)
+        /// Filter by job status (e.g. ready, running, completed, failed, terminated)
         #[arg(short, long)]
         status: Option<String>,
         /// Filter by upstream job ID (jobs that depend on this job)
@@ -318,6 +323,12 @@ EXAMPLES:
 
     # Set scheduling priority (higher = submitted first)
     torc jobs update 456 --priority 10
+
+    # Route the job to runners started with --label windows
+    torc jobs update 456 --label windows
+
+    # Remove the label so unlabeled runners claim the job
+    torc jobs update 456 --clear-label
 ")]
     Update {
         /// ID of the job to update
@@ -341,6 +352,12 @@ EXAMPLES:
         /// Scheduling priority (0 or higher; higher = submitted first)
         #[arg(long)]
         priority: Option<i64>,
+        /// Routing label; only runners started with the same --label claim this job
+        #[arg(long, value_parser = models::parse_label, conflicts_with = "clear_label")]
+        label: Option<String>,
+        /// Remove the routing label so runners without --label claim this job
+        #[arg(long)]
+        clear_label: bool,
     },
     /// Delete one or more jobs
     #[command(after_long_help = "\
@@ -611,29 +628,22 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None => select_workflow_interactively(config, &user_name).unwrap(),
             };
 
-            // Convert string status to JobStatus enum if provided
-            let job_status = match status {
-                Some(status_str) => match status_str.to_lowercase().as_str() {
-                    "uninitialized" => Some(models::JobStatus::Uninitialized),
-                    "blocked" => Some(models::JobStatus::Blocked),
-                    "ready" => Some(models::JobStatus::Ready),
-                    "pending" => Some(models::JobStatus::Pending),
-                    "running" => Some(models::JobStatus::Running),
-                    "completed" => Some(models::JobStatus::Completed),
-                    "failed" => Some(models::JobStatus::Failed),
-                    "canceled" => Some(models::JobStatus::Canceled),
-                    "terminated" => Some(models::JobStatus::Terminated),
-                    "disabled" => Some(models::JobStatus::Disabled),
-                    _ => {
+            // Convert string status to JobStatus enum if provided. Parse through
+            // `JobStatus::FromStr` so every status the server knows about is accepted;
+            // a hand-rolled match here previously omitted `pending_failed`.
+            let job_status = status.as_ref().map(|status_str| {
+                status_str
+                    .trim()
+                    .to_lowercase()
+                    .parse::<models::JobStatus>()
+                    .unwrap_or_else(|_| {
                         eprintln!(
-                            "Invalid status: {}. Valid values are: uninitialized, blocked, ready, pending, running, completed, failed, canceled, terminated, disabled",
-                            status_str
+                            "Invalid status: {}. Valid values are: {}",
+                            status_str, VALID_JOB_STATUSES
                         );
                         std::process::exit(1);
-                    }
-                },
-                None => None,
-            };
+                    })
+            });
 
             let mut params = JobListParams::new()
                 .with_offset(*offset)
@@ -717,6 +727,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     println!("  Workflow ID: {}", job.workflow_id);
                     println!("  Status: {}", status);
                     println!("  Priority: {}", job.priority.unwrap_or(0));
+                    println!("  Label: {}", job.label.as_deref().unwrap_or("None"));
                     println!(
                         "  Compute Node: {}",
                         job.compute_node_id
@@ -765,6 +776,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             runtime,
             resource_requirements_id,
             priority,
+            label,
+            clear_label,
         } => {
             // First get the existing job
             match apis::jobs_api::get_job(config, *id) {
@@ -781,6 +794,12 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                     }
                     if let Some(p) = priority {
                         job.priority = Some(*p);
+                    }
+                    if let Some(new_label) = label {
+                        job.label = Some(new_label.clone());
+                    } else if *clear_label {
+                        // The server treats an empty label as "clear".
+                        job.label = Some(String::new());
                     }
 
                     // Handle runtime update (requires updating resource requirements)
@@ -807,7 +826,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                                 ) {
                                     Ok(_) => {
                                         if format != "json" {
-                                            println!(
+                                            eprintln!(
                                                 "Updated runtime to {} on resource requirements ID {}",
                                                 new_runtime, rr_id
                                             );
@@ -984,6 +1003,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None,    // origin_is_set
                 None,    // name
                 None,    // command
+                None,    // label
             ) {
                 Ok(response) => {
                     let job_count = response.total_count;
@@ -999,12 +1019,12 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
 
                     // Confirm deletion
                     if !no_prompts && format != "json" {
-                        println!(
+                        eprintln!(
                             "About to delete {} job(s) from workflow ID: {}",
                             job_count, selected_workflow_id
                         );
-                        print!("Are you sure? (y/N): ");
-                        if let Err(e) = io::stdout().flush() {
+                        eprint!("Are you sure? (y/N): ");
+                        if let Err(e) = io::stderr().flush() {
                             eprintln!("Failed to write prompt: {}", e);
                             std::process::exit(1);
                         }
@@ -1016,7 +1036,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                         }
 
                         if !input.trim().eq_ignore_ascii_case("y") {
-                            println!("Deletion cancelled");
+                            eprintln!("Deletion cancelled");
                             return;
                         }
                     }
@@ -1125,7 +1145,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             };
 
-            if jobs.is_empty() {
+            // CSV falls through so an empty table renders like other list commands.
+            if jobs.is_empty() && format != "csv" {
                 if format == "json" {
                     println!("[]");
                 } else {
@@ -1245,7 +1266,8 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             };
 
-            if jobs.is_empty() {
+            // CSV falls through so an empty table renders like other list commands.
+            if jobs.is_empty() && format != "csv" {
                 if format == "json" {
                     println!("[]");
                 } else {
@@ -1533,6 +1555,7 @@ pub fn get_current_job_count(
         None,    // origin_is_set
         None,    // name
         None,    // command
+        None,    // label
     )
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
@@ -1655,10 +1678,9 @@ fn resolve_reset_targets_by_status(
             }
             Err(_) => {
                 eprintln!(
-                    "Error: invalid status '{}'. Valid values are: uninitialized, blocked, \
-                     ready, pending, running, completed, failed, canceled, terminated, disabled, \
-                     pending_failed.",
-                    raw.trim()
+                    "Error: invalid status '{}'. Valid values are: {}.",
+                    raw.trim(),
+                    VALID_JOB_STATUSES
                 );
                 std::process::exit(1);
             }
@@ -1941,12 +1963,12 @@ fn handle_reset_job_status(
 
         if !downstream_jobs.is_empty() {
             if reinit {
-                println!(
+                eprintln!(
                     "\nThe following downstream jobs will be reset now by the reinit step \
                      (a rerun job produces new outputs, so its consumers must rerun too):",
                 );
             } else {
-                println!(
+                eprintln!(
                     "\nThe following downstream jobs will be reset when you run \
                      'torc workflows reinit {}' (a rerun job produces new outputs, so its \
                      consumers must rerun too):",
@@ -1975,9 +1997,9 @@ fn handle_reset_job_status(
             });
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else {
-            println!("Dry run: no changes were made.");
+            eprintln!("Dry run: no changes were made.");
             if reinit {
-                println!("Dry run: the workflow would also be reinitialized.");
+                eprintln!("Dry run: the workflow would also be reinitialized.");
             }
         }
         return;
@@ -2008,8 +2030,8 @@ fn handle_reset_job_status(
             }
         }
         eprintln!("This is an idempotent operation and can be re-run if it partially fails.");
-        print!("Continue? (y/N): ");
-        io::stdout().flush().unwrap();
+        eprint!("Continue? (y/N): ");
+        io::stderr().flush().unwrap();
 
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
@@ -2161,7 +2183,7 @@ fn handle_reset_job_status(
         if reinit_applied {
             println!("Reinitialized workflow {}.", workflow_id);
         }
-        println!("{}", next_steps);
+        eprintln!("{}", next_steps);
     }
 }
 
@@ -2190,6 +2212,7 @@ pub fn get_existing_job_names(
             None, // origin_is_set
             None, // name
             None, // command
+            None, // label
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 

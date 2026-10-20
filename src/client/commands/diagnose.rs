@@ -314,19 +314,19 @@ fn print_human_report(d: &PackingDiagnosis) {
         d.allocations_too_short_for_longest, d.allocations_with_walltime
     );
     println!("      their freed cores will idle instead of packing new work.");
-    println!();
-    println!("  Why: Torc won't start a job whose required runtime exceeds an allocation's");
-    println!("  remaining walltime — it would be killed mid-run. As allocations age, fewer");
-    println!("  long jobs fit, so node-packing drops even while cores are free.");
-    println!();
-    println!("  Fixes:");
-    println!(
+    eprintln!();
+    eprintln!("  Why: Torc won't start a job whose required runtime exceeds an allocation's");
+    eprintln!("  remaining walltime — it would be killed mid-run. As allocations age, fewer");
+    eprintln!("  long jobs fit, so node-packing drops even while cores are free.");
+    eprintln!();
+    eprintln!("  Fixes:");
+    eprintln!(
         "    \u{2022} Reduce job runtime requirements if over-estimated \
          (torc workflows check-resources {})",
         d.workflow_id
     );
-    println!("    \u{2022} Add checkpointing so jobs can resume in a later allocation");
-    println!("    \u{2022} Submit fresh allocations sized for these runtimes");
+    eprintln!("    \u{2022} Add checkpointing so jobs can resume in a later allocation");
+    eprintln!("    \u{2022} Submit fresh allocations sized for these runtimes");
 }
 
 /// Format a duration in seconds as a compact human string, e.g. "3d 1h", "45m".

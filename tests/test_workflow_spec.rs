@@ -1403,6 +1403,7 @@ fn test_json_field_name_compatibility() {
         failure_handler: None,
         stdio: None,
         priority: None,
+        label: None,
     };
 
     let json = serde_json::to_value(&job).expect("Failed to serialize to JSON value");
@@ -1571,6 +1572,7 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
         None,       // origin_is_set
         None,       // name
         None,       // command
+        None,       // label
     )
     .expect("Failed to list jobs");
 
@@ -1667,6 +1669,7 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
         None,       // origin_is_set
         None,       // name
         None,       // command
+        None,       // label
     )
     .expect("Failed to list jobs");
 
@@ -1756,6 +1759,7 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
         None,       // origin_is_set
         None,       // name
         None,       // command
+        None,       // label
     )
     .expect("Failed to list jobs");
 
@@ -1848,6 +1852,7 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
         None,       // origin_is_set
         None,       // name
         None,       // command
+        None,       // label
     )
     .expect("Failed to list jobs");
 
@@ -2540,6 +2545,94 @@ fn test_scheduler_node_validation_passes_with_single_node_scheduler(start_server
 // Tests for validate_spec (dry-run functionality)
 // =============================================================================
 
+/// A pattern that matches nothing is rejected when the workflow is created, so
+/// `--dry-run` must report it too instead of PASSED. Regression: validation only checked
+/// that these patterns compiled, so a spec `torc create` refuses passed the dry run.
+#[test]
+fn test_validate_spec_rejects_unmatched_regexes() {
+    let workflow_data = serde_json::json!({
+        "name": "unmatched_regexes",
+        "files": [{"name": "out_1", "path": "out_1.csv"}],
+        "user_data": [{"name": "table_1", "data": {}}],
+        "jobs": [
+            {"name": "producer", "command": "produce.sh", "output_files": ["out_1"]},
+            {
+                "name": "consumer",
+                "command": "aggregate.sh",
+                "input_file_regexes": ["^nomatch_\\d+$"],
+                "output_file_regexes": ["^also_nomatch_\\d+$"],
+                "input_user_data_regexes": ["^nomatch_table_\\d+$"],
+                "output_user_data_regexes": ["^nomatch_out_table_\\d+$"]
+            }
+        ]
+    });
+
+    let temp_file = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        serde_json::to_string_pretty(&workflow_data).unwrap(),
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+
+    assert!(!result.valid, "Expected validation to fail");
+    for expected in [
+        "Input file regex '^nomatch_\\d+$' did not match any names for job 'consumer'",
+        "Output file regex '^also_nomatch_\\d+$' did not match any names for job 'consumer'",
+        "Input user data regex '^nomatch_table_\\d+$' did not match any names for job 'consumer'",
+        "Output user data regex '^nomatch_out_table_\\d+$' did not match any names for job 'consumer'",
+    ] {
+        assert!(
+            result.errors.iter().any(|e| e == expected),
+            "missing error {expected:?}, got {:?}",
+            result.errors
+        );
+    }
+}
+
+/// Patterns that do match stay valid -- the fan-in pattern the docs recommend.
+#[test]
+fn test_validate_spec_accepts_matched_regexes() {
+    let workflow_data = serde_json::json!({
+        "name": "matched_regexes",
+        "files": [
+            {"name": "out_1", "path": "out_1.csv"},
+            {"name": "summary", "path": "summary.json"}
+        ],
+        "jobs": [
+            {"name": "producer", "command": "produce.sh", "output_files": ["out_1"]},
+            {
+                "name": "consumer",
+                "command": "aggregate.sh",
+                "input_file_regexes": ["^out_\\d+$"],
+                "output_files": ["summary"]
+            }
+        ]
+    });
+
+    let temp_file = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        serde_json::to_string_pretty(&workflow_data).unwrap(),
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+
+    assert!(
+        result.valid,
+        "Expected validation to pass: {:?}",
+        result.errors
+    );
+}
+
 /// Test that validate_spec returns correct summary for a simple workflow
 #[test]
 fn test_validate_spec_basic_workflow() {
@@ -2650,6 +2743,32 @@ fn test_parameters_file_csv_expands_jobs() {
     assert_eq!(spec.jobs.len(), 2, "Expected one job per CSV row");
     assert!(names.contains(&"train_resnet_bs32"));
     assert!(names.contains(&"train_vit_bs16"));
+}
+
+/// `label` takes parameter substitution like `name` and `command`; a literal `{os}` label
+/// would match no runner and strand every expanded job.
+#[test]
+fn test_job_label_parameter_substitution() {
+    let workflow_data = serde_json::json!({
+        "name": "label_param_test",
+        "user": "test_user",
+        "jobs": [
+            {
+                "name": "build_{os}",
+                "command": "echo {os}",
+                "label": "{os}",
+                "parameters": {"os": ["windows", "linux"]},
+            }
+        ]
+    });
+
+    let mut spec =
+        WorkflowSpec::from_json_value(workflow_data).expect("Failed to parse spec from value");
+    spec.expand_parameters().expect("expand_parameters failed");
+
+    let mut labels: Vec<_> = spec.jobs.iter().map(|j| j.label.as_deref()).collect();
+    labels.sort();
+    assert_eq!(labels, [Some("linux"), Some("windows")]);
 }
 
 /// A job with `parameters_file` pointing at a JSON array expands to one job per object,
@@ -2955,6 +3074,31 @@ fn test_validate_spec_with_scheduler_error() {
     assert!(
         error_text.contains("nodes"),
         "Expected error about nodes, got: {}",
+        error_text
+    );
+}
+
+/// Test that validate_spec (create --dry-run) rejects torc-managed keys in slurm_defaults,
+/// matching what workflow creation enforces
+#[test]
+fn test_validate_spec_rejects_managed_slurm_defaults() {
+    let temp_file = tempfile::Builder::new()
+        .suffix(".yaml")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(
+        temp_file.path(),
+        "name: w\njobs:\n  - name: a\n    command: echo a\nslurm_defaults:\n  qos: high\n  partition: debug\n",
+    )
+    .expect("Failed to write temp file");
+
+    let result = WorkflowSpec::validate_spec(temp_file.path());
+
+    assert!(!result.valid, "Expected validation to fail");
+    let error_text = result.errors.join(" ");
+    assert!(
+        error_text.contains("partition"),
+        "Expected error about partition, got: {}",
         error_text
     );
 }
@@ -3975,6 +4119,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
             None, // origin_is_set
             None, // name
             None, // command
+            None, // label
         )
         .expect("Failed to list jobs");
 
@@ -4136,6 +4281,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,       // origin_is_set
         None,       // name
         None,       // command
+        None,       // label
     )
     .expect("Failed to list jobs")
     .items;
@@ -4306,6 +4452,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,       // origin_is_set
         None,       // name
         None,       // command
+        None,       // label
     )
     .expect("Failed to list jobs")
     .items;
@@ -4427,6 +4574,46 @@ fn test_slurm_scheduler_serialize_allocations_kdl_roundtrip() {
     assert_eq!(schedulers[0].serialize_allocations, Some(true));
     // An omitted value stays omitted rather than round-tripping to Some(false).
     assert_eq!(schedulers[1].serialize_allocations, None);
+}
+
+/// A job `label` survives the YAML -> KDL -> spec round trip; the KDL reader and writer
+/// each list job fields by hand, so an omission would silently drop it.
+#[test]
+fn test_job_label_kdl_roundtrip() {
+    let yaml = r#"
+        name: label_roundtrip_test
+        user: test_user
+        jobs:
+          - name: plain
+            command: "echo plain"
+          - name: labeled
+            command: "echo labeled"
+            label: windows
+    "#;
+    let spec: WorkflowSpec = serde_yaml::from_str(yaml).unwrap();
+
+    let kdl_str = spec.to_kdl_str();
+    let roundtripped =
+        WorkflowSpec::from_spec_file_content(&kdl_str, "kdl").expect("Failed to parse KDL");
+
+    assert_eq!(roundtripped.jobs[0].label, None);
+    assert_eq!(roundtripped.jobs[1].label.as_deref(), Some("windows"));
+}
+
+/// A non-string KDL `label` is an error; dropping it would create the job unlabeled and
+/// let ordinary runners claim it.
+#[test]
+fn test_job_label_kdl_rejects_non_string() {
+    let kdl = r#"
+        name "label_bad"
+        user "test_user"
+        job "labeled" {
+            command "echo labeled"
+            label 1
+        }
+    "#;
+    let err = WorkflowSpec::from_spec_file_content(kdl, "kdl").expect_err("label 1 must fail");
+    assert!(err.to_string().contains("label"), "{}", err);
 }
 
 /// The shipped chained-allocations example (referenced from the docs) parses and

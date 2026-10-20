@@ -1084,7 +1084,7 @@ impl WorkflowManager {
                     if dry_run {
                         // If dry run is true, just log the change
                         info!(
-                            "Dry run: Would reset job_id={} name='{}' from status={:?} to Uninitialized due to file change in '{}' file_id={}",
+                            "Dry run: Would reset job_id={} name='{}' from status={} to uninitialized due to file change in '{}' file_id={}",
                             job_id, job.name, job_status, file.name, file_id
                         );
 
@@ -1109,8 +1109,13 @@ impl WorkflowManager {
                             };
 
                             info!(
-                                "Dry run: Would reset downstream job_id={} name='{}' status={:?} to Uninitialized",
-                                downstream_job_id, downstream_job.name, downstream_job.status
+                                "Dry run: Would reset downstream job_id={} name='{}' status={} to uninitialized",
+                                downstream_job_id,
+                                downstream_job.name,
+                                downstream_job
+                                    .status
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_default()
                             );
                         }
                     } else {
@@ -1122,7 +1127,7 @@ impl WorkflowManager {
                         ) {
                             Ok(_) => {
                                 info!(
-                                    "Reset job_id={} name='{}' from status={:?} to Uninitialized due to file change in '{}' file_id={}",
+                                    "Reset job_id={} name='{}' from status={} to uninitialized due to file change in '{}' file_id={}",
                                     job_id, job.name, job_status, file.name, file_id
                                 );
                             }
@@ -1138,7 +1143,7 @@ impl WorkflowManager {
                 _ => {
                     // Job is not Completed, Failed, or Canceled, no action needed
                     debug!(
-                        "job_id={} name='{}' has status={:?}, no reset needed for file change in '{}' file_id={}",
+                        "job_id={} name='{}' has status={}, no reset needed for file change in '{}' file_id={}",
                         job_id, job.name, job_status, file.name, file_id
                     );
                 }
@@ -1219,8 +1224,13 @@ impl WorkflowManager {
                         };
 
                         info!(
-                            "Dry run: Would reset downstream job {} (name: '{}' status: {:?}) to Uninitialized",
-                            downstream_job_id, downstream_job.name, downstream_job.status
+                            "Dry run: Would reset downstream job {} (name: '{}' status: {}) to uninitialized",
+                            downstream_job_id,
+                            downstream_job.name,
+                            downstream_job
+                                .status
+                                .map(|s| s.to_string())
+                                .unwrap_or_default()
                         );
                     }
                 } else {

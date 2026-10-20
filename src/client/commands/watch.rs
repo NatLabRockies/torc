@@ -1,7 +1,7 @@
 //! Watch command for monitoring workflows with automatic failure recovery
 
 use env_logger::Builder;
-use log::{LevelFilter, debug, error, info, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -61,20 +61,20 @@ use crate::client::log_paths::get_watch_log_file;
 
 // Note: ORPHANED_JOB_RETURN_CODE is now imported from orphan_detection module
 
-/// A writer that writes to both stdout and a file
+/// A writer that writes to both stderr and a file
 struct MultiWriter {
-    stdout: std::io::Stdout,
+    stderr: std::io::Stderr,
     file: File,
 }
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.stdout.write_all(buf)?;
+        self.stderr.write_all(buf)?;
         self.file.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.stdout.flush()?;
+        self.stderr.flush()?;
         self.file.flush()
     }
 }
@@ -108,6 +108,8 @@ pub struct WatchArgs {
     pub partition: Option<String>,
     /// Fixed Slurm walltime for regenerated schedulers (bypasses auto-calculation)
     pub walltime: Option<String>,
+    /// Keep watching until the workflow completes, even with no Slurm allocations
+    pub persistent: bool,
 }
 
 /// Get job counts by status for a workflow.
@@ -151,6 +153,9 @@ fn get_job_counts(
 /// the watch loop pays the cost of two tiny HTTP responses instead of
 /// downloading every ready job on every poll.
 ///
+/// Labeled jobs are left out: only runners started with a matching `--label`
+/// claim them, never the Slurm runners this count is used to schedule.
+///
 /// Returns `(total_ready, unplanned_ready)`.
 fn count_ready_unplanned_jobs(
     config: &Configuration,
@@ -171,8 +176,9 @@ fn count_ready_unplanned_jobs(
         None,
         None,
         None,
-        None, // name
-        None, // command
+        None,     // name
+        None,     // command
+        Some(""), // label: unlabeled jobs only
     )
     .map_err(|e| format!("Failed to count ready jobs: {}", e))?
     .total_count;
@@ -190,8 +196,9 @@ fn count_ready_unplanned_jobs(
         None,
         None,
         Some(true),
-        None, // name
-        None, // command
+        None,     // name
+        None,     // command
+        Some(""), // label: unlabeled jobs only
     )
     .map_err(|e| format!("Failed to count unplanned ready jobs: {}", e))?
     .total_count;
@@ -390,6 +397,7 @@ fn poll_until_complete(
     poll_interval: u64,
     show_job_counts: bool,
     auto_schedule: &AutoScheduleOptions,
+    persistent: bool,
 ) -> Result<HashMap<String, i64>, String> {
     use std::time::Instant;
 
@@ -400,6 +408,8 @@ fn poll_until_complete(
     // runs after multiple consecutive misses to avoid racing with Slurm jobs that
     // are just starting up (squeue may not reflect the new job immediately).
     let mut consecutive_no_allocation: u32 = 0;
+    // Last stall warning logged by a persistent watch, so it is not repeated every poll.
+    let mut last_stall_warning = String::new();
     const ORPHAN_DETECTION_THRESHOLD: u32 = 3;
 
     loop {
@@ -614,19 +624,50 @@ fn poll_until_complete(
                                 }
                                 Err(e) => {
                                     warn!("Auto-schedule failed: {}", e);
-                                    warn!(
-                                        "Workflow cannot make progress without active allocations"
-                                    );
-                                    break;
+                                    if !persistent {
+                                        warn!(
+                                            "Workflow cannot make progress without active allocations"
+                                        );
+                                        break;
+                                    }
                                 }
                             }
                         } else {
-                            warn!("No pending or active scheduled compute nodes found");
-                            warn!(
-                                "{} ready jobs with no schedulers. Use --auto-schedule to regenerate.",
-                                total_ready
-                            );
-                            break;
+                            if last_stall_warning != "no schedulers" {
+                                warn!("No pending or active scheduled compute nodes found");
+                                warn!(
+                                    "{} ready jobs with no schedulers. Use --auto-schedule to regenerate.",
+                                    total_ready
+                                );
+                                last_stall_warning = "no schedulers".to_string();
+                            }
+                            if !persistent {
+                                break;
+                            }
+                        }
+                    } else if persistent {
+                        // Runners outside Slurm (e.g. a labeled runner on a dedicated
+                        // machine) may still be working; keep watching.
+                        debug!(
+                            "No Slurm allocations and no ready jobs for them; waiting for the workflow to complete"
+                        );
+                        // Ready labeled jobs that no active runner serves wait forever;
+                        // say so, once per change.
+                        let warning = apis::workflows_api::get_workflow_status(config, workflow_id)
+                            .map(|status| {
+                                status
+                                    .unserved_ready_labels
+                                    .iter()
+                                    .map(|(label, count)| {
+                                        crate::models::unserved_label_warning(count, label)
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            })
+                            .unwrap_or_default();
+                        if !warning.is_empty() && warning != last_stall_warning {
+                            warn!("{}", warning);
+                            last_stall_warning = warning;
                         }
                     } else {
                         // No ready jobs and no schedulers - workflow is stuck
@@ -637,8 +678,10 @@ fn poll_until_complete(
                 }
                 Err(e) => {
                     warn!("Failed to count ready jobs: {}", e);
-                    warn!("No pending or active scheduled compute nodes found");
-                    break;
+                    if !persistent {
+                        warn!("No pending or active scheduled compute nodes found");
+                        break;
+                    }
                 }
             }
         }
@@ -676,30 +719,15 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
     };
 
     let multi_writer = MultiWriter {
-        stdout: std::io::stdout(),
+        stderr: std::io::stderr(),
         file: log_file,
     };
 
-    // Parse log level string to LevelFilter
-    let log_level_filter = match args.log_level.to_lowercase().as_str() {
-        "error" => LevelFilter::Error,
-        "warn" => LevelFilter::Warn,
-        "info" => LevelFilter::Info,
-        "debug" => LevelFilter::Debug,
-        "trace" => LevelFilter::Trace,
-        _ => {
-            eprintln!(
-                "Invalid log level '{}', defaulting to 'info'",
-                args.log_level
-            );
-            LevelFilter::Info
-        }
-    };
-
-    let mut builder = Builder::from_default_env();
+    // Accept a bare level ("debug") or module filters ("torc=debug"), like other commands.
+    let mut builder = Builder::new();
     builder
         .target(env_logger::Target::Pipe(Box::new(multi_writer)))
-        .filter_level(log_level_filter)
+        .parse_filters(&args.log_level)
         .try_init()
         .ok(); // Ignore error if logger is already initialized
 
@@ -716,7 +744,8 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
     // Early check: verify this workflow has scheduled compute nodes
     // The watch command is designed for Slurm/scheduler-based workflows.
     // For workflows run with `torc run` or `torc remote run`, use those commands directly.
-    if !has_any_scheduled_compute_nodes(config, args.workflow_id) {
+    // With --persistent the user expects runners outside Slurm, so skip the check.
+    if !args.persistent && !has_any_scheduled_compute_nodes(config, args.workflow_id) {
         error!(
             "No scheduled compute nodes found for workflow {}.",
             args.workflow_id
@@ -787,6 +816,7 @@ pub fn run_watch(config: &Configuration, args: &WatchArgs) {
             args.poll_interval,
             args.show_job_counts,
             &auto_schedule_opts,
+            args.persistent,
         ) {
             Ok(c) => c,
             Err(e) => {

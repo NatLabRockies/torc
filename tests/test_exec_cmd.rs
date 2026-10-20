@@ -18,10 +18,10 @@ use common::{
     ensure_test_binaries_built, run_torc_standalone, run_torc_standalone_ok, torc_binary_path,
 };
 
-/// Pull the workflow id out of `Created workflow N` (plain-text stdout).
+/// Pull the workflow id out of `Created workflow N` (plain-text stderr).
 /// Returns None if the line is missing; callers decide whether that's a test failure.
-fn extract_workflow_id(stdout: &str) -> Option<i64> {
-    for line in stdout.lines() {
+fn extract_workflow_id(output: &str) -> Option<i64> {
+    for line in output.lines() {
         if let Some(rest) = line.strip_prefix("Created workflow ")
             && let Ok(id) = rest.trim().parse::<i64>()
         {
@@ -62,9 +62,9 @@ fn exec_single_command_creates_one_job_workflow() {
     let db = work.path().join("torc.db");
 
     let out = run_torc_standalone_ok(work.path(), &db, &["exec", "-c", "echo one"]);
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let wf_id = extract_workflow_id(&stdout)
-        .unwrap_or_else(|| panic!("no workflow id in stdout:\n{}", stdout));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let wf_id = extract_workflow_id(&stderr)
+        .unwrap_or_else(|| panic!("no workflow id in stderr:\n{}", stderr));
 
     // Inspect the jobs with a follow-up query to the same DB.
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
@@ -110,7 +110,7 @@ fn exec_multiple_commands_creates_one_job_each() {
         ],
     );
     let wf_id =
-        extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("workflow id in stdout");
+        extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("workflow id in stderr");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs
@@ -139,7 +139,7 @@ fn exec_shell_style_invocation_creates_one_command() {
         &["exec", "--monitor", "off", "--", "echo", "two words"],
     );
     let wf_id =
-        extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("workflow id in stdout");
+        extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("workflow id in stderr");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs
@@ -175,7 +175,7 @@ echo third
         &db,
         &["exec", "-C", cmds_file.to_str().unwrap()],
     );
-    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
+    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
@@ -221,7 +221,7 @@ fn exec_param_product_creates_cartesian_jobs() {
             "2",
         ],
     );
-    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
+    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
@@ -262,7 +262,7 @@ fn exec_param_zip_creates_elementwise_jobs() {
             "zip",
         ],
     );
-    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
+    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
@@ -294,7 +294,7 @@ fn exec_param_integer_range() {
         &db,
         &["exec", "-c", "echo {i}", "--param", "i=1:5"],
     );
-    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
+    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("id");
 
     let jobs = query_json(work.path(), &db, &["jobs", "list", &wf_id.to_string()]);
     let items = jobs.get("items").and_then(|v| v.as_array()).unwrap();
@@ -330,7 +330,7 @@ fn exec_name_and_description_persist_on_workflow() {
             "echo named",
         ],
     );
-    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
+    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("id");
 
     let wf = query_json(work.path(), &db, &["workflows", "get", &wf_id.to_string()]);
     assert_eq!(wf["name"], "my-sweep", "workflow name; full: {}", wf);
@@ -349,7 +349,7 @@ fn exec_default_workflow_name_has_exec_prefix() {
     let db = work.path().join("torc.db");
 
     let out = run_torc_standalone_ok(work.path(), &db, &["exec", "-c", "echo default-name"]);
-    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stdout)).expect("id");
+    let wf_id = extract_workflow_id(&String::from_utf8_lossy(&out.stderr)).expect("id");
 
     let wf = query_json(work.path(), &db, &["workflows", "get", &wf_id.to_string()]);
     let name = wf["name"].as_str().expect("name");

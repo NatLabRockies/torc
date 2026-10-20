@@ -21,6 +21,7 @@ fn max_request_body_bytes() -> u64 {
     })
 }
 
+#[allow(clippy::result_large_err)]
 async fn read_body_bytes_limited<B>(request: Request<B>) -> Result<Bytes, Response<Body>>
 where
     B: HttpBody + Send + 'static,
@@ -72,6 +73,7 @@ where
     Ok(buffer.into())
 }
 
+#[allow(clippy::result_large_err)]
 pub(super) async fn read_required_json_body<B, T>(request: Request<B>) -> Result<T, Response<Body>>
 where
     B: HttpBody + Send + 'static,
@@ -92,6 +94,7 @@ where
         .map_err(|err| error_response(StatusCode::BAD_REQUEST, err.to_string()))
 }
 
+#[allow(clippy::result_large_err)]
 pub(super) async fn read_optional_json_value<B>(
     request: Request<B>,
 ) -> Result<Option<serde_json::Value>, Response<Body>>

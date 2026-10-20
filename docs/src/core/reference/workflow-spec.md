@@ -117,6 +117,7 @@ Defines a single computational task within a workflow.
 | `name`                           | string                      | _required_  | Name of the job                                                        |
 | `command`                        | string                      | _required_  | Command to execute for this job                                        |
 | `priority`                       | integer                     | `0`         | Scheduling priority; higher values are claimed before lower values     |
+| `label`                          | string                      | none        | Routing label; only runners started with the same `--label` claim it   |
 | `invocation_script`              | string                      | none        | Optional script for job invocation                                     |
 | `env`                            | map\<string, string\>       | none        | Environment variables exported for this job                            |
 | `resource_requirements`          | string                      | none        | Name of a [ResourceRequirementsSpec](#resourcerequirementsspec) to use |

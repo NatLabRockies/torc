@@ -123,17 +123,17 @@ impl<C> Server<C> {
                                     .unwrap_or(models::JobStatus::Failed);
                                 if status.is_complete() {
                                     debug!(
-                                        "job_id={} already in terminal status={:?}, treating as idempotent success",
+                                        "job_id={} already in terminal status={}, treating as idempotent success",
                                         job_id, status
                                     );
                                     return Ok(());
                                 }
                                 error!(
-                                    "job_id={} has unexpected status={:?} after conditional update matched 0 rows",
+                                    "job_id={} has unexpected status={} after conditional update matched 0 rows",
                                     job_id, status
                                 );
                                 return Err(ApiError(format!(
-                                    "job_id={} is in unexpected status={:?}",
+                                    "job_id={} is in unexpected status={}",
                                     job_id, status
                                 )));
                             }

@@ -185,19 +185,19 @@ Settings for `torc-server`.
 
 ### `[server]` Section
 
-| Option                           | Type         | Default     | Description                                             |
-| -------------------------------- | ------------ | ----------- | ------------------------------------------------------- |
-| `log_level`                      | string       | `info`      | Log level                                               |
-| `https`                          | bool         | `false`     | Enable HTTPS                                            |
-| `url`                            | string       | `localhost` | Hostname/IP to bind to                                  |
-| `port`                           | int          | `8080`      | Port to listen on                                       |
-| `threads`                        | int          | `1`         | Number of worker threads                                |
-| `database`                       | string       | (none)      | SQLite database path (falls back to `DATABASE_URL` env) |
-| `auth_file`                      | string       | (none)      | Path to htpasswd file                                   |
-| `require_auth`                   | bool         | `false`     | Require authentication for all requests                 |
-| `enforce_access_control`         | bool         | `false`     | Enforce access control based on workflow ownership      |
-| `admin_users`                    | string array | `[]`        | Users to add to the admin group                         |
-| `completion_check_interval_secs` | float        | `30.0`      | Background job processing interval                      |
+| Option                           | Type         | Default   | Description                                             |
+| -------------------------------- | ------------ | --------- | ------------------------------------------------------- |
+| `log_level`                      | string       | `info`    | Log level                                               |
+| `https`                          | bool         | `false`   | Enable HTTPS                                            |
+| `host`                           | string       | `0.0.0.0` | Hostname/IP to bind to (`url` is accepted as an alias)  |
+| `port`                           | int          | `8080`    | Port to listen on                                       |
+| `threads`                        | int          | `1`       | Number of worker threads                                |
+| `database`                       | string       | (none)    | SQLite database path (falls back to `DATABASE_URL` env) |
+| `auth_file`                      | string       | (none)    | Path to htpasswd file                                   |
+| `require_auth`                   | bool         | `false`   | Require authentication for all requests                 |
+| `enforce_access_control`         | bool         | `false`   | Enforce access control based on workflow ownership      |
+| `admin_users`                    | string array | `[]`      | Users to add to the admin group                         |
+| `completion_check_interval_secs` | float        | `30.0`    | Background job processing interval                      |
 
 ### `[server.logging]` Section
 
@@ -210,7 +210,7 @@ Settings for `torc-server`.
 
 ```toml
 [server]
-url = "0.0.0.0"
+host = "0.0.0.0"
 port = 8080
 threads = 4
 database = "/var/lib/torc/torc.db"
@@ -242,6 +242,7 @@ Settings for `torc-dash`.
 | `torc_server_bin`                | string | `torc-server`                           | Path to torc-server binary                  |
 | `standalone`                     | bool   | `false`                                 | Auto-start torc-server                      |
 | `server_port`                    | int    | `0`                                     | Server port for standalone mode (0 = auto)  |
+| `server_host`                    | string | `0.0.0.0`                               | Server bind address for standalone mode     |
 | `database`                       | string | (none)                                  | Database path for standalone mode           |
 | `completion_check_interval_secs` | int    | `5`                                     | Completion check interval (standalone mode) |
 

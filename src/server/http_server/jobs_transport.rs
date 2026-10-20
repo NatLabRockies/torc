@@ -123,6 +123,9 @@ fn validate_spawn_request_shape(jobs: &[models::SpawnJobModel]) -> Result<(), Sp
                 job.name, p
             )));
         }
+        if let Err(err) = models::validate_label(job.label.as_deref()) {
+            return Err(reject(format!("spawn job '{}': {}", job.name, err)));
+        }
     }
     Ok(())
 }
@@ -331,8 +334,8 @@ async fn insert_spawned_job_rows(
             INSERT INTO job
             (workflow_id, name, command, cancel_on_blocking_job_failure,
              supports_termination, resource_requirements_id, status, priority, env,
-             origin)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'spawn')
+             label, origin)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'spawn')
             RETURNING id
             "#,
         )
@@ -345,6 +348,7 @@ async fn insert_spawned_job_rows(
         .bind(blocked_int)
         .bind(job.priority.unwrap_or(0))
         .bind(&lineage_env)
+        .bind(&job.label)
         .fetch_one(&mut **tx)
         .await
         .map_err(|e| db_error(e, "Failed to insert spawned job"))?
@@ -712,6 +716,7 @@ struct BackfillClaimParams {
     time_limit_seconds: i64,
     scheduler_config_id: Option<i64>,
     use_scheduler_filter: bool,
+    label: Option<String>,
     claim_limit: usize,
 }
 
@@ -770,6 +775,7 @@ fn claim_candidate_row(
         attempt_id: row.get("attempt_id"),
         priority: Some(row.get("priority")),
         origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
+        label: row.try_get::<Option<String>, _>("label").ok().flatten(),
     });
 
     Ok(true)
@@ -808,6 +814,7 @@ async fn claim_backfill_jobs(
             job.attempt_id,
             job.priority,
             job.origin,
+            job.label,
             rr.id AS resource_requirements_id,
             rr.memory_bytes,
             rr.num_cpus,
@@ -838,7 +845,9 @@ async fn claim_backfill_jobs(
         .push(" AND rr.num_nodes <= ")
         .push_bind(remaining.nodes)
         .push(" AND rr.runtime_s <= ")
-        .push_bind(params.time_limit_seconds);
+        .push_bind(params.time_limit_seconds)
+        .push(" AND job.label IS ")
+        .push_bind(params.label.as_deref());
 
     if params.use_scheduler_filter {
         builder
@@ -1070,6 +1079,7 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -1095,6 +1105,7 @@ where
                 origin_is_set,
                 name,
                 command,
+                label,
                 context,
             )
             .await
@@ -1132,15 +1143,29 @@ where
         &self,
         id: i64,
         limit: Option<i64>,
+        label: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        log_call!(debug, context, "claim_next_jobs({}, {:?})", id, limit);
+        log_call!(
+            debug,
+            context,
+            "claim_next_jobs({}, {:?}, label={:?})",
+            id,
+            limit,
+            label
+        );
 
         authorize_workflow!(self, id, context, ClaimNextJobsResponse);
 
+        if let Err(err) = models::validate_label(label.as_deref()) {
+            return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(err),
+            ));
+        }
+
         let requested_limit = limit.unwrap_or(10);
         self.jobs_api
-            .claim_next_jobs(id, requested_limit, context)
+            .claim_next_jobs(id, requested_limit, label, context)
             .await
     }
 
@@ -1247,7 +1272,7 @@ where
         log_call!(
             debug,
             context,
-            "manage_status_change({}, {:?}, {})",
+            "manage_status_change({}, {}, {})",
             id,
             status,
             run_id,
@@ -1410,11 +1435,11 @@ where
             }
             Some(status) => {
                 error!(
-                    "start_job: Invalid job status for job_id={}. Expected SubmittedPending, got {:?}",
+                    "start_job: Invalid job status for job_id={}. Expected SubmittedPending, got {}",
                     id, status
                 );
                 return Err(ApiError(format!(
-                    "job_id={} has invalid status={:?}. Expected SubmittedPending for job start.",
+                    "job_id={} has invalid status={}. Expected SubmittedPending for job start.",
                     id, status
                 )));
             }
@@ -1493,7 +1518,7 @@ where
         log_call!(
             debug,
             context,
-            "complete_job({}, {:?}, {}, {:?})",
+            "complete_job({}, {}, {}, {:?})",
             id,
             status,
             run_id,
@@ -1564,13 +1589,13 @@ where
             && current_status.is_complete()
         {
             error!(
-                "job_id={} is already complete with status={:?}",
+                "job_id={} is already complete with status={}",
                 id, current_status
             );
             return Err(CompletionMutationError::Response(Box::new(
                 CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
                     format!(
-                        "job_id={} is already complete with status={:?}",
+                        "job_id={} is already complete with status={}",
                         id, current_status
                     ),
                 )),
@@ -1761,7 +1786,7 @@ where
             return Err(CompletionMutationError::Response(Box::new(
                 CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
                     format!(
-                        "job_id={} is already complete with status={:?}",
+                        "job_id={} is already complete with status={}",
                         id, current_status
                     ),
                 )),
@@ -1932,14 +1957,14 @@ where
                         return Err(CompletionMutationError::Response(Box::new(
                             CompleteJobResponse::UnprocessableContentErrorResponse(
                                 message_error_response(format!(
-                                    "job_id={} is already complete with status={:?}",
+                                    "job_id={} is already complete with status={}",
                                     id, current_status
                                 )),
                             ),
                         )));
                     }
                     return Err(CompletionMutationError::Transport(ApiError(format!(
-                        "job_id={} is in unexpected status={:?}",
+                        "job_id={} is in unexpected status={}",
                         id, current_status
                     ))));
                 }
@@ -1981,6 +2006,7 @@ where
             attempt_id: None,
             priority: None,
             origin: None,
+            label: None,
         };
 
         Ok(CompletedJobRecord {
@@ -2528,6 +2554,7 @@ where
             AND rr.num_gpus <= $5
             AND rr.num_nodes <= $6
             AND rr.runtime_s <= $7
+            AND job.label IS $8
             LIMIT 1
             "#,
         )
@@ -2538,6 +2565,7 @@ where
         .bind(resources.num_gpus)
         .bind(resources.num_nodes)
         .bind(time_limit_seconds)
+        .bind(resources.label.as_deref())
         .fetch_optional(&mut *conn)
         .await
         .map_err(|e| {
@@ -2576,6 +2604,8 @@ where
                 job.failure_handler_id,
                 job.attempt_id,
                 job.priority,
+                job.origin,
+                job.label,
                 rr.id AS resource_requirements_id,
                 rr.memory_bytes,
                 rr.num_cpus,
@@ -2592,8 +2622,9 @@ where
             AND rr.num_nodes <= $6
             AND rr.runtime_s <= $7
             AND (job.scheduler_id IS NULL OR job.scheduler_id = $8)
+            AND job.label IS $9
             {}
-            LIMIT $9
+            LIMIT $10
             "#,
             RESOURCE_CLAIM_ORDER_BY
         );
@@ -2608,6 +2639,7 @@ where
             .bind(resources.num_nodes)
             .bind(time_limit_seconds)
             .bind(resources.scheduler_config_id)
+            .bind(resources.label.as_deref())
             .bind(limit)
             .fetch_all(&mut *conn)
             .await
@@ -2636,6 +2668,8 @@ where
                     job.failure_handler_id,
                     job.attempt_id,
                     job.priority,
+                    job.origin,
+                    job.label,
                     rr.id AS resource_requirements_id,
                     rr.memory_bytes,
                     rr.num_cpus,
@@ -2651,8 +2685,9 @@ where
                 AND rr.num_gpus <= $5
                 AND rr.num_nodes <= $6
                 AND rr.runtime_s <= $7
+                AND job.label IS $8
                 {}
-                LIMIT $8
+                LIMIT $9
                 "#,
                 RESOURCE_CLAIM_ORDER_BY
             );
@@ -2665,6 +2700,7 @@ where
                 .bind(resources.num_gpus)
                 .bind(resources.num_nodes)
                 .bind(time_limit_seconds)
+                .bind(resources.label.as_deref())
                 .bind(limit)
                 .fetch_all(&mut *conn)
                 .await
@@ -2728,6 +2764,7 @@ where
             time_limit_seconds,
             scheduler_config_id: resources.scheduler_config_id,
             use_scheduler_filter: used_scheduler_filter,
+            label: resources.label.clone(),
             claim_limit,
         };
         if let Err(e) = claim_backfill_jobs(
