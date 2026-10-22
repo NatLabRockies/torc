@@ -1,0 +1,40 @@
+// Render: dot -Tpng -Gdpi=180 architecture-lifecycle.dot -o architecture-lifecycle.png
+digraph Torc {
+    graph [rankdir=TB, bgcolor="white", pad=0.15, nodesep=0.45, ranksep=0.55,
+           fontname="Helvetica", fontsize=18];
+    node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=18,
+          margin="0.2,0.15", color="#0369a1", fillcolor="#e0f2fe", penwidth=1.6];
+    edge [fontname="Helvetica", fontsize=15, color="#475569", arrowsize=0.8];
+
+    subgraph cluster_campaign {
+        label="A SCIENTIFIC CAMPAIGN";
+        color="#94a3b8";
+        style=rounded;
+        margin=18;
+        { rank=same;
+          prepare [label="Prepare inputs"];
+          simulate [label="Run simulations\n(parameter sweep)"];
+          aggregate [label="Aggregate results"];
+        }
+        prepare -> simulate -> aggregate;
+    }
+
+    clients [label="RESEARCHER + CLIENTS\nDescribe, run, inspect, retry", width=5.5];
+    server [label="TORC SERVER + SQLITE\nDependencies and resource-aware claims\nRetained definitions, attempts, and results",
+            color="#1d4ed8", fillcolor="#dbeafe", width=5.5];
+
+    { rank=same;
+      local [label="LOCAL / REMOTE WORKERS\nExecute commands", color="#15803d", fillcolor="#dcfce7"];
+      slurm [label="WORKERS IN SLURM ALLOCATIONS\nExecute commands or job steps",
+             color="#15803d", fillcolor="#dcfce7"];
+    }
+    files [label="EXTERNAL FILES\nInputs, outputs, and logs", shape=folder,
+           color="#b45309", fillcolor="#fef3c7"];
+
+    simulate -> clients [style=invis];
+    clients -> server [label="create / control", dir=both, xlabel="inspect history"];
+    server -> local [dir=back, label="claim jobs / report outcomes\n(HTTP requests)"];
+    server -> slurm [dir=back, label="claim jobs / report outcomes\n(HTTP requests)"];
+    local -> files [style=dashed, label="read / write", dir=both];
+    slurm -> files [style=dashed, label="read / write", dir=both];
+}

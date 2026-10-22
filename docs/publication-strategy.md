@@ -1,11 +1,71 @@
 # Torc Publication Strategy
 
+## JOSS Direction: October 2026
+
+The working draft now emphasizes local-first operation with optional shared history, rather than
+presenting a catalog of orchestration mechanisms. The narrative follows a scientific campaign:
+prepare inputs, run parameterized simulations, aggregate results, inspect outcomes, and selectively
+retry or revise work. SQLite and the server-worker split explain how this operating model supports
+both desktops and Slurm deployments without a separately administered database service.
+
+The author-provided selection summary supplies a concrete adoption rationale: approachable CLI use
+for analysts with limited programming experience, binary deployment, local execution, centralized
+history when needed, and HPC-compatible separation of server and workers. Snakemake was familiar and
+positively regarded, but judged less suitable for these users and their centralized history and
+audit requirements. Present this as the team's selection judgment, not a universal feature ranking
+or evidence that only Torc can execute external programs. Selection among existing tools is not
+itself a record of why Torc was originally developed; confirm that distinction before finalizing the
+build-versus-contribute explanation.
+
+The ExaEpi walltime benefit concerns reduced worker dispatch delay between calculations, not faster
+simulation execution. In the previous workflow, that delay could approach the duration of a short
+calculation. The Dane PCM calculations modeled a year of power-system operation; they did not run
+for a year. Keep these as application experience, without inventing speedup ratios or treating them
+as a comparative benchmark of the current implementation. Application version numbers are omitted
+from the narrative; preserve supporting deployment details where available.
+
+The manuscript uses the original `paper/architecture.png`, preferred for its additional detail. The
+reduced lifecycle alternative in `paper/architecture-lifecycle.dot` remains available for
+comparison.
+
+The existing diamond example is the reviewer entry point, with an isolated local-run walkthrough in
+`paper/README.md`. It demonstrates file-derived dependencies, fan-out/fan-in, local execution, and
+retained results without a new application or an HPC allocation. More advanced examples remain
+separate; the first run need not demonstrate every feature. The walkthrough still needs end-to-end
+verification: neither Torc binaries nor Cargo were available in the paper-editing environment.
+
+ExaEpi disclosure and citation permissions are uncertain. The Dane PCM work is expected to be
+referenceable, but may not have a research publication. Seek approved workflow records, reports, or
+other evidence of research use; do not invent a publication or disclose restricted material.
+Evidence for private workflows may be supplied to the editorial team through an agreed channel.
+
+The author list is believed current and is left unchanged. GPT-6 Astra Project assistance is
+identified in the draft, including formatting and citation-resolution checks; this is not a claim
+that human verification or a comprehensive technical and bibliographic review has been completed.
+
+Before submission:
+
+- Obtain a citable or reviewer-accessible selection record and application evidence, with permission
+  to disclose the deployment details and qualitative dispatch observation.
+- Identify the previous ExaEpi workflow and any available dispatch measurements; do not infer a
+  numerical speedup from the qualitative account.
+- Run the diamond walkthrough end to end and verify its recorded results and output assertions.
+- Obtain final author approval and confirm affiliations, ORCIDs, funding, sponsor involvement, and
+  acknowledgements.
+- Add citation metadata and archive the reviewed release; no archive DOI has been assigned here.
+- Complete the AI-use inventory for software, documentation, and manuscript work, then record
+  completed human verification rather than a future commitment.
+
+The earlier assessment below remains useful planning context, but its implementation risks and
+repository-readiness statements must be rechecked against the release selected for review. Full
+performance comparisons, fault-injection experiments, and scalability claims remain systems-paper
+work, not prerequisites imposed on this JOSS draft.
+
 ## Recommendation
 
 Use a two-paper publication strategy:
 
-1. Publish a software paper that establishes Torc as a citable, reusable research software
-   product.
+1. Publish a software paper that establishes Torc as a citable, reusable research software product.
 2. Publish a systems paper that makes and evaluates a narrower technical claim about HPC workflow
    execution.
 
@@ -79,22 +139,22 @@ Balsam, RADICAL-Pilot, Flux, and Airflow.
 
 The defensible novelty is in Torc's integrated design point and several specific mechanisms.
 
-| Candidate | Potential strength | Important qualification |
-| --- | --- | --- |
-| Transactional dynamic continuation spawning | Strong | Dynamic task generation is established, but Torc's lineage, iteration cap, replay, parent-edge, and atomic-state combination is specific. |
-| Atomic heterogeneous resource claiming | Moderate to strong | Combines multidimensional fit, priority ordering, remaining wall time, reservation, and residual backfill in one transaction. |
-| Adaptive resource recovery | Moderate to strong | Stronger than generic retries when monitoring, diagnosis, resource correction, graph reset, and new Slurm capacity are evaluated together. |
-| Offline result journaling | Moderate to strong | Workers drain running work during server loss and durably reconcile results afterward. |
-| Allocation-resident Slurm execution | Moderate | Pilot scheduling is established; Torc must show a utilization, scheduler-load, or deployment advantage. |
-| File and JSON artifact dependencies | Moderate | The combination is useful, but many systems already implement dataflow and incremental invalidation. |
-| SQLite control plane | Research question | Interesting if experiments define where a single-node, zero-service database is sufficient. |
-| OpenAPI, TUI, dashboard, and MCP | Low technical novelty | Valuable software and usability features, but not the center of a systems claim. |
+| Candidate                                   | Potential strength    | Important qualification                                                                                                                    |
+| ------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Transactional dynamic continuation spawning | Strong                | Dynamic task generation is established, but Torc's lineage, iteration cap, replay, parent-edge, and atomic-state combination is specific.  |
+| Atomic heterogeneous resource claiming      | Moderate to strong    | Combines multidimensional fit, priority ordering, remaining wall time, reservation, and residual backfill in one transaction.              |
+| Adaptive resource recovery                  | Moderate to strong    | Stronger than generic retries when monitoring, diagnosis, resource correction, graph reset, and new Slurm capacity are evaluated together. |
+| Offline result journaling                   | Moderate to strong    | Workers drain running work during server loss and durably reconcile results afterward.                                                     |
+| Allocation-resident Slurm execution         | Moderate              | Pilot scheduling is established; Torc must show a utilization, scheduler-load, or deployment advantage.                                    |
+| File and JSON artifact dependencies         | Moderate              | The combination is useful, but many systems already implement dataflow and incremental invalidation.                                       |
+| SQLite control plane                        | Research question     | Interesting if experiments define where a single-node, zero-service database is sufficient.                                                |
+| OpenAPI, TUI, dashboard, and MCP            | Low technical novelty | Valuable software and usability features, but not the center of a systems claim.                                                           |
 
 The strongest high-level thesis is:
 
 > Torc demonstrates that a compact, durable workflow control plane can coordinate adaptive,
-> heterogeneous scientific campaigns across local and Slurm resources by combining transactional
-> job claiming, allocation-resident execution, dynamic graph extension, and resource-aware recovery.
+> heterogeneous scientific campaigns across local and Slurm resources by combining transactional job
+> claiming, allocation-resident execution, dynamic graph extension, and resource-aware recovery.
 
 ## Paper 1: Software Paper
 

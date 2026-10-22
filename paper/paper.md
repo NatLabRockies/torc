@@ -33,164 +33,172 @@ bibliography: paper.bib
 
 # Summary
 
-Torc is an open-source workflow orchestration system for command-oriented computational pipelines.
-It supports workflows ranging from independent parameter sweeps to dependency-rich, multi-stage
-campaigns with heterogeneous CPU, memory, GPU, node-count, and runtime requirements. Researchers can
-describe workflows declaratively, run them locally, and execute the same workflow through workers
-inside Slurm allocations. A REST service and SQLite database maintain durable workflow state, while
-a unified command-line interface supports creation, execution, monitoring, diagnosis,
-resource-usage analysis, selective reruns, and recovery. Python and generated API clients provide
-programmatic access, while terminal
-and web interfaces support interactive operation. Torc is intended for computational scientists who
-need a practical path from workstation-scale experiments to persistent high-performance computing
-campaigns.
+Computational studies often require researchers to prepare inputs, run many simulations, and combine
+their results. These tasks may need different computing resources, and failed or changed
+calculations should not require restarting an entire study. Torc is an open-source workflow manager
+that coordinates these tasks and retains their execution history. Researchers describe existing
+programs and their dependencies in a workflow file, then run them on a local computer or a cluster
+managed by the Slurm scheduler. A command-line interface supports running, inspecting, and
+selectively repeating work, with graphical and programmatic interfaces for additional access. Torc
+supports local-first use as well as a persistent shared service, allowing teams to adopt centralized
+workflow history without administering a separate database service.
 
 # Statement of need
 
-Computational studies commonly begin with shell scripts, local process pools, or scheduler job
-arrays. These approaches can be sufficient for independent tasks, but scientific campaigns often
-grow to include dependencies, heterogeneous resource requirements, long execution histories, and
-failures that must be diagnosed and selectively rerun. Moving such a campaign to a high-performance
-computing system can force researchers to change how they describe work, manage state, submit jobs,
-inspect progress, and recover from failures.
+Scientific campaigns often begin with shell scripts or scheduler job arrays. These approaches can
+suffice for independent calculations, but managing dependencies, resource differences, failures, and
+execution records becomes harder as a study grows. Analysts also need to inspect outputs and trace
+how they were produced, without becoming developers of a distributed execution system.
 
-Torc addresses this transition with a common workflow and control model across local and Slurm
-execution. Workflow definitions describe commands, dependencies, files, user data, resource
-requirements, schedulers, and failure behavior. Torc persists this information and execution state
-behind an HTTP API. Workers claim ready jobs according to available resources, execute them as local
-processes or Slurm job steps, and return results and resource observations. This separation allows
-the same workflow to be inspected and operated through a command-line interface, Python client,
-terminal interface, web dashboard, or direct API calls.
+Consider a parameter study with input preparation, many independent simulations, and a final
+aggregation. Preparation and aggregation may use CPUs, while simulations require GPUs or larger
+memory allocations. A failed simulation should be diagnosed and retried without repeating successful
+ones; a changed input should invalidate the affected results rather than the entire campaign.
+Researchers need to manage this lifecycle on a desktop and retain the same workflow model when
+larger runs require high-performance computing (HPC).
 
-The compact control plane is important to Torc's intended use. Its server uses SQLite and does not
-require researchers to administer a separate database service for core workflow state. Torc is not
-intended to replace every workflow language, distributed runtime, or high-performance computing
-scheduler. It targets command-oriented scientific campaigns that benefit from durable coordination,
-resource-aware execution, and a consistent path between workstations and Slurm clusters.
+Torc targets this combination of approachable operation, inspectable history, and resource-aware
+execution. Its intended users include analysts with limited programming experience who run existing
+scientific applications, and teams that need shared visibility across longer-lived campaigns.
+Centralized operation is an option, not a prerequisite for starting locally.
 
 # State of the field
 
 Scientific workflow systems span several overlapping design spaces. Snakemake and Nextflow provide
-mature dataflow-oriented workflow languages and broad execution portability
-[@molder2021snakemake; @ditommaso2017nextflow]. Pegasus provides planning, provenance, data
-management, and recovery for large scientific workflows [@deelman2019pegasus]. Parsl provides
-Python-native parallel scripting and high-performance computing executors [@babuji2019parsl].
-FireWorks and Balsam provide persistent services and worker-based execution for high-throughput
-scientific campaigns [@jain2015fireworks; @salim2018balsam]. Pilot systems and hierarchical
-schedulers, including RADICAL-Pilot and Flux, execute many tasks within larger resource allocations
-[@merzky2018radicalpilot; @ahn2020flux].
+mature dataflow-oriented workflow languages and broad execution portability [@molder2021snakemake;
+@ditommaso2017nextflow]. Pegasus provides planning, provenance, data management, and recovery for
+large scientific workflows [@deelman2019pegasus]. Parsl provides Python-native parallel scripting
+and high-performance computing executors [@babuji2019parsl]. FireWorks and Balsam provide persistent
+services and worker-based execution for high-throughput scientific campaigns [@jain2015fireworks;
+@salim2018balsam]. Pilot systems and hierarchical schedulers, including RADICAL-Pilot and Flux,
+execute many tasks within larger resource allocations [@merzky2018radicalpilot; @ahn2020flux].
 
-Torc does not claim to originate directed acyclic graph execution, data-derived dependencies,
-persistent workflow state, dynamic workflows, or task execution inside allocations. It was built to
-provide a different integrated design point: command-oriented workflows, a compact control plane
-that does not require an external database service, and one operational model from local execution
-through Slurm. Independent workers and allocations pull from the same durable queue, while measured
-outcomes feed monitoring, selective reruns, and resource-aware recovery. This combination addresses
-campaigns that have outgrown scripts and job arrays but do not require a specialized distributed
-runtime or a separately administered workflow service.
+\textcolor{red}{TODO before submission: Ask the original developer which combination of requirements
+motivated Torc's creation and why extending an existing workflow system was unsuitable. Clarify
+whether FireWorks and Balsam were considered. Distinguish this development history from the later
+project selection described below, then remove this note.}
 
-This position differs from file-centered systems by allowing explicit dependencies and database-
-backed JSON relationships to coexist with file dataflow. It differs from Python-native runtimes by
-keeping existing executables and shell commands as the unit of work, while still providing Python
-and generated clients for orchestration. Compared with pilot and hierarchical schedulers, Torc adds
-the persistent workflow graph, user-facing lifecycle operations, and execution evidence around
-allocation-resident work. The contribution is therefore not any isolated primitive, but their
-coupling into a small operational system intended for scientific teams to run themselves.
+The team's workflow-tool evaluation considered individual simulations, parameterized runs, and
+ensembles across desktop and shared computing environments, with inspectable outputs, provenance,
+and auditability as requirements. After investigating and demonstrating several tools, the team
+selected Torc for a primarily local-first workflow. The selection emphasized an approachable
+command-line interface, binary distribution, optional centralized job history and command records,
+and separation of the server from HPC workers. Snakemake was already familiar and viewed positively
+for its lightweight, straightforward operation, but the team judged it less suitable for the
+intended analysts and their requirement for built-in centralized history and audit support.
+
+This is a fit-for-purpose rationale, not a claim that other systems cannot execute commands locally
+or on HPC resources. FireWorks and Balsam are particularly close architectural neighbors in their
+persistent, worker-based coordination. Torc's contribution is the integration of that operating
+model with standalone local use, SQLite-backed history, resource-aware execution, and common
+inspection and recovery tools. The design prioritizes these capabilities within one application
+rather than requiring analysts to assemble a workflow engine, a database service, and separate
+operational tooling. It does not claim to introduce dependency graphs, persistence, or execution
+inside scheduler allocations.
 
 # Software design
 
-Torc uses a client-server architecture. An asynchronous Rust server exposes a versioned REST API and
-stores workflows, jobs, dependencies, files, user data, resource requirements, results, events, and
-scheduler records in SQLite. Clients and workers communicate with the server over HTTP, allowing the
-database to remain on server-local storage while workers execute on other nodes. This design trades
-the horizontal write scalability of a distributed database for a control plane that is simple to
-deploy, back up, and inspect.
+Torc separates workflow coordination from execution (\autoref{fig:architecture}). An asynchronous
+Rust server exposes a REST API and stores workflow definitions, dependencies, resource requests,
+execution results, and events in SQLite. In standalone mode, the CLI starts a local server for the
+command's lifetime and retains an on-disk database for later inspection. Alternatively, clients
+connect to a long-running server for shared history and distributed execution. Precompiled binaries
+avoid requiring a language build environment on execution hosts; standalone use requires both the
+CLI and server binaries.
 
-SQLite is a deliberate operating boundary rather than an interchangeable implementation detail.
-Only the server opens the database; remote workers use HTTP, so a live database need not reside on a
-parallel filesystem or be exposed to compute nodes. A campaign can be started without provisioning
-a database service, resumed after process restarts, and archived by preserving one file. This favors
-the common case of one coordinating server and many execution workers. Workloads that exceed a
-single server's write capacity would require a different persistence architecture, a trade-off Torc
-makes in favor of deployability on institutional and leadership-class computing systems.
+Only the server opens the database; remote workers communicate over HTTP. This permits server-local
+database storage rather than placing a live database on the cluster's parallel filesystem. SQLite
+removes the need to administer a separate database service, at the cost of a single-server write
+bottleneck. Database backups preserve workflow records, while external input files, outputs, and
+logs must be preserved separately.
 
-![Torc separates user-facing tools, a durable SQLite-backed control plane, and pull-based execution
-across local, remote, and Slurm resources. Solid lines show control traffic; dashed lines show
-scientific artifact access.\label{fig:architecture}](architecture.png){ width=100% }
+![Torc separates user-facing tools, SQLite-backed workflow coordination, and pull-based execution
+across local, remote, and Slurm resources. Workers claim jobs and report outcomes over HTTP. Solid
+lines show control and state interactions; dashed lines show scientific artifact
+access.\label{fig:architecture}](architecture.png){
+width=100% }
 
-Dependencies may be declared directly or inferred from producer and consumer relationships over
-files and JSON user data. Torc resolves these relationships into one graph so that the same state
-transitions apply regardless of how an edge was specified. A worker advertises its available CPUs,
-memory, GPUs, node count, and remaining runtime. The server selects fitting ready jobs and marks
-them pending in one transaction, preventing duplicate ownership when many workers request work
-concurrently. Priority ordering and residual backfill let smaller jobs use capacity left by larger
-claims. This is useful for heterogeneous campaigns in which several independently submitted Slurm
-allocations, each with its own runner by default, draw from the same workflow queue.
+A workflow file describes commands, parameter ranges, dependencies, and resource requirements. In
+the example campaign, parameter expansion creates the simulation jobs, while explicit dependencies
+or producer-consumer relationships over files and JSON user data connect preparation to simulations
+and aggregation. These relationships resolve into one dependency graph. Existing scientific
+executables remain the unit of work rather than requiring their implementation in a
+workflow-specific programming interface.
 
-Runners separate workflow coordination from process placement. Local and remote runners execute
-commands directly. Inside a Slurm allocation, a runner can execute commands directly or launch
-resource-constrained `srun --exact` job steps; one runner can manage one or more allocated nodes.
-Slurm therefore retains responsibility for allocations, placement, and enforcement, while Torc
-decides which dependency-ready job fits next. Researchers can develop a workflow on a workstation
-and move it to a cluster without changing its dependency or operational model.
+Workers request ready jobs that fit their available CPUs, memory, GPUs, node count, and remaining
+runtime. The server selects jobs and marks them pending in one transaction, preventing competing
+workers from claiming the same ready job. Priority ordering and residual backfill allow smaller jobs
+to use capacity left by larger claims. Local and SSH-launched workers execute commands directly;
+workers inside Slurm allocations can execute directly or launch resource-constrained `srun --exact`
+job steps. Multiple allocations can draw work from the same workflow. Slurm retains allocation and
+placement responsibilities, while Torc selects dependency-ready work. Moving a workflow to a cluster
+preserves its dependency model but still requires appropriate application environments, file access,
+network connectivity, and scheduler configuration.
 
-For adaptive algorithms, transactional spawning adds a batch of jobs, parent and explicit
-dependency edges, and lineage state together. Invalid batches are rolled back. An iterative method
-can therefore inspect an intermediate result, create only its next generation, and terminate by
-spawning nothing when convergence is reached. Lineage records identify each generation, while
-iteration limits and replay handling constrain runaway or repeated requests. For completed
-workflows, reinitialization detects changed files, user data, job definitions, or missing outputs
-and resets only affected jobs and their descendants. Both mechanisms avoid predeclaring unnecessary
-work or rerunning unaffected branches.
+As jobs finish, recorded outcomes release dependent work and provide an inspectable history of
+attempts. When monitoring or scheduler accounting is available, CPU, memory, and runtime
+observations help users diagnose failures and tune subsequent requests. Client-side recovery tools
+can identify likely memory or timeout failures, adjust resource requests, and retry selected jobs in
+replacement Slurm allocations. Automatic recovery requires enabling the corresponding monitoring and
+recovery operation; persistence alone does not perform retries. Workers can journal completions
+locally during temporary API outages and reconcile them later.
 
-Execution results include status, logs, attempts, and, when monitoring or scheduler accounting is
-available, CPU, memory, and runtime observations. These records support reports and resource plots,
-but they also close the control loop: likely memory and runtime failures can be diagnosed, resource
-requirements corrected, and selected work retried in replacement allocations. If the API becomes
-temporarily unavailable, workers can journal completions locally and reconcile them later rather
-than discard finished work or rerun expensive calculations. The same retained evidence lets users
-compare requested and observed resources after a campaign and tune later runs, even when automatic
-recovery is not used. Optional RO-Crate generation records workflow, job, input, output, and
-software provenance [@soilandreyes2022rocrate].
-
-Users interact with these capabilities through declarative workflow files and a unified `torc`
-command-line interface. The same API supports generated clients, a Python orchestration layer, a
-terminal interface, a web dashboard, and an MCP server. This layered design allows interactive and
-programmatic clients to share workflow semantics rather than independently implementing workflow
-state transitions. It also exposes live status and historical resource evidence without requiring a
-separate monitoring stack.
+After an input or job definition changes, reinitialization resets affected jobs and their
+descendants, preserving unaffected branches. Adaptive workflows can also add jobs transactionally
+during execution, with lineage and iteration limits. Optional RO-Crate generation records workflow,
+job, input, output, and software provenance [@soilandreyes2022rocrate]. The CLI, Python and
+generated API clients, terminal interface, web dashboard, and MCP server expose the same underlying
+workflow state for interactive and programmatic operation.
 
 # Research impact statement
+
+\textcolor{red}{TODO before submission: Confirm which ExaEpi deployment details may be disclosed and
+what evidence can be shared with editors or reviewers. Obtain an approved reference or supporting
+record for the Dane PCM work; a research publication may not be available. Remove or qualify claims
+that cannot be supported, then remove this note.}
 
 At the National Energy Research Scientific Computing Center at Lawrence Berkeley National
 Laboratory, Torc orchestrated ExaEpi parameter sweeps for predicting epidemiological events,
 including COVID-19. The campaign ran three million simulations in batches of 100,000 on the
 Perlmutter system. Its Slurm workflow combined GPU-backed main simulations with CPU-backed setup and
-postprocessing jobs. Resource-aware scheduling reduced required walltime relative to the prior
-configuration and limited unused allocation capacity between the heterogeneous job stages.
+postprocessing jobs. In the previous workflow, the delay before a worker picked up and started the
+next calculation could approach the runtime of a short simulation. Torc reduced this between-job
+dispatch delay, reducing campaign walltime rather than accelerating the simulations themselves. This
+experience illustrates the importance of keeping workers supplied with ready work when individual
+calculations are short.
 
-At Lawrence Livermore National Laboratory's Livermore Computing Dane system, Torc ran year-long
-power-system production-cost simulations across varied input scenarios. These CPU-only workloads
-were longer lived than the ExaEpi jobs. Resource monitoring exposed CPU and memory use for debugging
-and allowed the team to tune resource requests for subsequent simulations.
+At Lawrence Livermore National Laboratory's Livermore Computing Dane system, Torc ran power-system
+production-cost modeling (PCM) calculations across varied input scenarios. Each calculation modeled
+a year of power-system operation; this is the simulated period, not the execution duration. These
+CPU-only calculations ran longer than the ExaEpi simulations. Resource monitoring exposed CPU and
+memory use for debugging and allowed the team to tune resource requests for subsequent simulations.
+Together, these applications illustrate the value of dispatching short heterogeneous tasks and
+retaining resource evidence for longer-running analyses.
 
 <!-- Add a documented Kestrel deployment after its scientific use, scale, and outcomes are confirmed. -->
 
 # Availability
 
-Torc is distributed under the BSD 3-Clause license. Source code, documentation, examples,
-integration tests, and release artifacts are available at
-<https://github.com/NatLabRockies/torc>. The project uses automated tests and generated-client
-consistency checks across its Rust server and clients. The version reviewed with this paper will be
-archived with a persistent DOI, and citation metadata will be provided in the repository.
+Torc is distributed under the BSD 3-Clause license. Source code, installation instructions, workflow
+examples, contribution guidance, integration tests, and release artifacts are available at
+<https://github.com/NatLabRockies/torc>. A diamond-workflow walkthrough in `paper/README.md`
+provides local execution and retained-result inspection using the existing example and supporting
+scripts. Automated tests and generated-client consistency checks cover its Rust server and clients.
+The version reviewed with this paper will be archived with a persistent DOI, and citation metadata
+will be provided in the repository.
 
 # AI usage disclosure
 
-OpenAI GPT-5.6, accessed through OpenCode, was used for literature discovery, manuscript
-brainstorming, drafting, and formatting this paper for JOSS. Before submission, the authors will
-review and edit all AI-assisted text and verify its technical claims, references, and comparisons
-against the software, primary literature, and released evidence. The authors made the software's
-core design decisions and retain responsibility for the final manuscript.
+OpenAI GPT-5.6 and GPT-6 Astra Project, accessed through OpenCode, were used for literature
+discovery, manuscript brainstorming, drafting, revision, figure preparation, and formatting this
+paper for JOSS. GPT-6 Astra Project also assisted with checking manuscript formatting and citation
+resolution. Before submission, the authors will review and edit all AI-assisted text and verify its
+technical claims, references, and comparisons against the software, primary literature, and released
+evidence. The authors made the software's core design decisions and retain responsibility for the
+final manuscript.
+
+<!-- Before submission, confirm the model names and versions, disclose any AI assistance with
+software or documentation, and replace the review commitment with completed verification. -->
 
 # Acknowledgements
 
