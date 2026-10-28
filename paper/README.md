@@ -1,5 +1,25 @@
 # Paper Reproducibility
 
+## Generate The PDF
+
+Install [Pandoc](https://pandoc.org/installing.html) and
+[Tectonic](https://tectonic-typesetting.github.io/en-US/install.html) and make both available on
+`PATH`. Tectonic may need network access on its first run to download TeX packages. From the
+repository root, run:
+
+```bash
+cd paper
+pandoc paper.md --standalone --citeproc --pdf-engine=tectonic \
+  --lua-filter=pdf-authors.lua -V geometry:margin=1in -V fontsize=10pt \
+  --output=paper.pdf --fail-if-warnings
+```
+
+This replaces the tracked `paper/paper.pdf` using `paper.md`, `paper.bib`, and `architecture.png`.
+The Lua filter adapts the manuscript's JOSS author and affiliation metadata for Pandoc's title
+block, so those details need only be maintained in `paper.md`. The result is a local draft
+rendering, not the journal's final JOSS layout. Regenerate the PDF whenever the manuscript or its
+inputs change.
+
 ## Local Diamond Workflow
 
 Use the existing `examples/yaml/diamond_workflow.yaml` as a small reviewer entry point. Four jobs

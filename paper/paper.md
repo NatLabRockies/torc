@@ -73,25 +73,31 @@ services and worker-based execution for high-throughput scientific campaigns [@j
 @salim2018balsam]. Pilot systems and hierarchical schedulers, including RADICAL-Pilot and Flux,
 execute many tasks within larger resource allocations [@merzky2018radicalpilot; @ahn2020flux].
 
-\textcolor{red}{TODO before submission: Ask the original developer which combination of requirements
-motivated Torc's creation and why extending an existing workflow system was unsuitable. Clarify
-whether FireWorks and Balsam were considered. Distinguish this development history from the later
-project selection described below, then remove this note.}
+In 2023, Torc's original development team evaluated Nextflow, Snakemake, and Pegasus, and considered
+FireWorks without deploying it. The team sought a combination suited to analysts running existing
+applications in large parameter studies: precompiled local deployment without a separate database
+service, JVM, or conda environment for the orchestrator; declarative command descriptions rather
+than a workflow programming language; workers that drain a job queue within Slurm allocations;
+durable, queryable campaign history; integrated recovery; and a language-independent API.
 
-The team's workflow-tool evaluation considered individual simulations, parameterized runs, and
-ensembles across desktop and shared computing environments, with inspectable outputs, provenance,
-and auditability as requirements. After investigating and demonstrating several tools, the team
-selected Torc for a primarily local-first workflow. The selection emphasized an approachable
-command-line interface, binary distribution, optional centralized job history and command records,
-and separation of the server from HPC workers. Snakemake was already familiar and viewed positively
-for its lightweight, straightforward operation, but the team judged it less suitable for the
-intended analysts and their requirement for built-in centralized history and audit support.
+The build-versus-extend decision centered on a persistent server-side state machine and pull-based,
+resource-aware workers. Rather than having a run-specific driver submit each task through an
+executor, Torc retains authoritative state in a service from which workers claim suitable jobs. The
+team judged that combining durable multi-user state with this allocation-level scheduling model
+would require changes beyond an executor adapter in the evaluated Snakemake and Nextflow designs.
+FireWorks was a closer architectural fit, but its MongoDB service conflicted with the goal of
+avoiding separately administered database infrastructure [@jain2015fireworks].
+
+A later team selection exercise favored Torc for local-first use, emphasizing its approachable CLI,
+binary distribution, optional shared history, and server-worker separation. Snakemake was familiar
+and positively regarded, but the team preferred Torc's integrated operating model for its intended
+analysts. This adoption decision is distinct from the 2023 development rationale.
 
 This is a fit-for-purpose rationale, not a claim that other systems cannot execute commands locally
 or on HPC resources. FireWorks and Balsam are particularly close architectural neighbors in their
 persistent, worker-based coordination. Torc's contribution is the integration of that operating
 model with standalone local use, SQLite-backed history, resource-aware execution, and common
-inspection and recovery tools. The design prioritizes these capabilities within one application
+inspection and recovery tools. The design prioritizes these capabilities within one software package
 rather than requiring analysts to assemble a workflow engine, a database service, and separate
 operational tooling. It does not claim to introduce dependency graphs, persistence, or execution
 inside scheduler allocations.
@@ -100,11 +106,12 @@ inside scheduler allocations.
 
 Torc separates workflow coordination from execution (\autoref{fig:architecture}). An asynchronous
 Rust server exposes a REST API and stores workflow definitions, dependencies, resource requests,
-execution results, and events in SQLite. In standalone mode, the CLI starts a local server for the
-command's lifetime and retains an on-disk database for later inspection. Alternatively, clients
-connect to a long-running server for shared history and distributed execution. Precompiled binaries
-avoid requiring a language build environment on execution hosts; standalone use requires both the
-CLI and server binaries.
+execution results, and events in SQLite. Workflow ownership, project labels, and user-defined
+metadata provide context for querying retained campaign records. In standalone mode,
+`torc -s run workflow.yaml` starts a local server for the command's lifetime and retains an on-disk
+database for later inspection. Alternatively, clients connect to a long-running server for shared
+history and distributed execution. Precompiled binaries avoid requiring a language build environment
+on execution hosts; standalone use requires both the CLI and server binaries.
 
 Only the server opens the database; remote workers communicate over HTTP. This permits server-local
 database storage rather than placing a live database on the cluster's parallel filesystem. SQLite
@@ -130,10 +137,12 @@ runtime. The server selects jobs and marks them pending in one transaction, prev
 workers from claiming the same ready job. Priority ordering and residual backfill allow smaller jobs
 to use capacity left by larger claims. Local and SSH-launched workers execute commands directly;
 workers inside Slurm allocations can execute directly or launch resource-constrained `srun --exact`
-job steps. Multiple allocations can draw work from the same workflow. Slurm retains allocation and
-placement responsibilities, while Torc selects dependency-ready work. Moving a workflow to a cluster
-preserves its dependency model but still requires appropriate application environments, file access,
-network connectivity, and scheduler configuration.
+job steps. A worker repeatedly claims work within its allocation's remaining walltime, avoiding a
+separate `sbatch` submission for each application job. Multiple allocations can draw work from the
+same workflow. Slurm retains allocation and placement responsibilities, while Torc selects
+dependency-ready work. Moving a workflow to a cluster preserves its dependency model but still
+requires appropriate application environments, file access, network connectivity, and scheduler
+configuration.
 
 As jobs finish, recorded outcomes release dependent work and provide an inspectable history of
 attempts. When monitoring or scheduler accounting is available, CPU, memory, and runtime
@@ -146,9 +155,17 @@ locally during temporary API outages and reconcile them later.
 After an input or job definition changes, reinitialization resets affected jobs and their
 descendants, preserving unaffected branches. Adaptive workflows can also add jobs transactionally
 during execution, with lineage and iteration limits. Optional RO-Crate generation records workflow,
-job, input, output, and software provenance [@soilandreyes2022rocrate]. The CLI, Python and
-generated API clients, terminal interface, web dashboard, and MCP server expose the same underlying
-workflow state for interactive and programmatic operation.
+job, input, output, and software provenance [@soilandreyes2022rocrate]. An OpenAPI contract supports
+generated Python and Julia clients included in the repository and clients in other languages. The
+CLI, terminal interface, web dashboard, and Model Context Protocol (MCP) server use the same REST
+service, keeping inspection and control tied to one workflow state model.
+
+Development in 2025--2026 extended this foundation with MCP-based AI assistance for inspection,
+debugging, and recovery; expanded dashboard and terminal interfaces; automated Slurm configuration
+and scheduling; remote worker execution; RO-Crate provenance; ephemeral standalone servers; and
+dynamic job addition. Control over the API and workflow state model allowed the team to integrate
+language-model tools alongside conventional interfaces. AI assistance remains optional: neither
+execution nor deterministic recovery requires it.
 
 # Research impact statement
 

@@ -8,14 +8,34 @@ prepare inputs, run parameterized simulations, aggregate results, inspect outcom
 retry or revise work. SQLite and the server-worker split explain how this operating model supports
 both desktops and Slurm deployments without a separately administered database service.
 
-The author-provided selection summary supplies a concrete adoption rationale: approachable CLI use
-for analysts with limited programming experience, binary deployment, local execution, centralized
-history when needed, and HPC-compatible separation of server and workers. Snakemake was familiar and
-positively regarded, but judged less suitable for these users and their centralized history and
-audit requirements. Present this as the team's selection judgment, not a universal feature ranking
-or evidence that only Torc can execute external programs. Selection among existing tools is not
-itself a record of why Torc was originally developed; confirm that distinction before finalizing the
-build-versus-contribute explanation.
+The original developer's account supplies the development rationale: in 2023, the team evaluated
+Nextflow, Snakemake, and Pegasus, and considered FireWorks without deploying it. The intended users
+were analysts running existing applications in large parameter studies, not workflow developers. The
+required combination was low-setup binary deployment, allocation-resident queue draining, durable
+queryable history, integrated recovery, and an API-first design. Do not imply that Balsam was
+evaluated; it remains a relevant architectural comparison in the literature.
+
+The build-versus-extend explanation centers on persistent server-side state and pull-based,
+resource-aware job claiming. Present the need for changes beyond an executor adapter in Snakemake or
+Nextflow as the development team's architectural judgment, not proof that extensions are impossible.
+FireWorks was a closer fit, but required a MongoDB service. Its
+[installation documentation](https://materialsproject.github.io/fireworks/installation.html) does
+not require Docker. Torc avoids a separate database service, not its own REST server:
+`src/main.rs::start_standalone_server` launches `torc-server`, so the current standalone command
+requires both CLI and server binaries. Use `torc -s run workflow.yaml`, not an unqualified claim of
+zero setup or a single executable. Scientific applications still need their own environments.
+
+The author-provided later selection summary supplies a separate adoption rationale: approachable CLI
+use, binary deployment, local execution, optional centralized history, and HPC-compatible
+server-worker separation. Snakemake was familiar and positively regarded. Keep this account distinct
+from the 2023 development history and avoid a universal feature ranking.
+
+Attribute MCP-based AI assistance, expanded dashboard and TUI capabilities, automated Slurm
+configuration and scheduling, remote workers, RO-Crate provenance, ephemeral standalone servers, and
+dynamic job addition to the developer-reported 2025--2026 evolution, not the original evaluation.
+The API enabled new interfaces without replacing the workflow state model; AI assistance is optional
+and should not be conflated with deterministic recovery. The paper's contribution remains the
+integrated operating model rather than a catalog of individually novel features.
 
 The ExaEpi walltime benefit concerns reduced worker dispatch delay between calculations, not faster
 simulation execution. In the previous workflow, that delay could approach the duration of a short
