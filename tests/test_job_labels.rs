@@ -491,6 +491,7 @@ fn test_persistent_labeled_runner_waits_for_its_job(start_server: &ServerProcess
 
 /// A Slurm runner started with `--label --persistent` claims only its labeled jobs, stays
 /// alive until the blocked one finishes, and records its labels on its compute node.
+#[cfg(unix)]
 #[rstest]
 fn test_slurm_runner_labels_and_persistent(start_server: &ServerProcess) {
     let config = &start_server.config;
