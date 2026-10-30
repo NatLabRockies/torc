@@ -2,23 +2,51 @@
 
 ## Generate The PDF
 
-Install [Pandoc](https://pandoc.org/installing.html) and
-[Tectonic](https://tectonic-typesetting.github.io/en-US/install.html) and make both available on
-`PATH`. Tectonic may need network access on its first run to download TeX packages. From the
-repository root, run:
+Use the official [Inara](https://github.com/openjournals/inara) JOSS templates, pinned to `v1.3.1`.
+Install [Pandoc](https://pandoc.org/installing.html), a TeX distribution with `latexmk` and
+`lualatex`, and the [Hack font](https://sourcefoundry.org/hack/). Make the executables available on
+`PATH`. For TinyTeX, include its `bin/x86_64-linux` directory on `PATH`; the tested setup used
+TinyTeX `v2026.10` with these additional packages:
 
 ```bash
-cd paper
-pandoc paper.md --standalone --citeproc --pdf-engine=tectonic \
-  --lua-filter=pdf-authors.lua -V geometry:margin=1in -V fontsize=10pt \
-  --output=paper.pdf --fail-if-warnings
+tlmgr update --self
+tlmgr install marginnote titlesec pgf hyperxmp caption orcidlink tcolorbox seqsplit \
+  xstring fancyhdr fontsetup newcomputermodern draftwatermark lineno preprint \
+  environ trimspaces xkeyval luatex85 selnolig pdfx luacode luatexbase colorprofiles
 ```
 
-This replaces the tracked `paper/paper.pdf` using `paper.md`, `paper.bib`, and `architecture.png`.
-The Lua filter adapts the manuscript's JOSS author and affiliation metadata for Pandoc's title
-block, so those details need only be maintained in `paper.md`. The result is a local draft
-rendering, not the journal's final JOSS layout. Regenerate the PDF whenever the manuscript or its
-inputs change.
+Obtain the templates once:
+
+```bash
+git clone --depth 1 --branch v1.3.1 https://github.com/openjournals/inara.git \
+  "$HOME/inara-v1.3.1"
+```
+
+From the Torc repository root, run:
+
+```bash
+repo="$PWD"
+inara="$HOME/inara-v1.3.1"
+(
+  cd "$inara" || exit 1
+  pandoc --data-dir=data --defaults=shared --defaults=pdf \
+    --defaults=resources/joss/defaults.yaml \
+    --resource-path=".:resources:$repo/paper" \
+    --variable=joss --variable=draft: --metadata=draft:true \
+    --metadata=software_repository_url:https://github.com/NatLabRockies/torc \
+    --output="$repo/paper/paper-joss.pdf" "$repo/paper/paper.md" --quiet
+)
+```
+
+This writes `paper/paper-joss.pdf` using `paper/paper.md`, `paper/paper.bib`,
+and `paper/architecture.png`. The empty `--variable=draft:` disables the watermark and line
+numbers, while `--metadata=draft:true` retains unpublished status and placeholder publication
+metadata. This is a JOSS-formatted preview, not a published article. To restore the watermark and
+line numbers for review, use `--variable=draft:true` instead.
+
+The native build was tested locally. The older `paper/paper.pdf` and `pdf-authors.lua` belong to
+the previous generic Pandoc/Tectonic preview and are not used by this build. Regenerate the PDF
+whenever the manuscript or its inputs change.
 
 ## Local Diamond Workflow
 
