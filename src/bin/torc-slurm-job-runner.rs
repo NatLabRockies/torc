@@ -75,6 +75,16 @@ mod unix_main {
         #[arg(long, default_value = "false")]
         is_subtask: bool,
 
+        /// Only claim jobs whose every label is in this set. Repeat the flag or
+        /// separate labels with commas. Without it, only unlabeled jobs are claimed.
+        #[arg(long = "label", value_delimiter = ',', value_parser = torc::models::parse_label)]
+        labels: Vec<String>,
+
+        /// Ignore the idle timeout while the workflow still has unfinished jobs this
+        /// runner can claim (its labels, or unlabeled when no --label is given).
+        #[arg(long)]
+        persistent: bool,
+
         /// Wait this number of minutes if the database is offline
         #[arg(long, default_value = "20")]
         wait_for_healthy_database_minutes: u64,
@@ -344,6 +354,7 @@ mod unix_main {
         );
         resources.scheduler_config_id = per_node_resources.scheduler_config_id;
         resources.time_limit = per_node_resources.time_limit;
+        resources.labels = (!args.labels.is_empty()).then(|| args.labels.clone());
 
         // Initialize per-node resource tracker for multi-node allocations.
         // This tracks which node each job lands on so resources_per_node()
@@ -457,6 +468,7 @@ mod unix_main {
             args.claim_backoff_max_secs
                 .unwrap_or(file_config.client.run.claim_backoff_max_secs),
         ));
+        job_runner.set_persistent(args.persistent);
 
         // Register SIGTERM and SIGCHLD signal handlers.
         //

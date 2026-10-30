@@ -489,6 +489,101 @@ fn test_persistent_labeled_runner_waits_for_its_job(start_server: &ServerProcess
     }
 }
 
+/// A Slurm runner started with `--label --persistent` claims only its labeled jobs, stays
+/// alive until the blocked one finishes, and records its labels on its compute node.
+#[rstest]
+fn test_slurm_runner_labels_and_persistent(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let mut workflow =
+        models::WorkflowModel::new("label_slurm_runner".to_string(), "test_user".to_string());
+    workflow.compute_node_wait_for_new_jobs_seconds = Some(1);
+    workflow.execution_config =
+        Some(serde_json::from_value(serde_json::json!({"mode": "direct"})).unwrap());
+    let workflow_id = apis::workflows_api::create_workflow(config, workflow)
+        .expect("Failed to create workflow")
+        .id
+        .unwrap();
+    let rr = create_test_resource_requirements(config, workflow_id, "small", 1, 0, 1, "1g", "PT1M");
+
+    let mut plain = models::JobModel::new(workflow_id, "plain".to_string(), "echo hi".to_string());
+    plain.resource_requirements_id = rr.id;
+    let plain_id = apis::jobs_api::create_job(config, plain)
+        .expect("Failed to create job")
+        .id
+        .unwrap();
+    // The dependent job becomes ready after the idle timeout, so a runner without
+    // --persistent would exit before claiming it.
+    let mut first = models::JobModel::new(workflow_id, "first".to_string(), "sleep 3".to_string());
+    first.resource_requirements_id = rr.id;
+    first.labels = Some(vec!["phase1".to_string()]);
+    let first_id = apis::jobs_api::create_job(config, first)
+        .expect("Failed to create job")
+        .id
+        .unwrap();
+    let mut second =
+        models::JobModel::new(workflow_id, "second".to_string(), "echo hi".to_string());
+    second.resource_requirements_id = rr.id;
+    second.labels = Some(vec!["phase1".to_string()]);
+    second.depends_on_job_ids = Some(vec![first_id]);
+    let second_id = apis::jobs_api::create_job(config, second)
+        .expect("Failed to create job")
+        .id
+        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    // Hangs here if the runner waits for the whole workflow to complete.
+    let output =
+        std::process::Command::new(common::get_exe_path("./target/debug/torc-slurm-job-runner"))
+            .args([
+                config.base_path.as_str(),
+                workflow_id.to_string().as_str(),
+                temp_dir.path().to_str().unwrap(),
+                "--poll-interval",
+                "1",
+                "--is-subtask",
+                "--label",
+                "phase1",
+                "--persistent",
+            ])
+            .env("TORC_FAKE_SBATCH", "1")
+            .env("SLURM_JOB_ID", "12345")
+            .env("SLURM_NODEID", "0")
+            .env("SLURM_TASK_PID", "1")
+            .env("SLURM_CPUS_ON_NODE", "4")
+            .env("SLURM_CPUS_PER_TASK", "4")
+            .env("SLURM_JOB_NUM_NODES", "1")
+            .output()
+            .expect("Failed to start Slurm runner");
+    assert!(
+        output.status.success(),
+        "Slurm runner failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let status = |id| apis::jobs_api::get_job(config, id).unwrap().status;
+    assert_eq!(status(plain_id), Some(models::JobStatus::Ready));
+    assert_eq!(status(first_id), Some(models::JobStatus::Completed));
+    assert_eq!(status(second_id), Some(models::JobStatus::Completed));
+
+    let nodes = apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list compute nodes")
+    .items;
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].labels, Some(vec!["phase1".to_string()]));
+}
+
 /// `torc watch --persistent` keeps watching a workflow that has no Slurm allocations
 /// while a labeled runner works, and returns once the workflow completes. Without the
 /// flag, watch refuses to start (or gives up) when it sees no allocations.
