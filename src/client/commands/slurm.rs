@@ -2516,6 +2516,7 @@ pub fn create_compute_node(
     // Persist the allocation end time so server-side/CLI diagnostics can compute
     // each active node's remaining walltime without querying Slurm.
     compute_node.end_time = end_time.map(|t| t.to_rfc3339());
+    compute_node.labels.clone_from(&resources.labels);
 
     match utils::send_with_retries(
         config,
