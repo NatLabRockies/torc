@@ -17,6 +17,10 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip 7.x build-dep of plotly_kaleido (extracts kaleido binary at build time); fix requires zip 9, no upstream upgrade available" },
     { id = "RUSTSEC-2026-0368", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
     { id = "RUSTSEC-2026-0369", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml via askama_derive (proc-macro, compile-time only) via plotly; latest askama_derive still requires it, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0391", reason = "zstd 0.13 via zip 7.x build-dep of plotly_kaleido; fix requires zstd 0.14, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0398", reason = "zstd-safe 7.x via zip 7.x build-dep of plotly_kaleido; fix requires zstd-safe 8.2, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0403", reason = "zstd-safe 7.x via zip 7.x build-dep of plotly_kaleido; fix requires zstd-safe 8.2, no upstream upgrade available" },
 ]
 
 # License compliance - permissive allow-list
