@@ -547,7 +547,7 @@ pub struct ReadyJobRequirementsQuery {
     tag = "system",
     path = "/ping",
     operation_id = "ping",
-    responses((status = 200, body = PingResponse))
+    responses((status = 200, description = "Successful response", body = PingResponse))
 )]
 pub async fn ping() -> Response<Body> {
     json_response(&PingResponse {
@@ -560,7 +560,7 @@ pub async fn ping() -> Response<Body> {
     tag = "system",
     path = "/version",
     operation_id = "get_version",
-    responses((status = 200, body = VersionResponse))
+    responses((status = 200, description = "Successful response", body = VersionResponse))
 )]
 pub async fn version(State(state): State<LiveRouterState>) -> Response<Body> {
     json_response(&VersionResponse {
@@ -576,7 +576,7 @@ pub async fn version(State(state): State<LiveRouterState>) -> Response<Body> {
     tag = "access_control",
     path = "/admin/reload-auth",
     operation_id = "reload_auth",
-    responses((status = 200, body = models::ReloadAuthResponse))
+    responses((status = 200, description = "Successful response", body = models::ReloadAuthResponse))
 )]
 pub async fn reload_auth(
     State(state): State<LiveRouterState>,
@@ -883,7 +883,7 @@ pub async fn create_user_data_list(
     path = "/access_groups",
     operation_id = "create_access_group",
     request_body = models::AccessGroupModel,
-    responses((status = 200, body = models::AccessGroupModel))
+    responses((status = 200, description = "Successful response", body = models::AccessGroupModel))
 )]
 pub async fn create_access_group(
     State(state): State<LiveRouterState>,
@@ -902,7 +902,7 @@ pub async fn create_access_group(
     path = "/access_groups",
     operation_id = "list_access_groups",
     params(AccessPaginationQuery),
-    responses((status = 200, body = models::ListAccessGroupsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListAccessGroupsResponse))
 )]
 pub async fn list_access_groups(
     State(state): State<LiveRouterState>,
@@ -925,7 +925,7 @@ pub async fn list_access_groups(
     path = "/access_groups/{id}",
     operation_id = "get_access_group",
     params(("id" = i64, Path, description = "Access group ID")),
-    responses((status = 200, body = models::AccessGroupModel))
+    responses((status = 200, description = "Successful response", body = models::AccessGroupModel))
 )]
 pub async fn get_access_group(
     State(state): State<LiveRouterState>,
@@ -944,7 +944,7 @@ pub async fn get_access_group(
     path = "/access_groups/{id}",
     operation_id = "delete_access_group",
     params(("id" = i64, Path, description = "Access group ID")),
-    responses((status = 200, body = models::AccessGroupModel))
+    responses((status = 200, description = "Successful response", body = models::AccessGroupModel))
 )]
 pub async fn delete_access_group(
     State(state): State<LiveRouterState>,
@@ -964,7 +964,7 @@ pub async fn delete_access_group(
     operation_id = "add_user_to_group",
     params(("id" = i64, Path, description = "Access group ID")),
     request_body = models::UserGroupMembershipModel,
-    responses((status = 200, body = models::UserGroupMembershipModel))
+    responses((status = 200, description = "Successful response", body = models::UserGroupMembershipModel))
 )]
 pub async fn add_user_to_group(
     State(state): State<LiveRouterState>,
@@ -984,7 +984,7 @@ pub async fn add_user_to_group(
     path = "/access_groups/{id}/members",
     operation_id = "list_group_members",
     params(("id" = i64, Path, description = "Access group ID"), AccessPaginationQuery),
-    responses((status = 200, body = models::ListUserGroupMembershipsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListUserGroupMembershipsResponse))
 )]
 pub async fn list_group_members(
     State(state): State<LiveRouterState>,
@@ -1011,7 +1011,7 @@ pub async fn list_group_members(
         ("id" = i64, Path, description = "Access group ID"),
         ("user_name" = String, Path, description = "Username")
     ),
-    responses((status = 200, body = models::UserGroupMembershipModel))
+    responses((status = 200, description = "Successful response", body = models::UserGroupMembershipModel))
 )]
 pub async fn remove_user_from_group(
     State(state): State<LiveRouterState>,
@@ -1037,7 +1037,7 @@ pub async fn remove_user_from_group(
         ("user_name" = String, Path, description = "Username"),
         AccessPaginationQuery
     ),
-    responses((status = 200, body = models::ListAccessGroupsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListAccessGroupsResponse))
 )]
 pub async fn list_user_groups(
     State(state): State<LiveRouterState>,
@@ -1064,7 +1064,7 @@ pub async fn list_user_groups(
         ("id" = i64, Path, description = "Workflow ID"),
         ("group_id" = i64, Path, description = "Access group ID")
     ),
-    responses((status = 200, body = models::WorkflowAccessGroupModel))
+    responses((status = 200, description = "Successful response", body = models::WorkflowAccessGroupModel))
 )]
 pub async fn add_workflow_to_group(
     State(state): State<LiveRouterState>,
@@ -1087,7 +1087,7 @@ pub async fn add_workflow_to_group(
     path = "/workflows/{id}/access_groups",
     operation_id = "list_workflow_groups",
     params(("id" = i64, Path, description = "Workflow ID"), AccessPaginationQuery),
-    responses((status = 200, body = models::ListAccessGroupsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListAccessGroupsResponse))
 )]
 pub async fn list_workflow_groups(
     State(state): State<LiveRouterState>,
@@ -1114,7 +1114,7 @@ pub async fn list_workflow_groups(
         ("id" = i64, Path, description = "Workflow ID"),
         ("group_id" = i64, Path, description = "Access group ID")
     ),
-    responses((status = 200, body = models::WorkflowAccessGroupModel))
+    responses((status = 200, description = "Successful response", body = models::WorkflowAccessGroupModel))
 )]
 pub async fn remove_workflow_from_group(
     State(state): State<LiveRouterState>,
@@ -1140,7 +1140,7 @@ pub async fn remove_workflow_from_group(
         ("workflow_id" = i64, Path, description = "Workflow ID"),
         ("user_name" = String, Path, description = "Username")
     ),
-    responses((status = 200, body = models::AccessCheckResponse))
+    responses((status = 200, description = "Successful response", body = models::AccessCheckResponse))
 )]
 pub async fn check_workflow_access(
     State(state): State<LiveRouterState>,
@@ -3472,7 +3472,7 @@ pub async fn delete_slurm_scheduler(
     operation_id = "create_workflow_action",
     params(("id" = i64, Path, description = "Workflow ID")),
     request_body = models::WorkflowActionModel,
-    responses((status = 200, body = models::WorkflowActionModel))
+    responses((status = 200, description = "Successful response", body = models::WorkflowActionModel))
 )]
 pub async fn create_workflow_action(
     State(state): State<LiveRouterState>,
@@ -3496,7 +3496,7 @@ pub async fn create_workflow_action(
     path = "/workflows/{id}/actions",
     operation_id = "get_workflow_actions",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = [models::WorkflowActionModel]))
+    responses((status = 200, description = "Successful response", body = [models::WorkflowActionModel]))
 )]
 pub async fn get_workflow_actions(
     State(state): State<LiveRouterState>,
@@ -3515,7 +3515,7 @@ pub async fn get_workflow_actions(
     path = "/workflows/{id}/actions/pending",
     operation_id = "get_pending_actions",
     params(("id" = i64, Path, description = "Workflow ID"), PendingActionsQuery),
-    responses((status = 200, body = [models::WorkflowActionModel]))
+    responses((status = 200, description = "Successful response", body = [models::WorkflowActionModel]))
 )]
 pub async fn get_pending_actions(
     State(state): State<LiveRouterState>,
@@ -3546,7 +3546,7 @@ pub async fn get_pending_actions(
         ("action_id" = i64, Path, description = "Action ID")
     ),
     request_body = models::ClaimActionRequest,
-    responses((status = 200, body = models::ClaimActionResponse))
+    responses((status = 200, description = "Successful response", body = models::ClaimActionResponse))
 )]
 pub async fn claim_action(
     State(state): State<LiveRouterState>,
@@ -3635,7 +3635,7 @@ pub async fn delete_workflow_action(
     path = "/workflows",
     operation_id = "list_workflows",
     params(WorkflowsListQuery),
-    responses((status = 200, body = models::ListWorkflowsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListWorkflowsResponse))
 )]
 pub async fn list_workflows(
     State(state): State<LiveRouterState>,
@@ -3694,7 +3694,7 @@ pub async fn create_workflow(
     path = "/workflows/{id}",
     operation_id = "get_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::WorkflowModel))
+    responses((status = 200, description = "Successful response", body = models::WorkflowModel))
 )]
 pub async fn get_workflow(
     State(state): State<LiveRouterState>,
@@ -3740,7 +3740,7 @@ pub async fn update_workflow(
     path = "/workflows/{id}",
     operation_id = "delete_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::WorkflowModel))
+    responses((status = 200, description = "Successful response", body = models::WorkflowModel))
 )]
 pub async fn delete_workflow(
     State(state): State<LiveRouterState>,
@@ -3759,7 +3759,7 @@ pub async fn delete_workflow(
     path = "/workflows/{id}/cancel",
     operation_id = "cancel_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = Value))
+    responses((status = 200, description = "Successful response", body = Value))
 )]
 pub async fn cancel_workflow(
     State(state): State<LiveRouterState>,
@@ -3779,7 +3779,7 @@ pub async fn cancel_workflow(
     operation_id = "archive_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
     request_body = models::ArchiveWorkflowRequest,
-    responses((status = 200, body = models::WorkflowModel))
+    responses((status = 200, description = "Successful response", body = models::WorkflowModel))
 )]
 pub async fn archive_workflow(
     State(state): State<LiveRouterState>,
@@ -3800,9 +3800,9 @@ pub async fn archive_workflow(
     operation_id = "get_task",
     params(("id" = i64, Path, description = "Task ID")),
     responses(
-        (status = 200, body = models::TaskModel),
-        (status = 404, body = models::ErrorResponse),
-        (status = 500, body = models::ErrorResponse)
+        (status = 200, description = "Successful response", body = models::TaskModel),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn get_task(
@@ -3823,10 +3823,10 @@ pub async fn get_task(
     operation_id = "get_active_task_for_workflow",
     params(("id" = i64, Path, description = "Workflow ID")),
     responses(
-        (status = 200, body = models::ActiveTaskResponse,
+        (status = 200, description = "Successful response", body = models::ActiveTaskResponse,
          description = "Returns { task: null } when no task is active"),
-        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
-        (status = 500, body = models::ErrorResponse)
+        (status = 404, description = "Not found", body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn get_active_task_for_workflow(
@@ -3851,12 +3851,12 @@ pub async fn get_active_task_for_workflow(
     operation_id = "initialize_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), InitializeJobsQuery),
     responses(
-        (status = 200, body = Value),
-        (status = 202, body = models::TaskModel),
-        (status = 403, body = models::ErrorResponse),
-        (status = 404, body = models::ErrorResponse),
-        (status = 409, body = models::ErrorResponse),
-        (status = 500, body = models::ErrorResponse)
+        (status = 200, description = "Successful response", body = Value),
+        (status = 202, description = "Task accepted", body = models::TaskModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Conflict", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn initialize_jobs(
@@ -3887,7 +3887,7 @@ pub async fn initialize_jobs(
     path = "/workflows/{id}/is_complete",
     operation_id = "is_workflow_complete",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::IsCompleteResponse))
+    responses((status = 200, description = "Successful response", body = models::IsCompleteResponse))
 )]
 pub async fn is_workflow_complete(
     State(state): State<LiveRouterState>,
@@ -3907,10 +3907,10 @@ pub async fn is_workflow_complete(
     operation_id = "get_workflow_status",
     params(("id" = i64, Path, description = "Workflow ID")),
     responses(
-        (status = 200, body = models::WorkflowStatusResponse),
-        (status = 403, body = models::ErrorResponse, description = "User does not have access"),
-        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
-        (status = 500, body = models::ErrorResponse)
+        (status = 200, description = "Successful response", body = models::WorkflowStatusResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse, description = "User does not have access"),
+        (status = 404, description = "Not found", body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn get_workflow_status(
@@ -3939,10 +3939,10 @@ pub struct SlurmJobCorrelationsQuery {
     operation_id = "get_slurm_job_correlations",
     params(("id" = i64, Path, description = "Workflow ID"), SlurmJobCorrelationsQuery),
     responses(
-        (status = 200, body = models::SlurmJobCorrelationsResponse),
-        (status = 403, body = models::ErrorResponse, description = "User does not have access"),
-        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
-        (status = 500, body = models::ErrorResponse)
+        (status = 200, description = "Successful response", body = models::SlurmJobCorrelationsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse, description = "User does not have access"),
+        (status = 404, description = "Not found", body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn get_slurm_job_correlations(
@@ -3976,10 +3976,10 @@ pub struct RunningJobsQuery {
     operation_id = "get_running_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), RunningJobsQuery),
     responses(
-        (status = 200, body = models::RunningJobsResponse),
-        (status = 403, body = models::ErrorResponse, description = "User does not have access"),
-        (status = 404, body = models::ErrorResponse, description = "Workflow not found"),
-        (status = 500, body = models::ErrorResponse)
+        (status = 200, description = "Successful response", body = models::RunningJobsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse, description = "User does not have access"),
+        (status = 404, description = "Not found", body = models::ErrorResponse, description = "Workflow not found"),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
 pub async fn get_running_jobs(
@@ -4004,7 +4004,7 @@ pub async fn get_running_jobs(
     path = "/workflows/{id}/is_uninitialized",
     operation_id = "is_workflow_uninitialized",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::IsUninitializedResponse))
+    responses((status = 200, description = "Successful response", body = models::IsUninitializedResponse))
 )]
 pub async fn is_workflow_uninitialized(
     State(state): State<LiveRouterState>,
@@ -4023,7 +4023,7 @@ pub async fn is_workflow_uninitialized(
     path = "/workflows/{id}/reset_status",
     operation_id = "reset_workflow_status",
     params(("id" = i64, Path, description = "Workflow ID"), ResetWorkflowStatusQuery),
-    responses((status = 200, body = Value))
+    responses((status = 200, description = "Successful response", body = Value))
 )]
 pub async fn reset_workflow_status(
     State(state): State<LiveRouterState>,
@@ -4047,7 +4047,7 @@ pub async fn reset_workflow_status(
     path = "/workflows/{id}/reset_job_status",
     operation_id = "reset_job_status",
     params(("id" = i64, Path, description = "Workflow ID"), ResetJobStatusQuery),
-    responses((status = 200, body = models::ResetJobStatusResponse))
+    responses((status = 200, description = "Successful response", body = models::ResetJobStatusResponse))
 )]
 pub async fn reset_job_status(
     State(state): State<LiveRouterState>,
@@ -4077,7 +4077,7 @@ pub async fn reset_job_status(
     ),
     request_body = models::ComputeNodesResources,
     responses(
-        (status = 200, body = models::ClaimJobsBasedOnResources),
+        (status = 200, description = "Successful response", body = models::ClaimJobsBasedOnResources),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Workflow not found", body = models::ErrorResponse),
         (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
@@ -4108,7 +4108,7 @@ pub async fn claim_jobs_based_on_resources(
     operation_id = "claim_next_jobs",
     params(("id" = i64, Path, description = "Workflow ID"), ClaimNextJobsQuery),
     responses(
-        (status = 200, body = models::ClaimNextJobsResponse),
+        (status = 200, description = "Successful response", body = models::ClaimNextJobsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Workflow not found", body = models::ErrorResponse),
         (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
@@ -4137,7 +4137,7 @@ pub async fn claim_next_jobs(
     path = "/workflows/{id}/job_dependencies",
     operation_id = "list_job_dependencies",
     params(("id" = i64, Path, description = "Workflow ID"), WorkflowRelationshipsQuery),
-    responses((status = 200, body = models::ListJobDependenciesResponse))
+    responses((status = 200, description = "Successful response", body = models::ListJobDependenciesResponse))
 )]
 pub async fn list_job_dependencies(
     State(state): State<LiveRouterState>,
@@ -4168,7 +4168,7 @@ pub async fn list_job_dependencies(
     path = "/workflows/{id}/job_file_relationships",
     operation_id = "list_job_file_relationships",
     params(("id" = i64, Path, description = "Workflow ID"), WorkflowRelationshipsQuery),
-    responses((status = 200, body = models::ListJobFileRelationshipsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListJobFileRelationshipsResponse))
 )]
 pub async fn list_job_file_relationships(
     State(state): State<LiveRouterState>,
@@ -4199,7 +4199,7 @@ pub async fn list_job_file_relationships(
     path = "/workflows/{id}/job_user_data_relationships",
     operation_id = "list_job_user_data_relationships",
     params(("id" = i64, Path, description = "Workflow ID"), WorkflowRelationshipsQuery),
-    responses((status = 200, body = models::ListJobUserDataRelationshipsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListJobUserDataRelationshipsResponse))
 )]
 pub async fn list_job_user_data_relationships(
     State(state): State<LiveRouterState>,
@@ -4230,7 +4230,7 @@ pub async fn list_job_user_data_relationships(
     path = "/workflows/{id}/job_ids",
     operation_id = "list_job_ids",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::ListJobIdsResponse))
+    responses((status = 200, description = "Successful response", body = models::ListJobIdsResponse))
 )]
 pub async fn list_job_ids(
     State(state): State<LiveRouterState>,
@@ -4249,7 +4249,7 @@ pub async fn list_job_ids(
     path = "/workflows/{id}/missing_user_data",
     operation_id = "list_missing_user_data",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::ListMissingUserDataResponse))
+    responses((status = 200, description = "Successful response", body = models::ListMissingUserDataResponse))
 )]
 pub async fn list_missing_user_data(
     State(state): State<LiveRouterState>,
@@ -4268,7 +4268,7 @@ pub async fn list_missing_user_data(
     path = "/workflows/{id}/process_changed_job_inputs",
     operation_id = "process_changed_job_inputs",
     params(("id" = i64, Path, description = "Workflow ID"), ProcessChangedJobInputsQuery),
-    responses((status = 200, body = models::ProcessChangedJobInputsResponse))
+    responses((status = 200, description = "Successful response", body = models::ProcessChangedJobInputsResponse))
 )]
 pub async fn process_changed_job_inputs(
     State(state): State<LiveRouterState>,
@@ -4292,7 +4292,7 @@ pub async fn process_changed_job_inputs(
     path = "/workflows/{id}/ready_job_requirements",
     operation_id = "get_ready_job_requirements",
     params(("id" = i64, Path, description = "Workflow ID"), ReadyJobRequirementsQuery),
-    responses((status = 200, body = models::GetReadyJobRequirementsResponse))
+    responses((status = 200, description = "Successful response", body = models::GetReadyJobRequirementsResponse))
 )]
 pub async fn get_ready_job_requirements(
     State(state): State<LiveRouterState>,
@@ -4316,7 +4316,7 @@ pub async fn get_ready_job_requirements(
     path = "/workflows/{id}/required_existing_files",
     operation_id = "list_required_existing_files",
     params(("id" = i64, Path, description = "Workflow ID")),
-    responses((status = 200, body = models::ListRequiredExistingFilesResponse))
+    responses((status = 200, description = "Successful response", body = models::ListRequiredExistingFilesResponse))
 )]
 pub async fn list_required_existing_files(
     State(state): State<LiveRouterState>,
