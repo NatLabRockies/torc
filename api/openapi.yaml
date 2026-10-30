@@ -33,7 +33,7 @@ paths:
           type: string
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -62,7 +62,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -79,7 +79,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -99,7 +99,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -118,7 +118,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -154,7 +154,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -179,7 +179,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -205,7 +205,7 @@ paths:
           type: string
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -262,7 +262,7 @@ paths:
       operationId: reload_auth
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -2271,7 +2271,7 @@ paths:
       operationId: ping
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -3722,19 +3722,19 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskModel'
         '404':
-          description: ''
+          description: Not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -4071,7 +4071,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4083,7 +4083,7 @@ paths:
       operationId: get_version
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4162,7 +4162,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4223,7 +4223,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4291,7 +4291,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4327,7 +4327,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4354,7 +4354,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4380,7 +4380,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4400,7 +4400,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4427,7 +4427,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4456,7 +4456,7 @@ paths:
             type: string
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4591,7 +4591,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4623,7 +4623,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -4649,7 +4649,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4713,7 +4713,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema: {}
@@ -4752,7 +4752,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4814,7 +4814,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4933,36 +4933,36 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema: {}
         '202':
-          description: ''
+          description: Task accepted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskModel'
         '403':
-          description: ''
+          description: Forbidden
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: ''
+          description: Not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: ''
+          description: Conflict
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -4982,7 +4982,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5002,7 +5002,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5052,7 +5052,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5102,7 +5102,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5122,7 +5122,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5172,7 +5172,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5192,7 +5192,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5219,7 +5219,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5247,7 +5247,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5404,7 +5404,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5431,7 +5431,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5458,7 +5458,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema: {}
@@ -5613,7 +5613,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5631,7 +5631,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -5667,7 +5667,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5685,7 +5685,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -5705,7 +5705,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5723,7 +5723,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -6082,8 +6082,7 @@ components:
           type: boolean
           default: false
         granularity:
-          oneOf:
-          - $ref: '#/components/schemas/MonitorGranularity'
+          $ref: '#/components/schemas/MonitorGranularity'
           default: summary
         memory:
           type: boolean
@@ -6692,8 +6691,7 @@ components:
           type: boolean
           default: false
         granularity:
-          oneOf:
-          - $ref: '#/components/schemas/MonitorGranularity'
+          $ref: '#/components/schemas/MonitorGranularity'
           default: summary
     JobStatus:
       type: string
@@ -7514,9 +7512,8 @@ components:
           type: boolean
           default: false
         granularity:
-          oneOf:
-          - $ref: '#/components/schemas/MonitorGranularity'
-            description: Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
+          $ref: '#/components/schemas/MonitorGranularity'
+          description: Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
           default: summary
         jobs:
           default: null
