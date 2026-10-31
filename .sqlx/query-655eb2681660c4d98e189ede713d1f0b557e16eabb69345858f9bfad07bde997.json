@@ -6,12 +6,24 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "user_data",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "data: Option<String>",
         "ordinal": 1,
-        "type_info": "Null"
+        "type_info": "Null",
+        "origin": {
+          "Table": {
+            "table": "user_data",
+            "name": "data"
+          }
+        }
       }
     ],
     "parameters": {

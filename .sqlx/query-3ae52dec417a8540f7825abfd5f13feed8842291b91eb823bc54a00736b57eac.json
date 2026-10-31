@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO file\n            (\n                workflow_id,\n                name,\n                path,\n                st_mtime\n            )\n            VALUES ($1, $2, $3, $4)\n            RETURNING rowid AS \"id!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "file",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3ae52dec417a8540f7825abfd5f13feed8842291b91eb823bc54a00736b57eac"
+}

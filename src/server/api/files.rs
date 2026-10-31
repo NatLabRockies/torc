@@ -121,7 +121,7 @@ where
                 st_mtime
             )
             VALUES ($1, $2, $3, $4)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
             "#,
             file.workflow_id,
             file.name,
@@ -464,7 +464,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
         sqlx_query = sqlx_query.bind(workflow_id);
         if let Some(job_id) = produced_by_job_id {
             sqlx_query = sqlx_query.bind(job_id);
@@ -511,7 +511,7 @@ where
             .with_where(where_clause)
             .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
         if let Some(job_id) = produced_by_job_id {
             count_sqlx_query = count_sqlx_query.bind(job_id);

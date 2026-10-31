@@ -250,7 +250,7 @@ impl AuthorizationService {
 
         // 1. Get the workflow ID for this resource (always do this to ensure 404s are accurate)
         let sql = format!("SELECT workflow_id FROM {} WHERE id = $1", table_name);
-        let workflow_id: i64 = match sqlx::query(&sql)
+        let workflow_id: i64 = match sqlx::query(sqlx::AssertSqlSafe(&*sql))
             .bind(resource_id)
             .fetch_optional(self.pool.as_ref())
             .await

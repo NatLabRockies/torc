@@ -6,7 +6,13 @@
       {
         "name": "input_hash",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "job_internal",
+            "name": "input_hash"
+          }
+        }
       }
     ],
     "parameters": {

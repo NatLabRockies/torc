@@ -6,62 +6,134 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "workflow_id",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "workflow_id"
+          }
+        }
       },
       {
         "name": "job_id",
         "ordinal": 2,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "job_id"
+          }
+        }
       },
       {
         "name": "run_id",
         "ordinal": 3,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "run_id"
+          }
+        }
       },
       {
         "name": "attempt_id",
         "ordinal": 4,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "attempt_id"
+          }
+        }
       },
       {
         "name": "slurm_job_id",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "slurm_job_id"
+          }
+        }
       },
       {
         "name": "max_rss_bytes",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "max_rss_bytes"
+          }
+        }
       },
       {
         "name": "max_vm_size_bytes",
         "ordinal": 7,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "max_vm_size_bytes"
+          }
+        }
       },
       {
         "name": "max_disk_read_bytes",
         "ordinal": 8,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "max_disk_read_bytes"
+          }
+        }
       },
       {
         "name": "max_disk_write_bytes",
         "ordinal": 9,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "max_disk_write_bytes"
+          }
+        }
       },
       {
         "name": "ave_cpu_seconds",
         "ordinal": 10,
-        "type_info": "Float"
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "ave_cpu_seconds"
+          }
+        }
       },
       {
         "name": "node_list",
         "ordinal": 11,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "slurm_stats",
+            "name": "node_list"
+          }
+        }
       }
     ],
     "parameters": {
