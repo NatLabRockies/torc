@@ -88,7 +88,7 @@ pub async fn run_export(opts: ExportOptions) -> Result<()> {
     // VACUUM INTO requires a string literal, not a bound parameter. Escape
     // single quotes per the SQL standard (' → '').
     let escaped = target.replace('\'', "''");
-    sqlx::query(&format!("VACUUM INTO '{escaped}'"))
+    sqlx::query(sqlx::AssertSqlSafe(&*format!("VACUUM INTO '{escaped}'")))
         .execute(&mut src)
         .await
         .context("VACUUM INTO")?;
@@ -271,7 +271,7 @@ async fn apply_workflow_filter(dst: &mut SqliteConnection, filter: &Filter) -> R
         Filter::Users(users) => {
             let placeholders = repeat_placeholders(users.len());
             let sql = format!("DELETE FROM workflow WHERE user NOT IN ({placeholders})");
-            let mut q = sqlx::query(&sql);
+            let mut q = sqlx::query(sqlx::AssertSqlSafe(&*sql));
             for u in users {
                 q = q.bind(u);
             }
@@ -287,7 +287,7 @@ async fn apply_workflow_filter(dst: &mut SqliteConnection, filter: &Filter) -> R
                 "DELETE FROM workflow WHERE id NOT IN \
                  (SELECT workflow_id FROM workflow_access_group WHERE group_id IN ({id_list}))"
             );
-            sqlx::query(&sql)
+            sqlx::query(sqlx::AssertSqlSafe(&*sql))
                 .execute(dst)
                 .await
                 .context("DELETE FROM workflow (access-group filter)")?;
@@ -296,7 +296,7 @@ async fn apply_workflow_filter(dst: &mut SqliteConnection, filter: &Filter) -> R
         Filter::WorkflowIds(ids) => {
             let id_list = id_list(ids);
             let sql = format!("DELETE FROM workflow WHERE id NOT IN ({id_list})");
-            sqlx::query(&sql)
+            sqlx::query(sqlx::AssertSqlSafe(&*sql))
                 .execute(dst)
                 .await
                 .context("DELETE FROM workflow (id filter)")?;
@@ -347,7 +347,7 @@ async fn prune_orphans(dst: &mut SqliteConnection) -> Result<()> {
                 table.replace('"', "\"\""),
                 placeholders,
             );
-            let mut q = sqlx::query(&sql);
+            let mut q = sqlx::query(sqlx::AssertSqlSafe(&*sql));
             for r in &rowids {
                 q = q.bind(*r);
             }

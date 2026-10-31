@@ -144,7 +144,7 @@ where
             r#"
             INSERT INTO user_data (workflow_id, name, is_ephemeral, data)
             VALUES ($1, $2, $3, $4)
-            RETURNING id
+            RETURNING id AS "id!"
             "#,
             body.workflow_id,
             body.name,
@@ -622,7 +622,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
 
         // Bind parameters manually in order
         sqlx_query = sqlx_query.bind(workflow_id);
@@ -670,7 +670,7 @@ where
             .with_where(where_clause)
             .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
         if let Some(consumer_id) = consumer_job_id {
             count_sqlx_query = count_sqlx_query.bind(consumer_id);

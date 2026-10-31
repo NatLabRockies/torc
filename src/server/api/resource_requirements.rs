@@ -189,7 +189,7 @@ where
                 ,runtime_s
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
         "#,
             body.workflow_id,
             body.name,
@@ -408,7 +408,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
 
         // Bind workflow_id first
         sqlx_query = sqlx_query.bind(workflow_id);
@@ -472,7 +472,7 @@ where
                 .with_where(where_clause)
                 .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
 
         if let Some(job_id_val) = job_id {

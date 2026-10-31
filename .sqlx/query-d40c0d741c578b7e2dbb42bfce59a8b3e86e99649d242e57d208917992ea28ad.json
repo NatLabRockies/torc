@@ -6,22 +6,46 @@
       {
         "name": "workflow_id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job",
+            "name": "workflow_id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "job",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "command",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "job",
+            "name": "command"
+          }
+        }
       },
       {
         "name": "status",
         "ordinal": 3,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job",
+            "name": "status"
+          }
+        }
       }
     ],
     "parameters": {

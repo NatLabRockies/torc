@@ -137,7 +137,10 @@ async fn count(path: &Path, sql: &str) -> i64 {
     )
     .await
     .unwrap();
-    let n: i64 = sqlx::query_scalar(sql).fetch_one(&mut c).await.unwrap();
+    let n: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(&mut c)
+        .await
+        .unwrap();
     let _ = c.close().await;
     n
 }

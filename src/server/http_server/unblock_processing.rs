@@ -243,7 +243,10 @@ where
         job_ids_str
     );
 
-    if let Err(e) = sqlx::query(&sql).execute(&mut *tx).await {
+    if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .execute(&mut *tx)
+        .await
+    {
         debug!(
             "Database error marking jobs as processed for workflow {}: {}",
             workflow_id, e

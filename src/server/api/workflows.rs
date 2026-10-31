@@ -124,7 +124,7 @@ async fn fetch_workflow_access_groups_batch(
             "#,
             placeholders
         );
-        let mut q = sqlx::query(&query);
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(&*query));
         for id in chunk {
             q = q.bind(id);
         }
@@ -495,7 +495,7 @@ impl WorkflowsApiImpl {
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
 
         // Bind optional parameters in order
         if let Some(workflow_name) = &name {
@@ -608,7 +608,7 @@ impl WorkflowsApiImpl {
             format!("{} WHERE {}", count_base_query, where_clause)
         };
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         if let Some(workflow_name) = &name {
             count_sqlx_query = count_sqlx_query.bind(workflow_name);
         }
@@ -1610,14 +1610,16 @@ where
             GROUP BY slurm_job_id, j.id, j.name
         "#;
 
-        let total_count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM ({grouped})"))
-            .bind(id)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to count Slurm correlations"))?;
+        let total_count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(&*format!(
+            "SELECT COUNT(*) FROM ({grouped})"
+        )))
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to count Slurm correlations"))?;
 
         let page_sql = format!("{grouped} ORDER BY slurm_job_id, job_id LIMIT ? OFFSET ?");
-        let rows = sqlx::query(&page_sql)
+        let rows = sqlx::query(sqlx::AssertSqlSafe(&*page_sql))
             .bind(id)
             .bind(limit)
             .bind(offset)
@@ -2451,7 +2453,7 @@ where
         )
         .build();
 
-        let dependency_rows = match sqlx::query(&query)
+        let dependency_rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .bind(workflow_id)
             .fetch_all(self.context.pool.as_ref())
             .await
@@ -2584,7 +2586,7 @@ where
         )
         .build();
 
-        let relationship_rows = match sqlx::query(&query)
+        let relationship_rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .bind(workflow_id)
             .fetch_all(self.context.pool.as_ref())
             .await
@@ -2743,7 +2745,7 @@ where
         )
         .build();
 
-        let relationship_rows = match sqlx::query(&query)
+        let relationship_rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .bind(workflow_id)
             .fetch_all(self.context.pool.as_ref())
             .await
