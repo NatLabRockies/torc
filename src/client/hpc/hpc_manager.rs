@@ -9,7 +9,7 @@ use super::common::{HpcJobStats, HpcJobStatus, HpcType};
 use super::hpc_interface::HpcInterface;
 
 /// Manages HPC job submission and monitoring
-pub(crate) struct HpcManager {
+struct HpcManager {
     output: String,
     config: HashMap<String, String>,
     hpc_type: HpcType,

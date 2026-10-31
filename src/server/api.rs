@@ -174,7 +174,7 @@ pub(crate) fn message_error_response(message: impl Into<String>) -> models::Erro
 /// with no labels claims only unlabeled jobs (`labels IS NULL`, served by the
 /// labels index); a labeled runner claims only labeled jobs whose every label
 /// it has. `column` is the job labels column (a sorted JSON array or NULL).
-pub fn claimable_labels_sql(
+pub(crate) fn claimable_labels_sql(
     labels: &[String],
     column: &str,
     placeholder: &str,
@@ -192,7 +192,7 @@ pub fn claimable_labels_sql(
 }
 
 /// Read a JSON-array labels column into a label set (`None` when NULL or absent).
-pub fn labels_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<Vec<String>> {
+pub(crate) fn labels_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<Vec<String>> {
     use sqlx::Row;
     models::labels_from_json(
         row.try_get::<Option<String>, _>(column)

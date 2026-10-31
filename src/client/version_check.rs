@@ -320,7 +320,7 @@ pub fn print_version_warning(result: &VersionCheckResult) -> VersionMismatchSeve
 
 /// Checks the server version and prints appropriate warnings.
 /// Returns true if the version check passed (no major incompatibility).
-pub(crate) fn check_and_warn(config: &Configuration) -> bool {
+fn check_and_warn(config: &Configuration) -> bool {
     let result = check_version(config);
     let severity = print_version_warning(&result);
     !severity.is_blocking()

@@ -22,7 +22,7 @@ use tabled::Tabled;
 
 /// Every job status accepted by `JobStatus::from_str`, for error messages.
 /// Keep in sync with `models::JobStatus`.
-pub const VALID_JOB_STATUSES: &str = "uninitialized, blocked, ready, pending, running, \
+pub(crate) const VALID_JOB_STATUSES: &str = "uninitialized, blocked, ready, pending, running, \
      completed, failed, canceled, terminated, disabled, pending_failed";
 
 #[derive(Tabled)]

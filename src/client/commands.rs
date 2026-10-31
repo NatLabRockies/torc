@@ -36,7 +36,7 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 
 /// Helper function to prompt user to select a workflow when workflow_id is not provided
-pub fn select_workflow_interactively(
+pub(crate) fn select_workflow_interactively(
     config: &Configuration,
     user: &str,
 ) -> Result<i64, Box<dyn std::error::Error>> {

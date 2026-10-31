@@ -1725,7 +1725,7 @@ pub fn parse_label(label: &str) -> Result<String, String> {
 }
 
 /// Validate an optional label set; `None` and an empty set are always valid.
-pub fn validate_labels(labels: Option<&[String]>) -> Result<(), String> {
+pub(crate) fn validate_labels(labels: Option<&[String]>) -> Result<(), String> {
     labels
         .unwrap_or_default()
         .iter()
@@ -1735,7 +1735,7 @@ pub fn validate_labels(labels: Option<&[String]>) -> Result<(), String> {
 /// Canonical database form of a label set: a sorted, deduplicated JSON array,
 /// or `None` for no labels. Equal sets always serialize identically, so the
 /// server can group jobs by their label set.
-pub fn labels_to_json(labels: Option<&[String]>) -> Option<String> {
+pub(crate) fn labels_to_json(labels: Option<&[String]>) -> Option<String> {
     let mut labels = labels.unwrap_or_default().to_vec();
     labels.sort();
     labels.dedup();
@@ -1743,13 +1743,13 @@ pub fn labels_to_json(labels: Option<&[String]>) -> Option<String> {
 }
 
 /// Inverse of [`labels_to_json`].
-pub fn labels_from_json(json: Option<&str>) -> Option<Vec<String>> {
+pub(crate) fn labels_from_json(json: Option<&str>) -> Option<Vec<String>> {
     json.and_then(|json| serde_json::from_str(json).ok())
 }
 
 /// Parse the comma-separated `labels` query parameter; an empty string is an
 /// empty set (the runner has no labels).
-pub fn labels_from_query(labels: &str) -> Vec<String> {
+pub(crate) fn labels_from_query(labels: &str) -> Vec<String> {
     labels
         .split(',')
         .filter(|label| !label.is_empty())
@@ -1759,7 +1759,7 @@ pub fn labels_from_query(labels: &str) -> Vec<String> {
 
 /// Warning shown by `torc status` and the TUI for ready jobs whose label set no
 /// active runner covers. `labels` is the comma-joined set.
-pub fn unserved_label_warning(count: impl std::fmt::Display, labels: &str) -> String {
+pub(crate) fn unserved_label_warning(count: impl std::fmt::Display, labels: &str) -> String {
     format!(
         "⚠ {} ready job(s) with labels '{}' but no active runner has all of them",
         count, labels

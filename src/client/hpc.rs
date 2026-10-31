@@ -10,7 +10,7 @@
 pub mod common;
 mod dane;
 pub mod hpc_interface;
-pub(crate) mod hpc_manager;
+mod hpc_manager;
 pub mod kestrel;
 pub mod profiles;
 pub mod slurm;

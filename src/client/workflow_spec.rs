@@ -766,7 +766,7 @@ pub struct JobSpec {
 
 impl JobSpec {
     /// Whether the job carries at least one routing label.
-    pub fn has_labels(&self) -> bool {
+    pub(crate) fn has_labels(&self) -> bool {
         self.labels.as_deref().is_some_and(|l| !l.is_empty())
     }
 

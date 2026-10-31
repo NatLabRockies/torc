@@ -1326,7 +1326,7 @@ fn store_job_metadata(conn: &impl SqlExecutor, job_id: i64, job_name: &str) -> S
 /// Persist a final compute-node summary to the metrics database for `unique_label`,
 /// creating it if needed. Used by sampler-only nodes (`torc monitor-node`) in summary
 /// mode, which have no compute node record to attach the summary to.
-pub fn write_system_summary(
+pub(crate) fn write_system_summary(
     output_dir: &Path,
     unique_label: &str,
     summary: &SystemMetricsSummary,
