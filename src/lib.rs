@@ -21,7 +21,10 @@ pub fn get_username() -> String {
 // Shared modules (always available)
 pub mod api_version;
 pub mod memory_utils;
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod models;
 pub mod network_utils;
 pub(crate) mod ro_crate_json_ld;
@@ -29,22 +32,34 @@ pub mod time_utils;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod config;
 
 // Server modules (behind feature flag)
 #[cfg(feature = "server")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod server;
 
 // Client modules (behind feature flag)
 #[cfg(feature = "client")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod client;
 
 // TUI module (behind feature flag)
 #[cfg(feature = "tui")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod tui;
 
 // Binary command modules (behind feature flags) - re-exported for standalone binaries
@@ -54,6 +69,9 @@ pub mod run_jobs_cmd;
 #[cfg(feature = "client")]
 pub mod exec_cmd;
 
+#[cfg(feature = "client")]
+pub mod monitor_node_cmd;
+
 #[cfg(feature = "tui")]
 pub mod tui_runner;
 
@@ -62,7 +80,10 @@ pub mod plot_resources_cmd;
 
 // MCP server modules (behind feature flag)
 #[cfg(feature = "mcp-server")]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod mcp_server;
 
 // Rust-owned OpenAPI emission

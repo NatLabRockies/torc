@@ -13,8 +13,8 @@ cd torc
 
 2. **Install Rust and dependencies:**
 
-Make sure you have Rust 1.95 or later installed. Hawk requires its analysis to run with the exact
-compiler toolchain it was built against, currently Rust 1.97.1.
+Make sure you have Rust 1.95 or later installed. Hawk 0.1.17 requires its analysis to run with the
+exact compiler toolchain it was built against, Rust 1.99.0.
 
 3. **Install cargo-nextest:**
 
@@ -37,9 +37,17 @@ cargo install cargo-release
 6. **Install Hawk:**
 
 ```bash
-rustup toolchain install 1.97.1
-curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/astral-sh/hawk/releases/download/0.1.10/cargo-hawk-installer.sh | sh
+set -euo pipefail
+rustup toolchain install 1.99.0
+hawk_installer="$(mktemp)"
+trap 'rm -f "$hawk_installer"' EXIT
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output "$hawk_installer" \
+  https://github.com/astral-sh/hawk/releases/download/0.1.17/cargo-hawk-installer.sh
+printf '%s  %s\n' \
+  'b6e51bce97baade945ad06d9b385588e70fea290cfa6a6d38ee0147b7e936dfb' \
+  "$hawk_installer" | shasum -a 256 -c -
+sh "$hawk_installer"
 ```
 
 7. **Set up the database:**
@@ -76,7 +84,7 @@ cargo clippy --all --all-targets --all-features -- -D warnings
 cargo fmt --check && cargo clippy --all --all-targets --all-features -- -D warnings
 
 # Check public APIs with Hawk (run with the pinned Hawk toolchain)
-cargo +1.97.1 hawk check -D warnings
+cargo +1.99.0 hawk check -D warnings
 ```
 
 ### Adding Tests
@@ -129,7 +137,7 @@ git commit -m "Add feature: description"
 cargo nextest run --all-features
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo +1.97.1 hawk check -D warnings
+cargo +1.99.0 hawk check -D warnings
 ```
 
 4. **Push to your fork:**
@@ -191,8 +199,8 @@ release is tagged.
 ## Cutting a Release
 
 Releases are driven by [`cargo-release`](https://github.com/crate-ci/cargo-release) with the
-configuration in [`release.toml`](https://github.com/NREL/torc/blob/main/release.toml). The tool
-bumps the version in every place it needs to be kept in sync (`Cargo.toml`, `Cargo.lock`,
+configuration in [`release.toml`](https://github.com/NatLabRockies/torc/blob/main/release.toml). The
+tool bumps the version in every place it needs to be kept in sync (`Cargo.toml`, `Cargo.lock`,
 `Dockerfile`, `python_client/pyproject.toml`, and the install snippets in
 `docs/src/getting-started/installation.md`) and creates a single "chore: Release" commit.
 
@@ -215,8 +223,8 @@ cargo release major --no-publish --no-push --no-tag --execute   # 0.30.2 -> 1.0.
 ```
 
 After the bump commit lands on `main`, tag it and push the tag to trigger the
-[release workflow](https://github.com/NREL/torc/blob/main/.github/workflows/release.yml), which
-builds binaries for all supported platforms and creates a draft GitHub release:
+[release workflow](https://github.com/NatLabRockies/torc/blob/main/.github/workflows/release.yml),
+which builds binaries for all supported platforms and creates a draft GitHub release:
 
 ```bash
 git push origin main
@@ -224,8 +232,8 @@ git tag v0.30.3
 git push origin v0.30.3
 ```
 
-See [`.github/RELEASE.md`](https://github.com/NREL/torc/blob/main/.github/RELEASE.md) for details on
-which binaries are produced, supported platforms, and how to publish the draft release.
+See [`.github/RELEASE.md`](https://github.com/NatLabRockies/torc/blob/main/.github/RELEASE.md) for
+details on which binaries are produced, supported platforms, and how to publish the draft release.
 
 ## Rebuilding the README TUI Demo GIF
 

@@ -11,7 +11,7 @@ mod unix_main {
     use chrono::Local;
     use clap::{Parser, builder::styling};
     use env_logger::Builder;
-    use log::{LevelFilter, debug, error, info, warn};
+    use log::{debug, error, info, warn};
     use signal_hook::consts::{SIGCHLD, SIGTERM};
     use signal_hook::iterator::Signals;
     use std::fs::File;
@@ -75,6 +75,16 @@ mod unix_main {
         #[arg(long, default_value = "false")]
         is_subtask: bool,
 
+        /// Only claim jobs whose every label is in this set. Repeat the flag or
+        /// separate labels with commas. Without it, only unlabeled jobs are claimed.
+        #[arg(long = "label", value_delimiter = ',', value_parser = torc::models::parse_label)]
+        labels: Vec<String>,
+
+        /// Ignore the idle timeout while the workflow still has unfinished jobs this
+        /// runner can claim (its labels, or unlabeled when no --label is given).
+        #[arg(long)]
+        persistent: bool,
+
         /// Wait this number of minutes if the database is offline
         #[arg(long, default_value = "20")]
         wait_for_healthy_database_minutes: u64,
@@ -91,8 +101,8 @@ mod unix_main {
         #[arg(long, env = "TORC_PASSWORD", hide_env_values = true)]
         password: Option<String>,
 
-        /// Log level: error, warn, info, debug, trace
-        #[arg(long)]
+        /// Log level (error, warn, info, debug, trace) or module filters (e.g. torc=debug)
+        #[arg(long, env = "RUST_LOG")]
         log_level: Option<String>,
 
         /// Maximum startup delay in seconds for thundering herd mitigation.
@@ -197,33 +207,18 @@ mod unix_main {
             }
         };
 
-        // Resolve log level: CLI arg > config file > default ("info")
+        // Resolve log level: CLI arg > RUST_LOG > config file > default ("info")
         let file_config = TorcConfig::load().unwrap_or_default();
         let log_level_str = args
             .log_level
             .clone()
             .unwrap_or_else(|| file_config.client.log_level.clone());
 
-        let level_filter = match log_level_str.to_lowercase().as_str() {
-            "error" => LevelFilter::Error,
-            "warn" => LevelFilter::Warn,
-            "info" => LevelFilter::Info,
-            "debug" => LevelFilter::Debug,
-            "trace" => LevelFilter::Trace,
-            _ => {
-                eprintln!(
-                    "Warning: unknown log level '{}', defaulting to 'info'",
-                    log_level_str
-                );
-                LevelFilter::Info
-            }
-        };
-
-        // Initialize logger now that we have the log file
-        let mut builder = Builder::from_default_env();
+        // Initialize logger now that we have the log file. Accepts a bare level or module filters.
+        let mut builder = Builder::new();
         builder
             .target(env_logger::Target::Pipe(Box::new(log_file)))
-            .filter_level(level_filter)
+            .parse_filters(&log_level_str)
             .init();
 
         let hostname = hostname::get()
@@ -359,6 +354,7 @@ mod unix_main {
         );
         resources.scheduler_config_id = per_node_resources.scheduler_config_id;
         resources.time_limit = per_node_resources.time_limit;
+        resources.labels = (!args.labels.is_empty()).then(|| args.labels.clone());
 
         // Initialize per-node resource tracker for multi-node allocations.
         // This tracks which node each job lands on so resources_per_node()
@@ -472,6 +468,7 @@ mod unix_main {
             args.claim_backoff_max_secs
                 .unwrap_or(file_config.client.run.claim_backoff_max_secs),
         ));
+        job_runner.set_persistent(args.persistent);
 
         // Register SIGTERM and SIGCHLD signal handlers.
         //

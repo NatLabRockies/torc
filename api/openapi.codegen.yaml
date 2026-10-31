@@ -33,7 +33,7 @@ paths:
           type: string
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -62,7 +62,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -79,7 +79,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -99,7 +99,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -118,7 +118,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -154,7 +154,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -179,7 +179,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -205,7 +205,7 @@ paths:
           type: string
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -262,7 +262,7 @@ paths:
       operationId: reload_auth
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -543,6 +543,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
           content:
             application/json:
               schema:
@@ -1484,6 +1490,16 @@ paths:
           type:
           - string
           - 'null'
+      - name: labels
+        in: query
+        description: |-
+          Comma-separated runner labels: returns the jobs a runner started with
+          these labels would claim. An empty value returns only unlabeled jobs.
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -1657,6 +1673,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (invalid label)
           content:
             application/json:
               schema:
@@ -1908,7 +1930,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: 'Validation error: caller job not Running, duplicate names in the batch, negative priority, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded'
+          description: 'Validation error: caller job not Running, duplicate names in the batch, negative priority, invalid label, unknown resource_requirements name (and no workflow default), unknown depends_on name, dependency cycle within the batch, inconsistent replay (partial overlap with existing names), or per-lineage iteration cap exceeded'
           content:
             application/json:
               schema:
@@ -2249,7 +2271,7 @@ paths:
       operationId: ping
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -3700,19 +3722,19 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskModel'
         '404':
-          description: ''
+          description: Not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -4049,7 +4071,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4061,7 +4083,7 @@ paths:
       operationId: get_version
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4140,7 +4162,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4201,7 +4223,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4269,7 +4291,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4305,7 +4327,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4332,7 +4354,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4358,7 +4380,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4378,7 +4400,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4405,7 +4427,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4434,7 +4456,7 @@ paths:
             type: string
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4569,7 +4591,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4601,7 +4623,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -4627,7 +4649,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4691,7 +4713,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema: {}
@@ -4730,11 +4752,35 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimJobsBasedOnResources'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (invalid label)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/claim_next_jobs:
     post:
       tags:
@@ -4756,13 +4802,47 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: labels
+        in: query
+        description: |-
+          Comma-separated runner labels. Only labeled jobs whose every label is in
+          this set are claimed; when unset or empty, only unlabeled jobs are.
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimNextJobsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (invalid label)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/failure_handlers:
     get:
       tags:
@@ -4853,36 +4933,36 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema: {}
         '202':
-          description: ''
+          description: Task accepted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskModel'
         '403':
-          description: ''
+          description: Forbidden
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: ''
+          description: Not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: ''
+          description: Conflict
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -4902,7 +4982,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4922,7 +5002,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -4972,7 +5052,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5022,7 +5102,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5042,7 +5122,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5092,7 +5172,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5112,7 +5192,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5139,7 +5219,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5167,7 +5247,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5324,7 +5404,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5351,7 +5431,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5378,7 +5458,7 @@ paths:
           - 'null'
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema: {}
@@ -5533,7 +5613,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5551,7 +5631,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -5587,7 +5667,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5605,7 +5685,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -5625,7 +5705,7 @@ paths:
           format: int64
       responses:
         '200':
-          description: ''
+          description: Successful response
           content:
             application/json:
               schema:
@@ -5643,7 +5723,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: ''
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -5937,6 +6017,15 @@ components:
           type:
           - boolean
           - 'null'
+        labels:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: |-
+            Labels the runner was started with; it claims only jobs whose every
+            label it has (or only unlabeled jobs, when unset).
         memory_gb:
           type: number
           format: double
@@ -5993,8 +6082,7 @@ components:
           type: boolean
           default: false
         granularity:
-          oneOf:
-          - $ref: '#/components/schemas/MonitorGranularity'
+          $ref: '#/components/schemas/MonitorGranularity'
           default: summary
         memory:
           type: boolean
@@ -6033,6 +6121,15 @@ components:
           - integer
           - 'null'
           format: int64
+        labels:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: |-
+            Runner labels; only labeled jobs whose every label is in this set (or
+            unlabeled jobs, when unset) are claimed.
         memory_gb:
           type: number
           format: double
@@ -6513,6 +6610,15 @@ components:
           type:
           - string
           - 'null'
+        labels:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: |-
+            Routing labels. A labeled runner claims only labeled jobs whose every
+            label it has; a runner with no labels claims only unlabeled jobs.
         name:
           type: string
         origin:
@@ -6585,8 +6691,7 @@ components:
           type: boolean
           default: false
         granularity:
-          oneOf:
-          - $ref: '#/components/schemas/MonitorGranularity'
+          $ref: '#/components/schemas/MonitorGranularity'
           default: summary
     JobStatus:
       type: string
@@ -7407,9 +7512,8 @@ components:
           type: boolean
           default: false
         granularity:
-          oneOf:
-          - $ref: '#/components/schemas/MonitorGranularity'
-            description: Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
+          $ref: '#/components/schemas/MonitorGranularity'
+          description: Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.
           default: summary
         jobs:
           default: null
@@ -7843,6 +7947,13 @@ components:
           items:
             type: string
           description: Job names this job depends on (existing jobs or siblings in this batch).
+        labels:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+          description: Routing labels; only runners started with all of them claim this job.
         name:
           type: string
         priority:
@@ -8318,6 +8429,16 @@ components:
         total_jobs:
           type: integer
           format: int64
+        unserved_ready_labels:
+          type: object
+          description: |-
+            Ready-job count per label set (comma-joined) that no active compute node
+            covers. These jobs stay ready until a runner is started with every label.
+          additionalProperties:
+            type: integer
+            format: int64
+          propertyNames:
+            type: string
         walltime_seconds:
           type:
           - number

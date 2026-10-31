@@ -27,6 +27,7 @@ This document contains the help content for the `torc` command-line program.
 - [`torc config`](#torc-config)
 - [`torc tui`](#torc-tui)
 - [`torc plot-resources`](#torc-plot-resources)
+- [`torc monitor-node`](#torc-monitor-node)
 - [`torc completions`](#torc-completions)
 
 ## `torc`
@@ -59,6 +60,7 @@ Torc workflow orchestration system
 - `config` — Manage configuration files and settings
 - `tui` — Interactive terminal UI for managing workflows
 - `plot-resources` — Generate interactive HTML plots from resource monitoring data
+- `monitor-node` — Record compute-node CPU/memory on this host without running jobs
 - `completions` — Generate shell completions
 
 ###### **Options:**
@@ -93,6 +95,10 @@ Run a workflow locally (create from spec file or stdin, or run existing workflow
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for jobs
 - `--skip-checks` — Skip validation checks (e.g., scheduler node requirements). Use with caution.
   Default: `false`
+- `--label <LABELS>` — Only claim jobs whose every label is in this set (repeat the flag or separate
+  with commas). Without it, only unlabeled jobs are claimed
+- `--persistent` — Ignore the idle timeout while the workflow still has unfinished jobs this runner
+  can claim (its labels, or unlabeled when no --label is given)
 
 ## `torc submit`
 
@@ -194,6 +200,15 @@ resource requirements, and resubmits jobs.
    that rely on either mechanism, since deferred `schedule_nodes` actions only account for the
    originally-declared workload.
 
+4. **With runners outside Slurm** (`--persistent`):
+
+   ```bash
+   torc watch 123 --persistent
+   ```
+
+   Keeps watching until the workflow completes, even when there are no Slurm allocations and no
+   ready jobs. Use it when a `torc run --label` runner on a dedicated machine is still working.
+
 ### Arguments
 
 - `<WORKFLOW_ID>` — Workflow ID to watch
@@ -206,6 +221,7 @@ resource requirements, and resubmits jobs.
 - `-o`, `--output-dir <OUTPUT_DIR>` — Output directory for job files. Default: `output`
 - `-s`, `--show-job-counts` — Show job counts by status during polling. WARNING: Can cause high
   server load for large workflows.
+- `--persistent` — Keep watching until the workflow completes, even with no Slurm allocations
 
 **Recovery:**
 
@@ -2158,6 +2174,23 @@ Generate interactive HTML plots from resource monitoring data
 - `-j`, `--job-ids <JOB_IDS>` — Only plot specific job IDs (comma-separated)
 - `-p`, `--prefix <PREFIX>` — Prefix for output filenames. Default: `resource_plot`
 - `-f`, `--format <FORMAT>` — Output format: html or json. Default: `html`
+
+## `torc monitor-node`
+
+Record compute-node CPU/memory on this host without running jobs. Writes the same SQLite layout as
+the job runner's resource monitor, readable by `torc plot-resources`. Runs until SIGTERM or Ctrl-C.
+
+**Usage:** `torc monitor-node [OPTIONS]`
+
+###### **Options:**
+
+- `-w`, `--workflow-id <WORKFLOW_ID>` — Use this workflow's `resource_monitor.compute_node` config
+  (the flags below are then ignored). Omit to sample without a Torc workflow
+- `-o`, `--output-dir <OUTPUT_DIR>` — Output directory (same as the job runner's). Default:
+  `torc_output`
+- `-i`, `--sample-interval-seconds <N>` — Seconds between samples (no workflow only). Default: `10`
+- `--flush-interval-seconds <N>` — Seconds between SQLite flushes (no workflow only). Default: `300`
+- `--summary-only` — Store only the lifetime summary, not every sample (no workflow only)
 
 ## `torc completions`
 

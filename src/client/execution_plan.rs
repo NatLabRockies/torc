@@ -496,7 +496,7 @@ impl ExecutionPlan {
             let mut graph_clone = graph.clone();
             let components = graph_clone.connected_components();
             if components.len() > 1 {
-                println!(
+                eprintln!(
                     "\nNote: Workflow has {} independent sub-workflows that can run in parallel",
                     components.len()
                 );

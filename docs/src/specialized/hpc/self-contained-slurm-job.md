@@ -119,7 +119,7 @@ grep $(hostname -s) /etc/hosts    # often shows the HSN alias explicitly
 getent hosts $(hostname -s)       # canonical address lookup
 ```
 
-On NREL Kestrel, for example, the HSN hostname follows the pattern
+On NLR Kestrel, for example, the HSN hostname follows the pattern
 `<shortname>.hsn.cm.kestrel.hpc.nrel.gov`. See
 [HPC Deployment → Finding the Internal Hostname](./hpc-deployment.md#finding-the-internal-hostname)
 for cluster-specific hostnames and

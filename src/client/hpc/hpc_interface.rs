@@ -62,6 +62,8 @@ pub trait HpcInterface: Send + Sync {
     /// * `claim_backoff_max_secs` - Optional upper bound for the adaptive
     ///   claim/poll backoff used inside the runner. When `Some`, propagated to
     ///   the runner via `--claim-backoff-max-secs`.
+    /// * `monitor_idle_nodes` - Launch `torc monitor-node` on every non-head node so
+    ///   compute-node utilization is recorded there too (single-runner allocations only)
     #[allow(clippy::too_many_arguments)]
     fn create_submission_script(
         &self,
@@ -79,6 +81,7 @@ pub trait HpcInterface: Send + Sync {
         tls_insecure: bool,
         startup_delay_seconds: u64,
         claim_backoff_max_secs: Option<f64>,
+        monitor_idle_nodes: bool,
     ) -> Result<()>;
 
     /// Get the current HPC job ID from environment variables

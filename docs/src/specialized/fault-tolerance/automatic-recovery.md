@@ -138,8 +138,8 @@ Timeout Failures (1 job):
   145      postprocess                    152    PT30M        29.8         sigxcpu_152
 
 OOM failures (3 jobs): [R]etry with 1.5x memory / [A]djust multiplier / [S]kip (default: R): r
-Timeout failures (1 job): [R]etry with 1.4x runtime / [A]djust multiplier / [S]kip (default: R): a
-  Enter runtime multiplier [default: 1.4]: 2.0
+Timeout failures (1 job): [R]etry with 1.5x runtime / [A]djust multiplier / [S]kip (default: R): a
+  Enter runtime multiplier [default: 1.5]: 2.0
 
 --- Recovery Plan ---
 
@@ -195,7 +195,7 @@ In non-interactive mode, the command:
 ```bash
 torc recover <workflow_id> \
   --memory-multiplier 1.5 \     # Memory increase factor for OOM (default: 1.5)
-  --runtime-multiplier 1.4 \    # Runtime increase factor for timeout (default: 1.4)
+  --runtime-multiplier 1.5 \    # Runtime increase factor for timeout (default: 1.5)
   --retry-unknown \             # Also retry jobs with unknown failure causes
   --recovery-hook "bash fix.sh" \  # Custom script for unknown failures
   --dry-run \                   # Preview without making changes

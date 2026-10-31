@@ -41,6 +41,7 @@ use torc::client::workflow_spec::WorkflowSpec;
 
 // Import the binary command modules from the library
 use torc::exec_cmd;
+use torc::monitor_node_cmd;
 use torc::plot_resources_cmd;
 use torc::run_jobs_cmd;
 use torc::tui_runner;
@@ -488,15 +489,11 @@ fn main() {
         env_logger::Builder::new().parse_filters(&log_level).init();
     }
 
-    // Resolve format with priority: CLI arg (non-default) > file config > CLI default
-    // Note: clap sets default to "table", so we check if user explicitly provided it
-    let format = if cli.format != "table" {
-        // User explicitly provided a format
-        cli.format.clone()
-    } else {
-        // Use file config if available, otherwise CLI default
-        file_config.client.format.clone()
-    };
+    // Resolve format with priority: CLI arg > file config (which defaults to "table")
+    let format = cli
+        .format
+        .clone()
+        .unwrap_or_else(|| file_config.client.format.clone());
 
     // Validate format option for API commands
     if !matches!(format.as_str(), "table" | "json" | "csv") {
@@ -568,6 +565,10 @@ fn main() {
             | Commands::Hpc { .. }
             | Commands::SelfCommand { .. }
             | Commands::Exec { dry_run: true, .. }
+            | Commands::MonitorNode(monitor_node_cmd::Args {
+                workflow_id: None,
+                ..
+            })
     );
 
     // --in-memory snapshots the empty DB over the on-disk path on exit, which
@@ -672,6 +673,8 @@ fn main() {
             time_limit,
             end_time,
             skip_checks,
+            labels,
+            persistent,
         } => {
             let workflow_id = if is_spec_file(workflow_spec_or_id) {
                 // Resolve the spec source once (handles `-` reading from stdin) so
@@ -693,7 +696,15 @@ fn main() {
                 let user = torc::get_username();
                 match WorkflowSpec::create_workflow_from_spec(&config, spec_path, &user, true) {
                     Ok(id) => {
-                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
+                        if format == "json" {
+                            print_workflow_message(
+                                &format,
+                                id,
+                                &format!("Created workflow {}", id),
+                            );
+                        } else {
+                            eprintln!("Created workflow {}", id);
+                        }
                         id
                     }
                     Err(e) => {
@@ -735,6 +746,8 @@ fn main() {
                 num_gpus: num_gpus.or(run_config.num_gpus),
                 num_nodes: None,
                 scheduler_config_id: None,
+                labels: labels.clone(),
+                persistent: *persistent,
                 log_prefix: None,
                 cpu_affinity_cpus_per_job: None,
                 log_level: log_level.clone(),
@@ -877,7 +890,11 @@ fn main() {
 
                 match WorkflowSpec::create_workflow_from_spec(&config, spec_path, &user, true) {
                     Ok(id) => {
-                        print_workflow_message(&format, id, &format!("Created workflow {}", id));
+                        // Progress only: the submit result below is the single stdout document
+                        // (and carries workflow_id in JSON mode).
+                        if format != "json" {
+                            eprintln!("Created workflow {}", id);
+                        }
                         id
                     }
                     Err(e) => {
@@ -1041,6 +1058,7 @@ fn main() {
             ai_agent,
             partition,
             walltime,
+            persistent,
         } => {
             let args = WatchArgs {
                 workflow_id: *workflow_id,
@@ -1062,6 +1080,7 @@ fn main() {
                 ai_agent: ai_agent.clone(),
                 partition: partition.clone(),
                 walltime: walltime.clone(),
+                persistent: *persistent,
             };
             run_watch(&config, &args);
         }
@@ -1164,7 +1183,7 @@ fn main() {
                                 Err(_) => println!("Would reset {} job(s) for retry.", n),
                             }
                         }
-                        println!("\nRun without --dry-run to apply these changes.");
+                        eprintln!("\nRun without --dry-run to apply these changes.");
                     } else {
                         println!("Recovery complete for workflow {}", workflow_id);
                         if result.oom_fixed > 0 {
@@ -1319,16 +1338,19 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Commands::MonitorNode(args) => {
+            std::process::exit(monitor_node_cmd::run(&config, args));
+        }
         Commands::Ping => match apis::system_api::ping(&config) {
             Ok(_) => {
-                if cli.format == "json" {
+                if format == "json" {
                     println!(r#"{{"status": "Server is running"}}"#);
                 } else {
                     println!("Server is running");
                 }
             }
             Err(e) => {
-                if cli.format == "json" {
+                if format == "json" {
                     println!(
                         r#"{{"status": "error", "message": "{}"}}"#,
                         e.to_string().replace('"', "\\\"")

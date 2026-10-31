@@ -44,6 +44,9 @@ struct ResourceSample {
 
 #[derive(Debug, Clone)]
 struct SystemResourceSample {
+    /// Which node the sample came from: the metrics file's stem without the
+    /// `resource_metrics_` prefix (e.g. `wf7_hnode12_r1`). One file per node.
+    source: String,
     timestamp: i64,
     cpu_percent: f64,
     memory_bytes: i64,
@@ -93,12 +96,12 @@ pub fn run(args: &Args) -> Result<()> {
     let mut system_summaries: Vec<SystemSummary> = Vec::new();
 
     for db_path in &args.db_paths {
-        println!("Loading data from: {}", db_path.display());
+        eprintln!("Loading data from: {}", db_path.display());
         let samples = load_samples(db_path)?;
         let names = load_job_names(db_path)?;
         let loaded_system_samples = load_system_samples(db_path)?;
         let loaded_system_summary = load_system_summary(db_path)?;
-        println!(
+        eprintln!(
             "  Loaded {} job samples, {} job names, {} system samples",
             samples.len(),
             names.len(),
@@ -127,7 +130,7 @@ pub fn run(args: &Args) -> Result<()> {
     let system_metrics = calculate_system_metrics(system_samples, system_summaries);
 
     if jobs_to_plot.is_empty() && system_metrics.is_none() {
-        println!("No resource data found to plot");
+        eprintln!("No resource data found to plot");
         return Ok(());
     }
 
@@ -146,7 +149,7 @@ pub fn run(args: &Args) -> Result<()> {
                 format!("Job {}", metrics.job_id)
             };
 
-            println!(
+            eprintln!(
                 "{}: {} samples, {:.1}s duration, peak CPU: {:.1}%, peak mem: {:.2} GB",
                 job_display,
                 samples.len(),
@@ -167,7 +170,7 @@ pub fn run(args: &Args) -> Result<()> {
     };
 
     // Generate plots
-    println!("\nGenerating plots...");
+    eprintln!("\nGenerating plots...");
     let mut total_plots = 0;
     let filename = |stem: &str| -> String {
         if args.prefix.is_empty() {
@@ -183,7 +186,7 @@ pub fn run(args: &Args) -> Result<()> {
             .output_dir
             .join(filename(&format!("job_{}", metrics.job_id)));
         plot_job_timeline(metrics, &output_path, &args.format)?;
-        println!("  Created: {}", output_path.display());
+        eprintln!("  Created: {}", output_path.display());
         total_plots += 1;
     }
 
@@ -191,12 +194,12 @@ pub fn run(args: &Args) -> Result<()> {
     if job_metrics.len() > 1 {
         let cpu_output_path = args.output_dir.join(filename("cpu_all_jobs"));
         plot_all_jobs_cpu_overview(&job_metrics, &cpu_output_path, &args.format)?;
-        println!("  Created: {}", cpu_output_path.display());
+        eprintln!("  Created: {}", cpu_output_path.display());
         total_plots += 1;
 
         let memory_output_path = args.output_dir.join(filename("memory_all_jobs"));
         plot_all_jobs_memory_overview(&job_metrics, &memory_output_path, &args.format)?;
-        println!("  Created: {}", memory_output_path.display());
+        eprintln!("  Created: {}", memory_output_path.display());
         total_plots += 1;
     }
 
@@ -204,7 +207,7 @@ pub fn run(args: &Args) -> Result<()> {
     if !job_metrics.is_empty() {
         let output_path = args.output_dir.join(filename("summary"));
         plot_summary_dashboard(&job_metrics, &output_path, &args.format)?;
-        println!("  Created: {}", output_path.display());
+        eprintln!("  Created: {}", output_path.display());
         total_plots += 1;
     }
 
@@ -213,19 +216,19 @@ pub fn run(args: &Args) -> Result<()> {
         if !metrics.samples.is_empty() {
             let output_path = args.output_dir.join(filename("system_timeline"));
             plot_system_timeline(metrics, &output_path, &args.format)?;
-            println!("  Created: {}", output_path.display());
+            eprintln!("  Created: {}", output_path.display());
             total_plots += 1;
         }
 
         if metrics.summary.is_some() {
             let output_path = args.output_dir.join(filename("system_summary"));
             plot_system_summary(metrics, &output_path, &args.format)?;
-            println!("  Created: {}", output_path.display());
+            eprintln!("  Created: {}", output_path.display());
             total_plots += 1;
         }
     }
 
-    println!("\nDone! Generated {} plot(s)", total_plots);
+    eprintln!("\nDone! Generated {} plot(s)", total_plots);
 
     Ok(())
 }
@@ -233,6 +236,10 @@ pub fn run(args: &Args) -> Result<()> {
 fn load_samples(db_path: &Path) -> Result<Vec<ResourceSample>> {
     let conn = Connection::open(db_path)
         .with_context(|| format!("Failed to open database: {}", db_path.display()))?;
+
+    if !table_exists(&conn, "job_resource_samples")? {
+        return Ok(Vec::new());
+    }
 
     let mut stmt = conn.prepare(
         "SELECT job_id, timestamp, cpu_percent, memory_bytes, num_processes
@@ -296,9 +303,19 @@ fn load_system_samples(db_path: &Path) -> Result<Vec<SystemResourceSample>> {
          ORDER BY timestamp, rowid",
     )?;
 
+    let source = db_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let source = source
+        .strip_prefix("resource_metrics_")
+        .unwrap_or(&source)
+        .to_string();
+
     let samples: SqliteResult<Vec<SystemResourceSample>> = stmt
         .query_map([], |row| {
             Ok(SystemResourceSample {
+                source: source.clone(),
                 timestamp: row.get(0)?,
                 cpu_percent: row.get(1)?,
                 memory_bytes: row.get(2)?,
@@ -721,39 +738,66 @@ fn plot_system_timeline(metrics: &SystemMetrics, output_path: &Path, format: &st
     let mut plot = Plot::new();
 
     let start_time = metrics.samples.first().unwrap().timestamp;
-    let times: Vec<f64> = metrics
-        .samples
-        .iter()
-        .map(|s| (s.timestamp - start_time) as f64)
-        .collect();
-    let cpu_values: Vec<f64> = metrics.samples.iter().map(|s| s.cpu_percent).collect();
-    let memory_values: Vec<f64> = metrics
-        .samples
-        .iter()
-        .map(|s| s.memory_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-        .collect();
-    let total_memory_values: Vec<f64> = metrics
-        .samples
-        .iter()
-        .map(|s| s.total_memory_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-        .collect();
 
-    let cpu_trace = Scatter::new(times.clone(), cpu_values)
-        .name("System CPU %")
-        .mode(Mode::Lines)
-        .y_axis("y1");
-    let memory_trace = Scatter::new(times.clone(), memory_values)
-        .name("Used Memory (GB)")
-        .mode(Mode::Lines)
-        .y_axis("y2");
-    let total_memory_trace = Scatter::new(times, total_memory_values)
-        .name("Total Memory (GB)")
-        .mode(Mode::Lines)
-        .y_axis("y2");
+    // One CPU and one memory trace per node. Samples are already sorted by
+    // timestamp; group by source in first-seen order so concurrent nodes never
+    // interleave into a single zigzag line.
+    let mut sources: Vec<&str> = Vec::new();
+    let mut by_source: HashMap<&str, Vec<&SystemResourceSample>> = HashMap::new();
+    for s in &metrics.samples {
+        by_source
+            .entry(s.source.as_str())
+            .or_insert_with(|| {
+                sources.push(&s.source);
+                Vec::new()
+            })
+            .push(s);
+    }
+    let single_source = sources.len() == 1;
 
-    plot.add_trace(cpu_trace);
-    plot.add_trace(memory_trace);
-    plot.add_trace(total_memory_trace);
+    for source in sources {
+        let node = &by_source[source];
+        let times: Vec<f64> = node
+            .iter()
+            .map(|s| (s.timestamp - start_time) as f64)
+            .collect();
+        let cpu_values: Vec<f64> = node.iter().map(|s| s.cpu_percent).collect();
+        let memory_values: Vec<f64> = node
+            .iter()
+            .map(|s| s.memory_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+            .collect();
+        let (cpu_name, memory_name) = if single_source {
+            ("System CPU %".to_string(), "Used Memory (GB)".to_string())
+        } else {
+            (format!("{} CPU %", source), format!("{} Mem (GB)", source))
+        };
+
+        plot.add_trace(
+            Scatter::new(times.clone(), cpu_values)
+                .name(&cpu_name)
+                .mode(Mode::Lines)
+                .y_axis("y1"),
+        );
+        plot.add_trace(
+            Scatter::new(times.clone(), memory_values)
+                .name(&memory_name)
+                .mode(Mode::Lines)
+                .y_axis("y2"),
+        );
+        // Total memory is a flat line per node; with many nodes it only adds clutter.
+        if single_source {
+            let total_memory_values: Vec<f64> = node
+                .iter()
+                .map(|s| s.total_memory_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+                .collect();
+            plot.add_trace(
+                Scatter::new(times, total_memory_values)
+                    .name("Total Memory (GB)")
+                    .mode(Mode::Lines)
+                    .y_axis("y2"),
+            );
+        }
+    }
 
     let title = format!(
         "System Resource Usage Timeline<br><sub>Peak: {:.1}% CPU, {:.2} GB Memory | Avg: {:.1}% CPU, {:.2} GB Memory | Duration: {:.1}s</sub>",
@@ -839,6 +883,82 @@ fn plot_system_summary(metrics: &SystemMetrics, output_path: &Path, format: &str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Create a metrics db holding only compute-node samples (one per `(ts, cpu)` pair).
+    fn create_system_db(path: &Path, samples: &[(i64, f64)]) {
+        let conn = Connection::open(path).unwrap();
+        conn.execute(
+            "CREATE TABLE system_resource_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                cpu_percent REAL NOT NULL,
+                memory_bytes INTEGER NOT NULL,
+                total_memory_bytes INTEGER NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        for (ts, cpu) in samples {
+            conn.execute(
+                "INSERT INTO system_resource_samples
+                    (timestamp, cpu_percent, memory_bytes, total_memory_bytes)
+                 VALUES (?1, ?2, 1024, 4096)",
+                rusqlite::params![ts, cpu],
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn system_timeline_draws_one_trace_per_node() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_dir = temp_dir.path().join("plots");
+        let db_a = temp_dir.path().join("resource_metrics_monitor_hnodeA.db");
+        let db_b = temp_dir.path().join("resource_metrics_monitor_hnodeB.db");
+        // Concurrent samples: identical timestamps, very different CPU.
+        create_system_db(&db_a, &[(100, 10.0), (101, 10.0), (102, 10.0)]);
+        create_system_db(&db_b, &[(100, 90.0), (101, 90.0), (102, 90.0)]);
+
+        run(&Args {
+            db_paths: vec![db_a, db_b],
+            output_dir: output_dir.clone(),
+            job_ids: Vec::new(),
+            prefix: "p".to_string(),
+            format: "json".to_string(),
+        })
+        .unwrap();
+
+        let json: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(output_dir.join("p_system_timeline.json")).unwrap(),
+        )
+        .unwrap();
+        let traces = json["data"].as_array().unwrap();
+        let names: Vec<&str> = traces.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert_eq!(
+            names,
+            [
+                "monitor_hnodeA CPU %",
+                "monitor_hnodeA Mem (GB)",
+                "monitor_hnodeB CPU %",
+                "monitor_hnodeB Mem (GB)",
+            ]
+        );
+        // Each CPU trace holds only its own node's readings, never interleaved.
+        let cpu_a: Vec<f64> = traces[0]["y"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        let cpu_b: Vec<f64> = traces[2]["y"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect();
+        assert_eq!(cpu_a, [10.0, 10.0, 10.0]);
+        assert_eq!(cpu_b, [90.0, 90.0, 90.0]);
+    }
 
     #[test]
     fn generates_system_plots_without_job_samples() {

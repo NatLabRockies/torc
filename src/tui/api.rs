@@ -157,6 +157,7 @@ impl TorcClient {
             None,    // origin_is_set
             name,    // name
             command, // command
+            None,    // label
         )
         .context("Failed to list jobs")?;
 

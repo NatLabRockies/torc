@@ -677,6 +677,8 @@ pub struct WorkflowSummary {
     pub longest_ready_runtime_seconds: Option<i64>,
     /// Greatest remaining walltime (seconds) across active bounded allocations.
     pub max_allocation_remaining_seconds: Option<i64>,
+    /// Ready-job count per label that no active runner was started with.
+    pub unserved_ready_labels: std::collections::BTreeMap<String, i64>,
 }
 
 pub struct App {
@@ -1380,6 +1382,7 @@ impl App {
                             longest_ready_runtime_seconds: status.longest_ready_runtime_seconds,
                             max_allocation_remaining_seconds: status
                                 .max_allocation_remaining_seconds,
+                            unserved_ready_labels: status.unserved_ready_labels,
                         });
                     }
                     DetailViewType::Jobs => {
@@ -2640,7 +2643,7 @@ impl App {
                         return;
                     };
                     let Some(s) = job.status else { return };
-                    (FilterTarget::Details, "Status", format!("{:?}", s))
+                    (FilterTarget::Details, "Status", s.to_string())
                 }
                 DetailViewType::Results => {
                     let Some(idx) = self.results_state.selected() else {
@@ -2649,7 +2652,7 @@ impl App {
                     let Some(r) = self.results.get(idx) else {
                         return;
                     };
-                    (FilterTarget::Details, "Status", format!("{:?}", r.status))
+                    (FilterTarget::Details, "Status", r.status.to_string())
                 }
                 DetailViewType::Events => {
                     let Some(idx) = self.events_state.selected() else {
@@ -2839,7 +2842,7 @@ impl App {
                         "Status" => job
                             .status
                             .as_ref()
-                            .map(|s| format!("{:?}", s).to_lowercase().contains(&value))
+                            .map(|s| s.to_string().contains(&value))
                             .unwrap_or(false),
                         "Name" => job.name.to_lowercase().contains(&value),
                         "Command" => job.command.to_lowercase().contains(&value),
@@ -2893,9 +2896,7 @@ impl App {
                     .results_all
                     .iter()
                     .filter(|result| match column.as_str() {
-                        "Status" => format!("{:?}", result.status)
-                            .to_lowercase()
-                            .contains(&value),
+                        "Status" => result.status.to_string().contains(&value),
                         "Return Code" => result.return_code.to_string().contains(&value),
                         _ => false,
                     })
@@ -3205,7 +3206,7 @@ impl App {
                 let node = dag.add_node(JobNode {
                     id: job_id,
                     name: job.name.clone(),
-                    status: job.status.as_ref().map(|s| format!("{:?}", s)),
+                    status: job.status.as_ref().map(|s| s.to_string()),
                 });
                 job_id_to_node.insert(job_id, node);
             }
@@ -4362,7 +4363,7 @@ impl App {
                 job.command.clone(),
                 job.status
                     .as_ref()
-                    .map(|s| format!("{:?}", s))
+                    .map(|s| s.to_string())
                     .unwrap_or_default(),
                 job.compute_node_id,
                 job.start_time.clone(),
@@ -5168,10 +5169,10 @@ enum StatusFilterResolution {
 
 /// Resolve a user-typed Jobs status filter to a single [`JobStatus`] for
 /// server-side filtering. Matches the status name the user sees in the table
-/// (the `{:?}` debug form, e.g. "Completed"), case-insensitively: an exact
+/// (e.g. "completed", "pending_failed"), case-insensitively: an exact
 /// match wins; otherwise a substring is accepted only when it matches exactly
 /// one status. An empty value is treated as `Unknown`. Substrings that match
-/// several statuses (e.g. "ed" → Completed/Failed/…) return `Ambiguous` so the
+/// several statuses (e.g. "ed" → completed/failed/…) return `Ambiguous` so the
 /// caller can surface the ambiguity instead of silently picking one.
 fn resolve_job_status_filter(value: &str) -> StatusFilterResolution {
     let v = value.trim().to_lowercase();
@@ -5191,20 +5192,18 @@ fn resolve_job_status_filter(value: &str) -> StatusFilterResolution {
         JobStatus::Disabled,
         JobStatus::PendingFailed,
     ];
-    if let Some(s) = ALL.iter().find(|s| format!("{:?}", s).to_lowercase() == v) {
+    if let Some(s) = ALL.iter().find(|s| s.to_string() == v) {
         return StatusFilterResolution::Matched(*s);
     }
     let matches: Vec<JobStatus> = ALL
         .iter()
-        .filter(|s| format!("{:?}", s).to_lowercase().contains(&v))
+        .filter(|s| s.to_string().contains(&v))
         .copied()
         .collect();
     match matches.as_slice() {
         [] => StatusFilterResolution::Unknown,
         [s] => StatusFilterResolution::Matched(*s),
-        many => {
-            StatusFilterResolution::Ambiguous(many.iter().map(|s| format!("{:?}", s)).collect())
-        }
+        many => StatusFilterResolution::Ambiguous(many.iter().map(|s| s.to_string()).collect()),
     }
 }
 

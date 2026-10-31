@@ -64,7 +64,7 @@ impl HpcManager {
     /// The current status of the job
     fn get_status(&self, job_id: &str) -> Result<HpcJobStatus> {
         let info = self.interface.get_status(job_id)?;
-        trace!("hpc_job_id={} status={:?}", job_id, info.status);
+        trace!("hpc_job_id={} status={}", job_id, info.status);
         Ok(info.status)
     }
 
@@ -156,6 +156,7 @@ impl HpcManager {
             tls_insecure,
             startup_delay_seconds,
             None,
+            false,
         )?;
 
         trace!("Created submission script {:?}", filename);

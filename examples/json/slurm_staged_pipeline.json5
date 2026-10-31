@@ -346,7 +346,7 @@
       "nodes": 1
     }
   ],
-  
+
   "resource_monitor": {
     "sample_interval_seconds": 10,
     "jobs": {

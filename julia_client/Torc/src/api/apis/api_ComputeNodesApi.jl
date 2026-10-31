@@ -15,6 +15,7 @@ const _returntypes_create_compute_node_ComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ComputeNodeModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 

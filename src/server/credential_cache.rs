@@ -101,6 +101,16 @@ impl CredentialCache {
     pub(crate) fn clear(&self) {
         self.cache.write().clear();
     }
+
+    /// Get the number of entries in the cache (for debugging/monitoring).
+    fn len(&self) -> usize {
+        self.cache.read().len()
+    }
+
+    /// Check if the cache is empty.
+    fn is_empty(&self) -> bool {
+        self.cache.read().is_empty()
+    }
 }
 
 impl std::fmt::Debug for CredentialCache {

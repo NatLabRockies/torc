@@ -41,7 +41,13 @@ jobs:
           mdbook build
 
       - name: Check documentation links
-        run: python3 .github/scripts/check-doc-links.py --internal --external
+        run: python3 .github/scripts/check-doc-links.py --internal
+
+      # External link rot on third-party sites must not block a docs deploy.
+      # Failures are reported in the job log but do not fail the run.
+      - name: Check external documentation links
+        continue-on-error: true
+        run: python3 .github/scripts/check-doc-links.py --external
 
       - name: Setup gh-pages branch
         run: .github/scripts/gh-pages-setup.sh

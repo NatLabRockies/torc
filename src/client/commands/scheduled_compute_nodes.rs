@@ -155,7 +155,7 @@ pub fn handle_scheduled_compute_node_commands(
                         } else {
                             display_table_with_count(&rows, "scheduled compute nodes");
                             if response.total_count as usize > nodes.len() {
-                                println!(
+                                eprintln!(
                                     "\nShowing {} of {} total scheduled compute nodes",
                                     nodes.len(),
                                     response.total_count

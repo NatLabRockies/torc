@@ -194,7 +194,7 @@ fn maybe_reload_auth(reload_auth: bool, url: &Option<String>, server_password: &
 
     match torc::client::apis::access_control_api::reload_auth(&config) {
         Ok(response) => {
-            println!(
+            eprintln!(
                 "Server: {} ({} users)",
                 response.message, response.user_count
             );
@@ -232,7 +232,7 @@ fn main() {
                 std::process::exit(1);
             }
 
-            println!("Hashing password (cost={cost})...");
+            eprintln!("Hashing password (cost={cost})...");
             let hash = match hash(&password, cost) {
                 Ok(h) => h,
                 Err(e) => {

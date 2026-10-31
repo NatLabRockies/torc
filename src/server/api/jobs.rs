@@ -22,10 +22,10 @@ use crate::server::api_responses::{
 use crate::models::{self as models, JobStatus};
 
 use super::{
-    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
-    database_error_with_msg, deserialize_env_map, escape_like_pattern, message_error_response,
-    normalize_env_map, parse_job_status, resource_not_found_response, serialize_env_map,
-    validate_env_map,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate, claimable_labels_sql,
+    database_error_with_msg, deserialize_env_map, escape_like_pattern, labels_column,
+    message_error_response, normalize_env_map, parse_job_status, resource_not_found_response,
+    serialize_env_map, validate_env_map,
 };
 
 /// Per-job values prepared during the first pass of bulk `create_jobs` so the
@@ -155,6 +155,7 @@ pub trait JobsApi<C> {
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        labels: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -188,6 +189,7 @@ pub trait JobsApi<C> {
         &self,
         id: i64,
         requested_job_count: i64,
+        labels: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 
@@ -406,7 +408,7 @@ impl JobsApiImpl {
                 SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script,
                        env,
                        status, cancel_on_blocking_job_failure, supports_termination, scheduler_id,
-                       failure_handler_id, attempt_id, priority, origin,
+                       failure_handler_id, attempt_id, priority, origin, labels,
                        start_time, compute_node_id
                 FROM job
                 WHERE id = ?
@@ -584,6 +586,7 @@ impl JobsApiImpl {
             attempt_id: record.try_get("attempt_id").ok(),
             priority: record.try_get("priority").ok(),
             origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
+            labels: labels_column(&record, "labels"),
         })
     }
 
@@ -1262,6 +1265,11 @@ where
                 )),
             ));
         }
+        if let Err(err) = models::validate_labels(job.labels.as_deref()) {
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!("{} for job '{}'", err, job.name)),
+            ));
+        }
         if let Err(err) = validate_env_map(job.env.as_ref(), "job env") {
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(err.0),
@@ -1270,6 +1278,9 @@ where
         let status = JobStatus::Uninitialized;
         let status_int = status.to_int();
         job.status = Some(status);
+        // Echo the stored (sorted, deduplicated) form back to the caller.
+        job.labels =
+            models::labels_from_json(models::labels_to_json(job.labels.as_deref()).as_deref());
 
         // Acquire the SQLite write lock up front. `fetch_workflow_env` reads
         // before the INSERT, which would risk SQLITE_BUSY_SNAPSHOT under
@@ -1303,9 +1314,10 @@ where
                 status,
                 scheduler_id,
                 failure_handler_id,
-                priority
+                priority,
+                labels
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -1321,6 +1333,7 @@ where
         .bind(job.scheduler_id)
         .bind(job.failure_handler_id)
         .bind(priority)
+        .bind(models::labels_to_json(job.labels.as_deref()))
         .fetch_one(&mut *tx)
         .await
         {
@@ -1541,9 +1554,17 @@ where
                     )),
                 ));
             }
+            if let Err(err) = models::validate_labels(job.labels.as_deref()) {
+                let _ = transaction.rollback().await;
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!("{} for job '{}'", err, job.name)),
+                ));
+            }
             let status = JobStatus::Uninitialized;
             let status_int = status.to_int();
             job.status = Some(status);
+            job.labels =
+                models::labels_from_json(models::labels_to_json(job.labels.as_deref()).as_deref());
 
             prepared.push(PreparedJobRow {
                 job,
@@ -1570,7 +1591,7 @@ where
                 "INSERT INTO job (\
                     workflow_id, name, command, cancel_on_blocking_job_failure, \
                     supports_termination, resource_requirements_id, invocation_script, \
-                    env, status, scheduler_id, failure_handler_id, priority\
+                    env, status, scheduler_id, failure_handler_id, priority, labels\
                 ) ",
             );
             qb.push_values(chunk, |mut row, prep| {
@@ -1585,7 +1606,8 @@ where
                     .push_bind(prep.status_int)
                     .push_bind(prep.job.scheduler_id)
                     .push_bind(prep.job.failure_handler_id)
-                    .push_bind(prep.priority);
+                    .push_bind(prep.priority)
+                    .push_bind(models::labels_to_json(prep.job.labels.as_deref()));
             });
             qb.push(" RETURNING id, name");
             let rows = match qb.build().fetch_all(&mut *transaction).await {
@@ -1854,10 +1876,11 @@ where
         origin_is_set: Option<bool>,
         name: Option<String>,
         command: Option<String>,
+        labels: Option<String>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -1871,11 +1894,12 @@ where
             origin_is_set,
             name,
             command,
+            labels,
             context.get().0.clone()
         );
 
         // Build base query
-        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, start_time, compute_node_id FROM job".to_string();
+        let base_query = "SELECT id, workflow_id, name, command, resource_requirements_id, invocation_script, env, status, cancel_on_blocking_job_failure, supports_termination, scheduler_id, failure_handler_id, attempt_id, priority, origin, labels, start_time, compute_node_id FROM job".to_string();
 
         // Build WHERE clause conditions
         let mut where_conditions = vec!["workflow_id = ?".to_string()];
@@ -1923,6 +1947,14 @@ where
         if command.is_some() {
             where_conditions.push("command LIKE ? ESCAPE '\\'".to_string());
         }
+        // Jobs a runner with these (comma-separated) labels would claim; an empty
+        // filter selects unlabeled jobs.
+        let label_filter = labels
+            .as_deref()
+            .map(|l| claimable_labels_sql(&models::labels_from_query(l), "labels", "?"));
+        if let Some((predicate, _)) = &label_filter {
+            where_conditions.push(predicate.clone());
+        }
 
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
@@ -1968,6 +2000,9 @@ where
         }
         if let Some(ref c) = command {
             sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
+        }
+        if let Some((_, l)) = &label_filter {
+            sqlx_query = sqlx_query.bind(l.clone());
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -2034,6 +2069,7 @@ where
                     attempt_id: record.try_get("attempt_id").ok(),
                     priority: record.try_get("priority").ok(),
                     origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
+                    labels: labels_column(&record, "labels"),
                 });
             }
         }
@@ -2062,6 +2098,9 @@ where
         }
         if let Some(ref c) = command {
             count_sqlx_query = count_sqlx_query.bind(format!("%{}%", escape_like_pattern(c)));
+        }
+        if let Some((_, l)) = &label_filter {
+            count_sqlx_query = count_sqlx_query.bind(l.clone());
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
@@ -2280,6 +2319,19 @@ where
             ));
         }
 
+        // An empty label set clears the labels (see the NULLIF below); a missing
+        // one keeps them.
+        if let Err(err) = models::validate_labels(body.labels.as_deref()) {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(err),
+            ));
+        }
+
+        // `Some("[]")` clears, `None` keeps; labels_to_json folds an empty set to None.
+        let labels_update = body
+            .labels
+            .as_deref()
+            .map(|l| models::labels_to_json(Some(l)).unwrap_or_else(|| "[]".to_string()));
         let result = match sqlx::query(
             r#"
             UPDATE job
@@ -2293,6 +2345,7 @@ where
                 ,resource_requirements_id = COALESCE(?, resource_requirements_id)
                 ,scheduler_id = COALESCE(?, scheduler_id)
                 ,priority = COALESCE(?, priority)
+                ,labels = CASE WHEN ? IS NULL THEN labels ELSE NULLIF(?, '[]') END
             WHERE id = ?
         "#,
         )
@@ -2305,6 +2358,8 @@ where
         .bind(body.resource_requirements_id)
         .bind(body.scheduler_id)
         .bind(body.priority)
+        .bind(labels_update.clone())
+        .bind(labels_update)
         .bind(id)
         .execute(self.context.pool.as_ref())
         .await
@@ -2429,6 +2484,7 @@ where
         &self,
         id: i64,
         requested_job_count: i64,
+        labels: Option<String>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
@@ -2472,7 +2528,13 @@ where
             })?;
 
         let ready_status = models::JobStatus::Ready.to_int();
-        let query = r#"
+        let (labels_predicate, labels_json) = claimable_labels_sql(
+            &models::labels_from_query(labels.as_deref().unwrap_or("")),
+            "labels",
+            "$3",
+        );
+        let query = format!(
+            r#"
             SELECT
                 id as job_id,
                 workflow_id,
@@ -2486,16 +2548,20 @@ where
                 resource_requirements_id,
                 failure_handler_id,
                 attempt_id,
-                priority
+                priority,
+                origin,
+                labels
             FROM job
-            WHERE workflow_id = $1 AND status = $2
+            WHERE workflow_id = $1 AND status = $2 AND {labels_predicate}
             ORDER BY priority DESC, id ASC
-            LIMIT $3
-            "#;
+            LIMIT $4
+            "#
+        );
 
-        let rows = match sqlx::query(query)
+        let rows = match sqlx::query(&query)
             .bind(id)
             .bind(ready_status)
+            .bind(labels_json)
             .bind(requested_job_count)
             .fetch_all(&mut *conn)
             .await
@@ -2545,6 +2611,7 @@ where
                 attempt_id: row.get("attempt_id"),
                 priority: row.try_get("priority").ok(),
                 origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
+                labels: labels_column(&row, "labels"),
             };
 
             selected_jobs.push(job);
@@ -2955,7 +3022,7 @@ where
             r#"
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
-                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin,
+                   j.resource_requirements_id, j.scheduler_id, j.priority, j.origin, j.labels,
                    w.run_id as workflow_run_id
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
@@ -3152,6 +3219,7 @@ where
             // previously-spawned row keeps origin='spawn'; a fresh retry of
             // a statically-declared job becomes 'retry'.
             origin: Some(existing_origin.unwrap_or_else(|| "retry".to_string())),
+            labels: labels_column(&job_record, "labels"),
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

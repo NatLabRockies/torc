@@ -51,17 +51,17 @@ Manual builds create artifacts but don't create a GitHub release.
 
 ### Which Linux binary should users download?
 
-**For maximum compatibility (recommended for most users):**
+**On x86_64:**
 
 - Use `torc-x86_64-unknown-linux-musl.tar.gz`
 - This is a fully static binary that works on any Linux distro
 - No external dependencies required
 
-**For better performance on modern systems:**
+**On ARM 64-bit (Raspberry Pi OS 64-bit, AWS Graviton, Ampere, etc.):**
 
-- Use `torc-x86_64-unknown-linux-gnu.tar.gz`
-- Built on Ubuntu 20.04, compatible with glibc 2.31+
-- Works on Ubuntu 20.04+, Debian 11+, RHEL 8+, etc.
+- Use `torc-aarch64-unknown-linux-musl.tar.gz`
+- Also fully static; requires a 64-bit OS (`uname -m` reports `aarch64`)
+- 32-bit ARM (`armv7l`) is not built
 
 ## Adding More Platforms
 
@@ -85,17 +85,6 @@ To also build for Intel Macs, add:
 - os: macos-13
   target: x86_64-apple-darwin
   use_cross: false
-```
-
-### ARM64 Linux
-
-For ARM64 servers (like AWS Graviton), add:
-
-```yaml
-# Linux ARM64
-- os: ubuntu-latest
-  target: aarch64-unknown-linux-musl
-  use_cross: true
 ```
 
 ## Troubleshooting

@@ -58,7 +58,8 @@ map_response!(
 map_response!(
     create_compute_node_response,
     CreateComputeNodeResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     create_event_response,
@@ -555,7 +556,8 @@ map_response!(
 map_response!(
     claim_next_jobs_response,
     ClaimNextJobsResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response_no_forbidden!(get_task_response, GetTaskResponse, SuccessfulResponse);
 

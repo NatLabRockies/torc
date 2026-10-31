@@ -1427,10 +1427,16 @@ where
         // allocations that report an end_time, and whether any active node is
         // unlimited (end_time IS NULL, i.e. a local/unbounded worker). julianday()
         // handles RFC3339 parsing/timezones; MAX ignores NULL end_times.
+        // The `unlabeled_*` columns cover only nodes without a routing label: the
+        // runtime-blocked signal below is about unlabeled jobs, which labeled
+        // runners never claim.
         let compute_node_row = sqlx::query(
             "SELECT COUNT(*) AS cnt, \
-             COALESCE(SUM(CASE WHEN end_time IS NULL THEN 1 ELSE 0 END), 0) AS unlimited_cnt, \
-             (MAX(julianday(end_time)) - julianday('now')) * 86400.0 AS max_remaining_s \
+             COALESCE(SUM(CASE WHEN end_time IS NULL AND labels IS NULL THEN 1 ELSE 0 END), 0) \
+                 AS unlabeled_unlimited_cnt, \
+             (MAX(julianday(end_time)) - julianday('now')) * 86400.0 AS max_remaining_s, \
+             (MAX(CASE WHEN labels IS NULL THEN julianday(end_time) END) - julianday('now')) \
+                 * 86400.0 AS unlabeled_max_remaining_s \
              FROM compute_node WHERE workflow_id = ? AND is_active = 1",
         )
         .bind(id)
@@ -1438,7 +1444,10 @@ where
         .await
         .map_err(|e| database_error_with_msg(e, "Failed to count compute nodes"))?;
         let active_compute_nodes: i64 = compute_node_row.get("cnt");
-        let has_unlimited_active_node: bool = compute_node_row.get::<i64, _>("unlimited_cnt") > 0;
+        let has_unlimited_unlabeled_node: bool =
+            compute_node_row.get::<i64, _>("unlabeled_unlimited_cnt") > 0;
+        let unlabeled_max_remaining_seconds: Option<f64> =
+            compute_node_row.get("unlabeled_max_remaining_s");
         let max_allocation_remaining_seconds: Option<i64> = compute_node_row
             .get::<Option<f64>, _>("max_remaining_s")
             .map(|s| s.max(0.0) as i64);
@@ -1470,21 +1479,24 @@ where
         // An unlimited active node (end_time IS NULL) can run any job -- matching
         // the claim path where time_limit=None becomes i64::MAX -- so its presence
         // means nothing is runtime-blocked by walltime.
+        // Only unlabeled jobs and unlabeled nodes take part: a labeled runner cannot
+        // claim an unlabeled job (and vice versa), and labeled ready jobs with no
+        // runner are reported by `unserved_ready_labels` below.
         const STARTUP_GRACE_PERIOD_SECONDS: f64 = 120.0;
         let mut runtime_blocked_ready_jobs: i64 = 0;
         let mut longest_ready_runtime_seconds: Option<i64> = None;
         if counts.ready > 0
-            && !has_unlimited_active_node
-            && let Some(max_remaining) = max_allocation_remaining_seconds
+            && !has_unlimited_unlabeled_node
+            && let Some(max_remaining) = unlabeled_max_remaining_seconds
         {
-            let threshold = max_remaining as f64 + STARTUP_GRACE_PERIOD_SECONDS;
+            let threshold = max_remaining.max(0.0).trunc() + STARTUP_GRACE_PERIOD_SECONDS;
             let blocked_row = sqlx::query(
                 "SELECT \
                  COALESCE(SUM(CASE WHEN rr.runtime_s > ? THEN 1 ELSE 0 END), 0) AS blocked, \
                  MAX(rr.runtime_s) AS longest \
                  FROM job j \
                  JOIN resource_requirements rr ON j.resource_requirements_id = rr.id \
-                 WHERE j.workflow_id = ? AND j.status = ?",
+                 WHERE j.workflow_id = ? AND j.status = ? AND j.labels IS NULL",
             )
             .bind(threshold)
             .bind(id)
@@ -1494,6 +1506,36 @@ where
             .map_err(|e| database_error_with_msg(e, "Failed to count runtime-blocked jobs"))?;
             runtime_blocked_ready_jobs = blocked_row.get("blocked");
             longest_ready_runtime_seconds = blocked_row.get::<Option<i64>, _>("longest");
+        }
+
+        // Labeled ready jobs that no active runner serves: a job is claimed only by
+        // a runner started with every one of its labels, so these are stranded
+        // until one appears. Label sets are sorted JSON arrays, so GROUP BY groups
+        // equal sets. Pending Slurm allocations are ignored; their runners are
+        // always unlabeled.
+        let mut unserved_ready_labels = std::collections::BTreeMap::new();
+        if counts.ready > 0 {
+            let rows = sqlx::query(
+                "SELECT labels, COUNT(*) AS cnt, \
+                 EXISTS (SELECT 1 FROM compute_node cn \
+                     WHERE cn.workflow_id = ?1 AND cn.is_active = 1 AND cn.labels IS NOT NULL \
+                     AND NOT EXISTS (SELECT 1 FROM json_each(job.labels) \
+                         WHERE value NOT IN (SELECT value FROM json_each(cn.labels)))) AS served \
+                 FROM job \
+                 WHERE workflow_id = ?1 AND status = ?2 AND labels IS NOT NULL \
+                 GROUP BY labels",
+            )
+            .bind(id)
+            .bind(models::JobStatus::Ready.to_int())
+            .fetch_all(pool)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to count unserved labeled jobs"))?;
+            for row in &rows {
+                if !row.get::<bool, _>("served") {
+                    let labels = super::labels_column(row, "labels").unwrap_or_default();
+                    unserved_ready_labels.insert(labels.join(","), row.get("cnt"));
+                }
+            }
         }
 
         Ok(GetWorkflowStatusResponse::SuccessfulResponse(
@@ -1513,6 +1555,7 @@ where
                 runtime_blocked_ready_jobs,
                 longest_ready_runtime_seconds,
                 max_allocation_remaining_seconds,
+                unserved_ready_labels,
             },
         ))
     }

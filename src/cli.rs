@@ -27,6 +27,7 @@ use crate::client::commands::slurm::SlurmCommands;
 use crate::client::commands::tasks::TasksCommands;
 use crate::client::commands::user_data::UserDataCommands;
 use crate::client::commands::workflows::WorkflowCommands;
+use crate::monitor_node_cmd;
 use crate::plot_resources_cmd;
 use crate::tui_runner;
 
@@ -85,6 +86,7 @@ const HELP_TEMPLATE: &str = "\
   \x1b[1;36mconfig\x1b[0m                   Manage configuration settings
   \x1b[1;36mtasks\x1b[0m                    Wait for async tasks
   \x1b[1;36mplot-resources\x1b[0m           Generate HTML resource plots
+  \x1b[1;36mmonitor-node\x1b[0m             Record compute-node CPU/memory without running jobs
   \x1b[1;36mself\x1b[0m                     Manage the local torc executable
   \x1b[1;36mcompletions\x1b[0m              Generate shell completions
   \x1b[1;36mhelp\x1b[0m                     Print help for a subcommand
@@ -99,8 +101,9 @@ pub struct Cli {
     #[arg(long, env = "RUST_LOG")]
     pub log_level: Option<String>,
     /// Output format (table, json, or csv). csv is supported for list commands.
-    #[arg(short, long, default_value = "table")]
-    pub format: String,
+    /// [default: table, or client.format from config]
+    #[arg(short, long)]
+    pub format: Option<String>,
     /// URL of torc server
     #[arg(long, env = "TORC_API_URL")]
     pub url: Option<String>,
@@ -282,6 +285,14 @@ SEE ALSO:
         /// Skip validation checks (e.g., scheduler node requirements). Use with caution.
         #[arg(long, default_value = "false")]
         skip_checks: bool,
+        /// Only claim jobs whose every label is in this set. Repeat the flag or
+        /// separate labels with commas. Without it, only unlabeled jobs are claimed.
+        #[arg(long = "label", value_delimiter = ',', value_parser = crate::models::parse_label)]
+        labels: Vec<String>,
+        /// Ignore the idle timeout while the workflow still has unfinished jobs this
+        /// runner can claim (its labels, or unlabeled when no --label is given).
+        #[arg(long)]
+        persistent: bool,
     },
     /// Run inline commands as a synthesized workflow (no spec file required).
     ///
@@ -611,6 +622,15 @@ SEE ALSO:
         #[arg(short, long)]
         show_job_counts: bool,
 
+        /// Keep watching until the workflow completes
+        ///
+        /// By default, watch exits when there are no Slurm allocations and no ready
+        /// jobs, because nothing it manages can make progress. Use this when runners
+        /// outside Slurm are still working, such as a `torc run --label` runner on a
+        /// dedicated machine.
+        #[arg(long)]
+        persistent: bool,
+
         /// Automatically schedule new compute nodes when needed
         ///
         /// When enabled, the watch command will automatically regenerate and submit
@@ -762,8 +782,8 @@ SEE ALSO:
         #[arg(long, default_value = "1.5")]
         memory_multiplier: f64,
 
-        /// Runtime multiplier for timeout failures (default: 1.4 = 40% increase)
-        #[arg(long, default_value = "1.4")]
+        /// Runtime multiplier for timeout failures (default: 1.5 = 50% increase)
+        #[arg(long, default_value = "1.5")]
         runtime_multiplier: f64,
 
         /// Retry jobs with unknown failure causes (not OOM or timeout)
@@ -1068,6 +1088,26 @@ EXAMPLES:
 "
     )]
     PlotResources(plot_resources_cmd::Args),
+    /// Monitor compute-node CPU/memory on this host without running jobs
+    #[command(
+        name = "monitor-node",
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Sample this node using workflow 42's resource_monitor.compute_node config until SIGTERM;
+    # writes to torc_output/resource_utilization/
+    torc monitor-node -w 42
+    torc monitor-node -w 42 --output-dir /scratch/run1
+
+    # No workflow: sample every 5 seconds, no server needed
+    torc monitor-node -i 5 -o /scratch/node_metrics
+    torc plot-resources /scratch/node_metrics/resource_utilization/*.db
+
+Torc launches this automatically on the non-head nodes of a single-runner Slurm allocation
+when resource_monitor.compute_node is enabled.
+"
+    )]
+    MonitorNode(monitor_node_cmd::Args),
     /// Manage the local torc executable
     #[command(name = "self")]
     SelfCommand {

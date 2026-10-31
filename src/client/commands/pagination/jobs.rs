@@ -140,6 +140,7 @@ impl Paginatable for JobModel {
             params.origin_is_set,
             None, // name
             None, // command
+            None, // label
         )?;
 
         Ok(PaginatedResponse {

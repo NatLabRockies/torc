@@ -17,7 +17,8 @@ use axum::{
     },
     routing::{get, post},
 };
-use clap::Parser;
+use clap::parser::ValueSource;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use rmcp::{ServiceExt, model::CallToolRequestParams, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
@@ -256,45 +257,52 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let cli = Cli::parse();
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
     // Load configuration from files and merge with CLI arguments
     let file_config = TorcConfig::load().unwrap_or_default();
     let dash_config = &file_config.dash;
 
-    // Merge CLI config with file config (CLI takes precedence for non-default values)
-    let host = if cli.host != "127.0.0.1" {
+    // Merge CLI config with file config. A value from the command line or its environment
+    // variable wins, even when it equals the clap default.
+    let explicit = |id| {
+        matches
+            .value_source(id)
+            .is_some_and(|source| source != ValueSource::DefaultValue)
+    };
+    let host = if explicit("host") {
         cli.host.clone()
     } else {
         dash_config.host.clone()
     };
-    let port = if cli.port != 8090 {
+    let port = if explicit("port") {
         cli.port
     } else {
         dash_config.port
     };
-    let api_url = if cli.api_url != "http://localhost:8080/torc-service/v1" {
+    let api_url = if explicit("api_url") {
         cli.api_url.clone()
     } else {
         dash_config.api_url.clone()
     };
-    let torc_bin = if cli.torc_bin != "torc" {
+    let torc_bin = if explicit("torc_bin") {
         cli.torc_bin.clone()
     } else {
         dash_config.torc_bin.clone()
     };
-    let torc_server_bin = if cli.torc_server_bin != "torc-server" {
+    let torc_server_bin = if explicit("torc_server_bin") {
         cli.torc_server_bin.clone()
     } else {
         dash_config.torc_server_bin.clone()
     };
     let standalone = cli.standalone || dash_config.standalone;
-    let server_port = if cli.server_port != 0 {
+    let server_port = if explicit("server_port") {
         cli.server_port
     } else {
         dash_config.server_port
     };
-    let server_host = if cli.server_host != "0.0.0.0" {
+    let server_host = if explicit("server_host") {
         cli.server_host.clone()
     } else {
         dash_config.server_host.clone()
@@ -303,7 +311,7 @@ async fn main() -> Result<()> {
         .database
         .clone()
         .or_else(|| dash_config.database.clone());
-    let completion_check_interval_secs = if cli.completion_check_interval_secs != 5 {
+    let completion_check_interval_secs = if explicit("completion_check_interval_secs") {
         cli.completion_check_interval_secs
     } else {
         dash_config.completion_check_interval_secs

@@ -371,8 +371,11 @@ pub fn handle_ro_crate_commands(config: &Configuration, command: &RoCrateCommand
         }
         RoCrateCommands::Delete { id } => {
             match apis::ro_crate_entities_api::delete_ro_crate_entity(config, *id) {
-                Ok(_) => {
-                    println!("Deleted RO-Crate entity ID: {}", id);
+                Ok(response) => {
+                    let json = serde_json::json!({ "id": id, "message": response.message });
+                    if !print_if_json(format, &json, "RO-Crate entity") {
+                        println!("Deleted RO-Crate entity ID: {}", id);
+                    }
                 }
                 Err(e) => {
                     print_error("deleting RO-Crate entity", &e);
@@ -984,7 +987,7 @@ fn handle_add_dataset(
     });
 
     // Compute statistics
-    println!(
+    eprintln!(
         "Computing dataset statistics for: {} (using {} threads)",
         path, num_threads
     );
@@ -996,12 +999,12 @@ fn handle_add_dataset(
         }
     };
 
-    println!(
+    eprintln!(
         "  Files: {}, Size: {} bytes",
         stats.file_count, stats.total_size_bytes
     );
     if let Some(ref hash) = stats.hash {
-        println!("  Hash ({}): {}", hash_mode, hash);
+        eprintln!("  Hash ({}): {}", hash_mode, hash);
     }
 
     // Ensure path ends with / for directory convention

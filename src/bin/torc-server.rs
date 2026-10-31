@@ -1,7 +1,8 @@
 #![allow(missing_docs)]
 
 use anyhow::Result;
-use clap::{Args, Parser, builder::styling};
+use clap::parser::ValueSource;
+use clap::{ArgMatches, Args, CommandFactory, FromArgMatches, Parser, builder::styling};
 use dotenvy::dotenv;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use std::env;
@@ -275,19 +276,27 @@ const DEFAULT_RUN_INTERVAL_SECS: f64 = 30.0;
 fn main() -> Result<()> {
     dotenv().ok();
 
-    let cli = Cli::parse();
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
     // Handle commands - default to Run with default config if no subcommand
     match cli.command {
-        Some(Commands::Service { action }) => handle_service_action(action),
-        Some(Commands::Run { config }) => run_server(config),
+        Some(Commands::Service { action }) => {
+            let install_matches = matches
+                .subcommand_matches("service")
+                .and_then(|m| m.subcommand_matches("install"));
+            handle_service_action(action, install_matches)
+        }
+        Some(Commands::Run { config }) => run_server(config, matches.subcommand_matches("run")),
         Some(Commands::Export { args }) => handle_export(args),
         None => {
             // Default: run server with default config
-            // We need to re-parse as "run" to get ServerConfig defaults from clap
-            let cli = Cli::parse_from(["torc-server", "run"]);
+            // Re-parse as "run" to get ServerConfig defaults from clap. Keep the matches so
+            // environment-backed values (e.g. RUST_LOG) still count as explicit.
+            let matches = Cli::command().get_matches_from(["torc-server", "run"]);
+            let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
             if let Some(Commands::Run { config }) = cli.command {
-                run_server(config)
+                run_server(config, matches.subcommand_matches("run"))
             } else {
                 unreachable!()
             }
@@ -341,28 +350,67 @@ fn handle_export(args: ExportArgs) -> Result<()> {
     runtime.block_on(export::run_export(opts))
 }
 
-fn handle_service_action(action: ServiceAction) -> Result<()> {
+/// True when an option came from the command line or its environment variable rather than
+/// from clap's default, so it should override the config file or service defaults.
+fn is_explicit(matches: Option<&ArgMatches>, id: &str) -> bool {
+    matches
+        .and_then(|m| m.value_source(id))
+        .is_some_and(|source| source != ValueSource::DefaultValue)
+}
+
+fn handle_service_action(
+    action: ServiceAction,
+    install_matches: Option<&ArgMatches>,
+) -> Result<()> {
     let (command, user_level, config) = match action {
         ServiceAction::Install { user, config } => {
+            let defaults = service::ServiceConfig::defaults(user);
+            let explicit = |id| is_explicit(install_matches, id);
             let svc_config = service::ServiceConfig {
-                log_dir: config.log_dir,
-                database: config.database,
-                host: config.host,
-                port: config.port,
-                threads: config.threads,
-                auth_file: config.auth_file,
-                require_auth: config.require_auth,
-                credential_cache_ttl_secs: config.credential_cache_ttl_secs,
-                enforce_access_control: config.enforce_access_control,
-                log_level: config.log_level,
-                json_logs: config.json_logs,
-                https: config.https,
-                tls_cert: config.tls_cert,
-                tls_key: config.tls_key,
-                admin_users: config.admin_users,
+                log_dir: config.log_dir.or(defaults.log_dir),
+                database: config.database.or(defaults.database),
+                host: if explicit("host") {
+                    config.host
+                } else {
+                    defaults.host
+                },
+                port: if explicit("port") {
+                    config.port
+                } else {
+                    defaults.port
+                },
+                threads: if explicit("threads") {
+                    config.threads
+                } else {
+                    defaults.threads
+                },
+                auth_file: config.auth_file.or(defaults.auth_file),
+                require_auth: config.require_auth || defaults.require_auth,
+                credential_cache_ttl_secs: if explicit("credential_cache_ttl_secs") {
+                    config.credential_cache_ttl_secs
+                } else {
+                    defaults.credential_cache_ttl_secs
+                },
+                enforce_access_control: config.enforce_access_control
+                    || defaults.enforce_access_control,
+                log_level: if explicit("log_level") {
+                    config.log_level
+                } else {
+                    defaults.log_level
+                },
+                json_logs: config.json_logs || defaults.json_logs,
+                https: config.https || defaults.https,
+                tls_cert: config.tls_cert.or(defaults.tls_cert),
+                tls_key: config.tls_key.or(defaults.tls_key),
+                admin_users: if config.admin_users.is_empty() {
+                    defaults.admin_users
+                } else {
+                    config.admin_users
+                },
                 completion_check_interval_secs: config.completion_check_interval_secs,
-                disable_admin_sql: config.disable_admin_sql,
-                disable_admin_sql_writes: config.disable_admin_sql_writes,
+                disable_admin_sql: config.disable_admin_sql || defaults.disable_admin_sql,
+                disable_admin_sql_writes: config.disable_admin_sql_writes
+                    || defaults.disable_admin_sql_writes,
             };
             (service::ServiceCommand::Install, user, Some(svc_config))
         }
@@ -375,15 +423,16 @@ fn handle_service_action(action: ServiceAction) -> Result<()> {
     service::execute_service_command(command, config.as_ref(), user_level)
 }
 
-fn run_server(cli_config: ServerConfig) -> Result<()> {
+fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Result<()> {
     // Load configuration from files and merge with CLI arguments
     // CLI arguments take precedence over file config
     let file_config = TorcConfig::load().unwrap_or_default();
     let server_file_config = &file_config.server;
 
-    // Merge CLI config with file config (CLI takes precedence for non-default values)
+    // Merge CLI config with file config (explicit CLI/env values take precedence)
+    let explicit = |id| is_explicit(run_matches, id);
     let config = ServerConfig {
-        log_level: if cli_config.log_level != "info" {
+        log_level: if explicit("log_level") {
             cli_config.log_level
         } else {
             server_file_config.log_level.clone()
@@ -395,17 +444,17 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
         tls_key: cli_config
             .tls_key
             .or_else(|| server_file_config.tls_key.clone()),
-        host: if cli_config.host != "0.0.0.0" {
+        host: if explicit("host") {
             cli_config.host
         } else {
             server_file_config.host.clone()
         },
-        port: if cli_config.port != 8080 {
+        port: if explicit("port") {
             cli_config.port
         } else {
             server_file_config.port
         },
-        threads: if cli_config.threads != 1 {
+        threads: if explicit("threads") {
             cli_config.threads
         } else {
             server_file_config.threads
@@ -417,7 +466,7 @@ fn run_server(cli_config: ServerConfig) -> Result<()> {
             .auth_file
             .or_else(|| server_file_config.auth_file.clone()),
         require_auth: cli_config.require_auth || server_file_config.require_auth,
-        credential_cache_ttl_secs: if cli_config.credential_cache_ttl_secs != 60 {
+        credential_cache_ttl_secs: if explicit("credential_cache_ttl_secs") {
             cli_config.credential_cache_ttl_secs
         } else {
             server_file_config.credential_cache_ttl_secs

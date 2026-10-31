@@ -6,6 +6,7 @@ Additional tools and third-party integrations.
 - [Configuration Files Tutorial](./configuration.md) - Working with config files
 - [Dashboard Deployment](./dashboard-deployment.md) - Deploying the web dashboard
 - [Configuring AI Assistants](./ai-assistants.md) - Setting up AI integration
+- [Installing the Agent Skill](./agent-skills.md) - Teaching AI assistants to use Torc
 - [AI-Assisted Workflow Management](./ai-assistant.md) - Using AI for workflow management
 - [Analyzing Workflows with datasight](./datasight.md) - Natural-language SQL exploration of the
   torc database
