@@ -196,7 +196,7 @@ cd torc
 <ol start="2">
 <li><strong>Install Rust and dependencies:</strong></li>
 </ol>
-<p>Make sure you have Rust 1.85 or later installed:</p>
+<p>Make sure you have Rust 1.95 or later installed:</p>
 <pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 </code></pre>
 <ol start="3">
@@ -327,9 +327,12 @@ real Slurm scheduler.</p>
 writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</code>. All tests must pass before a
 release is tagged.</p>
 <h2 id="versioning-policy"><a class="header" href="#versioning-policy">Versioning Policy</a></h2>
-<p>Changes to the Rust API inside <code>torc-server</code> (the <code>torc::server</code> module) do not affect semantic
-versioning. That API is an internal implementation detail and may change in any release. The HTTP
-API has its own version; see <a href="./specialized/design/http-api.html">HTTP API</a>.</p>
+<p>Torc's semantic versioning covers the <code>torc</code> command-line interface, the HTTP API, and the workflow
+specification format. The HTTP API also has its own version; see
+<a href="./specialized/design/http-api.html">HTTP API</a>.</p>
+<p>The Rust API of the <code>torc</code> crate, including <code>torc::client</code> and <code>torc::server</code>, is not covered. It is
+public so that Torc's binaries can use it, and it may change in any release. Rust projects that
+depend on the crate should pin an exact version.</p>
 <h2 id="cutting-a-release"><a class="header" href="#cutting-a-release">Cutting a Release</a></h2>
 <p>Releases are driven by <a href="https://github.com/crate-ci/cargo-release"><code>cargo-release</code></a> with the
 configuration in <a href="https://github.com/NatLabRockies/torc/blob/main/release.toml"><code>release.toml</code></a>. The

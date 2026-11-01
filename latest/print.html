@@ -19631,6 +19631,10 @@ torc-htpasswd add --file /etc/torc/prod_htpasswd --cost 14 alice
 <h3 id="programmatic-access"><a class="header" href="#programmatic-access">Programmatic Access</a></h3>
 <p>When using Torc's Rust, Python, or Julia clients programmatically:</p>
 <p><strong>Rust:</strong></p>
+<blockquote>
+<p><strong>Note:</strong> The Rust API of the <code>torc</code> crate is not covered by semantic versioning and may change in
+any release. Pin an exact version if you depend on it.</p>
+</blockquote>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use torc::client::apis::configuration::Configuration;
@@ -19831,6 +19835,10 @@ torc workflows list
 making connections vulnerable to man-in-the-middle attacks.</p>
 </blockquote>
 <h3 id="programmatic-access-rust"><a class="header" href="#programmatic-access-rust">Programmatic Access (Rust)</a></h3>
+<blockquote>
+<p><strong>Note:</strong> The Rust API of the <code>torc</code> crate is not covered by semantic versioning and may change in
+any release. Pin an exact version if you depend on it.</p>
+</blockquote>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use std::path::PathBuf;
@@ -26998,7 +27006,7 @@ cd torc
 <ol start="2">
 <li><strong>Install Rust and dependencies:</strong></li>
 </ol>
-<p>Make sure you have Rust 1.85 or later installed:</p>
+<p>Make sure you have Rust 1.95 or later installed:</p>
 <pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 </code></pre>
 <ol start="3">
@@ -27129,9 +27137,12 @@ real Slurm scheduler.</p>
 writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</code>. All tests must pass before a
 release is tagged.</p>
 <h2 id="versioning-policy"><a class="header" href="#versioning-policy">Versioning Policy</a></h2>
-<p>Changes to the Rust API inside <code>torc-server</code> (the <code>torc::server</code> module) do not affect semantic
-versioning. That API is an internal implementation detail and may change in any release. The HTTP
-API has its own version; see <a href="./specialized/design/http-api.html">HTTP API</a>.</p>
+<p>Torc's semantic versioning covers the <code>torc</code> command-line interface, the HTTP API, and the workflow
+specification format. The HTTP API also has its own version; see
+<a href="./specialized/design/http-api.html">HTTP API</a>.</p>
+<p>The Rust API of the <code>torc</code> crate, including <code>torc::client</code> and <code>torc::server</code>, is not covered. It is
+public so that Torc's binaries can use it, and it may change in any release. Rust projects that
+depend on the crate should pin an exact version.</p>
 <h2 id="cutting-a-release"><a class="header" href="#cutting-a-release">Cutting a Release</a></h2>
 <p>Releases are driven by <a href="https://github.com/crate-ci/cargo-release"><code>cargo-release</code></a> with the
 configuration in <a href="https://github.com/NatLabRockies/torc/blob/main/release.toml"><code>release.toml</code></a>. The
