@@ -357,6 +357,94 @@ The preprocessing jobs run across 2 nodes (Pattern 1). When they complete, a 4-n
 requested for the training job (Pattern 2). Torc wraps the training command with `srun --nodes=4`
 automatically.
 
+## MPI and Single-Node Stages in One Allocation
+
+**Use when**: A workflow alternates between MPI jobs that span every node and many single-node jobs,
+and you want to wait in the Slurm queue only once.
+
+For example, in a 100-node allocation:
+
+1. Run an MPI job across all nodes.
+2. Run 200 single-node jobs that use its output, with two jobs fitting on each node.
+3. Run a second MPI job across all nodes that uses their output.
+4. Run 100 single-node jobs that use its output.
+
+**How it works**: Use one job runner, started on the first node by the batch script, and do not set
+`start_one_worker_per_node`. Set `execution_config.mode: direct` so that Torc runs each command as
+written, and call `srun` in each command. The single-node jobs still run on the compute nodes
+because `srun` places them there. File dependencies keep the stages in order, so you do not need job
+labels or workflow actions to switch between them.
+
+```yaml
+execution_config:
+  mode: direct
+  limit_resources: false
+
+slurm_schedulers:
+  - name: all_nodes
+    account: my_project
+    nodes: 100
+    mem: 240G
+    walltime: "16:00:00"
+
+resource_requirements:
+  - name: mpi_all_nodes
+    num_cpus: 104
+    memory: 230g
+    num_nodes: 100
+    runtime: PT4H
+
+  - name: half_node
+    num_cpus: 52
+    memory: 110g
+    runtime: PT2H
+
+jobs:
+  - name: solve_initial
+    command: >-
+      srun --mpi=pmix --nodes=100 --ntasks=10400 --cpus-per-task=1
+      ./solver --output output/solve_initial.h5
+    scheduler: all_nodes
+    resource_requirements: mpi_all_nodes
+    output_files: [solve_initial_output]
+
+  - name: postprocess_{i:03d}
+    command: >-
+      srun --exact --nodes=1 --ntasks=1 --cpus-per-task=52 --mem=110G
+      ./postprocess --input output/solve_initial.h5 --index {i}
+      --output output/postprocess_{i:03d}.h5
+    scheduler: all_nodes
+    resource_requirements: half_node
+    input_files: [solve_initial_output]
+    output_files: ["postprocess_{i:03d}_output"]
+    parameters:
+      i: "1:200"
+```
+
+The complete workflow, including the `files` section and the `schedule_nodes` action, is in
+[`single_allocation_mpi_stages.yaml`](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/single_allocation_mpi_stages.yaml).
+
+Keep these points in mind:
+
+- **Keep requirements and `srun` flags in step.** Torc uses `resource_requirements` to decide when
+  to start a job, and Slurm uses the `srun` flags to run it. Change them together.
+- **Use `--exact` on single-node jobs.** It lets jobs share a node. Leave it off the MPI command so
+  that the step gets the resources of every node.
+- **Leave memory free on the first node.** The runner and one `srun` process per running job share
+  that node with its jobs. Measure this on your cluster at close to your full job count.
+- **Expect no useful resource data.** The runner sees only the local `srun` process, so it cannot
+  measure or limit what the job uses on other nodes. Set `limit_resources: false`.
+- **Set the walltime for all stages combined.** A job is claimed only if its `runtime` fits in the
+  time remaining in the allocation.
+
+> **Note:** Any multi-node job in a workflow makes the runner track the allocation's resources as a
+> total rather than node by node. A job then fits only if the free total divided by the number of
+> nodes is at least the job's size. The single-node stages can therefore run below capacity: in this
+> example, about 100 to 150 of the possible 200 jobs at once. Allow for this in the walltime.
+
+Before running this under Torc, test the same `srun` commands in a plain `sbatch` script on a few
+nodes. If that script fails, the problem is in the cluster setup or the application.
+
 ## `num_nodes`
 
 The `num_nodes` field controls how many nodes each job step spans (`srun --nodes`). It defaults to

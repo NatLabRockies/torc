@@ -1,0 +1,123 @@
+# MPI and Single-Node Stages in One Slurm Allocation
+#
+# Runs alternating MPI and single-node stages inside one 100-node allocation, so
+# the workflow only waits in the Slurm queue once:
+#
+#   solve_initial (MPI, all 100 nodes)
+#        |
+#   postprocess_{001..200} (1 node each, 2 jobs fit on a node)
+#        |
+#   solve_refined (MPI, all 100 nodes)
+#        |
+#   summarize_{001..100} (1 node each, whole node)
+#
+# One torc-slurm-job-runner runs in the batch script on the first node and starts
+# every job. Direct mode runs each command as written, so each command calls srun
+# itself. Slurm, not a runner on each node, puts the jobs on the compute nodes.
+#
+# Adjust these for your cluster: the node size (104 CPUs, 240 GB here), the account
+# and partition, the srun --mpi value, and the walltime, which must cover all stages.
+#
+# Docs: docs/src/specialized/hpc/multi-node-jobs.md
+
+name: single_allocation_mpi_stages
+description: Alternate MPI and single-node stages in one 100-node Slurm allocation
+
+execution_config:
+  mode: direct
+  # The runner only sees the local srun process, so it cannot measure or limit these jobs.
+  limit_resources: false
+
+slurm_schedulers:
+  - name: all_nodes
+    account: my_project
+    partition: standard
+    nodes: 100
+    mem: 240G
+    walltime: "16:00:00"
+
+resource_requirements:
+  # Reserves every node. Claimed only when the whole allocation is free.
+  - name: mpi_all_nodes
+    num_cpus: 104
+    memory: 230g
+    num_nodes: 100
+    runtime: PT4H
+
+  # These values must match the srun --cpus-per-task and --mem values in the commands.
+  # Memory is below half a node to leave room for the runner and srun processes.
+  - name: half_node
+    num_cpus: 52
+    memory: 110g
+    runtime: PT2H
+
+  - name: whole_node
+    num_cpus: 104
+    memory: 230g
+    runtime: PT2H
+
+files:
+  - name: solve_initial_output
+    path: output/solve_initial.h5
+
+  - name: postprocess_{i:03d}_output
+    path: output/postprocess_{i:03d}.h5
+    parameters:
+      i: "1:200"
+
+  - name: solve_refined_output
+    path: output/solve_refined.h5
+
+  - name: summary_{i:03d}_output
+    path: output/summary_{i:03d}.json
+    parameters:
+      i: "1:100"
+
+jobs:
+  - name: solve_initial
+    command: >-
+      srun --mpi=pmix --nodes=100 --ntasks=10400 --cpus-per-task=1
+      ./solver --output output/solve_initial.h5
+    scheduler: all_nodes
+    resource_requirements: mpi_all_nodes
+    output_files: [solve_initial_output]
+
+  - name: postprocess_{i:03d}
+    command: >-
+      srun --exact --nodes=1 --ntasks=1 --cpus-per-task=52 --mem=110G
+      ./postprocess --input output/solve_initial.h5 --index {i}
+      --output output/postprocess_{i:03d}.h5
+    scheduler: all_nodes
+    resource_requirements: half_node
+    input_files: [solve_initial_output]
+    output_files: ["postprocess_{i:03d}_output"]
+    parameters:
+      i: "1:200"
+
+  - name: solve_refined
+    command: >-
+      srun --mpi=pmix --nodes=100 --ntasks=10400 --cpus-per-task=1
+      ./solver --restart-dir output --output output/solve_refined.h5
+    scheduler: all_nodes
+    resource_requirements: mpi_all_nodes
+    input_file_regexes: ["^postprocess_\\d+_output$"]
+    output_files: [solve_refined_output]
+
+  - name: summarize_{i:03d}
+    command: >-
+      srun --exact --nodes=1 --ntasks=1 --cpus-per-task=104 --mem=230G
+      ./summarize --input output/solve_refined.h5 --index {i}
+      --output output/summary_{i:03d}.json
+    scheduler: all_nodes
+    resource_requirements: whole_node
+    input_files: [solve_refined_output]
+    output_files: ["summary_{i:03d}_output"]
+    parameters:
+      i: "1:100"
+
+actions:
+  - trigger_type: on_workflow_start
+    action_type: schedule_nodes
+    scheduler: all_nodes
+    scheduler_type: slurm
+    num_allocations: 1
