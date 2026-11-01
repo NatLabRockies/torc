@@ -333,7 +333,7 @@ cd torc
 set the environment variable <code>DATABASE_URL</code>.</p>
 <p><strong>Initialize the database</strong></p>
 <pre><code class="language-bash"># Install sqlx-cli if needed
-cargo install sqlx-cli --no-default-features --features sqlite
+cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 sqlx database setup --source torc-server/migrations
 </code></pre>
 <p><strong>Build everything (server, client, dashboard, job runners):</strong></p>
