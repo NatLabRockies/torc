@@ -179,6 +179,12 @@ The runner starts a temporary Torc server, executes each test as a child workflo
 writes results to `slurm-tests/output/run_<timestamp>/results.json`. All tests must pass before a
 release is tagged.
 
+## Versioning Policy
+
+Changes to the Rust API inside `torc-server` (the `torc::server` module) do not affect semantic
+versioning. That API is an internal implementation detail and may change in any release. The HTTP
+API has its own version; see [HTTP API](./specialized/design/http-api.md).
+
 ## Cutting a Release
 
 Releases are driven by [`cargo-release`](https://github.com/crate-ci/cargo-release) with the
