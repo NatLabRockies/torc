@@ -13,7 +13,7 @@ cd torc
 
 2. **Install Rust and dependencies:**
 
-Make sure you have Rust 1.85 or later installed:
+Make sure you have Rust 1.95 or later installed:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -181,9 +181,13 @@ release is tagged.
 
 ## Versioning Policy
 
-Changes to the Rust API inside `torc-server` (the `torc::server` module) do not affect semantic
-versioning. That API is an internal implementation detail and may change in any release. The HTTP
-API has its own version; see [HTTP API](./specialized/design/http-api.md).
+Torc's semantic versioning covers the `torc` command-line interface, the HTTP API, and the workflow
+specification format. The HTTP API also has its own version; see
+[HTTP API](./specialized/design/http-api.md).
+
+The Rust API of the `torc` crate, including `torc::client` and `torc::server`, is not covered. It is
+public so that Torc's binaries can use it, and it may change in any release. Rust projects that
+depend on the crate should pin an exact version.
 
 ## Cutting a Release
 

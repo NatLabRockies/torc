@@ -102,6 +102,9 @@ torc --url https://localhost:8443/torc-service/v1 \
 
 ### Programmatic Access (Rust)
 
+> **Note:** The Rust API of the `torc` crate is not covered by semantic versioning and may change in
+> any release. Pin an exact version if you depend on it.
+
 ```rust
 use std::path::PathBuf;
 use torc::client::apis::configuration::{Configuration, TlsConfig};

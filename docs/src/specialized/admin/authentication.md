@@ -384,6 +384,9 @@ When using Torc's Rust, Python, or Julia clients programmatically:
 
 **Rust:**
 
+> **Note:** The Rust API of the `torc` crate is not covered by semantic versioning and may change in
+> any release. Pin an exact version if you depend on it.
+
 ```rust
 use torc::client::apis::configuration::Configuration;
 
