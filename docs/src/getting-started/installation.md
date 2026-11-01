@@ -200,7 +200,7 @@ set the environment variable `DATABASE_URL`.
 
 ```bash
 # Install sqlx-cli if needed
-cargo install sqlx-cli --no-default-features --features sqlite
+cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 sqlx database setup --source torc-server/migrations
 ```
 
