@@ -326,6 +326,10 @@ real Slurm scheduler.</p>
 <p>The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
 writes results to <code>slurm-tests/output/run_&lt;timestamp&gt;/results.json</code>. All tests must pass before a
 release is tagged.</p>
+<h2 id="versioning-policy"><a class="header" href="#versioning-policy">Versioning Policy</a></h2>
+<p>Changes to the Rust API inside <code>torc-server</code> (the <code>torc::server</code> module) do not affect semantic
+versioning. That API is an internal implementation detail and may change in any release. The HTTP
+API has its own version; see <a href="./specialized/design/http-api.html">HTTP API</a>.</p>
 <h2 id="cutting-a-release"><a class="header" href="#cutting-a-release">Cutting a Release</a></h2>
 <p>Releases are driven by <a href="https://github.com/crate-ci/cargo-release"><code>cargo-release</code></a> with the
 configuration in <a href="https://github.com/NatLabRockies/torc/blob/main/release.toml"><code>release.toml</code></a>. The
