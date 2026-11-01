@@ -393,7 +393,7 @@ jobs:
 ```
 
 The complete workflow, including the `files` section and the `schedule_nodes` action, is in
-[`single_allocation_mpi_stages.yaml`](https://github.com/NatLabRockies/torc/blob/main/examples/yaml/single_allocation_mpi_stages.yaml).
+`examples/yaml/single_allocation_mpi_stages.yaml`.
 
 Keep these points in mind:
 
