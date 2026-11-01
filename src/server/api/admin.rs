@@ -363,7 +363,7 @@ async fn read_rows(
 ) -> Result<(Vec<String>, Vec<serde_json::Map<String, Value>>), String> {
     use futures::TryStreamExt;
 
-    let mut stream = sqlx::query(sql).fetch(&mut *conn);
+    let mut stream = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch(&mut *conn);
     let mut columns: Vec<String> = Vec::new();
     let mut items: Vec<serde_json::Map<String, Value>> = Vec::new();
 
@@ -449,7 +449,10 @@ pub async fn execute_write(
         .await
         .map_err(|e| AdminSqlError::Internal(format!("Failed to begin transaction: {e}")))?;
 
-    let affected = match sqlx::query(sql).execute(&mut *tx).await {
+    let affected = match sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(&mut *tx)
+        .await
+    {
         Ok(done) => done.rows_affected() as i64,
         Err(e) => {
             let _ = tx.rollback().await;

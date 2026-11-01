@@ -186,7 +186,7 @@ async fn lookup_existing_job_names(
             "SELECT id, name FROM job WHERE workflow_id = ? AND name IN ({})",
             placeholders
         );
-        let mut q = sqlx::query(&sql).bind(workflow_id);
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(&*sql)).bind(workflow_id);
         for n in chunk {
             q = q.bind(*n);
         }
@@ -219,7 +219,7 @@ async fn lookup_existing_rrs(
             "SELECT id, name FROM resource_requirements WHERE workflow_id = ? AND name IN ({})",
             placeholders
         );
-        let mut q = sqlx::query(&sql).bind(workflow_id);
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(&*sql)).bind(workflow_id);
         for n in chunk {
             q = q.bind(*n);
         }
@@ -403,7 +403,7 @@ async fn insert_dependency_edges(
             }
             sql.push_str("(?, ?, ?)");
         }
-        let mut q = sqlx::query(&sql);
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(&*sql));
         for (job_id, dep_id, wf_id) in chunk {
             q = q.bind(*job_id).bind(*dep_id).bind(*wf_id);
         }
@@ -1884,7 +1884,7 @@ where
                 ,avg_cpu_percent
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
         "#,
             result.job_id,
             result.workflow_id,
@@ -2557,7 +2557,7 @@ where
         let runner_labels = resources.labels.clone().unwrap_or_default();
         let (labels_predicate, labels_json) =
             claimable_labels_sql(&runner_labels, "job.labels", "$8");
-        let pre_check = sqlx::query(&format!(
+        let pre_check = sqlx::query(sqlx::AssertSqlSafe(&*format!(
             r#"
             SELECT 1
             FROM job
@@ -2572,7 +2572,7 @@ where
             AND {labels_predicate}
             LIMIT 1
             "#
-        ))
+        )))
         .bind(workflow_id)
         .bind(ready_status)
         .bind(memory_bytes)
@@ -2646,7 +2646,7 @@ where
         );
 
         let mut used_scheduler_filter = true;
-        let mut rows = match sqlx::query(&query_with_scheduler)
+        let mut rows = match sqlx::query(sqlx::AssertSqlSafe(&*query_with_scheduler))
             .bind(workflow_id)
             .bind(ready_status)
             .bind(memory_bytes)
@@ -2708,7 +2708,7 @@ where
                 labels_predicate, RESOURCE_CLAIM_ORDER_BY
             );
 
-            rows = match sqlx::query(&query_without_scheduler)
+            rows = match sqlx::query(sqlx::AssertSqlSafe(&*query_without_scheduler))
                 .bind(workflow_id)
                 .bind(ready_status)
                 .bind(memory_bytes)
@@ -2868,7 +2868,10 @@ where
                 "UPDATE job SET status = {} WHERE id IN ({})",
                 pending, job_ids_str
             );
-            if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
+            if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql))
+                .execute(&mut *conn)
+                .await
+            {
                 error!("Failed to update job status: {}", e);
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 return Err(ApiError("Database update error".to_string()));

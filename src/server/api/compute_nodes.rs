@@ -406,7 +406,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query).bind(workflow_id);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query)).bind(workflow_id);
         if let Some(ref h) = hostname {
             sqlx_query = sqlx_query.bind(format!("%{}%", super::escape_like_pattern(h)));
         }
@@ -475,7 +475,8 @@ where
         // hostname, is_active, scheduled_compute_node_id). The previous version
         // omitted hostname/is_active, which mis-bound the count query whenever
         // those filters were active.
-        let mut count_sqlx_query = sqlx::query(&count_query).bind(workflow_id);
+        let mut count_sqlx_query =
+            sqlx::query(sqlx::AssertSqlSafe(&*count_query)).bind(workflow_id);
         if let Some(ref h) = hostname {
             count_sqlx_query =
                 count_sqlx_query.bind(format!("%{}%", super::escape_like_pattern(h)));

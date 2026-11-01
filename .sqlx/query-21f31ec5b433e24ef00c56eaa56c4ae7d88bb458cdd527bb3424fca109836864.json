@@ -6,32 +6,68 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "ro_crate_entity",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "workflow_id",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "ro_crate_entity",
+            "name": "workflow_id"
+          }
+        }
       },
       {
         "name": "file_id",
         "ordinal": 2,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "ro_crate_entity",
+            "name": "file_id"
+          }
+        }
       },
       {
         "name": "entity_id",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ro_crate_entity",
+            "name": "entity_id"
+          }
+        }
       },
       {
         "name": "entity_type",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ro_crate_entity",
+            "name": "entity_type"
+          }
+        }
       },
       {
         "name": "metadata",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ro_crate_entity",
+            "name": "metadata"
+          }
+        }
       }
     ],
     "parameters": {

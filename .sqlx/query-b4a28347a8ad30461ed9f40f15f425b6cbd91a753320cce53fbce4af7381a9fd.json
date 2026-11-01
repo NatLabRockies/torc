@@ -6,22 +6,46 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "failure_handler",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "workflow_id",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "failure_handler",
+            "name": "workflow_id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "failure_handler",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "rules",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "failure_handler",
+            "name": "rules"
+          }
+        }
       }
     ],
     "parameters": {

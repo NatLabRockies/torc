@@ -415,7 +415,7 @@ where
             r#"
             INSERT INTO ro_crate_entity (workflow_id, file_id, entity_id, entity_type, metadata)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id
+            RETURNING id AS "id!"
             "#,
             body.workflow_id,
             body.file_id,
@@ -556,7 +556,7 @@ where
         )
         .build();
 
-        let mut query_builder = sqlx::query(&query).bind(workflow_id);
+        let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(&*query)).bind(workflow_id);
         if let Some(file_id) = file_id {
             query_builder = query_builder.bind(file_id);
         }
@@ -594,7 +594,8 @@ where
             "SELECT COUNT(*) as total FROM ro_crate_entity WHERE {}",
             where_clauses.join(" AND ")
         );
-        let mut count_query_builder = sqlx::query(&count_query).bind(workflow_id);
+        let mut count_query_builder =
+            sqlx::query(sqlx::AssertSqlSafe(&*count_query)).bind(workflow_id);
         if let Some(file_id) = file_id {
             count_query_builder = count_query_builder.bind(file_id);
         }

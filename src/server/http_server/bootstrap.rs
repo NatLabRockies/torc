@@ -193,7 +193,7 @@ async fn snapshot_once(pool: &SqlitePool, cfg: &SnapshotConfig) {
     // VACUUM INTO has been unreliable across SQLite versions.
     let escaped = tmp.to_string_lossy().replace('\'', "''");
     let sql = format!("VACUUM INTO '{}'", escaped);
-    if let Err(e) = sqlx::query(&sql).execute(pool).await {
+    if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql)).execute(pool).await {
         error!("Failed to snapshot database: {}", e);
         let _ = tokio::fs::remove_file(&tmp).await;
         return;

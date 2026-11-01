@@ -67,7 +67,7 @@ impl<C: Send + Sync + Has<XSpanIdString>> SlurmStatsApi<C> for SlurmStatsApiImpl
              max_disk_read_bytes, max_disk_write_bytes,
              ave_cpu_seconds, node_list)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
             "#,
             body.workflow_id,
             body.job_id,

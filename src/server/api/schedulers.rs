@@ -237,7 +237,7 @@ where
                 ,num_cpus
             )
             VALUES ($1, $2, $3)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
         "#,
             body.workflow_id,
             body.memory,
@@ -280,7 +280,7 @@ where
                 ,status
             )
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
         "#,
             body.workflow_id,
             body.scheduler_id,
@@ -336,7 +336,7 @@ where
                 ,serialize_allocations
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
         "#,
             body.workflow_id,
             body.name,
@@ -702,7 +702,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let records = match sqlx::query(&query)
+        let records = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .bind(workflow_id)
             .fetch_all(self.context.pool.as_ref())
             .await
@@ -730,7 +730,7 @@ where
                 .with_where(where_clause)
                 .build();
 
-        let total_count = match sqlx::query(&count_query)
+        let total_count = match sqlx::query(sqlx::AssertSqlSafe(&*count_query))
             .bind(workflow_id)
             .fetch_one(self.context.pool.as_ref())
             .await
@@ -829,7 +829,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query with dynamic parameter binding
-        let mut sqlx_query = sqlx::query(&query).bind(workflow_id);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query)).bind(workflow_id);
 
         if let Some(ref sched_id) = scheduler_id {
             sqlx_query = sqlx_query.bind(sched_id.parse::<i64>().unwrap_or(0));
@@ -867,7 +867,8 @@ where
         .with_where(where_clause)
         .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query).bind(workflow_id);
+        let mut count_sqlx_query =
+            sqlx::query(sqlx::AssertSqlSafe(&*count_query)).bind(workflow_id);
 
         if let Some(ref sched_id) = scheduler_id {
             count_sqlx_query = count_sqlx_query.bind(sched_id.parse::<i64>().unwrap_or(0));
@@ -960,7 +961,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let records = match sqlx::query(&query)
+        let records = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .bind(workflow_id)
             .fetch_all(self.context.pool.as_ref())
             .await
@@ -997,7 +998,7 @@ where
                 .with_where(where_clause)
                 .build();
 
-        let total_count = match sqlx::query(&count_query)
+        let total_count = match sqlx::query(sqlx::AssertSqlSafe(&*count_query))
             .bind(workflow_id)
             .fetch_one(self.context.pool.as_ref())
             .await

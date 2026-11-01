@@ -79,7 +79,7 @@ jobs:
             ${{ runner.os }}-cargo-build-target-
 
       - name: Install SQLx CLI
-        run: cargo install sqlx-cli --no-default-features --features sqlite
+        run: cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 
       - name: Setup database
         run: |

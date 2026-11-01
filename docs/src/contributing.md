@@ -28,7 +28,7 @@ cargo install cargo-nextest
 4. **Install SQLx CLI:**
 
 ```bash
-cargo install sqlx-cli --no-default-features --features sqlite
+cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 ```
 
 5. **Install cargo-release** (only needed when cutting a release):
