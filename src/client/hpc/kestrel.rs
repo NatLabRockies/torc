@@ -5,7 +5,7 @@
 //! - 156 GPU nodes with 4x NVIDIA H100 GPUs (80GB each)
 //! - Various specialized partitions for different workload types
 //!
-//! Detection: Environment variable NREL_CLUSTER=kestrel
+//! Detection: Environment variable NLR_CLUSTER=kestrel
 
 use super::profiles::{HpcDetection, HpcPartition, HpcProfile};
 
@@ -16,7 +16,7 @@ pub fn kestrel_profile() -> HpcProfile {
         display_name: "NLR Kestrel".to_string(),
         description: "NLR's flagship HPC system with CPU and GPU nodes".to_string(),
         detection: vec![HpcDetection::EnvVar {
-            name: "NREL_CLUSTER".to_string(),
+            name: "NLR_CLUSTER".to_string(),
             value: "kestrel".to_string(),
         }],
         default_account: None,

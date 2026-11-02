@@ -223,6 +223,16 @@ fn test_walltime_format() {
 // ============== Kestrel Profile Tests ==============
 
 #[rstest]
+#[serial(slurm)]
+fn test_kestrel_profile_detected_from_nlr_cluster() {
+    let mut overrides = HashMap::new();
+    overrides.insert("NLR_CLUSTER", "kestrel");
+    let _guard = EnvGuard::new(overrides);
+
+    assert!(kestrel_profile().detect());
+}
+
+#[rstest]
 fn test_kestrel_profile_basics() {
     let profile = kestrel_profile();
     assert_eq!(profile.name, "kestrel");
