@@ -84,15 +84,6 @@ We evaluated [Nextflow](https://www.nextflow.io/), [Snakemake](https://snakemake
 - **AI-assisted management** via Claude Code, GitHub Copilot, and an MCP server
 - **REST API** with OpenAPI-generated clients
 
-## Project Status
-
-Recently rebuilt in Rust with SQLite — more portable, more stable, plus a lot of new features.
-Tested and ready for adoption; interfaces are mostly stable. We're collecting user feedback over the
-next 1–2 months and targeting a **1.0 release by July 2026**.
-
-Ideas and bug reports are very welcome on
-[GitHub Discussions](https://github.com/NatLabRockies/torc/discussions).
-
 ## Installation
 
 ```bash
