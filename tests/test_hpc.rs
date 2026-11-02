@@ -1700,6 +1700,10 @@ fn test_detect_slurm_profile() {
     let gpu = profile.get_partition("gpu").unwrap();
     assert_eq!(gpu.gpus_per_node, Some(4));
     assert_eq!(gpu.gpu_type, Some("h100".to_string()));
+
+    // A partition's QoS is not necessarily valid for `sbatch -q`, so it must not become a default.
+    assert_eq!(standard.default_qos, None);
+    assert_eq!(gpu.default_qos, None);
 }
 
 #[rstest]

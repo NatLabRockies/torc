@@ -10,7 +10,7 @@ if [[ "$*" == *"show partition"* ]]; then
     # Return basic info for any partition
     # Extract partition name from arguments (usually the 3rd argument after 'show partition')
     partition_name=$3
-    echo "PartitionName=$partition_name MinNodes=1 MaxNodes=UNLIMITED OverSubscribe=NO QoS=N/A"
+    echo "PartitionName=$partition_name MinNodes=1 MaxNodes=UNLIMITED OverSubscribe=NO QoS=debug"
     exit 0
 fi
 
