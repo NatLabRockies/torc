@@ -322,10 +322,14 @@ actions:
 <li>Multiple jobs to schedule</li>
 </ul>
 <h3 id="strategy-2-multi-node-allocation"><a class="header" href="#strategy-2-multi-node-allocation">Strategy 2: Multi-Node Allocation</a></h3>
-<p>A single Torc worker manages all nodes in the allocation. The worker reports the total resources
-across all nodes (CPUs × nodes, memory × nodes, etc.) and launches each job via <code>srun --exact</code>,
-which lets Slurm place it on whichever node has capacity:</p>
-<pre><code class="language-yaml">slurm_schedulers:
+<p>A single Torc worker manages all nodes in the allocation. Set <code>execution_config.mode: slurm</code> so the
+worker launches each job on a node with capacity via <code>srun --exact</code>. In direct mode, the default,
+jobs run on the first node unless their commands call <code>srun</code> themselves or you set
+<code>start_one_worker_per_node</code>:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: slurm
+
+slurm_schedulers:
   - name: work_scheduler
     account: my_account
     nodes: 10
@@ -342,13 +346,14 @@ actions:
 <ul>
 <li>Many single-node jobs with similar requirements</li>
 <li>Want faster queue scheduling (larger jobs often prioritized)</li>
-<li>MPI or multi-node jobs that span multiple nodes</li>
+<li>MPI or multi-node jobs that span multiple nodes, in direct mode (see
+<a href="./multi-node-jobs.html">Multi-Node Jobs</a>)</li>
 </ul>
 <p><strong>Benefits:</strong></p>
 <ul>
 <li>Single queue wait</li>
-<li>Full per-step <code>sacct</code> accounting and cgroup enforcement</li>
-<li>Slurm handles node placement automatically via <code>srun --exact</code></li>
+<li>In slurm mode, full per-step <code>sacct</code> accounting and cgroup enforcement</li>
+<li>In slurm mode, Torc and <code>srun --exact</code> handle node placement</li>
 <li>With <code>resource_monitor.compute_node</code> enabled, every non-head node runs <code>torc monitor-node</code> so its
 CPU and memory utilization is recorded (see
 <a href="../../core/reference/resource-monitoring.html">Resource Monitoring</a>)</li>
@@ -434,9 +439,10 @@ torc submit workflow.yaml
 <pre><code class="language-bash">curl $TORC_API_URL/health
 </code></pre>
 <h2 id="srun-job-step-wrapping"><a class="header" href="#srun-job-step-wrapping">srun Job Step Wrapping</a></h2>
-<p>When Torc detects that it is running inside a Slurm allocation (<code>SLURM_JOB_ID</code> is set in the
-environment), it automatically wraps each individual job with <code>srun</code>. This creates a dedicated Slurm
-job step for every Torc job, which provides:</p>
+<p>With <code>execution_config.mode: slurm</code>, Torc wraps each individual job with <code>srun</code>. With <code>mode: auto</code>,
+it does so when it is running inside a Slurm allocation (<code>SLURM_JOB_ID</code> is set in the environment).
+Direct mode, the default, does not wrap jobs. Wrapping creates a dedicated Slurm job step for every
+Torc job, which provides:</p>
 <ul>
 <li><strong>Cgroup enforcement</strong> — Slurm enforces CPU and memory limits from the job's resource
 requirements. Jobs that exceed their stated requirements are immediately killed.</li>
@@ -458,9 +464,9 @@ correlated.</p>
 <blockquote>
 <p>For a comprehensive guide to multi-node patterns, see <a href="./multi-node-jobs.html">Multi-Node Jobs</a>.</p>
 </blockquote>
-<p>The <code>num_nodes</code> resource requirement field controls how many nodes each job step spans
-(<code>srun --nodes</code>). It defaults to <code>1</code>. The Slurm allocation size (<code>sbatch --nodes</code>) is set separately
-via the Slurm scheduler configuration.</p>
+<p>The <code>num_nodes</code> resource requirement field sets how many nodes Torc reserves for each job. It
+defaults to <code>1</code>. In slurm mode, Torc also passes it to the step as <code>srun --nodes</code>. The Slurm
+allocation size (<code>sbatch --nodes</code>) is set separately via the Slurm scheduler configuration.</p>
 <p><strong>Single-node jobs (default)</strong> — no extra configuration needed:</p>
 <pre><code class="language-yaml">resource_requirements:
   - name: standard
@@ -470,18 +476,22 @@ via the Slurm scheduler configuration.</p>
     # num_nodes defaults to 1
 </code></pre>
 <p><strong>True multi-node jobs</strong> (MPI, Julia <code>Distributed.jl</code>, etc.) — the job spans multiple nodes in the
-allocation:</p>
-<pre><code class="language-yaml">resource_requirements:
+allocation. Use direct mode and start the job with your usual launcher:</p>
+<pre><code class="language-yaml">execution_config:
+  mode: direct
+
+resource_requirements:
   - name: mpi_job
     num_cpus: 32
     memory: 128g
     runtime: PT8H
-    num_nodes: 4      # srun spans all 4 nodes; allocation size set via scheduler
+    num_nodes: 4      # reserves 4 nodes; allocation size set via scheduler
 </code></pre>
-<p>In this pattern, the step spans 4 nodes exclusively, and Torc passes <code>srun --nodes=4</code> when launching
-the job. The job command receives <code>SLURM_JOB_NODELIST</code>, <code>SLURM_NTASKS</code>, and the rest of the standard
-Slurm step environment, so MPI launchers (<code>mpirun</code>, <code>mpiexec</code>) and Julia <code>Distributed.jl</code> will
-automatically use all allocated nodes.</p>
+<p>In this pattern, Torc reserves the 4 nodes exclusively and runs your command as written, in the
+environment of the batch script. Your command (for example, <code>srun</code>, <code>mpirun</code>, or <code>mpiexec</code>) starts
+the processes across those nodes.</p>
+<p>Do not use slurm mode for these jobs. It launches every job with <code>--ntasks=1</code>, so it starts one task
+rather than a set of MPI ranks, and it does not pass an MPI mode to the step.</p>
 <h3 id="multi-node-allocation-rule"><a class="header" href="#multi-node-allocation-rule">Multi-Node Allocation Rule</a></h3>
 <p>Inside a multi-node Slurm allocation, Torc uses two scheduling modes:</p>
 <ul>
@@ -514,9 +524,11 @@ set <code>mode: direct</code> in your execution config:</p>
 do not run as Slurm steps. However, Torc's own resource monitor can still track memory and CPU usage
 if enabled.</p>
 <blockquote>
-<p><strong>Note</strong>: Direct mode inside a Slurm allocation is useful when <code>srun</code> has compatibility issues, or
-when you want to run jobs without resource limits (<code>limit_resources: false</code>). For most workflows,
-the default auto mode (which selects Slurm mode inside allocations) is recommended.</p>
+<p><strong>Note</strong>: Direct mode inside a Slurm allocation is required for MPI jobs. It is also useful when
+<code>srun</code> has compatibility issues, or when you want to run jobs without resource limits
+(<code>limit_resources: false</code>). For single-task jobs, <code>mode: slurm</code> or <code>mode: auto</code> (which selects
+slurm mode inside allocations) is recommended, because you must set it explicitly to get per-step
+accounting and cgroup enforcement.</p>
 </blockquote>
 <h3 id="slurm-accounting-stats"><a class="header" href="#slurm-accounting-stats">Slurm Accounting Stats</a></h3>
 <p>After each job step exits, Torc calls <code>sacct</code> once to collect the following Slurm-native accounting
@@ -539,8 +551,9 @@ etc.) and are available via <code>torc slurm stats &lt;workflow_id&gt;</code>.</
 <li>The step was not found in the Slurm accounting database at collection time</li>
 </ul>
 <h3 id="local-execution"><a class="header" href="#local-execution">Local Execution</a></h3>
-<p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), Torc uses its standard shell wrapper
-and the <code>srun</code> behavior is never triggered. No configuration is needed for local runs.</p>
+<p>When running locally (no <code>SLURM_JOB_ID</code> environment variable), direct and auto modes use Torc's
+standard shell wrapper and never call <code>srun</code>. With <code>mode: slurm</code>, the job runner refuses to start
+outside a Slurm allocation.</p>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>
 <li><a href="./slurm-workflows.html">Slurm Overview</a> — Simplified workflow approach</li>

@@ -185,11 +185,13 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="slurm-job-step-monitoring"><a class="header" href="#slurm-job-step-monitoring">Slurm Job Step Monitoring</a></h1>
-<p>Torc automatically wraps workflow jobs with <code>srun</code> when running inside a Slurm allocation, creating
+<p>In slurm execution mode, Torc wraps workflow jobs with <code>srun</code> inside a Slurm allocation, creating
 per-job steps with cgroup enforcement. It then monitors live resource usage via <code>sstat</code> and collects
-final accounting data via <code>sacct</code>. This page describes the architecture and data flow.</p>
+final accounting data via <code>sacct</code>. Set <code>execution_config.mode: slurm</code>, or <code>auto</code> to select slurm
+mode inside an allocation; the default, direct mode, does not wrap jobs. This page describes the
+architecture and data flow.</p>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>When a Torc job runner detects <code>SLURM_JOB_ID</code> in the environment, it activates three subsystems:</p>
+<p>When a Torc job runner's effective mode is slurm, it activates three subsystems:</p>
 <ol>
 <li><strong>srun wrapping</strong> -- creates a Slurm job step per workflow job</li>
 <li><strong>sstat monitoring</strong> -- polls live CPU and memory usage during execution</li>
@@ -287,10 +289,12 @@ isolation.</p>
 scheduler configuration.</p>
 <ul>
 <li><strong>Single-node jobs</strong> (default): <code>num_nodes=1</code> -- each job runs on one node</li>
-<li><strong>Multi-node jobs</strong> (MPI, Julia Distributed.jl): <code>num_nodes=N</code> -- step spans N nodes</li>
+<li><strong>Multi-node jobs</strong>: <code>num_nodes=N</code> -- step requests N nodes</li>
 </ul>
+<p>Every step uses <code>--ntasks=1</code>, so slurm mode does not start a set of MPI ranks. Run MPI jobs in
+direct mode with their usual launcher (see <a href="../hpc/multi-node-jobs.html">Multi-Node Jobs</a>).</p>
 <p>When <code>num_nodes &gt; 1</code>, Torc treats the job as consuming whole nodes exclusively for the lifetime of
-the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.</p>
+the step. This avoids ambiguous partial-node accounting for multi-node jobs.</p>
 <h3 id="resource-enforcement"><a class="header" href="#resource-enforcement">Resource Enforcement</a></h3>
 <p>In Slurm mode, srun always applies <code>--cpus-per-task</code> and <code>--mem</code> flags from the job's resource
 requirements. This creates cgroup-enforced limits: jobs exceeding their memory allocation are killed
