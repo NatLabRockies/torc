@@ -357,6 +357,8 @@ slurm_schedulers:
     nodes: 100
     mem: 240G
     walltime: "16:00:00"
+    # The runner's capacity comes from the CPUs Slurm allocates, so reserve whole nodes.
+    extra: "--exclusive"
 
 resource_requirements:
   - name: mpi_all_nodes
