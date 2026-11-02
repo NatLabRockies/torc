@@ -225,7 +225,7 @@ torc slurm generate [OPTIONS] --account <ACCOUNT> <WORKFLOW_FILE>
 
 **Profile name:** `kestrel`
 
-**Detection:** Environment variable `NREL_CLUSTER=kestrel`
+**Detection:** Environment variable `NLR_CLUSTER=kestrel`
 
 **Partitions:**
 

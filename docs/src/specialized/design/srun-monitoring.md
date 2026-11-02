@@ -1,12 +1,14 @@
 # Slurm Job Step Monitoring
 
-Torc automatically wraps workflow jobs with `srun` when running inside a Slurm allocation, creating
+In slurm execution mode, Torc wraps workflow jobs with `srun` inside a Slurm allocation, creating
 per-job steps with cgroup enforcement. It then monitors live resource usage via `sstat` and collects
-final accounting data via `sacct`. This page describes the architecture and data flow.
+final accounting data via `sacct`. Set `execution_config.mode: slurm`, or `auto` to select slurm
+mode inside an allocation; the default, direct mode, does not wrap jobs. This page describes the
+architecture and data flow.
 
 ## Overview
 
-When a Torc job runner detects `SLURM_JOB_ID` in the environment, it activates three subsystems:
+When a Torc job runner's effective mode is slurm, it activates three subsystems:
 
 1. **srun wrapping** -- creates a Slurm job step per workflow job
 2. **sstat monitoring** -- polls live CPU and memory usage during execution
@@ -119,10 +121,13 @@ The `num_nodes` field on resource requirements controls how many nodes an srun s
 scheduler configuration.
 
 - **Single-node jobs** (default): `num_nodes=1` -- each job runs on one node
-- **Multi-node jobs** (MPI, Julia Distributed.jl): `num_nodes=N` -- step spans N nodes
+- **Multi-node jobs**: `num_nodes=N` -- step requests N nodes
+
+Every step uses `--ntasks=1`, so slurm mode does not start a set of MPI ranks. Run MPI jobs in
+direct mode with their usual launcher (see [Multi-Node Jobs](../hpc/multi-node-jobs.md)).
 
 When `num_nodes > 1`, Torc treats the job as consuming whole nodes exclusively for the lifetime of
-the step. This avoids ambiguous partial-node accounting for MPI and other true multi-node jobs.
+the step. This avoids ambiguous partial-node accounting for multi-node jobs.
 
 ### Resource Enforcement
 

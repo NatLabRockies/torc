@@ -292,7 +292,7 @@ execution_config {
 
 | Field                      | Type   | Default   | Description                                       |
 | -------------------------- | ------ | --------- | ------------------------------------------------- |
-| `mode`                     | string | `auto`    | Execution mode: `direct`, `slurm`, or `auto`      |
+| `mode`                     | string | `direct`  | Execution mode: `direct`, `slurm`, or `auto`      |
 | `limit_resources`          | bool   | `true`    | Enforce memory limits in direct mode only         |
 | `termination_signal`       | string | `SIGTERM` | Signal to send before SIGKILL (direct mode)       |
 | `sigterm_lead_seconds`     | int    | `30`      | Seconds before SIGKILL to send termination signal |
@@ -304,14 +304,14 @@ execution_config {
 
 ### When to Use Each Mode
 
-- **direct mode**: Use when running outside Slurm, or when `srun`/`sacct` are unreliable. Torc
-  manages termination via SIGTERM/SIGKILL signals.
+- **direct mode** (default): Use when running outside Slurm, when `srun`/`sacct` are unreliable, or
+  for MPI jobs that start their own launcher. Torc manages termination via SIGTERM/SIGKILL signals.
 
 - **slurm mode**: Use inside Slurm allocations when srun works correctly. Jobs are wrapped with
   `srun` and Slurm manages resource enforcement and termination.
 
-- **auto mode** (default): Automatically selects `slurm` mode if running inside a Slurm allocation
-  (detected via `SLURM_JOB_ID` environment variable), otherwise uses `direct` mode.
+- **auto mode**: Automatically selects `slurm` mode if running inside a Slurm allocation (detected
+  via `SLURM_JOB_ID` environment variable), otherwise uses `direct` mode.
 
 ### Termination Timeline (Direct Mode)
 
