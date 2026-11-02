@@ -21,6 +21,7 @@ repos:
 
 
 exclude: >-
+  (?x)
   (python_client/src/torc/openapi_client/.*)
   |(julia_client/julia_client/.*)
   |(docs/mermaid\.min\.js)
