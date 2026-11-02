@@ -84,12 +84,12 @@ run_pre_poll_actions() {
       torc --url "$TORC_API_URL" -f json workflows sync-status "$wf_id" \
         > "$RUN_DIR/sync_status_output.json" \
         2> "$RUN_DIR/sync_status_stderr.log"
-      torc --url "$TORC_API_URL" cancel "$wf_id" > /dev/null 2>&1 || true
+      torc --url "$TORC_API_URL" cancel --no-prompts "$wf_id" > /dev/null 2>&1 || true
     else
       printf '%s\n' \
         '{"skipped": true, "reason": "jobs never reached running status"}' \
         > "$RUN_DIR/sync_status_output.json"
-      torc --url "$TORC_API_URL" cancel "$wf_id" > /dev/null 2>&1 || true
+      torc --url "$TORC_API_URL" cancel --no-prompts "$wf_id" > /dev/null 2>&1 || true
     fi
     ;;
   esac
