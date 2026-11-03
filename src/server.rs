@@ -2,6 +2,13 @@
 //!
 //! This module contains all server-side functionality including API implementations,
 //! authentication, transport, and database operations.
+//!
+//! # Stability
+//!
+//! The Rust API of this module is an internal implementation detail of `torc-server`. It is
+//! `pub` so that the binaries can use it, but it is not covered by Torc's semantic versioning
+//! and may change in any release, including through changes to dependencies such as `sqlx`.
+//! The HTTP API is versioned separately; see `crate::api_version`.
 
 pub mod api;
 pub(crate) mod api_constants;

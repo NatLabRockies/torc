@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO result\n            (\n                job_id\n                ,workflow_id\n                ,run_id\n                ,attempt_id\n                ,compute_node_id\n                ,return_code\n                ,exec_time_minutes\n                ,completion_time\n                ,status\n                ,peak_memory_bytes\n                ,avg_memory_bytes\n                ,peak_cpu_percent\n                ,avg_cpu_percent\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n            RETURNING rowid AS \"id!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "result",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3d8081ec99a1d73aec3ced1804c72c71c407564f6205bac2c09a090c16a1ae5a"
+}

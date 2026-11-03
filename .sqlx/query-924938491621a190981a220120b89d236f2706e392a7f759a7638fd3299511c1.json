@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO local_scheduler\n            (\n                workflow_id\n                ,memory\n                ,num_cpus\n            )\n            VALUES ($1, $2, $3)\n            RETURNING rowid AS \"id!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "local_scheduler",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "924938491621a190981a220120b89d236f2706e392a7f759a7638fd3299511c1"
+}

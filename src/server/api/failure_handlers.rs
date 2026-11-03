@@ -83,7 +83,7 @@ where
             r#"
             INSERT INTO failure_handler (workflow_id, name, rules)
             VALUES ($1, $2, $3)
-            RETURNING id
+            RETURNING id AS "id!"
             "#,
             body.workflow_id,
             body.name,

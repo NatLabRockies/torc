@@ -74,6 +74,8 @@ examples/
 
 - **`slurm_staged_pipeline`** - Multi-stage Slurm pipeline with automated scheduling and resource
   monitoring
+- **`single_allocation_mpi_stages`** - Alternating MPI and single-node stages in one 100-node Slurm
+  allocation (YAML only)
 
 ### Parameterized Workflows (YAML/JSON5 only)
 

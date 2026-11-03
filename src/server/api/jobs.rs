@@ -324,7 +324,7 @@ impl JobsApiImpl {
             table_name
         );
 
-        match sqlx::query(&sql)
+        match sqlx::query(sqlx::AssertSqlSafe(&*sql))
             .bind(job_id)
             .bind(file_id)
             .bind(workflow_id)
@@ -355,7 +355,7 @@ impl JobsApiImpl {
             table_name
         );
 
-        match sqlx::query(&sql)
+        match sqlx::query(sqlx::AssertSqlSafe(&*sql))
             .bind(job_id)
             .bind(user_data_id)
             .execute(executor)
@@ -1083,7 +1083,7 @@ impl JobsApiImpl {
                     "SELECT id, data FROM user_data WHERE id IN ({})",
                     placeholders.join(",")
                 );
-                let mut query = sqlx::query(&sql);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(&*sql));
                 for id in chunk {
                     query = query.bind(id);
                 }
@@ -1179,7 +1179,7 @@ impl JobsApiImpl {
                  ON CONFLICT(job_id) DO UPDATE SET input_hash = excluded.input_hash",
                 placeholders.join(", ")
             );
-            let mut query = sqlx::query(&sql);
+            let mut query = sqlx::query(sqlx::AssertSqlSafe(&*sql));
             for (job_id, hash_hex) in chunk {
                 query = query.bind(job_id).bind(hash_hex);
             }
@@ -1977,7 +1977,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
 
         // Bind workflow_id
         sqlx_query = sqlx_query.bind(workflow_id);
@@ -2079,7 +2079,7 @@ where
             .with_where(where_clause)
             .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
         if let Some(ref s) = status {
             count_sqlx_query = count_sqlx_query.bind(s.to_int());
@@ -2558,7 +2558,7 @@ where
             "#
         );
 
-        let rows = match sqlx::query(&query)
+        let rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .bind(id)
             .bind(ready_status)
             .bind(labels_json)
@@ -2689,7 +2689,10 @@ where
                 "UPDATE job SET status = {} WHERE id IN ({})",
                 pending, job_ids_str
             );
-            if let Err(e) = sqlx::query(&sql).execute(&mut *conn).await {
+            if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql))
+                .execute(&mut *conn)
+                .await
+            {
                 error!("Failed to update job status: {}", e);
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 return Err(ApiError("Database update error".to_string()));

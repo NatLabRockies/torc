@@ -235,7 +235,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
 
         // Bind workflow_id
         sqlx_query = sqlx_query.bind(workflow_id);
@@ -280,7 +280,7 @@ where
             .with_where(where_clause)
             .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
 
         // Bind timestamp for count query if provided

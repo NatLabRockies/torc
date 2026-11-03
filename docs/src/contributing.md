@@ -13,8 +13,14 @@ cd torc
 
 2. **Install Rust and dependencies:**
 
-Make sure you have Rust 1.95 or later installed. Hawk 0.1.17 requires its analysis to run with the
-exact compiler toolchain it was built against, Rust 1.99.0.
+Make sure you have Rust 1.95 or later installed:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Hawk 0.1.17 requires its analysis to run with the exact compiler toolchain it was built against,
+Rust 1.99.0 (installed in step 6).
 
 3. **Install cargo-nextest:**
 
@@ -25,7 +31,7 @@ cargo install cargo-nextest
 4. **Install SQLx CLI:**
 
 ```bash
-cargo install sqlx-cli --no-default-features --features sqlite
+cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 ```
 
 5. **Install cargo-release** (only needed when cutting a release):
@@ -195,6 +201,16 @@ Common options:
 The runner starts a temporary Torc server, executes each test as a child workflow under Slurm, and
 writes results to `slurm-tests/output/run_<timestamp>/results.json`. All tests must pass before a
 release is tagged.
+
+## Versioning Policy
+
+Torc's semantic versioning covers the `torc` command-line interface, the HTTP API, and the workflow
+specification format. The HTTP API also has its own version; see
+[HTTP API](./specialized/design/http-api.md).
+
+The Rust API of the `torc` crate, including `torc::client` and `torc::server`, is not covered. It is
+public so that Torc's binaries can use it, and it may change in any release. Rust projects that
+depend on the crate should pin an exact version.
 
 ## Cutting a Release
 

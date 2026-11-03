@@ -51,7 +51,7 @@ jobs:
 
       - name: Setup database for sqlx
         run: |
-          cargo install sqlx-cli --no-default-features --features sqlite
+          cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
           mkdir -p db/sqlite
           DATABASE_URL=sqlite:db/sqlite/dev.db sqlx database create
           DATABASE_URL=sqlite:db/sqlite/dev.db sqlx migrate run --source torc-server/migrations

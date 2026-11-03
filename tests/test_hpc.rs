@@ -223,6 +223,16 @@ fn test_walltime_format() {
 // ============== Kestrel Profile Tests ==============
 
 #[rstest]
+#[serial(slurm)]
+fn test_kestrel_profile_detected_from_nlr_cluster() {
+    let mut overrides = HashMap::new();
+    overrides.insert("NLR_CLUSTER", "kestrel");
+    let _guard = EnvGuard::new(overrides);
+
+    assert!(kestrel_profile().detect());
+}
+
+#[rstest]
 fn test_kestrel_profile_basics() {
     let profile = kestrel_profile();
     assert_eq!(profile.name, "kestrel");
@@ -1700,6 +1710,10 @@ fn test_detect_slurm_profile() {
     let gpu = profile.get_partition("gpu").unwrap();
     assert_eq!(gpu.gpus_per_node, Some(4));
     assert_eq!(gpu.gpu_type, Some("h100".to_string()));
+
+    // A partition's QoS is not necessarily valid for `sbatch -q`, so it must not become a default.
+    assert_eq!(standard.default_qos, None);
+    assert_eq!(gpu.default_qos, None);
 }
 
 #[rstest]

@@ -382,7 +382,7 @@ where
                     placeholders
                 );
 
-                let mut query = sqlx::query(&query_str).bind(workflow_id);
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(&*query_str)).bind(workflow_id);
                 for trigger_type in types {
                     query = query.bind(trigger_type);
                 }
@@ -400,7 +400,7 @@ where
                  ORDER BY id".to_string();
             (
                 query_str.clone(),
-                sqlx::query(&query_str)
+                sqlx::query(sqlx::AssertSqlSafe(&*query_str))
                     .bind(workflow_id)
                     .fetch_all(self.context.pool.as_ref())
                     .await,

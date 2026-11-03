@@ -23,7 +23,6 @@ struct ScontrolPartitionInfo {
     min_nodes: Option<u32>,
     max_nodes: Option<u32>,
     oversubscribe: Option<String>,
-    default_qos: Option<String>,
 }
 
 /// Get the sinfo executable path (allows for testing with fake binary in dev/test builds)
@@ -193,7 +192,9 @@ pub(crate) fn generate_dynamic_slurm_profile(
             local_disk_gb: None,
             shared,
             requires_explicit_request: false,
-            default_qos: scontrol_info.default_qos.filter(|q| q != "N/A"),
+            // A partition QoS (`QoS=` in scontrol) is applied by Slurm automatically and is not
+            // necessarily a value that sbatch accepts for `-q`, so it must not be a default.
+            default_qos: None,
             features: vec![],
         };
 
@@ -336,7 +337,6 @@ fn parse_scontrol_partition(name: &str) -> Option<ScontrolPartitionInfo> {
                 "MinNodes" => info.min_nodes = value.parse().ok(),
                 "MaxNodes" => info.max_nodes = value.parse().ok(),
                 "OverSubscribe" => info.oversubscribe = Some(value.to_string()),
-                "QOS" | "QoS" => info.default_qos = Some(value.to_string()),
                 _ => {}
             }
         }

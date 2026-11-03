@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO scheduled_compute_node\n            (\n                workflow_id\n                ,scheduler_id\n                ,scheduler_config_id\n                ,scheduler_type\n                ,status\n            )\n            VALUES ($1, $2, $3, $4, $5)\n            RETURNING rowid AS \"id!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "scheduled_compute_node",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "30b8e83c55b306d2d47e6d479f834fe40ceabb30201e87db3ebee48a6277e6e8"
+}

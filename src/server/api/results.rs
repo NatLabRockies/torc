@@ -139,7 +139,7 @@ where
                 ,avg_cpu_percent
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING rowid
+            RETURNING rowid AS "id!"
         "#,
             body.job_id,
             body.workflow_id,
@@ -409,7 +409,7 @@ where
         debug!("Executing query: {}", query);
 
         // Execute the query
-        let mut sqlx_query = sqlx::query(&query);
+        let mut sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*query));
 
         // Bind workflow_id
         sqlx_query = sqlx_query.bind(workflow_id);
@@ -474,7 +474,7 @@ where
             .with_where(where_clause)
             .build();
 
-        let mut count_sqlx_query = sqlx::query(&count_query);
+        let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
         if let Some(j_id) = job_id {
             count_sqlx_query = count_sqlx_query.bind(j_id);

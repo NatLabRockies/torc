@@ -2,6 +2,13 @@
 //!
 //! This library provides shared functionality for the Torc workflow orchestration system.
 //! It includes data models, server implementation, and client utilities.
+//!
+//! # Stability
+//!
+//! The Rust API of this crate is not covered by Torc's semantic versioning and may change in any
+//! release. It is `pub` so that Torc's binaries can use it. Projects that depend on this crate
+//! should pin an exact version. Semantic versioning covers the `torc` command-line interface, the
+//! HTTP API, and the workflow specification format.
 
 /// Maximum number of records that can be transferred in a single API request or response.
 /// Used for both batch creation limits and pagination limits.

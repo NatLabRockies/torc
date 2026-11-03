@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO slurm_scheduler\n            (\n                workflow_id\n                ,name\n                ,account\n                ,gres\n                ,mem\n                ,nodes\n                ,ntasks_per_node\n                ,partition\n                ,qos\n                ,tmp\n                ,walltime\n                ,extra\n                ,serialize_allocations\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n            RETURNING rowid AS \"id!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "slurm_scheduler",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2d3fdc1e3512e24ee2ea8da27f6ffd1170404760882d152dd5b3fd68a8ede744"
+}

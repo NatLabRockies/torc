@@ -324,7 +324,7 @@ impl AccessGroupsApiImpl {
         )
         .build();
 
-        let records = match sqlx::query(&query)
+        let records = match sqlx::query(sqlx::AssertSqlSafe(&*query))
             .fetch_all(self.context.pool.as_ref())
             .await
         {

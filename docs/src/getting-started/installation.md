@@ -67,9 +67,9 @@ listed below.
 
 ```
 /scratch/dthom/torc/
-├── 0.42.0/
+├── 1.0.0/
 ├── ...
-└── latest -> 0.42.0  (symlink to current version)
+└── latest -> 1.0.0  (symlink to current version)
 ```
 
 > **Recommended**: Use the `latest` directory. Torc maintains backwards compatibility, so you'll
@@ -200,7 +200,7 @@ set the environment variable `DATABASE_URL`.
 
 ```bash
 # Install sqlx-cli if needed
-cargo install sqlx-cli --no-default-features --features sqlite
+cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 sqlx database setup --source torc-server/migrations
 ```
 
