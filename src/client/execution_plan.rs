@@ -21,10 +21,10 @@ use std::collections::{HashMap, HashSet};
 /// Represents a scheduler allocation in the execution plan
 #[derive(Debug, Clone, Serialize)]
 pub struct SchedulerAllocation {
-    pub scheduler: String,
-    pub scheduler_type: String,
-    pub num_allocations: i64,
-    pub jobs: Vec<String>,
+    pub(crate) scheduler: String,
+    pub(crate) scheduler_type: String,
+    pub(crate) num_allocations: i64,
+    pub(crate) jobs: Vec<String>,
 }
 
 /// What triggers an execution event
@@ -41,19 +41,19 @@ pub enum EventTrigger {
 #[derive(Debug, Clone, Serialize)]
 pub struct ExecutionEvent {
     /// Unique identifier for this event
-    pub id: String,
+    pub(crate) id: String,
     /// What triggers this event
-    pub trigger: EventTrigger,
+    pub(crate) trigger: EventTrigger,
     /// Human-readable description of the trigger
     pub trigger_description: String,
     /// Scheduler allocations triggered by this event
-    pub scheduler_allocations: Vec<SchedulerAllocation>,
+    pub(crate) scheduler_allocations: Vec<SchedulerAllocation>,
     /// Jobs that become ready when this event fires
     pub jobs_becoming_ready: Vec<String>,
     /// Event IDs that must complete before this event can fire
-    pub depends_on_events: Vec<String>,
+    pub(crate) depends_on_events: Vec<String>,
     /// Event IDs that depend on this event
-    pub unlocks_events: Vec<String>,
+    pub(crate) unlocks_events: Vec<String>,
 }
 
 /// Represents the complete execution plan for a workflow as a DAG
@@ -67,17 +67,17 @@ pub struct ExecutionPlan {
     pub leaf_events: Vec<String>,
     /// The underlying workflow graph (if built from spec)
     #[serde(skip)]
-    pub graph: Option<WorkflowGraph>,
+    graph: Option<WorkflowGraph>,
 }
 
 // Legacy stage-based interface for backwards compatibility
 /// Represents a stage in the workflow execution plan (legacy format)
 #[derive(Debug, Clone, Serialize)]
 pub struct ExecutionStage {
-    pub stage_number: usize,
-    pub trigger_description: String,
-    pub scheduler_allocations: Vec<SchedulerAllocation>,
-    pub jobs_becoming_ready: Vec<String>,
+    stage_number: usize,
+    trigger_description: String,
+    scheduler_allocations: Vec<SchedulerAllocation>,
+    jobs_becoming_ready: Vec<String>,
 }
 
 impl ExecutionPlan {
@@ -486,7 +486,7 @@ impl ExecutionPlan {
     }
 
     /// Display the execution plan in a human-readable format
-    pub fn display(&self) {
+    pub(crate) fn display(&self) {
         println!("\n{}", "=".repeat(80));
         println!("Workflow Execution Plan (DAG)");
         println!("{}", "=".repeat(80));
@@ -606,14 +606,14 @@ impl ExecutionPlan {
     }
 
     /// Get the underlying workflow graph (if available)
-    pub fn workflow_graph(&self) -> Option<&WorkflowGraph> {
+    fn workflow_graph(&self) -> Option<&WorkflowGraph> {
         self.graph.as_ref()
     }
 
     /// Convert to legacy stage format for backwards compatibility
     /// Note: This flattens the DAG into a linear sequence, which may not
     /// accurately represent parallel subgraphs
-    pub fn to_stages(&self) -> Vec<ExecutionStage> {
+    fn to_stages(&self) -> Vec<ExecutionStage> {
         let mut stages = Vec::new();
         let mut displayed = HashSet::new();
         let mut queue: Vec<String> = self.root_events.clone();

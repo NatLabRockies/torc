@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.99.0
         with:
           components: rustfmt, clippy
 
@@ -58,6 +58,24 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --all --all-targets --all-features -- -D warnings
+
+      - name: Install Hawk
+        run: |
+          set -euo pipefail
+          hawk_version=0.1.17
+          hawk_archive="$RUNNER_TEMP/cargo-hawk.tar.gz"
+          hawk_dir="$RUNNER_TEMP/cargo-hawk-x86_64-unknown-linux-gnu"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$hawk_archive" \
+            "https://github.com/astral-sh/hawk/releases/download/${hawk_version}/cargo-hawk-x86_64-unknown-linux-gnu.tar.gz"
+          printf '%s  %s\n' \
+            'f5a76a43aa6be1e55e44f5eac13310193ba77729673799250065f1d201018016' \
+            "$hawk_archive" | sha256sum --check -
+          tar -xzf "$hawk_archive" -C "$RUNNER_TEMP"
+          echo "$hawk_dir" >> "$GITHUB_PATH"
+
+      - name: Run Hawk
+        run: cargo +1.99.0 hawk check -D warnings
 
       - name: Check Rust-owned OpenAPI artifacts
         env:

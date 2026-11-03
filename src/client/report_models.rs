@@ -33,12 +33,12 @@ fn is_zero(n: &usize) -> bool {
 /// A resource utilization violation (job exceeded its specified resources)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceViolation {
-    pub job_id: i64,
-    pub job_name: String,
-    pub resource_type: String,
-    pub specified: String,
-    pub peak_used: String,
-    pub over_utilization: String,
+    pub(crate) job_id: i64,
+    pub(crate) job_name: String,
+    pub(crate) resource_type: String,
+    pub(crate) specified: String,
+    pub(crate) peak_used: String,
+    pub(crate) over_utilization: String,
 }
 
 /// Information about a job that exceeded resource allocation.
@@ -48,57 +48,57 @@ pub struct ResourceViolation {
 /// Used for proactive resource optimization and recovery diagnostics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceViolationInfo {
-    pub job_id: i64,
-    pub job_name: String,
-    pub return_code: i64,
-    pub exec_time_minutes: f64,
-    pub configured_memory: String,
-    pub configured_runtime: String,
-    pub configured_cpus: i64,
+    pub(crate) job_id: i64,
+    pub(crate) job_name: String,
+    pub(crate) return_code: i64,
+    pub(crate) exec_time_minutes: f64,
+    pub(crate) configured_memory: String,
+    pub(crate) configured_runtime: String,
+    pub(crate) configured_cpus: i64,
 
     /// Peak memory usage in bytes (if available from resource monitoring)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub peak_memory_bytes: Option<i64>,
+    pub(crate) peak_memory_bytes: Option<i64>,
 
     /// Human-readable peak memory (e.g., "1.5 GB")
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub peak_memory_formatted: Option<String>,
+    pub(crate) peak_memory_formatted: Option<String>,
 
     /// Whether this job violated memory limits
     #[serde(default, skip_serializing_if = "is_false")]
-    pub memory_violation: bool,
+    pub(crate) memory_violation: bool,
 
     /// Reason for OOM detection (e.g., "memory_exceeded", "sigkill_137")
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub oom_reason: Option<String>,
+    pub(crate) oom_reason: Option<String>,
 
     /// How much memory was over-utilized (e.g., "+25.3%")
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub memory_over_utilization: Option<String>,
+    pub(crate) memory_over_utilization: Option<String>,
 
     /// Whether this job likely failed due to timeout
     #[serde(default, skip_serializing_if = "is_false")]
-    pub likely_timeout: bool,
+    pub(crate) likely_timeout: bool,
 
     /// Reason for timeout detection (e.g., "sigxcpu_152")
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_reason: Option<String>,
+    pub(crate) timeout_reason: Option<String>,
 
     /// Runtime utilization percentage (e.g., "95.2%")
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_utilization: Option<String>,
+    pub(crate) runtime_utilization: Option<String>,
 
     /// Whether this job exceeded its CPU allocation
     #[serde(default, skip_serializing_if = "is_false")]
-    pub likely_cpu_violation: bool,
+    pub(crate) likely_cpu_violation: bool,
 
     /// Peak CPU percentage used (e.g., 501.4%)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub peak_cpu_percent: Option<f64>,
+    pub(crate) peak_cpu_percent: Option<f64>,
 
     /// Whether this job exceeded its runtime allocation
     #[serde(default, skip_serializing_if = "is_false")]
-    pub likely_runtime_violation: bool,
+    pub(crate) likely_runtime_violation: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -108,58 +108,58 @@ fn is_false(b: &bool) -> bool {
 /// Output of `torc reports results`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultsReport {
-    pub workflow_id: i64,
-    pub workflow_name: String,
-    pub workflow_user: String,
-    pub all_runs: bool,
-    pub total_results: usize,
+    pub(crate) workflow_id: i64,
+    pub(crate) workflow_name: String,
+    pub(crate) workflow_user: String,
+    pub(crate) all_runs: bool,
+    pub(crate) total_results: usize,
     /// Job result records.
     ///
     /// Serialized as `items` for consistency with the other list commands and
     /// the REST API's paginated responses (which all wrap records in `items`).
     #[serde(rename = "items")]
-    pub results: Vec<JobResultRecord>,
+    pub(crate) results: Vec<JobResultRecord>,
 }
 
 /// A single job result record with log file paths
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobResultRecord {
-    pub job_id: i64,
-    pub job_name: String,
-    pub status: String,
-    pub run_id: i64,
-    pub return_code: i64,
-    pub completion_time: String,
-    pub exec_time_minutes: f64,
-    pub compute_node_id: i64,
+    pub(crate) job_id: i64,
+    pub(crate) job_name: String,
+    pub(crate) status: String,
+    pub(crate) run_id: i64,
+    pub(crate) return_code: i64,
+    pub(crate) completion_time: String,
+    pub(crate) exec_time_minutes: f64,
+    pub(crate) compute_node_id: i64,
 
     /// Path to job stdout log
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub job_stdout: Option<String>,
+    pub(crate) job_stdout: Option<String>,
 
     /// Path to job stderr log
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub job_stderr: Option<String>,
+    pub(crate) job_stderr: Option<String>,
 
     /// Type of compute node ("local" or "slurm")
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compute_node_type: Option<String>,
+    pub(crate) compute_node_type: Option<String>,
 
     /// Path to job runner log file
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub job_runner_log: Option<String>,
+    pub(crate) job_runner_log: Option<String>,
 
     /// Slurm job ID (only for slurm jobs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slurm_job_id: Option<String>,
+    pub(crate) slurm_job_id: Option<String>,
 
     /// Path to Slurm stdout log (only for slurm jobs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slurm_stdout: Option<String>,
+    pub(crate) slurm_stdout: Option<String>,
 
     /// Path to Slurm stderr log (only for slurm jobs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slurm_stderr: Option<String>,
+    pub(crate) slurm_stderr: Option<String>,
 }
 
 #[cfg(test)]

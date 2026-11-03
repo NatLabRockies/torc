@@ -285,7 +285,7 @@ pub trait WorkflowsApi<C> {
 /// Implementation of workflows API for the server
 #[derive(Clone)]
 pub struct WorkflowsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const WORKFLOW_COLUMNS: &[&str] = &[
@@ -342,7 +342,7 @@ const JOB_USER_DATA_RELATIONSHIP_COLUMNS: &[&str] = &[
 ];
 
 impl WorkflowsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 
@@ -350,7 +350,7 @@ impl WorkflowsApiImpl {
     ///
     /// When `accessible_ids` is `Some(ids)`, only workflows with IDs in the list are returned.
     /// When `accessible_ids` is `None`, no ID-based filtering is applied.
-    pub async fn list_workflows_filtered<C>(
+    pub(crate) async fn list_workflows_filtered<C>(
         &self,
         offset: i64,
         sort_by: Option<String>,

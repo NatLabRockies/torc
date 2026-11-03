@@ -6,7 +6,7 @@ use std::io::ErrorKind;
 use std::net::TcpListener;
 
 /// Maximum number of ports to try when searching for an available port.
-pub const MAX_PORT_ATTEMPTS: u16 = 100;
+const MAX_PORT_ATTEMPTS: u16 = 100;
 
 /// Try to bind to a port, incrementing if the port is in use.
 ///

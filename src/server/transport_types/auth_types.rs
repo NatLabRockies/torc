@@ -14,9 +14,9 @@ pub enum Scopes {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Authorization {
-    pub subject: String,
-    pub scopes: Scopes,
-    pub issuer: Option<String>,
+    pub(crate) subject: String,
+    pub(crate) scopes: Scopes,
+    pub(crate) issuer: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,12 +24,12 @@ pub struct AuthData;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Basic {
-    pub username: String,
-    pub password: Option<String>,
+    pub(crate) username: String,
+    pub(crate) password: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Bearer(pub String);
+pub struct Bearer(pub(crate) String);
 
 pub trait RcBound {
     type Result;
@@ -47,7 +47,7 @@ where
     }
 }
 
-pub fn from_headers(headers: &HeaderMap) -> Option<Basic> {
+pub(crate) fn from_headers(headers: &HeaderMap) -> Option<Basic> {
     let header = headers.get(header::AUTHORIZATION)?;
     let header = header.to_str().ok()?;
     let encoded = header.strip_prefix("Basic ")?;
@@ -69,7 +69,7 @@ pub struct AllowAllAuthenticator<T, RC> {
 }
 
 impl<T, RC> AllowAllAuthenticator<T, RC> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             _inner: PhantomData,
             _context: PhantomData,

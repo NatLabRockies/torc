@@ -32,7 +32,7 @@ from pathlib import Path
 
 from torc import Orchestrator, SpawnJobModel
 
-CONVERGENCE_THRESHOLD = 0.01      # convergence rule — edit me
+CONVERGENCE_THRESHOLD = 0.01  # convergence rule — edit me
 
 
 def main() -> None:
@@ -43,10 +43,12 @@ def main() -> None:
     seed_lineage = sys.argv[1] if len(sys.argv) > 1 else None
     orch = Orchestrator.from_env(lineage_fallback=seed_lineage)
 
-    demo_root = Path(os.environ.get(
-        "TORC_DEMO_DIR",
-        os.environ.get("TORC_OUTPUT_DIR", str(Path.cwd() / "out")),
-    ))
+    demo_root = Path(
+        os.environ.get(
+            "TORC_DEMO_DIR",
+            os.environ.get("TORC_OUTPUT_DIR", str(Path.cwd() / "out")),
+        )
+    )
     work_dir = demo_root / "dynamic_demo" / orch.lineage
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,11 +75,13 @@ def main() -> None:
     # =====================================================================
     if prior_metric is not None and prior_metric < CONVERGENCE_THRESHOLD:
         log(f"converged at gen={current_gen} (metric={prior_metric}) -> no spawn")
-        orch.converge(state={
-            "converged": True,
-            "final_metric": prior_metric,
-            "generation": current_gen,
-        })
+        orch.converge(
+            state={
+                "converged": True,
+                "final_metric": prior_metric,
+                "generation": current_gen,
+            }
+        )
         return
 
     # =====================================================================
@@ -130,8 +134,10 @@ def main() -> None:
         ],
         state={"generation": next_gen, "prior_metric": prior_metric},
     )
-    log(f"spawned gen={next_gen}: {reeds_name} -> {pras_name} -> {cont_name} "
-        f"(iteration={resp.iteration}) — exiting; runner will complete us")
+    log(
+        f"spawned gen={next_gen}: {reeds_name} -> {pras_name} -> {cont_name} "
+        f"(iteration={resp.iteration}) — exiting; runner will complete us"
+    )
 
 
 if __name__ == "__main__":

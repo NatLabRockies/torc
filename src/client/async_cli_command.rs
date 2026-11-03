@@ -212,7 +212,7 @@ impl AsyncCliCommand {
 
     /// Returns the Slurm step name, if running inside an allocation.
     /// Set after `start()` is called.
-    pub fn step_name(&self) -> Option<&str> {
+    fn step_name(&self) -> Option<&str> {
         self.step_name.as_deref()
     }
 
@@ -534,7 +534,7 @@ impl AsyncCliCommand {
 
     /// Returns the Slurm accounting stats collected for this job step, if any.
     /// Only populated when the job ran inside a Slurm allocation and sacct succeeded.
-    pub fn take_slurm_stats(&mut self) -> Option<SlurmStatsModel> {
+    pub(crate) fn take_slurm_stats(&mut self) -> Option<SlurmStatsModel> {
         self.slurm_stats.take()
     }
 
@@ -582,7 +582,7 @@ impl AsyncCliCommand {
     /// // exit_code will be 143 (128 + 15) if killed by SIGTERM on Unix
     /// ```
     #[cfg(unix)]
-    pub fn send_sigterm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn send_sigterm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref child) = self.handle {
             let pid = child.id();
             debug!("Sending SIGTERM to job {} (PID {})", self.job_id, pid);
@@ -656,7 +656,10 @@ impl AsyncCliCommand {
     /// **Note**: This method does not wait for the process to exit. Call
     /// [`wait_for_completion()`] afterwards to wait for the process and capture its exit code.
     #[cfg(unix)]
-    pub fn send_signal(&mut self, signal_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn send_signal(
+        &mut self,
+        signal_name: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref child) = self.handle {
             let pid = child.id();
             let signal = match signal_name {
@@ -714,7 +717,7 @@ impl AsyncCliCommand {
     /// This is a forceful termination that cannot be caught or ignored by the process.
     /// Use this as a last resort after graceful termination has failed.
     #[cfg(unix)]
-    pub fn send_sigkill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn send_sigkill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref child) = self.handle {
             let pid = child.id();
             debug!("Sending SIGKILL to job {} (PID {})", self.job_id, pid);
@@ -842,7 +845,7 @@ impl AsyncCliCommand {
     /// Process ID of the job, once `start()` has spawned it. In Slurm mode this
     /// is the PID of the `srun` process, not of the job itself, which runs
     /// under slurmstepd.
-    pub fn pid(&self) -> Option<u32> {
+    pub(crate) fn pid(&self) -> Option<u32> {
         self.pid
     }
 

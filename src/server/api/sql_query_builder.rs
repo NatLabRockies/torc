@@ -3,7 +3,7 @@
 use log::warn;
 
 /// Utility for building SQL queries with pagination and sorting
-pub struct SqlQueryBuilder {
+pub(crate) struct SqlQueryBuilder {
     base_query: String,
     where_clause: Option<String>,
     order_by_clause: Option<String>,
@@ -12,7 +12,7 @@ pub struct SqlQueryBuilder {
 }
 
 impl SqlQueryBuilder {
-    pub fn new(base_query: String) -> Self {
+    pub(crate) fn new(base_query: String) -> Self {
         Self {
             base_query,
             where_clause: None,
@@ -22,12 +22,12 @@ impl SqlQueryBuilder {
         }
     }
 
-    pub fn with_where(mut self, where_clause: String) -> Self {
+    pub(crate) fn with_where(mut self, where_clause: String) -> Self {
         self.where_clause = Some(where_clause);
         self
     }
 
-    pub fn with_pagination_and_sorting(
+    pub(crate) fn with_pagination_and_sorting(
         mut self,
         offset: i64,
         limit: i64,
@@ -73,7 +73,7 @@ impl SqlQueryBuilder {
         self
     }
 
-    pub fn build(self) -> String {
+    pub(crate) fn build(self) -> String {
         let mut query = self.base_query;
 
         if let Some(where_clause) = self.where_clause {

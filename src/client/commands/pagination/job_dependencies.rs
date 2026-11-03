@@ -13,28 +13,28 @@ use crate::models::JobDependencyModel;
 #[derive(Debug, Clone, Default)]
 pub struct JobDependencyListParams {
     /// Workflow ID to list dependencies from
-    pub workflow_id: i64,
+    workflow_id: i64,
     /// Pagination offset
-    pub offset: i64,
+    offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
 }
 
 impl JobDependencyListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
@@ -88,10 +88,10 @@ impl Paginatable for JobDependencyModel {
 }
 
 /// Type alias for the job dependencies iterator
-pub type JobDependenciesIterator = PaginatedIterator<JobDependencyModel>;
+type JobDependenciesIterator = PaginatedIterator<JobDependencyModel>;
 
 /// Create a lazy iterator for job-to-job dependencies that fetches pages on-demand.
-pub fn iter_job_dependencies(
+fn iter_job_dependencies(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: JobDependencyListParams,
@@ -103,7 +103,7 @@ pub fn iter_job_dependencies(
 
 /// Collect all job-to-job dependencies into a vector using lazy iteration internally.
 #[allow(clippy::result_large_err)]
-pub fn paginate_job_dependencies(
+pub(crate) fn paginate_job_dependencies(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: JobDependencyListParams,

@@ -19,12 +19,12 @@ pub type SharedCredentialCache = Arc<RwLock<Option<CredentialCache>>>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,
-    pub iss: String,
-    pub aud: String,
-    pub company: String,
-    pub exp: u64,
-    pub scopes: String,
+    sub: String,
+    iss: String,
+    aud: String,
+    company: String,
+    exp: u64,
+    scopes: String,
 }
 
 pub trait AuthenticationApi {
@@ -49,7 +49,7 @@ impl HtpasswdAuthenticator {
     /// Create a new authenticator with optional htpasswd file
     /// If htpasswd is None and require_auth is false, all requests are allowed (backward compatible)
     /// If require_auth is true, authentication is required
-    pub fn new(htpasswd: Option<HtpasswdFile>, require_auth: bool) -> Self {
+    fn new(htpasswd: Option<HtpasswdFile>, require_auth: bool) -> Self {
         HtpasswdAuthenticator {
             htpasswd,
             require_auth,
@@ -156,7 +156,7 @@ where
     RC: RcBound,
     RC::Result: Send + 'static,
 {
-    pub fn new(
+    fn new(
         inner: T,
         htpasswd: SharedHtpasswd,
         require_auth: bool,

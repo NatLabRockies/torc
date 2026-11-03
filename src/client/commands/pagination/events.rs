@@ -13,45 +13,45 @@ use crate::models::EventModel;
 #[derive(Debug, Clone, Default)]
 pub struct EventListParams {
     /// Workflow ID to list events from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of events to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Filter by category
-    pub category: Option<String>,
+    pub(crate) category: Option<String>,
 }
 
 impl EventListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_category(mut self, category: String) -> Self {
+    pub(crate) fn with_category(mut self, category: String) -> Self {
         self.category = Some(category);
         self
     }
@@ -107,7 +107,7 @@ impl Paginatable for EventModel {
 }
 
 /// Type alias for the events iterator
-pub type EventsIterator = PaginatedIterator<EventModel>;
+type EventsIterator = PaginatedIterator<EventModel>;
 
 /// Create a lazy iterator for events that fetches pages on-demand.
 ///
@@ -118,7 +118,7 @@ pub type EventsIterator = PaginatedIterator<EventModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<EventModel, Error>` items
-pub fn iter_events(
+fn iter_events(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: EventListParams,
@@ -138,7 +138,7 @@ pub fn iter_events(
 /// # Returns
 /// `Result<Vec<EventModel>, Error>` containing all events or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_events(
+pub(crate) fn paginate_events(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: EventListParams,

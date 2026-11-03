@@ -175,7 +175,7 @@ pub trait SchedulersApi<C> {
 /// Implementation of schedulers API for the server
 #[derive(Clone)]
 pub struct SchedulersApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const LOCAL_SCHEDULER_COLUMNS: &[&str] = &["id", "workflow_id", "memory", "num_cpus"];
@@ -207,7 +207,7 @@ const SLURM_SCHEDULER_COLUMNS: &[&str] = &[
 ];
 
 impl SchedulersApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

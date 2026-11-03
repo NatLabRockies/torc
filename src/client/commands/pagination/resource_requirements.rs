@@ -14,87 +14,87 @@ use crate::time_utils::duration_string_to_seconds;
 #[derive(Debug, Clone, Default)]
 pub struct ResourceRequirementsListParams {
     /// Workflow ID to list resource requirements from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Filter by job ID
-    pub job_id: Option<i64>,
+    pub(crate) job_id: Option<i64>,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Filter by name
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
     /// Filter by memory
-    pub memory: Option<String>,
+    pub(crate) memory: Option<String>,
     /// Filter by number of CPUs
-    pub num_cpus: Option<i64>,
+    pub(crate) num_cpus: Option<i64>,
     /// Filter by number of GPUs
-    pub num_gpus: Option<i64>,
+    pub(crate) num_gpus: Option<i64>,
     /// Filter by number of nodes
-    pub num_nodes: Option<i64>,
+    pub(crate) num_nodes: Option<i64>,
     /// Filter by runtime
-    pub runtime: Option<String>,
+    pub(crate) runtime: Option<String>,
 }
 
 impl ResourceRequirementsListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_job_id(mut self, job_id: i64) -> Self {
+    fn with_job_id(mut self, job_id: i64) -> Self {
         self.job_id = Some(job_id);
         self
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_name(mut self, name: String) -> Self {
+    fn with_name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
 
-    pub fn with_memory(mut self, memory: String) -> Self {
+    fn with_memory(mut self, memory: String) -> Self {
         self.memory = Some(memory);
         self
     }
 
-    pub fn with_num_cpus(mut self, num_cpus: i64) -> Self {
+    fn with_num_cpus(mut self, num_cpus: i64) -> Self {
         self.num_cpus = Some(num_cpus);
         self
     }
 
-    pub fn with_num_gpus(mut self, num_gpus: i64) -> Self {
+    fn with_num_gpus(mut self, num_gpus: i64) -> Self {
         self.num_gpus = Some(num_gpus);
         self
     }
 
-    pub fn with_num_nodes(mut self, num_nodes: i64) -> Self {
+    fn with_num_nodes(mut self, num_nodes: i64) -> Self {
         self.num_nodes = Some(num_nodes);
         self
     }
 
-    pub fn with_runtime(mut self, runtime: String) -> Self {
+    fn with_runtime(mut self, runtime: String) -> Self {
         self.runtime = Some(runtime);
         self
     }
@@ -162,7 +162,7 @@ impl Paginatable for ResourceRequirementsModel {
 }
 
 /// Type alias for the resource requirements iterator
-pub type ResourceRequirementsIterator = PaginatedIterator<ResourceRequirementsModel>;
+type ResourceRequirementsIterator = PaginatedIterator<ResourceRequirementsModel>;
 
 /// Create a lazy iterator for resource requirements that fetches pages on-demand.
 ///
@@ -173,7 +173,7 @@ pub type ResourceRequirementsIterator = PaginatedIterator<ResourceRequirementsMo
 ///
 /// # Returns
 /// An iterator that yields `Result<ResourceRequirementsModel, Error>` items
-pub fn iter_resource_requirements(
+fn iter_resource_requirements(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResourceRequirementsListParams,
@@ -193,7 +193,7 @@ pub fn iter_resource_requirements(
 /// # Returns
 /// `Result<Vec<ResourceRequirementsModel>, Error>` containing all resource requirements or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_resource_requirements(
+pub(crate) fn paginate_resource_requirements(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResourceRequirementsListParams,

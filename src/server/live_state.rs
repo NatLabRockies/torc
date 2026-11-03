@@ -41,36 +41,36 @@ impl Default for AdminSqlConfig {
 
 #[derive(Clone)]
 pub struct LiveServerState {
-    pub pool: Arc<SqlitePool>,
-    pub last_completion_time: Arc<AtomicU64>,
-    pub workflows_with_failures: Arc<std::sync::RwLock<HashSet<i64>>>,
-    pub authorization_service: AuthorizationService,
-    pub event_broadcaster: EventBroadcaster,
-    pub api_event_broadcaster: ApiEventBroadcaster,
-    pub api_stats: ApiStatsRing,
-    pub htpasswd: SharedHtpasswd,
-    pub auth_file_path: Option<String>,
-    pub credential_cache: SharedCredentialCache,
-    pub admin_sql: AdminSqlConfig,
-    pub access_groups_api: AccessGroupsApiImpl,
-    pub compute_nodes_api: ComputeNodesApiImpl,
-    pub events_api: EventsApiImpl,
-    pub failure_handlers_api: FailureHandlersApiImpl,
-    pub files_api: FilesApiImpl,
-    pub jobs_api: JobsApiImpl,
-    pub remote_workers_api: RemoteWorkersApiImpl,
-    pub resource_requirements_api: ResourceRequirementsApiImpl,
-    pub results_api: ResultsApiImpl,
-    pub ro_crate_api: RoCrateApiImpl,
-    pub schedulers_api: SchedulersApiImpl,
-    pub slurm_stats_api: SlurmStatsApiImpl,
-    pub user_data_api: UserDataApiImpl,
-    pub workflow_actions_api: WorkflowActionsApiImpl,
-    pub workflows_api: WorkflowsApiImpl,
+    pub(crate) pool: Arc<SqlitePool>,
+    pub(crate) last_completion_time: Arc<AtomicU64>,
+    pub(crate) workflows_with_failures: Arc<std::sync::RwLock<HashSet<i64>>>,
+    pub(crate) authorization_service: AuthorizationService,
+    pub(crate) event_broadcaster: EventBroadcaster,
+    pub(crate) api_event_broadcaster: ApiEventBroadcaster,
+    pub(crate) api_stats: ApiStatsRing,
+    pub(crate) htpasswd: SharedHtpasswd,
+    pub(crate) auth_file_path: Option<String>,
+    pub(crate) credential_cache: SharedCredentialCache,
+    pub(crate) admin_sql: AdminSqlConfig,
+    pub(crate) access_groups_api: AccessGroupsApiImpl,
+    pub(crate) compute_nodes_api: ComputeNodesApiImpl,
+    pub(crate) events_api: EventsApiImpl,
+    pub(crate) failure_handlers_api: FailureHandlersApiImpl,
+    pub(crate) files_api: FilesApiImpl,
+    pub(crate) jobs_api: JobsApiImpl,
+    pub(crate) remote_workers_api: RemoteWorkersApiImpl,
+    pub(crate) resource_requirements_api: ResourceRequirementsApiImpl,
+    pub(crate) results_api: ResultsApiImpl,
+    pub(crate) ro_crate_api: RoCrateApiImpl,
+    pub(crate) schedulers_api: SchedulersApiImpl,
+    pub(crate) slurm_stats_api: SlurmStatsApiImpl,
+    pub(crate) user_data_api: UserDataApiImpl,
+    pub(crate) workflow_actions_api: WorkflowActionsApiImpl,
+    pub(crate) workflows_api: WorkflowsApiImpl,
 }
 
 impl LiveServerState {
-    pub fn new(
+    pub(crate) fn new(
         pool: SqlitePool,
         enforce_access_control: bool,
         htpasswd: SharedHtpasswd,
@@ -114,7 +114,7 @@ impl LiveServerState {
     }
 
     #[cfg(feature = "openapi-codegen")]
-    pub fn openapi_app_state(
+    pub(crate) fn openapi_app_state(
         &self,
         version: String,
         api_version: String,

@@ -29,10 +29,12 @@ pub mod types;
 pub mod worker_file;
 
 pub use shell::{RemoteShell, detect_remote_shell};
-pub use ssh::{
-    check_all_connectivity, check_ssh_connectivity, get_remote_torc_version, parallel_execute,
-    scp_download, ssh_execute, ssh_execute_capture, ssh_execute_checked, verify_all_versions,
-    verify_version,
+pub(crate) use ssh::{
+    check_all_connectivity, check_ssh_connectivity, parallel_execute, scp_download,
+    ssh_execute_checked, verify_all_versions,
 };
-pub use types::{RemoteOperationResult, RemoteWorkerState, WorkerEntry};
-pub use worker_file::{parse_worker_content, parse_worker_file};
+pub use ssh::{ssh_execute, ssh_execute_capture};
+pub use types::WorkerEntry;
+pub(crate) use types::{RemoteOperationResult, RemoteWorkerState};
+pub use worker_file::parse_worker_content;
+pub(crate) use worker_file::parse_worker_file;

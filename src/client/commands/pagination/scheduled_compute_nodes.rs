@@ -13,59 +13,59 @@ use crate::models::ScheduledComputeNodesModel;
 #[derive(Debug, Clone, Default)]
 pub struct ScheduledComputeNodeListParams {
     /// Workflow ID to list scheduled compute nodes from
-    pub workflow_id: i64,
+    workflow_id: i64,
     /// Pagination offset
-    pub offset: i64,
+    offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     /// Filter by scheduler ID
-    pub scheduler_id: Option<String>,
+    scheduler_id: Option<String>,
     /// Filter by scheduler config ID
-    pub scheduler_config_id: Option<String>,
+    scheduler_config_id: Option<String>,
     /// Filter by status
-    pub status: Option<String>,
+    status: Option<String>,
 }
 
 impl ScheduledComputeNodeListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_scheduler_id(mut self, scheduler_id: String) -> Self {
+    fn with_scheduler_id(mut self, scheduler_id: String) -> Self {
         self.scheduler_id = Some(scheduler_id);
         self
     }
 
-    pub fn with_scheduler_config_id(mut self, scheduler_config_id: String) -> Self {
+    fn with_scheduler_config_id(mut self, scheduler_config_id: String) -> Self {
         self.scheduler_config_id = Some(scheduler_config_id);
         self
     }
 
-    pub fn with_status(mut self, status: String) -> Self {
+    pub(crate) fn with_status(mut self, status: String) -> Self {
         self.status = Some(status);
         self
     }
@@ -122,7 +122,7 @@ impl Paginatable for ScheduledComputeNodesModel {
 }
 
 /// Type alias for the scheduled compute nodes iterator
-pub type ScheduledComputeNodesIterator = PaginatedIterator<ScheduledComputeNodesModel>;
+type ScheduledComputeNodesIterator = PaginatedIterator<ScheduledComputeNodesModel>;
 
 /// Create a lazy iterator for scheduled compute nodes that fetches pages on-demand.
 ///
@@ -133,7 +133,7 @@ pub type ScheduledComputeNodesIterator = PaginatedIterator<ScheduledComputeNodes
 ///
 /// # Returns
 /// An iterator that yields `Result<ScheduledComputeNodesModel, Error>` items
-pub fn iter_scheduled_compute_nodes(
+fn iter_scheduled_compute_nodes(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ScheduledComputeNodeListParams,
@@ -153,7 +153,7 @@ pub fn iter_scheduled_compute_nodes(
 /// # Returns
 /// `Result<Vec<ScheduledComputeNodesModel>, Error>` containing all scheduled compute nodes or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_scheduled_compute_nodes(
+pub(crate) fn paginate_scheduled_compute_nodes(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ScheduledComputeNodeListParams,

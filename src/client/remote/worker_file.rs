@@ -21,7 +21,7 @@ use super::types::WorkerEntry;
 /// user@192.168.1.10
 /// admin@server.local:2222
 /// ```
-pub fn parse_worker_file(path: &Path) -> Result<Vec<WorkerEntry>, String> {
+pub(crate) fn parse_worker_file(path: &Path) -> Result<Vec<WorkerEntry>, String> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("Failed to read worker file '{}': {}", path.display(), e))?;
 

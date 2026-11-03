@@ -68,14 +68,14 @@ impl HtpasswdFile {
     }
 
     /// Create an empty htpasswd file (for testing or programmatic creation)
-    pub fn new() -> Self {
+    fn new() -> Self {
         HtpasswdFile {
             users: HashMap::new(),
         }
     }
 
     /// Add a user with an already-hashed password
-    pub fn add_user(&mut self, username: String, bcrypt_hash: String) {
+    fn add_user(&mut self, username: String, bcrypt_hash: String) {
         self.users.insert(username, bcrypt_hash);
     }
 
@@ -103,7 +103,7 @@ impl HtpasswdFile {
     }
 
     /// Check if a username exists
-    pub fn has_user(&self, username: &str) -> bool {
+    fn has_user(&self, username: &str) -> bool {
         self.users.contains_key(username)
     }
 }

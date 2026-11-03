@@ -68,13 +68,13 @@ pub trait EventsApi<C> {
 /// Implementation of events API for the server
 #[derive(Clone)]
 pub struct EventsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const EVENT_COLUMNS: &[&str] = &["id", "workflow_id", "timestamp", "data"];
 
 impl EventsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

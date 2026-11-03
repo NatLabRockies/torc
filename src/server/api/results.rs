@@ -71,7 +71,7 @@ pub trait ResultsApi<C> {
 /// Implementation of results API for the server
 #[derive(Clone)]
 pub struct ResultsApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 const RESULT_COLUMNS: &[&str] = &[
@@ -92,7 +92,7 @@ const RESULT_COLUMNS: &[&str] = &[
 ];
 
 impl ResultsApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }

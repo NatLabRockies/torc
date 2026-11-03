@@ -22,7 +22,7 @@ use tabled::Tabled;
 
 /// Every job status accepted by `JobStatus::from_str`, for error messages.
 /// Keep in sync with `models::JobStatus`.
-pub const VALID_JOB_STATUSES: &str = "uninitialized, blocked, ready, pending, running, \
+pub(crate) const VALID_JOB_STATUSES: &str = "uninitialized, blocked, ready, pending, running, \
      completed, failed, canceled, terminated, disabled, pending_failed";
 
 #[derive(Tabled)]
@@ -1543,7 +1543,7 @@ pub fn create_jobs_from_file(
 }
 
 /// Get the current job count for a workflow
-pub fn get_current_job_count(
+fn get_current_job_count(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<i64, Box<dyn std::error::Error>> {
@@ -2195,7 +2195,7 @@ fn handle_reset_job_status(
 }
 
 /// Get existing job names to avoid duplicates
-pub fn get_existing_job_names(
+fn get_existing_job_names(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {

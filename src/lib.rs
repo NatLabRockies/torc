@@ -28,25 +28,45 @@ pub fn get_username() -> String {
 // Shared modules (always available)
 pub mod api_version;
 pub mod memory_utils;
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod models;
 pub mod network_utils;
-pub mod ro_crate_json_ld;
+pub(crate) mod ro_crate_json_ld;
 pub mod time_utils;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod config;
 
 // Server modules (behind feature flag)
 #[cfg(feature = "server")]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod server;
 
 // Client modules (behind feature flag)
 #[cfg(feature = "client")]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod client;
 
 // TUI module (behind feature flag)
 #[cfg(feature = "tui")]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod tui;
 
 // Binary command modules (behind feature flags) - re-exported for standalone binaries
@@ -67,6 +87,10 @@ pub mod plot_resources_cmd;
 
 // MCP server modules (behind feature flag)
 #[cfg(feature = "mcp-server")]
+#[expect(
+    dead_code,
+    reason = "This visibility cleanup intentionally retains existing helpers."
+)]
 pub mod mcp_server;
 
 // Rust-owned OpenAPI emission

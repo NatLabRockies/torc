@@ -13,66 +13,66 @@ use crate::models::UserDataModel;
 #[derive(Debug, Clone, Default)]
 pub struct UserDataListParams {
     /// Workflow ID to list user data from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Filter by consumer job ID
-    pub consumer_job_id: Option<i64>,
+    pub(crate) consumer_job_id: Option<i64>,
     /// Filter by producer job ID
-    pub producer_job_id: Option<i64>,
+    pub(crate) producer_job_id: Option<i64>,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Filter by name
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
     /// Filter by ephemeral status
-    pub is_ephemeral: Option<bool>,
+    pub(crate) is_ephemeral: Option<bool>,
 }
 
 impl UserDataListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_consumer_job_id(mut self, job_id: i64) -> Self {
+    pub(crate) fn with_consumer_job_id(mut self, job_id: i64) -> Self {
         self.consumer_job_id = Some(job_id);
         self
     }
 
-    pub fn with_producer_job_id(mut self, job_id: i64) -> Self {
+    pub(crate) fn with_producer_job_id(mut self, job_id: i64) -> Self {
         self.producer_job_id = Some(job_id);
         self
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_name(mut self, name: String) -> Self {
+    pub(crate) fn with_name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
 
-    pub fn with_is_ephemeral(mut self, is_ephemeral: bool) -> Self {
+    pub(crate) fn with_is_ephemeral(mut self, is_ephemeral: bool) -> Self {
         self.is_ephemeral = Some(is_ephemeral);
         self
     }
@@ -130,7 +130,7 @@ impl Paginatable for UserDataModel {
 }
 
 /// Type alias for the user data iterator
-pub type UserDataIterator = PaginatedIterator<UserDataModel>;
+type UserDataIterator = PaginatedIterator<UserDataModel>;
 
 /// Create a lazy iterator for user data that fetches pages on-demand.
 ///
@@ -141,7 +141,7 @@ pub type UserDataIterator = PaginatedIterator<UserDataModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<UserDataModel, Error>` items
-pub fn iter_user_data(
+fn iter_user_data(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: UserDataListParams,
@@ -161,7 +161,7 @@ pub fn iter_user_data(
 /// # Returns
 /// `Result<Vec<UserDataModel>, Error>` containing all user data or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_user_data(
+pub(crate) fn paginate_user_data(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: UserDataListParams,
