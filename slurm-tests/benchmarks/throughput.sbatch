@@ -18,16 +18,17 @@
 # Knobs (env vars, export before sbatch):
 #   SERVERS="regular ephemeral"  SHAPES="flat stages"  N_JOBS=100000  STAGES=5
 #   JOB_CMD="sleep 5"  JOBS_PER_NODE=$SLURM_CPUS_ON_NODE  POLL=1  BACKOFF_MAX=2
-#   SERVER_THREADS=16  UNBLOCK_INTERVAL=30  SCENARIO_MINUTES=12  WORKER_NODES=<all>
+#   SERVER_THREADS=16  UNBLOCK_INTERVAL=30  SCENARIO_MINUTES=8  WORKER_NODES=<all>
 #   TORC_BIN / TORC_SERVER_BIN (default: from PATH)
 #
 # Extra sweeps, run on the ephemeral server with the flat shape (set to "" to skip):
 #   SCALE_NODES="10 50"   SCALE_N_JOBS=20000      worker-node scaling (the main run is the top point)
-#   SLEEPS="10 30"        SLEEP_N_JOBS=50000      job duration: JOB_CMD="sleep <s>"
+#   SLEEPS="10"           SLEEP_N_JOBS=50000      job duration: JOB_CMD="sleep <s>"
 #   FAST_UNBLOCK_INTERVAL=1                       stages again on a server restarted with this
 #                                                 --completion-check-interval-secs
 #
-# Results: one CSV line per scenario in $RUN_DIR/results.csv.
+# Results: one CSV line per scenario in $RUN_DIR/results.csv, plus per-second server request
+# stats (`torc admin api-stats`) in $RUN_DIR/<server>.api-stats.json.
 
 set -uo pipefail
 
@@ -41,7 +42,7 @@ POLL=${POLL:-1}
 BACKOFF_MAX=${BACKOFF_MAX:-2}
 SERVER_THREADS=${SERVER_THREADS:-16}
 UNBLOCK_INTERVAL=${UNBLOCK_INTERVAL:-30}  # match the regular server
-SCENARIO_MINUTES=${SCENARIO_MINUTES:-6}
+SCENARIO_MINUTES=${SCENARIO_MINUTES:-8}
 WORKER_NODES=${WORKER_NODES:-$SLURM_NNODES}
 TORC_BIN=${TORC_BIN:-$(command -v torc)}
 TORC_SERVER_BIN=${TORC_SERVER_BIN:-$(command -v torc-server)}
@@ -49,7 +50,7 @@ RUN_DIR=${RUN_DIR:-$PWD/torc-bench-$SLURM_JOB_ID}
 HEAD=${HEAD:-$(hostname -s)}  # must resolve from worker nodes
 SCALE_NODES=${SCALE_NODES-"10 50"}
 SCALE_N_JOBS=${SCALE_N_JOBS:-20000}
-SLEEPS=${SLEEPS-"10 30"}
+SLEEPS=${SLEEPS-"10"}
 SLEEP_N_JOBS=${SLEEP_N_JOBS:-50000}
 FAST_UNBLOCK_INTERVAL=${FAST_UNBLOCK_INTERVAL-1}
 mkdir -p "$RUN_DIR"
@@ -96,6 +97,15 @@ start_ephemeral() {
   unset TORC_PASSWORD
   for _ in $(seq 60); do "$TORC_BIN" ping >/dev/null 2>&1 && return 0; sleep 1; done
   echo "ephemeral server failed to start"; stop_server; return 1
+}
+
+save_api_stats() { # label; the regular server likely needs an admin login for this
+  if "$TORC_BIN" -f json admin api-stats --window 3600 --interval 1 \
+    >"$RUN_DIR/$1.api-stats.json" 2>"$RUN_DIR/$1.api-stats.err"; then
+    rm -f "$RUN_DIR/$1.api-stats.err"
+  else
+    echo "could not save api-stats for $1 (see $1.api-stats.err)"
+  fi
 }
 
 stop_server() {
@@ -152,11 +162,15 @@ for server in $SERVERS; do
     for sec in $SLEEPS; do
       N_JOBS=$SLEEP_N_JOBS JOB_CMD="sleep $sec" run_scenario "$server" flat "sleep$sec"
     done
+    save_api_stats "ephemeral-unblock$UNBLOCK_INTERVAL"
     if [ -n "$FAST_UNBLOCK_INTERVAL" ]; then
       stop_server
       UNBLOCK_INTERVAL=$FAST_UNBLOCK_INTERVAL start_ephemeral &&
-        run_scenario "$server" stages "unblock$FAST_UNBLOCK_INTERVAL"
+        run_scenario "$server" stages "unblock$FAST_UNBLOCK_INTERVAL" &&
+        save_api_stats "ephemeral-unblock$FAST_UNBLOCK_INTERVAL"
     fi
+  else
+    save_api_stats regular
   fi
   stop_server
 done
