@@ -3,7 +3,7 @@ use log::{debug, error, info, warn};
 use rusqlite::{Connection, Params, Result as SqliteResult, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError, channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use sysinfo::{
@@ -532,8 +532,31 @@ fn run_monitoring_loop(
     let mut last_flush_time = Instant::now();
 
     loop {
-        // Process all pending commands (non-blocking)
-        while let Ok(cmd) = rx.try_recv() {
+        // Wait for the next command, but no longer than the 100ms tick that drives sampling and
+        // flushing. Blocking on the channel instead of sleeping matters because
+        // `stop_monitoring()` waits synchronously for its reply and the job runner reaps
+        // completions one at a time: a fixed sleep here capped each runner at about 10 job
+        // completions per second.
+        let first = match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(cmd) => Some(cmd),
+            Err(RecvTimeoutError::Timeout) => None,
+            Err(RecvTimeoutError::Disconnected) => {
+                // The ResourceMonitor was dropped without a shutdown; nobody can send commands
+                // or read results again. Keep any buffered samples and exit.
+                if let Some(ref mut conn) = db_conn {
+                    flush_pending_samples(
+                        conn,
+                        &mut pending_job_samples,
+                        &mut pending_system_samples,
+                        None,
+                    );
+                }
+                return Ok(());
+            }
+        };
+
+        // Process that command and any others already queued (non-blocking)
+        for cmd in first.into_iter().chain(rx.try_iter()) {
             match cmd {
                 MonitorCommand::StartMonitoring {
                     pid,
@@ -945,9 +968,6 @@ fn run_monitoring_loop(
             );
             last_flush_time = Instant::now();
         }
-
-        // Sleep briefly to avoid busy-waiting
-        thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -1798,6 +1818,41 @@ time.sleep(30)
             vm_rss_bytes,
             N_THREADS,
             vm_rss_bytes.saturating_mul((N_THREADS as u64) + 1),
+        );
+    }
+
+    /// `stop_monitoring` is called once per completed job, serially, and blocks until the
+    /// monitoring thread replies. The reply must not wait for the loop's 100ms tick, or each job
+    /// runner is capped at about 10 completions per second.
+    #[test]
+    fn stop_monitoring_replies_without_waiting_for_tick() {
+        const N: u32 = 20;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = ResourceMonitorConfig {
+            jobs: Some(JobMonitorConfig {
+                enabled: true,
+                granularity: MonitorGranularity::Summary,
+            }),
+            ..ResourceMonitorConfig::default()
+        };
+        let monitor =
+            ResourceMonitor::new(config, temp_dir.path().to_path_buf(), "latency".into()).unwrap();
+        let pid = std::process::id();
+
+        let start = Instant::now();
+        for i in 0..N {
+            monitor
+                .start_monitoring(pid, i64::from(i), format!("job{i}"), None)
+                .unwrap();
+            assert!(monitor.stop_monitoring(pid).is_some());
+        }
+        let elapsed = start.elapsed();
+        let _ = monitor.shutdown();
+
+        // Waiting out the tick costs about N x 100ms = 2s. Allow 1s for slow CI machines.
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "{N} stop_monitoring round trips took {elapsed:?}"
         );
     }
 }
