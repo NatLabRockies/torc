@@ -411,9 +411,18 @@ Keep these points in mind:
   time remaining in the allocation.
 
 > **Note:** Any multi-node job in a workflow makes the runner track the allocation's resources as a
-> total rather than node by node. A job then fits only if the free total divided by the number of
-> nodes is at least the job's size. The single-node stages can therefore run below capacity: in this
-> example, about 100 to 150 of the possible 200 jobs at once. Allow for this in the walltime.
+> total rather than node by node. A single-node job can start only if the average free resources per
+> node (the free total divided by the number of nodes) are at least its requirements. Torc cannot
+> tell which nodes have room, so the single-node stages run below capacity:
+>
+> - **Half-node jobs:** about 100 to 150 run at once instead of 200. Once more than 100 are running,
+>   the average free CPUs per node drops below 52. No new job starts until the count falls back to
+>   100.
+> - **Whole-node jobs:** after 100 start, no new job can start until all 100 have finished, because
+>   one free node averages to almost nothing across 100. The example has exactly 100, so this costs
+>   nothing here. With more jobs than nodes, each wave waits for its slowest job.
+>
+> Allow for this in the walltime.
 
 Before running this under Torc, test the same `srun` commands in a plain `sbatch` script on a few
 nodes. If that script fails, the problem is in the cluster setup or the application.

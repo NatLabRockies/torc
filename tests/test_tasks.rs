@@ -222,6 +222,39 @@ fn test_wait_for_task_returns_succeeded(start_server: &ServerProcess) {
 
 #[rstest]
 #[serial]
+fn test_wait_for_task_does_not_wait_for_poll_interval(start_server: &ServerProcess) {
+    // A fast task can finish after the first poll but before the SSE subscription exists, so
+    // its task_completed event is missed. wait_for_task must still return promptly instead of
+    // sleeping a full poll interval.
+    const POLL_INTERVAL_SECS: u64 = 30;
+    let server = start_server;
+    for i in 0..5 {
+        let name = format!("tasks-test-wait-fast-{i}");
+        let workflow = common::create_test_workflow(&server.config, &name);
+        let resp = workflows_api::initialize_jobs(
+            &server.config,
+            workflow.id.unwrap(),
+            Some(false),
+            Some(false),
+            Some(true),
+        )
+        .expect("initialize_jobs should accept async request");
+        let task: TaskModel = serde_json::from_value(resp).expect("TaskModel response");
+
+        let start = Instant::now();
+        let final_task = wait_for_task(&server.config, task.id, Some(60), POLL_INTERVAL_SECS)
+            .expect("wait_for_task should return a terminal task");
+        assert_eq!(final_task.status, TaskStatus::Succeeded);
+        assert!(
+            start.elapsed() < Duration::from_secs(POLL_INTERVAL_SECS / 2),
+            "wait_for_task took {:?}; it waited for the poll interval",
+            start.elapsed()
+        );
+    }
+}
+
+#[rstest]
+#[serial]
 fn test_initialize_jobs_async_mismatched_params_returns_409(start_server: &ServerProcess) {
     // P2: if a task is already running with one parameter set, a concurrent request with a
     // different parameter set must be rejected rather than silently returned the existing task.
