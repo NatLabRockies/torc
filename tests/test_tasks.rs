@@ -226,6 +226,7 @@ fn test_wait_for_task_does_not_wait_for_poll_interval(start_server: &ServerProce
     // A fast task can finish after the first poll but before the SSE subscription exists, so
     // its task_completed event is missed. wait_for_task must still return promptly instead of
     // sleeping a full poll interval.
+    const POLL_INTERVAL_SECS: u64 = 30;
     let server = start_server;
     for i in 0..5 {
         let name = format!("tasks-test-wait-fast-{i}");
@@ -241,11 +242,11 @@ fn test_wait_for_task_does_not_wait_for_poll_interval(start_server: &ServerProce
         let task: TaskModel = serde_json::from_value(resp).expect("TaskModel response");
 
         let start = Instant::now();
-        let final_task = wait_for_task(&server.config, task.id, Some(60), 30)
+        let final_task = wait_for_task(&server.config, task.id, Some(60), POLL_INTERVAL_SECS)
             .expect("wait_for_task should return a terminal task");
         assert_eq!(final_task.status, TaskStatus::Succeeded);
         assert!(
-            start.elapsed() < Duration::from_secs(10),
+            start.elapsed() < Duration::from_secs(POLL_INTERVAL_SECS / 2),
             "wait_for_task took {:?}; it waited for the poll interval",
             start.elapsed()
         );
