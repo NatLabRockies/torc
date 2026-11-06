@@ -12,13 +12,13 @@
 #   shape:  flat      -> N_JOBS independent no-op jobs
 #           stages    -> STAGES stages of N_JOBS/STAGES jobs, separated by barrier jobs
 #
-# The batch node hosts the ephemeral server and never runs jobs; workers run on the other
-# nodes in every scenario so results are comparable. One `torc run` per worker node.
+# Jobs run on every node, including the batch node that hosts the ephemeral server (the jobs
+# are no-ops, so the server is not starved). One `torc run` per worker node.
 #
 # Knobs (env vars, export before sbatch):
 #   SERVERS="regular ephemeral"  SHAPES="flat stages"  N_JOBS=100000  STAGES=5
 #   JOB_CMD=true  JOBS_PER_NODE=$SLURM_CPUS_ON_NODE  POLL=1  BACKOFF_MAX=2
-#   SERVER_THREADS=16  UNBLOCK_INTERVAL=30  SCENARIO_MINUTES=12  WORKER_NODES=<all but head>
+#   SERVER_THREADS=16  UNBLOCK_INTERVAL=30  SCENARIO_MINUTES=12  WORKER_NODES=<all>
 #   TORC_BIN / TORC_SERVER_BIN (default: from PATH)
 #
 # Extra sweeps, run on the ephemeral server with the flat shape (set to "" to skip):
@@ -42,7 +42,7 @@ BACKOFF_MAX=${BACKOFF_MAX:-2}
 SERVER_THREADS=${SERVER_THREADS:-16}
 UNBLOCK_INTERVAL=${UNBLOCK_INTERVAL:-30}  # match the regular server
 SCENARIO_MINUTES=${SCENARIO_MINUTES:-6}
-WORKER_NODES=${WORKER_NODES:-$((SLURM_NNODES - 1))}
+WORKER_NODES=${WORKER_NODES:-$SLURM_NNODES}
 TORC_BIN=${TORC_BIN:-$(command -v torc)}
 TORC_SERVER_BIN=${TORC_SERVER_BIN:-$(command -v torc-server)}
 RUN_DIR=${RUN_DIR:-$PWD/torc-bench-$SLURM_JOB_ID}
@@ -115,7 +115,7 @@ run_scenario() { # server shape [tag_suffix]
   "$TORC_BIN" workflows init "$wf" >/dev/null || return 1
   t2=$(now)
 
-  srun --nodes="$WORKER_NODES" --ntasks-per-node=1 --exclude="$HEAD" \
+  srun --nodes="$WORKER_NODES" --ntasks-per-node=1 \
     --time="$SCENARIO_MINUTES" --kill-on-bad-exit=0 \
     "$TORC_BIN" run "$wf" --max-parallel-jobs "$JOBS_PER_NODE" -p "$POLL" \
     --claim-backoff-max-secs "$BACKOFF_MAX" --persistent \
