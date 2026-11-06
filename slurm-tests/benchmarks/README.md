@@ -7,7 +7,7 @@ inside that allocation.
 ## Layout
 
 - The batch node (first node of the allocation) hosts the ephemeral server and also runs jobs. The
-  jobs are no-ops, so they leave the server plenty of CPU and memory.
+  jobs only sleep, so they leave the server plenty of CPU and memory.
 - Jobs run on all nodes in every scenario so results are comparable across servers.
 - Each worker node runs one `torc run <workflow_id>` with `--max-parallel-jobs` equal to its CPU
   count.
@@ -18,14 +18,14 @@ inside that allocation.
 
 | Scenario                    | Server                                           | Shape                                      | Default jobs | Worker nodes |
 | --------------------------- | ------------------------------------------------ | ------------------------------------------ | ------------ | ------------ |
-| `regular_flat`              | regular                                          | independent `true` jobs                    | 50,000       | all          |
+| `regular_flat`              | regular                                          | independent `sleep 5` jobs                 | 50,000       | all          |
 | `regular_stages`            | regular                                          | 5 stages separated by barrier jobs         | 50,000       | all          |
-| `ephemeral_flat`            | ephemeral                                        | independent `true` jobs                    | 50,000       | all          |
+| `ephemeral_flat`            | ephemeral                                        | independent `sleep 5` jobs                 | 50,000       | all          |
 | `ephemeral_stages`          | ephemeral                                        | 5 stages separated by barrier jobs         | 50,000       | all          |
-| `ephemeral_flat_nodes10`    | ephemeral                                        | independent `true` jobs (node scaling)     | 20,000       | 10           |
-| `ephemeral_flat_nodes50`    | ephemeral                                        | independent `true` jobs (node scaling)     | 20,000       | 50           |
-| `ephemeral_flat_sleep1`     | ephemeral                                        | independent `sleep 1` jobs (job duration)  | 50,000       | all          |
+| `ephemeral_flat_nodes10`    | ephemeral                                        | independent `sleep 5` jobs (node scaling)  | 20,000       | 10           |
+| `ephemeral_flat_nodes50`    | ephemeral                                        | independent `sleep 5` jobs (node scaling)  | 20,000       | 50           |
 | `ephemeral_flat_sleep10`    | ephemeral                                        | independent `sleep 10` jobs (job duration) | 50,000       | all          |
+| `ephemeral_flat_sleep30`    | ephemeral                                        | independent `sleep 30` jobs (job duration) | 50,000       | all          |
 | `ephemeral_stages_unblock1` | ephemeral, restarted with a 1 s unblock interval | 5 stages separated by barrier jobs         | 50,000       | all          |
 
 - **regular**: your existing torc-server, taken from `TORC_API_URL` (and `TORC_PASSWORD` if set).
@@ -42,8 +42,8 @@ What each group answers:
 - **Node scaling**: whether throughput keeps rising with more nodes. If it flattens, the server is
   the bottleneck.
 - **Job duration**: how short jobs can be before torc becomes the bottleneck. With about 100 × 104
-  slots, ideal run time is about 5 s for `sleep 1` and about 50 s for `sleep 10`; the gap between
-  ideal and measured is torc overhead.
+  slots, ideal run time is about 25 s for the default `sleep 5`, 50 s for `sleep 10` and 150 s for
+  `sleep 30`; the gap between ideal and measured is torc overhead.
 - **Unblock interval** (`ephemeral_stages` vs. `ephemeral_stages_unblock1`): how much of the stage
   cost is the `--completion-check-interval-secs` timer, and whether releasing dependents every
   second (frequent short write locks) slows job claims and completions compared with the production
@@ -78,10 +78,10 @@ All are optional environment variables, exported before `sbatch`.
 | `SHAPES`                | `flat stages`           | Shapes for the main scenarios                                                             |
 | `N_JOBS`                | `50000`                 | Jobs per main scenario                                                                    |
 | `STAGES`                | `5`                     | Number of stages in the `stages` shape                                                    |
-| `JOB_CMD`               | `true`                  | Command each job runs in the main scenarios                                               |
+| `JOB_CMD`               | `sleep 5`               | Command each job runs in the main scenarios                                               |
 | `SCALE_NODES`           | `10 50`                 | Worker-node counts for the scaling sweep (`""` skips it)                                  |
 | `SCALE_N_JOBS`          | `20000`                 | Jobs per scaling scenario                                                                 |
-| `SLEEPS`                | `1 10`                  | Sleep seconds for the duration sweep (`""` skips it)                                      |
+| `SLEEPS`                | `10 30`                 | Sleep seconds for the duration sweep (`""` skips it)                                      |
 | `SLEEP_N_JOBS`          | `50000`                 | Jobs per duration scenario                                                                |
 | `JOBS_PER_NODE`         | `$SLURM_CPUS_ON_NODE`   | `--max-parallel-jobs` per worker node                                                     |
 | `WORKER_NODES`          | `$SLURM_NNODES`         | Worker nodes for the main scenarios                                                       |

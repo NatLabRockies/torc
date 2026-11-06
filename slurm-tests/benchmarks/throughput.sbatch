@@ -9,21 +9,21 @@
 # Torc throughput benchmark. Runs every (server, shape) combination in one allocation:
 #   server: regular   -> your existing torc-server (TORC_API_URL / TORC_PASSWORD from env)
 #           ephemeral -> torc-server -d :memory: started on this batch node
-#   shape:  flat      -> N_JOBS independent no-op jobs
+#   shape:  flat      -> N_JOBS independent `sleep 5` jobs
 #           stages    -> STAGES stages of N_JOBS/STAGES jobs, separated by barrier jobs
 #
 # Jobs run on every node, including the batch node that hosts the ephemeral server (the jobs
-# are no-ops, so the server is not starved). One `torc run` per worker node.
+# only sleep, so the server is not starved). One `torc run` per worker node.
 #
 # Knobs (env vars, export before sbatch):
 #   SERVERS="regular ephemeral"  SHAPES="flat stages"  N_JOBS=100000  STAGES=5
-#   JOB_CMD=true  JOBS_PER_NODE=$SLURM_CPUS_ON_NODE  POLL=1  BACKOFF_MAX=2
+#   JOB_CMD="sleep 5"  JOBS_PER_NODE=$SLURM_CPUS_ON_NODE  POLL=1  BACKOFF_MAX=2
 #   SERVER_THREADS=16  UNBLOCK_INTERVAL=30  SCENARIO_MINUTES=12  WORKER_NODES=<all>
 #   TORC_BIN / TORC_SERVER_BIN (default: from PATH)
 #
 # Extra sweeps, run on the ephemeral server with the flat shape (set to "" to skip):
 #   SCALE_NODES="10 50"   SCALE_N_JOBS=20000      worker-node scaling (the main run is the top point)
-#   SLEEPS="1 10"         SLEEP_N_JOBS=50000      job duration: JOB_CMD="sleep <s>"
+#   SLEEPS="10 30"        SLEEP_N_JOBS=50000      job duration: JOB_CMD="sleep <s>"
 #   FAST_UNBLOCK_INTERVAL=1                       stages again on a server restarted with this
 #                                                 --completion-check-interval-secs
 #
@@ -35,7 +35,7 @@ SERVERS=${SERVERS:-"regular ephemeral"}
 SHAPES=${SHAPES:-"flat stages"}
 N_JOBS=${N_JOBS:-50000}
 STAGES=${STAGES:-5}
-JOB_CMD=${JOB_CMD:-true}
+JOB_CMD=${JOB_CMD:-sleep 5}
 JOBS_PER_NODE=${JOBS_PER_NODE:-${SLURM_CPUS_ON_NODE:-104}}
 POLL=${POLL:-1}
 BACKOFF_MAX=${BACKOFF_MAX:-2}
@@ -49,7 +49,7 @@ RUN_DIR=${RUN_DIR:-$PWD/torc-bench-$SLURM_JOB_ID}
 HEAD=${HEAD:-$(hostname -s)}  # must resolve from worker nodes
 SCALE_NODES=${SCALE_NODES-"10 50"}
 SCALE_N_JOBS=${SCALE_N_JOBS:-20000}
-SLEEPS=${SLEEPS-"1 10"}
+SLEEPS=${SLEEPS-"10 30"}
 SLEEP_N_JOBS=${SLEEP_N_JOBS:-50000}
 FAST_UNBLOCK_INTERVAL=${FAST_UNBLOCK_INTERVAL-1}
 mkdir -p "$RUN_DIR"
