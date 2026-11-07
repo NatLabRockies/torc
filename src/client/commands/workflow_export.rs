@@ -28,65 +28,65 @@ use crate::models::{
 };
 
 /// Current version of the export format
-pub const EXPORT_VERSION: &str = "1.0";
+pub(crate) const EXPORT_VERSION: &str = "1.0";
 
 /// Complete workflow export document
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowExport {
     /// Version of the export format
-    pub export_version: String,
+    pub(crate) export_version: String,
 
     /// Timestamp when the export was created (ISO 8601)
-    pub exported_at: String,
+    exported_at: String,
 
     /// The workflow metadata
-    pub workflow: WorkflowModel,
+    pub(crate) workflow: WorkflowModel,
 
     /// All files in the workflow
-    pub files: Vec<FileModel>,
+    pub(crate) files: Vec<FileModel>,
 
     /// All user data in the workflow
-    pub user_data: Vec<UserDataModel>,
+    pub(crate) user_data: Vec<UserDataModel>,
 
     /// All resource requirements in the workflow
-    pub resource_requirements: Vec<ResourceRequirementsModel>,
+    pub(crate) resource_requirements: Vec<ResourceRequirementsModel>,
 
     /// Slurm schedulers in the workflow
-    pub slurm_schedulers: Vec<SlurmSchedulerModel>,
+    pub(crate) slurm_schedulers: Vec<SlurmSchedulerModel>,
 
     /// Local schedulers in the workflow
-    pub local_schedulers: Vec<LocalSchedulerModel>,
+    pub(crate) local_schedulers: Vec<LocalSchedulerModel>,
 
     /// Failure handlers in the workflow
     #[serde(default)]
-    pub failure_handlers: Vec<FailureHandlerModel>,
+    pub(crate) failure_handlers: Vec<FailureHandlerModel>,
 
     /// RO-Crate entities in the workflow
     #[serde(default)]
-    pub ro_crate_entities: Vec<RoCrateEntityModel>,
+    pub(crate) ro_crate_entities: Vec<RoCrateEntityModel>,
 
     /// All jobs in the workflow (includes relationship IDs)
-    pub jobs: Vec<JobModel>,
+    pub(crate) jobs: Vec<JobModel>,
 
     /// Workflow actions (triggers like on_workflow_start)
-    pub workflow_actions: Vec<WorkflowActionModel>,
+    pub(crate) workflow_actions: Vec<WorkflowActionModel>,
 
     /// Compute nodes (included when results are included, since results reference them)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compute_nodes: Option<Vec<ComputeNodeModel>>,
+    pub(crate) compute_nodes: Option<Vec<ComputeNodeModel>>,
 
     /// Job results (optional, only included with --include-results)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub results: Option<Vec<ResultModel>>,
+    pub(crate) results: Option<Vec<ResultModel>>,
 
     /// Workflow events (optional, only included with --include-events)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub events: Option<Vec<EventModel>>,
+    pub(crate) events: Option<Vec<EventModel>>,
 }
 
 impl WorkflowExport {
     /// Create a new empty export with the current version
-    pub fn new(workflow: WorkflowModel) -> Self {
+    pub(crate) fn new(workflow: WorkflowModel) -> Self {
         Self {
             export_version: EXPORT_VERSION.to_string(),
             exported_at: chrono::Utc::now().to_rfc3339(),
@@ -110,22 +110,22 @@ impl WorkflowExport {
 /// Statistics about an export or import operation
 #[derive(Debug, Clone, Default)]
 pub struct ExportImportStats {
-    pub jobs: usize,
-    pub files: usize,
-    pub user_data: usize,
-    pub resource_requirements: usize,
-    pub slurm_schedulers: usize,
-    pub local_schedulers: usize,
-    pub failure_handlers: usize,
-    pub ro_crate_entities: usize,
-    pub workflow_actions: usize,
-    pub compute_nodes: usize,
-    pub results: usize,
-    pub events: usize,
+    pub(crate) jobs: usize,
+    pub(crate) files: usize,
+    pub(crate) user_data: usize,
+    resource_requirements: usize,
+    slurm_schedulers: usize,
+    local_schedulers: usize,
+    failure_handlers: usize,
+    ro_crate_entities: usize,
+    workflow_actions: usize,
+    compute_nodes: usize,
+    pub(crate) results: usize,
+    pub(crate) events: usize,
 }
 
 impl ExportImportStats {
-    pub fn from_export(export: &WorkflowExport) -> Self {
+    pub(crate) fn from_export(export: &WorkflowExport) -> Self {
         Self {
             jobs: export.jobs.len(),
             files: export.files.len(),
@@ -148,38 +148,38 @@ use std::collections::HashMap;
 /// ID mapping tables used during import
 #[derive(Debug, Default)]
 pub struct IdMappings {
-    pub files: HashMap<i64, i64>,
-    pub user_data: HashMap<i64, i64>,
-    pub resource_requirements: HashMap<i64, i64>,
-    pub slurm_schedulers: HashMap<i64, i64>,
-    pub local_schedulers: HashMap<i64, i64>,
-    pub failure_handlers: HashMap<i64, i64>,
-    pub jobs: HashMap<i64, i64>,
-    pub compute_nodes: HashMap<i64, i64>,
+    pub(crate) files: HashMap<i64, i64>,
+    pub(crate) user_data: HashMap<i64, i64>,
+    pub(crate) resource_requirements: HashMap<i64, i64>,
+    pub(crate) slurm_schedulers: HashMap<i64, i64>,
+    pub(crate) local_schedulers: HashMap<i64, i64>,
+    pub(crate) failure_handlers: HashMap<i64, i64>,
+    pub(crate) jobs: HashMap<i64, i64>,
+    pub(crate) compute_nodes: HashMap<i64, i64>,
 }
 
 impl IdMappings {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Remap a file ID using the mapping table
-    pub fn remap_file_id(&self, old_id: i64) -> Option<i64> {
+    pub(crate) fn remap_file_id(&self, old_id: i64) -> Option<i64> {
         self.files.get(&old_id).copied()
     }
 
     /// Remap a user_data ID using the mapping table
-    pub fn remap_user_data_id(&self, old_id: i64) -> Option<i64> {
+    fn remap_user_data_id(&self, old_id: i64) -> Option<i64> {
         self.user_data.get(&old_id).copied()
     }
 
     /// Remap a resource_requirements ID using the mapping table
-    pub fn remap_resource_requirements_id(&self, old_id: i64) -> Option<i64> {
+    pub(crate) fn remap_resource_requirements_id(&self, old_id: i64) -> Option<i64> {
         self.resource_requirements.get(&old_id).copied()
     }
 
     /// Remap a scheduler ID (tries both slurm and local)
-    pub fn remap_scheduler_id(&self, old_id: i64) -> Option<i64> {
+    pub(crate) fn remap_scheduler_id(&self, old_id: i64) -> Option<i64> {
         self.slurm_schedulers
             .get(&old_id)
             .or_else(|| self.local_schedulers.get(&old_id))
@@ -187,22 +187,22 @@ impl IdMappings {
     }
 
     /// Remap a failure_handler ID using the mapping table
-    pub fn remap_failure_handler_id(&self, old_id: i64) -> Option<i64> {
+    pub(crate) fn remap_failure_handler_id(&self, old_id: i64) -> Option<i64> {
         self.failure_handlers.get(&old_id).copied()
     }
 
     /// Remap a job ID using the mapping table
-    pub fn remap_job_id(&self, old_id: i64) -> Option<i64> {
+    pub(crate) fn remap_job_id(&self, old_id: i64) -> Option<i64> {
         self.jobs.get(&old_id).copied()
     }
 
     /// Remap a compute_node ID using the mapping table
-    pub fn remap_compute_node_id(&self, old_id: i64) -> Option<i64> {
+    pub(crate) fn remap_compute_node_id(&self, old_id: i64) -> Option<i64> {
         self.compute_nodes.get(&old_id).copied()
     }
 
     /// Remap a vector of file IDs
-    pub fn remap_file_ids(&self, old_ids: &[i64]) -> Vec<i64> {
+    pub(crate) fn remap_file_ids(&self, old_ids: &[i64]) -> Vec<i64> {
         old_ids
             .iter()
             .filter_map(|id| self.remap_file_id(*id))
@@ -210,7 +210,7 @@ impl IdMappings {
     }
 
     /// Remap a vector of user_data IDs
-    pub fn remap_user_data_ids(&self, old_ids: &[i64]) -> Vec<i64> {
+    pub(crate) fn remap_user_data_ids(&self, old_ids: &[i64]) -> Vec<i64> {
         old_ids
             .iter()
             .filter_map(|id| self.remap_user_data_id(*id))
@@ -218,7 +218,7 @@ impl IdMappings {
     }
 
     /// Remap a vector of job IDs
-    pub fn remap_job_ids(&self, old_ids: &[i64]) -> Vec<i64> {
+    pub(crate) fn remap_job_ids(&self, old_ids: &[i64]) -> Vec<i64> {
         old_ids
             .iter()
             .filter_map(|id| self.remap_job_id(*id))
@@ -232,7 +232,7 @@ impl IdMappings {
     /// - metadata JSON containing `prov:wasGeneratedBy: {"@id": "#job-{old_id}-attempt-{n}"}`
     ///
     /// Returns the updated (entity_id, metadata) tuple.
-    pub fn remap_ro_crate_job_ids(
+    pub(crate) fn remap_ro_crate_job_ids(
         &self,
         entity_id: &str,
         metadata: &std::collections::HashMap<String, serde_json::Value>,

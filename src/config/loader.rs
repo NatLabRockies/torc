@@ -360,7 +360,7 @@ completion_check_interval_secs = 5
     }
 
     /// Get the configuration paths
-    pub fn paths() -> ConfigPaths {
+    fn paths() -> ConfigPaths {
         ConfigPaths::new()
     }
 

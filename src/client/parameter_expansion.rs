@@ -21,7 +21,7 @@ impl std::fmt::Display for ParameterValue {
 impl ParameterValue {
     /// Format the parameter value with optional format specifier
     /// Supports printf-style format specifiers like {:03d} for integers
-    pub fn format(&self, format_spec: Option<&str>) -> String {
+    pub(crate) fn format(&self, format_spec: Option<&str>) -> String {
         match (self, format_spec) {
             (ParameterValue::Integer(i), Some(spec)) => {
                 // Parse format spec like "03d" to mean zero-padded 3 digits
@@ -57,7 +57,7 @@ impl ParameterValue {
 ///
 /// Also tolerates curly braces around values (e.g., "{1:100}" is treated as "1:100")
 /// since users sometimes confuse parameter value syntax with template substitution syntax.
-pub fn parse_parameter_value(value: &str) -> Result<Vec<ParameterValue>, String> {
+pub(crate) fn parse_parameter_value(value: &str) -> Result<Vec<ParameterValue>, String> {
     let trimmed = value.trim();
 
     // File-backed list: `@path/to/file.txt` (one value per line)
@@ -191,7 +191,9 @@ fn parse_file_list(path: &str) -> Result<Vec<ParameterValue>, String> {
 ///
 /// Returns an error if the file is missing, has an unsupported extension, is
 /// malformed, or contains zero rows.
-pub fn load_parameter_table(path: &str) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
+pub(crate) fn load_parameter_table(
+    path: &str,
+) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("Empty parameters_file path".to_string());
@@ -460,7 +462,7 @@ fn parse_range(value: &str) -> Result<Vec<ParameterValue>, String> {
 
 /// Generate the Cartesian product of parameter values
 /// Given a map of parameter names to value lists, returns a vector of all possible combinations
-pub fn cartesian_product(
+pub(crate) fn cartesian_product(
     params: &HashMap<String, Vec<ParameterValue>>,
 ) -> Vec<HashMap<String, ParameterValue>> {
     if params.is_empty() {
@@ -491,7 +493,7 @@ pub fn cartesian_product(
 /// All parameter lists must have the same length
 /// Given a map of parameter names to value lists, returns a vector where
 /// the i-th element contains the i-th value from each parameter
-pub fn zip_parameters(
+pub(crate) fn zip_parameters(
     params: &HashMap<String, Vec<ParameterValue>>,
 ) -> Result<Vec<HashMap<String, ParameterValue>>, String> {
     if params.is_empty() {
@@ -534,7 +536,10 @@ pub fn zip_parameters(
 
 /// Substitute parameter values into a template string
 /// Supports both {param_name} and {param_name:format} syntax
-pub fn substitute_parameters(template: &str, params: &HashMap<String, ParameterValue>) -> String {
+pub(crate) fn substitute_parameters(
+    template: &str,
+    params: &HashMap<String, ParameterValue>,
+) -> String {
     let mut result = template.to_string();
 
     for (param_name, param_value) in params {
@@ -569,10 +574,7 @@ pub fn substitute_parameters(template: &str, params: &HashMap<String, ParameterV
 /// Substitute parameter values into a regex pattern string
 /// Escapes regex metacharacters in the parameter values to ensure literal matching
 /// Supports both {param_name} and {param_name:format} syntax
-pub fn substitute_parameters_regex(
-    template: &str,
-    params: &HashMap<String, ParameterValue>,
-) -> String {
+fn substitute_parameters_regex(template: &str, params: &HashMap<String, ParameterValue>) -> String {
     let mut result = template.to_string();
 
     for (param_name, param_value) in params {

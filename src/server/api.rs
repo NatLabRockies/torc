@@ -12,11 +12,11 @@ pub use crate::MAX_RECORD_TRANSFER_COUNT;
 /// Shared server context that all API modules can use
 #[derive(Clone)]
 pub struct ApiContext {
-    pub pool: Arc<SqlitePool>,
+    pool: Arc<SqlitePool>,
 }
 
 impl ApiContext {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub(crate) fn new(pool: SqlitePool) -> Self {
         Self {
             pool: Arc::new(pool),
         }
@@ -24,7 +24,10 @@ impl ApiContext {
 }
 
 /// Common error handling utilities
-pub fn database_error_with_msg(e: impl std::fmt::Display, msg: impl Into<String>) -> ApiError {
+pub(crate) fn database_error_with_msg(
+    e: impl std::fmt::Display,
+    msg: impl Into<String>,
+) -> ApiError {
     let msg_str = msg.into();
     error!("Database error ({}): {}", msg_str, e);
     ApiError(msg_str)
@@ -34,7 +37,10 @@ pub fn database_error_with_msg(e: impl std::fmt::Display, msg: impl Into<String>
 /// so that callers can detect lock contention and retry. Does not leak other database
 /// error details. Lock contention is logged at debug level (expected transient condition)
 /// while other database errors are logged at error level.
-pub fn database_lock_aware_error(e: impl std::fmt::Display, msg: impl Into<String>) -> ApiError {
+pub(crate) fn database_lock_aware_error(
+    e: impl std::fmt::Display,
+    msg: impl Into<String>,
+) -> ApiError {
     let msg_str = msg.into();
     let error_string = e.to_string().to_lowercase();
     if error_string.contains("database is locked")
@@ -49,16 +55,18 @@ pub fn database_lock_aware_error(e: impl std::fmt::Display, msg: impl Into<Strin
     }
 }
 
-pub fn json_parse_error(e: impl std::fmt::Display) -> ApiError {
+pub(crate) fn json_parse_error(e: impl std::fmt::Display) -> ApiError {
     info!("Failed to parse JSON data: {}", e);
     ApiError("Failed to parse event data".to_string())
 }
 
-pub fn normalize_env_map(env: Option<HashMap<String, String>>) -> Option<HashMap<String, String>> {
+pub(crate) fn normalize_env_map(
+    env: Option<HashMap<String, String>>,
+) -> Option<HashMap<String, String>> {
     env.filter(|env_map| !env_map.is_empty())
 }
 
-pub fn serialize_env_map(
+pub(crate) fn serialize_env_map(
     env: Option<HashMap<String, String>>,
     field_name: &str,
 ) -> Result<Option<String>, ApiError> {
@@ -70,7 +78,7 @@ pub fn serialize_env_map(
         .transpose()
 }
 
-pub fn deserialize_env_map(
+pub(crate) fn deserialize_env_map(
     env_json: Option<String>,
     field_name: &str,
 ) -> Result<Option<HashMap<String, String>>, ApiError> {
@@ -87,7 +95,7 @@ pub fn deserialize_env_map(
         .map(normalize_env_map)
 }
 
-pub fn validate_env_map(
+pub(crate) fn validate_env_map(
     env: Option<&HashMap<String, String>>,
     field_name: &str,
 ) -> Result<(), ApiError> {
@@ -121,7 +129,7 @@ pub fn validate_env_map(
 /// applies to lock acquisition and the snapshot-conflict path is impossible. Use
 /// this helper for any handler that mixes reads and writes inside a single
 /// transaction.
-pub async fn begin_immediate(
+pub(crate) async fn begin_immediate(
     pool: &SqlitePool,
 ) -> Result<sqlx::Transaction<'static, sqlx::Sqlite>, sqlx::Error> {
     pool.begin_with("BEGIN IMMEDIATE").await
@@ -136,7 +144,10 @@ pub async fn begin_immediate(
 /// `let status = parse_job_status(status_int, job_id)?;` instead of a 7-line
 /// match. The `job_id` is included in the log line so the offending row can
 /// be located.
-pub fn parse_job_status(status_int: i32, job_id: i64) -> Result<models::JobStatus, ApiError> {
+pub(crate) fn parse_job_status(
+    status_int: i32,
+    job_id: i64,
+) -> Result<models::JobStatus, ApiError> {
     models::JobStatus::from_int(status_int).map_err(|e| {
         error!(
             "Failed to parse job status job_id={} status={} error={}",
@@ -154,7 +165,7 @@ pub fn parse_job_status(status_int: i32, job_id: i64) -> Result<models::JobStatu
 /// API handlers historically construct this shape inline with
 /// `models::ErrorResponse::new(serde_json::json!({"message": ...}))`. Use this
 /// helper to keep call sites focused on intent.
-pub fn message_error_response(message: impl Into<String>) -> models::ErrorResponse {
+pub(crate) fn message_error_response(message: impl Into<String>) -> models::ErrorResponse {
     models::ErrorResponse::new(serde_json::json!({"message": message.into()}))
 }
 
@@ -163,7 +174,7 @@ pub fn message_error_response(message: impl Into<String>) -> models::ErrorRespon
 /// with no labels claims only unlabeled jobs (`labels IS NULL`, served by the
 /// labels index); a labeled runner claims only labeled jobs whose every label
 /// it has. `column` is the job labels column (a sorted JSON array or NULL).
-pub fn claimable_labels_sql(
+pub(crate) fn claimable_labels_sql(
     labels: &[String],
     column: &str,
     placeholder: &str,
@@ -181,7 +192,7 @@ pub fn claimable_labels_sql(
 }
 
 /// Read a JSON-array labels column into a label set (`None` when NULL or absent).
-pub fn labels_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<Vec<String>> {
+pub(crate) fn labels_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<Vec<String>> {
     use sqlx::Row;
     models::labels_from_json(
         row.try_get::<Option<String>, _>(column)
@@ -196,7 +207,7 @@ pub fn labels_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Option<Vec<
 /// `resource` is the human-readable resource name (e.g., `"Workflow"`, `"Job"`).
 /// The wording matches what handlers already produce, so error bodies remain
 /// stable for clients.
-pub fn resource_not_found_response(
+pub(crate) fn resource_not_found_response(
     resource: &str,
     id: impl std::fmt::Display,
 ) -> models::ErrorResponse {
@@ -205,7 +216,7 @@ pub fn resource_not_found_response(
 
 /// Escape SQL LIKE wildcard characters in user input.
 /// Escapes `%`, `_`, and `\` with a backslash prefix.
-pub fn escape_like_pattern(input: &str) -> String {
+pub(crate) fn escape_like_pattern(input: &str) -> String {
     input
         .replace('\\', "\\\\")
         .replace('%', "\\%")
@@ -381,13 +392,13 @@ macro_rules! paginated_list_response {
 /// Common pagination response structure
 #[derive(Debug)]
 pub struct PaginationInfo {
-    pub offset: i64,
-    pub limit: Option<i64>,
-    pub total_count: i64,
+    offset: i64,
+    limit: Option<i64>,
+    total_count: i64,
 }
 
 impl PaginationInfo {
-    pub fn new(offset: Option<i64>, limit: Option<i64>, total_count: i64) -> Self {
+    fn new(offset: Option<i64>, limit: Option<i64>, total_count: i64) -> Self {
         Self {
             offset: offset.unwrap_or(0),
             limit,
@@ -395,7 +406,7 @@ impl PaginationInfo {
         }
     }
 
-    pub fn has_more(&self) -> bool {
+    fn has_more(&self) -> bool {
         if let Some(limit) = self.limit {
             self.offset + limit < self.total_count
         } else {
@@ -418,25 +429,25 @@ pub mod results;
 pub mod ro_crate;
 pub mod schedulers;
 pub mod slurm_stats;
-pub mod sql_query_builder;
+pub(crate) mod sql_query_builder;
 pub mod user_data;
 pub mod workflow_actions;
 pub mod workflows;
 
 // Re-export API traits and implementations
-pub use access_groups::{AccessGroupsApi, AccessGroupsApiImpl};
-pub use compute_nodes::{ComputeNodesApi, ComputeNodesApiImpl};
-pub use events::{EventsApi, EventsApiImpl};
-pub use failure_handlers::{FailureHandlersApi, FailureHandlersApiImpl};
-pub use files::{FilesApi, FilesApiImpl};
-pub use jobs::{JobsApi, JobsApiImpl};
-pub use remote_workers::{RemoteWorkersApi, RemoteWorkersApiImpl};
-pub use resource_requirements::{ResourceRequirementsApi, ResourceRequirementsApiImpl};
-pub use results::{ResultsApi, ResultsApiImpl};
-pub use ro_crate::{RoCrateApi, RoCrateApiImpl};
-pub use schedulers::{SchedulersApi, SchedulersApiImpl};
-pub use slurm_stats::{SlurmStatsApi, SlurmStatsApiImpl};
-pub use sql_query_builder::SqlQueryBuilder;
-pub use user_data::{UserDataApi, UserDataApiImpl};
-pub use workflow_actions::{WorkflowActionsApi, WorkflowActionsApiImpl};
-pub use workflows::{WorkflowsApi, WorkflowsApiImpl};
+pub(crate) use access_groups::{AccessGroupsApi, AccessGroupsApiImpl};
+pub(crate) use compute_nodes::{ComputeNodesApi, ComputeNodesApiImpl};
+pub(crate) use events::{EventsApi, EventsApiImpl};
+pub(crate) use failure_handlers::{FailureHandlersApi, FailureHandlersApiImpl};
+pub(crate) use files::{FilesApi, FilesApiImpl};
+pub(crate) use jobs::{JobsApi, JobsApiImpl};
+pub(crate) use remote_workers::{RemoteWorkersApi, RemoteWorkersApiImpl};
+pub(crate) use resource_requirements::{ResourceRequirementsApi, ResourceRequirementsApiImpl};
+pub(crate) use results::{ResultsApi, ResultsApiImpl};
+pub(crate) use ro_crate::{RoCrateApi, RoCrateApiImpl};
+pub(crate) use schedulers::{SchedulersApi, SchedulersApiImpl};
+pub(crate) use slurm_stats::{SlurmStatsApi, SlurmStatsApiImpl};
+pub(crate) use sql_query_builder::SqlQueryBuilder;
+pub(crate) use user_data::{UserDataApi, UserDataApiImpl};
+pub(crate) use workflow_actions::{WorkflowActionsApi, WorkflowActionsApiImpl};
+pub(crate) use workflows::{WorkflowsApi, WorkflowsApiImpl};

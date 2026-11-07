@@ -21,7 +21,7 @@ const INFO_PAGE: &str = r#"<!DOCTYPE html>
 ///
 /// Returns `Some(Response)` for root/dashboard paths,
 /// or `None` if the request should be handled by the API.
-pub fn serve_dashboard(path: &str) -> Option<Response<Body>> {
+pub(crate) fn serve_dashboard(path: &str) -> Option<Response<Body>> {
     let path = path.trim_start_matches('/');
 
     if path.is_empty() || path == "dashboard" || path == "dashboard/" {

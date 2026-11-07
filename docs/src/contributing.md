@@ -19,6 +19,9 @@ Make sure you have Rust 1.95 or later installed:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+Hawk 0.1.17 requires its analysis to run with the exact compiler toolchain it was built against,
+Rust 1.99.0 (installed in step 6).
+
 3. **Install cargo-nextest:**
 
 ```bash
@@ -37,7 +40,23 @@ cargo install sqlx-cli --version 0.9.0 --no-default-features --features sqlite
 cargo install cargo-release
 ```
 
-6. **Set up the database:**
+6. **Install Hawk:**
+
+```bash
+set -euo pipefail
+rustup toolchain install 1.99.0
+hawk_installer="$(mktemp)"
+trap 'rm -f "$hawk_installer"' EXIT
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output "$hawk_installer" \
+  https://github.com/astral-sh/hawk/releases/download/0.1.17/cargo-hawk-installer.sh
+printf '%s  %s\n' \
+  'b6e51bce97baade945ad06d9b385588e70fea290cfa6a6d38ee0147b7e936dfb' \
+  "$hawk_installer" | shasum -a 256 -c -
+sh "$hawk_installer"
+```
+
+7. **Set up the database:**
 
 ```bash
 # Create .env file
@@ -47,7 +66,7 @@ echo "DATABASE_URL=sqlite:torc.db" > .env
 sqlx migrate run --source torc-server/migrations
 ```
 
-7. **Build and test:**
+8. **Build and test:**
 
 ```bash
 cargo build
@@ -69,6 +88,9 @@ cargo clippy --all --all-targets --all-features -- -D warnings
 
 # Run all checks
 cargo fmt --check && cargo clippy --all --all-targets --all-features -- -D warnings
+
+# Check public APIs with Hawk (run with the pinned Hawk toolchain)
+cargo +1.99.0 hawk check -D warnings
 ```
 
 ### Adding Tests
@@ -121,6 +143,7 @@ git commit -m "Add feature: description"
 cargo nextest run --all-features
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo +1.99.0 hawk check -D warnings
 ```
 
 4. **Push to your fork:**

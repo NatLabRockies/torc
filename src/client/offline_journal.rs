@@ -28,7 +28,7 @@ const FILENAME_PREFIX: &str = "offline_results";
 /// Maximum completions to send in a single `batch_complete_jobs` request when
 /// replaying a journal. Bounds request body size and lets replay make partial
 /// progress. Shared by the runner's resume flush and `torc workflows reconcile`.
-pub const FLUSH_BATCH_SIZE: usize = 500;
+pub(crate) const FLUSH_BATCH_SIZE: usize = 500;
 
 /// Build the journal file name for a runner. The `workflow_id` / `run_id` prefix
 /// is what [`OfflineJournal::discover`] globs on; `unique_label` makes the name
@@ -44,12 +44,7 @@ fn journal_filename_prefix(workflow_id: i64, run_id: i64) -> String {
 
 /// Returns the path of the journal file that would be created for the given
 /// runner identity, mirroring the layout used by [`OfflineJournal::open_or_create`].
-pub fn journal_path(
-    output_dir: &Path,
-    workflow_id: i64,
-    run_id: i64,
-    unique_label: &str,
-) -> PathBuf {
+fn journal_path(output_dir: &Path, workflow_id: i64, run_id: i64, unique_label: &str) -> PathBuf {
     output_dir
         .join(JOURNAL_SUBDIR)
         .join(journal_filename(workflow_id, run_id, unique_label))
@@ -99,7 +94,7 @@ impl OfflineJournal {
     }
 
     /// Path to the underlying SQLite file.
-    pub fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.path
     }
 
@@ -131,13 +126,13 @@ impl OfflineJournal {
     }
 
     /// Read every journaled completion from this file.
-    pub fn read_all(&self) -> Result<Vec<JobCompletionEntry>, String> {
+    pub(crate) fn read_all(&self) -> Result<Vec<JobCompletionEntry>, String> {
         Self::read_all_from_conn(&self.conn)
     }
 
     /// Delete all journaled completions. Called after a successful flush to the
     /// server so a subsequent outage does not re-submit already-recorded jobs.
-    pub fn clear(&self) -> Result<(), String> {
+    pub(crate) fn clear(&self) -> Result<(), String> {
         self.conn
             .execute("DELETE FROM journaled_completions", [])
             .map_err(|e| format!("Failed to clear journal: {e}"))?;
@@ -164,7 +159,7 @@ impl OfflineJournal {
 
     /// Read all completions from a journal file at `path` without holding a
     /// long-lived handle. Used by `torc workflows reconcile`.
-    pub fn read_file(path: &Path) -> Result<Vec<JobCompletionEntry>, String> {
+    pub(crate) fn read_file(path: &Path) -> Result<Vec<JobCompletionEntry>, String> {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open journal {}: {e}", path.display()))?;
         Self::read_all_from_conn(&conn)
@@ -173,7 +168,7 @@ impl OfflineJournal {
     /// Count the journaled completions in the file at `path` without
     /// deserializing each payload. Cheaper than [`read_file`] when only the
     /// number of pending completions is needed (e.g. an advisory check).
-    pub fn count_file(path: &Path) -> Result<usize, String> {
+    pub(crate) fn count_file(path: &Path) -> Result<usize, String> {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open journal {}: {e}", path.display()))?;
         let count: i64 = conn
@@ -187,7 +182,7 @@ impl OfflineJournal {
     /// Find every journal file for a `(workflow_id, run_id)` by recursively
     /// walking `base_dir`. Matching is by file name prefix, so journals written
     /// to per-node `output_dir`s nested anywhere under `base_dir` are all found.
-    pub fn discover(base_dir: &Path, workflow_id: i64, run_id: i64) -> Vec<PathBuf> {
+    pub(crate) fn discover(base_dir: &Path, workflow_id: i64, run_id: i64) -> Vec<PathBuf> {
         let prefix = journal_filename_prefix(workflow_id, run_id);
         let mut found = Vec::new();
         walk(base_dir, &prefix, &mut found);

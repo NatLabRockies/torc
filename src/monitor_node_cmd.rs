@@ -29,16 +29,16 @@ pub struct Args {
     pub workflow_id: Option<i64>,
     /// Output directory (same as the job runner's)
     #[arg(short, long, default_value = "torc_output")]
-    pub output_dir: PathBuf,
+    output_dir: PathBuf,
     /// Seconds between samples (no workflow only)
     #[arg(short = 'i', long, default_value_t = 10)]
-    pub sample_interval_seconds: i32,
+    sample_interval_seconds: i32,
     /// Seconds between SQLite flushes (no workflow only)
     #[arg(long, default_value_t = 300)]
-    pub flush_interval_seconds: i32,
+    flush_interval_seconds: i32,
     /// Store only the lifetime summary, not every sample (no workflow only)
     #[arg(long)]
-    pub summary_only: bool,
+    summary_only: bool,
 }
 
 /// Returns the process exit code.

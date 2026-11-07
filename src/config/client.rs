@@ -21,16 +21,16 @@ pub struct ClientConfig {
     pub run: ClientRunConfig,
 
     /// Offline-drain configuration for job runners
-    pub offline: ClientOfflineConfig,
+    pub(crate) offline: ClientOfflineConfig,
 
     /// Slurm scheduler configuration
     pub slurm: ClientSlurmConfig,
 
     /// HPC profile configuration
-    pub hpc: ClientHpcConfig,
+    pub(crate) hpc: ClientHpcConfig,
 
     /// Watch command configuration
-    pub watch: ClientWatchConfig,
+    watch: ClientWatchConfig,
 
     /// TLS configuration
     pub tls: ClientTlsConfig,
@@ -148,12 +148,12 @@ pub struct ClientSlurmConfig {
     pub poll_interval: i32,
 
     /// Keep submission scripts after job submission (useful for debugging)
-    pub keep_submission_scripts: bool,
+    pub(crate) keep_submission_scripts: bool,
 
     /// If true, only claim jobs that match the scheduler_id of the worker.
     /// If false (default), jobs with a scheduler_id mismatch will be claimed
     /// if no matching jobs are available.
-    pub strict_scheduler_match: bool,
+    pub(crate) strict_scheduler_match: bool,
 }
 
 impl Default for ClientSlurmConfig {
@@ -215,14 +215,14 @@ impl Default for ClientWatchConfig {
 #[serde(default)]
 pub struct ClientHpcConfig {
     /// Default account to use for HPC jobs
-    pub default_account: Option<String>,
+    default_account: Option<String>,
 
     /// Profile overrides - allows customizing built-in profiles
     /// Key is the profile name (e.g., "kestrel")
-    pub profile_overrides: HashMap<String, HpcProfileOverride>,
+    profile_overrides: HashMap<String, HpcProfileOverride>,
 
     /// Custom profiles defined by the user
-    pub custom_profiles: HashMap<String, HpcProfileConfig>,
+    pub(crate) custom_profiles: HashMap<String, HpcProfileConfig>,
 }
 
 /// Override settings for a built-in HPC profile
@@ -230,42 +230,42 @@ pub struct ClientHpcConfig {
 #[serde(default)]
 pub struct HpcProfileOverride {
     /// Override the default account for this profile
-    pub default_account: Option<String>,
+    default_account: Option<String>,
 }
 
 /// Configuration for a custom HPC profile
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HpcProfileConfig {
     /// Display name for the profile
-    pub display_name: String,
+    pub(crate) display_name: String,
 
     /// Description of the HPC system
     #[serde(default)]
-    pub description: String,
+    pub(crate) description: String,
 
     /// Detection via environment variable (name=value)
     #[serde(default)]
-    pub detect_env_var: Option<String>,
+    pub(crate) detect_env_var: Option<String>,
 
     /// Detection via hostname pattern (regex)
     #[serde(default)]
-    pub detect_hostname: Option<String>,
+    pub(crate) detect_hostname: Option<String>,
 
     /// Default account for this profile
     #[serde(default)]
-    pub default_account: Option<String>,
+    pub(crate) default_account: Option<String>,
 
     /// Charge factor for CPU jobs
     #[serde(default = "default_charge_factor")]
-    pub charge_factor_cpu: f64,
+    pub(crate) charge_factor_cpu: f64,
 
     /// Charge factor for GPU jobs
     #[serde(default = "default_charge_factor_gpu")]
-    pub charge_factor_gpu: f64,
+    pub(crate) charge_factor_gpu: f64,
 
     /// Partition configurations
     #[serde(default)]
-    pub partitions: Vec<HpcPartitionConfig>,
+    pub(crate) partitions: Vec<HpcPartitionConfig>,
 }
 
 fn default_charge_factor() -> f64 {
@@ -280,40 +280,40 @@ fn default_charge_factor_gpu() -> f64 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HpcPartitionConfig {
     /// Partition name
-    pub name: String,
+    pub(crate) name: String,
 
     /// Description
     #[serde(default)]
-    pub description: String,
+    pub(crate) description: String,
 
     /// CPUs per node
-    pub cpus_per_node: u32,
+    pub(crate) cpus_per_node: u32,
 
     /// Memory per node in MB
-    pub memory_mb: u64,
+    pub(crate) memory_mb: u64,
 
     /// Maximum wall time in seconds
-    pub max_walltime_secs: u64,
+    pub(crate) max_walltime_secs: u64,
 
     /// GPUs per node (if any)
     #[serde(default)]
-    pub gpus_per_node: Option<u32>,
+    pub(crate) gpus_per_node: Option<u32>,
 
     /// GPU type (e.g., "h100", "a100")
     #[serde(default)]
-    pub gpu_type: Option<String>,
+    pub(crate) gpu_type: Option<String>,
 
     /// GPU memory in GB
     #[serde(default)]
-    pub gpu_memory_gb: Option<u32>,
+    pub(crate) gpu_memory_gb: Option<u32>,
 
     /// Whether the partition supports shared access
     #[serde(default)]
-    pub shared: bool,
+    pub(crate) shared: bool,
 
     /// Whether partition must be explicitly requested
     #[serde(default)]
-    pub requires_explicit_request: bool,
+    pub(crate) requires_explicit_request: bool,
 }
 
 #[cfg(test)]

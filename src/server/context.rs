@@ -19,7 +19,7 @@ where
     B: Push<Option<AuthData>, Result = C>,
     C: Push<Option<Authorization>, Result = D>,
 {
-    pub fn new(inner: T) -> MakeAddContext<T, A> {
+    fn new(inner: T) -> MakeAddContext<T, A> {
         MakeAddContext {
             inner,
             marker: PhantomData,
@@ -71,7 +71,7 @@ where
     B: Push<Option<AuthData>, Result = C>,
     C: Push<Option<Authorization>, Result = D>,
 {
-    pub fn new(inner: T) -> Self {
+    fn new(inner: T) -> Self {
         AddContext {
             inner,
             marker: PhantomData,

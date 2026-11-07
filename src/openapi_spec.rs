@@ -252,23 +252,23 @@ mod openapi_task_paths {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PingResponse {
-    pub status: String,
+    pub(crate) status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VersionResponse {
-    pub version: String,
-    pub api_version: String,
+    pub(crate) version: String,
+    pub(crate) api_version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub git_hash: Option<String>,
+    pub(crate) git_hash: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct OpenApiAppState {
-    pub version: String,
-    pub api_version: String,
-    pub git_hash: String,
-    pub access_control_enabled: bool,
+    pub(crate) version: String,
+    pub(crate) api_version: String,
+    pub(crate) git_hash: String,
+    pub(crate) access_control_enabled: bool,
 }
 
 impl Default for OpenApiAppState {
@@ -679,7 +679,7 @@ fn resolve_schema_properties<'a>(
         description = "Rust-owned OpenAPI surface for Torc."
     )
 )]
-pub struct TorcOpenApi;
+struct TorcOpenApi;
 
 fn openapi_doc() -> utoipa::openapi::OpenApi {
     let mut doc = TorcOpenApi::openapi();
@@ -859,7 +859,7 @@ fn flatten_nullable_refs_yaml(value: &mut serde_yaml::Value) {
     }
 }
 
-pub fn openapi_value() -> Value {
+fn openapi_value() -> Value {
     let mut value = serde_json::to_value(openapi_doc()).expect("OpenAPI document should serialize");
     apply_env_property_name_pattern_json(&mut value);
     flatten_nullable_refs_json(&mut value);

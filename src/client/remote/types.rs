@@ -6,7 +6,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkerEntry {
     /// Original line from file (for error messages)
-    pub original: String,
+    pub(crate) original: String,
     /// Username (optional, defaults to current user if not specified)
     pub user: Option<String>,
     /// Hostname or IP address
@@ -28,19 +28,19 @@ impl WorkerEntry {
     }
 
     /// Set the user for this entry.
-    pub fn with_user(mut self, user: impl Into<String>) -> Self {
+    fn with_user(mut self, user: impl Into<String>) -> Self {
         self.user = Some(user.into());
         self
     }
 
     /// Set the port for this entry.
-    pub fn with_port(mut self, port: u16) -> Self {
+    fn with_port(mut self, port: u16) -> Self {
         self.port = Some(port);
         self
     }
 
     /// Returns the SSH target string: [user@]host
-    pub fn ssh_target(&self) -> String {
+    pub(crate) fn ssh_target(&self) -> String {
         match &self.user {
             Some(user) => format!("{}@{}", user, self.host),
             None => self.host.clone(),
@@ -48,7 +48,7 @@ impl WorkerEntry {
     }
 
     /// Returns the display name for this worker (used in output).
-    pub fn display_name(&self) -> &str {
+    pub(crate) fn display_name(&self) -> &str {
         &self.host
     }
 }
@@ -95,16 +95,16 @@ impl fmt::Display for RemoteWorkerState {
 #[derive(Debug)]
 pub struct RemoteOperationResult {
     /// The worker this result is for
-    pub worker: WorkerEntry,
+    pub(crate) worker: WorkerEntry,
     /// Whether the operation succeeded
-    pub success: bool,
+    pub(crate) success: bool,
     /// Human-readable message about the result
-    pub message: String,
+    pub(crate) message: String,
 }
 
 impl RemoteOperationResult {
     /// Create a successful result.
-    pub fn success(worker: WorkerEntry, message: impl Into<String>) -> Self {
+    pub(crate) fn success(worker: WorkerEntry, message: impl Into<String>) -> Self {
         Self {
             worker,
             success: true,
@@ -113,7 +113,7 @@ impl RemoteOperationResult {
     }
 
     /// Create a failed result.
-    pub fn failure(worker: WorkerEntry, message: impl Into<String>) -> Self {
+    pub(crate) fn failure(worker: WorkerEntry, message: impl Into<String>) -> Self {
         Self {
             worker,
             success: false,

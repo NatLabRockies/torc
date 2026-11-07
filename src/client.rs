@@ -14,7 +14,7 @@ pub mod async_cli_command;
 pub mod commands;
 pub mod errors;
 pub mod resource_correction;
-pub mod ro_crate_utils;
+pub(crate) mod ro_crate_utils;
 
 // Re-export config from the top-level module for backwards compatibility
 #[cfg(feature = "config")]
@@ -29,7 +29,7 @@ pub mod remote;
 pub mod report_models;
 pub mod resource_monitor;
 pub mod scheduler_plan;
-pub mod slurm_utils;
+pub(crate) mod slurm_utils;
 pub mod sse_client;
 pub mod utils;
 pub mod version_check;
@@ -47,8 +47,8 @@ pub use apis::{
     system_api, tasks_api, user_data_api, workflow_actions_api, workflows_api,
 };
 pub use hpc::{
-    HpcDetection, HpcInterface, HpcJobInfo, HpcJobStats, HpcJobStatus, HpcManager, HpcPartition,
-    HpcProfile, HpcProfileRegistry, HpcType, SlurmInterface, create_hpc_interface,
+    HpcDetection, HpcInterface, HpcJobInfo, HpcJobStats, HpcJobStatus, HpcPartition, HpcProfile,
+    HpcProfileRegistry, SlurmInterface,
 };
 pub use job_runner::JobRunner;
 // JobModel is re-exported from models (which re-exports from crate::models)
@@ -59,11 +59,7 @@ pub use workflow_spec::{
 };
 
 // Report model types for inter-command data sharing
-pub use report_models::{
-    JobResultRecord, ResourceUtilizationReport, ResourceViolation, ResultsReport,
-};
+pub use report_models::{ResourceUtilizationReport, ResourceViolation};
 
 // Version checking utilities
-pub use version_check::{
-    ServerInfo, VersionCheckResult, VersionMismatchSeverity, check_and_warn, check_version,
-};
+pub use version_check::{ServerInfo, VersionCheckResult, VersionMismatchSeverity, check_version};

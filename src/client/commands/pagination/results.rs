@@ -13,80 +13,80 @@ use crate::models::{JobStatus, ResultModel};
 #[derive(Debug, Clone, Default)]
 pub struct ResultListParams {
     /// Workflow ID to list results from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Filter by job ID
-    pub job_id: Option<i64>,
+    pub(crate) job_id: Option<i64>,
     /// Filter by run ID
-    pub run_id: Option<i64>,
+    pub(crate) run_id: Option<i64>,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Filter by return code
-    pub return_code: Option<i64>,
+    pub(crate) return_code: Option<i64>,
     /// Filter by status
-    pub status: Option<JobStatus>,
+    pub(crate) status: Option<JobStatus>,
     /// Include all runs
-    pub all_runs: Option<bool>,
+    pub(crate) all_runs: Option<bool>,
     /// Filter by compute node ID
-    pub compute_node_id: Option<i64>,
+    pub(crate) compute_node_id: Option<i64>,
 }
 
 impl ResultListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_job_id(mut self, job_id: i64) -> Self {
+    pub(crate) fn with_job_id(mut self, job_id: i64) -> Self {
         self.job_id = Some(job_id);
         self
     }
 
-    pub fn with_run_id(mut self, run_id: i64) -> Self {
+    pub(crate) fn with_run_id(mut self, run_id: i64) -> Self {
         self.run_id = Some(run_id);
         self
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_return_code(mut self, return_code: i64) -> Self {
+    pub(crate) fn with_return_code(mut self, return_code: i64) -> Self {
         self.return_code = Some(return_code);
         self
     }
 
-    pub fn with_status(mut self, status: JobStatus) -> Self {
+    pub(crate) fn with_status(mut self, status: JobStatus) -> Self {
         self.status = Some(status);
         self
     }
 
-    pub fn with_all_runs(mut self, all_runs: bool) -> Self {
+    pub(crate) fn with_all_runs(mut self, all_runs: bool) -> Self {
         self.all_runs = Some(all_runs);
         self
     }
 
-    pub fn with_compute_node_id(mut self, compute_node_id: i64) -> Self {
+    pub(crate) fn with_compute_node_id(mut self, compute_node_id: i64) -> Self {
         self.compute_node_id = Some(compute_node_id);
         self
     }
@@ -146,7 +146,7 @@ impl Paginatable for ResultModel {
 }
 
 /// Type alias for the results iterator
-pub type ResultsIterator = PaginatedIterator<ResultModel>;
+type ResultsIterator = PaginatedIterator<ResultModel>;
 
 /// Create a lazy iterator for results that fetches pages on-demand.
 ///
@@ -157,7 +157,7 @@ pub type ResultsIterator = PaginatedIterator<ResultModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<ResultModel, Error>` items
-pub fn iter_results(
+fn iter_results(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResultListParams,
@@ -177,7 +177,7 @@ pub fn iter_results(
 /// # Returns
 /// `Result<Vec<ResultModel>, Error>` containing all results or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_results(
+pub(crate) fn paginate_results(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: ResultListParams,

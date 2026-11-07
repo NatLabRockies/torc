@@ -13,71 +13,71 @@ use crate::models::WorkflowModel;
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowListParams {
     /// Pagination offset
-    pub offset: i64,
+    offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    reverse_sort: Option<bool>,
     /// Filter by name
-    pub name: Option<String>,
+    name: Option<String>,
     /// Filter by user
-    pub user: Option<String>,
+    user: Option<String>,
     /// Filter by description
-    pub description: Option<String>,
+    description: Option<String>,
     /// Filter by archived status
-    pub is_archived: Option<bool>,
+    is_archived: Option<bool>,
     /// Filter to workflows shared with this access group (by group name)
-    pub access_group: Option<String>,
+    access_group: Option<String>,
 }
 
 impl WorkflowListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    pub(crate) fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    pub(crate) fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_name(mut self, name: String) -> Self {
+    fn with_name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
 
-    pub fn with_user(mut self, user: String) -> Self {
+    pub(crate) fn with_user(mut self, user: String) -> Self {
         self.user = Some(user);
         self
     }
 
-    pub fn with_description(mut self, description: String) -> Self {
+    fn with_description(mut self, description: String) -> Self {
         self.description = Some(description);
         self
     }
 
-    pub fn with_is_archived(mut self, is_archived: bool) -> Self {
+    pub(crate) fn with_is_archived(mut self, is_archived: bool) -> Self {
         self.is_archived = Some(is_archived);
         self
     }
 
-    pub fn with_access_group(mut self, access_group: String) -> Self {
+    pub(crate) fn with_access_group(mut self, access_group: String) -> Self {
         self.access_group = Some(access_group);
         self
     }
@@ -135,7 +135,7 @@ impl Paginatable for WorkflowModel {
 }
 
 /// Type alias for the workflows iterator
-pub type WorkflowsIterator = PaginatedIterator<WorkflowModel>;
+type WorkflowsIterator = PaginatedIterator<WorkflowModel>;
 
 /// Create a lazy iterator for workflows that fetches pages on-demand.
 ///
@@ -145,7 +145,7 @@ pub type WorkflowsIterator = PaginatedIterator<WorkflowModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<WorkflowModel, Error>` items
-pub fn iter_workflows(
+fn iter_workflows(
     config: &apis::configuration::Configuration,
     params: WorkflowListParams,
 ) -> WorkflowsIterator {
@@ -160,7 +160,7 @@ pub fn iter_workflows(
 ///
 /// # Returns
 /// `Result<Vec<WorkflowModel>, Error>` containing all workflows or an error
-pub fn paginate_workflows(
+pub(crate) fn paginate_workflows(
     config: &apis::configuration::Configuration,
     params: WorkflowListParams,
 ) -> Result<Vec<WorkflowModel>, apis::Error<apis::workflows_api::ListWorkflowsError>> {

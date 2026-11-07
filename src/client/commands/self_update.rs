@@ -28,11 +28,11 @@ EXAMPLES:
 pub struct SelfUpdateArgs {
     /// Release tag or version to install (defaults to the latest stable release)
     #[arg(value_name = "TARGET_VERSION")]
-    pub target_version: Option<String>,
+    target_version: Option<String>,
 
     /// GitHub token for release API requests; also read from GITHUB_TOKEN
     #[arg(long, env = "GITHUB_TOKEN", hide_env_values = true)]
-    pub token: Option<String>,
+    token: Option<String>,
 }
 
 #[derive(Debug)]

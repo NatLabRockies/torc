@@ -256,7 +256,7 @@ impl RemoteShell {
 
     /// Command that prints `started` if `log_file` contains the worker startup
     /// line, else `waiting`. A missing log file prints `waiting`.
-    pub fn log_shows_startup(&self, log_file: &str) -> String {
+    pub(crate) fn log_shows_startup(&self, log_file: &str) -> String {
         match self {
             RemoteShell::Posix => format!(
                 "grep -q 'Starting torc job runner' {} 2>/dev/null && echo started || echo waiting",
@@ -273,7 +273,7 @@ impl RemoteShell {
 
     /// Command that prints `running` if a `torc ... run <workflow_id>` process
     /// exists, else `stopped`. Used to confirm startup after the log line.
-    pub fn torc_process_running(&self, workflow_id: i64) -> String {
+    pub(crate) fn torc_process_running(&self, workflow_id: i64) -> String {
         match self {
             RemoteShell::Posix => format!(
                 "pgrep -f 'torc .* run {}( |$)' >/dev/null 2>&1 && echo running || echo stopped",
@@ -288,7 +288,7 @@ impl RemoteShell {
 
     /// Command that prints the PID of a `torc ... run <workflow_id>` process if
     /// one exists, else nothing. Used as a fallback when the PID file is absent.
-    pub fn torc_process_pid(&self, workflow_id: i64) -> String {
+    pub(crate) fn torc_process_pid(&self, workflow_id: i64) -> String {
         match self {
             RemoteShell::Posix => {
                 format!(

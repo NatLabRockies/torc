@@ -16,7 +16,9 @@ use super::table_format::{display_csv, display_table_with_count};
 /// Create an HPC profile registry with built-in profiles and user-defined profiles from config
 ///
 /// This is a public version for use by other modules (e.g., main.rs for submit command)
-pub fn create_registry_with_config_public(hpc_config: &ClientHpcConfig) -> HpcProfileRegistry {
+pub(crate) fn create_registry_with_config_public(
+    hpc_config: &ClientHpcConfig,
+) -> HpcProfileRegistry {
     create_registry_with_config(hpc_config)
 }
 

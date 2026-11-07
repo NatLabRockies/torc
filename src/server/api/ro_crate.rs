@@ -150,11 +150,11 @@ pub trait RoCrateApi<C> {
 /// Implementation of RO-Crate entity API for the server
 #[derive(Clone)]
 pub struct RoCrateApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 impl RoCrateApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 
@@ -166,7 +166,10 @@ impl RoCrateApiImpl {
     /// creates new entities otherwise.
     ///
     /// This is called during `initialize_jobs` when `enable_ro_crate` is true.
-    pub async fn create_entities_for_input_files(&self, workflow_id: i64) -> Result<i64, ApiError> {
+    pub(crate) async fn create_entities_for_input_files(
+        &self,
+        workflow_id: i64,
+    ) -> Result<i64, ApiError> {
         // Get all files with st_mtime set (input files)
         let input_files = match sqlx::query!(
             r#"
@@ -315,7 +318,10 @@ impl RoCrateApiImpl {
     /// entity with `#software-torc-server-run-id-{run_id}` already exists for this workflow.
     ///
     /// Called during `initialize_jobs` regardless of `enable_ro_crate`.
-    pub async fn create_server_software_entity(&self, workflow_id: i64) -> Result<(), ApiError> {
+    pub(crate) async fn create_server_software_entity(
+        &self,
+        workflow_id: i64,
+    ) -> Result<(), ApiError> {
         // Get the current run_id from workflow
         let run_id: i64 =
             sqlx::query_scalar!("SELECT run_id FROM workflow WHERE id = $1", workflow_id,)

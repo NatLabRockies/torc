@@ -58,7 +58,12 @@ def non_code_lines(text: str, *, strip_inline_code: bool) -> list[tuple[int, str
         if marker and fence is None:
             fence = marker
             continue
-        if marker and fence is not None and marker[0] == fence[0] and marker[1] >= fence[1]:
+        if (
+            marker
+            and fence is not None
+            and marker[0] == fence[0]
+            and marker[1] >= fence[1]
+        ):
             fence = None
             continue
         if fence is not None:
@@ -88,7 +93,9 @@ def collect_anchors(files: list[Path]) -> dict[Path, set[str]]:
     for path in files:
         counts: dict[str, int] = {}
         file_anchors = {""}
-        for _, line in non_code_lines(path.read_text(errors="replace"), strip_inline_code=False):
+        for _, line in non_code_lines(
+            path.read_text(errors="replace"), strip_inline_code=False
+        ):
             match = re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
             if not match:
                 continue
@@ -111,7 +118,9 @@ def check_internal_links(files: list[Path]) -> list[LinkProblem]:
         ):
             for match in link_re.finditer(line):
                 raw = match.group(1).strip("<>")
-                if not raw or raw.startswith(("http://", "https://", "mailto:", "tel:")):
+                if not raw or raw.startswith(
+                    ("http://", "https://", "mailto:", "tel:")
+                ):
                     continue
 
                 if raw.startswith("#"):
@@ -127,7 +136,9 @@ def check_internal_links(files: list[Path]) -> list[LinkProblem]:
 
                 if not target.exists():
                     problems.append(
-                        LinkProblem(path, line_no, raw, "missing file", display_path(target))
+                        LinkProblem(
+                            path, line_no, raw, "missing file", display_path(target)
+                        )
                     )
                 elif fragment:
                     fragment = urllib.parse.unquote(fragment)
@@ -194,12 +205,16 @@ def check_external_url(url: str, timeout: int, retries: int) -> str | None:
     return last_error
 
 
-def check_external_links(files: list[Path], timeout: int, retries: int) -> list[LinkProblem]:
+def check_external_links(
+    files: list[Path], timeout: int, retries: int
+) -> list[LinkProblem]:
     problems: list[LinkProblem] = []
     for path, line_no, url in collect_external_urls(files):
         error = check_external_url(url, timeout, retries)
         if error:
-            problems.append(LinkProblem(path, line_no, url, "external link failed", error))
+            problems.append(
+                LinkProblem(path, line_no, url, "external link failed", error)
+            )
     return problems
 
 
@@ -218,10 +233,16 @@ def print_problems(problems: list[LinkProblem]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--internal", action="store_true", help="check local file and anchor links")
+    parser.add_argument(
+        "--internal", action="store_true", help="check local file and anchor links"
+    )
     parser.add_argument("--external", action="store_true", help="check HTTP(S) links")
-    parser.add_argument("--timeout", type=int, default=12, help="external URL timeout in seconds")
-    parser.add_argument("--retries", type=int, default=2, help="external URL retry count")
+    parser.add_argument(
+        "--timeout", type=int, default=12, help="external URL timeout in seconds"
+    )
+    parser.add_argument(
+        "--retries", type=int, default=2, help="external URL retry count"
+    )
     args = parser.parse_args()
 
     if not args.internal and not args.external:

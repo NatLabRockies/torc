@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// When both groups exist, each needs at least 1 allocation, so the minimum total is 2.
 /// A threshold of 2 means we merge when exactly 2 allocations are needed (the minimum case).
-pub const MERGE_THRESHOLD: i64 = 2;
+const MERGE_THRESHOLD: i64 = 2;
 
 use crate::client::hpc::HpcProfile;
 use crate::client::workflow_graph::{SchedulerGroup, WorkflowGraph};
@@ -157,52 +157,52 @@ fn calculate_walltime(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlannedScheduler {
     /// Scheduler name (includes suffix like "_deferred" for jobs with dependencies)
-    pub name: String,
+    pub(crate) name: String,
     /// Slurm account
-    pub account: String,
+    pub(crate) account: String,
     /// Partition (if explicit request required for sbatch --partition flag)
     pub partition: Option<String>,
     /// Resolved partition name (always set, used for cluster state queries and display)
-    pub resolved_partition: String,
+    pub(crate) resolved_partition: String,
     /// Memory request
-    pub mem: Option<String>,
+    pub(crate) mem: Option<String>,
     /// Walltime in HH:MM:SS format
     pub walltime: String,
     /// Nodes per allocation
-    pub nodes: i64,
+    pub(crate) nodes: i64,
     /// GPU gres string (e.g., "gpu:2")
-    pub gres: Option<String>,
+    pub(crate) gres: Option<String>,
     /// QOS
-    pub qos: Option<String>,
+    pub(crate) qos: Option<String>,
     /// Resource requirements name this scheduler is for
-    pub resource_requirements: String,
+    pub(crate) resource_requirements: String,
     /// Whether this scheduler is for jobs with dependencies
-    pub has_dependencies: bool,
+    pub(crate) has_dependencies: bool,
     /// Number of jobs this scheduler will handle
-    pub job_count: usize,
+    pub(crate) job_count: usize,
     /// Job names that will use this scheduler
-    pub job_names: Vec<String>,
+    pub(crate) job_names: Vec<String>,
     /// Job name patterns for action matching
-    pub job_name_patterns: Vec<String>,
+    job_name_patterns: Vec<String>,
     /// Number of allocations to create
-    pub num_allocations: i64,
+    pub(crate) num_allocations: i64,
 }
 
 /// A planned workflow action for scheduling nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlannedAction {
     /// Trigger type: "on_workflow_start" or "on_jobs_ready"
-    pub trigger_type: String,
+    trigger_type: String,
     /// Scheduler name this action references
-    pub scheduler_name: String,
+    pub(crate) scheduler_name: String,
     /// Exact job names for this action (preferred over patterns for expanded jobs)
-    pub job_names: Option<Vec<String>>,
+    pub(crate) job_names: Option<Vec<String>>,
     /// Job name regex patterns (for on_jobs_ready triggers with unexpanded parameterized jobs)
-    pub job_name_patterns: Option<Vec<String>>,
+    pub(crate) job_name_patterns: Option<Vec<String>>,
     /// Number of allocations to submit
-    pub num_allocations: i64,
+    pub(crate) num_allocations: i64,
     /// Whether this is a recovery action (ephemeral, deleted on reinitialize)
-    pub is_recovery: bool,
+    pub(crate) is_recovery: bool,
 }
 
 /// A complete scheduler plan for a workflow.
@@ -214,16 +214,16 @@ pub struct SchedulerPlan {
     /// Schedulers to create
     pub schedulers: Vec<PlannedScheduler>,
     /// Actions to create
-    pub actions: Vec<PlannedAction>,
+    pub(crate) actions: Vec<PlannedAction>,
     /// Map of job name -> scheduler name
-    pub job_assignments: HashMap<String, String>,
+    pub(crate) job_assignments: HashMap<String, String>,
     /// Warnings generated during planning
     pub warnings: Vec<String>,
 }
 
 impl SchedulerPlan {
     /// Create an empty plan
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             schedulers: Vec::new(),
             actions: Vec::new(),
@@ -1021,7 +1021,7 @@ use crate::client::workflow_spec::{SlurmSchedulerSpec, WorkflowActionSpec, Workf
 ///
 /// This adds the planned schedulers and actions to the spec, and updates
 /// job scheduler assignments.
-pub fn apply_plan_to_spec(plan: &SchedulerPlan, spec: &mut WorkflowSpec) {
+pub(crate) fn apply_plan_to_spec(plan: &SchedulerPlan, spec: &mut WorkflowSpec) {
     // Convert planned schedulers to SlurmSchedulerSpec
     let schedulers: Vec<SlurmSchedulerSpec> = plan
         .schedulers

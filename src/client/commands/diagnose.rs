@@ -80,7 +80,7 @@ struct PackingDiagnosis {
 }
 
 /// Entry point for `torc workflows diagnose`.
-pub fn diagnose_packing(config: &Configuration, workflow_id: Option<i64>, format: &str) {
+pub(crate) fn diagnose_packing(config: &Configuration, workflow_id: Option<i64>, format: &str) {
     let user = get_env_user_name();
     let workflow_id = match workflow_id {
         Some(id) => id,

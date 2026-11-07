@@ -13,71 +13,71 @@ use crate::models::SlurmSchedulerModel;
 #[derive(Debug, Clone, Default)]
 pub struct SlurmSchedulersListParams {
     /// Workflow ID to list slurm schedulers from
-    pub workflow_id: i64,
+    pub(crate) workflow_id: i64,
     /// Pagination offset
-    pub offset: i64,
+    pub(crate) offset: i64,
     /// Maximum number of records to return
-    pub limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Field to sort by
-    pub sort_by: Option<String>,
+    pub(crate) sort_by: Option<String>,
     /// Reverse sort order
-    pub reverse_sort: Option<bool>,
+    pub(crate) reverse_sort: Option<bool>,
     /// Filter by name
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
     /// Filter by account
-    pub account: Option<String>,
+    pub(crate) account: Option<String>,
     /// Filter by gres
-    pub gres: Option<String>,
+    pub(crate) gres: Option<String>,
     /// Filter by mem
-    pub mem: Option<String>,
+    pub(crate) mem: Option<String>,
     /// Filter by nodes
-    pub nodes: Option<i64>,
+    pub(crate) nodes: Option<i64>,
     /// Filter by partition
-    pub partition: Option<String>,
+    pub(crate) partition: Option<String>,
     /// Filter by qos
-    pub qos: Option<String>,
+    pub(crate) qos: Option<String>,
     /// Filter by tmp
-    pub tmp: Option<String>,
+    pub(crate) tmp: Option<String>,
     /// Filter by walltime
-    pub walltime: Option<String>,
+    pub(crate) walltime: Option<String>,
 }
 
 impl SlurmSchedulersListParams {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_offset(mut self, offset: i64) -> Self {
+    pub(crate) fn with_offset(mut self, offset: i64) -> Self {
         self.offset = offset;
         self
     }
 
-    pub fn with_limit(mut self, limit: i64) -> Self {
+    pub(crate) fn with_limit(mut self, limit: i64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn with_sort_by(mut self, sort_by: String) -> Self {
+    fn with_sort_by(mut self, sort_by: String) -> Self {
         self.sort_by = Some(sort_by);
         self
     }
 
-    pub fn with_reverse_sort(mut self, reverse: bool) -> Self {
+    fn with_reverse_sort(mut self, reverse: bool) -> Self {
         self.reverse_sort = Some(reverse);
         self
     }
 
-    pub fn with_name(mut self, name: String) -> Self {
+    fn with_name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
 
-    pub fn with_account(mut self, account: String) -> Self {
+    fn with_account(mut self, account: String) -> Self {
         self.account = Some(account);
         self
     }
 
-    pub fn with_partition(mut self, partition: String) -> Self {
+    fn with_partition(mut self, partition: String) -> Self {
         self.partition = Some(partition);
         self
     }
@@ -131,7 +131,7 @@ impl Paginatable for SlurmSchedulerModel {
 }
 
 /// Type alias for the slurm schedulers iterator
-pub type SlurmSchedulersIterator = PaginatedIterator<SlurmSchedulerModel>;
+type SlurmSchedulersIterator = PaginatedIterator<SlurmSchedulerModel>;
 
 /// Create a lazy iterator for slurm schedulers that fetches pages on-demand.
 ///
@@ -142,7 +142,7 @@ pub type SlurmSchedulersIterator = PaginatedIterator<SlurmSchedulerModel>;
 ///
 /// # Returns
 /// An iterator that yields `Result<SlurmSchedulerModel, Error>` items
-pub fn iter_slurm_schedulers(
+fn iter_slurm_schedulers(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: SlurmSchedulersListParams,
@@ -162,7 +162,7 @@ pub fn iter_slurm_schedulers(
 /// # Returns
 /// `Result<Vec<SlurmSchedulerModel>, Error>` containing all slurm schedulers or an error
 #[allow(clippy::result_large_err)]
-pub fn paginate_slurm_schedulers(
+pub(crate) fn paginate_slurm_schedulers(
     config: &apis::configuration::Configuration,
     workflow_id: i64,
     params: SlurmSchedulersListParams,

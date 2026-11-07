@@ -44,11 +44,11 @@ pub trait RemoteWorkersApi<C> {
 /// Implementation of remote workers API for the server
 #[derive(Clone)]
 pub struct RemoteWorkersApiImpl {
-    pub context: ApiContext,
+    context: ApiContext,
 }
 
 impl RemoteWorkersApiImpl {
-    pub fn new(context: ApiContext) -> Self {
+    pub(crate) fn new(context: ApiContext) -> Self {
         Self { context }
     }
 }
