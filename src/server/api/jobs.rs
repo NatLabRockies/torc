@@ -36,15 +36,55 @@ pub struct ClaimStart {
     pub compute_node_id: i64,
 }
 
+impl ClaimStart {
+    /// Build from a claim's optional query parameters, which must be passed together.
+    pub fn from_query(
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
+    ) -> Result<Option<Self>, String> {
+        match (run_id, compute_node_id) {
+            (None, None) => Ok(None),
+            (Some(run_id), Some(compute_node_id)) => Ok(Some(Self {
+                run_id,
+                compute_node_id,
+            })),
+            _ => Err("run_id and compute_node_id must be passed together".to_string()),
+        }
+    }
+}
+
+/// Message returned when `finish_claim` rejects a claim's start fields.
+pub const CLAIM_START_MISMATCH: &str =
+    "run_id is not the workflow's current run or compute_node_id is not a node of this workflow";
+
 /// Finish a claim inside its write transaction: attach output file and user_data IDs
 /// to the claimed jobs and mark them pending, or running when `start` is set.
+///
+/// Returns false, changing nothing, when `start` names a run other than the workflow's
+/// current one or a compute node outside the workflow. The check runs under the claim's
+/// write lock so a concurrent reset cannot hand the new run's jobs to a stale runner.
 pub(crate) async fn finish_claim(
     conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
     jobs: &mut [models::JobModel],
     start: Option<ClaimStart>,
-) -> Result<(), sqlx::Error> {
+) -> Result<bool, sqlx::Error> {
     if jobs.is_empty() {
-        return Ok(());
+        return Ok(true);
+    }
+    if let Some(s) = start {
+        let valid = sqlx::query(
+            "SELECT 1 FROM workflow w JOIN compute_node cn ON cn.workflow_id = w.id \
+             WHERE w.id = ? AND w.run_id = ? AND cn.id = ?",
+        )
+        .bind(workflow_id)
+        .bind(s.run_id)
+        .bind(s.compute_node_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+        if valid.is_none() {
+            return Ok(false);
+        }
     }
     let ids = jobs
         .iter()
@@ -111,7 +151,7 @@ pub(crate) async fn finish_claim(
             job.status = Some(JobStatus::Pending);
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Per-job values prepared during the first pass of bulk `create_jobs` so the
@@ -2703,10 +2743,19 @@ where
             selected_jobs.push(job);
         }
 
-        if let Err(e) = finish_claim(&mut conn, &mut selected_jobs, start).await {
-            error!("Failed to finish claim for workflow_id={}: {}", id, e);
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            return Err(ApiError("Database update error".to_string()));
+        match finish_claim(&mut conn, id, &mut selected_jobs, start).await {
+            Ok(true) => {}
+            Ok(false) => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(CLAIM_START_MISMATCH),
+                ));
+            }
+            Err(e) => {
+                error!("Failed to finish claim for workflow_id={}: {}", id, e);
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Err(ApiError("Database update error".to_string()));
+            }
         }
 
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {

@@ -1230,6 +1230,48 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
         .is_err()
     );
 
+    // A compute node from another workflow is rejected.
+    let other_workflow_id = create_many_jobs_workflow(config, true, 1)
+        .values()
+        .next()
+        .unwrap()
+        .workflow_id;
+    let other_node_id = create_test_compute_node(config, other_workflow_id)
+        .id
+        .unwrap();
+    assert!(
+        apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(1),
+            None,
+            Some(run_id),
+            Some(other_node_id),
+        )
+        .is_err()
+    );
+    // Rejected claims leave every job ready.
+    let ready = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        Some(models::JobStatus::Ready),
+        None,
+        None,
+        None,
+        Some(100),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    assert_eq!(ready.len(), 10);
+
     let claimed = apis::workflows_api::claim_next_jobs(
         config,
         workflow_id,

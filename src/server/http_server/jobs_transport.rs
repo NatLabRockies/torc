@@ -1,5 +1,5 @@
 use super::*;
-use crate::server::api::jobs::{ClaimStart, finish_claim};
+use crate::server::api::jobs::{CLAIM_START_MISMATCH, ClaimStart, finish_claim};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -1180,7 +1180,7 @@ where
             ));
         }
 
-        let start = match self.resolve_claim_start(id, run_id, compute_node_id).await {
+        let start = match ClaimStart::from_query(run_id, compute_node_id) {
             Ok(start) => start,
             Err(e) => {
                 return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
@@ -2816,13 +2816,24 @@ where
             return Err(e);
         }
 
-        if let Err(e) = finish_claim(&mut conn, &mut selected_jobs, start).await {
-            error!(
-                "Failed to finish claim for workflow_id={}: {}",
-                workflow_id, e
-            );
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            return Err(ApiError("Database update error".to_string()));
+        match finish_claim(&mut conn, workflow_id, &mut selected_jobs, start).await {
+            Ok(true) => {}
+            Ok(false) => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Ok(
+                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                        message_error_response(CLAIM_START_MISMATCH),
+                    ),
+                );
+            }
+            Err(e) => {
+                error!(
+                    "Failed to finish claim for workflow_id={}: {}",
+                    workflow_id, e
+                );
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Err(ApiError("Database update error".to_string()));
+            }
         }
 
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {

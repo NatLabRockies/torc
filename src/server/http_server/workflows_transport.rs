@@ -639,7 +639,8 @@ where
             ));
         }
 
-        let start = match self.resolve_claim_start(id, run_id, compute_node_id).await {
+        let start = match crate::server::api::jobs::ClaimStart::from_query(run_id, compute_node_id)
+        {
             Ok(start) => start,
             Err(e) => {
                 return Ok(

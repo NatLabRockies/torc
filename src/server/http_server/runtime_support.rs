@@ -313,26 +313,6 @@ impl<C> Server<C> {
         Ok(())
     }
 
-    /// Validate the optional start fields of a claim request. They must be passed together.
-    pub(super) async fn resolve_claim_start(
-        &self,
-        workflow_id: i64,
-        run_id: Option<i64>,
-        compute_node_id: Option<i64>,
-    ) -> Result<Option<ClaimStart>, String> {
-        match (run_id, compute_node_id) {
-            (None, None) => Ok(None),
-            (Some(run_id), Some(compute_node_id)) => {
-                self.validate_run_id(workflow_id, run_id).await?;
-                Ok(Some(ClaimStart {
-                    run_id,
-                    compute_node_id,
-                }))
-            }
-            _ => Err("run_id and compute_node_id must be passed together".to_string()),
-        }
-    }
-
     /// Broadcast a `job_started` event for each job a claim marked running.
     pub(super) fn broadcast_jobs_started(&self, jobs: &[models::JobModel], start: ClaimStart) {
         let timestamp = chrono::Utc::now().timestamp_millis();
