@@ -1,5 +1,6 @@
 use super::*;
 use crate::server::api::ResourceRequirementsApi;
+use crate::server::api::jobs::ClaimStart;
 
 impl<C> Server<C> {
     /// Create a depends-on association between two jobs based on file dependencies.
@@ -310,5 +311,44 @@ impl<C> Server<C> {
         }
 
         Ok(())
+    }
+
+    /// Validate the optional start fields of a claim request. They must be passed together.
+    pub(super) async fn resolve_claim_start(
+        &self,
+        workflow_id: i64,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
+    ) -> Result<Option<ClaimStart>, String> {
+        match (run_id, compute_node_id) {
+            (None, None) => Ok(None),
+            (Some(run_id), Some(compute_node_id)) => {
+                self.validate_run_id(workflow_id, run_id).await?;
+                Ok(Some(ClaimStart {
+                    run_id,
+                    compute_node_id,
+                }))
+            }
+            _ => Err("run_id and compute_node_id must be passed together".to_string()),
+        }
+    }
+
+    /// Broadcast a `job_started` event for each job a claim marked running.
+    pub(super) fn broadcast_jobs_started(&self, jobs: &[models::JobModel], start: ClaimStart) {
+        let timestamp = chrono::Utc::now().timestamp_millis();
+        for job in jobs {
+            self.event_broadcaster.broadcast(BroadcastEvent {
+                workflow_id: job.workflow_id,
+                timestamp,
+                event_type: "job_started".to_string(),
+                severity: models::EventSeverity::Info,
+                data: serde_json::json!({
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "compute_node_id": start.compute_node_id,
+                    "run_id": start.run_id,
+                }),
+            });
+        }
     }
 }

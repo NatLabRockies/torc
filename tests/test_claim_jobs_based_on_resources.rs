@@ -19,9 +19,16 @@ fn test_claim_jobs_based_on_resources_honors_limit(start_server: &ServerProcess)
         .workflow_id;
 
     let resources = models::ComputeNodesResources::new(2, 2.0, 0, 1);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 2, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        2,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 2);
@@ -75,6 +82,8 @@ fn test_claim_jobs_based_on_resources_priority_ordering(start_server: &ServerPro
         1,
         resources.clone(),
         None,
+        None,
+        None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
     let first_jobs = first.jobs.expect("Server must return jobs array");
@@ -87,15 +96,24 @@ fn test_claim_jobs_based_on_resources_priority_ordering(start_server: &ServerPro
         1,
         resources.clone(),
         None,
+        None,
+        None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
     let second_jobs = second.jobs.expect("Server must return jobs array");
     assert_eq!(second_jobs.len(), 1);
     assert_eq!(second_jobs[0].priority, Some(5));
 
-    let third =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 1, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let third = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        1,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
     let third_jobs = third.jobs.expect("Server must return jobs array");
     assert_eq!(third_jobs.len(), 1);
     assert_eq!(third_jobs[0].priority, Some(0));
@@ -139,9 +157,16 @@ fn test_claim_jobs_based_on_resources_skips_high_priority_job_that_does_not_fit(
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 2, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        2,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1);
@@ -201,9 +226,16 @@ fn test_claim_jobs_based_on_resources_prefers_gpu_jobs_with_equal_priority(
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(4, 8.0, 2, 1);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 4, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        4,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     let returned_names: Vec<&str> = returned_jobs.iter().map(|job| job.name.as_str()).collect();
@@ -263,9 +295,16 @@ fn test_claim_jobs_based_on_resources_scans_past_limit_for_runnable_jobs(
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 2, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        2,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1);
@@ -315,9 +354,16 @@ fn test_claim_jobs_based_on_resources_backfills_after_gpu_saturates(start_server
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(4, 4.0, 1, 1);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 4, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        4,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     let gpu_count = returned_jobs
@@ -403,6 +449,8 @@ fn test_claim_jobs_based_on_resources_backfill_uses_relaxed_scheduler_fallback(
         4,
         resources,
         Some(false),
+        None,
+        None,
     )
     .expect("claim_jobs_based_on_resources should succeed");
 
@@ -479,9 +527,16 @@ fn test_claim_jobs_based_on_resources_backfill_short_circuits_when_saturated(
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(1, 1.0, 1, 1);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 4, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        4,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1);
@@ -565,9 +620,16 @@ fn test_claim_jobs_based_on_resources_backfill_enforces_per_node_limits(
         .expect("Failed to initialize jobs");
 
     let resources = models::ComputeNodesResources::new(4, 4.0, 1, 2);
-    let result =
-        apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 4, resources, None)
-            .expect("claim_jobs_based_on_resources should succeed");
+    let result = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        4,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim_jobs_based_on_resources should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     let returned_names: Vec<&str> = returned_jobs.iter().map(|job| job.name.as_str()).collect();
@@ -629,6 +691,8 @@ fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
         1,
         resources.clone(),
         Some(true),
+        None,
+        None,
     )
     .expect("strict claim should succeed");
     assert_eq!(
@@ -643,6 +707,8 @@ fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
         1,
         resources,
         Some(false),
+        None,
+        None,
     )
     .expect("relaxed claim should succeed");
     let returned_jobs = relaxed.jobs.expect("Server must return jobs array");

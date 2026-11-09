@@ -120,8 +120,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **claim_jobs_based_on_resources**
-> claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing) -> ClaimJobsBasedOnResources, OpenAPI.Clients.ApiResponse <br/>
-> claim_jobs_based_on_resources(_api::WorkflowsApi, response_stream::Channel, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing) -> Channel{ ClaimJobsBasedOnResources }, OpenAPI.Clients.ApiResponse
+> claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing) -> ClaimJobsBasedOnResources, OpenAPI.Clients.ApiResponse <br/>
+> claim_jobs_based_on_resources(_api::WorkflowsApi, response_stream::Channel, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing) -> Channel{ ClaimJobsBasedOnResources }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -139,6 +139,8 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **strict_scheduler_match** | **Bool** |  | [default to nothing]
+ **run_id** | **Int64** | Current run ID. Pass with &#x60;compute_node_id&#x60; to mark the claimed jobs running in the claim itself instead of calling &#x60;start_job&#x60; for each job. | [default to nothing]
+ **compute_node_id** | **Int64** | Compute node that will run the claimed jobs. Pass with &#x60;run_id&#x60;. | [default to nothing]
 
 ### Return type
 
@@ -156,8 +158,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **claim_next_jobs**
-> claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing) -> ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing) -> Channel{ ClaimNextJobsResponse }, OpenAPI.Clients.ApiResponse
+> claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing) -> ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, labels=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing) -> Channel{ ClaimNextJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -174,6 +176,8 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **limit** | **Int64** |  | [default to nothing]
  **labels** | **String** | Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are. | [default to nothing]
+ **run_id** | **Int64** | Current run ID. Pass with &#x60;compute_node_id&#x60; to mark the claimed jobs running in the claim itself instead of calling &#x60;start_job&#x60; for each job. | [default to nothing]
+ **compute_node_id** | **Int64** | Compute node that will run the claimed jobs. Pass with &#x60;run_id&#x60;. | [default to nothing]
 
 ### Return type
 

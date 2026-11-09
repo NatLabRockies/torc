@@ -105,11 +105,13 @@ const _returntypes_claim_jobs_based_on_resources_WorkflowsApi = Dict{Regex,Type}
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing)
+function _oacinternal_claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_claim_jobs_based_on_resources_WorkflowsApi, "/workflows/{id}/claim_jobs_based_on_resources/{limit}", [], compute_nodes_resources)
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "limit", limit)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "strict_scheduler_match", strict_scheduler_match; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "compute_node_id", compute_node_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
@@ -120,16 +122,18 @@ end
 - limit::Int64 (required)
 - compute_nodes_resources::ComputeNodesResources (required)
 - strict_scheduler_match::Bool
+- run_id::Int64
+- compute_node_id::Int64
 
 Return: ClaimJobsBasedOnResources, OpenAPI.Clients.ApiResponse
 """
-function claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_claim_jobs_based_on_resources(_api, id, limit, compute_nodes_resources; strict_scheduler_match=strict_scheduler_match, _mediaType=_mediaType)
+function claim_jobs_based_on_resources(_api::WorkflowsApi, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_claim_jobs_based_on_resources(_api, id, limit, compute_nodes_resources; strict_scheduler_match=strict_scheduler_match, run_id=run_id, compute_node_id=compute_node_id, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function claim_jobs_based_on_resources(_api::WorkflowsApi, response_stream::Channel, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_claim_jobs_based_on_resources(_api, id, limit, compute_nodes_resources; strict_scheduler_match=strict_scheduler_match, _mediaType=_mediaType)
+function claim_jobs_based_on_resources(_api::WorkflowsApi, response_stream::Channel, id::Int64, limit::Int64, compute_nodes_resources::ComputeNodesResources; strict_scheduler_match=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_claim_jobs_based_on_resources(_api, id, limit, compute_nodes_resources; strict_scheduler_match=strict_scheduler_match, run_id=run_id, compute_node_id=compute_node_id, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -141,11 +145,13 @@ const _returntypes_claim_next_jobs_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing)
+function _oacinternal_claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_claim_next_jobs_WorkflowsApi, "/workflows/{id}/claim_next_jobs", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "labels", labels; style="form", is_explode=true)  # type String
+    OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "compute_node_id", compute_node_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -155,16 +161,18 @@ end
 - id::Int64 (required)
 - limit::Int64
 - labels::String
+- run_id::Int64
+- compute_node_id::Int64
 
 Return: ClaimNextJobsResponse, OpenAPI.Clients.ApiResponse
 """
-function claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, labels=labels, _mediaType=_mediaType)
+function claim_next_jobs(_api::WorkflowsApi, id::Int64; limit=nothing, labels=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, labels=labels, run_id=run_id, compute_node_id=compute_node_id, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, labels=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, labels=labels, _mediaType=_mediaType)
+function claim_next_jobs(_api::WorkflowsApi, response_stream::Channel, id::Int64; limit=nothing, labels=nothing, run_id=nothing, compute_node_id=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_claim_next_jobs(_api, id; limit=limit, labels=labels, run_id=run_id, compute_node_id=compute_node_id, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

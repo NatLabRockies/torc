@@ -164,6 +164,8 @@ fn execute_workflow_with_job(
         10,
         resources,
         None,
+        None,
+        None,
     )?;
     let returned_jobs = result.jobs.expect("Server must return jobs array");
 
@@ -1123,6 +1125,8 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
         10,
         resources,
         None,
+        None,
+        None,
     )
     .expect("Failed to prepare jobs for submission");
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -1338,6 +1342,8 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
         10,
         resources,
         None,
+        None,
+        None,
     )
     .expect("Failed to claim jobs");
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -1437,6 +1443,8 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("claim_jobs_based_on_resources should succeed");

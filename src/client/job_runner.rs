@@ -1013,6 +1013,24 @@ impl JobRunner {
         Ok(file_model)
     }
 
+    fn get_resource_requirements_cached(
+        &self,
+        cache: &mut HashMap<i64, ResourceRequirementsModel>,
+        rr_id: i64,
+    ) -> Result<ResourceRequirementsModel, Box<dyn std::error::Error>> {
+        if let Some(rr) = cache.get(&rr_id) {
+            return Ok(rr.clone());
+        }
+        let rr = self.send_with_retries(|| {
+            Self::box_retry_error(apis::resource_requirements_api::get_resource_requirements(
+                &self.config,
+                rr_id,
+            ))
+        })?;
+        cache.insert(rr_id, rr.clone());
+        Ok(rr)
+    }
+
     fn cache_file_model(&mut self, file_id: i64, file_model: FileModel) {
         self.file_model_cache.insert(file_id, file_model);
     }
@@ -3110,6 +3128,8 @@ impl JobRunner {
                 limit,
                 per_node.clone(),
                 Some(strict_scheduler_match),
+                Some(self.run_id),
+                Some(self.compute_node_id),
             ))
         }) {
             Ok(response) => {
@@ -3132,6 +3152,10 @@ impl JobRunner {
 
                 self.last_job_claimed_time = Some(Instant::now());
 
+                // The claim marked these jobs running; a failed start below reverts the job.
+                // Jobs in one claim usually share a few resource requirements, so fetch each
+                // once per claim. Not cached longer, so resource corrections take effect.
+                let mut rr_cache = HashMap::new();
                 for job in jobs {
                     let job_id = job.id.expect("Job must have an ID");
                     let rr_id = job
@@ -3140,14 +3164,7 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
                     let effective_job_env = async_job.job.env.clone();
 
-                    let job_rr = match self.send_with_retries(|| {
-                        Self::box_retry_error(
-                            apis::resource_requirements_api::get_resource_requirements(
-                                &self.config,
-                                rr_id,
-                            ),
-                        )
-                    }) {
+                    let job_rr = match self.get_resource_requirements_cached(&mut rr_cache, rr_id) {
                         Ok(rr) => rr,
                         Err(e) => {
                             error!(
@@ -3160,26 +3177,25 @@ impl JobRunner {
                         }
                     };
 
-                    match self.send_with_retries(|| {
-                        Self::box_retry_error(apis::jobs_api::start_job(
-                            &self.config,
-                            job_id,
-                            self.run_id,
-                            self.compute_node_id,
-                        ))
-                    }) {
-                        Ok(_) => {
-                            debug!("Successfully marked job {} as started in database", job_id);
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to mark job as started after retries \
-                                 workflow_id={} job_id={}: {}",
-                                self.workflow_id, job_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
+                    // A server older than API 0.24 ignores the start fields of the claim and
+                    // returns pending jobs; mark them running here instead.
+                    if async_job.job.status == Some(JobStatus::Pending)
+                        && let Err(e) = self.send_with_retries(|| {
+                            Self::box_retry_error(apis::jobs_api::start_job(
+                                &self.config,
+                                job_id,
+                                self.run_id,
+                                self.compute_node_id,
+                            ))
+                        })
+                    {
+                        error!(
+                            "Failed to mark job as started after retries \
+                             workflow_id={} job_id={}: {}",
+                            self.workflow_id, job_id, e
+                        );
+                        self.revert_job_to_ready(job_id);
+                        continue;
                     }
 
                     let attempt_id = async_job.job.attempt_id.unwrap_or(1);
@@ -3279,6 +3295,8 @@ impl JobRunner {
                 self.workflow_id,
                 Some(limit),
                 Some(&self.labels_query()),
+                Some(self.run_id),
+                Some(self.compute_node_id),
             ))
         }) {
             Ok(response) => {
@@ -3298,7 +3316,10 @@ impl JobRunner {
                 // Update last job claimed time since we got jobs
                 self.last_job_claimed_time = Some(Instant::now());
 
-                // Start each job asynchronously
+                // The claim marked these jobs running; a failed start below reverts the job.
+                // Jobs in one claim usually share a few resource requirements, so fetch each
+                // once per claim. Not cached longer, so resource corrections take effect.
+                let mut rr_cache = HashMap::new();
                 for job in jobs {
                     let job_id = job.id.expect("Job must have an ID");
                     let rr_id = job
@@ -3307,14 +3328,7 @@ impl JobRunner {
                     let mut async_job = AsyncCliCommand::new(job);
                     let effective_job_env = async_job.job.env.clone();
 
-                    let job_rr = match self.send_with_retries(|| {
-                        Self::box_retry_error(
-                            apis::resource_requirements_api::get_resource_requirements(
-                                &self.config,
-                                rr_id,
-                            ),
-                        )
-                    }) {
+                    let job_rr = match self.get_resource_requirements_cached(&mut rr_cache, rr_id) {
                         Ok(rr) => rr,
                         Err(e) => {
                             error!(
@@ -3327,27 +3341,25 @@ impl JobRunner {
                         }
                     };
 
-                    // Mark job as started in the database before actually starting it
-                    match self.send_with_retries(|| {
-                        Self::box_retry_error(apis::jobs_api::start_job(
-                            &self.config,
-                            job_id,
-                            self.run_id,
-                            self.compute_node_id,
-                        ))
-                    }) {
-                        Ok(_) => {
-                            debug!("Successfully marked job {} as started in database", job_id);
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to mark job as started after retries \
-                                 workflow_id={} job_id={}: {}",
-                                self.workflow_id, job_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
+                    // A server older than API 0.24 ignores the start fields of the claim and
+                    // returns pending jobs; mark them running here instead.
+                    if async_job.job.status == Some(JobStatus::Pending)
+                        && let Err(e) = self.send_with_retries(|| {
+                            Self::box_retry_error(apis::jobs_api::start_job(
+                                &self.config,
+                                job_id,
+                                self.run_id,
+                                self.compute_node_id,
+                            ))
+                        })
+                    {
+                        error!(
+                            "Failed to mark job as started after retries \
+                             workflow_id={} job_id={}: {}",
+                            self.workflow_id, job_id, e
+                        );
+                        self.revert_job_to_ready(job_id);
+                        continue;
                     }
 
                     let attempt_id = async_job.job.attempt_id.unwrap_or(1);

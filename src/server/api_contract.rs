@@ -932,22 +932,28 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<UpdateWorkflowResponse, ApiError>;
 
-    /// Return jobs that are ready for submission and meet worker resource. Set status to pending.
+    /// Return jobs that are ready for submission and meet worker resource. Set status to
+    /// pending, or running when run_id and compute_node_id are passed.
     async fn claim_jobs_based_on_resources(
         &self,
         id: i64,
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError>;
 
-    /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
+    /// Return user-requested number of jobs that are ready for submission. Sets status to
+    /// pending, or running when run_id and compute_node_id are passed.
     async fn claim_next_jobs(
         &self,
         id: i64,
         limit: Option<i64>,
         labels: Option<String>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 

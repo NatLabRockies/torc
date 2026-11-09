@@ -333,8 +333,8 @@ left to run. Standard orphan cleanup never touches them because Slurm still repo
 This cleanup runs automatically inside the **Slurm job runner**, so it happens for every workflow —
 no `torc watch` required. When a job runner stops (the workflow completed, or it has no more work),
 the head node of that allocation checks whether the workflow has any **runnable** jobs left — jobs
-in `Ready`, `Pending`, or `Running` status. If none remain, any still-`Queued` sibling Slurm
-allocation is unnecessary, so the runner:
+in `Ready` or `Running` status. If none remain, any still-`Queued` sibling Slurm allocation is
+unnecessary, so the runner:
 
 1. confirms the allocation is still queued in Slurm,
 2. issues `scancel` to release the queue slot,

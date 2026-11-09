@@ -105,8 +105,16 @@ fn claim_and_mark_running(
     job_id: i64,
 ) {
     let resources = models::ComputeNodesResources::new(64, 100.0, 0, 1);
-    apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 10, resources, None)
-        .expect("claim failed");
+    apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("claim failed");
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("set running failed");
 }

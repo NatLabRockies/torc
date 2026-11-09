@@ -353,6 +353,10 @@ This endpoint uses database-level write locks (`BEGIN IMMEDIATE TRANSACTION`) to
 multiple workers calling simultaneously will not receive the same jobs. Each job is allocated to
 exactly one worker.
 
+Pass `run_id` and `compute_node_id` with the claim: claimed jobs move straight to `running` with
+`start_time` and `compute_node_id` set, so the worker does not need to call `start_job` for each
+job.
+
 ### `claim_jobs_based_on_resources`
 
 Similar to `claim_next_jobs` but factors in resource requirements (CPU, memory, GPU) and available
@@ -392,7 +396,7 @@ Job status is stored and transmitted as integers (0-10):
 | 0     | uninitialized  |
 | 1     | blocked        |
 | 2     | ready          |
-| 3     | pending        |
+| 3     | (unused)       |
 | 4     | running        |
 | 5     | completed      |
 | 6     | failed         |

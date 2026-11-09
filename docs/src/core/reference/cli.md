@@ -545,9 +545,9 @@ do other work and resume with [`torc tasks wait`](#torc-tasks) later.
 
 ## `torc workflows reinit`
 
-Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
-pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
-user_data record has changed.
+Reinitialize a workflow. This will reinitialize all jobs with a status of canceled or terminated.
+Jobs with a status of done will also be reinitialized if an input_file or user_data record has
+changed.
 
 Reinitialization runs asynchronously on the server. By default the command blocks until the
 server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
@@ -596,8 +596,8 @@ Reset workflow and job status
 
 - `--failed-only` — Only reset failed jobs. Default: `false`
 - `-r`, `--reinitialize` — Reinitialize the workflow after resetting status. Default: `false`
-- `--force` — Force reset even if there are active jobs (ignores running/pending jobs check).
-  Default: `false`
+- `--force` — Force reset even if there are active jobs (ignores running jobs check). Default:
+  `false`
 - `--no-prompts` — Skip confirmation prompt
 
 ## `torc workflows execution-plan`
@@ -1371,7 +1371,7 @@ List results
 - `--return-code <RETURN_CODE>` — Filter by return code
 - `--failed` — Show only failed jobs (non-zero return code)
 - `-s`, `--status <STATUS>` — Filter by job status (uninitialized, blocked, canceled, terminated,
-  done, ready, scheduled, running, pending, disabled)
+  done, ready, scheduled, running, disabled)
 - `-l`, `--limit <LIMIT>` — Maximum number of results to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by

@@ -147,10 +147,10 @@ meaningful cost to doing so.
 
 - **Measure who holds the write lock.** The current warnings show waiting time, not which request
   types hold the lock and for how long. Timing in the transaction helper would show where time goes.
-- **Batch job starts.** Completions and claims are already batched, but the runner reports each job
-  start in its own request (`start_job`), one write transaction per job. Marking jobs as running in
-  the claim transaction, or a batch-start endpoint, would remove the one write transaction made for
-  every single job.
+- **Batch job starts (done after these runs).** The runner used to report each job start in its own
+  request (`start_job`), one write transaction per job. Claims now mark jobs running in the claim
+  transaction, and the runner fetches each resource requirement once per claim instead of once per
+  job. These runs predate the change.
 - **Spread out runner requests.** All runners poll on similar schedules; random jitter would smooth
   bursts. The backoff sweeps in run 4 test part of this.
 - **Release dependents on demand.** Starting the unblock step when a completion arrives, and folding

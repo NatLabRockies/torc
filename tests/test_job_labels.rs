@@ -62,8 +62,9 @@ fn test_claim_next_jobs_filters_by_label(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_claim_next_jobs");
     let claim = |label: Option<&str>| {
-        let response = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), label)
-            .expect("claim_next_jobs should succeed");
+        let response =
+            apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), label, None, None)
+                .expect("claim_next_jobs should succeed");
         names(response.jobs)
     };
 
@@ -90,6 +91,8 @@ fn test_claim_jobs_based_on_resources_filters_by_label(start_server: &ServerProc
             10,
             resources,
             None,
+            None,
+            None,
         )
         .expect("claim_jobs_based_on_resources should succeed");
         names(response.jobs)
@@ -108,8 +111,9 @@ fn test_claim_jobs_based_on_resources_filters_by_label(start_server: &ServerProc
 fn test_update_job_sets_label(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_update");
-    let response = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
-        .expect("claim_next_jobs should succeed");
+    let response =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
+            .expect("claim_next_jobs should succeed");
     let mut job = response.jobs.unwrap().remove(0);
     assert_eq!(job.labels, None);
 
@@ -175,9 +179,15 @@ fn test_status_reports_unserved_labels(start_server: &ServerProcess) {
 fn test_update_job_clears_label(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_labeled_workflow(config, "label_clear");
-    let response =
-        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), Some("windows"))
-            .expect("claim_next_jobs should succeed");
+    let response = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(1),
+        Some("windows"),
+        None,
+        None,
+    )
+    .expect("claim_next_jobs should succeed");
     let mut job = response.jobs.unwrap().remove(0);
     let job_id = job.id.unwrap();
 
@@ -250,8 +260,9 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
         "a rejected batch must not create any of its jobs, got {job_names:?}"
     );
 
-    let response = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
-        .expect("claim_next_jobs should succeed");
+    let response =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
+            .expect("claim_next_jobs should succeed");
     let mut job = response.jobs.unwrap().remove(0);
     let job_id = job.id.unwrap();
     job.labels = Some(vec!["windows ".to_string()]);
@@ -269,8 +280,15 @@ fn test_invalid_runner_labels_are_rejected(start_server: &ServerProcess) {
         // Comma-separated in the query string, so a blank entry is a padded label.
         let query = format!("windows,{bad}");
         assert!(
-            apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), Some(&query))
-                .is_err(),
+            apis::workflows_api::claim_next_jobs(
+                config,
+                workflow_id,
+                Some(1),
+                Some(&query),
+                None,
+                None
+            )
+            .is_err(),
             "label {bad:?} should be rejected by claim_next_jobs"
         );
 
@@ -282,6 +300,8 @@ fn test_invalid_runner_labels_are_rejected(start_server: &ServerProcess) {
                 workflow_id,
                 10,
                 resources,
+                None,
+                None,
                 None
             )
             .is_err(),

@@ -21,8 +21,7 @@ client-server architecture where:
 
 - **Workflows**: Top-level containers for related computational jobs with a unique ID
 - **Jobs**: Individual computational tasks with dependencies, resource requirements, and status
-  tracking (uninitialized → ready → scheduled → pending → running → running →
-  completed/failed/canceled)
+  tracking (uninitialized → ready → running → completed/failed/canceled)
 - **Files & User Data**: Input/output artifacts that establish implicit job dependencies
 - **Resource Requirements**: CPU, memory, GPU, and runtime specifications per job
 - **Schedulers**: Local or Slurm-based job execution environments
@@ -230,7 +229,7 @@ Job status values are stored as INTEGER (0-10) in the database, not strings:
 - 0 = uninitialized
 - 1 = blocked
 - 2 = ready
-- 3 = pending
+- 3 = unused (formerly pending)
 - 4 = running
 - 5 = completed
 - 6 = failed

@@ -66,8 +66,16 @@ fn claim_all_ready(config: &Configuration, workflow_id: i64) {
     apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
     let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
-    apis::workflows_api::claim_jobs_based_on_resources(config, workflow_id, 100, resources, None)
-        .expect("Failed to claim jobs");
+    apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        100,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to claim jobs");
 }
 
 /// Drive an already-claimed job to a terminal state by recording a result.

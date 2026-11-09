@@ -350,7 +350,7 @@ EXAMPLES:
         /// Reinitialize the workflow after resetting status
         #[arg(short, long, default_value = "false")]
         reinitialize: bool,
-        /// Force reset even if there are active jobs (ignores running/pending jobs check)
+        /// Force reset even if there are active jobs (ignores running jobs check)
         #[arg(long, default_value = "false")]
         force: bool,
         /// Skip confirmation prompt
@@ -398,7 +398,7 @@ EXAMPLES:
     },
     /// Reinitialize a workflow after changes
     ///
-    /// Reinitializes jobs that are canceled, submitting, pending, or terminated.
+    /// Reinitializes jobs that are canceled or terminated.
     /// Jobs that completed will also be reinitialized if their input data changed.
     #[command(
         name = "reinit",
@@ -1891,7 +1891,7 @@ fn handle_reset_status(
             eprintln!("The workflow will be reinitialized after reset.");
         }
         if force {
-            eprintln!("Force mode is enabled (will ignore running/pending jobs check).");
+            eprintln!("Force mode is enabled (will ignore running jobs check).");
         }
         eprint!("\nDo you want to continue? (y/N): ");
         io::stderr().flush().unwrap();

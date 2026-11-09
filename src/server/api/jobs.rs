@@ -28,6 +28,92 @@ use super::{
     serialize_env_map, validate_env_map,
 };
 
+/// Run and compute node a job runner passes with a claim. When present, the claim marks
+/// the jobs running in its own transaction, replacing one `start_job` call per job.
+#[derive(Debug, Clone, Copy)]
+pub struct ClaimStart {
+    pub run_id: i64,
+    pub compute_node_id: i64,
+}
+
+/// Finish a claim inside its write transaction: attach output file and user_data IDs
+/// to the claimed jobs and mark them pending, or running when `start` is set.
+pub(crate) async fn finish_claim(
+    conn: &mut sqlx::SqliteConnection,
+    jobs: &mut [models::JobModel],
+    start: Option<ClaimStart>,
+) -> Result<(), sqlx::Error> {
+    if jobs.is_empty() {
+        return Ok(());
+    }
+    let ids = jobs
+        .iter()
+        .filter_map(|j| j.id)
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let mut files: HashMap<i64, Vec<i64>> = HashMap::new();
+    let sql = format!("SELECT job_id, file_id FROM job_output_file WHERE job_id IN ({ids})");
+    for row in sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .fetch_all(&mut *conn)
+        .await?
+    {
+        files
+            .entry(row.get("job_id"))
+            .or_default()
+            .push(row.get("file_id"));
+    }
+    let mut user_data: HashMap<i64, Vec<i64>> = HashMap::new();
+    let sql =
+        format!("SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN ({ids})");
+    for row in sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .fetch_all(&mut *conn)
+        .await?
+    {
+        user_data
+            .entry(row.get("job_id"))
+            .or_default()
+            .push(row.get("user_data_id"));
+    }
+
+    let start_time = start.map(|_| Utc::now().to_rfc3339());
+    match start {
+        Some(s) => {
+            let sql = format!(
+                "UPDATE job SET status = ?, start_time = ?, compute_node_id = ? WHERE id IN ({ids})"
+            );
+            sqlx::query(sqlx::AssertSqlSafe(&*sql))
+                .bind(JobStatus::Running.to_int())
+                .bind(&start_time)
+                .bind(s.compute_node_id)
+                .execute(&mut *conn)
+                .await?;
+        }
+        None => {
+            let sql = format!("UPDATE job SET status = ? WHERE id IN ({ids})");
+            sqlx::query(sqlx::AssertSqlSafe(&*sql))
+                .bind(JobStatus::Pending.to_int())
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+
+    for job in jobs {
+        let id = job.id.unwrap_or_default();
+        job.output_file_ids = files.remove(&id);
+        job.output_user_data_ids = user_data.remove(&id);
+        if let Some(s) = start {
+            job.status = Some(JobStatus::Running);
+            job.start_time.clone_from(&start_time);
+            job.compute_node_id = Some(s.compute_node_id);
+        } else {
+            job.status = Some(JobStatus::Pending);
+        }
+    }
+    Ok(())
+}
+
 /// Per-job values prepared during the first pass of bulk `create_jobs` so the
 /// chunked INSERT in the second pass can stay infallible. `env_serialized` and the
 /// per-job booleans/priority that get NULL/default coalescing in the single-row
@@ -190,6 +276,7 @@ pub trait JobsApi<C> {
         id: i64,
         requested_job_count: i64,
         labels: Option<String>,
+        start: Option<ClaimStart>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 
@@ -2485,6 +2572,7 @@ where
         id: i64,
         requested_job_count: i64,
         labels: Option<String>,
+        start: Option<ClaimStart>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
@@ -2581,11 +2669,9 @@ where
         );
 
         let mut selected_jobs = Vec::new();
-        let mut job_ids_to_update = Vec::new();
 
         for row in rows {
             let job_id: i64 = row.get("job_id");
-            job_ids_to_update.push(job_id);
 
             let job = models::JobModel {
                 id: Some(job_id),
@@ -2617,92 +2703,10 @@ where
             selected_jobs.push(job);
         }
 
-        let mut output_files_map: HashMap<i64, Vec<i64>> = HashMap::new();
-        let mut output_user_data_map: HashMap<i64, Vec<i64>> = HashMap::new();
-
-        if !job_ids_to_update.is_empty() {
-            let output_files = match sqlx::query(
-                "SELECT job_id, file_id FROM job_output_file WHERE workflow_id = $1",
-            )
-            .bind(id)
-            .fetch_all(&mut *conn)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output files: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_files {
-                let job_id: i64 = row.get("job_id");
-                let file_id: i64 = row.get("file_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_files_map.entry(job_id).or_default().push(file_id);
-                }
-            }
-
-            let output_user_data = match sqlx::query(
-                "SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN (SELECT id FROM job WHERE workflow_id = $1)",
-            )
-            .bind(id)
-            .fetch_all(&mut *conn)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output user_data: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_user_data {
-                let job_id: i64 = row.get("job_id");
-                let user_data_id: i64 = row.get("user_data_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_user_data_map
-                        .entry(job_id)
-                        .or_default()
-                        .push(user_data_id);
-                }
-            }
-        }
-
-        for job in &mut selected_jobs {
-            if let Some(job_id) = job.id {
-                job.output_file_ids = output_files_map.get(&job_id).cloned();
-                job.output_user_data_ids = output_user_data_map.get(&job_id).cloned();
-            }
-        }
-
-        if !job_ids_to_update.is_empty() {
-            let pending = models::JobStatus::Pending.to_int();
-            let job_ids_str = job_ids_to_update
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",");
-            let sql = format!(
-                "UPDATE job SET status = {} WHERE id IN ({})",
-                pending, job_ids_str
-            );
-            if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql))
-                .execute(&mut *conn)
-                .await
-            {
-                error!("Failed to update job status: {}", e);
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                return Err(ApiError("Database update error".to_string()));
-            }
-
-            debug!(
-                "Updated {} jobs to pending status for workflow {}",
-                job_ids_to_update.len(),
-                id
-            );
+        if let Err(e) = finish_claim(&mut conn, &mut selected_jobs, start).await {
+            error!("Failed to finish claim for workflow_id={}: {}", id, e);
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            return Err(ApiError("Database update error".to_string()));
         }
 
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {

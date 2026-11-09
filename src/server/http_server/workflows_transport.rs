@@ -590,16 +590,20 @@ where
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         log_call!(
             debug,
             context,
-            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?})",
+            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?}, run_id={:?}, compute_node_id={:?})",
             id,
             body,
             limit,
             strict_scheduler_match,
+            run_id,
+            compute_node_id,
         );
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
@@ -635,7 +639,24 @@ where
             ));
         }
 
-        self.transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, context)
-            .await
+        let start = match self.resolve_claim_start(id, run_id, compute_node_id).await {
+            Ok(start) => start,
+            Err(e) => {
+                return Ok(
+                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                        message_error_response(e),
+                    ),
+                );
+            }
+        };
+
+        let response = self
+            .transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, start, context)
+            .await?;
+        if let (Some(start), ClaimJobsBasedOnResources::SuccessfulResponse(r)) = (start, &response)
+        {
+            self.broadcast_jobs_started(r.jobs.as_deref().unwrap_or_default(), start);
+        }
+        Ok(response)
     }
 }

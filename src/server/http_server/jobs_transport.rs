@@ -1,4 +1,5 @@
 use super::*;
+use crate::server::api::jobs::{ClaimStart, finish_claim};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -1154,15 +1155,19 @@ where
         id: i64,
         limit: Option<i64>,
         labels: Option<String>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         log_call!(
             debug,
             context,
-            "claim_next_jobs({}, {:?}, labels={:?})",
+            "claim_next_jobs({}, {:?}, labels={:?}, run_id={:?}, compute_node_id={:?})",
             id,
             limit,
-            labels
+            labels,
+            run_id,
+            compute_node_id
         );
 
         authorize_workflow!(self, id, context, ClaimNextJobsResponse);
@@ -1175,10 +1180,24 @@ where
             ));
         }
 
+        let start = match self.resolve_claim_start(id, run_id, compute_node_id).await {
+            Ok(start) => start,
+            Err(e) => {
+                return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(e),
+                ));
+            }
+        };
+
         let requested_limit = limit.unwrap_or(10);
-        self.jobs_api
-            .claim_next_jobs(id, requested_limit, labels, context)
-            .await
+        let response = self
+            .jobs_api
+            .claim_next_jobs(id, requested_limit, labels, start, context)
+            .await?;
+        if let (Some(start), ClaimNextJobsResponse::SuccessfulResponse(r)) = (start, &response) {
+            self.broadcast_jobs_started(r.jobs.as_deref().unwrap_or_default(), start);
+        }
+        Ok(response)
     }
 
     pub(super) async fn transport_process_changed_job_inputs(
@@ -2481,6 +2500,7 @@ where
         resources: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        start: Option<ClaimStart>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         let strict_scheduler_match = strict_scheduler_match.unwrap_or(false);
@@ -2796,92 +2816,13 @@ where
             return Err(e);
         }
 
-        let mut output_files_map: std::collections::HashMap<i64, Vec<i64>> =
-            std::collections::HashMap::new();
-        let mut output_user_data_map: std::collections::HashMap<i64, Vec<i64>> =
-            std::collections::HashMap::new();
-
-        if !job_ids_to_update.is_empty() {
-            let output_files = match sqlx::query(
-                "SELECT job_id, file_id FROM job_output_file WHERE workflow_id = $1",
-            )
-            .bind(workflow_id)
-            .fetch_all(&mut *conn)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output files: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_files {
-                let job_id: i64 = row.get("job_id");
-                let file_id: i64 = row.get("file_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_files_map.entry(job_id).or_default().push(file_id);
-                }
-            }
-
-            let output_user_data = match sqlx::query("SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN (SELECT id FROM job WHERE workflow_id = $1)")
-                .bind(workflow_id)
-                .fetch_all(&mut *conn)
-                .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output user_data: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_user_data {
-                let job_id: i64 = row.get("job_id");
-                let user_data_id: i64 = row.get("user_data_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_user_data_map
-                        .entry(job_id)
-                        .or_default()
-                        .push(user_data_id);
-                }
-            }
-        }
-
-        for job in &mut selected_jobs {
-            if let Some(job_id) = job.id {
-                job.output_file_ids = output_files_map.get(&job_id).cloned();
-                job.output_user_data_ids = output_user_data_map.get(&job_id).cloned();
-            }
-        }
-
-        if !job_ids_to_update.is_empty() {
-            let pending = models::JobStatus::Pending.to_int();
-            let job_ids_str = job_ids_to_update
-                .iter()
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
-            let sql = format!(
-                "UPDATE job SET status = {} WHERE id IN ({})",
-                pending, job_ids_str
+        if let Err(e) = finish_claim(&mut conn, &mut selected_jobs, start).await {
+            error!(
+                "Failed to finish claim for workflow_id={}: {}",
+                workflow_id, e
             );
-            if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql))
-                .execute(&mut *conn)
-                .await
-            {
-                error!("Failed to update job status: {}", e);
-                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                return Err(ApiError("Database update error".to_string()));
-            }
-
-            debug!(
-                "Updated {} jobs to pending status for workflow {}",
-                job_ids_to_update.len(),
-                workflow_id
-            );
+            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+            return Err(ApiError("Database update error".to_string()));
         }
 
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
