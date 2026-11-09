@@ -14,14 +14,8 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "quick-xml O(N²) DoS via plist/service-manager - no upstream upgrade available" },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml NsReader heap DoS via plist/service-manager - no upstream upgrade available" },
     { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via serde_yaml - unmaintained, no safe upgrade; replace serde_yaml separately" },
-    { id = "RUSTSEC-2026-0367", reason = "zip 7.x build-dep of plotly_kaleido (extracts kaleido binary at build time); fix requires zip 9, no upstream upgrade available" },
-    { id = "RUSTSEC-2026-0368", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
-    { id = "RUSTSEC-2026-0369", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
-    { id = "RUSTSEC-2026-0429", reason = "zip 7.x build-dep of plotly_kaleido; fix requires zip 9, no upstream upgrade available" },
     { id = "RUSTSEC-2026-0374", reason = "basic-toml via askama_derive (proc-macro, compile-time only) via plotly; latest askama_derive still requires it, no upstream upgrade available" },
-    { id = "RUSTSEC-2026-0391", reason = "zstd 0.13 via zip 7.x build-dep of plotly_kaleido; fix requires zstd 0.14, no upstream upgrade available" },
-    { id = "RUSTSEC-2026-0398", reason = "zstd-safe 7.x via zip 7.x build-dep of plotly_kaleido; fix requires zstd-safe 8.2, no upstream upgrade available" },
-    { id = "RUSTSEC-2026-0403", reason = "zstd-safe 7.x via zip 7.x build-dep of plotly_kaleido; fix requires zstd-safe 8.2, no upstream upgrade available" },
+    { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys 0.30 via sqlx-sqlite 0.9.0 and rusqlite; fix requires libsqlite3-sys 0.39 but sqlx 0.9.0 caps it at <0.38. Local-only, needs attacker-crafted db+wal pair" },
 ]
 
 # License compliance - permissive allow-list

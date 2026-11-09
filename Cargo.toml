@@ -63,7 +63,7 @@ crossterm = "0.29"
 petgraph = "0.8"
 
 # Plot-resources-specific
-plotly = { version = "0.14", default-features = false, features = ["kaleido"] }
+plotly = { version = "0.14", default-features = false }
 
 # Server-specific
 rust-embed = "8.5"
