@@ -28,6 +28,8 @@ where
         Err(err) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 
+    // Subscribe before returning the response: the client's `wait_for_task` re-polls as soon as
+    // the stream connects and relies on every later event being delivered.
     let mut receiver = server.subscribe_to_events();
     let stream = async_stream::stream! {
         loop {

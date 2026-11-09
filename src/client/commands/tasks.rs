@@ -127,6 +127,10 @@ pub fn wait_for_task(
                     return;
                 }
             };
+        // The server subscribes before responding, so events from here on are delivered.
+        // Wake the main loop to re-poll once: a task that finished before the subscription
+        // existed would otherwise go unnoticed until the next poll interval.
+        let _ = tx.send(());
 
         loop {
             if sse_shutdown.load(Ordering::Relaxed) {
@@ -159,26 +163,6 @@ pub fn wait_for_task(
             && Instant::now() >= deadline
         {
             return Err(WaitError::Timeout);
-        }
-
-        // If SSE notifies us, refresh the task state immediately.
-        if rx.try_recv().is_ok() {
-            match tasks_api::get_task(config, task_id) {
-                Ok(task) => {
-                    backoff.reset();
-                    return Ok(task);
-                }
-                Err(e) if is_retryable_get_task_error(&e) => {
-                    let delay = backoff.next_delay();
-                    eprintln!(
-                        "Warning: transient error getting task {} (SSE wake): {}; retrying in {:?}",
-                        task_id, e, delay
-                    );
-                    sleep_or_wake(&rx, delay);
-                    continue;
-                }
-                Err(e) => return Err(WaitError::Api(e.to_string())),
-            }
         }
 
         match tasks_api::get_task(config, task_id) {
