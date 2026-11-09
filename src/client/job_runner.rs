@@ -3177,7 +3177,7 @@ impl JobRunner {
                         }
                     };
 
-                    // A server older than API 0.24 ignores the start fields of the claim and
+                    // A server older than API 1.0 ignores the start fields of the claim and
                     // returns pending jobs; mark them running here instead.
                     if async_job.job.status == Some(JobStatus::Pending)
                         && let Err(e) = self.send_with_retries(|| {
@@ -3341,7 +3341,7 @@ impl JobRunner {
                         }
                     };
 
-                    // A server older than API 0.24 ignores the start fields of the claim and
+                    // A server older than API 1.0 ignores the start fields of the claim and
                     // returns pending jobs; mark them running here instead.
                     if async_job.job.status == Some(JobStatus::Pending)
                         && let Err(e) = self.send_with_retries(|| {
