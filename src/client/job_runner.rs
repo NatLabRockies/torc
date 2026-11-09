@@ -3831,10 +3831,10 @@ struct ComputeNodeRules {
     /// Does not apply if the workflow is complete.
     ///
     /// The default value must satisfy:
-    ///   compute_node_wait_for_new_jobs_seconds >= completion_check_interval_secs + job_completion_poll_interval
-    /// This ensures the worker doesn't exit before the server's background unblock task runs
-    /// and the worker polls for newly-ready jobs. With defaults of 30s for each interval,
-    /// the minimum safe value is 60s. We use 90s to provide a safety buffer.
+    ///   compute_node_wait_for_new_jobs_seconds >= unblock latency + job_completion_poll_interval
+    /// This ensures the worker doesn't exit before the server releases dependent jobs and the
+    /// worker polls for newly-ready jobs. The server releases dependents within about a second
+    /// of a completion; the poll interval defaults to 30s. We use 90s to provide a safety buffer.
     pub compute_node_wait_for_new_jobs_seconds: u64,
     /// Inform all compute nodes to ignore workflow completions and hold onto allocations indefinitely. Useful for debugging failed jobs and possibly dynamic workflows where jobs get added after starting.
     pub compute_node_ignore_workflow_completion: bool,

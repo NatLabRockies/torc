@@ -12,7 +12,6 @@ use log::{debug, error, info, warn};
 use sqlx::Row;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use tracing::instrument;
 
 use sqlx::sqlite::SqlitePool;
@@ -333,7 +332,6 @@ pub async fn create(
     require_auth: bool,
     credential_cache_ttl_secs: u64,
     enforce_access_control: bool,
-    completion_check_interval_secs: f64,
     admin_users: Vec<String>,
     #[allow(unused_variables)] tls_cert: Option<String>,
     #[allow(unused_variables)] tls_key: Option<String>,
@@ -349,7 +347,6 @@ pub async fn create(
         require_auth,
         credential_cache_ttl_secs,
         enforce_access_control,
-        completion_check_interval_secs,
         admin_users,
         tls_cert,
         tls_key,
@@ -406,11 +403,7 @@ impl<C> Server<C> {
 
     /// Signal that a job has completed. This wakes up the background unblock task.
     fn signal_job_completion(&self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(1);
-        self.last_completion_time.store(now, Ordering::Release);
+        self.completion_notify.notify_one();
     }
 
     /// Get a reference to the event broadcaster for SSE subscriptions.

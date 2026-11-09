@@ -120,30 +120,28 @@ See `hpc-profiles.md` for the profile and partition schema.
 
 Read by `torc-server`.
 
-| Option                           | Default   | Notes                                            |
-| -------------------------------- | --------- | ------------------------------------------------ |
-| `host`                           | `0.0.0.0` | Bind address; accepts `url` as an alias          |
-| `port`                           | `8080`    |                                                  |
-| `threads`                        | `1`       | Worker threads                                   |
-| `database`                       | unset     | SQLite path; falls back to `DATABASE_URL`        |
-| `log_level`                      | `info`    |                                                  |
-| `https`                          | `false`   | With `tls_cert` and `tls_key`                    |
-| `tls_cert` / `tls_key`           | unset     | PEM paths                                        |
-| `auth_file`                      | unset     | htpasswd file                                    |
-| `require_auth`                   | `false`   | Require authentication on all requests           |
-| `credential_cache_ttl_secs`      | `60`      | Avoids repeated bcrypt verification; 0 disables  |
-| `enforce_access_control`         | `false`   | Enforce ownership and group membership           |
-| `admin_users`                    | `[]`      | Added to the admin group at startup              |
-| `completion_check_interval_secs` | `30.0`    | Background completion processing interval        |
-| `disable_admin_sql`              | `false`   | Disable `torc admin sql` entirely                |
-| `disable_admin_sql_writes`       | `false`   | Read-only raw SQL; ignored when the above is set |
+| Option                      | Default   | Notes                                            |
+| --------------------------- | --------- | ------------------------------------------------ |
+| `host`                      | `0.0.0.0` | Bind address; accepts `url` as an alias          |
+| `port`                      | `8080`    |                                                  |
+| `threads`                   | `1`       | Worker threads                                   |
+| `database`                  | unset     | SQLite path; falls back to `DATABASE_URL`        |
+| `log_level`                 | `info`    |                                                  |
+| `https`                     | `false`   | With `tls_cert` and `tls_key`                    |
+| `tls_cert` / `tls_key`      | unset     | PEM paths                                        |
+| `auth_file`                 | unset     | htpasswd file                                    |
+| `require_auth`              | `false`   | Require authentication on all requests           |
+| `credential_cache_ttl_secs` | `60`      | Avoids repeated bcrypt verification; 0 disables  |
+| `enforce_access_control`    | `false`   | Enforce ownership and group membership           |
+| `admin_users`               | `[]`      | Added to the admin group at startup              |
+| `disable_admin_sql`         | `false`   | Disable `torc admin sql` entirely                |
+| `disable_admin_sql_writes`  | `false`   | Read-only raw SQL; ignored when the above is set |
 
 The default bind is `0.0.0.0`, which is reachable from other machines as soon as the port is open.
 Confirm the effective value with `torc config show`.
 
 Enabling `require_auth` without distributing credentials locks out every client, including running
-job runners. `completion_check_interval_secs` bounds how quickly downstream jobs unblock after a
-completion, so a large value makes a workflow look stalled.
+job runners.
 
 ## server.logging
 
@@ -156,19 +154,18 @@ Files are written as `torc-server.log` in `log_dir`, rotating at 10 MiB and keep
 
 ## dash
 
-| Option                           | Default                                 | Notes                                    |
-| -------------------------------- | --------------------------------------- | ---------------------------------------- |
-| `host`                           | `127.0.0.1`                             | Dashboard bind address                   |
-| `port`                           | `8090`                                  |                                          |
-| `api_url`                        | `http://localhost:8080/torc-service/v1` | Server the dashboard queries             |
-| `torc_bin`                       | `torc`                                  | CLI used for execution features          |
-| `torc_server_bin`                | `torc-server`                           | Binary used in standalone mode           |
-| `standalone`                     | `false`                                 | Auto-start a server                      |
-| `server_port`                    | `0`                                     | 0 means auto-detect a free port          |
-| `server_host`                    | `0.0.0.0`                               | Bind address for the auto-started server |
-| `database`                       | unset                                   | Database for standalone mode             |
-| `socket`                         | unset (Unix only)                       | UNIX socket instead of TCP               |
-| `completion_check_interval_secs` | `5`                                     | Standalone-mode completion interval      |
+| Option            | Default                                 | Notes                                    |
+| ----------------- | --------------------------------------- | ---------------------------------------- |
+| `host`            | `127.0.0.1`                             | Dashboard bind address                   |
+| `port`            | `8090`                                  |                                          |
+| `api_url`         | `http://localhost:8080/torc-service/v1` | Server the dashboard queries             |
+| `torc_bin`        | `torc`                                  | CLI used for execution features          |
+| `torc_server_bin` | `torc-server`                           | Binary used in standalone mode           |
+| `standalone`      | `false`                                 | Auto-start a server                      |
+| `server_port`     | `0`                                     | 0 means auto-detect a free port          |
+| `server_host`     | `0.0.0.0`                               | Bind address for the auto-started server |
+| `database`        | unset                                   | Database for standalone mode             |
+| `socket`          | unset (Unix only)                       | UNIX socket instead of TCP               |
 
 The dashboard binds loopback by default while its managed server binds `0.0.0.0`. To expose the
 dashboard itself, set `host = "0.0.0.0"` deliberately and put authentication in front of it.
@@ -188,8 +185,8 @@ export TORC_DASH__HOST=0.0.0.0
 
 Direct variables also work and are what most users reach for: `TORC_API_URL`, `TORC_PASSWORD`,
 `TORC_USERNAME`, `TORC_COOKIE_HEADER`, `TORC_TLS_CA_CERT`, `TORC_TLS_INSECURE`, `TORC_SERVER_BIN`,
-`TORC_AUTH_FILE`, `TORC_LOG_DIR`, `TORC_ADMIN_USERS`, `TORC_COMPLETION_CHECK_INTERVAL_SECS`,
-`TORC_MAX_REQUEST_BODY_MB`, `DATABASE_URL`, `RUST_LOG`.
+`TORC_AUTH_FILE`, `TORC_LOG_DIR`, `TORC_ADMIN_USERS`, `TORC_MAX_REQUEST_BODY_MB`, `DATABASE_URL`,
+`RUST_LOG`.
 
 ## Worked example
 

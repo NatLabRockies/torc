@@ -14,7 +14,6 @@ use crate::server::event_broadcast::EventBroadcaster;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 
 /// Operator-controlled availability of the admin raw-SQL endpoint
 /// (`POST /admin/sql`). Both halves default to enabled; the `torc-server`
@@ -42,7 +41,8 @@ impl Default for AdminSqlConfig {
 #[derive(Clone)]
 pub struct LiveServerState {
     pub pool: Arc<SqlitePool>,
-    pub last_completion_time: Arc<AtomicU64>,
+    /// Wakes the background unblock task when jobs reach a terminal status.
+    pub completion_notify: Arc<tokio::sync::Notify>,
     pub workflows_with_failures: Arc<std::sync::RwLock<HashSet<i64>>>,
     pub authorization_service: AuthorizationService,
     pub event_broadcaster: EventBroadcaster,
@@ -85,7 +85,7 @@ impl LiveServerState {
 
         Self {
             pool: pool_arc,
-            last_completion_time: Arc::new(AtomicU64::new(1)),
+            completion_notify: Arc::new(tokio::sync::Notify::new()),
             workflows_with_failures: Arc::new(std::sync::RwLock::new(HashSet::new())),
             authorization_service,
             event_broadcaster: EventBroadcaster::new(512),

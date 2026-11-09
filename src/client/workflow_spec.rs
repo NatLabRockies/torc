@@ -3478,7 +3478,7 @@ impl WorkflowSpec {
         if let Some(value) = spec.compute_node_wait_for_new_jobs_seconds {
             workflow_model.compute_node_wait_for_new_jobs_seconds = Some(value);
         } else {
-            // Default must be >= completion_check_interval_secs + job_completion_poll_interval
+            // Default must be >= unblock latency + job_completion_poll_interval
             // to avoid exiting before dependent jobs are unblocked. See ComputeNodeRules.
             workflow_model.compute_node_wait_for_new_jobs_seconds = Some(90);
         }

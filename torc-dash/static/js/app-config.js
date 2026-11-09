@@ -94,7 +94,6 @@ Object.assign(TorcDashboard.prototype, {
     async startServer() {
         const port = parseInt(document.getElementById('server-port')?.value) || 8080;
         const database = document.getElementById('server-database')?.value || '';
-        const completionInterval = parseInt(document.getElementById('server-completion-interval')?.value) || 5;
         const logLevel = document.getElementById('server-log-level')?.value || 'info';
 
         const startBtn = document.getElementById('btn-start-server');
@@ -106,7 +105,6 @@ Object.assign(TorcDashboard.prototype, {
         const result = await api.startServer({
             port,
             database: database || null,
-            completion_check_interval_secs: completionInterval,
             log_level: logLevel,
         });
 

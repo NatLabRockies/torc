@@ -185,19 +185,18 @@ Settings for `torc-server`.
 
 ### `[server]` Section
 
-| Option                           | Type         | Default   | Description                                             |
-| -------------------------------- | ------------ | --------- | ------------------------------------------------------- |
-| `log_level`                      | string       | `info`    | Log level                                               |
-| `https`                          | bool         | `false`   | Enable HTTPS                                            |
-| `host`                           | string       | `0.0.0.0` | Hostname/IP to bind to (`url` is accepted as an alias)  |
-| `port`                           | int          | `8080`    | Port to listen on                                       |
-| `threads`                        | int          | `1`       | Number of worker threads                                |
-| `database`                       | string       | (none)    | SQLite database path (falls back to `DATABASE_URL` env) |
-| `auth_file`                      | string       | (none)    | Path to htpasswd file                                   |
-| `require_auth`                   | bool         | `false`   | Require authentication for all requests                 |
-| `enforce_access_control`         | bool         | `false`   | Enforce access control based on workflow ownership      |
-| `admin_users`                    | string array | `[]`      | Users to add to the admin group                         |
-| `completion_check_interval_secs` | float        | `30.0`    | Background job processing interval                      |
+| Option                   | Type         | Default   | Description                                             |
+| ------------------------ | ------------ | --------- | ------------------------------------------------------- |
+| `log_level`              | string       | `info`    | Log level                                               |
+| `https`                  | bool         | `false`   | Enable HTTPS                                            |
+| `host`                   | string       | `0.0.0.0` | Hostname/IP to bind to (`url` is accepted as an alias)  |
+| `port`                   | int          | `8080`    | Port to listen on                                       |
+| `threads`                | int          | `1`       | Number of worker threads                                |
+| `database`               | string       | (none)    | SQLite database path (falls back to `DATABASE_URL` env) |
+| `auth_file`              | string       | (none)    | Path to htpasswd file                                   |
+| `require_auth`           | bool         | `false`   | Require authentication for all requests                 |
+| `enforce_access_control` | bool         | `false`   | Enforce access control based on workflow ownership      |
+| `admin_users`            | string array | `[]`      | Users to add to the admin group                         |
 
 ### `[server.logging]` Section
 
@@ -218,7 +217,6 @@ auth_file = "/etc/torc/htpasswd"
 require_auth = true
 enforce_access_control = true
 admin_users = ["alice", "bob"]
-completion_check_interval_secs = 30.0
 log_level = "info"
 https = false
 
@@ -233,18 +231,24 @@ Settings for `torc-dash`.
 
 ### `[dash]` Section
 
-| Option                           | Type   | Default                                 | Description                                 |
-| -------------------------------- | ------ | --------------------------------------- | ------------------------------------------- |
-| `host`                           | string | `127.0.0.1`                             | Hostname/IP to bind to                      |
-| `port`                           | int    | `8090`                                  | Port to listen on                           |
-| `api_url`                        | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                         |
-| `torc_bin`                       | string | `torc`                                  | Path to torc CLI binary                     |
-| `torc_server_bin`                | string | `torc-server`                           | Path to torc-server binary                  |
-| `standalone`                     | bool   | `false`                                 | Auto-start torc-server                      |
-| `server_port`                    | int    | `0`                                     | Server port for standalone mode (0 = auto)  |
-| `server_host`                    | string | `0.0.0.0`                               | Server bind address for standalone mode     |
-| `database`                       | string | (none)                                  | Database path for standalone mode           |
-| `completion_check_interval_secs` | int    | `5`                                     | Completion check interval (standalone mode) |
+| Option            | Type   | Default                                 | Description                                |
+| ----------------- | ------ | --------------------------------------- | ------------------------------------------ |
+| `host`            | string | `127.0.0.1`                             | Hostname/IP to bind to                     |
+| `port`            | int    | `8090`                                  | Port to listen on                          |
+| `api_url`         | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                        |
+| `torc_bin`        | string | `torc`                                  | Path to torc CLI binary                    |
+| `torc_server_bin` | string | `torc-server`                           | Path to torc-server binary                 |
+| `standalone`      | bool   | `false`                                 | Auto-start torc-server                     |
+| `server_port`     | int    | `0`                                     | Server port for standalone mode (0 = auto) |
+| `server_host`     | string | `0.0.0.0`                               | Server bind address for standalone mode    |
+| `database`        | string | (none)                                  | Database path for standalone mode          |
+
+> **Deprecated:** `server.completion_check_interval_secs`, `dash.completion_check_interval_secs`,
+> the `--completion-check-interval-secs` flag of `torc-server` and `torc-dash`, and the
+> `TORC_COMPLETION_CHECK_INTERVAL_SECS` / `TORC_SERVER__COMPLETION_CHECK_INTERVAL_SECS` environment
+> variables are ignored. They are still accepted (with a logged warning) so existing configs keep
+> working. The server now processes job completions as they arrive, releasing dependent jobs within
+> about 1 second.
 
 ### Example
 
@@ -257,7 +261,6 @@ torc_bin = "/usr/local/bin/torc"
 torc_server_bin = "/usr/local/bin/torc-server"
 standalone = true
 server_port = 0
-completion_check_interval_secs = 5
 ```
 
 ## Environment Variables
@@ -284,19 +287,18 @@ Environment variables use double underscore (`__`) to separate nested keys.
 
 ### Server Variables
 
-| Variable                                      | Maps To                                 |
-| --------------------------------------------- | --------------------------------------- |
-| `TORC_SERVER__URL`                            | `server.url`                            |
-| `TORC_SERVER__PORT`                           | `server.port`                           |
-| `TORC_SERVER__THREADS`                        | `server.threads`                        |
-| `TORC_SERVER__DATABASE`                       | `server.database`                       |
-| `TORC_SERVER__AUTH_FILE`                      | `server.auth_file`                      |
-| `TORC_SERVER__REQUIRE_AUTH`                   | `server.require_auth`                   |
-| `TORC_SERVER__ENFORCE_ACCESS_CONTROL`         | `server.enforce_access_control`         |
-| `TORC_SERVER__LOG_LEVEL`                      | `server.log_level`                      |
-| `TORC_SERVER__COMPLETION_CHECK_INTERVAL_SECS` | `server.completion_check_interval_secs` |
-| `TORC_SERVER__LOGGING__LOG_DIR`               | `server.logging.log_dir`                |
-| `TORC_SERVER__LOGGING__JSON_LOGS`             | `server.logging.json_logs`              |
+| Variable                              | Maps To                         |
+| ------------------------------------- | ------------------------------- |
+| `TORC_SERVER__URL`                    | `server.url`                    |
+| `TORC_SERVER__PORT`                   | `server.port`                   |
+| `TORC_SERVER__THREADS`                | `server.threads`                |
+| `TORC_SERVER__DATABASE`               | `server.database`               |
+| `TORC_SERVER__AUTH_FILE`              | `server.auth_file`              |
+| `TORC_SERVER__REQUIRE_AUTH`           | `server.require_auth`           |
+| `TORC_SERVER__ENFORCE_ACCESS_CONTROL` | `server.enforce_access_control` |
+| `TORC_SERVER__LOG_LEVEL`              | `server.log_level`              |
+| `TORC_SERVER__LOGGING__LOG_DIR`       | `server.logging.log_dir`        |
+| `TORC_SERVER__LOGGING__JSON_LOGS`     | `server.logging.json_logs`      |
 
 ### Dashboard Variables
 
@@ -311,19 +313,18 @@ Environment variables use double underscore (`__`) to separate nested keys.
 
 These environment variables are still supported directly by clap:
 
-| Variable                              | Component | Description                              |
-| ------------------------------------- | --------- | ---------------------------------------- |
-| `TORC_API_URL`                        | Client    | Server API URL (CLI only)                |
-| `TORC_PASSWORD`                       | Client    | Authentication password (CLI only)       |
-| `TORC_TLS_CA_CERT`                    | Client    | PEM-encoded CA certificate path          |
-| `TORC_TLS_INSECURE`                   | Client    | Skip certificate verification            |
-| `TORC_AUTH_FILE`                      | Server    | htpasswd file path                       |
-| `TORC_LOG_DIR`                        | Server    | Log directory                            |
-| `TORC_COMPLETION_CHECK_INTERVAL_SECS` | Server    | Completion check interval                |
-| `TORC_ADMIN_USERS`                    | Server    | Comma-separated list of admin usernames  |
-| `TORC_MAX_REQUEST_BODY_MB`            | Server    | Bulk job upload request-body limit (MiB) |
-| `DATABASE_URL`                        | Server    | SQLite database URL                      |
-| `RUST_LOG`                            | All       | Log level filter                         |
+| Variable                   | Component | Description                              |
+| -------------------------- | --------- | ---------------------------------------- |
+| `TORC_API_URL`             | Client    | Server API URL (CLI only)                |
+| `TORC_PASSWORD`            | Client    | Authentication password (CLI only)       |
+| `TORC_TLS_CA_CERT`         | Client    | PEM-encoded CA certificate path          |
+| `TORC_TLS_INSECURE`        | Client    | Skip certificate verification            |
+| `TORC_AUTH_FILE`           | Server    | htpasswd file path                       |
+| `TORC_LOG_DIR`             | Server    | Log directory                            |
+| `TORC_ADMIN_USERS`         | Server    | Comma-separated list of admin usernames  |
+| `TORC_MAX_REQUEST_BODY_MB` | Server    | Bulk job upload request-body limit (MiB) |
+| `DATABASE_URL`             | Server    | SQLite database URL                      |
+| `RUST_LOG`                 | All       | Log level filter                         |
 
 ## Complete Example
 
@@ -358,7 +359,6 @@ auth_file = "/etc/torc/htpasswd"
 require_auth = true
 enforce_access_control = true
 admin_users = ["alice", "bob"]
-completion_check_interval_secs = 30.0
 
 [server.logging]
 log_dir = "/var/log/torc"
@@ -372,7 +372,6 @@ torc_bin = "torc"
 torc_server_bin = "torc-server"
 standalone = false
 server_port = 0
-completion_check_interval_secs = 5
 ```
 
 ## See Also

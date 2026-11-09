@@ -273,9 +273,6 @@ https = false
 # Require authentication for all requests
 require_auth = false
 
-# Interval for background job completion processing (seconds)
-completion_check_interval_secs = 30.0
-
 # Log level: error, warn, info, debug, trace
 log_level = "info"
 
@@ -311,9 +308,6 @@ standalone = false
 
 # Server port for standalone mode (0 = auto-detect)
 server_port = 0
-
-# Job completion check interval for standalone mode (seconds)
-completion_check_interval_secs = 5
 "#
         .to_string()
     }
@@ -341,10 +335,6 @@ completion_check_interval_secs = 5
 
         if self.server.threads == 0 {
             errors.push("server.threads must be at least 1".to_string());
-        }
-
-        if self.server.completion_check_interval_secs <= 0.0 {
-            errors.push("server.completion_check_interval_secs must be positive".to_string());
         }
 
         // Validate dash config

@@ -204,9 +204,6 @@ database = "/var/lib/torc/torc.db"
 auth_file = "/etc/torc/htpasswd"
 require_auth = true
 
-# Background job processing interval
-completion_check_interval_secs = 30.0
-
 # Log level
 log_level = "info"
 
@@ -260,7 +257,6 @@ threads = 8
 database = "/var/lib/torc/production.db"
 require_auth = true
 auth_file = "/etc/torc/htpasswd"
-completion_check_interval_secs = 30.0
 log_level = "info"
 
 [server.logging]

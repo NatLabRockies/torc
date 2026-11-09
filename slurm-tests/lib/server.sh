@@ -37,7 +37,6 @@ start_server() {
     --auth-file "$htpasswd_file" \
     --admin-user admin \
     --enforce-access-control \
-    --completion-check-interval-secs 5 \
     >"$log_file" 2>&1 &
   SERVER_PID=$!
 

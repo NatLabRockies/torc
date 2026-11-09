@@ -44,7 +44,6 @@ set -- torc-server run \
   --database "${TORC_DATABASE:-/data/torc.db}" \
   --log-dir "${TORC_LOG_DIR:-/data}" \
   --log-level "${TORC_LOG_LEVEL:-info}" \
-  --completion-check-interval-secs "${TORC_COMPLETION_CHECK_INTERVAL_SECS:-30}" \
   --require-auth \
   --enforce-access-control \
   --auth-file "${TORC_AUTH_FILE}" \

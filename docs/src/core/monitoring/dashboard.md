@@ -79,7 +79,6 @@ Options:
       --standalone            Auto-start torc-server alongside dashboard
       --server-port <PORT>    Server port in standalone mode (0 = auto-detect) [default: 0]
       --database <PATH>       Database path for standalone server
-      --completion-check-interval-secs <SECS>  Server polling interval [default: 5]
       --torc-mcp-server-bin        Path to torc-mcp-server [default: torc-mcp-server]
 
   AI Chat options:
@@ -364,7 +363,6 @@ Start and stop `torc-server` directly from the dashboard:
 
 - **Server Port**: Port to listen on (0 = auto-detect free port)
 - **Database Path**: SQLite database file location
-- **Completion Check Interval**: How often to check for job completions
 - **Log Level**: Server logging verbosity
 
 Click "Start Server" to launch, "Stop Server" to terminate.

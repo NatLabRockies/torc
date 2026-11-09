@@ -327,7 +327,6 @@ pub(super) async fn create_server(
     require_auth: bool,
     credential_cache_ttl_secs: u64,
     enforce_access_control: bool,
-    completion_check_interval_secs: f64,
     admin_users: Vec<String>,
     #[allow(unused_variables)] tls_cert: Option<String>,
     #[allow(unused_variables)] tls_key: Option<String>,
@@ -388,11 +387,7 @@ pub(super) async fn create_server(
 
     let server_clone = server.clone();
     tokio::spawn(async move {
-        super::unblock_processing::background_unblock_task(
-            server_clone,
-            completion_check_interval_secs,
-        )
-        .await;
+        super::unblock_processing::background_unblock_task(server_clone).await;
     });
 
     #[cfg(unix)]

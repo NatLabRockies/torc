@@ -485,7 +485,6 @@ class TorcAPI {
      * @param {object} options - Server configuration options
      * @param {number} [options.port=8080] - Port to listen on
      * @param {string} [options.database] - Database path
-     * @param {number} [options.completion_check_interval_secs=5] - Completion check interval
      * @param {string} [options.log_level='info'] - Log level
      * @returns {object} Response with success, message, pid, port
      */

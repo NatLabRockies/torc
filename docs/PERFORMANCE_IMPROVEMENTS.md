@@ -34,8 +34,9 @@ became a bottleneck:
 **Deferred unblocking with background processing:**
 
 1. `complete_job` API now just updates job status and sets `unblocking_processed = 0` flag (1-5ms)
-2. Background task runs periodically (configurable via `TORC_COMPLETION_CHECK_INTERVAL_SECS`)
-3. Background task processes all pending completions in batches per workflow
+2. `complete_job` notifies the background task, which wakes immediately (no polling timer)
+3. Background task processes all pending completions in batches per workflow, then waits at least 1
+   second before its next pass so completions arriving close together are batched
 4. Multiple completions processed in single transaction for efficiency
 
 **Migration**: `20251123000000_add_unblocking_processed`
@@ -53,36 +54,18 @@ became a bottleneck:
 - `complete_job` API latency: 1-5ms (100× faster)
 - Throughput: 2000+ completions/second
 - No worker blocking
-- Trade-off: Downstream jobs delayed by up to `TORC_COMPLETION_CHECK_INTERVAL_SECS` (default: 60
-  seconds)
+- Trade-off: Downstream jobs are released within about 1 second of a completion
 
 ### Configuration
 
-Control unblocking interval via environment variable:
-
-```bash
-# Production (default) - efficient batching
-export TORC_COMPLETION_CHECK_INTERVAL_SECS=60
-
-# Development/demos - faster feedback
-export TORC_COMPLETION_CHECK_INTERVAL_SECS=1
-
-# Testing - near-immediate
-export TORC_COMPLETION_CHECK_INTERVAL_SECS=0.1
-```
+No tuning is needed. The 1-second minimum gap between passes is fixed. The former
+`TORC_COMPLETION_CHECK_INTERVAL_SECS` / `--completion-check-interval-secs` setting is deprecated and
+ignored.
 
 ### HPC Suitability
 
-The 60-second delay is negligible for typical HPC workflows:
-
-- Jobs run for minutes to hours
-- 60-second delay is <1% of job runtime
-- Batching provides massive scalability benefits
-
-For workflows with extremely short jobs (<5 seconds), consider:
-
-- Reducing interval to 1-5 seconds
-- Redesigning workflow to have longer-running jobs
+The ~1-second release delay is negligible for typical HPC workflows, and batching completions that
+arrive close together keeps database contention low even with thousands of concurrent workers.
 
 ### Database Changes
 
@@ -107,7 +90,7 @@ WHERE status IN (6, 7, 8) AND unblocking_processed = 0;
 Check background task status in server logs:
 
 ```
-Starting background job completion check interval: 60 seconds
+Starting background job completion processor (min gap = 1s)
 Processing 15 completed jobs for workflow 42
 Processed 15 completions for workflow 42, 8 jobs became ready
 ```

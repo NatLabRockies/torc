@@ -225,7 +225,6 @@ host = "kl3.hsn.cm.kestrel.hpc.nrel.gov"
 port = 8085
 database = "/scratch/myuser/torc/workflows.db"
 threads = 4
-completion_check_interval_secs = 30.0
 log_level = "info"
 
 [server.logging]
@@ -353,7 +352,6 @@ SQLite may report locking issues on network filesystems:
 
 1. Ensure only one `torc-server` instance is running
 2. Use a local scratch filesystem rather than NFS home directories
-3. Consider increasing `completion_check_interval_secs` to reduce database contention
 
 ### Server stops when SSH disconnects
 

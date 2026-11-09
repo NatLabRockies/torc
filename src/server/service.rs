@@ -39,21 +39,15 @@ pub struct ServiceConfig {
     pub tls_cert: Option<String>,
     pub tls_key: Option<String>,
     pub admin_users: Vec<String>,
-    pub completion_check_interval_secs: Option<f64>,
     pub disable_admin_sql: bool,
     pub disable_admin_sql_writes: bool,
 }
 
 impl ServiceConfig {
-    /// Default completion check interval for services (5 seconds)
-    pub const DEFAULT_SERVICE_INTERVAL_SECS: f64 = 5.0;
-
     /// Default credential cache TTL in seconds
     pub const DEFAULT_CREDENTIAL_CACHE_TTL_SECS: u64 = 60;
 
     /// Create default configuration for system-level service
-    /// Uses a shorter completion check interval (5s) since local services
-    /// typically run jobs on the same machine and benefit from faster feedback.
     fn default_system() -> Self {
         Self {
             log_dir: Some(PathBuf::from("/var/log/torc")),
@@ -71,15 +65,12 @@ impl ServiceConfig {
             tls_cert: None,
             tls_key: None,
             admin_users: Vec::new(),
-            completion_check_interval_secs: None, // Will use DEFAULT_SERVICE_INTERVAL_SECS
             disable_admin_sql: false,
             disable_admin_sql_writes: false,
         }
     }
 
     /// Create default configuration for user-level service
-    /// Uses a shorter completion check interval (5s) since local services
-    /// typically run jobs on the same machine and benefit from faster feedback.
     fn default_user() -> Self {
         // Get user's home directory
         let home = env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -100,7 +91,6 @@ impl ServiceConfig {
             tls_cert: None,
             tls_key: None,
             admin_users: Vec::new(),
-            completion_check_interval_secs: None, // Will use DEFAULT_SERVICE_INTERVAL_SECS
             disable_admin_sql: false,
             disable_admin_sql_writes: false,
         }
@@ -239,12 +229,6 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
     if config.disable_admin_sql_writes {
         args.push("--disable-admin-sql-writes".into());
     }
-
-    let interval = config
-        .completion_check_interval_secs
-        .unwrap_or(ServiceConfig::DEFAULT_SERVICE_INTERVAL_SECS);
-    args.push("--completion-check-interval-secs".into());
-    args.push(interval.to_string().into());
 
     // Create service install context
     let install_ctx = ServiceInstallCtx {

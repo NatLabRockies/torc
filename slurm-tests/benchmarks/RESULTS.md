@@ -120,9 +120,8 @@ job's completion releases the barrier, and the barrier's completion releases the
 Why 30 s is still a reasonable default: torc's typical workload is jobs that run for an hour or
 more. Then a 30 s delay is under 1% of a dependency level, and completions are rare enough that the
 interval has no effect on server load either way. The interval matters only for workflows with
-**dependencies and short jobs**. If that is your workload, lower the interval on a server you
-control (for example `torc-server run --completion-check-interval-secs 1`); our data shows no
-meaningful cost to doing so.
+**dependencies and short jobs**. Our data showed no meaningful cost to a 1 s interval, so the server
+now releases dependents on demand instead (see "Possible improvements").
 
 ### Other observations
 
@@ -137,8 +136,9 @@ meaningful cost to doing so.
 - **Jobs of a minute or longer** will not hit the server limit at this scale. Below about 15 s per
   job at 10,000+ concurrent slots, expect the server to cap throughput; combine small tasks into
   larger jobs if you can.
-- **Short jobs with dependencies**: lower `--completion-check-interval-secs` on a server you
-  control, or expect up to two intervals of idle time per dependency level.
+- **Short jobs with dependencies**: servers released before the on-demand change wait up to two
+  `--completion-check-interval-secs` ticks per dependency level; lower it on a server you control.
+  Newer servers release dependents within about 1 s and ignore the flag.
 - **Very large short-job workflows**: an ephemeral `torc-server -d :memory:` on the first node of
   the allocation was the fastest option measured. Its data is lost when it stops unless you snapshot
   it (`SIGUSR1`).
@@ -153,9 +153,10 @@ meaningful cost to doing so.
   job. These runs predate the change.
 - **Spread out runner requests.** All runners poll on similar schedules; random jitter would smooth
   bursts. The backoff sweeps in run 4 test part of this.
-- **Release dependents on demand.** Starting the unblock step when a completion arrives, and folding
-  completions that arrive close together into one batch, would keep batching for long jobs and
-  remove the per-level delay for short ones.
+- **Release dependents on demand (done after these runs).** A completion now wakes the unblock step
+  directly, and passes are at least 1 s apart so completions that arrive close together are batched.
+  This removes the per-level delay without a tuning knob, and `--completion-check-interval-secs` is
+  deprecated and ignored. These runs predate the change; the 1 s rows above approximate it.
 - **PostgreSQL.** It would allow concurrent writers (`FOR UPDATE SKIP LOCKED` is the standard
   job-queue claim pattern), which targets the measured bottleneck. It would also mean porting
   SQLite-specific SQL and migrations, slower individual transactions over the network, and losing
