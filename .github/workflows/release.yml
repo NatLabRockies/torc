@@ -27,7 +27,7 @@ jobs:
       matrix:
         include:
           # macOS Apple Silicon
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
             use_cross: false
 
