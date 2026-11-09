@@ -355,7 +355,8 @@ exactly one worker.
 
 Pass `run_id` and `compute_node_id` with the claim: claimed jobs move straight to `running` with
 `start_time` and `compute_node_id` set, so the worker does not need to call `start_job` for each
-job.
+job. If both are omitted, as older clients do, claimed jobs move to `pending` and the worker must
+call `start_job` for each one.
 
 ### `claim_jobs_based_on_resources`
 
@@ -396,7 +397,7 @@ Job status is stored and transmitted as integers (0-10):
 | 0     | uninitialized  |
 | 1     | blocked        |
 | 2     | ready          |
-| 3     | (unused)       |
+| 3     | pending        |
 | 4     | running        |
 | 5     | completed      |
 | 6     | failed         |
@@ -404,6 +405,9 @@ Job status is stored and transmitted as integers (0-10):
 | 8     | terminated     |
 | 9     | disabled       |
 | 10    | pending_failed |
+
+`pending` (3) is legacy: only claims that omit `run_id` and `compute_node_id` produce it. The torc
+job runner always passes both, so its jobs go from `ready` to `running`.
 
 ## API Evolution
 
