@@ -102,7 +102,7 @@ completed successfully, the command warns you before resetting it, since resetti
 results and reruns it.
 
 The `--force` flag bypasses two checks: (1) the no-active-workers check (compute nodes and Slurm
-allocations), and (2) the active-status guard (Running jobs are normally rejected).
+allocations), and (2) the active-status guard (jobs in Running or Pending are normally rejected).
 
 ## Choosing the Right Tool
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job SET status = ?,\n                start_time = CASE WHEN ? THEN start_time END,\n                compute_node_id = CASE WHEN ? THEN compute_node_id END\n             WHERE id = ? AND status = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "059968484125767be238d103fabcc1771098e3b0dc59c261456d1838a130ede3"
+}

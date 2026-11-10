@@ -1330,3 +1330,62 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
     .items;
     assert_eq!(active.len(), claimed.len() + claimed_by_resources.len());
 }
+
+/// A stale claim is rejected even when no job is ready, and reverting a claimed job to ready
+/// clears the start_time and compute_node_id the claim set.
+#[rstest]
+fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let jobs = create_many_jobs_workflow(config, true, 1);
+    let workflow_id = jobs.values().next().unwrap().workflow_id;
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let claimed = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(1),
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    assert_eq!(claimed.len(), 1);
+    let job_id = claimed[0].id.unwrap();
+
+    // No job is ready now; a stale run_id must still be rejected by both claim endpoints.
+    assert!(
+        apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(1),
+            None,
+            Some(run_id + 1),
+            Some(compute_node_id),
+        )
+        .is_err()
+    );
+    assert!(
+        apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            1,
+            models::ComputeNodesResources::new(1, 1.0, 0, 1),
+            None,
+            Some(run_id + 1),
+            Some(compute_node_id),
+        )
+        .is_err()
+    );
+
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Ready, run_id).unwrap();
+    let stored = apis::jobs_api::get_job(config, job_id).unwrap();
+    assert_eq!(stored.status, Some(models::JobStatus::Ready));
+    assert_eq!(stored.start_time, None);
+    assert_eq!(stored.compute_node_id, None);
+}

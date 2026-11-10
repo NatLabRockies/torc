@@ -1,5 +1,7 @@
 use super::*;
-use crate::server::api::jobs::{CLAIM_START_MISMATCH, ClaimStart, finish_claim};
+use crate::server::api::jobs::{
+    CLAIM_START_MISMATCH, ClaimStart, claim_start_is_valid, finish_claim,
+};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -726,7 +728,6 @@ fn claim_candidate_row(
     row: &sqlx::sqlite::SqliteRow,
     packing_state: &mut ClaimPackingState,
     selected_jobs: &mut Vec<models::JobModel>,
-    job_ids_to_update: &mut Vec<i64>,
 ) -> Result<bool, ApiError> {
     if !packing_state.candidate_fits(row) {
         if log::log_enabled!(log::Level::Debug) {
@@ -752,7 +753,6 @@ fn claim_candidate_row(
     packing_state.consume_candidate(row);
 
     let job_id: i64 = row.get("job_id");
-    job_ids_to_update.push(job_id);
     selected_jobs.push(models::JobModel {
         id: Some(job_id),
         workflow_id: row.get("workflow_id"),
@@ -788,7 +788,6 @@ async fn claim_backfill_jobs(
     params: &BackfillClaimParams,
     packing_state: &mut ClaimPackingState,
     selected_jobs: &mut Vec<models::JobModel>,
-    job_ids_to_update: &mut Vec<i64>,
 ) -> Result<(), ApiError> {
     if selected_jobs.len() >= params.claim_limit {
         return Ok(());
@@ -867,10 +866,10 @@ async fn claim_backfill_jobs(
             .push(")");
     }
 
-    if !job_ids_to_update.is_empty() {
+    if !selected_jobs.is_empty() {
         builder.push(" AND job.id NOT IN (");
         let mut separated = builder.separated(", ");
-        for job_id in job_ids_to_update.iter() {
+        for job_id in selected_jobs.iter().filter_map(|j| j.id) {
             separated.push_bind(job_id);
         }
         separated.push_unseparated(")");
@@ -901,7 +900,7 @@ async fn claim_backfill_jobs(
         if selected_jobs.len() >= params.claim_limit {
             break;
         }
-        claim_candidate_row(&row, packing_state, selected_jobs, job_ids_to_update)?;
+        claim_candidate_row(&row, packing_state, selected_jobs)?;
     }
     let remaining_after = packing_state.remaining_resources();
     debug!(
@@ -1365,9 +1364,17 @@ where
 
         let new_status_int = status.to_int();
         let current_status_int = current_status.to_int();
+        // Runtime state belongs only to running jobs; e.g. a runner reverting a claimed job
+        // to ready after a failed launch must not leave the claim's start_time behind.
+        let keep_runtime_state = status == models::JobStatus::Running;
         let update_result = sqlx::query!(
-            "UPDATE job SET status = ? WHERE id = ? AND status = ?",
+            "UPDATE job SET status = ?,
+                start_time = CASE WHEN ? THEN start_time END,
+                compute_node_id = CASE WHEN ? THEN compute_node_id END
+             WHERE id = ? AND status = ?",
             new_status_int,
+            keep_runtime_state,
+            keep_runtime_state,
             id,
             current_status_int,
         )
@@ -1521,18 +1528,13 @@ where
             )));
         }
 
-        self.event_broadcaster.broadcast(BroadcastEvent {
-            workflow_id: job.workflow_id,
-            timestamp: chrono::Utc::now().timestamp_millis(),
-            event_type: "job_started".to_string(),
-            severity: models::EventSeverity::Info,
-            data: serde_json::json!({
-                "job_id": id,
-                "job_name": job.name,
-                "compute_node_id": compute_node_id,
-                "run_id": run_id,
-            }),
-        });
+        self.broadcast_jobs_started(
+            std::slice::from_ref(&job),
+            ClaimStart {
+                run_id,
+                compute_node_id,
+            },
+        );
         debug!("Broadcast job_started event for job_id={}", id);
 
         Ok(StartJobResponse::SuccessfulResponse(job))
@@ -2609,6 +2611,20 @@ where
         })?;
 
         if pre_check.is_none() {
+            // No lock needed: a stale run or foreign node stays invalid, so report it early.
+            let valid = claim_start_is_valid(&mut conn, workflow_id, start)
+                .await
+                .map_err(|e| {
+                    error!("Database error validating claim start: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
+            if !valid {
+                return Ok(
+                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                        message_error_response(CLAIM_START_MISMATCH),
+                    ),
+                );
+            }
             return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
                 models::ClaimJobsBasedOnResources {
                     jobs: Some(Vec::new()),
@@ -2765,7 +2781,6 @@ where
 
         let mut packing_state = ClaimPackingState::new(&resources, memory_bytes);
         let mut selected_jobs = Vec::new();
-        let mut job_ids_to_update = Vec::new();
 
         debug!(
             "get_ready_jobs: Found {} potential jobs for workflow {} with resources: \
@@ -2783,12 +2798,7 @@ where
             if selected_jobs.len() >= claim_limit {
                 break;
             }
-            if let Err(e) = claim_candidate_row(
-                &row,
-                &mut packing_state,
-                &mut selected_jobs,
-                &mut job_ids_to_update,
-            ) {
+            if let Err(e) = claim_candidate_row(&row, &mut packing_state, &mut selected_jobs) {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 return Err(e);
             }
@@ -2808,7 +2818,6 @@ where
             &backfill_params,
             &mut packing_state,
             &mut selected_jobs,
-            &mut job_ids_to_update,
         )
         .await
         {

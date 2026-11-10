@@ -596,8 +596,8 @@ Reset workflow and job status
 
 - `--failed-only` — Only reset failed jobs. Default: `false`
 - `-r`, `--reinitialize` — Reinitialize the workflow after resetting status. Default: `false`
-- `--force` — Force reset even if there are active jobs (ignores running jobs check). Default:
-  `false`
+- `--force` — Force reset even if there are active jobs (ignores running/pending jobs check).
+  Default: `false`
 - `--no-prompts` — Skip confirmation prompt
 
 ## `torc workflows execution-plan`
@@ -1371,7 +1371,7 @@ List results
 - `--return-code <RETURN_CODE>` — Filter by return code
 - `--failed` — Show only failed jobs (non-zero return code)
 - `-s`, `--status <STATUS>` — Filter by job status (uninitialized, blocked, canceled, terminated,
-  done, ready, scheduled, running, disabled)
+  done, ready, scheduled, running, pending, disabled)
 - `-l`, `--limit <LIMIT>` — Maximum number of results to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by

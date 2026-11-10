@@ -313,7 +313,7 @@ impl<C> Server<C> {
         Ok(())
     }
 
-    /// Broadcast a `job_started` event for each job a claim marked running.
+    /// Broadcast a `job_started` event for each job marked running by a claim or `start_job`.
     pub(super) fn broadcast_jobs_started(&self, jobs: &[models::JobModel], start: ClaimStart) {
         let timestamp = chrono::Utc::now().timestamp_millis();
         for job in jobs {

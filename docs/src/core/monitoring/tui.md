@@ -133,6 +133,7 @@ Navigate to the Jobs tab (`→` then `Tab` if needed) to manage individual jobs:
 - **Yellow**: Running
 - **Red**: Failed
 - **Magenta**: Canceled/Terminated
+- **Blue**: Pending (legacy claim)
 - **Cyan**: Ready
 - **Gray**: Blocked
 

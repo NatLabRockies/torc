@@ -229,7 +229,7 @@ Job status values are stored as INTEGER (0-10) in the database, not strings:
 - 0 = uninitialized
 - 1 = blocked
 - 2 = ready
-- 3 = unused (formerly pending)
+- 3 = pending (legacy: claim without `run_id`/`compute_node_id`; runner then calls `start_job`)
 - 4 = running
 - 5 = completed
 - 6 = failed

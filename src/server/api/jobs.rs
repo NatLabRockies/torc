@@ -57,6 +57,27 @@ impl ClaimStart {
 pub const CLAIM_START_MISMATCH: &str =
     "run_id is not the workflow's current run or compute_node_id is not a node of this workflow";
 
+/// True when `start` is absent or names the workflow's current run and one of its compute nodes.
+pub(crate) async fn claim_start_is_valid(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    start: Option<ClaimStart>,
+) -> Result<bool, sqlx::Error> {
+    let Some(s) = start else {
+        return Ok(true);
+    };
+    let valid = sqlx::query(
+        "SELECT 1 FROM workflow w JOIN compute_node cn ON cn.workflow_id = w.id \
+         WHERE w.id = ? AND w.run_id = ? AND cn.id = ?",
+    )
+    .bind(workflow_id)
+    .bind(s.run_id)
+    .bind(s.compute_node_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(valid.is_some())
+}
+
 /// Finish a claim inside its write transaction: attach output file and user_data IDs
 /// to the claimed jobs and mark them pending, or running when `start` is set.
 ///
@@ -69,22 +90,11 @@ pub(crate) async fn finish_claim(
     jobs: &mut [models::JobModel],
     start: Option<ClaimStart>,
 ) -> Result<bool, sqlx::Error> {
+    if !claim_start_is_valid(conn, workflow_id, start).await? {
+        return Ok(false);
+    }
     if jobs.is_empty() {
         return Ok(true);
-    }
-    if let Some(s) = start {
-        let valid = sqlx::query(
-            "SELECT 1 FROM workflow w JOIN compute_node cn ON cn.workflow_id = w.id \
-             WHERE w.id = ? AND w.run_id = ? AND cn.id = ?",
-        )
-        .bind(workflow_id)
-        .bind(s.run_id)
-        .bind(s.compute_node_id)
-        .fetch_optional(&mut *conn)
-        .await?;
-        if valid.is_none() {
-            return Ok(false);
-        }
     }
     let ids = jobs
         .iter()
