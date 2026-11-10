@@ -70,8 +70,10 @@ pub(crate) async fn run_id_mismatch(
             workflow_id
         )),
         Some(row) if row.run_id != run_id => Some(format!(
-            "Run ID mismatch: provided {} but workflow status has {}",
-            run_id, row.run_id
+            "{}: provided {} but workflow is at run {}",
+            crate::STALE_RUN,
+            run_id,
+            row.run_id
         )),
         Some(_) => None,
     })
@@ -3154,8 +3156,10 @@ where
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(format!(
-                    "Run ID mismatch: provided {} but workflow is at run {}",
-                    run_id, workflow_run_id
+                    "{}: provided {} but workflow is at run {}",
+                    crate::STALE_RUN,
+                    run_id,
+                    workflow_run_id
                 )),
             ));
         }

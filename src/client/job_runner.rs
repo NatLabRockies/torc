@@ -993,7 +993,7 @@ impl JobRunner {
     }
 
     fn note_stale_run(&mut self, err: &dyn std::fmt::Display) {
-        if err.to_string().contains(crate::CLAIM_START_MISMATCH) {
+        if err.to_string().contains(crate::STALE_RUN) {
             self.stale_run = true;
         }
     }
@@ -1293,7 +1293,7 @@ impl JobRunner {
             }
 
             let mut jobs_claimed = false;
-            if !self.offline {
+            if !self.offline && !self.stale_run {
                 self.check_and_execute_actions();
 
                 debug!("Check for new jobs");
@@ -1579,9 +1579,10 @@ impl JobRunner {
     /// Kill all running child processes without making any API calls.
     ///
     /// Used when the server is unreachable or this runner's run is stale.
-    /// Jobs are left in their current server-side status (likely "running");
-    /// the server will detect them as stale when the compute node is no longer
-    /// reporting in.
+    /// Jobs are left in their current server-side status. For a stale run the
+    /// reset that bumped run_id owns those rows (a full reset already set them
+    /// uninitialized); any left "running" are failed by orphan cleanup once
+    /// this runner's compute node is deactivated.
     fn kill_running_jobs(&mut self) {
         if self.running_jobs.is_empty() {
             return;
@@ -2693,6 +2694,9 @@ impl JobRunner {
                 "Job complete reported as failed by server workflow_id={} job_id={} message={}",
                 self.workflow_id, err.job_id, err.message
             );
+            // A busy runner may not claim again, so a completion can be where it first
+            // learns the workflow was reset.
+            self.note_stale_run(&err.message);
         }
 
         for prep in prepared {

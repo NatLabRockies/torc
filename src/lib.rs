@@ -14,10 +14,22 @@
 /// Used for both batch creation limits and pagination limits.
 pub const MAX_RECORD_TRANSFER_COUNT: i64 = 100_000;
 
+macro_rules! stale_run_text {
+    () => {
+        "run_id is not the workflow's current run"
+    };
+}
+
+/// Prefix of every error the server returns (422) for a run_id that is not the workflow's
+/// current run, from claims and completions alike. Job runners match on it to stop.
+pub const STALE_RUN: &str = stale_run_text!();
+
 /// Message a claim returns (with 422) when its run_id is not the workflow's current run or its
-/// compute_node_id is not a node of the workflow. Job runners match on it to stop.
-pub const CLAIM_START_MISMATCH: &str =
-    "run_id is not the workflow's current run or compute_node_id is not a node of this workflow";
+/// compute_node_id is not a node of the workflow. Starts with [`STALE_RUN`].
+pub const CLAIM_START_MISMATCH: &str = concat!(
+    stale_run_text!(),
+    " or compute_node_id is not a node of this workflow"
+);
 
 /// Get the current username from environment variables.
 ///

@@ -1450,4 +1450,8 @@ fn test_runner_stops_on_stale_run_id(start_server: &ServerProcess) {
         err.to_string().contains("no longer the current run"),
         "{err}"
     );
+    // The stale runner still shuts down cleanly: its compute node is deactivated.
+    let node =
+        apis::compute_nodes_api::get_compute_node(config, compute_node_id).expect("get node");
+    assert_eq!(node.is_active, Some(false));
 }

@@ -21,8 +21,9 @@ use crate::models;
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
-    database_error_with_msg, deserialize_env_map, escape_like_pattern, message_error_response,
-    normalize_env_map, resource_not_found_response, serialize_env_map, validate_env_map,
+    database_error_with_msg, database_lock_aware_error, deserialize_env_map, escape_like_pattern,
+    message_error_response, normalize_env_map, resource_not_found_response, serialize_env_map,
+    validate_env_map,
 };
 
 /// Serialize the model's `dynamic_jobs` for the JSON-blob column. `None`
@@ -2228,8 +2229,8 @@ where
         // Use force flag from query parameter (defaults to false)
         let force = force.unwrap_or(false);
 
-        let current_workflow = match self.get_workflow(id, context).await? {
-            GetWorkflowResponse::SuccessfulResponse(wf) => wf,
+        match self.get_workflow(id, context).await? {
+            GetWorkflowResponse::SuccessfulResponse(_) => {}
             GetWorkflowResponse::ForbiddenErrorResponse(err) => {
                 // Return the forbidden error as a default error since this endpoint
                 // doesn't have a ForbiddenErrorResponse variant in the OpenAPI spec
@@ -2242,10 +2243,33 @@ where
                 error!("Failed to get workflow before reset for workflow_id={}", id);
                 return Err(ApiError("Failed to get workflow".to_string()));
             }
+        }
+
+        // Take the write lock before the archived and active-job checks so a concurrent
+        // archive or claim cannot commit between the check and the run_id bump.
+        let mut tx = match begin_immediate(&self.context.pool).await {
+            Ok(tx) => tx,
+            Err(e) => {
+                return Err(database_lock_aware_error(e, "Failed to begin transaction"));
+            }
         };
 
-        // Check if workflow is archived
-        if current_workflow.is_archived.unwrap_or(false) {
+        let is_archived = match sqlx::query_scalar::<_, bool>(
+            "SELECT COALESCE(is_archived, 0) FROM workflow WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        {
+            Ok(v) => v.unwrap_or(false),
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to check archived status",
+                ));
+            }
+        };
+        if is_archived {
             return Ok(
                 ResetWorkflowStatusResponse::UnprocessableContentErrorResponse(
                     message_error_response(
@@ -2254,15 +2278,6 @@ where
                 ),
             );
         }
-
-        // Take the write lock before the active-job checks so a concurrent claim cannot
-        // commit running jobs between the check and the run_id bump.
-        let mut tx = match begin_immediate(&self.context.pool).await {
-            Ok(tx) => tx,
-            Err(e) => {
-                return Err(database_error_with_msg(e, "Failed to begin transaction"));
-            }
-        };
 
         // Check if any jobs are in running or SubmittedPending status
         let submitted_status = models::JobStatus::Running.to_int();

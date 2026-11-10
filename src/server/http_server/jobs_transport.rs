@@ -1,6 +1,6 @@
 use super::*;
 use crate::CLAIM_START_MISMATCH;
-use crate::server::api::jobs::{ClaimStart, claim_start_is_valid, finish_claim};
+use crate::server::api::jobs::{ClaimStart, claim_start_is_valid, finish_claim, run_id_mismatch};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -1841,38 +1841,18 @@ where
 
         // Inline run_id validation against tx for the same reason: validate_run_id uses a
         // fresh pool connection and would deadlock against the in-flight transaction.
-        let workflow_run_id_row =
-            sqlx::query!("SELECT run_id FROM workflow WHERE id = ?", job_workflow_id)
-                .fetch_optional(&mut **tx)
-                .await
-                .map_err(|e| {
-                    CompletionMutationError::Transport(database_lock_aware_error(
-                        e,
-                        "Failed to fetch workflow run_id",
-                    ))
-                })?;
-        match workflow_run_id_row {
-            Some(row) if row.run_id == run_id => {}
-            Some(row) => {
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
-                        format!(
-                            "Run ID mismatch: provided {} but workflow status has {}",
-                            run_id, row.run_id
-                        ),
-                    )),
-                )));
-            }
-            None => {
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
-                        format!(
-                            "Workflow status not found for workflow ID: {}",
-                            job_workflow_id
-                        ),
-                    )),
-                )));
-            }
+        if let Some(msg) = run_id_mismatch(tx, job_workflow_id, run_id)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to fetch workflow run_id",
+                ))
+            })?
+        {
+            return Err(CompletionMutationError::Response(Box::new(
+                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(msg)),
+            )));
         }
 
         if let Err(e) = sqlx::query!(
@@ -2559,23 +2539,6 @@ where
             resources,
         );
 
-        // Workflow existence check runs without a transaction. WAL mode allows
-        // concurrent reads, so this never contends with productive writes.
-        let workflow_exists = sqlx::query("SELECT id FROM workflow WHERE id = $1")
-            .bind(workflow_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| {
-                error!("Database error checking workflow existence: {}", e);
-                ApiError("Database error".to_string())
-            })?;
-
-        if workflow_exists.is_none() {
-            return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
-                resource_not_found_response("Workflow", workflow_id),
-            ));
-        }
-
         // Lock-free pre-check: skip the BEGIN IMMEDIATE write lock when no
         // ready job in this workflow could possibly fit the runner's resources.
         // We deliberately omit the scheduler filter here so a positive result
@@ -2618,18 +2581,36 @@ where
         if pre_check.is_none() {
             // Still reject a stale run so an idle runner learns it should stop. No lock is
             // needed: nothing is claimed, and a stale run never becomes current again.
-            let valid = claim_start_is_valid(&mut conn, workflow_id, start)
-                .await
-                .map_err(|e| {
-                    error!("Database error validating claim start: {}", e);
-                    ApiError("Database error".to_string())
-                })?;
+            // A valid start proves the workflow exists, so the common idle poll costs two
+            // reads; the existence lookup runs only to choose between 404 and 422.
+            let valid = start.is_some()
+                && claim_start_is_valid(&mut conn, workflow_id, start)
+                    .await
+                    .map_err(|e| {
+                        error!("Database error validating claim start: {}", e);
+                        ApiError("Database error".to_string())
+                    })?;
             if !valid {
-                return Ok(
-                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
-                        message_error_response(CLAIM_START_MISMATCH),
-                    ),
-                );
+                let workflow_exists = sqlx::query("SELECT id FROM workflow WHERE id = $1")
+                    .bind(workflow_id)
+                    .fetch_optional(&mut *conn)
+                    .await
+                    .map_err(|e| {
+                        error!("Database error checking workflow existence: {}", e);
+                        ApiError("Database error".to_string())
+                    })?;
+                if workflow_exists.is_none() {
+                    return Ok(ClaimJobsBasedOnResources::NotFoundErrorResponse(
+                        resource_not_found_response("Workflow", workflow_id),
+                    ));
+                }
+                if start.is_some() {
+                    return Ok(
+                        ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                            message_error_response(CLAIM_START_MISMATCH),
+                        ),
+                    );
+                }
             }
             return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
                 models::ClaimJobsBasedOnResources {
