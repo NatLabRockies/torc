@@ -2664,7 +2664,11 @@ where
                 .await
             {
                 Ok(Some(row)) => row.get::<bool, _>("is_canceled"),
-                Ok(None) => false,
+                Ok(None) => {
+                    return Ok(ClaimNextJobsResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Workflow", id),
+                    ));
+                }
                 Err(e) => {
                     error!("Failed to query workflow cancellation status: {}", e);
                     return Err(ApiError("Database error".to_string()));
@@ -2672,6 +2676,18 @@ where
             };
 
         if workflow_is_canceled {
+            // Nothing is claimed, but still reject a stale run so its runner stops.
+            let valid = claim_start_is_valid(&mut conn, id, start)
+                .await
+                .map_err(|e| {
+                    error!("Database error validating claim start: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
+            if !valid {
+                return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(CLAIM_START_MISMATCH),
+                ));
+            }
             return Ok(ClaimNextJobsResponse::SuccessfulResponse(
                 models::ClaimNextJobsResponse { jobs: Some(vec![]) },
             ));

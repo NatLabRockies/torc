@@ -630,15 +630,6 @@ where
             Err(e) => return Err(e),
         };
 
-        if workflow.is_canceled.unwrap_or(false) {
-            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
-                models::ClaimJobsBasedOnResources {
-                    jobs: Some(vec![]),
-                    reason: Some("Workflow is canceled".to_string()),
-                },
-            ));
-        }
-
         let start = match crate::server::api::jobs::ClaimStart::from_query(run_id, compute_node_id)
         {
             Ok(start) => start,
@@ -650,6 +641,35 @@ where
                 );
             }
         };
+
+        if workflow.is_canceled.unwrap_or(false) {
+            // Nothing is claimed, but still reject a stale run so its runner stops.
+            if start.is_some() {
+                let mut conn = self.pool.acquire().await.map_err(|e| {
+                    error!("Failed to acquire database connection: {}", e);
+                    ApiError("Database connection error".to_string())
+                })?;
+                let valid = crate::server::api::jobs::claim_start_is_valid(&mut conn, id, start)
+                    .await
+                    .map_err(|e| {
+                        error!("Database error validating claim start: {}", e);
+                        ApiError("Database error".to_string())
+                    })?;
+                if !valid {
+                    return Ok(
+                        ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                            message_error_response(crate::CLAIM_START_MISMATCH),
+                        ),
+                    );
+                }
+            }
+            return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
+                models::ClaimJobsBasedOnResources {
+                    jobs: Some(vec![]),
+                    reason: Some("Workflow is canceled".to_string()),
+                },
+            ));
+        }
 
         let response = self
             .transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, start, context)

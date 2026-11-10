@@ -287,6 +287,55 @@ fn test_prepare_next_jobs_canceled_workflow(start_server: &ServerProcess) {
         returned_jobs.is_empty(),
         "Should return empty array for canceled workflow"
     );
+
+    // A canceled workflow still rejects a stale run on both claim endpoints.
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    for (rid, ok) in [(run_id, true), (run_id + 1, false)] {
+        let next = apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(10),
+            None,
+            Some(rid),
+            Some(compute_node_id),
+        );
+        assert_eq!(next.is_ok(), ok, "claim_next_jobs run_id={rid}");
+        let by_resources = apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            10,
+            models::ComputeNodesResources::new(1, 1.0, 0, 1),
+            None,
+            Some(rid),
+            Some(compute_node_id),
+        );
+        assert_eq!(
+            by_resources.is_ok(),
+            ok,
+            "claim_jobs_based_on_resources run_id={rid}"
+        );
+    }
+}
+
+/// claim_next_jobs on a missing workflow returns 404, not the stale-run 422.
+#[rstest]
+fn test_claim_next_jobs_missing_workflow(start_server: &ServerProcess) {
+    let result = apis::workflows_api::claim_next_jobs(
+        &start_server.config,
+        999_999_999,
+        Some(1),
+        None,
+        Some(1),
+        Some(1),
+    );
+    match result {
+        Err(apis::Error::ResponseError(ref r)) => assert_eq!(r.status, 404),
+        other => panic!("Expected 404 ResponseError, got {:?}", other),
+    }
 }
 
 /// Test claim_next_jobs exhausts all ready jobs

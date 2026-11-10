@@ -359,8 +359,8 @@ job. If both are omitted, as older clients do, claimed jobs move to `pending` an
 call `start_job` for each one.
 
 The server rejects the claim with 422 when `run_id` is not the workflow's current run or
-`compute_node_id` is not one of its nodes. If the workflow is canceled, the claim returns no jobs
-without checking them.
+`compute_node_id` is not one of its nodes. It checks them even when the claim returns no jobs,
+including for a canceled workflow, so a runner whose run is stale learns to stop.
 
 ### `claim_jobs_based_on_resources`
 
