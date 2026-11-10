@@ -20,9 +20,9 @@ use crate::server::api_responses::{
 use crate::models;
 
 use super::{
-    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
-    deserialize_env_map, escape_like_pattern, message_error_response, normalize_env_map,
-    resource_not_found_response, serialize_env_map, validate_env_map,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
+    database_error_with_msg, deserialize_env_map, escape_like_pattern, message_error_response,
+    normalize_env_map, resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
 /// Serialize the model's `dynamic_jobs` for the JSON-blob column. `None`
@@ -2255,6 +2255,15 @@ where
             );
         }
 
+        // Take the write lock before the active-job checks so a concurrent claim cannot
+        // commit running jobs between the check and the run_id bump.
+        let mut tx = match begin_immediate(&self.context.pool).await {
+            Ok(tx) => tx,
+            Err(e) => {
+                return Err(database_error_with_msg(e, "Failed to begin transaction"));
+            }
+        };
+
         // Check if any jobs are in running or SubmittedPending status
         let submitted_status = models::JobStatus::Running.to_int();
         let submitted_pending_status = models::JobStatus::Pending.to_int();
@@ -2265,7 +2274,7 @@ where
         .bind(id)
         .bind(submitted_status)
         .bind(submitted_pending_status)
-        .fetch_optional(self.context.pool.as_ref())
+        .fetch_optional(&mut *tx)
         .await
         {
             Ok(result) => result.is_some(),
@@ -2299,7 +2308,7 @@ where
             "SELECT id FROM scheduled_compute_node WHERE workflow_id = ? AND (status = 'pending' OR status = 'active') LIMIT 1",
         )
         .bind(id)
-        .fetch_optional(self.context.pool.as_ref())
+        .fetch_optional(&mut *tx)
         .await
         {
             Ok(result) => result.is_some(),
@@ -2324,14 +2333,6 @@ where
                 );
             }
         }
-
-        // Begin a transaction to ensure workflow status reset is atomic
-        let mut tx = match self.context.pool.begin().await {
-            Ok(tx) => tx,
-            Err(e) => {
-                return Err(database_error_with_msg(e, "Failed to begin transaction"));
-            }
-        };
 
         // Reset clears the lifecycle flags and bumps run_id by one — semantically
         // "start a new run". Folding the bump in here keeps the API surface

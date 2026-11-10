@@ -1,7 +1,6 @@
 use super::*;
-use crate::server::api::jobs::{
-    CLAIM_START_MISMATCH, ClaimStart, claim_start_is_valid, finish_claim,
-};
+use crate::CLAIM_START_MISMATCH;
+use crate::server::api::jobs::{ClaimStart, claim_start_is_valid, finish_claim};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,

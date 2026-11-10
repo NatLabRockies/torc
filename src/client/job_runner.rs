@@ -1329,11 +1329,9 @@ impl JobRunner {
                     self.run_id, self.workflow_id
                 );
                 self.kill_running_jobs();
-                return Err(format!(
-                    "run_id={} is no longer the current run of workflow_id={}",
-                    self.run_id, self.workflow_id
-                )
-                .into());
+                // Fall through to the normal shutdown so the compute node is deactivated and
+                // the resource monitor stops; the server is still reachable.
+                break;
             }
 
             // Skip the poll-interval wait when this iteration reported one or
@@ -1520,8 +1518,9 @@ impl JobRunner {
             }
         }
 
-        // Worker-complete actions run on the server; skip them when offline.
-        if !self.offline {
+        // Worker-complete actions run on the server; skip them when offline or when this
+        // runner's run is stale.
+        if !self.offline && !self.stale_run {
             self.execute_worker_complete_actions();
         }
 
@@ -1564,6 +1563,13 @@ impl JobRunner {
             self.had_failures,
             self.had_terminations
         );
+        if self.stale_run {
+            return Err(format!(
+                "run_id={} is no longer the current run of workflow_id={}",
+                self.run_id, self.workflow_id
+            )
+            .into());
+        }
         Ok(WorkerResult {
             had_failures: self.had_failures,
             had_terminations: self.had_terminations,
@@ -1572,7 +1578,7 @@ impl JobRunner {
 
     /// Kill all running child processes without making any API calls.
     ///
-    /// Used when the server is unreachable and we need to exit immediately.
+    /// Used when the server is unreachable or this runner's run is stale.
     /// Jobs are left in their current server-side status (likely "running");
     /// the server will detect them as stale when the compute node is no longer
     /// reporting in.
@@ -1581,7 +1587,7 @@ impl JobRunner {
             return;
         }
         error!(
-            "Killing {} running job(s) due to unrecoverable API failure workflow_id={}",
+            "Killing {} running job(s) workflow_id={}",
             self.running_jobs.len(),
             self.workflow_id
         );

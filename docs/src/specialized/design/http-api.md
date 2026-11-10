@@ -367,9 +367,9 @@ without checking them.
 Similar to `claim_next_jobs` but factors in resource requirements (CPU, memory, GPU) and available
 capacity on the requesting worker.
 
-It validates `run_id` and `compute_node_id` the same way, but only when some ready job fits the
-worker's resources. If none fits, the claim returns no jobs without checking them, so an idle poll
-costs a single query.
+It validates `run_id` and `compute_node_id` the same way, including when no ready job fits the
+worker's resources, so a runner whose run is stale learns to stop even while idle. An idle poll
+skips the write lock.
 
 ## Content Types
 

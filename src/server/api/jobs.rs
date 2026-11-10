@@ -19,6 +19,7 @@ use crate::server::api_responses::{
     UpdateJobResponse,
 };
 
+use crate::CLAIM_START_MISMATCH;
 use crate::models::{self as models, JobStatus};
 
 use super::{
@@ -53,9 +54,6 @@ impl ClaimStart {
     }
 }
 
-/// Message returned when `finish_claim` rejects a claim's start fields.
-pub use crate::CLAIM_START_MISMATCH;
-
 /// Check `run_id` against the workflow's current run on `conn`, which may be inside an open
 /// transaction. Returns `Some(message)` when the workflow is missing or the run is stale.
 pub(crate) async fn run_id_mismatch(
@@ -88,18 +86,16 @@ pub(crate) async fn claim_start_is_valid(
     let Some(s) = start else {
         return Ok(true);
     };
-    if run_id_mismatch(conn, workflow_id, s.run_id)
-        .await?
-        .is_some()
-    {
-        return Ok(false);
-    }
-    let node = sqlx::query("SELECT 1 FROM compute_node WHERE id = ? AND workflow_id = ?")
-        .bind(s.compute_node_id)
-        .bind(workflow_id)
-        .fetch_optional(&mut *conn)
-        .await?;
-    Ok(node.is_some())
+    let row = sqlx::query(
+        "SELECT 1 FROM workflow w JOIN compute_node c ON c.workflow_id = w.id \
+         WHERE w.id = ? AND w.run_id = ? AND c.id = ?",
+    )
+    .bind(workflow_id)
+    .bind(s.run_id)
+    .bind(s.compute_node_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.is_some())
 }
 
 /// Finish a claim inside its write transaction: attach output file and user_data IDs
@@ -151,37 +147,35 @@ pub(crate) async fn finish_claim(
             .push(row.get("user_data_id"));
     }
 
-    let start_time = start.map(|_| Utc::now().to_rfc3339());
-    match start {
-        Some(s) => {
-            let sql = format!(
-                "UPDATE job SET status = ?, start_time = ?, compute_node_id = ? WHERE id IN ({ids})"
-            );
-            sqlx::query(sqlx::AssertSqlSafe(&*sql))
-                .bind(JobStatus::Running.to_int())
-                .bind(&start_time)
-                .bind(s.compute_node_id)
-                .execute(&mut *conn)
-                .await?;
-        }
-        None => {
-            let sql = format!("UPDATE job SET status = ? WHERE id IN ({ids})");
-            sqlx::query(sqlx::AssertSqlSafe(&*sql))
-                .bind(JobStatus::Pending.to_int())
-                .execute(&mut *conn)
-                .await?;
-        }
-    }
-
-    for job in jobs {
+    for job in jobs.iter_mut() {
         let id = job.id.unwrap_or_default();
         job.output_file_ids = files.remove(&id);
         job.output_user_data_ids = user_data.remove(&id);
-        if let Some(s) = start {
+    }
+
+    if let Some(s) = start {
+        let start_time = Utc::now().to_rfc3339();
+        let sql = format!(
+            "UPDATE job SET status = ?, start_time = ?, compute_node_id = ? WHERE id IN ({ids})"
+        );
+        sqlx::query(sqlx::AssertSqlSafe(&*sql))
+            .bind(JobStatus::Running.to_int())
+            .bind(&start_time)
+            .bind(s.compute_node_id)
+            .execute(&mut *conn)
+            .await?;
+        for job in jobs {
             job.status = Some(JobStatus::Running);
-            job.start_time.clone_from(&start_time);
+            job.start_time = Some(start_time.clone());
             job.compute_node_id = Some(s.compute_node_id);
-        } else {
+        }
+    } else {
+        let sql = format!("UPDATE job SET status = ? WHERE id IN ({ids})");
+        sqlx::query(sqlx::AssertSqlSafe(&*sql))
+            .bind(JobStatus::Pending.to_int())
+            .execute(&mut *conn)
+            .await?;
+        for job in jobs {
             job.status = Some(JobStatus::Pending);
         }
     }
