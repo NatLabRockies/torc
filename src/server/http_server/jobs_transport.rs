@@ -1364,9 +1364,10 @@ where
 
         let new_status_int = status.to_int();
         let current_status_int = current_status.to_int();
-        // Runtime state belongs only to running jobs; e.g. a runner reverting a claimed job
-        // to ready after a failed launch must not leave the claim's start_time behind.
-        let keep_runtime_state = status == models::JobStatus::Running;
+        // A runner reverting a claimed job to ready after a failed launch must not leave the
+        // claim's start_time and compute_node_id behind. Other transitions (cancel, terminate,
+        // disable) keep them so reports can still see where and when the job last ran.
+        let keep_runtime_state = status != models::JobStatus::Ready;
         let update_result = sqlx::query!(
             "UPDATE job SET status = ?,
                 start_time = CASE WHEN ? THEN start_time END,

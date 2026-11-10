@@ -1388,4 +1388,78 @@ fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
     assert_eq!(stored.status, Some(models::JobStatus::Ready));
     assert_eq!(stored.start_time, None);
     assert_eq!(stored.compute_node_id, None);
+
+    // Other transitions keep the last start_time and compute_node_id for reporting.
+    let reclaimed = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(1),
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    assert_eq!(reclaimed[0].id, Some(job_id));
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Disabled, run_id)
+        .unwrap();
+    let stored = apis::jobs_api::get_job(config, job_id).unwrap();
+    assert_eq!(stored.status, Some(models::JobStatus::Disabled));
+    assert!(stored.start_time.is_some());
+    assert_eq!(stored.compute_node_id, Some(compute_node_id));
+}
+
+/// A claim whose response was lost leaves jobs running on the runner's node with no
+/// process; revert_stranded_claims hands them back, sparing jobs from the latest claim.
+#[rstest]
+fn test_revert_stranded_claims(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let jobs = create_many_jobs_workflow(config, true, 2);
+    let workflow_id = jobs.values().next().unwrap().workflow_id;
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    let run_id = workflow.run_id.unwrap_or(0);
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let claimed = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(2),
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    assert_eq!(claimed.len(), 2);
+    let stranded = claimed[0].id.unwrap();
+    let just_claimed = claimed[1].id.unwrap();
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let mut runner = torc::client::job_runner::JobRunner::new(
+        config.clone(),
+        workflow,
+        run_id,
+        compute_node_id,
+        output_dir.path().to_path_buf(),
+        0.1,
+        None,
+        None,
+        None,
+        models::ComputeNodesResources::new(4, 8.0, 0, 1),
+        None,
+        None,
+        None,
+        false,
+        "test".to_string(),
+        None,
+    );
+    runner.revert_stranded_claims(&HashSet::from([just_claimed]));
+
+    let job = apis::jobs_api::get_job(config, stranded).unwrap();
+    assert_eq!(job.status, Some(models::JobStatus::Ready));
+    assert_eq!(job.compute_node_id, None);
+    let job = apis::jobs_api::get_job(config, just_claimed).unwrap();
+    assert_eq!(job.status, Some(models::JobStatus::Running));
 }

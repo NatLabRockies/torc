@@ -320,7 +320,7 @@ pub trait JobsApi<C> {
         context: &C,
     ) -> Result<UpdateJobResponse, ApiError>;
 
-    /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
+    /// Return user-requested number of jobs that are ready for submission. Sets status to pending, or running when `start` is set.
     async fn claim_next_jobs(
         &self,
         id: i64,
@@ -2615,7 +2615,7 @@ where
         Ok(UpdateJobResponse::SuccessfulResponse(updated_job))
     }
 
-    /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
+    /// Return user-requested number of jobs that are ready for submission. Sets status to pending, or running when `start` is set.
     #[instrument(skip(self, context), fields(workflow_id = id, requested_job_count))]
     async fn claim_next_jobs(
         &self,
