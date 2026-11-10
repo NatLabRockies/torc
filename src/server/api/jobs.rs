@@ -56,6 +56,29 @@ impl ClaimStart {
 /// Message returned when `finish_claim` rejects a claim's start fields.
 pub use crate::CLAIM_START_MISMATCH;
 
+/// Check `run_id` against the workflow's current run on `conn`, which may be inside an open
+/// transaction. Returns `Some(message)` when the workflow is missing or the run is stale.
+pub(crate) async fn run_id_mismatch(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    run_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query!("SELECT run_id FROM workflow WHERE id = ?", workflow_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(match row {
+        None => Some(format!(
+            "Workflow status not found for workflow ID: {}",
+            workflow_id
+        )),
+        Some(row) if row.run_id != run_id => Some(format!(
+            "Run ID mismatch: provided {} but workflow status has {}",
+            run_id, row.run_id
+        )),
+        Some(_) => None,
+    })
+}
+
 /// True when `start` is absent or names the workflow's current run and one of its compute nodes.
 pub(crate) async fn claim_start_is_valid(
     conn: &mut sqlx::SqliteConnection,
@@ -65,16 +88,18 @@ pub(crate) async fn claim_start_is_valid(
     let Some(s) = start else {
         return Ok(true);
     };
-    let valid = sqlx::query(
-        "SELECT 1 FROM workflow w JOIN compute_node cn ON cn.workflow_id = w.id \
-         WHERE w.id = ? AND w.run_id = ? AND cn.id = ?",
-    )
-    .bind(workflow_id)
-    .bind(s.run_id)
-    .bind(s.compute_node_id)
-    .fetch_optional(&mut *conn)
-    .await?;
-    Ok(valid.is_some())
+    if run_id_mismatch(conn, workflow_id, s.run_id)
+        .await?
+        .is_some()
+    {
+        return Ok(false);
+    }
+    let node = sqlx::query("SELECT 1 FROM compute_node WHERE id = ? AND workflow_id = ?")
+        .bind(s.compute_node_id)
+        .bind(workflow_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(node.is_some())
 }
 
 /// Finish a claim inside its write transaction: attach output file and user_data IDs

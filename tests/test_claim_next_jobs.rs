@@ -1371,18 +1371,23 @@ fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
         )
         .is_err()
     );
-    // claim_jobs_based_on_resources has nothing to claim, so it returns no jobs unchecked.
-    let idle = apis::workflows_api::claim_jobs_based_on_resources(
-        config,
-        workflow_id,
-        1,
-        models::ComputeNodesResources::new(1, 1.0, 0, 1),
-        None,
-        Some(run_id + 1),
-        Some(compute_node_id),
-    )
-    .unwrap();
-    assert!(idle.jobs.unwrap_or_default().is_empty());
+    // claim_jobs_based_on_resources has nothing to claim but still rejects the stale run,
+    // and accepts the current one. Yields the number of jobs claimed, or None when rejected.
+    let idle_claim = |run_id| {
+        apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            1,
+            models::ComputeNodesResources::new(1, 1.0, 0, 1),
+            None,
+            Some(run_id),
+            Some(compute_node_id),
+        )
+        .ok()
+        .map(|r| r.jobs.unwrap_or_default().len())
+    };
+    assert_eq!(idle_claim(run_id + 1), None);
+    assert_eq!(idle_claim(run_id), Some(0));
 
     apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Ready, run_id).unwrap();
     let stored = apis::jobs_api::get_job(config, job_id).unwrap();

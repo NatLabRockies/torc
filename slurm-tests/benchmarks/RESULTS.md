@@ -23,17 +23,16 @@ server-reported workflow walltime (first job start to last job end).
 
 ## Runs
 
-| Run                            | Script                        | What changed                   |
-| ------------------------------ | ----------------------------- | ------------------------------ |
-| 1                              | `throughput.sbatch`           | baseline, 50,000 jobs          |
-| 2                              | `throughput.sbatch`           | baseline, 100,000 jobs         |
-| 3                              | `throughput_ephemeral.sbatch` | ephemeral only, 1 s unblock    |
-| 4 (pending at time of writing) | `throughput_followup.sbatch`  | job duration, backoff, threads |
+| Run                            | Script                       | What changed                   |
+| ------------------------------ | ---------------------------- | ------------------------------ |
+| 1                              | `throughput.sbatch`          | baseline, 50,000 jobs          |
+| 2                              | `throughput.sbatch`          | baseline, 100,000 jobs         |
+| 3                              | `throughput.sbatch`          | ephemeral only, 1 s unblock    |
+| 4 (pending at time of writing) | `throughput_followup.sbatch` | job duration, backoff, threads |
 
-`throughput_ephemeral.sbatch` is `throughput.sbatch` with the regular server removed and the
-completion-check interval (`UNBLOCK_INTERVAL`) lowered from 30 s to 1 s.
-`throughput_followup.sbatch` runs several sweeps of it back to back in one allocation; see its
-header.
+Run 3 used `SERVERS=ephemeral UNBLOCK_INTERVAL=1 FAST_UNBLOCK_INTERVAL=`: the regular server removed
+and the completion-check interval lowered from 30 s to 1 s. `throughput_followup.sbatch` runs
+several sweeps with those settings back to back in one allocation; see its header.
 
 Every run completed every job with no failures and no server 5xx errors.
 

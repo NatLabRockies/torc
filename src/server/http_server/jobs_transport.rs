@@ -1,5 +1,7 @@
 use super::*;
-use crate::server::api::jobs::{CLAIM_START_MISMATCH, ClaimStart, finish_claim};
+use crate::server::api::jobs::{
+    CLAIM_START_MISMATCH, ClaimStart, claim_start_is_valid, finish_claim,
+};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -2615,8 +2617,21 @@ where
         })?;
 
         if pre_check.is_none() {
-            // Nothing to claim, so nothing to validate: run_id/compute_node_id are checked
-            // only when a claim would mark jobs, keeping idle polls to a single query.
+            // Still reject a stale run so an idle runner learns it should stop. No lock is
+            // needed: nothing is claimed, and a stale run never becomes current again.
+            let valid = claim_start_is_valid(&mut conn, workflow_id, start)
+                .await
+                .map_err(|e| {
+                    error!("Database error validating claim start: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
+            if !valid {
+                return Ok(
+                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                        message_error_response(CLAIM_START_MISMATCH),
+                    ),
+                );
+            }
             return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
                 models::ClaimJobsBasedOnResources {
                     jobs: Some(Vec::new()),
