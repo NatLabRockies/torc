@@ -555,6 +555,8 @@ pub struct JobRunner {
     /// Uses std::time::Instant instead of wall clock time to avoid issues with
     /// NTP clock adjustments that could cause premature idle timeout exits.
     last_job_claimed_time: Option<Instant>,
+    /// Set when a claim is rejected because `run_id` is no longer the workflow's current run.
+    stale_run: bool,
     /// Monotonic timestamp of the last job completion this runner observed.
     /// Bounds how long an untriggered action may keep an idle runner alive:
     /// only a local completion can move an action toward its trigger threshold
@@ -865,6 +867,7 @@ impl JobRunner {
             termination_requested: Arc::new(AtomicBool::new(false)),
             wakeup: Wakeup::new(),
             last_job_claimed_time: None,
+            stale_run: false,
             last_completion_time: None,
             persistent: false,
             executed_action_ids: HashSet::new(),
@@ -987,6 +990,12 @@ impl JobRunner {
             },
             self.rules.compute_node_wait_for_healthy_database_minutes,
         )
+    }
+
+    fn note_stale_run(&mut self, err: &dyn std::fmt::Display) {
+        if err.to_string().contains(crate::CLAIM_START_MISMATCH) {
+            self.stale_run = true;
+        }
     }
 
     fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
@@ -1310,6 +1319,21 @@ impl JobRunner {
                         );
                     }
                 }
+            }
+
+            if self.stale_run {
+                // The workflow was reset or reinitialized; every later claim would fail the
+                // same way, and running jobs' results can no longer be recorded.
+                error!(
+                    "run_id={} is no longer the current run, stopping job runner workflow_id={}",
+                    self.run_id, self.workflow_id
+                );
+                self.kill_running_jobs();
+                return Err(format!(
+                    "run_id={} is no longer the current run of workflow_id={}",
+                    self.run_id, self.workflow_id
+                )
+                .into());
             }
 
             // Skip the poll-interval wait when this iteration reported one or
@@ -3121,11 +3145,7 @@ impl JobRunner {
 
         let limit = per_node.num_cpus;
         let strict_scheduler_match = self.torc_config.client.slurm.strict_scheduler_match;
-        // More than one attempt means an earlier one may have claimed a batch whose
-        // response was lost; revert_stranded_claims hands such jobs back afterwards.
-        let mut attempts = 0;
-        let claimed = self.send_with_retries(|| {
-            attempts += 1;
+        match self.send_with_retries(|| {
             Self::box_retry_error(apis::workflows_api::claim_jobs_based_on_resources(
                 &self.config,
                 self.workflow_id,
@@ -3135,17 +3155,7 @@ impl JobRunner {
                 Some(self.run_id),
                 Some(self.compute_node_id),
             ))
-        });
-        if attempts > 1 {
-            let just_claimed: HashSet<i64> = claimed
-                .as_ref()
-                .ok()
-                .and_then(|r| r.jobs.as_ref())
-                .map(|jobs| jobs.iter().filter_map(|j| j.id).collect())
-                .unwrap_or_default();
-            self.revert_stranded_claims(&just_claimed);
-        }
-        match claimed {
+        }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
@@ -3170,6 +3180,7 @@ impl JobRunner {
                 true
             }
             Err(err) => {
+                self.note_stale_run(&err);
                 error!(
                     "Failed to claim jobs after retries workflow_id={}{}: {}",
                     self.workflow_id,
@@ -3200,11 +3211,7 @@ impl JobRunner {
             .max_parallel_jobs
             .expect("max_parallel_jobs must be set")
             - self.running_jobs.len() as i64;
-        // More than one attempt means an earlier one may have claimed a batch whose
-        // response was lost; revert_stranded_claims hands such jobs back afterwards.
-        let mut attempts = 0;
-        let claimed = self.send_with_retries(|| {
-            attempts += 1;
+        match self.send_with_retries(|| {
             Self::box_retry_error(apis::workflows_api::claim_next_jobs(
                 &self.config,
                 self.workflow_id,
@@ -3213,17 +3220,7 @@ impl JobRunner {
                 Some(self.run_id),
                 Some(self.compute_node_id),
             ))
-        });
-        if attempts > 1 {
-            let just_claimed: HashSet<i64> = claimed
-                .as_ref()
-                .ok()
-                .and_then(|r| r.jobs.as_ref())
-                .map(|jobs| jobs.iter().filter_map(|j| j.id).collect())
-                .unwrap_or_default();
-            self.revert_stranded_claims(&just_claimed);
-        }
-        match claimed {
+        }) {
             Ok(response) => {
                 let jobs = response.jobs.unwrap_or_default();
                 if jobs.is_empty() {
@@ -3245,6 +3242,7 @@ impl JobRunner {
                 true
             }
             Err(err) => {
+                self.note_stale_run(&err);
                 error!(
                     "Failed to claim jobs after retries workflow_id={}: {}",
                     self.workflow_id, err
@@ -3374,52 +3372,6 @@ impl JobRunner {
     ///
     /// This allows the job to be picked up by another worker. Also releases any
     /// GPU devices that were reserved for the job.
-    /// Revert jobs the server shows running on this compute node that this runner is not
-    /// running. A claim whose response was lost (then retried, or given up on) leaves its
-    /// batch marked running here with no process behind it; this hands those jobs back.
-    /// `just_claimed` holds jobs from the claim that succeeded, which are not started yet.
-    #[doc(hidden)]
-    pub fn revert_stranded_claims(&mut self, just_claimed: &HashSet<i64>) {
-        let jobs = match self.send_with_retries(|| {
-            Self::box_retry_error(apis::jobs_api::list_jobs(
-                &self.config,
-                self.workflow_id,
-                Some(JobStatus::Running),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(self.compute_node_id),
-                None,
-                None,
-                None,
-                None,
-            ))
-        }) {
-            Ok(response) => response.items,
-            Err(e) => {
-                error!(
-                    "Failed to list running jobs to revert stranded claims workflow_id={} \
-                     compute_node_id={}: {}",
-                    self.workflow_id, self.compute_node_id, e
-                );
-                return;
-            }
-        };
-        for job_id in jobs.iter().filter_map(|j| j.id) {
-            if !self.running_jobs.contains_key(&job_id) && !just_claimed.contains(&job_id) {
-                warn!(
-                    "Reverting job stranded by a lost claim response workflow_id={} job_id={}",
-                    self.workflow_id, job_id
-                );
-                self.revert_job_to_ready(job_id);
-            }
-        }
-    }
-
     fn revert_job_to_ready(&mut self, job_id: i64) {
         match self.send_with_retries(|| {
             Self::box_retry_error(apis::jobs_api::manage_status_change(

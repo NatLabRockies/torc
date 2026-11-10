@@ -14,6 +14,11 @@
 /// Used for both batch creation limits and pagination limits.
 pub const MAX_RECORD_TRANSFER_COUNT: i64 = 100_000;
 
+/// Message a claim returns (with 422) when its run_id is not the workflow's current run or its
+/// compute_node_id is not a node of the workflow. Job runners match on it to stop.
+pub const CLAIM_START_MISMATCH: &str =
+    "run_id is not the workflow's current run or compute_node_id is not a node of this workflow";
+
 /// Get the current username from environment variables.
 ///
 /// Checks in order: `TORC_USERNAME` (explicit override), `USER` (Unix),

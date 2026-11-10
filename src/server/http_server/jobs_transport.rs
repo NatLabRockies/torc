@@ -1,7 +1,5 @@
 use super::*;
-use crate::server::api::jobs::{
-    CLAIM_START_MISMATCH, ClaimStart, claim_start_is_valid, finish_claim,
-};
+use crate::server::api::jobs::{CLAIM_START_MISMATCH, ClaimStart, finish_claim};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -1365,9 +1363,14 @@ where
         let new_status_int = status.to_int();
         let current_status_int = current_status.to_int();
         // A runner reverting a claimed job to ready after a failed launch must not leave the
-        // claim's start_time and compute_node_id behind. Other transitions (cancel, terminate,
-        // disable) keep them so reports can still see where and when the job last ran.
-        let keep_runtime_state = status != models::JobStatus::Ready;
+        // claim's start_time and compute_node_id behind. Other transitions (including an admin
+        // resetting a finished job to ready) keep them so reports can still see where and when
+        // the job last ran.
+        let keep_runtime_state = !(status == models::JobStatus::Ready
+            && matches!(
+                current_status,
+                models::JobStatus::Running | models::JobStatus::Pending
+            ));
         let update_result = sqlx::query!(
             "UPDATE job SET status = ?,
                 start_time = CASE WHEN ? THEN start_time END,
@@ -2612,20 +2615,8 @@ where
         })?;
 
         if pre_check.is_none() {
-            // No lock needed: a stale run or foreign node stays invalid, so report it early.
-            let valid = claim_start_is_valid(&mut conn, workflow_id, start)
-                .await
-                .map_err(|e| {
-                    error!("Database error validating claim start: {}", e);
-                    ApiError("Database error".to_string())
-                })?;
-            if !valid {
-                return Ok(
-                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
-                        message_error_response(CLAIM_START_MISMATCH),
-                    ),
-                );
-            }
+            // Nothing to claim, so nothing to validate: run_id/compute_node_id are checked
+            // only when a claim would mark jobs, keeping idle polls to a single query.
             return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
                 models::ClaimJobsBasedOnResources {
                     jobs: Some(Vec::new()),

@@ -904,7 +904,7 @@ class WorkflowsApi:
         limit: Annotated[StrictInt, Field(description="Maximum number of jobs to claim")],
         compute_nodes_resources: ComputeNodesResources,
         strict_scheduler_match: Optional[StrictBool] = None,
-        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.")] = None,
+        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs.")] = None,
         compute_node_id: Annotated[Optional[StrictInt], Field(description="Compute node that will run the claimed jobs. Pass with `run_id`.")] = None,
         _request_timeout: Union[
             None,
@@ -930,7 +930,7 @@ class WorkflowsApi:
         :type compute_nodes_resources: ComputeNodesResources
         :param strict_scheduler_match:
         :type strict_scheduler_match: bool
-        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.
+        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs.
         :type run_id: int
         :param compute_node_id: Compute node that will run the claimed jobs. Pass with `run_id`.
         :type compute_node_id: int
@@ -994,7 +994,7 @@ class WorkflowsApi:
         limit: Annotated[StrictInt, Field(description="Maximum number of jobs to claim")],
         compute_nodes_resources: ComputeNodesResources,
         strict_scheduler_match: Optional[StrictBool] = None,
-        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.")] = None,
+        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs.")] = None,
         compute_node_id: Annotated[Optional[StrictInt], Field(description="Compute node that will run the claimed jobs. Pass with `run_id`.")] = None,
         _request_timeout: Union[
             None,
@@ -1020,7 +1020,7 @@ class WorkflowsApi:
         :type compute_nodes_resources: ComputeNodesResources
         :param strict_scheduler_match:
         :type strict_scheduler_match: bool
-        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.
+        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs.
         :type run_id: int
         :param compute_node_id: Compute node that will run the claimed jobs. Pass with `run_id`.
         :type compute_node_id: int
@@ -1084,7 +1084,7 @@ class WorkflowsApi:
         limit: Annotated[StrictInt, Field(description="Maximum number of jobs to claim")],
         compute_nodes_resources: ComputeNodesResources,
         strict_scheduler_match: Optional[StrictBool] = None,
-        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.")] = None,
+        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs.")] = None,
         compute_node_id: Annotated[Optional[StrictInt], Field(description="Compute node that will run the claimed jobs. Pass with `run_id`.")] = None,
         _request_timeout: Union[
             None,
@@ -1110,7 +1110,7 @@ class WorkflowsApi:
         :type compute_nodes_resources: ComputeNodesResources
         :param strict_scheduler_match:
         :type strict_scheduler_match: bool
-        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.
+        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs.
         :type run_id: int
         :param compute_node_id: Compute node that will run the claimed jobs. Pass with `run_id`.
         :type compute_node_id: int
@@ -1266,7 +1266,7 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are.")] = None,
-        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.")] = None,
+        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs.")] = None,
         compute_node_id: Annotated[Optional[StrictInt], Field(description="Compute node that will run the claimed jobs. Pass with `run_id`.")] = None,
         _request_timeout: Union[
             None,
@@ -1290,7 +1290,7 @@ class WorkflowsApi:
         :type limit: int
         :param labels: Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are.
         :type labels: str
-        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.
+        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs.
         :type run_id: int
         :param compute_node_id: Compute node that will run the claimed jobs. Pass with `run_id`.
         :type compute_node_id: int
@@ -1352,7 +1352,7 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are.")] = None,
-        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.")] = None,
+        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs.")] = None,
         compute_node_id: Annotated[Optional[StrictInt], Field(description="Compute node that will run the claimed jobs. Pass with `run_id`.")] = None,
         _request_timeout: Union[
             None,
@@ -1376,7 +1376,7 @@ class WorkflowsApi:
         :type limit: int
         :param labels: Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are.
         :type labels: str
-        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.
+        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs.
         :type run_id: int
         :param compute_node_id: Compute node that will run the claimed jobs. Pass with `run_id`.
         :type compute_node_id: int
@@ -1438,7 +1438,7 @@ class WorkflowsApi:
         id: Annotated[StrictInt, Field(description="Workflow ID")],
         limit: Optional[StrictInt] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are.")] = None,
-        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.")] = None,
+        run_id: Annotated[Optional[StrictInt], Field(description="Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs.")] = None,
         compute_node_id: Annotated[Optional[StrictInt], Field(description="Compute node that will run the claimed jobs. Pass with `run_id`.")] = None,
         _request_timeout: Union[
             None,
@@ -1462,7 +1462,7 @@ class WorkflowsApi:
         :type limit: int
         :param labels: Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are.
         :type labels: str
-        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job.
+        :param run_id: Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the claim itself instead of calling `start_job` for each job. Returns 422 when this is not the workflow's current run or `compute_node_id` is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs.
         :type run_id: int
         :param compute_node_id: Compute node that will run the claimed jobs. Pass with `run_id`.
         :type compute_node_id: int

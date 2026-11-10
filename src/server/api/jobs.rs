@@ -54,8 +54,7 @@ impl ClaimStart {
 }
 
 /// Message returned when `finish_claim` rejects a claim's start fields.
-pub const CLAIM_START_MISMATCH: &str =
-    "run_id is not the workflow's current run or compute_node_id is not a node of this workflow";
+pub use crate::CLAIM_START_MISMATCH;
 
 /// True when `start` is absent or names the workflow's current run and one of its compute nodes.
 pub(crate) async fn claim_start_is_valid(

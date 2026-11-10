@@ -358,10 +358,18 @@ Pass `run_id` and `compute_node_id` with the claim: claimed jobs move straight t
 job. If both are omitted, as older clients do, claimed jobs move to `pending` and the worker must
 call `start_job` for each one.
 
+The server rejects the claim with 422 when `run_id` is not the workflow's current run or
+`compute_node_id` is not one of its nodes. If the workflow is canceled, the claim returns no jobs
+without checking them.
+
 ### `claim_jobs_based_on_resources`
 
 Similar to `claim_next_jobs` but factors in resource requirements (CPU, memory, GPU) and available
 capacity on the requesting worker.
+
+It validates `run_id` and `compute_node_id` the same way, but only when some ready job fits the
+worker's resources. If none fits, the claim returns no jobs without checking them, so an idle poll
+costs a single query.
 
 ## Content Types
 

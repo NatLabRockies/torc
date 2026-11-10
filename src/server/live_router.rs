@@ -508,6 +508,9 @@ pub struct ClaimJobsBasedOnResourcesQuery {
     pub strict_scheduler_match: Option<bool>,
     /// Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the
     /// claim itself instead of calling `start_job` for each job.
+    /// Returns 422 when this is not the workflow's current run or `compute_node_id` is not
+    /// one of its nodes. Not checked when no ready job fits the request; the claim then
+    /// returns no jobs.
     #[param(nullable = true)]
     pub run_id: Option<i64>,
     /// Compute node that will run the claimed jobs. Pass with `run_id`.
@@ -525,6 +528,9 @@ pub struct ClaimNextJobsQuery {
     pub labels: Option<String>,
     /// Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the
     /// claim itself instead of calling `start_job` for each job.
+    /// Returns 422 when this is not the workflow's current run or `compute_node_id` is not
+    /// one of its nodes. Not checked when the workflow is canceled; the claim then returns
+    /// no jobs.
     #[param(nullable = true)]
     pub run_id: Option<i64>,
     /// Compute node that will run the claimed jobs. Pass with `run_id`.

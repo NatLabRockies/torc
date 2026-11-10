@@ -1331,8 +1331,9 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
     assert_eq!(active.len(), claimed.len() + claimed_by_resources.len());
 }
 
-/// A stale claim is rejected even when no job is ready, and reverting a claimed job to ready
-/// clears the start_time and compute_node_id the claim set.
+/// A stale claim_next_jobs is rejected even when no job is ready; claim_jobs_based_on_resources
+/// skips the check when nothing fits. Reverting a claimed job to ready clears the start_time and
+/// compute_node_id the claim set.
 #[rstest]
 fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -1358,7 +1359,7 @@ fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
     assert_eq!(claimed.len(), 1);
     let job_id = claimed[0].id.unwrap();
 
-    // No job is ready now; a stale run_id must still be rejected by both claim endpoints.
+    // No job is ready now; claim_next_jobs still rejects a stale run_id.
     assert!(
         apis::workflows_api::claim_next_jobs(
             config,
@@ -1370,18 +1371,18 @@ fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
         )
         .is_err()
     );
-    assert!(
-        apis::workflows_api::claim_jobs_based_on_resources(
-            config,
-            workflow_id,
-            1,
-            models::ComputeNodesResources::new(1, 1.0, 0, 1),
-            None,
-            Some(run_id + 1),
-            Some(compute_node_id),
-        )
-        .is_err()
-    );
+    // claim_jobs_based_on_resources has nothing to claim, so it returns no jobs unchecked.
+    let idle = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        1,
+        models::ComputeNodesResources::new(1, 1.0, 0, 1),
+        None,
+        Some(run_id + 1),
+        Some(compute_node_id),
+    )
+    .unwrap();
+    assert!(idle.jobs.unwrap_or_default().is_empty());
 
     apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Ready, run_id).unwrap();
     let stored = apis::jobs_api::get_job(config, job_id).unwrap();
@@ -1410,37 +1411,21 @@ fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
     assert_eq!(stored.compute_node_id, Some(compute_node_id));
 }
 
-/// A claim whose response was lost leaves jobs running on the runner's node with no
-/// process; revert_stranded_claims hands them back, sparing jobs from the latest claim.
+/// A runner whose run_id is no longer the workflow's current run stops instead of polling.
 #[rstest]
-fn test_revert_stranded_claims(start_server: &ServerProcess) {
+fn test_runner_stops_on_stale_run_id(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let jobs = create_many_jobs_workflow(config, true, 2);
+    let jobs = create_many_jobs_workflow(config, true, 1);
     let workflow_id = jobs.values().next().unwrap().workflow_id;
     let workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
-    let run_id = workflow.run_id.unwrap_or(0);
+    let stale_run_id = workflow.run_id.unwrap_or(0) + 1;
     let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
-
-    let claimed = apis::workflows_api::claim_next_jobs(
-        config,
-        workflow_id,
-        Some(2),
-        None,
-        Some(run_id),
-        Some(compute_node_id),
-    )
-    .unwrap()
-    .jobs
-    .unwrap();
-    assert_eq!(claimed.len(), 2);
-    let stranded = claimed[0].id.unwrap();
-    let just_claimed = claimed[1].id.unwrap();
 
     let output_dir = tempfile::TempDir::new().unwrap();
     let mut runner = torc::client::job_runner::JobRunner::new(
         config.clone(),
         workflow,
-        run_id,
+        stale_run_id,
         compute_node_id,
         output_dir.path().to_path_buf(),
         0.1,
@@ -1455,11 +1440,9 @@ fn test_revert_stranded_claims(start_server: &ServerProcess) {
         "test".to_string(),
         None,
     );
-    runner.revert_stranded_claims(&HashSet::from([just_claimed]));
-
-    let job = apis::jobs_api::get_job(config, stranded).unwrap();
-    assert_eq!(job.status, Some(models::JobStatus::Ready));
-    assert_eq!(job.compute_node_id, None);
-    let job = apis::jobs_api::get_job(config, just_claimed).unwrap();
-    assert_eq!(job.status, Some(models::JobStatus::Running));
+    let err = runner.run_worker().unwrap_err();
+    assert!(
+        err.to_string().contains("no longer the current run"),
+        "{err}"
+    );
 }
