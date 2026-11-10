@@ -139,7 +139,7 @@ Name | Type | Description  | Notes
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **strict_scheduler_match** | **Bool** |  | [default to nothing]
- **run_id** | **Int64** | Current run ID. Pass with &#x60;compute_node_id&#x60; to mark the claimed jobs running in the claim itself instead of calling &#x60;start_job&#x60; for each job. Returns 422 when this is not the workflow&#39;s current run or &#x60;compute_node_id&#x60; is not one of its nodes. Not checked when no ready job fits the request; the claim then returns no jobs. | [default to nothing]
+ **run_id** | **Int64** | Current run ID. Pass with &#x60;compute_node_id&#x60; to mark the claimed jobs running in the claim itself instead of calling &#x60;start_job&#x60; for each job. Returns 422 when this is not the workflow&#39;s current run or &#x60;compute_node_id&#x60; is not one of its nodes, including when no ready job fits the request. | [default to nothing]
  **compute_node_id** | **Int64** | Compute node that will run the claimed jobs. Pass with &#x60;run_id&#x60;. | [default to nothing]
 
 ### Return type
@@ -176,7 +176,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **limit** | **Int64** |  | [default to nothing]
  **labels** | **String** | Comma-separated runner labels. Only labeled jobs whose every label is in this set are claimed; when unset or empty, only unlabeled jobs are. | [default to nothing]
- **run_id** | **Int64** | Current run ID. Pass with &#x60;compute_node_id&#x60; to mark the claimed jobs running in the claim itself instead of calling &#x60;start_job&#x60; for each job. Returns 422 when this is not the workflow&#39;s current run or &#x60;compute_node_id&#x60; is not one of its nodes. Not checked when the workflow is canceled; the claim then returns no jobs. | [default to nothing]
+ **run_id** | **Int64** | Current run ID. Pass with &#x60;compute_node_id&#x60; to mark the claimed jobs running in the claim itself instead of calling &#x60;start_job&#x60; for each job. Returns 422 when this is not the workflow&#39;s current run or &#x60;compute_node_id&#x60; is not one of its nodes, including when the claim returns no jobs or the workflow is canceled. | [default to nothing]
  **compute_node_id** | **Int64** | Compute node that will run the claimed jobs. Pass with &#x60;run_id&#x60;. | [default to nothing]
 
 ### Return type
