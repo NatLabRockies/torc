@@ -3,34 +3,43 @@ use crate::models;
 use crate::server::api::{begin_immediate, database_lock_aware_error};
 use crate::server::transport_types::context_types::{ApiError, EmptyContext, Has, XSpanIdString};
 use log::{debug, error, info};
-use std::sync::atomic::Ordering;
 
-pub(super) async fn background_unblock_task<C>(server: Server<C>, interval_seconds: f64)
+/// Minimum time between unblock passes. Completions that arrive during this window are
+/// handled together in the next pass, which bounds the write load under heavy completion
+/// traffic while an isolated completion is processed immediately.
+const MIN_UNBLOCK_GAP: std::time::Duration = std::time::Duration::from_secs(1);
+const ERROR_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Releases the dependents of completed jobs. Runs when `signal_job_completion` fires rather
+/// than on a timer, so a dependency level costs at most `MIN_UNBLOCK_GAP` of extra latency.
+pub(super) async fn background_unblock_task<C>(server: Server<C>)
 where
     C: Has<XSpanIdString> + Send + Sync,
 {
     info!(
-        "Starting background job completion checker with interval = {} seconds",
-        interval_seconds
+        "Starting background job completion processor (min gap = {:?})",
+        MIN_UNBLOCK_GAP
     );
 
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs_f64(interval_seconds));
-    let mut last_checked_time: u64 = 0;
+    // Process completions left pending by a previous server instance.
+    server.completion_notify.notify_one();
 
     loop {
-        interval.tick().await;
-
-        let completion_time = server.last_completion_time.load(Ordering::Acquire);
-        if completion_time <= last_checked_time {
-            debug!("No new job completions since last check, skipping unblock processing");
-            continue;
-        }
-
-        last_checked_time = completion_time;
+        // Notify keeps one permit, so completions signaled while a pass runs (or during the
+        // gap below) trigger exactly one more pass.
+        server.completion_notify.notified().await;
 
         if let Err(e) = process_pending_unblocks(&server).await {
-            error!("Error processing pending unblocks: {}", e);
+            // Rows stay unblocking_processed = 0; retry even if no new completion arrives.
+            error!(
+                "Error processing pending unblocks, retrying in {:?}: {}",
+                ERROR_RETRY_DELAY, e
+            );
+            tokio::time::sleep(ERROR_RETRY_DELAY).await;
+            server.completion_notify.notify_one();
         }
+
+        tokio::time::sleep(MIN_UNBLOCK_GAP).await;
     }
 }
 
@@ -77,15 +86,22 @@ where
         workflows.len()
     );
 
+    let mut failed = 0;
     for workflow in workflows {
         if let Err(e) = process_workflow_unblocks(server, workflow.workflow_id).await {
             error!(
-                "Error processing unblocks for workflow {}: {}",
+                "Error processing unblocks for workflow_id={}: {}",
                 workflow.workflow_id, e
             );
+            failed += 1;
         }
     }
 
+    if failed > 0 {
+        return Err(ApiError(format!(
+            "unblock processing failed for {failed} workflow(s)"
+        )));
+    }
     Ok(())
 }
 

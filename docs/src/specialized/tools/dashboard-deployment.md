@@ -98,9 +98,6 @@ torc-dash --standalone --port 8080 --server-host localhost
 # Specify database location
 torc-dash --standalone --database /path/to/my.db --server-host localhost
 
-# Faster job completion detection
-torc-dash --standalone --server-host localhost --completion-check-interval-secs 2
-
 # Specify binary paths (if not in PATH)
 torc-dash --standalone \
   --server-host localhost \
@@ -182,8 +179,7 @@ dashboard.
 torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
   --database /scratch/$USER/torc.db \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov \
-  --completion-check-interval-secs 60
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
 ```
 
 **Step 3: Access via SSH tunnel**
@@ -210,8 +206,7 @@ If you prefer TCP, omit `--socket` and use `--port` instead:
 torc-dash --standalone \
   --database /scratch/$USER/torc.db \
   --port 8090 \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov \
-  --completion-check-interval-secs 60
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
 ```
 
 Then tunnel to the TCP port:
@@ -307,8 +302,7 @@ On the shared server (e.g., a dedicated service node):
 ```bash
 torc-server run \
   --port 8080 \
-  --database /shared/storage/torc.db \
-  --completion-check-interval-secs 60
+  --database /shared/storage/torc.db
 ```
 
 For production, consider running as a systemd service:

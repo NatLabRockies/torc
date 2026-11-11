@@ -67,8 +67,6 @@ fn start_in_memory_server() -> InMemoryServer {
         .arg("1")
         .arg("--database")
         .arg(":memory:")
-        .arg("--completion-check-interval-secs")
-        .arg("0.1")
         .env("RUST_LOG", "info")
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

@@ -37,8 +37,9 @@ pub struct DashConfig {
     #[cfg(unix)]
     pub socket: Option<String>,
 
-    /// Interval in seconds for job completion checks (standalone mode)
-    pub completion_check_interval_secs: u32,
+    /// Deprecated and ignored: torc-server processes job completions as they arrive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_check_interval_secs: Option<u32>,
 }
 
 impl Default for DashConfig {
@@ -55,7 +56,7 @@ impl Default for DashConfig {
             database: None,
             #[cfg(unix)]
             socket: None,
-            completion_check_interval_secs: 5,
+            completion_check_interval_secs: None,
         }
     }
 }
@@ -81,6 +82,6 @@ mod tests {
         assert!(config.database.is_none());
         #[cfg(unix)]
         assert!(config.socket.is_none());
-        assert_eq!(config.completion_check_interval_secs, 5);
+        assert_eq!(config.completion_check_interval_secs, None);
     }
 }

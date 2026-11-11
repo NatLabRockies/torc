@@ -75,8 +75,6 @@ fn start_server() -> TestServer {
         .arg(port.to_string())
         .arg("--database")
         .arg(":memory:")
-        .arg("--completion-check-interval-secs")
-        .arg("0.1")
         .env("RUST_LOG", "warn")
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

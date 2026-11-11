@@ -23,8 +23,7 @@ systems. Adjust as necessary or exclude `--host` to use the default.
 torc-server run \
     --database torc.db \
     --host kl1.hsn.cm.kestrel.hpc.nrel.gov \
-    --port 0 \
-    --completion-check-interval-secs 5
+    --port 0
 ```
 
 With `port=0` torc will find a random free port. It will print the port number on the console like

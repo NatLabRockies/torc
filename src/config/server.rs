@@ -45,8 +45,9 @@ pub struct ServerConfig {
     /// Enforce access control based on workflow ownership and group membership
     pub enforce_access_control: bool,
 
-    /// Interval in seconds for background job completion processing
-    pub completion_check_interval_secs: f64,
+    /// Deprecated and ignored: completions are now processed as they arrive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_check_interval_secs: Option<f64>,
 
     /// Logging configuration
     pub logging: ServerLoggingConfig,
@@ -79,7 +80,7 @@ impl Default for ServerConfig {
             require_auth: false,
             credential_cache_ttl_secs: 60,
             enforce_access_control: false,
-            completion_check_interval_secs: 30.0,
+            completion_check_interval_secs: None,
             logging: ServerLoggingConfig::default(),
             admin_users: Vec::new(),
             disable_admin_sql: false,
@@ -117,7 +118,7 @@ mod tests {
         assert!(config.database.is_none());
         assert!(!config.require_auth);
         assert!(!config.enforce_access_control);
-        assert_eq!(config.completion_check_interval_secs, 30.0);
+        assert_eq!(config.completion_check_interval_secs, None);
     }
 
     #[test]

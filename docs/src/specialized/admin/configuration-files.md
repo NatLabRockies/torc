@@ -75,7 +75,6 @@ threads = 4
 database = "/path/to/torc.db"
 auth_file = "/path/to/htpasswd"
 require_auth = false
-completion_check_interval_secs = 30.0
 log_level = "info"
 https = false
 
@@ -97,7 +96,6 @@ torc_bin = "torc"
 torc_server_bin = "torc-server"
 standalone = false
 server_port = 0
-completion_check_interval_secs = 5
 ```
 
 ## Environment Variables

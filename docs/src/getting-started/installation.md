@@ -153,16 +153,15 @@ The server will be available at `http://localhost:8080`.
 
 ### Environment Variables
 
-| Variable                              | Default         | Description                                  |
-| ------------------------------------- | --------------- | -------------------------------------------- |
-| `TORC_AUTH_FILE`                      | _(required)_    | Path to htpasswd file inside the container   |
-| `TORC_ADMIN_USERS`                    | _(required)_    | Comma-separated list of admin usernames      |
-| `TORC_PORT`                           | `8080`          | Server listen port                           |
-| `TORC_DATABASE`                       | `/data/torc.db` | SQLite database path                         |
-| `TORC_LOG_DIR`                        | `/data`         | Log file directory                           |
-| `TORC_LOG_LEVEL`                      | `info`          | Log level (`debug`, `info`, `warn`, `error`) |
-| `TORC_THREADS`                        | `4`             | Number of worker threads                     |
-| `TORC_COMPLETION_CHECK_INTERVAL_SECS` | `30`            | Job completion polling interval              |
+| Variable           | Default         | Description                                  |
+| ------------------ | --------------- | -------------------------------------------- |
+| `TORC_AUTH_FILE`   | _(required)_    | Path to htpasswd file inside the container   |
+| `TORC_ADMIN_USERS` | _(required)_    | Comma-separated list of admin usernames      |
+| `TORC_PORT`        | `8080`          | Server listen port                           |
+| `TORC_DATABASE`    | `/data/torc.db` | SQLite database path                         |
+| `TORC_LOG_DIR`     | `/data`         | Log file directory                           |
+| `TORC_LOG_LEVEL`   | `info`          | Log level (`debug`, `info`, `warn`, `error`) |
+| `TORC_THREADS`     | `4`             | Number of worker threads                     |
 
 ### Running CLI Commands
 
@@ -316,10 +315,3 @@ cargo run --features server-bin --bin torc-server -- run
 ```
 
 Server will start on `http://localhost:8080`.
-
-When running small workflows for testing and demonstration purposes, we recommend setting this
-option so that the server detects job completions faster than the default value of 30 seconds.
-
-```bash
-./target/release/torc-server run --completion-check-interval-secs 5
-```

@@ -41,7 +41,7 @@ fn test_server_config_defaults() {
     assert!(config.database.is_none());
     assert!(config.auth_file.is_none());
     assert!(!config.require_auth);
-    assert_eq!(config.completion_check_interval_secs, 30.0);
+    assert_eq!(config.completion_check_interval_secs, None);
 }
 
 #[rstest]
@@ -62,7 +62,7 @@ fn test_dash_config_defaults() {
     assert!(!config.standalone);
     assert_eq!(config.server_port, 0);
     assert!(config.database.is_none());
-    assert_eq!(config.completion_check_interval_secs, 5);
+    assert_eq!(config.completion_check_interval_secs, None);
 }
 
 #[rstest]
@@ -253,20 +253,6 @@ fn test_validate_invalid_threads() {
     assert!(result.is_err());
     let errors = result.unwrap_err();
     assert!(errors.iter().any(|e| e.contains("threads")));
-}
-
-#[rstest]
-fn test_validate_invalid_completion_interval() {
-    let mut config = TorcConfig::default();
-    config.server.completion_check_interval_secs = 0.0;
-    let result = config.validate();
-    assert!(result.is_err());
-    let errors = result.unwrap_err();
-    assert!(
-        errors
-            .iter()
-            .any(|e| e.contains("completion_check_interval"))
-    );
 }
 
 #[rstest]

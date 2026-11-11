@@ -8,11 +8,10 @@ For running workflows on HPC clusters with Slurm, see [Quick Start (HPC)](./quic
 
 ## Start the Server
 
-Start a Torc server with a local database. Setting `--completion-check-interval-secs` ensures job
-completions are processed quickly (use this for personal servers, not shared deployments).
+Start a Torc server with a local database.
 
 ```console
-torc-server run --database torc.db --host localhost --completion-check-interval-secs 5
+torc-server run --database torc.db --host localhost
 ```
 
 ## Test the Connection

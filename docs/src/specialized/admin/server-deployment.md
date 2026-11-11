@@ -29,7 +29,6 @@ torc-server run
 
 # With options
 torc-server run --port 8080 --database ./torc.db --log-level debug
-torc-server run --completion-check-interval-secs 5
 ```
 
 ### `torc-server service`

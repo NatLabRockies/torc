@@ -716,7 +716,7 @@ where
         body.env = normalize_env_map(body.env.take());
         let workflow_env = serialize_env_map(body.env.clone(), "workflow env")?;
         let compute_node_expiration_buffer_seconds = body.compute_node_expiration_buffer_seconds;
-        // Default must be >= completion_check_interval_secs + job_completion_poll_interval
+        // Default must be >= unblock latency + job_completion_poll_interval
         // to avoid workers exiting before dependent jobs are unblocked.
         let compute_node_wait_for_new_jobs_seconds =
             body.compute_node_wait_for_new_jobs_seconds.unwrap_or(90);

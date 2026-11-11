@@ -145,9 +145,9 @@ struct Cli {
     #[arg(long, env = "DATABASE_URL")]
     database: Option<String>,
 
-    /// Completion check interval (seconds) for torc-server in standalone mode
-    #[arg(long, default_value_t = 5)]
-    completion_check_interval_secs: u32,
+    /// Deprecated and ignored: torc-server processes job completions as they arrive.
+    #[arg(long, hide = true)]
+    completion_check_interval_secs: Option<u32>,
 
     /// Listen on a UNIX domain socket instead of TCP (more secure on shared hosts).
     /// The socket file is created with owner-only permissions (0600).
@@ -311,11 +311,14 @@ async fn main() -> Result<()> {
         .database
         .clone()
         .or_else(|| dash_config.database.clone());
-    let completion_check_interval_secs = if explicit("completion_check_interval_secs") {
-        cli.completion_check_interval_secs
-    } else {
-        dash_config.completion_check_interval_secs
-    };
+    if cli.completion_check_interval_secs.is_some()
+        || dash_config.completion_check_interval_secs.is_some()
+    {
+        warn!(
+            "completion_check_interval_secs is deprecated and ignored: torc-server now \
+             processes job completions as they arrive"
+        );
+    }
 
     #[cfg(unix)]
     let socket_path = cli
@@ -378,8 +381,6 @@ async fn main() -> Result<()> {
             server_host.clone(),
             "--port".to_string(),
             server_port.to_string(),
-            "--completion-check-interval-secs".to_string(),
-            completion_check_interval_secs.to_string(),
         ];
 
         if let Some(ref db) = database {
@@ -2624,9 +2625,6 @@ struct ServerStartRequest {
     /// Database path (optional)
     #[serde(default)]
     database: Option<String>,
-    /// Completion check interval in seconds
-    #[serde(default = "default_completion_interval")]
-    completion_check_interval_secs: u32,
     /// Log level
     #[serde(default = "default_log_level")]
     log_level: String,
@@ -2634,10 +2632,6 @@ struct ServerStartRequest {
 
 fn default_server_port() -> u16 {
     8080
-}
-
-fn default_completion_interval() -> u32 {
-    5
 }
 
 fn default_log_level() -> String {
@@ -2691,8 +2685,6 @@ async fn server_start_handler(
         req.port.to_string(),
         "--log-level".to_string(),
         req.log_level.clone(),
-        "--completion-check-interval-secs".to_string(),
-        req.completion_check_interval_secs.to_string(),
     ];
 
     if let Some(ref db) = req.database

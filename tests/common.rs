@@ -280,8 +280,6 @@ fn start_process_with_env(
             .arg("run")
             .arg("--port")
             .arg(port.to_string())
-            .arg("--completion-check-interval-secs")
-            .arg("0.1")
             .env("DATABASE_URL", db_url)
             .env("RUST_LOG", "info")
             .stdout(std::process::Stdio::inherit())
@@ -1665,8 +1663,6 @@ fn start_process_with_access_control_impl(
         cmd.arg("run")
             .arg("--port")
             .arg(port.to_string())
-            .arg("--completion-check-interval-secs")
-            .arg("0.1")
             .arg("--enforce-access-control") // Enable access control enforcement
             .arg("--auth-file")
             .arg(&htpasswd_path)
