@@ -60,7 +60,7 @@ The server's `GET /workflows/{id}/claim_jobs_based_on_resources` endpoint:
 1. Receives the runner's resource capacity
 2. Queries the ready queue for jobs that fit within those resources
 3. Returns a set of jobs that can run concurrently without over-subscription
-4. Updates job status from `ready` to `pending` atomically
+4. Updates job status from `ready` to `running` atomically
 
 ### Priority-Based Job Selection
 
@@ -245,7 +245,7 @@ The `GET /workflows/{id}/claim_next_jobs` endpoint:
 1. Accepts `limit` parameter specifying maximum jobs to return
 2. Ignores all resource requirements
 3. Returns the next N ready jobs from the queue
-4. Updates their status from `ready` to `pending`
+4. Updates their status from `ready` to `running`
 
 **Runner behavior:**
 

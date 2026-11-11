@@ -1,5 +1,6 @@
 use super::*;
 use crate::server::api::ResourceRequirementsApi;
+use crate::server::api::jobs::{ClaimStart, run_id_mismatch};
 
 impl<C> Server<C> {
     /// Create a depends-on association between two jobs based on file dependencies.
@@ -284,31 +285,36 @@ impl<C> Server<C> {
         workflow_id: i64,
         provided_run_id: i64,
     ) -> Result<(), String> {
-        let workflow_status =
-            match sqlx::query!("SELECT run_id FROM workflow WHERE id = ?", workflow_id)
-                .fetch_optional(self.pool.as_ref())
-                .await
-            {
-                Ok(Some(row)) => row,
-                Ok(None) => {
-                    return Err(format!(
-                        "Workflow status not found for workflow ID: {}",
-                        workflow_id
-                    ));
-                }
-                Err(e) => {
-                    error!("Database error looking up workflow status: {}", e);
-                    return Err("Database error".to_string());
-                }
-            };
-
-        if provided_run_id != workflow_status.run_id {
-            return Err(format!(
-                "Run ID mismatch: provided {} but workflow status has {}",
-                provided_run_id, workflow_status.run_id
-            ));
+        let result = match self.pool.acquire().await {
+            Ok(mut conn) => run_id_mismatch(&mut conn, workflow_id, provided_run_id).await,
+            Err(e) => Err(e),
+        };
+        match result {
+            Ok(None) => Ok(()),
+            Ok(Some(msg)) => Err(msg),
+            Err(e) => {
+                error!("Database error looking up workflow status: {}", e);
+                Err("Database error".to_string())
+            }
         }
+    }
 
-        Ok(())
+    /// Broadcast a `job_started` event for each job marked running by a claim or `start_job`.
+    pub(super) fn broadcast_jobs_started(&self, jobs: &[models::JobModel], start: ClaimStart) {
+        let timestamp = chrono::Utc::now().timestamp_millis();
+        for job in jobs {
+            self.event_broadcaster.broadcast(BroadcastEvent {
+                workflow_id: job.workflow_id,
+                timestamp,
+                event_type: "job_started".to_string(),
+                severity: models::EventSeverity::Info,
+                data: serde_json::json!({
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "compute_node_id": start.compute_node_id,
+                    "run_id": start.run_id,
+                }),
+            });
+        }
     }
 }

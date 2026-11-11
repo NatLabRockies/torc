@@ -9,8 +9,9 @@ stateDiagram-v2
     uninitialized --> blocked: has dependencies
 
     blocked --> ready: dependencies met
-    ready --> pending: runner claims
-    pending --> running: execution starts
+    ready --> running: runner claims and starts
+    ready --> pending: legacy claim
+    pending --> running: start_job
 
     running --> completed: exit 0
     running --> failed: exit != 0 (handler match + max retries)
@@ -50,8 +51,9 @@ stateDiagram-v2
 - **uninitialized** (0) - Job created but dependencies not evaluated
 - **blocked** (1) - Waiting for dependencies to complete
 - **ready** (2) - All dependencies satisfied, ready for execution
-- **pending** (3) - Job claimed by runner
-- **running** (4) - Currently executing
+- **pending** (3) - Legacy: claimed by a client that did not pass `run_id` and `compute_node_id`;
+  moves to running when the client calls `start_job`
+- **running** (4) - Claimed by a runner and executing
 - **completed** (5) - Finished successfully (exit code 0)
 - **failed** (6) - Finished with error (exit code != 0)
 - **canceled** (7) - Explicitly canceled by user or torc. Never executed.

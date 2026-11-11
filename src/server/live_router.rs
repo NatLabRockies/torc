@@ -506,6 +506,15 @@ pub struct ResetJobStatusQuery {
 pub struct ClaimJobsBasedOnResourcesQuery {
     #[param(nullable = true)]
     pub strict_scheduler_match: Option<bool>,
+    /// Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the
+    /// claim itself instead of calling `start_job` for each job.
+    /// Returns 422 when this is not the workflow's current run or `compute_node_id` is not
+    /// one of its nodes, including when no ready job fits the request.
+    #[param(nullable = true)]
+    pub run_id: Option<i64>,
+    /// Compute node that will run the claimed jobs. Pass with `run_id`.
+    #[param(nullable = true)]
+    pub compute_node_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -516,6 +525,15 @@ pub struct ClaimNextJobsQuery {
     /// this set are claimed; when unset or empty, only unlabeled jobs are.
     #[param(nullable = true)]
     pub labels: Option<String>,
+    /// Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the
+    /// claim itself instead of calling `start_job` for each job.
+    /// Returns 422 when this is not the workflow's current run or `compute_node_id` is not
+    /// one of its nodes, including when the claim returns no jobs or the workflow is canceled.
+    #[param(nullable = true)]
+    pub run_id: Option<i64>,
+    /// Compute node that will run the claimed jobs. Pass with `run_id`.
+    #[param(nullable = true)]
+    pub compute_node_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -4093,7 +4111,15 @@ pub async fn claim_jobs_based_on_resources(
 ) -> Response<Body> {
     match state
         .server
-        .claim_jobs_based_on_resources(id, body, limit, query.strict_scheduler_match, &context)
+        .claim_jobs_based_on_resources(
+            id,
+            body,
+            limit,
+            query.strict_scheduler_match,
+            query.run_id,
+            query.compute_node_id,
+            &context,
+        )
         .await
     {
         Ok(response) => claim_jobs_based_on_resources_response(response),
@@ -4123,7 +4149,14 @@ pub async fn claim_next_jobs(
 ) -> Response<Body> {
     match state
         .server
-        .claim_next_jobs(id, query.limit, query.labels, &context)
+        .claim_next_jobs(
+            id,
+            query.limit,
+            query.labels,
+            query.run_id,
+            query.compute_node_id,
+            &context,
+        )
         .await
     {
         Ok(response) => claim_next_jobs_response(response),

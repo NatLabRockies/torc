@@ -22,7 +22,7 @@ fn test_prepare_next_jobs_basic(start_server: &ServerProcess) {
     let job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = job.workflow_id;
 
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, None, None)
+    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, None, None, None, None)
         .expect("claim_next_jobs should succeed");
 
     // Should return jobs (default limit is 10)
@@ -59,8 +59,9 @@ fn test_prepare_next_jobs_with_limit(start_server: &ServerProcess, #[case] limit
     let job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = job.workflow_id;
 
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert!(
@@ -91,8 +92,9 @@ fn test_prepare_next_jobs_returns_full_limit(start_server: &ServerProcess) {
     let workflow_id = job.workflow_id;
 
     let limit = 25;
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(
@@ -123,8 +125,9 @@ fn test_prepare_next_jobs_limit_exceeds_available(start_server: &ServerProcess) 
     let workflow_id = job.workflow_id;
 
     let limit = 50; // Much larger than 4 available jobs
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(
@@ -153,8 +156,9 @@ fn test_prepare_next_jobs_no_ready_jobs(start_server: &ServerProcess) {
     let job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = job.workflow_id;
 
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     // Should return empty jobs list when no jobs are ready
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -170,7 +174,14 @@ fn test_prepare_next_jobs_invalid_workflow(start_server: &ServerProcess) {
     let config = &start_server.config;
     let invalid_workflow_id = 99999i64;
 
-    let result = apis::workflows_api::claim_next_jobs(config, invalid_workflow_id, Some(10), None);
+    let result = apis::workflows_api::claim_next_jobs(
+        config,
+        invalid_workflow_id,
+        Some(10),
+        None,
+        None,
+        None,
+    );
 
     // Should return an error for invalid workflow ID
     assert!(
@@ -188,15 +199,17 @@ fn test_prepare_next_jobs_no_double_allocation(start_server: &ServerProcess) {
     let workflow_id = job.workflow_id;
 
     // First request: get 20 jobs
-    let result1 = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(20), None)
-        .expect("First claim_next_jobs should succeed");
+    let result1 =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(20), None, None, None)
+            .expect("First claim_next_jobs should succeed");
 
     let jobs1 = result1.jobs.expect("First call must return jobs array");
     assert_eq!(jobs1.len(), 20, "Should return 20 jobs on first call");
 
     // Second request: get another 20 jobs
-    let result2 = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(20), None)
-        .expect("Second claim_next_jobs should succeed");
+    let result2 =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(20), None, None, None)
+            .expect("Second claim_next_jobs should succeed");
 
     let jobs2 = result2.jobs.expect("Second call must return jobs array");
     assert_eq!(jobs2.len(), 20, "Should return 20 more jobs on second call");
@@ -222,8 +235,9 @@ fn test_prepare_next_jobs_marks_jobs_pending(start_server: &ServerProcess) {
     let workflow_id = job.workflow_id;
 
     // Get jobs
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(2), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(2), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 2, "Should return 2 jobs");
@@ -263,8 +277,9 @@ fn test_prepare_next_jobs_canceled_workflow(start_server: &ServerProcess) {
         .expect("Should be able to cancel workflow");
 
     // Try to get jobs from canceled workflow
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None)
-        .expect("claim_next_jobs should succeed even for canceled workflow");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None, None, None)
+            .expect("claim_next_jobs should succeed even for canceled workflow");
 
     // Should return empty jobs list for canceled workflow
     let returned_jobs = result.jobs.expect("Server must return jobs array");
@@ -272,6 +287,55 @@ fn test_prepare_next_jobs_canceled_workflow(start_server: &ServerProcess) {
         returned_jobs.is_empty(),
         "Should return empty array for canceled workflow"
     );
+
+    // A canceled workflow still rejects a stale run on both claim endpoints.
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    for (rid, ok) in [(run_id, true), (run_id + 1, false)] {
+        let next = apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(10),
+            None,
+            Some(rid),
+            Some(compute_node_id),
+        );
+        assert_eq!(next.is_ok(), ok, "claim_next_jobs run_id={rid}");
+        let by_resources = apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            10,
+            models::ComputeNodesResources::new(1, 1.0, 0, 1),
+            None,
+            Some(rid),
+            Some(compute_node_id),
+        );
+        assert_eq!(
+            by_resources.is_ok(),
+            ok,
+            "claim_jobs_based_on_resources run_id={rid}"
+        );
+    }
+}
+
+/// claim_next_jobs on a missing workflow returns 404, not the stale-run 422.
+#[rstest]
+fn test_claim_next_jobs_missing_workflow(start_server: &ServerProcess) {
+    let result = apis::workflows_api::claim_next_jobs(
+        &start_server.config,
+        999_999_999,
+        Some(1),
+        None,
+        Some(1),
+        Some(1),
+    );
+    match result {
+        Err(apis::Error::ResponseError(ref r)) => assert_eq!(r.status, 404),
+        other => panic!("Expected 404 ResponseError, got {:?}", other),
+    }
 }
 
 /// Test claim_next_jobs exhausts all ready jobs
@@ -288,8 +352,9 @@ fn test_prepare_next_jobs_exhaust_all_jobs(start_server: &ServerProcess) {
 
     // Keep requesting jobs until none are returned
     for iteration in 0..20 {
-        let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None)
-            .expect("claim_next_jobs should succeed");
+        let result =
+            apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None, None, None)
+                .expect("claim_next_jobs should succeed");
 
         let returned_jobs = result.jobs.expect("Server must return jobs array");
 
@@ -324,8 +389,9 @@ fn test_prepare_next_jobs_response_structure(start_server: &ServerProcess) {
     let job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = job.workflow_id;
 
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(3), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(3), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
 
@@ -370,8 +436,9 @@ fn test_prepare_next_jobs_various_counts(
     let job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = job.workflow_id;
 
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(limit), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     let expected_count = std::cmp::min(num_jobs, limit as usize);
@@ -412,8 +479,9 @@ fn test_prepare_next_jobs_ignores_resources(start_server: &ServerProcess) {
     let _large_jobs = create_custom_resources_workflow(config, true, 64, 512.0, 0, 1);
 
     // Request jobs without any resource filtering
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(10), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
 
@@ -471,8 +539,14 @@ fn test_prepare_next_jobs_concurrent_allocation(start_server: &ServerProcess) {
             // Each thread keeps requesting jobs until none are available
             for _iteration in 1..=MAX_ITERATIONS {
                 // Request up to 5 jobs at a time
-                let result =
-                    apis::workflows_api::claim_next_jobs(&config_clone, workflow_id, Some(5), None);
+                let result = apis::workflows_api::claim_next_jobs(
+                    &config_clone,
+                    workflow_id,
+                    Some(5),
+                    None,
+                    None,
+                    None,
+                );
 
                 match result {
                     Ok(response) => {
@@ -609,6 +683,8 @@ fn test_prepare_next_jobs_concurrent_small_batches(start_server: &ServerProcess)
                     workflow_id,
                     Some(1), // Request just 1 job at a time
                     None,
+                    None,
+                    None,
                 );
 
                 match result {
@@ -688,8 +764,9 @@ fn test_prepare_next_jobs_zero_limit(start_server: &ServerProcess) {
     let job = jobs.values().next().expect("Should have at least one job");
     let workflow_id = job.workflow_id;
 
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(0), None)
-        .expect("claim_next_jobs should succeed with limit=0");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(0), None, None, None)
+            .expect("claim_next_jobs should succeed with limit=0");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert!(
@@ -729,8 +806,9 @@ fn test_claim_next_jobs_priority_ordering(start_server: &ServerProcess) {
         .expect("Failed to initialize jobs");
 
     // Claim one job at a time and verify descending priority order
-    let first = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
-        .expect("claim_next_jobs should succeed");
+    let first =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
+            .expect("claim_next_jobs should succeed");
     let first_jobs = first.jobs.expect("Server must return jobs array");
     assert_eq!(first_jobs.len(), 1);
     assert_eq!(
@@ -739,8 +817,9 @@ fn test_claim_next_jobs_priority_ordering(start_server: &ServerProcess) {
         "Highest priority job (10) should be claimed first"
     );
 
-    let second = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
-        .expect("claim_next_jobs should succeed");
+    let second =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
+            .expect("claim_next_jobs should succeed");
     let second_jobs = second.jobs.expect("Server must return jobs array");
     assert_eq!(second_jobs.len(), 1);
     assert_eq!(
@@ -749,8 +828,9 @@ fn test_claim_next_jobs_priority_ordering(start_server: &ServerProcess) {
         "Second highest priority job (5) should be claimed second"
     );
 
-    let third = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
-        .expect("claim_next_jobs should succeed");
+    let third =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
+            .expect("claim_next_jobs should succeed");
     let third_jobs = third.jobs.expect("Server must return jobs array");
     assert_eq!(third_jobs.len(), 1);
     assert_eq!(
@@ -790,8 +870,9 @@ fn test_claim_next_jobs_returns_invocation_script(start_server: &ServerProcess) 
         .expect("Failed to initialize jobs");
 
     // Claim the job
-    let result = apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None)
-        .expect("claim_next_jobs should succeed");
+    let result =
+        apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
+            .expect("claim_next_jobs should succeed");
 
     let returned_jobs = result.jobs.expect("Server must return jobs array");
     assert_eq!(returned_jobs.len(), 1, "Should return exactly 1 job");
@@ -931,9 +1012,15 @@ fn test_concurrent_claim_and_complete(start_server: &ServerProcess) {
                     completed_count.load(Ordering::SeqCst)
                 );
 
-                let response =
-                    apis::workflows_api::claim_next_jobs(&config, workflow_id, Some(4), None)
-                        .unwrap_or_else(|e| panic!("runner {runner_id} claim failed: {e}"));
+                let response = apis::workflows_api::claim_next_jobs(
+                    &config,
+                    workflow_id,
+                    Some(4),
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap_or_else(|e| panic!("runner {runner_id} claim failed: {e}"));
                 let jobs = response.jobs.unwrap_or_default();
 
                 if jobs.is_empty() {
@@ -1152,4 +1239,268 @@ fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
         "exactly one result should be recorded for a job completed once, found {}",
         results.count
     );
+}
+
+/// Claims that pass run_id and compute_node_id mark jobs running in the claim itself, so the
+/// job runner does not need a start_job call per job.
+#[rstest]
+fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let jobs = create_many_jobs_workflow(config, true, 10);
+    let workflow_id = jobs.values().next().unwrap().workflow_id;
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    // Only one of the pair is rejected.
+    assert!(
+        apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(1),
+            None,
+            Some(run_id),
+            None
+        )
+        .is_err()
+    );
+    // A stale run_id is rejected.
+    assert!(
+        apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(1),
+            None,
+            Some(run_id + 1),
+            Some(compute_node_id),
+        )
+        .is_err()
+    );
+
+    // A compute node from another workflow is rejected.
+    let other_workflow_id = create_many_jobs_workflow(config, true, 1)
+        .values()
+        .next()
+        .unwrap()
+        .workflow_id;
+    let other_node_id = create_test_compute_node(config, other_workflow_id)
+        .id
+        .unwrap();
+    assert!(
+        apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(1),
+            None,
+            Some(run_id),
+            Some(other_node_id),
+        )
+        .is_err()
+    );
+    // Rejected claims leave every job ready.
+    let ready = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        Some(models::JobStatus::Ready),
+        None,
+        None,
+        None,
+        Some(100),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    assert_eq!(ready.len(), 10);
+
+    let claimed = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(3),
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    let resources = models::ComputeNodesResources::new(3, 3.0, 0, 1);
+    let claimed_by_resources = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        3,
+        resources,
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    assert_eq!(claimed.len(), 3);
+    assert!(!claimed_by_resources.is_empty());
+
+    for job in claimed.iter().chain(&claimed_by_resources) {
+        assert_eq!(job.status, Some(models::JobStatus::Running));
+        assert_eq!(job.compute_node_id, Some(compute_node_id));
+        let stored = apis::jobs_api::get_job(config, job.id.unwrap()).unwrap();
+        assert_eq!(stored.status, Some(models::JobStatus::Running));
+        assert_eq!(stored.compute_node_id, Some(compute_node_id));
+        assert!(stored.start_time.is_some());
+    }
+
+    // A runner that dies after claiming leaves running jobs that orphan cleanup can find.
+    let active = apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        Some(100),
+        None,
+        None,
+        None,
+        Some(compute_node_id),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    assert_eq!(active.len(), claimed.len() + claimed_by_resources.len());
+}
+
+/// A stale claim_next_jobs is rejected even when no job is ready; claim_jobs_based_on_resources
+/// skips the check when nothing fits. Reverting a claimed job to ready clears the start_time and
+/// compute_node_id the claim set.
+#[rstest]
+fn test_claim_with_start_stale_and_revert(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let jobs = create_many_jobs_workflow(config, true, 1);
+    let workflow_id = jobs.values().next().unwrap().workflow_id;
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let claimed = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(1),
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    assert_eq!(claimed.len(), 1);
+    let job_id = claimed[0].id.unwrap();
+
+    // No job is ready now; claim_next_jobs still rejects a stale run_id.
+    assert!(
+        apis::workflows_api::claim_next_jobs(
+            config,
+            workflow_id,
+            Some(1),
+            None,
+            Some(run_id + 1),
+            Some(compute_node_id),
+        )
+        .is_err()
+    );
+    // claim_jobs_based_on_resources has nothing to claim but still rejects the stale run,
+    // and accepts the current one. Yields the number of jobs claimed, or None when rejected.
+    let idle_claim = |run_id| {
+        apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            1,
+            models::ComputeNodesResources::new(1, 1.0, 0, 1),
+            None,
+            Some(run_id),
+            Some(compute_node_id),
+        )
+        .ok()
+        .map(|r| r.jobs.unwrap_or_default().len())
+    };
+    assert_eq!(idle_claim(run_id + 1), None);
+    assert_eq!(idle_claim(run_id), Some(0));
+
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Ready, run_id).unwrap();
+    let stored = apis::jobs_api::get_job(config, job_id).unwrap();
+    assert_eq!(stored.status, Some(models::JobStatus::Ready));
+    assert_eq!(stored.start_time, None);
+    assert_eq!(stored.compute_node_id, None);
+
+    // Other transitions keep the last start_time and compute_node_id for reporting.
+    let reclaimed = apis::workflows_api::claim_next_jobs(
+        config,
+        workflow_id,
+        Some(1),
+        None,
+        Some(run_id),
+        Some(compute_node_id),
+    )
+    .unwrap()
+    .jobs
+    .unwrap();
+    assert_eq!(reclaimed[0].id, Some(job_id));
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Disabled, run_id)
+        .unwrap();
+    let stored = apis::jobs_api::get_job(config, job_id).unwrap();
+    assert_eq!(stored.status, Some(models::JobStatus::Disabled));
+    assert!(stored.start_time.is_some());
+    assert_eq!(stored.compute_node_id, Some(compute_node_id));
+}
+
+/// A runner whose run_id is no longer the workflow's current run stops instead of polling.
+#[rstest]
+fn test_runner_stops_on_stale_run_id(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let jobs = create_many_jobs_workflow(config, true, 1);
+    let workflow_id = jobs.values().next().unwrap().workflow_id;
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    let stale_run_id = workflow.run_id.unwrap_or(0) + 1;
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let output_dir = tempfile::TempDir::new().unwrap();
+    let mut runner = torc::client::job_runner::JobRunner::new(
+        config.clone(),
+        workflow,
+        stale_run_id,
+        compute_node_id,
+        output_dir.path().to_path_buf(),
+        0.1,
+        None,
+        None,
+        None,
+        models::ComputeNodesResources::new(4, 8.0, 0, 1),
+        None,
+        None,
+        None,
+        false,
+        "test".to_string(),
+        None,
+    );
+    let err = runner.run_worker().unwrap_err();
+    assert!(
+        err.to_string().contains("no longer the current run"),
+        "{err}"
+    );
+    // The stale runner still shuts down cleanly: its compute node is deactivated.
+    let node =
+        apis::compute_nodes_api::get_compute_node(config, compute_node_id).expect("get node");
+    assert_eq!(node.is_active, Some(false));
 }

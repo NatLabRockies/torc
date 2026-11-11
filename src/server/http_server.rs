@@ -2333,7 +2333,7 @@ where
         self.transport_update_workflow(id, body, context).await
     }
 
-    /// Return jobs that are ready for submission and meet worker resource requirements. Set status to pending.
+    /// Return jobs that are ready for submission and meet worker resource requirements. Set status to pending, or running when run_id and compute_node_id are passed.
     #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, limit))]
     async fn claim_jobs_based_on_resources(
         &self,
@@ -2341,6 +2341,8 @@ where
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         self.transport_claim_jobs_based_on_resources(
@@ -2348,21 +2350,25 @@ where
             body,
             limit,
             strict_scheduler_match,
+            run_id,
+            compute_node_id,
             context,
         )
         .await
     }
 
-    /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
+    /// Return user-requested number of jobs that are ready for submission. Sets status to pending, or running when run_id and compute_node_id are passed.
     #[instrument(level = "debug", skip(self, context), fields(workflow_id = id, limit = ?limit))]
     async fn claim_next_jobs(
         &self,
         id: i64,
         limit: Option<i64>,
         labels: Option<String>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
-        self.transport_claim_next_jobs(id, limit, labels, context)
+        self.transport_claim_next_jobs(id, limit, labels, run_id, compute_node_id, context)
             .await
     }
 
@@ -2615,6 +2621,7 @@ where
             resources,
             limit,
             strict_scheduler_match,
+            None,
             context,
         )
         .await

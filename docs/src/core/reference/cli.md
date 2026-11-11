@@ -545,9 +545,9 @@ do other work and resume with [`torc tasks wait`](#torc-tasks) later.
 
 ## `torc workflows reinit`
 
-Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
-pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
-user_data record has changed.
+Reinitialize a workflow. This will reinitialize all jobs with a status of canceled or terminated.
+Jobs with a status of done will also be reinitialized if an input_file or user_data record has
+changed.
 
 Reinitialization runs asynchronously on the server. By default the command blocks until the
 server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task

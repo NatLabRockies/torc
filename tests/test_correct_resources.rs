@@ -69,6 +69,8 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
         10,
         resources,
         None,
+        None,
+        None,
     )
     .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
@@ -167,6 +169,8 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
         10,
         resources,
         None,
+        None,
+        None,
     )
     .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
@@ -263,6 +267,8 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");
@@ -384,6 +390,8 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");
@@ -550,6 +558,8 @@ fn test_correct_resources_applies_corrections(start_server: &ServerProcess) {
         10,
         resources,
         None,
+        None,
+        None,
     )
     .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
@@ -656,6 +666,8 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");
@@ -770,6 +782,8 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");
@@ -944,6 +958,8 @@ fn claim_and_complete_jobs(
         workflow_id,
         100,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");
@@ -1772,6 +1788,8 @@ fn test_recovery_cpu_violation_not_counted_as_unknown(start_server: &ServerProce
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs")

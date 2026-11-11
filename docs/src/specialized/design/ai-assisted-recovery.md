@@ -162,7 +162,7 @@ sequenceDiagram
 | 0      | uninitialized      | Not yet initialized            |
 | 1      | blocked            | Waiting on dependencies        |
 | 2      | ready              | Ready to run                   |
-| 3      | pending            | Claimed by worker              |
+| 3      | pending            | Legacy claim without start     |
 | 4      | running            | Currently executing            |
 | 5      | completed          | Finished successfully          |
 | 6      | failed             | Failed (terminal)              |
@@ -179,8 +179,7 @@ stateDiagram-v2
     uninitialized --> blocked : initialize
     uninitialized --> ready : no dependencies
     blocked --> ready : dependencies met
-    ready --> pending : claimed
-    pending --> running : started
+    ready --> running : claimed and started
     running --> completed : exit 0
     running --> failed : handler match + max retries
     running --> pending_failed : no handler match

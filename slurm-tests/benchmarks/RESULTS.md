@@ -23,17 +23,16 @@ server-reported workflow walltime (first job start to last job end).
 
 ## Runs
 
-| Run                            | Script                        | What changed                   |
-| ------------------------------ | ----------------------------- | ------------------------------ |
-| 1                              | `throughput.sbatch`           | baseline, 50,000 jobs          |
-| 2                              | `throughput.sbatch`           | baseline, 100,000 jobs         |
-| 3                              | `throughput_ephemeral.sbatch` | ephemeral only, 1 s unblock    |
-| 4 (pending at time of writing) | `throughput_followup.sbatch`  | job duration, backoff, threads |
+| Run                            | Script                       | What changed                   |
+| ------------------------------ | ---------------------------- | ------------------------------ |
+| 1                              | `throughput.sbatch`          | baseline, 50,000 jobs          |
+| 2                              | `throughput.sbatch`          | baseline, 100,000 jobs         |
+| 3                              | `throughput.sbatch`          | ephemeral only, 1 s unblock    |
+| 4 (pending at time of writing) | `throughput_followup.sbatch` | job duration, backoff, threads |
 
-`throughput_ephemeral.sbatch` is `throughput.sbatch` with the regular server removed and the
-completion-check interval (`UNBLOCK_INTERVAL`) lowered from 30 s to 1 s.
-`throughput_followup.sbatch` runs several sweeps of it back to back in one allocation; see its
-header.
+Run 3 used `SERVERS=ephemeral UNBLOCK_INTERVAL=1 FAST_UNBLOCK_INTERVAL=`: the regular server removed
+and the completion-check interval lowered from 30 s to 1 s. `throughput_followup.sbatch` runs
+several sweeps with those settings back to back in one allocation; see its header.
 
 Every run completed every job with no failures and no server 5xx errors.
 
@@ -147,10 +146,10 @@ meaningful cost to doing so.
 
 - **Measure who holds the write lock.** The current warnings show waiting time, not which request
   types hold the lock and for how long. Timing in the transaction helper would show where time goes.
-- **Batch job starts.** Completions and claims are already batched, but the runner reports each job
-  start in its own request (`start_job`), one write transaction per job. Marking jobs as running in
-  the claim transaction, or a batch-start endpoint, would remove the one write transaction made for
-  every single job.
+- **Batch job starts (done after these runs).** The runner used to report each job start in its own
+  request (`start_job`), one write transaction per job. Claims now mark jobs running in the claim
+  transaction, and the runner fetches each resource requirement once per claim instead of once per
+  job. These runs predate the change.
 - **Spread out runner requests.** All runners poll on similar schedules; random jitter would smooth
   bursts. The backoff sweeps in run 4 test part of this.
 - **Release dependents on demand.** Starting the unblock step when a completion arrives, and folding

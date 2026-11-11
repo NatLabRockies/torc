@@ -175,7 +175,7 @@ flowchart TD
     ClaimBranch -->|Queue-based| MinTimeGate{Remaining time ≥<br/>compute_node_min_time?}
     MinTimeGate -->|Yes| ClaimQueue[claim_next_jobs<br/>up to max-parallel-jobs]
     MinTimeGate -->|No| Wait
-    ClaimResources --> StartJobs[Start claimed jobs<br/>start_job + AsyncCliCommand<br/>+ GPU round-robin assignment]
+    ClaimResources --> StartJobs[Start claimed jobs<br/>AsyncCliCommand<br/>+ GPU round-robin assignment]
     ClaimQueue --> StartJobs
     StartJobs --> Wait[Wait: adaptive backoff with<br/>SIGCHLD-aware wakeup;<br/>reset to base on progress,<br/>pinned to base while offline]
     Wait --> Sigterm{SIGTERM<br/>received?}
@@ -230,9 +230,10 @@ branches above:
    actions (e.g., schedule new Slurm allocations).
 7. **Claim new jobs** (online only) — resource-based mode filters by per-node CPU/memory/GPU
    capacity; queue-based mode claims up to `--max-parallel-jobs`, but only if remaining time exceeds
-   `compute_node_min_time_for_new_jobs_seconds`.
-8. **Start jobs** — call `start_job`, assign a GPU device if needed, then spawn the command via
-   `AsyncCliCommand`, recording stdout/stderr to per-job log files.
+   `compute_node_min_time_for_new_jobs_seconds`. The claim passes the run ID and compute node ID, so
+   the server marks the claimed jobs `running` in the same transaction.
+8. **Start jobs** — assign a GPU device if needed, then spawn the command via `AsyncCliCommand`,
+   recording stdout/stderr to per-job log files.
 9. **Wait** — sleep with `SIGCHLD`-aware wakeup so subprocess exits are observed promptly. The sleep
    length is set by the adaptive-backoff rules described in [Adaptive Backoff](#adaptive-backoff).
    While offline, the adaptive ramp is bypassed so drain-ping cadence is preserved (the drain ping

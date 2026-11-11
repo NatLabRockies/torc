@@ -55,6 +55,8 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
         10,
         resources,
         None,
+        None,
+        None,
     )
     .expect("Failed to claim jobs");
     let jobs = result.jobs.expect("Should return jobs");
@@ -118,6 +120,8 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");
@@ -211,6 +215,8 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
         workflow_id,
         10,
         resources,
+        None,
+        None,
         None,
     )
     .expect("Failed to claim jobs");

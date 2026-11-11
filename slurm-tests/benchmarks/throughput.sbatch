@@ -16,7 +16,7 @@
 # only sleep, so the server is not starved). One `torc run` per worker node.
 #
 # Knobs (env vars, export before sbatch):
-#   SERVERS="regular ephemeral"  SHAPES="flat stages"  N_JOBS=100000  STAGES=5
+#   SERVERS="regular ephemeral"  SHAPES="flat stages"  N_JOBS=50000  STAGES=5
 #   JOB_CMD="sleep 5"  JOBS_PER_NODE=$SLURM_CPUS_ON_NODE  POLL=1  BACKOFF_MAX=2
 #   SERVER_THREADS=16  UNBLOCK_INTERVAL=30  SCENARIO_MINUTES=8  WORKER_NODES=<all>
 #   TORC_BIN / TORC_SERVER_BIN (default: from PATH)

@@ -254,7 +254,7 @@ The dashboard shows job status updates as Slurm jobs progress:
 1. Go to **Details** tab
 2. Select **Jobs**
 3. Enable **Auto-refresh**
-4. Watch status change from `pending` → `running` → `completed`
+4. Watch status change from `ready` → `running` → `completed`
 
 You can also monitor via:
 

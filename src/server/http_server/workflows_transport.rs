@@ -590,16 +590,20 @@ where
         body: models::ComputeNodesResources,
         limit: i64,
         strict_scheduler_match: Option<bool>,
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
         context: &C,
     ) -> Result<ClaimJobsBasedOnResources, ApiError> {
         log_call!(
             debug,
             context,
-            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?})",
+            "claim_jobs_based_on_resources({}, {:?}, {:?}, strict_scheduler_match={:?}, run_id={:?}, compute_node_id={:?})",
             id,
             body,
             limit,
             strict_scheduler_match,
+            run_id,
+            compute_node_id,
         );
 
         authorize_workflow!(self, id, context, ClaimJobsBasedOnResources);
@@ -626,7 +630,39 @@ where
             Err(e) => return Err(e),
         };
 
+        let start = match crate::server::api::jobs::ClaimStart::from_query(run_id, compute_node_id)
+        {
+            Ok(start) => start,
+            Err(e) => {
+                return Ok(
+                    ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                        message_error_response(e),
+                    ),
+                );
+            }
+        };
+
         if workflow.is_canceled.unwrap_or(false) {
+            // Nothing is claimed, but still reject a stale run so its runner stops.
+            if start.is_some() {
+                let mut conn = self.pool.acquire().await.map_err(|e| {
+                    error!("Failed to acquire database connection: {}", e);
+                    ApiError("Database connection error".to_string())
+                })?;
+                let valid = crate::server::api::jobs::claim_start_is_valid(&mut conn, id, start)
+                    .await
+                    .map_err(|e| {
+                        error!("Database error validating claim start: {}", e);
+                        ApiError("Database error".to_string())
+                    })?;
+                if !valid {
+                    return Ok(
+                        ClaimJobsBasedOnResources::UnprocessableContentErrorResponse(
+                            message_error_response(crate::CLAIM_START_MISMATCH),
+                        ),
+                    );
+                }
+            }
             return Ok(ClaimJobsBasedOnResources::SuccessfulResponse(
                 models::ClaimJobsBasedOnResources {
                     jobs: Some(vec![]),
@@ -635,7 +671,13 @@ where
             ));
         }
 
-        self.transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, context)
-            .await
+        let response = self
+            .transport_prepare_ready_jobs(id, body, limit, strict_scheduler_match, start, context)
+            .await?;
+        if let (Some(start), ClaimJobsBasedOnResources::SuccessfulResponse(r)) = (start, &response)
+        {
+            self.broadcast_jobs_started(r.jobs.as_deref().unwrap_or_default(), start);
+        }
+        Ok(response)
     }
 }

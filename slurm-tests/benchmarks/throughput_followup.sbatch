@@ -6,8 +6,8 @@
 #SBATCH --output=torc-bench-followup-%j.out
 # Add --account / --partition on the sbatch command line.
 #
-# Follow-up sweeps on the ephemeral server, each a separate call of throughput_ephemeral.sbatch
-# (fresh server per sweep) in its own subdirectory of $OUT:
+# Follow-up sweeps on the ephemeral server (1 s unblock interval), each a separate call of
+# throughput.sbatch (fresh server per sweep) in its own subdirectory of $OUT:
 #   sleeps     flat 100k sleep 5 baseline, then 50k jobs of sleep 30 and sleep 60
 #   backoff5   flat 100k, --claim-backoff-max-secs 5
 #   backoff10  flat 100k, --claim-backoff-max-secs 10
@@ -15,17 +15,18 @@
 #   slots224   flat 50k sleep 10, 224 jobs per node (compare to sleep10 at 112: ~651 jobs/s)
 #
 # Slurm runs a spooled copy of this file, so it finds the benchmark script via BENCH_SCRIPT
-# (default: throughput_ephemeral.sbatch in the directory you submit from).
+# (default: throughput.sbatch in the directory you submit from).
 
 set -uo pipefail
 
-BENCH_SCRIPT=${BENCH_SCRIPT:-$SLURM_SUBMIT_DIR/throughput_ephemeral.sbatch}
+BENCH_SCRIPT=${BENCH_SCRIPT:-$SLURM_SUBMIT_DIR/throughput.sbatch}
 OUT=${OUT:-$PWD/torc-bench-followup-$SLURM_JOB_ID}
 [ -f "$BENCH_SCRIPT" ] || { echo "BENCH_SCRIPT not found: $BENCH_SCRIPT"; exit 1; }
 mkdir -p "$OUT"
 
-# Shared by every sweep: flat shape only, no node-scaling or sleep sweeps unless set below.
-export SHAPES=flat N_JOBS=100000 SCALE_NODES= SLEEPS=
+# Shared by every sweep: ephemeral server with a 1 s unblock interval, flat shape only, no
+# node-scaling, sleep, or fast-unblock sweeps unless set below.
+export SERVERS=ephemeral UNBLOCK_INTERVAL=1 FAST_UNBLOCK_INTERVAL= SHAPES=flat N_JOBS=100000 SCALE_NODES= SLEEPS=
 
 sweep() { # name, then VAR=value overrides
   local name=$1; shift

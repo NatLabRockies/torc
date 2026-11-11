@@ -549,6 +549,13 @@ mod unix_main {
                     task_pid,
                 );
                 utils::capture_dmesg(std::path::Path::new(&dmesg_path), Some(dmesg_cutoff));
+                // The allocation is ending either way; leaving its scheduled node "active"
+                // would block every later non-force reset of the workflow.
+                if slurm_interface.is_head_node()
+                    && let Some(ref node) = scheduled_compute_node
+                {
+                    set_scheduled_compute_node_status(&config, node, "complete");
+                }
                 std::process::exit(1);
             }
         }

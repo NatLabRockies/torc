@@ -158,7 +158,7 @@ Press `→` to focus the Details pane, then navigate to the Jobs tab:
 - 🟡 **Yellow**: Running
 - 🔴 **Red**: Failed
 - 🟣 **Magenta**: Canceled/Terminated
-- 🔵 **Blue**: Pending/Scheduled
+- 🔵 **Blue**: Pending (legacy claim)
 - ⚪ **Cyan**: Ready
 - ⬛ **Gray**: Blocked
 

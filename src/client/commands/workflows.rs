@@ -398,7 +398,7 @@ EXAMPLES:
     },
     /// Reinitialize a workflow after changes
     ///
-    /// Reinitializes jobs that are canceled, submitting, pending, or terminated.
+    /// Reinitializes jobs that are canceled or terminated.
     /// Jobs that completed will also be reinitialized if their input data changed.
     #[command(
         name = "reinit",

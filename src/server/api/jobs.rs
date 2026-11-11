@@ -19,6 +19,7 @@ use crate::server::api_responses::{
     UpdateJobResponse,
 };
 
+use crate::CLAIM_START_MISMATCH;
 use crate::models::{self as models, JobStatus};
 
 use super::{
@@ -27,6 +28,161 @@ use super::{
     message_error_response, normalize_env_map, parse_job_status, resource_not_found_response,
     serialize_env_map, validate_env_map,
 };
+
+/// Run and compute node a job runner passes with a claim. When present, the claim marks
+/// the jobs running in its own transaction, replacing one `start_job` call per job.
+#[derive(Debug, Clone, Copy)]
+pub struct ClaimStart {
+    pub run_id: i64,
+    pub compute_node_id: i64,
+}
+
+impl ClaimStart {
+    /// Build from a claim's optional query parameters, which must be passed together.
+    pub fn from_query(
+        run_id: Option<i64>,
+        compute_node_id: Option<i64>,
+    ) -> Result<Option<Self>, String> {
+        match (run_id, compute_node_id) {
+            (None, None) => Ok(None),
+            (Some(run_id), Some(compute_node_id)) => Ok(Some(Self {
+                run_id,
+                compute_node_id,
+            })),
+            _ => Err("run_id and compute_node_id must be passed together".to_string()),
+        }
+    }
+}
+
+/// Check `run_id` against the workflow's current run on `conn`, which may be inside an open
+/// transaction. Returns `Some(message)` when the workflow is missing or the run is stale.
+pub(crate) async fn run_id_mismatch(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    run_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query!("SELECT run_id FROM workflow WHERE id = ?", workflow_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(match row {
+        None => Some(format!(
+            "Workflow status not found for workflow ID: {}",
+            workflow_id
+        )),
+        Some(row) if row.run_id != run_id => Some(format!(
+            "{}: provided {} but workflow is at run {}",
+            crate::STALE_RUN,
+            run_id,
+            row.run_id
+        )),
+        Some(_) => None,
+    })
+}
+
+/// True when `start` is absent or names the workflow's current run and one of its compute nodes.
+pub(crate) async fn claim_start_is_valid(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    start: Option<ClaimStart>,
+) -> Result<bool, sqlx::Error> {
+    let Some(s) = start else {
+        return Ok(true);
+    };
+    let row = sqlx::query(
+        "SELECT 1 FROM workflow w JOIN compute_node c ON c.workflow_id = w.id \
+         WHERE w.id = ? AND w.run_id = ? AND c.id = ?",
+    )
+    .bind(workflow_id)
+    .bind(s.run_id)
+    .bind(s.compute_node_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.is_some())
+}
+
+/// Finish a claim inside its write transaction: attach output file and user_data IDs
+/// to the claimed jobs and mark them pending, or running when `start` is set.
+///
+/// Returns false, changing nothing, when `start` names a run other than the workflow's
+/// current one or a compute node outside the workflow. The check runs under the claim's
+/// write lock so a concurrent reset cannot hand the new run's jobs to a stale runner.
+pub(crate) async fn finish_claim(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    jobs: &mut [models::JobModel],
+    start: Option<ClaimStart>,
+) -> Result<bool, sqlx::Error> {
+    if !claim_start_is_valid(conn, workflow_id, start).await? {
+        return Ok(false);
+    }
+    if jobs.is_empty() {
+        return Ok(true);
+    }
+    let ids = jobs
+        .iter()
+        .filter_map(|j| j.id)
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let mut files: HashMap<i64, Vec<i64>> = HashMap::new();
+    let sql = format!("SELECT job_id, file_id FROM job_output_file WHERE job_id IN ({ids})");
+    for row in sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .fetch_all(&mut *conn)
+        .await?
+    {
+        files
+            .entry(row.get("job_id"))
+            .or_default()
+            .push(row.get("file_id"));
+    }
+    let mut user_data: HashMap<i64, Vec<i64>> = HashMap::new();
+    let sql =
+        format!("SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN ({ids})");
+    for row in sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .fetch_all(&mut *conn)
+        .await?
+    {
+        user_data
+            .entry(row.get("job_id"))
+            .or_default()
+            .push(row.get("user_data_id"));
+    }
+
+    for job in jobs.iter_mut() {
+        let id = job.id.unwrap_or_default();
+        job.output_file_ids = files.remove(&id);
+        job.output_user_data_ids = user_data.remove(&id);
+    }
+
+    if let Some(s) = start {
+        let start_time = Utc::now().to_rfc3339();
+        let sql = format!(
+            "UPDATE job SET status = ?, start_time = ?, compute_node_id = ? WHERE id IN ({ids})"
+        );
+        sqlx::query(sqlx::AssertSqlSafe(&*sql))
+            .bind(JobStatus::Running.to_int())
+            .bind(&start_time)
+            .bind(s.compute_node_id)
+            .execute(&mut *conn)
+            .await?;
+        for job in jobs {
+            job.status = Some(JobStatus::Running);
+            job.start_time = Some(start_time.clone());
+            job.compute_node_id = Some(s.compute_node_id);
+        }
+    } else {
+        let sql = format!("UPDATE job SET status = ? WHERE id IN ({ids})");
+        sqlx::query(sqlx::AssertSqlSafe(&*sql))
+            .bind(JobStatus::Pending.to_int())
+            .execute(&mut *conn)
+            .await?;
+        for job in jobs {
+            job.status = Some(JobStatus::Pending);
+        }
+    }
+    Ok(true)
+}
 
 /// Per-job values prepared during the first pass of bulk `create_jobs` so the
 /// chunked INSERT in the second pass can stay infallible. `env_serialized` and the
@@ -184,12 +340,13 @@ pub trait JobsApi<C> {
         context: &C,
     ) -> Result<UpdateJobResponse, ApiError>;
 
-    /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
+    /// Return user-requested number of jobs that are ready for submission. Sets status to pending, or running when `start` is set.
     async fn claim_next_jobs(
         &self,
         id: i64,
         requested_job_count: i64,
         labels: Option<String>,
+        start: Option<ClaimStart>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError>;
 
@@ -2478,13 +2635,14 @@ where
         Ok(UpdateJobResponse::SuccessfulResponse(updated_job))
     }
 
-    /// Return user-requested number of jobs that are ready for submission. Sets status to pending.
+    /// Return user-requested number of jobs that are ready for submission. Sets status to pending, or running when `start` is set.
     #[instrument(skip(self, context), fields(workflow_id = id, requested_job_count))]
     async fn claim_next_jobs(
         &self,
         id: i64,
         requested_job_count: i64,
         labels: Option<String>,
+        start: Option<ClaimStart>,
         context: &C,
     ) -> Result<ClaimNextJobsResponse, ApiError> {
         debug!(
@@ -2506,7 +2664,11 @@ where
                 .await
             {
                 Ok(Some(row)) => row.get::<bool, _>("is_canceled"),
-                Ok(None) => false,
+                Ok(None) => {
+                    return Ok(ClaimNextJobsResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Workflow", id),
+                    ));
+                }
                 Err(e) => {
                     error!("Failed to query workflow cancellation status: {}", e);
                     return Err(ApiError("Database error".to_string()));
@@ -2514,6 +2676,18 @@ where
             };
 
         if workflow_is_canceled {
+            // Nothing is claimed, but still reject a stale run so its runner stops.
+            let valid = claim_start_is_valid(&mut conn, id, start)
+                .await
+                .map_err(|e| {
+                    error!("Database error validating claim start: {}", e);
+                    ApiError("Database error".to_string())
+                })?;
+            if !valid {
+                return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(CLAIM_START_MISMATCH),
+                ));
+            }
             return Ok(ClaimNextJobsResponse::SuccessfulResponse(
                 models::ClaimNextJobsResponse { jobs: Some(vec![]) },
             ));
@@ -2581,11 +2755,9 @@ where
         );
 
         let mut selected_jobs = Vec::new();
-        let mut job_ids_to_update = Vec::new();
 
         for row in rows {
             let job_id: i64 = row.get("job_id");
-            job_ids_to_update.push(job_id);
 
             let job = models::JobModel {
                 id: Some(job_id),
@@ -2617,92 +2789,19 @@ where
             selected_jobs.push(job);
         }
 
-        let mut output_files_map: HashMap<i64, Vec<i64>> = HashMap::new();
-        let mut output_user_data_map: HashMap<i64, Vec<i64>> = HashMap::new();
-
-        if !job_ids_to_update.is_empty() {
-            let output_files = match sqlx::query(
-                "SELECT job_id, file_id FROM job_output_file WHERE workflow_id = $1",
-            )
-            .bind(id)
-            .fetch_all(&mut *conn)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output files: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_files {
-                let job_id: i64 = row.get("job_id");
-                let file_id: i64 = row.get("file_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_files_map.entry(job_id).or_default().push(file_id);
-                }
+        match finish_claim(&mut conn, id, &mut selected_jobs, start).await {
+            Ok(true) => {}
+            Ok(false) => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Ok(ClaimNextJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(CLAIM_START_MISMATCH),
+                ));
             }
-
-            let output_user_data = match sqlx::query(
-                "SELECT job_id, user_data_id FROM job_output_user_data WHERE job_id IN (SELECT id FROM job WHERE workflow_id = $1)",
-            )
-            .bind(id)
-            .fetch_all(&mut *conn)
-            .await
-            {
-                Ok(rows) => rows,
-                Err(e) => {
-                    error!("Failed to query output user_data: {}", e);
-                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-                    return Err(ApiError("Database query error".to_string()));
-                }
-            };
-
-            for row in output_user_data {
-                let job_id: i64 = row.get("job_id");
-                let user_data_id: i64 = row.get("user_data_id");
-                if job_ids_to_update.contains(&job_id) {
-                    output_user_data_map
-                        .entry(job_id)
-                        .or_default()
-                        .push(user_data_id);
-                }
-            }
-        }
-
-        for job in &mut selected_jobs {
-            if let Some(job_id) = job.id {
-                job.output_file_ids = output_files_map.get(&job_id).cloned();
-                job.output_user_data_ids = output_user_data_map.get(&job_id).cloned();
-            }
-        }
-
-        if !job_ids_to_update.is_empty() {
-            let pending = models::JobStatus::Pending.to_int();
-            let job_ids_str = job_ids_to_update
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",");
-            let sql = format!(
-                "UPDATE job SET status = {} WHERE id IN ({})",
-                pending, job_ids_str
-            );
-            if let Err(e) = sqlx::query(sqlx::AssertSqlSafe(&*sql))
-                .execute(&mut *conn)
-                .await
-            {
-                error!("Failed to update job status: {}", e);
+            Err(e) => {
+                error!("Failed to finish claim for workflow_id={}: {}", id, e);
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 return Err(ApiError("Database update error".to_string()));
             }
-
-            debug!(
-                "Updated {} jobs to pending status for workflow {}",
-                job_ids_to_update.len(),
-                id
-            );
         }
 
         if let Err(e) = sqlx::query("COMMIT").execute(&mut *conn).await {
@@ -3073,8 +3172,10 @@ where
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(format!(
-                    "Run ID mismatch: provided {} but workflow is at run {}",
-                    run_id, workflow_run_id
+                    "{}: provided {} but workflow is at run {}",
+                    crate::STALE_RUN,
+                    run_id,
+                    workflow_run_id
                 )),
             ));
         }

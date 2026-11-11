@@ -7,7 +7,7 @@ info:
   license:
     name: BSD-3-Clause
     identifier: BSD-3-Clause
-  version: 0.23.0
+  version: 1.0.0
 servers:
 - url: /torc-service/v1
   description: Versioned Torc API base path
@@ -4737,6 +4737,28 @@ paths:
           type:
           - boolean
           - 'null'
+      - name: run_id
+        in: query
+        description: |-
+          Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the
+          claim itself instead of calling `start_job` for each job.
+          Returns 422 when this is not the workflow's current run or `compute_node_id` is not
+          one of its nodes, including when no ready job fits the request.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: compute_node_id
+        in: query
+        description: Compute node that will run the claimed jobs. Pass with `run_id`.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
       - name: limit
         in: path
         description: Maximum number of jobs to claim
@@ -4812,6 +4834,28 @@ paths:
           type:
           - string
           - 'null'
+      - name: run_id
+        in: query
+        description: |-
+          Current run ID. Pass with `compute_node_id` to mark the claimed jobs running in the
+          claim itself instead of calling `start_job` for each job.
+          Returns 422 when this is not the workflow's current run or `compute_node_id` is not
+          one of its nodes, including when the claim returns no jobs or the workflow is canceled.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
+      - name: compute_node_id
+        in: query
+        description: Compute node that will run the claimed jobs. Pass with `run_id`.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
       responses:
         '200':
           description: Successful response

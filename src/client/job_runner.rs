@@ -46,8 +46,8 @@ use crate::client::workflow_spec::{ExecutionConfig, ExecutionMode};
 use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
-    BatchCompleteJobsRequest, ComputeNodesResources, FileModel, JobCompletionEntry, JobStatus,
-    ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
+    BatchCompleteJobsRequest, ComputeNodesResources, FileModel, JobCompletionEntry, JobModel,
+    JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
 };
 
 /// Local-side result of preparing a job completion: the data to send to the
@@ -555,6 +555,8 @@ pub struct JobRunner {
     /// Uses std::time::Instant instead of wall clock time to avoid issues with
     /// NTP clock adjustments that could cause premature idle timeout exits.
     last_job_claimed_time: Option<Instant>,
+    /// Set when a claim is rejected because `run_id` is no longer the workflow's current run.
+    stale_run: bool,
     /// Monotonic timestamp of the last job completion this runner observed.
     /// Bounds how long an untriggered action may keep an idle runner alive:
     /// only a local completion can move an action toward its trigger threshold
@@ -865,6 +867,7 @@ impl JobRunner {
             termination_requested: Arc::new(AtomicBool::new(false)),
             wakeup: Wakeup::new(),
             last_job_claimed_time: None,
+            stale_run: false,
             last_completion_time: None,
             persistent: false,
             executed_action_ids: HashSet::new(),
@@ -989,6 +992,12 @@ impl JobRunner {
         )
     }
 
+    fn note_stale_run(&mut self, err: &dyn std::fmt::Display) {
+        if err.to_string().contains(crate::STALE_RUN) {
+            self.stale_run = true;
+        }
+    }
+
     fn box_retry_error<T, E>(result: Result<T, E>) -> Result<T, Box<dyn std::error::Error>>
     where
         E: std::fmt::Display,
@@ -1011,6 +1020,24 @@ impl JobRunner {
         })?;
         self.file_model_cache.insert(file_id, file_model.clone());
         Ok(file_model)
+    }
+
+    fn get_resource_requirements_cached(
+        &self,
+        cache: &mut HashMap<i64, ResourceRequirementsModel>,
+        rr_id: i64,
+    ) -> Result<ResourceRequirementsModel, Box<dyn std::error::Error>> {
+        if let Some(rr) = cache.get(&rr_id) {
+            return Ok(rr.clone());
+        }
+        let rr = self.send_with_retries(|| {
+            Self::box_retry_error(apis::resource_requirements_api::get_resource_requirements(
+                &self.config,
+                rr_id,
+            ))
+        })?;
+        cache.insert(rr_id, rr.clone());
+        Ok(rr)
     }
 
     fn cache_file_model(&mut self, file_id: i64, file_model: FileModel) {
@@ -1266,7 +1293,7 @@ impl JobRunner {
             }
 
             let mut jobs_claimed = false;
-            if !self.offline {
+            if !self.offline && !self.stale_run {
                 self.check_and_execute_actions();
 
                 debug!("Check for new jobs");
@@ -1292,6 +1319,19 @@ impl JobRunner {
                         );
                     }
                 }
+            }
+
+            if self.stale_run {
+                // The workflow was reset or reinitialized; every later claim would fail the
+                // same way, and running jobs' results can no longer be recorded.
+                error!(
+                    "run_id={} is no longer the current run, stopping job runner workflow_id={}",
+                    self.run_id, self.workflow_id
+                );
+                self.kill_running_jobs();
+                // Fall through to the normal shutdown so the compute node is deactivated and
+                // the resource monitor stops; the server is still reachable.
+                break;
             }
 
             // Skip the poll-interval wait when this iteration reported one or
@@ -1478,8 +1518,9 @@ impl JobRunner {
             }
         }
 
-        // Worker-complete actions run on the server; skip them when offline.
-        if !self.offline {
+        // Worker-complete actions run on the server; skip them when offline or when this
+        // runner's run is stale.
+        if !self.offline && !self.stale_run {
             self.execute_worker_complete_actions();
         }
 
@@ -1522,6 +1563,13 @@ impl JobRunner {
             self.had_failures,
             self.had_terminations
         );
+        if self.stale_run {
+            return Err(format!(
+                "run_id={} is no longer the current run of workflow_id={}",
+                self.run_id, self.workflow_id
+            )
+            .into());
+        }
         Ok(WorkerResult {
             had_failures: self.had_failures,
             had_terminations: self.had_terminations,
@@ -1530,16 +1578,17 @@ impl JobRunner {
 
     /// Kill all running child processes without making any API calls.
     ///
-    /// Used when the server is unreachable and we need to exit immediately.
-    /// Jobs are left in their current server-side status (likely "running");
-    /// the server will detect them as stale when the compute node is no longer
-    /// reporting in.
+    /// Used when the server is unreachable or this runner's run is stale.
+    /// Jobs are left in their current server-side status. For a stale run the
+    /// reset that bumped run_id owns those rows (a full reset already set them
+    /// uninitialized); any left "running" are failed by orphan cleanup once
+    /// this runner's compute node is deactivated.
     fn kill_running_jobs(&mut self) {
         if self.running_jobs.is_empty() {
             return;
         }
         error!(
-            "Killing {} running job(s) due to unrecoverable API failure workflow_id={}",
+            "Killing {} running job(s) workflow_id={}",
             self.running_jobs.len(),
             self.workflow_id
         );
@@ -2645,6 +2694,9 @@ impl JobRunner {
                 "Job complete reported as failed by server workflow_id={} job_id={} message={}",
                 self.workflow_id, err.job_id, err.message
             );
+            // A busy runner may not claim again, so a completion can be where it first
+            // learns the workflow was reset.
+            self.note_stale_run(&err.message);
         }
 
         for prep in prepared {
@@ -3110,6 +3162,8 @@ impl JobRunner {
                 limit,
                 per_node.clone(),
                 Some(strict_scheduler_match),
+                Some(self.run_id),
+                Some(self.compute_node_id),
             ))
         }) {
             Ok(response) => {
@@ -3132,117 +3186,11 @@ impl JobRunner {
 
                 self.last_job_claimed_time = Some(Instant::now());
 
-                for job in jobs {
-                    let job_id = job.id.expect("Job must have an ID");
-                    let rr_id = job
-                        .resource_requirements_id
-                        .expect("Job must have a resource_requirements_id");
-                    let mut async_job = AsyncCliCommand::new(job);
-                    let effective_job_env = async_job.job.env.clone();
-
-                    let job_rr = match self.send_with_retries(|| {
-                        Self::box_retry_error(
-                            apis::resource_requirements_api::get_resource_requirements(
-                                &self.config,
-                                rr_id,
-                            ),
-                        )
-                    }) {
-                        Ok(rr) => rr,
-                        Err(e) => {
-                            error!(
-                                "Failed to get resource requirements after retries \
-                                 workflow_id={} job_id={} rr_id={}: {}",
-                                self.workflow_id, job_id, rr_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
-                    };
-
-                    match self.send_with_retries(|| {
-                        Self::box_retry_error(apis::jobs_api::start_job(
-                            &self.config,
-                            job_id,
-                            self.run_id,
-                            self.compute_node_id,
-                        ))
-                    }) {
-                        Ok(_) => {
-                            debug!("Successfully marked job {} as started in database", job_id);
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to mark job as started after retries \
-                                 workflow_id={} job_id={}: {}",
-                                self.workflow_id, job_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
-                    }
-
-                    let attempt_id = async_job.job.attempt_id.unwrap_or(1);
-                    let effective_mode = self.execution_config.effective_mode();
-                    let gpu_visible_devices = if effective_mode == ExecutionMode::Slurm {
-                        None
-                    } else {
-                        self.allocate_gpu_devices(job_id, job_rr.num_gpus)
-                    };
-                    let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
-                    match async_job.start(
-                        &self.output_dir,
-                        self.workflow_id,
-                        self.run_id,
-                        attempt_id,
-                        self.resource_monitor.as_ref(),
-                        &self.config.base_path,
-                        Some(&job_rr),
-                        effective_job_env.as_ref(),
-                        gpu_visible_devices.as_deref(),
-                        self.execution_config.limit_resources(),
-                        effective_mode,
-                        self.execution_config.enable_cpu_bind(),
-                        self.end_time,
-                        self.execution_config.srun_termination_signal.as_deref(),
-                        self.execution_config.sigkill_headroom_seconds(),
-                        target_node,
-                        &stdio_config.mode,
-                        self.workflow.submission_directory.as_deref(),
-                    ) {
-                        Ok(()) => {
-                            info!(
-                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={} pid={}{}",
-                                self.workflow_id,
-                                job_id,
-                                self.run_id,
-                                self.compute_node_id,
-                                attempt_id,
-                                async_job
-                                    .pid()
-                                    .map_or("unknown".to_string(), |p| p.to_string()),
-                                target_node.map_or(String::new(), |n| format!(" node={}", n))
-                            );
-                            if let Some(node) = target_node {
-                                self.track_node_resources(job_id, node, &job_rr);
-                            }
-                            self.running_jobs.insert(job_id, async_job);
-                            self.decrement_resources(&job_rr);
-                            self.job_resources.insert(job_id, job_rr);
-                        }
-                        Err(e) => {
-                            error!(
-                                "Job start failed workflow_id={} job_id={} error={}",
-                                self.workflow_id, job_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
-                    }
-                }
+                self.start_claimed_jobs(jobs, target_node, true);
                 true
             }
             Err(err) => {
+                self.note_stale_run(&err);
                 error!(
                     "Failed to claim jobs after retries workflow_id={}{}: {}",
                     self.workflow_id,
@@ -3279,6 +3227,8 @@ impl JobRunner {
                 self.workflow_id,
                 Some(limit),
                 Some(&self.labels_query()),
+                Some(self.run_id),
+                Some(self.compute_node_id),
             ))
         }) {
             Ok(response) => {
@@ -3298,118 +3248,132 @@ impl JobRunner {
                 // Update last job claimed time since we got jobs
                 self.last_job_claimed_time = Some(Instant::now());
 
-                // Start each job asynchronously
-                for job in jobs {
-                    let job_id = job.id.expect("Job must have an ID");
-                    let rr_id = job
-                        .resource_requirements_id
-                        .expect("Job must have a resource_requirements_id");
-                    let mut async_job = AsyncCliCommand::new(job);
-                    let effective_job_env = async_job.job.env.clone();
-
-                    let job_rr = match self.send_with_retries(|| {
-                        Self::box_retry_error(
-                            apis::resource_requirements_api::get_resource_requirements(
-                                &self.config,
-                                rr_id,
-                            ),
-                        )
-                    }) {
-                        Ok(rr) => rr,
-                        Err(e) => {
-                            error!(
-                                "Failed to get resource requirements after retries \
-                                 workflow_id={} job_id={} rr_id={}: {}",
-                                self.workflow_id, job_id, rr_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
-                    };
-
-                    // Mark job as started in the database before actually starting it
-                    match self.send_with_retries(|| {
-                        Self::box_retry_error(apis::jobs_api::start_job(
-                            &self.config,
-                            job_id,
-                            self.run_id,
-                            self.compute_node_id,
-                        ))
-                    }) {
-                        Ok(_) => {
-                            debug!("Successfully marked job {} as started in database", job_id);
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to mark job as started after retries \
-                                 workflow_id={} job_id={}: {}",
-                                self.workflow_id, job_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
-                    }
-
-                    let attempt_id = async_job.job.attempt_id.unwrap_or(1);
-                    let effective_mode = self.execution_config.effective_mode();
-                    let gpu_visible_devices = if effective_mode == ExecutionMode::Slurm {
-                        None
-                    } else {
-                        self.allocate_gpu_devices(job_id, job_rr.num_gpus)
-                    };
-                    let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
-                    match async_job.start(
-                        &self.output_dir,
-                        self.workflow_id,
-                        self.run_id,
-                        attempt_id,
-                        self.resource_monitor.as_ref(),
-                        &self.config.base_path,
-                        Some(&job_rr),
-                        effective_job_env.as_ref(),
-                        gpu_visible_devices.as_deref(),
-                        self.execution_config.limit_resources(),
-                        effective_mode,
-                        self.execution_config.enable_cpu_bind(),
-                        self.end_time,
-                        self.execution_config.srun_termination_signal.as_deref(),
-                        self.execution_config.sigkill_headroom_seconds(),
-                        None, // target_node: user-parallelism mode doesn't use per-node placement
-                        &stdio_config.mode,
-                        self.workflow.submission_directory.as_deref(),
-                    ) {
-                        Ok(()) => {
-                            info!(
-                                "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={} pid={}",
-                                self.workflow_id,
-                                job_id,
-                                self.run_id,
-                                self.compute_node_id,
-                                attempt_id,
-                                async_job
-                                    .pid()
-                                    .map_or("unknown".to_string(), |p| p.to_string())
-                            );
-                            self.running_jobs.insert(job_id, async_job);
-                        }
-                        Err(e) => {
-                            error!(
-                                "Job start failed workflow_id={} job_id={} error={}",
-                                self.workflow_id, job_id, e
-                            );
-                            self.revert_job_to_ready(job_id);
-                            continue;
-                        }
-                    }
-                }
+                self.start_claimed_jobs(jobs, None, false);
                 true
             }
             Err(err) => {
+                self.note_stale_run(&err);
                 error!(
                     "Failed to claim jobs after retries workflow_id={}: {}",
                     self.workflow_id, err
                 );
                 false
+            }
+        }
+    }
+
+    /// Start jobs that a claim returned. With `track_resources`, each started job's
+    /// requirements are charged against this runner's (and `target_node`'s) resources.
+    fn start_claimed_jobs(
+        &mut self,
+        jobs: Vec<JobModel>,
+        target_node: Option<&str>,
+        track_resources: bool,
+    ) {
+        // The claim marked these jobs running; a failed start below reverts the job.
+        // Jobs in one claim usually share a few resource requirements, so fetch each
+        // once per claim. Not cached longer, so resource corrections take effect.
+        let mut rr_cache = HashMap::new();
+        for job in jobs {
+            let job_id = job.id.expect("Job must have an ID");
+            let rr_id = job
+                .resource_requirements_id
+                .expect("Job must have a resource_requirements_id");
+            let mut async_job = AsyncCliCommand::new(job);
+            let effective_job_env = async_job.job.env.clone();
+
+            let job_rr = match self.get_resource_requirements_cached(&mut rr_cache, rr_id) {
+                Ok(rr) => rr,
+                Err(e) => {
+                    error!(
+                        "Failed to get resource requirements after retries \
+                         workflow_id={} job_id={} rr_id={}: {}",
+                        self.workflow_id, job_id, rr_id, e
+                    );
+                    self.revert_job_to_ready(job_id);
+                    continue;
+                }
+            };
+
+            // A server older than API 1.0 ignores the start fields of the claim and
+            // returns pending jobs; mark them running here instead.
+            if async_job.job.status == Some(JobStatus::Pending)
+                && let Err(e) = self.send_with_retries(|| {
+                    Self::box_retry_error(apis::jobs_api::start_job(
+                        &self.config,
+                        job_id,
+                        self.run_id,
+                        self.compute_node_id,
+                    ))
+                })
+            {
+                error!(
+                    "Failed to mark job as started after retries \
+                     workflow_id={} job_id={}: {}",
+                    self.workflow_id, job_id, e
+                );
+                self.revert_job_to_ready(job_id);
+                continue;
+            }
+
+            let attempt_id = async_job.job.attempt_id.unwrap_or(1);
+            let effective_mode = self.execution_config.effective_mode();
+            let gpu_visible_devices = if effective_mode == ExecutionMode::Slurm {
+                None
+            } else {
+                self.allocate_gpu_devices(job_id, job_rr.num_gpus)
+            };
+            let stdio_config = self.execution_config.stdio_for_job(&async_job.job.name);
+            match async_job.start(
+                &self.output_dir,
+                self.workflow_id,
+                self.run_id,
+                attempt_id,
+                self.resource_monitor.as_ref(),
+                &self.config.base_path,
+                Some(&job_rr),
+                effective_job_env.as_ref(),
+                gpu_visible_devices.as_deref(),
+                self.execution_config.limit_resources(),
+                effective_mode,
+                self.execution_config.enable_cpu_bind(),
+                self.end_time,
+                self.execution_config.srun_termination_signal.as_deref(),
+                self.execution_config.sigkill_headroom_seconds(),
+                target_node,
+                &stdio_config.mode,
+                self.workflow.submission_directory.as_deref(),
+            ) {
+                Ok(()) => {
+                    info!(
+                        "Job started workflow_id={} job_id={} run_id={} compute_node_id={} attempt_id={} pid={}{}",
+                        self.workflow_id,
+                        job_id,
+                        self.run_id,
+                        self.compute_node_id,
+                        attempt_id,
+                        async_job
+                            .pid()
+                            .map_or("unknown".to_string(), |p| p.to_string()),
+                        target_node.map_or(String::new(), |n| format!(" node={}", n))
+                    );
+                    self.running_jobs.insert(job_id, async_job);
+                    if track_resources {
+                        if let Some(node) = target_node {
+                            self.track_node_resources(job_id, node, &job_rr);
+                        }
+                        self.decrement_resources(&job_rr);
+                        self.job_resources.insert(job_id, job_rr);
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Job start failed workflow_id={} job_id={} error={}",
+                        self.workflow_id, job_id, e
+                    );
+                    self.revert_job_to_ready(job_id);
+                    continue;
+                }
             }
         }
     }

@@ -353,10 +353,23 @@ This endpoint uses database-level write locks (`BEGIN IMMEDIATE TRANSACTION`) to
 multiple workers calling simultaneously will not receive the same jobs. Each job is allocated to
 exactly one worker.
 
+Pass `run_id` and `compute_node_id` with the claim: claimed jobs move straight to `running` with
+`start_time` and `compute_node_id` set, so the worker does not need to call `start_job` for each
+job. If both are omitted, as older clients do, claimed jobs move to `pending` and the worker must
+call `start_job` for each one.
+
+The server rejects the claim with 422 when `run_id` is not the workflow's current run or
+`compute_node_id` is not one of its nodes. It checks them even when the claim returns no jobs,
+including for a canceled workflow, so a runner whose run is stale learns to stop.
+
 ### `claim_jobs_based_on_resources`
 
 Similar to `claim_next_jobs` but factors in resource requirements (CPU, memory, GPU) and available
 capacity on the requesting worker.
+
+It validates `run_id` and `compute_node_id` the same way, including when no ready job fits the
+worker's resources, so a runner whose run is stale learns to stop even while idle. An idle poll
+skips the write lock.
 
 ## Content Types
 
@@ -400,6 +413,9 @@ Job status is stored and transmitted as integers (0-10):
 | 8     | terminated     |
 | 9     | disabled       |
 | 10    | pending_failed |
+
+`pending` (3) is legacy: only claims that omit `run_id` and `compute_node_id` produce it. The torc
+job runner always passes both, so its jobs go from `ready` to `running`.
 
 ## API Evolution
 
