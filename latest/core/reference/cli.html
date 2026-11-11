@@ -644,9 +644,9 @@ do other work and resume with <a href="#torc-tasks"><code>torc tasks wait</code>
 timeout expires, the task keeps running on the server; resume with <code>torc tasks wait &lt;id&gt;</code></li>
 </ul>
 <h2 id="torc-workflows-reinit"><a class="header" href="#torc-workflows-reinit"><code>torc workflows reinit</code></a></h2>
-<p>Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
-pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
-user_data record has changed.</p>
+<p>Reinitialize a workflow. This will reinitialize all jobs with a status of canceled or terminated.
+Jobs with a status of done will also be reinitialized if an input_file or user_data record has
+changed.</p>
 <p>Reinitialization runs asynchronously on the server. By default the command blocks until the
 server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
 fails. Use <code>--async</code> to return the task handle immediately — useful for scripting where you want to

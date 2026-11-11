@@ -192,8 +192,9 @@
     uninitialized --&gt; blocked: has dependencies
 
     blocked --&gt; ready: dependencies met
-    ready --&gt; pending: runner claims
-    pending --&gt; running: execution starts
+    ready --&gt; running: runner claims and starts
+    ready --&gt; pending: legacy claim
+    pending --&gt; running: start_job
 
     running --&gt; completed: exit 0
     running --&gt; failed: exit != 0 (handler match + max retries)
@@ -232,8 +233,9 @@
 <li><strong>uninitialized</strong> (0) - Job created but dependencies not evaluated</li>
 <li><strong>blocked</strong> (1) - Waiting for dependencies to complete</li>
 <li><strong>ready</strong> (2) - All dependencies satisfied, ready for execution</li>
-<li><strong>pending</strong> (3) - Job claimed by runner</li>
-<li><strong>running</strong> (4) - Currently executing</li>
+<li><strong>pending</strong> (3) - Legacy: claimed by a client that did not pass <code>run_id</code> and <code>compute_node_id</code>;
+moves to running when the client calls <code>start_job</code></li>
+<li><strong>running</strong> (4) - Claimed by a runner and executing</li>
 <li><strong>completed</strong> (5) - Finished successfully (exit code 0)</li>
 <li><strong>failed</strong> (6) - Finished with error (exit code != 0)</li>
 <li><strong>canceled</strong> (7) - Explicitly canceled by user or torc. Never executed.</li>

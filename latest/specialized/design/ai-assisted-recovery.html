@@ -330,7 +330,7 @@ rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a
 <tr><td>0</td><td>uninitialized</td><td>Not yet initialized</td></tr>
 <tr><td>1</td><td>blocked</td><td>Waiting on dependencies</td></tr>
 <tr><td>2</td><td>ready</td><td>Ready to run</td></tr>
-<tr><td>3</td><td>pending</td><td>Claimed by worker</td></tr>
+<tr><td>3</td><td>pending</td><td>Legacy claim without start</td></tr>
 <tr><td>4</td><td>running</td><td>Currently executing</td></tr>
 <tr><td>5</td><td>completed</td><td>Finished successfully</td></tr>
 <tr><td>6</td><td>failed</td><td>Failed (terminal)</td></tr>
@@ -346,8 +346,7 @@ rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a
     uninitialized --&gt; blocked : initialize
     uninitialized --&gt; ready : no dependencies
     blocked --&gt; ready : dependencies met
-    ready --&gt; pending : claimed
-    pending --&gt; running : started
+    ready --&gt; running : claimed and started
     running --&gt; completed : exit 0
     running --&gt; failed : handler match + max retries
     running --&gt; pending_failed : no handler match

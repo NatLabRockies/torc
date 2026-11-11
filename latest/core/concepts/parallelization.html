@@ -233,7 +233,7 @@ jobs:
 <li>Receives the runner's resource capacity</li>
 <li>Queries the ready queue for jobs that fit within those resources</li>
 <li>Returns a set of jobs that can run concurrently without over-subscription</li>
-<li>Updates job status from <code>ready</code> to <code>pending</code> atomically</li>
+<li>Updates job status from <code>ready</code> to <code>running</code> atomically</li>
 </ol>
 <h3 id="priority-based-job-selection"><a class="header" href="#priority-based-job-selection">Priority-Based Job Selection</a></h3>
 <p>When more than one ready job fits the runner's available resources, Torc orders the candidates by
@@ -389,7 +389,7 @@ control the level of parallelism.</p>
 <li>Accepts <code>limit</code> parameter specifying maximum jobs to return</li>
 <li>Ignores all resource requirements</li>
 <li>Returns the next N ready jobs from the queue</li>
-<li>Updates their status from <code>ready</code> to <code>pending</code></li>
+<li>Updates their status from <code>ready</code> to <code>running</code></li>
 </ol>
 <p><strong>Runner behavior:</strong></p>
 <ul>

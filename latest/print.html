@@ -1403,8 +1403,9 @@ jobs:
     uninitialized --&gt; blocked: has dependencies
 
     blocked --&gt; ready: dependencies met
-    ready --&gt; pending: runner claims
-    pending --&gt; running: execution starts
+    ready --&gt; running: runner claims and starts
+    ready --&gt; pending: legacy claim
+    pending --&gt; running: start_job
 
     running --&gt; completed: exit 0
     running --&gt; failed: exit != 0 (handler match + max retries)
@@ -1443,8 +1444,9 @@ jobs:
 <li><strong>uninitialized</strong> (0) - Job created but dependencies not evaluated</li>
 <li><strong>blocked</strong> (1) - Waiting for dependencies to complete</li>
 <li><strong>ready</strong> (2) - All dependencies satisfied, ready for execution</li>
-<li><strong>pending</strong> (3) - Job claimed by runner</li>
-<li><strong>running</strong> (4) - Currently executing</li>
+<li><strong>pending</strong> (3) - Legacy: claimed by a client that did not pass <code>run_id</code> and <code>compute_node_id</code>;
+moves to running when the client calls <code>start_job</code></li>
+<li><strong>running</strong> (4) - Claimed by a runner and executing</li>
 <li><strong>completed</strong> (5) - Finished successfully (exit code 0)</li>
 <li><strong>failed</strong> (6) - Finished with error (exit code != 0)</li>
 <li><strong>canceled</strong> (7) - Explicitly canceled by user or torc. Never executed.</li>
@@ -1699,7 +1701,7 @@ both skipped — the server is unreachable, so the node is left active and the j
     ClaimBranch --&gt;|Queue-based| MinTimeGate{Remaining time ≥&lt;br/&gt;compute_node_min_time?}
     MinTimeGate --&gt;|Yes| ClaimQueue[claim_next_jobs&lt;br/&gt;up to max-parallel-jobs]
     MinTimeGate --&gt;|No| Wait
-    ClaimResources --&gt; StartJobs[Start claimed jobs&lt;br/&gt;start_job + AsyncCliCommand&lt;br/&gt;+ GPU round-robin assignment]
+    ClaimResources --&gt; StartJobs[Start claimed jobs&lt;br/&gt;AsyncCliCommand&lt;br/&gt;+ GPU round-robin assignment]
     ClaimQueue --&gt; StartJobs
     StartJobs --&gt; Wait[Wait: adaptive backoff with&lt;br/&gt;SIGCHLD-aware wakeup;&lt;br/&gt;reset to base on progress,&lt;br/&gt;pinned to base while offline]
     Wait --&gt; Sigterm{SIGTERM&lt;br/&gt;received?}
@@ -1753,9 +1755,10 @@ hint and exit; the journal will be replayed once the server is back.</li>
 actions (e.g., schedule new Slurm allocations).</li>
 <li><strong>Claim new jobs</strong> (online only) — resource-based mode filters by per-node CPU/memory/GPU
 capacity; queue-based mode claims up to <code>--max-parallel-jobs</code>, but only if remaining time exceeds
-<code>compute_node_min_time_for_new_jobs_seconds</code>.</li>
-<li><strong>Start jobs</strong> — call <code>start_job</code>, assign a GPU device if needed, then spawn the command via
-<code>AsyncCliCommand</code>, recording stdout/stderr to per-job log files.</li>
+<code>compute_node_min_time_for_new_jobs_seconds</code>. The claim passes the run ID and compute node ID, so
+the server marks the claimed jobs <code>running</code> in the same transaction.</li>
+<li><strong>Start jobs</strong> — assign a GPU device if needed, then spawn the command via <code>AsyncCliCommand</code>,
+recording stdout/stderr to per-job log files.</li>
 <li><strong>Wait</strong> — sleep with <code>SIGCHLD</code>-aware wakeup so subprocess exits are observed promptly. The sleep
 length is set by the adaptive-backoff rules described in <a href="core/concepts/job-runners.html#adaptive-backoff">Adaptive Backoff</a>.
 While offline, the adaptive ramp is bypassed so drain-ping cadence is preserved (the drain ping
@@ -2211,7 +2214,7 @@ jobs:
 <li>Receives the runner's resource capacity</li>
 <li>Queries the ready queue for jobs that fit within those resources</li>
 <li>Returns a set of jobs that can run concurrently without over-subscription</li>
-<li>Updates job status from <code>ready</code> to <code>pending</code> atomically</li>
+<li>Updates job status from <code>ready</code> to <code>running</code> atomically</li>
 </ol>
 <h3 id="priority-based-job-selection"><a class="header" href="#priority-based-job-selection">Priority-Based Job Selection</a></h3>
 <p>When more than one ready job fits the runner's available resources, Torc orders the candidates by
@@ -2367,7 +2370,7 @@ control the level of parallelism.</p>
 <li>Accepts <code>limit</code> parameter specifying maximum jobs to return</li>
 <li>Ignores all resource requirements</li>
 <li>Returns the next N ready jobs from the queue</li>
-<li>Updates their status from <code>ready</code> to <code>pending</code></li>
+<li>Updates their status from <code>ready</code> to <code>running</code></li>
 </ol>
 <p><strong>Runner behavior:</strong></p>
 <ul>
@@ -7998,7 +8001,7 @@ show a confirmation dialog listing the files that will be deleted. Press <code>y
 <li><strong>Yellow</strong>: Running</li>
 <li><strong>Red</strong>: Failed</li>
 <li><strong>Magenta</strong>: Canceled/Terminated</li>
-<li><strong>Blue</strong>: Pending/Scheduled</li>
+<li><strong>Blue</strong>: Pending (legacy claim)</li>
 <li><strong>Cyan</strong>: Ready</li>
 <li><strong>Gray</strong>: Blocked</li>
 </ul>
@@ -9697,9 +9700,9 @@ do other work and resume with <a href="core/reference/cli.html#torc-tasks"><code
 timeout expires, the task keeps running on the server; resume with <code>torc tasks wait &lt;id&gt;</code></li>
 </ul>
 <h2 id="torc-workflows-reinit"><a class="header" href="#torc-workflows-reinit"><code>torc workflows reinit</code></a></h2>
-<p>Reinitialize a workflow. This will reinitialize all jobs with a status of canceled, submitting,
-pending, or terminated. Jobs with a status of done will also be reinitialized if an input_file or
-user_data record has changed.</p>
+<p>Reinitialize a workflow. This will reinitialize all jobs with a status of canceled or terminated.
+Jobs with a status of done will also be reinitialized if an input_file or user_data record has
+changed.</p>
 <p>Reinitialization runs asynchronously on the server. By default the command blocks until the
 server-side work finishes (using SSE, with polling as a fallback) and exits non-zero if the task
 fails. Use <code>--async</code> to return the task handle immediately — useful for scripting where you want to
@@ -17204,8 +17207,8 @@ left to run. Standard orphan cleanup never touches them because Slurm still repo
 <p>This cleanup runs automatically inside the <strong>Slurm job runner</strong>, so it happens for every workflow —
 no <code>torc watch</code> required. When a job runner stops (the workflow completed, or it has no more work),
 the head node of that allocation checks whether the workflow has any <strong>runnable</strong> jobs left — jobs
-in <code>Ready</code>, <code>Pending</code>, or <code>Running</code> status. If none remain, any still-<code>Queued</code> sibling Slurm
-allocation is unnecessary, so the runner:</p>
+in <code>Ready</code> or <code>Running</code> status. If none remain, any still-<code>Queued</code> sibling Slurm allocation is
+unnecessary, so the runner:</p>
 <ol>
 <li>confirms the allocation is still queued in Slurm,</li>
 <li>issues <code>scancel</code> to release the queue slot,</li>
@@ -21769,7 +21772,7 @@ torc submit &lt;workflow_id&gt;
 <li>Go to <strong>Details</strong> tab</li>
 <li>Select <strong>Jobs</strong></li>
 <li>Enable <strong>Auto-refresh</strong></li>
-<li>Watch status change from <code>pending</code> → <code>running</code> → <code>completed</code></li>
+<li>Watch status change from <code>ready</code> → <code>running</code> → <code>completed</code></li>
 </ol>
 <p>You can also monitor via:</p>
 <ul>
@@ -23948,9 +23951,19 @@ the username derived from the <code>X-Remote-User</code> header or defaulting to
 <p>This endpoint uses database-level write locks (<code>BEGIN IMMEDIATE TRANSACTION</code>) to ensure that
 multiple workers calling simultaneously will not receive the same jobs. Each job is allocated to
 exactly one worker.</p>
+<p>Pass <code>run_id</code> and <code>compute_node_id</code> with the claim: claimed jobs move straight to <code>running</code> with
+<code>start_time</code> and <code>compute_node_id</code> set, so the worker does not need to call <code>start_job</code> for each
+job. If both are omitted, as older clients do, claimed jobs move to <code>pending</code> and the worker must
+call <code>start_job</code> for each one.</p>
+<p>The server rejects the claim with 422 when <code>run_id</code> is not the workflow's current run or
+<code>compute_node_id</code> is not one of its nodes. It checks them even when the claim returns no jobs,
+including for a canceled workflow, so a runner whose run is stale learns to stop.</p>
 <h3 id="claim_jobs_based_on_resources"><a class="header" href="#claim_jobs_based_on_resources"><code>claim_jobs_based_on_resources</code></a></h3>
 <p>Similar to <code>claim_next_jobs</code> but factors in resource requirements (CPU, memory, GPU) and available
 capacity on the requesting worker.</p>
+<p>It validates <code>run_id</code> and <code>compute_node_id</code> the same way, including when no ready job fits the
+worker's resources, so a runner whose run is stale learns to stop even while idle. An idle poll
+skips the write lock.</p>
 <h2 id="content-types"><a class="header" href="#content-types">Content Types</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Content-Type</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>application/json</code></td><td>All request and response bodies</td></tr>
@@ -23982,6 +23995,8 @@ capacity on the requesting worker.</p>
 <tr><td>10</td><td>pending_failed</td></tr>
 </tbody></table>
 </div>
+<p><code>pending</code> (3) is legacy: only claims that omit <code>run_id</code> and <code>compute_node_id</code> produce it. The torc
+job runner always passes both, so its jobs go from <code>ready</code> to <code>running</code>.</p>
 <h2 id="api-evolution"><a class="header" href="#api-evolution">API Evolution</a></h2>
 <p>When evolving the API:</p>
 <ol>
@@ -25526,7 +25541,7 @@ rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a
 <tr><td>0</td><td>uninitialized</td><td>Not yet initialized</td></tr>
 <tr><td>1</td><td>blocked</td><td>Waiting on dependencies</td></tr>
 <tr><td>2</td><td>ready</td><td>Ready to run</td></tr>
-<tr><td>3</td><td>pending</td><td>Claimed by worker</td></tr>
+<tr><td>3</td><td>pending</td><td>Legacy claim without start</td></tr>
 <tr><td>4</td><td>running</td><td>Currently executing</td></tr>
 <tr><td>5</td><td>completed</td><td>Finished successfully</td></tr>
 <tr><td>6</td><td>failed</td><td>Failed (terminal)</td></tr>
@@ -25542,8 +25557,7 @@ rule-based mechanisms (failure handlers, OOM/timeout detection). It introduces a
     uninitialized --&gt; blocked : initialize
     uninitialized --&gt; ready : no dependencies
     blocked --&gt; ready : dependencies met
-    ready --&gt; pending : claimed
-    pending --&gt; running : started
+    ready --&gt; running : claimed and started
     running --&gt; completed : exit 0
     running --&gt; failed : handler match + max retries
     running --&gt; pending_failed : no handler match

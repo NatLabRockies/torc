@@ -448,9 +448,19 @@ the username derived from the <code>X-Remote-User</code> header or defaulting to
 <p>This endpoint uses database-level write locks (<code>BEGIN IMMEDIATE TRANSACTION</code>) to ensure that
 multiple workers calling simultaneously will not receive the same jobs. Each job is allocated to
 exactly one worker.</p>
+<p>Pass <code>run_id</code> and <code>compute_node_id</code> with the claim: claimed jobs move straight to <code>running</code> with
+<code>start_time</code> and <code>compute_node_id</code> set, so the worker does not need to call <code>start_job</code> for each
+job. If both are omitted, as older clients do, claimed jobs move to <code>pending</code> and the worker must
+call <code>start_job</code> for each one.</p>
+<p>The server rejects the claim with 422 when <code>run_id</code> is not the workflow's current run or
+<code>compute_node_id</code> is not one of its nodes. It checks them even when the claim returns no jobs,
+including for a canceled workflow, so a runner whose run is stale learns to stop.</p>
 <h3 id="claim_jobs_based_on_resources"><a class="header" href="#claim_jobs_based_on_resources"><code>claim_jobs_based_on_resources</code></a></h3>
 <p>Similar to <code>claim_next_jobs</code> but factors in resource requirements (CPU, memory, GPU) and available
 capacity on the requesting worker.</p>
+<p>It validates <code>run_id</code> and <code>compute_node_id</code> the same way, including when no ready job fits the
+worker's resources, so a runner whose run is stale learns to stop even while idle. An idle poll
+skips the write lock.</p>
 <h2 id="content-types"><a class="header" href="#content-types">Content Types</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Content-Type</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>application/json</code></td><td>All request and response bodies</td></tr>
@@ -482,6 +492,8 @@ capacity on the requesting worker.</p>
 <tr><td>10</td><td>pending_failed</td></tr>
 </tbody></table>
 </div>
+<p><code>pending</code> (3) is legacy: only claims that omit <code>run_id</code> and <code>compute_node_id</code> produce it. The torc
+job runner always passes both, so its jobs go from <code>ready</code> to <code>running</code>.</p>
 <h2 id="api-evolution"><a class="header" href="#api-evolution">API Evolution</a></h2>
 <p>When evolving the API:</p>
 <ol>

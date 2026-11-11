@@ -322,7 +322,7 @@ both skipped — the server is unreachable, so the node is left active and the j
     ClaimBranch --&gt;|Queue-based| MinTimeGate{Remaining time ≥&lt;br/&gt;compute_node_min_time?}
     MinTimeGate --&gt;|Yes| ClaimQueue[claim_next_jobs&lt;br/&gt;up to max-parallel-jobs]
     MinTimeGate --&gt;|No| Wait
-    ClaimResources --&gt; StartJobs[Start claimed jobs&lt;br/&gt;start_job + AsyncCliCommand&lt;br/&gt;+ GPU round-robin assignment]
+    ClaimResources --&gt; StartJobs[Start claimed jobs&lt;br/&gt;AsyncCliCommand&lt;br/&gt;+ GPU round-robin assignment]
     ClaimQueue --&gt; StartJobs
     StartJobs --&gt; Wait[Wait: adaptive backoff with&lt;br/&gt;SIGCHLD-aware wakeup;&lt;br/&gt;reset to base on progress,&lt;br/&gt;pinned to base while offline]
     Wait --&gt; Sigterm{SIGTERM&lt;br/&gt;received?}
@@ -376,9 +376,10 @@ hint and exit; the journal will be replayed once the server is back.</li>
 actions (e.g., schedule new Slurm allocations).</li>
 <li><strong>Claim new jobs</strong> (online only) — resource-based mode filters by per-node CPU/memory/GPU
 capacity; queue-based mode claims up to <code>--max-parallel-jobs</code>, but only if remaining time exceeds
-<code>compute_node_min_time_for_new_jobs_seconds</code>.</li>
-<li><strong>Start jobs</strong> — call <code>start_job</code>, assign a GPU device if needed, then spawn the command via
-<code>AsyncCliCommand</code>, recording stdout/stderr to per-job log files.</li>
+<code>compute_node_min_time_for_new_jobs_seconds</code>. The claim passes the run ID and compute node ID, so
+the server marks the claimed jobs <code>running</code> in the same transaction.</li>
+<li><strong>Start jobs</strong> — assign a GPU device if needed, then spawn the command via <code>AsyncCliCommand</code>,
+recording stdout/stderr to per-job log files.</li>
 <li><strong>Wait</strong> — sleep with <code>SIGCHLD</code>-aware wakeup so subprocess exits are observed promptly. The sleep
 length is set by the adaptive-backoff rules described in <a href="#adaptive-backoff">Adaptive Backoff</a>.
 While offline, the adaptive ramp is bypassed so drain-ping cadence is preserved (the drain ping
