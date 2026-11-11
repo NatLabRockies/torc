@@ -267,9 +267,6 @@ torc-dash --standalone --port 8080 --server-host localhost
 # Specify database location
 torc-dash --standalone --database /path/to/my.db --server-host localhost
 
-# Faster job completion detection
-torc-dash --standalone --server-host localhost --completion-check-interval-secs 2
-
 # Specify binary paths (if not in PATH)
 torc-dash --standalone \
   --server-host localhost \
@@ -333,8 +330,7 @@ dashboard.</p>
 <pre><code class="language-bash">torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
   --database /scratch/$USER/torc.db \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov \
-  --completion-check-interval-secs 60
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
 </code></pre>
 <p><strong>Step 3: Access via SSH tunnel</strong></p>
 <p>From your local machine, create an SSH tunnel that forwards a local TCP port to the UNIX socket on
@@ -353,8 +349,7 @@ natively supports forwarding local TCP ports to remote UNIX sockets.</p>
 <pre><code class="language-bash">torc-dash --standalone \
   --database /scratch/$USER/torc.db \
   --port 8090 \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov \
-  --completion-check-interval-secs 60
+  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
 </code></pre>
 <p>Then tunnel to the TCP port:</p>
 <pre><code class="language-bash">ssh -L 8090:localhost:8090 user@login-node
@@ -428,8 +423,7 @@ large workflows.</p>
 <p>On the shared server (e.g., a dedicated service node):</p>
 <pre><code class="language-bash">torc-server run \
   --port 8080 \
-  --database /shared/storage/torc.db \
-  --completion-check-interval-secs 60
+  --database /shared/storage/torc.db
 </code></pre>
 <p>For production, consider running as a systemd service:</p>
 <pre><code class="language-bash">torc-server service install --user \

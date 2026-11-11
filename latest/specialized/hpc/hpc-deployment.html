@@ -360,7 +360,6 @@ host = "kl3.hsn.cm.kestrel.hpc.nrel.gov"
 port = 8085
 database = "/scratch/myuser/torc/workflows.db"
 threads = 4
-completion_check_interval_secs = 30.0
 log_level = "info"
 
 [server.logging]
@@ -456,7 +455,6 @@ nc -zv &lt;internal-hostname&gt; 8085
 <ol>
 <li>Ensure only one <code>torc-server</code> instance is running</li>
 <li>Use a local scratch filesystem rather than NFS home directories</li>
-<li>Consider increasing <code>completion_check_interval_secs</code> to reduce database contention</li>
 </ol>
 <h3 id="server-stops-when-ssh-disconnects"><a class="header" href="#server-stops-when-ssh-disconnects">Server stops when SSH disconnects</a></h3>
 <p>Always use tmux or screen (see above). If the server dies unexpectedly:</p>

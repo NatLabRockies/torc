@@ -349,7 +349,6 @@ shared = false
 <tr><td><code>require_auth</code></td><td>bool</td><td><code>false</code></td><td>Require authentication for all requests</td></tr>
 <tr><td><code>enforce_access_control</code></td><td>bool</td><td><code>false</code></td><td>Enforce access control based on workflow ownership</td></tr>
 <tr><td><code>admin_users</code></td><td>string array</td><td><code>[]</code></td><td>Users to add to the admin group</td></tr>
-<tr><td><code>completion_check_interval_secs</code></td><td>float</td><td><code>30.0</code></td><td>Background job processing interval</td></tr>
 </tbody></table>
 </div>
 <h3 id="serverlogging-section"><a class="header" href="#serverlogging-section"><code>[server.logging]</code> Section</a></h3>
@@ -368,7 +367,6 @@ auth_file = "/etc/torc/htpasswd"
 require_auth = true
 enforce_access_control = true
 admin_users = ["alice", "bob"]
-completion_check_interval_secs = 30.0
 log_level = "info"
 https = false
 
@@ -389,9 +387,16 @@ json_logs = false
 <tr><td><code>server_port</code></td><td>int</td><td><code>0</code></td><td>Server port for standalone mode (0 = auto)</td></tr>
 <tr><td><code>server_host</code></td><td>string</td><td><code>0.0.0.0</code></td><td>Server bind address for standalone mode</td></tr>
 <tr><td><code>database</code></td><td>string</td><td>(none)</td><td>Database path for standalone mode</td></tr>
-<tr><td><code>completion_check_interval_secs</code></td><td>int</td><td><code>5</code></td><td>Completion check interval (standalone mode)</td></tr>
 </tbody></table>
 </div>
+<blockquote>
+<p><strong>Deprecated:</strong> <code>server.completion_check_interval_secs</code>, <code>dash.completion_check_interval_secs</code>,
+the <code>--completion-check-interval-secs</code> flag of <code>torc-server</code> and <code>torc-dash</code>, and the
+<code>TORC_COMPLETION_CHECK_INTERVAL_SECS</code> / <code>TORC_SERVER__COMPLETION_CHECK_INTERVAL_SECS</code> environment
+variables are ignored. They are still accepted (with a logged warning) so existing configs keep
+working. The server now processes job completions as they arrive, releasing dependent jobs within
+about 1 second.</p>
+</blockquote>
 <h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
 <pre><code class="language-toml">[dash]
 host = "0.0.0.0"
@@ -401,7 +406,6 @@ torc_bin = "/usr/local/bin/torc"
 torc_server_bin = "/usr/local/bin/torc-server"
 standalone = true
 server_port = 0
-completion_check_interval_secs = 5
 </code></pre>
 <h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
 <p>Environment variables use double underscore (<code>__</code>) to separate nested keys.</p>
@@ -432,7 +436,6 @@ completion_check_interval_secs = 5
 <tr><td><code>TORC_SERVER__REQUIRE_AUTH</code></td><td><code>server.require_auth</code></td></tr>
 <tr><td><code>TORC_SERVER__ENFORCE_ACCESS_CONTROL</code></td><td><code>server.enforce_access_control</code></td></tr>
 <tr><td><code>TORC_SERVER__LOG_LEVEL</code></td><td><code>server.log_level</code></td></tr>
-<tr><td><code>TORC_SERVER__COMPLETION_CHECK_INTERVAL_SECS</code></td><td><code>server.completion_check_interval_secs</code></td></tr>
 <tr><td><code>TORC_SERVER__LOGGING__LOG_DIR</code></td><td><code>server.logging.log_dir</code></td></tr>
 <tr><td><code>TORC_SERVER__LOGGING__JSON_LOGS</code></td><td><code>server.logging.json_logs</code></td></tr>
 </tbody></table>
@@ -454,7 +457,6 @@ completion_check_interval_secs = 5
 <tr><td><code>TORC_TLS_INSECURE</code></td><td>Client</td><td>Skip certificate verification</td></tr>
 <tr><td><code>TORC_AUTH_FILE</code></td><td>Server</td><td>htpasswd file path</td></tr>
 <tr><td><code>TORC_LOG_DIR</code></td><td>Server</td><td>Log directory</td></tr>
-<tr><td><code>TORC_COMPLETION_CHECK_INTERVAL_SECS</code></td><td>Server</td><td>Completion check interval</td></tr>
 <tr><td><code>TORC_ADMIN_USERS</code></td><td>Server</td><td>Comma-separated list of admin usernames</td></tr>
 <tr><td><code>TORC_MAX_REQUEST_BODY_MB</code></td><td>Server</td><td>Bulk job upload request-body limit (MiB)</td></tr>
 <tr><td><code>DATABASE_URL</code></td><td>Server</td><td>SQLite database URL</td></tr>
@@ -492,7 +494,6 @@ auth_file = "/etc/torc/htpasswd"
 require_auth = true
 enforce_access_control = true
 admin_users = ["alice", "bob"]
-completion_check_interval_secs = 30.0
 
 [server.logging]
 log_dir = "/var/log/torc"
@@ -506,7 +507,6 @@ torc_bin = "torc"
 torc_server_bin = "torc-server"
 standalone = false
 server_port = 0
-completion_check_interval_secs = 5
 </code></pre>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>

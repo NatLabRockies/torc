@@ -190,9 +190,8 @@ Jobs run directly on the current machine, making this ideal for testing, develop
 environments.</p>
 <p>For running workflows on HPC clusters with Slurm, see <a href="./quick-start-hpc.html">Quick Start (HPC)</a>.</p>
 <h2 id="start-the-server"><a class="header" href="#start-the-server">Start the Server</a></h2>
-<p>Start a Torc server with a local database. Setting <code>--completion-check-interval-secs</code> ensures job
-completions are processed quickly (use this for personal servers, not shared deployments).</p>
-<pre><code class="language-console">torc-server run --database torc.db --host localhost --completion-check-interval-secs 5
+<p>Start a Torc server with a local database.</p>
+<pre><code class="language-console">torc-server run --database torc.db --host localhost
 </code></pre>
 <h2 id="test-the-connection"><a class="header" href="#test-the-connection">Test the Connection</a></h2>
 <p>In a new terminal, verify the client can connect:</p>
