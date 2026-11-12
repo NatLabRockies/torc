@@ -103,6 +103,20 @@ actions:
 > no allocation. `on_workflow_start` is still fine for a single allocation serving the whole
 > workflow.
 
+### Environment of New Allocations
+
+Actions such as `on_jobs_ready` and `on_jobs_complete` often fire on a compute node, so Torc calls
+`sbatch` from inside an existing allocation. By default `sbatch` uses `--export=ALL`, which would
+copy the current job's Slurm variables into the new job. Stale values like `SLURM_MEM_PER_CPU` or
+`SLURM_CPUS_PER_TASK` can then break or change `srun` steps in the new allocation.
+
+To prevent this, Torc removes these variables from the environment it passes to `sbatch`:
+
+- `SLURM_*`, except `SLURM_CONF`
+- `PMI_*` and `PMIX_*`
+
+Everything else is still passed on, including `PATH`, loaded modules and `SBATCH_*` variables.
+
 ### Assigning Jobs to Schedulers
 
 Reference schedulers in job definitions:
