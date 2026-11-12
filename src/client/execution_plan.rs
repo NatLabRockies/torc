@@ -928,12 +928,12 @@ fn compact_job_list(jobs: &[String]) -> Vec<String> {
                 let mut runs = Vec::new();
                 let mut current_run = vec![group.numbers[0].clone()];
 
-                for i in 1..group.numbers.len() {
-                    if group.numbers[i].0 == current_run.last().unwrap().0 + 1 {
-                        current_run.push(group.numbers[i].clone());
+                for item in &group.numbers[1..] {
+                    if item.0 == current_run.last().unwrap().0 + 1 {
+                        current_run.push(item.clone());
                     } else {
                         runs.push(current_run);
-                        current_run = vec![group.numbers[i].clone()];
+                        current_run = vec![item.clone()];
                     }
                 }
                 runs.push(current_run);
