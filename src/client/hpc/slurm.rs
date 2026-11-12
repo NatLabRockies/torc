@@ -604,6 +604,25 @@ pub struct SbatchTestResult {
     pub raw_output: String,
 }
 
+/// Whether an inherited env var is allocation state that must not leak into a new
+/// submission (e.g. when sbatch runs from inside a job). `SLURM_CONF` is site config, kept.
+fn is_inherited_job_env(key: &str) -> bool {
+    (key.starts_with("SLURM_") && key != "SLURM_CONF")
+        || key.starts_with("PMI_")
+        || key.starts_with("PMIX_")
+}
+
+/// Remove the current allocation's Slurm/PMI env vars from `cmd`. Without this, `sbatch`
+/// (default `--export=ALL`) forwards them into the new job, where stale values such as
+/// `SLURM_MEM_PER_CPU` or `SLURM_CPUS_PER_TASK` break or alter its `srun` steps.
+pub(crate) fn remove_inherited_job_env(cmd: &mut Command) {
+    for (key, _) in std::env::vars_os() {
+        if key.to_str().is_some_and(is_inherited_job_env) {
+            cmd.env_remove(key);
+        }
+    }
+}
+
 /// Get the sbatch executable path (allows for testing with fake binary in dev/test builds)
 fn get_sbatch_exec() -> String {
     if cfg!(any(test, debug_assertions)) {
@@ -627,6 +646,7 @@ pub fn run_sbatch_test_only(
 ) -> SbatchTestResult {
     let sbatch = get_sbatch_exec();
     let mut cmd = Command::new(&sbatch);
+    remove_inherited_job_env(&mut cmd);
 
     cmd.args([
         "--test-only",
@@ -731,6 +751,28 @@ pub fn parse_sbatch_test_only(output: &str) -> SbatchTestResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_inherited_job_env() {
+        for k in [
+            "SLURM_JOB_ID",
+            "SLURM_MEM_PER_CPU",
+            "SLURM_CPUS_PER_TASK",
+            "PMI_RANK",
+            "PMIX_RANK",
+        ] {
+            assert!(is_inherited_job_env(k), "{k} should be removed");
+        }
+        for k in [
+            "SLURM_CONF",
+            "SBATCH_ACCOUNT",
+            "PATH",
+            "PMIXFOO",
+            "TORC_API_URL",
+        ] {
+            assert!(!is_inherited_job_env(k), "{k} should be kept");
+        }
+    }
 
     #[test]
     fn test_parse_slurm_timelimit() {

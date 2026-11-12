@@ -76,7 +76,10 @@ impl SlurmInterface {
             attempts += 1;
             trace!("Running command: {} {:?} (attempt {})", cmd, args, attempts);
 
-            let output = Command::new(cmd).args(args).output()?;
+            let mut command = Command::new(cmd);
+            command.args(args);
+            super::slurm::remove_inherited_job_env(&mut command);
+            let output = command.output()?;
 
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
