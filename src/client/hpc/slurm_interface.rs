@@ -62,7 +62,11 @@ impl SlurmInterface {
         env::var("TORC_FAKE_SCANCEL").unwrap_or_else(|_| "scancel".to_string())
     }
 
-    /// Run a command with retries for transient errors
+    /// Run a command with retries for transient errors.
+    ///
+    /// Set `strip_job_env` only for commands that submit new jobs (sbatch), so the current
+    /// allocation's Slurm/PMI env does not leak into them. Other commands (e.g. squeue) may
+    /// rely on user-set `SLURM_*` input vars such as `SLURM_CLUSTERS`.
     fn run_command_with_retries(
         &self,
         cmd: &str,
@@ -70,6 +74,7 @@ impl SlurmInterface {
         num_retries: usize,
         retry_delay_secs: u64,
         ignore_errors: &[&str],
+        strip_job_env: bool,
     ) -> Result<(i32, String, String)> {
         let mut attempts = 0;
         loop {
@@ -78,7 +83,9 @@ impl SlurmInterface {
 
             let mut command = Command::new(cmd);
             command.args(args);
-            super::slurm::remove_inherited_job_env(&mut command);
+            if strip_job_env {
+                super::slurm::remove_inherited_job_env(&mut command);
+            }
             let output = command.output()?;
 
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -133,6 +140,7 @@ impl HpcInterface for SlurmInterface {
             6,
             10,
             &["Invalid job id specified"],
+            false,
         )?;
 
         if return_code != 0 {
@@ -181,6 +189,7 @@ impl HpcInterface for SlurmInterface {
             6,
             10,
             &[],
+            false,
         )?;
 
         if return_code != 0 {
@@ -614,7 +623,7 @@ impl HpcInterface for SlurmInterface {
         let filename_str = filename.to_string_lossy();
 
         let (return_code, stdout, stderr) =
-            self.run_command_with_retries(&sbatch, &[&filename_str], 6, 10, &[])?;
+            self.run_command_with_retries(&sbatch, &[&filename_str], 6, 10, &[], true)?;
 
         if return_code != 0 {
             return Ok((return_code, String::new(), stderr));
