@@ -14682,6 +14682,17 @@ kept (not re-armed) on reinitialize and <code>torc submit</code> cannot re-fire 
 no allocation. <code>on_workflow_start</code> is still fine for a single allocation serving the whole
 workflow.</p>
 </blockquote>
+<h3 id="environment-of-new-allocations"><a class="header" href="#environment-of-new-allocations">Environment of New Allocations</a></h3>
+<p>Actions such as <code>on_jobs_ready</code> and <code>on_jobs_complete</code> often fire on a compute node, so Torc calls
+<code>sbatch</code> from inside an existing allocation. By default <code>sbatch</code> uses <code>--export=ALL</code>, which would
+copy the current job's Slurm variables into the new job. Stale values like <code>SLURM_MEM_PER_CPU</code> or
+<code>SLURM_CPUS_PER_TASK</code> can then break or change <code>srun</code> steps in the new allocation.</p>
+<p>To prevent this, Torc removes these variables from the environment it passes to <code>sbatch</code>:</p>
+<ul>
+<li><code>SLURM_*</code>, except <code>SLURM_CONF</code></li>
+<li><code>PMI_*</code> and <code>PMIX_*</code></li>
+</ul>
+<p>Everything else is still passed on, including <code>PATH</code>, loaded modules and <code>SBATCH_*</code> variables.</p>
 <h3 id="assigning-jobs-to-schedulers"><a class="header" href="#assigning-jobs-to-schedulers">Assigning Jobs to Schedulers</a></h3>
 <p>Reference schedulers in job definitions:</p>
 <pre><code class="language-yaml">jobs:
