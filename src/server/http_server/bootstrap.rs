@@ -283,37 +283,68 @@ async fn rotate_and_promote(cfg: &SnapshotConfig, tmp: &std::path::Path) -> std:
 /// lifetime to the parent process — when the parent dies for any reason
 /// (including std::process::exit, which bypasses destructors), the kernel
 /// closes the pipe write end, stdin sees EOF here, and the server shuts down.
-async fn build_shutdown_future(shutdown_on_stdin_eof: bool) {
-    let stdin_eof = async {
-        if !shutdown_on_stdin_eof {
-            std::future::pending::<()>().await;
-            return;
+///
+/// On Unix, SIGTERM (sent by `docker stop`, Kubernetes, systemd, and Slurm) also
+/// triggers a graceful shutdown. The handler is installed eagerly when this
+/// function is called, not when the future is first polled, so call it before
+/// advertising readiness. Without a handler, SIGTERM kills the process outright,
+/// and as PID 1 in a container it is ignored entirely until SIGKILL.
+fn build_shutdown_future(shutdown_on_stdin_eof: bool) -> impl std::future::Future<Output = ()> {
+    #[cfg(unix)]
+    let sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            error!("Failed to install SIGTERM handler: {}", e);
+            None
         }
-        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        std::thread::spawn(move || {
-            use std::io::Read;
-            let mut buf = [0u8; 1024];
-            let stdin = std::io::stdin();
-            let mut lock = stdin.lock();
-            loop {
-                match lock.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(_) => continue,
-                    Err(_) => break,
-                }
-            }
-            let _ = tx.send(());
-        });
-        let _ = rx.await;
     };
-    tokio::pin!(stdin_eof);
-    tokio::select! {
-        r = tokio::signal::ctrl_c() => {
-            r.expect("Failed to install Ctrl+C handler");
-            info!("Received shutdown signal, gracefully shutting down...");
-        }
-        _ = &mut stdin_eof => {
-            info!("Parent process exited (stdin EOF), gracefully shutting down...");
+    async move {
+        #[cfg(unix)]
+        let sigterm_recv = async move {
+            match sigterm {
+                Some(mut s) => {
+                    s.recv().await;
+                }
+                None => std::future::pending::<()>().await,
+            }
+        };
+        #[cfg(not(unix))]
+        let sigterm_recv = std::future::pending::<()>();
+        tokio::pin!(sigterm_recv);
+        let stdin_eof = async {
+            if !shutdown_on_stdin_eof {
+                std::future::pending::<()>().await;
+                return;
+            }
+            let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+            std::thread::spawn(move || {
+                use std::io::Read;
+                let mut buf = [0u8; 1024];
+                let stdin = std::io::stdin();
+                let mut lock = stdin.lock();
+                loop {
+                    match lock.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(_) => continue,
+                        Err(_) => break,
+                    }
+                }
+                let _ = tx.send(());
+            });
+            let _ = rx.await;
+        };
+        tokio::pin!(stdin_eof);
+        tokio::select! {
+            r = tokio::signal::ctrl_c() => {
+                r.expect("Failed to install Ctrl+C handler");
+                info!("Received shutdown signal, gracefully shutting down...");
+            }
+            _ = &mut sigterm_recv => {
+                info!("Received SIGTERM, gracefully shutting down...");
+            }
+            _ = &mut stdin_eof => {
+                info!("Parent process exited (stdin EOF), gracefully shutting down...");
+            }
         }
     }
 }
@@ -353,6 +384,9 @@ pub(super) async fn create_server(
     // accidentally kill the server (default SIGUSR1 disposition is terminate).
     #[cfg(unix)]
     let sigusr1 = register_sigusr1();
+    // Same reasoning for SIGTERM: install the graceful-shutdown handler before
+    // readiness so an early SIGTERM drains instead of killing the process.
+    let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
 
     println!("TORC_SERVER_PORT={}", actual_port);
 
@@ -439,7 +473,6 @@ pub(super) async fn create_server(
             let tls_acceptor = ssl.build();
 
             info!("Starting a server (with https) on port {}", actual_port);
-            let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
             tokio::pin!(shutdown);
 
             let mut connection_tasks = tokio::task::JoinSet::new();
@@ -508,7 +541,6 @@ pub(super) async fn create_server(
             "Starting a server (over http, so no TLS) on port {}",
             actual_port
         );
-        let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
         tokio::pin!(shutdown);
 
         let mut connection_tasks = tokio::task::JoinSet::new();
