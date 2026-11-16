@@ -39,13 +39,16 @@ cargo install cargo-release
 
 6. **Set up the database:**
 
-```bash
-# Create .env file
-echo "DATABASE_URL=sqlite:torc.db" > .env
+The `sqlx::query!` macros check queries against this database at compile time. The tracked `.env`
+sets `DATABASE_URL=sqlite:db/sqlite/dev.db`, so `cargo build` fails until the database exists.
 
-# Run migrations
+```bash
+mkdir -p db/sqlite
+sqlx database create        # uses DATABASE_URL from .env
 sqlx migrate run --source torc-server/migrations
 ```
+
+To build without a database, set `SQLX_OFFLINE=true` to use the committed `.sqlx/` query cache.
 
 7. **Build and test:**
 
