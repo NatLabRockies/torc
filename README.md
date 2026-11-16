@@ -93,9 +93,12 @@ cargo install torc
 # Everything (server, dashboard, MCP server, Slurm runner)
 cargo install torc --features "server-bin,mcp-server,dash,slurm-runner"
 
-# Or build from source
-cargo build --all-features --release
+# Or build from source (SQLX_OFFLINE uses the committed .sqlx/ query cache)
+SQLX_OFFLINE=true cargo build --all-features --release
 ```
+
+Developers changing SQL queries should build against a live database instead; see the
+[contributing guide](docs/src/contributing.md).
 
 Or download a precompiled binary from the
 [releases page](https://github.com/NatLabRockies/torc/releases).
@@ -109,7 +112,7 @@ Or download a precompiled binary from the
 ```bash
 # 1. Start the server
 torc-server run
-# (options: --url localhost --port 8080 --threads 8 --database path/to/db.sqlite)
+# (options: --host localhost --port 8080 --threads 8 --database path/to/db.sqlite)
 
 # 2. Create + run in one step
 torc run examples/yaml/hyperparameter_sweep.yaml
