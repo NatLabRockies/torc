@@ -206,67 +206,52 @@ jobs. This is often the quickest way to investigate failed jobs without using co
 
 2. Open your browser to `http://localhost:8090`
 
-3. Select a workflow from the dropdown in the sidebar
+3. Click the **Debugging** tab in the sidebar
 
-4. Click the **Debugging** tab in the navigation
+4. Select a workflow with the picker in the top bar
 
 ### Features
 
-#### Job Results Report
+#### Job Results
 
-The Debug tab provides a report generator with the following options:
+The Debugging tab loads job results for the selected workflow automatically, with these options:
 
-- **Output Directory**: Specify where job logs are stored (default: `torc_output`). This must match
-  the directory used during workflow execution.
+- **Output dir**: Where job logs are stored (default: `torc_output`, relative to the workflow's
+  submission directory). This must match the directory used during workflow execution.
 
-- **Include all runs**: Check this to see results from all workflow runs, not just the latest.
-  Useful for comparing job behavior across reinitializations.
+- **Failed only**: Show only jobs with non-zero return codes. Checked by default to help you focus
+  on problematic jobs.
 
-- **Show only failed jobs**: Filter to display only jobs with non-zero return codes. This is checked
-  by default to help you focus on problematic jobs.
+- **All runs**: Include results from all workflow runs, not just the latest. Useful for comparing
+  job behavior across reinitializations.
 
-Click **Generate Report** to fetch job results from the server.
+The table shows each job's ID, name, status, run and attempt, and return code. Type in the filter
+box (or press `/`) to narrow it down, and use the details button to open the full job view.
 
-#### Job Results Table
+#### Log Viewer
 
-After generating a report, the Debug tab displays an interactive table showing:
+Selecting a job shows its logs beside the table:
 
-- **Job ID**: Unique identifier for the job
-- **Job Name**: Human-readable name from the workflow spec
-- **Status**: Job completion status (Done, Terminated, etc.)
-- **Return Code**: Exit code (0 = success, non-zero = failure)
-- **Execution Time**: Duration in minutes
-- **Run ID**: Which workflow run the result is from
+- **stdout**: Standard output from the job command (print statements and normal program output)
+- **stderr**: Error messages, warnings, and stack traces; the main place to investigate crashes
 
-Click any row to select a job and view its log files.
+The viewer shows the file path, keeps whitespace intact, scrolls to the end of the log, and has a
+**Copy** button and a button to open the file in the full-size file viewer.
 
-#### Log File Viewer
+#### Slurm Analysis
 
-When you select a job from the table, the Log File Viewer displays:
-
-- **stdout tab**: Standard output from the job command
-  - Shows print statements and normal program output
-  - Useful for checking expected behavior and debugging logic
-
-- **stderr tab**: Standard error from the job command
-  - Shows error messages, warnings, and stack traces
-  - Primary location for investigating crashes and exceptions
-
-Each tab includes:
-
-- **Copy Path** button: Copy the full file path to clipboard
-- **File path display**: Shows where the log file is located
-- **Scrollable content viewer**: Dark-themed viewer for easy reading
+For workflows run on Slurm, the **Slurm log analysis** sub-tab scans Slurm output logs for errors
+(out-of-memory, time limits, node failures) and links them to Torc jobs, and the **Slurm
+accounting** sub-tab collects `sacct` data for the workflow's allocations.
 
 ### Quick Debugging Workflow with torc-dash
 
-1. Open torc-dash and select your workflow from the sidebar
-2. Go to the **Debugging** tab
-3. Ensure "Show only failed jobs" is checked
-4. Click **Generate Report**
-5. Click on a failed job in the results table
-6. Review the **stderr** tab for error messages
-7. Check the **stdout** tab for context about what the job was doing
+1. Open torc-dash and go to the **Debugging** tab
+2. Pick your workflow in the top bar
+3. Keep **Failed only** checked
+4. Click on a failed job in the table
+5. Review **stderr** for error messages
+6. Check **stdout** for context about what the job was doing
 
 ### When to Use torc-dash vs CLI
 

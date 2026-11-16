@@ -23,7 +23,7 @@ workflows, offering an intuitive alternative to the command-line interface.
 
 ```bash
 # Build torc-dash
-cargo build --release -p torc-dash
+cargo build --release --features dash --bin torc-dash
 
 # Binary location
 ./target/release/torc-dash
@@ -101,92 +101,100 @@ Options:
 
 ## Features
 
+The sidebar switches between tabs. Tabs that work on one workflow (Details, Graph, Events,
+Debugging, Resources) share a **workflow picker** in the top bar. Data refreshes automatically
+(every 30 seconds by default; pauses while the window is hidden) or on demand with **Refresh**.
+
+Keyboard shortcuts (press `?` in the dashboard for the list):
+
+| Key     | Action                              |
+| ------- | ----------------------------------- |
+| `1`–`8` | Switch tabs                         |
+| `N`     | New workflow                        |
+| `R`     | Refresh                             |
+| `T`     | Cycle theme (system / light / dark) |
+| `/`     | Focus the current tab's filter      |
+| `Esc`   | Close a dialog                      |
+
 ### Workflows Tab
 
-The main workflows view provides:
-
-- **Workflow list** with ID, name, timestamp, user, and description
-- **Create Workflow** button to upload new workflow specifications
-- **Quick actions** for each workflow:
-  - View details and DAG visualization
-  - Initialize/reinitialize workflow
-  - Run locally or submit to scheduler
-  - Delete workflow
+- **Workflow list** with ID, name, user, project, description, and creation time. Filter by text or
+  access group, or show workflows from all users. Click a row to open its details.
+- **Actions** per workflow: run locally, submit to the scheduler, initialize, reinitialize, reset
+  status, cancel, recover, sync status, execution plan, export, and delete. Select several workflows
+  to delete them together.
+- **Import** a workflow from a file on the server or an uploaded file.
+- **Run output** streams into a panel at the bottom of the window while you keep using the
+  dashboard. Stopping the panel stops the output, not the run; use **Cancel** to stop the run.
 
 #### Creating Workflows
 
-Click "Create Workflow" to open the creation dialog:
+Click **Create workflow** (or press `N`) and choose a source:
 
-1. **Upload a file**: Drag and drop or click to select a workflow specification file
-   - Supports YAML, JSON, JSON5, and KDL formats
-2. **Or enter a file path**: Specify a path on the server filesystem
-3. Click "Create" to register the workflow
+1. **Upload file**: drag and drop or click to select a YAML, JSON, JSON5, or KDL specification
+2. **File path**: a path on the machine running `torc-dash`
+3. **Paste spec**: paste a specification; the format is detected automatically
+4. **Wizard**: build a workflow step by step (jobs, parameters, resources, Slurm schedulers,
+   actions, monitoring) with a live preview of the generated spec
+
+**Validate** checks the spec on the server without creating anything. By default the new workflow is
+initialized after creation; if output files already exist you are asked before they are removed.
 
 ### Details Tab
 
-Explore workflow components with interactive tables:
+A summary of the selected workflow (status counts, execution time, actions) above sub-tabs for jobs,
+running jobs, results, events, files, user data, resource requirements, schedulers, compute nodes,
+scheduled compute nodes, and Slurm stats.
 
-- **Jobs**: View all jobs with status, name, command, and dependencies
-- **Files**: Input/output files with paths and timestamps
-- **User Data**: Key-value data passed between jobs
-- **Results**: Execution results with return codes and resource metrics
-- **Compute Nodes**: Available compute resources
-- **Resource Requirements**: CPU, memory, GPU specifications
-- **Schedulers**: Slurm scheduler configurations
+- **Sorting**: click column headers
+- **Filtering**: plain text matches any column; `field<op>value` filters a column, with `=`, `!=`,
+  `>`, `<`, `>=`, `<=`, `~` (contains), and `:` (e.g. `status=failed`, `exec_time>10`, `name:work`).
+  Quick-filter buttons cover common job statuses.
+- **Job details**: click a job to see its command, results, logs (stdout/stderr), files, user data,
+  resources, and dependencies. Other tabs open the same view.
 
-Features:
+Tables render only the visible rows, so workflows with very large job counts stay responsive.
 
-- **Workflow selector**: Filter by workflow
-- **Column sorting**: Click headers to sort
-- **Row filtering**: Type in filter boxes (supports `column:value` syntax)
-- **Auto-refresh**: Toggle automatic updates
+### Graph Tab
 
-### DAG Visualization
+An interactive dependency graph for the selected workflow:
 
-Click "View" on any workflow to see an interactive dependency graph:
-
-- Nodes represent jobs, colored by status
-- Edges show dependencies (file-based and explicit)
-- Zoom, pan, and click nodes for details
-- Legend shows status colors
+- Views: jobs only, jobs and files, or jobs and user data
+- Nodes are colored by job status; the legend shows counts per status
+- Zoom, pan, and fit to screen; click a job to open its details
+- Very large graphs (thousands of nodes) use a faster layout and ask before rendering
 
 ### Debugging Tab
 
-Investigate failed jobs with the integrated debugger:
+Investigate jobs in the selected workflow:
 
-1. Select a workflow
-2. Configure output directory (where logs are stored)
-3. Toggle "Show only failed jobs" to focus on problems
-4. Click "Generate Report" to fetch results
-5. Click any job row to view its log files:
-   - **stdout**: Standard output from the job
-   - **stderr**: Error output and stack traces
-   - Copy file paths with one click
+1. Set the output directory where job logs are stored (default `torc_output`, relative to the
+   workflow's submission directory)
+2. Keep **Failed only** checked to focus on failures, or uncheck it to see all jobs
+3. Select a job to read its stdout and stderr side by side (copy, or open in the file viewer)
 
-### Events Tab (SSE Live Streaming)
+Sub-tabs analyze Slurm logs for errors and collect `sacct` accounting data for Slurm allocations.
 
-Monitor workflow activity in real-time using Server-Sent Events (SSE):
+### Events Tab
 
-- **Live event streaming** - events appear instantly without polling
-- **Connection status indicator** - shows Live/Reconnecting/Disconnected status
-- **Event types displayed**:
-  - `job_started` / `job_completed` / `job_failed` - Job lifecycle events
-  - `compute_node_started` / `compute_node_stopped` - Worker node lifecycle
-  - `workflow_started` / `workflow_reinitialized` - Workflow initialization events
-  - `scheduler_node_created` - Slurm scheduler events
-- **Clear button** to reset the event list
-- **Auto-reconnect** on connection loss
+Live workflow events via Server-Sent Events (SSE), plus stored events such as retries:
 
-### Resource Plots Tab
+- Job, compute node, and workflow lifecycle events appear as they happen
+- A status indicator shows Live or Reconnecting; reconnection is automatic
+- The sidebar shows a count of new events while you are on another tab
+- Click an event that refers to a job to open the job
 
-Visualize CPU and memory usage over time:
+### Resources Tab
 
-1. Enter a base directory containing resource database files
-2. Click "Scan for Databases" to find `.db` files
-3. Select databases to plot
-4. Click "Generate Plots" for interactive Plotly charts
+Plot CPU and memory usage from resource monitoring databases:
 
-Requires workflows run with `granularity: "time_series"` in `resource_monitor` config.
+1. The dashboard scans the database directory (default `torc_output/resource_utilization`) and lists
+   databases for the selected workflow
+2. Select databases and click **Generate plots**
+3. Choose a plot: summary, CPU and memory across all jobs, or individual jobs
+
+Requires workflows run with resource monitoring enabled; time-series plots need
+`granularity: "time_series"` in the `resource_monitor` config.
 
 ### AI Chat Tab
 
@@ -355,53 +363,37 @@ Models, `GITHUB_TOKEN` is required. Ollama requires no credentials (runs locally
 > **Note:** The API key is kept server-side and never sent to the browser. All AI requests are
 > proxied through the `torc-dash` backend.
 
-### Configuration Tab
+### Settings Tab
 
-#### Server Management
+- **Appearance and behavior**: theme (system, light, dark), auto-refresh interval, and whether to
+  show workflows from all users by default. Preferences are stored in the browser.
+- **Version**: dashboard and server versions, with a warning if they don't match
+- **Server management**: start and stop `torc-server` from the dashboard (port, database path, log
+  level) and view its output
 
-Start and stop `torc-server` directly from the dashboard:
-
-- **Server Port**: Port to listen on (0 = auto-detect free port)
-- **Database Path**: SQLite database file location
-- **Log Level**: Server logging verbosity
-
-Click "Start Server" to launch, "Stop Server" to terminate.
-
-#### API Configuration
-
-- **API URL**: Torc server endpoint
-- **Test Connection**: Verify connectivity
-
-Settings are saved to browser local storage.
+The dashboard always talks to the server set with `--api-url` (or `TORC_API_URL`) when `torc-dash`
+starts.
 
 ## Common Usage Patterns
 
 ### Running a Workflow
 
-1. Navigate to **Workflows** tab
-2. Click **Create Workflow**
-3. Upload your specification file
-4. Click **Create**
-5. Click **Initialize** on the new workflow
-6. Click **Run Locally** (or **Submit** for Slurm)
-7. Monitor progress in the **Details** tab or **Events** tab
+1. In the **Workflows** tab, click **Create workflow**
+2. Upload or paste your specification and click **Create** (it is initialized automatically)
+3. Click the run button on the workflow (or **Submit** for Slurm)
+4. Watch progress in the **Details** or **Events** tab
 
 ### Debugging a Failed Workflow
 
-1. Go to the **Debugging** tab
-2. Select the workflow
-3. Check "Show only failed jobs"
-4. Click **Generate Report**
-5. Click on a failed job row
-6. Review the **stderr** tab for error messages
-7. Check **stdout** for context
+1. Pick the workflow in the top bar and open the **Debugging** tab
+2. Select a failed job
+3. Read **stderr** for the error and **stdout** for context
 
 ### Monitoring Active Jobs
 
-1. Open **Details** tab
-2. Select "Jobs" and your workflow
-3. Enable **Auto-refresh**
-4. Watch job statuses update in real-time
+1. Open the **Details** tab and pick the workflow
+2. Use the **Running** sub-tab, or the `status=running` filter on **Jobs**
+3. Data refreshes automatically; press `R` to refresh immediately
 
 ## Security Considerations
 
@@ -418,14 +410,14 @@ Settings are saved to browser local storage.
 ### Cannot Connect to Server
 
 - Verify torc-server is running: `curl http://localhost:8080/torc-service/v1/workflows`
-- Check the API URL in Configuration tab
+- Check the `--api-url` (or `TORC_API_URL`) that `torc-dash` was started with
 - In standalone mode, check server output for startup errors
 
 ### Workflow Creation Fails
 
 - Ensure workflow specification is valid YAML/JSON/KDL
 - Check file paths are accessible from the server
-- Review browser console for error details
+- Use **Validate** in the create dialog to see the server's error message
 
 ### Resource Plots Not Showing
 
@@ -439,21 +431,31 @@ Settings are saved to browser local storage.
 - Check if the port is already in use
 - Review console output for error messages
 
+## Desktop App
+
+`torc-desktop` is a native app (macOS, Windows, Linux) that shows the same dashboard without a
+browser or a manual SSH tunnel:
+
+- **This computer**: starts `torc-dash` locally, pointed at your torc-server or at a new one it
+  starts for you
+- **Remote (SSH)**: connects to a login node, starts `torc-dash` there on a private UNIX socket, and
+  forwards it automatically; password and MFA prompts appear in the app
+
+See `torc-desktop/README.md` in the repository for building and running it.
+
 ## Architecture
 
 `torc-dash` is a self-contained Rust binary with:
 
 - **Axum web framework** for HTTP server
-- **Embedded static assets** (HTML, CSS, JavaScript)
+- **Embedded static assets**: the dashboard UI, built at compile time into the binary
 - **API proxy** to forward requests to torc-server
 - **CLI integration** for workflow operations
 - **MCP client** that spawns `torc-mcp-server` as a subprocess for AI Chat
 
-The frontend uses vanilla JavaScript with:
-
-- **Cytoscape.js** for DAG visualization
-- **Plotly.js** for resource charts
-- **Custom components** for tables and forms
+The UI is a Svelte and TypeScript app in `torc-dash/web/`, with typed API calls generated from the
+OpenAPI spec, Cytoscape.js for the dependency graph, and Plotly.js for resource charts (both loaded
+only when needed).
 
 ## Next Steps
 

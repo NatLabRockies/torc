@@ -83,11 +83,10 @@ Navigate to http://localhost:8090
 
 **Step 3: Create and run a workflow**
 
-1. Click **Create Workflow**
-2. Upload a workflow specification file (YAML, JSON, or KDL)
-3. Click **Create**
-4. Click **Initialize** on the new workflow
-5. Click **Run Locally** to execute
+1. Click **Create workflow**
+2. Upload a workflow specification file (YAML, JSON, JSON5, or KDL)
+3. Click **Create** (the workflow is initialized automatically)
+4. Click the run button on the new workflow to execute it locally
 
 ### Configuration Options
 
@@ -229,8 +228,7 @@ Open http://localhost:8090 in your browser.
 **Via Dashboard:**
 
 1. Create a workflow with Slurm scheduler configuration
-2. Click **Initialize**
-3. Click **Submit** (not "Run Locally")
+2. Click **Submit** on the workflow (not the run button, which runs locally)
 
 **Via CLI:**
 
@@ -464,7 +462,7 @@ If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name n
 
 ### Dashboard shows "Disconnected"
 
-- Verify API URL in Configuration tab
+- Verify the `--api-url` (or `TORC_API_URL`) that `torc-dash` was started with
 - Check network connectivity to server
 - Ensure server is running and accessible
 

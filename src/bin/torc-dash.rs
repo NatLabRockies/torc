@@ -759,10 +759,11 @@ async fn main() -> Result<()> {
 
 // ============== Static File Handlers ==============
 
+/// The dashboard UI, built from torc-dash/web into torc-dash/static/app/.
 async fn index_handler() -> impl IntoResponse {
-    match Assets::get("index.html") {
+    match Assets::get("app/index.html") {
         Some(content) => Html(content.data.into_owned()).into_response(),
-        None => (StatusCode::NOT_FOUND, "index.html not found").into_response(),
+        None => (StatusCode::NOT_FOUND, "app/index.html not found").into_response(),
     }
 }
 
