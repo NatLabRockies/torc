@@ -27113,12 +27113,13 @@ cd torc
 <ol start="6">
 <li><strong>Set up the database:</strong></li>
 </ol>
-<pre><code class="language-bash"># Create .env file
-echo "DATABASE_URL=sqlite:torc.db" &gt; .env
-
-# Run migrations
+<p>The <code>sqlx::query!</code> macros check queries against this database at compile time. The tracked <code>.env</code>
+sets <code>DATABASE_URL=sqlite:db/sqlite/dev.db</code>, so <code>cargo build</code> fails until the database exists.</p>
+<pre><code class="language-bash">mkdir -p db/sqlite
+sqlx database create        # uses DATABASE_URL from .env
 sqlx migrate run --source torc-server/migrations
 </code></pre>
+<p>To build without a database, set <code>SQLX_OFFLINE=true</code> to use the committed <code>.sqlx/</code> query cache.</p>
 <ol start="7">
 <li><strong>Build and test:</strong></li>
 </ol>
