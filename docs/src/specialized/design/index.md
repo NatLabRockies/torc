@@ -3,6 +3,9 @@
 Internal design documentation for developers.
 
 - [Client Architecture](./client.md) - Torc client design
+- [RDP Bootstrap for Windows Workers](./rdp-windows-workers.md) - Proposed admin-free Windows
+  deployment through Windows App
+- [Worker Enrollment](./worker-enrollment.md) - Proposed scoped, revocable worker credentials
 - [HTTP API Design](./http-api.md) - REST API conventions and design principles
 - [Workflow Actions](./workflow-actions.md) - Workflow action system
 - [Web Dashboard Design](./dashboard.md) - Dashboard architecture
