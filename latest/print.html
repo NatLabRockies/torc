@@ -492,6 +492,10 @@ docker run --rm -it ghcr.io/natlabrockies/torc:latest \
   ghcr.io/natlabrockies/torc:latest
 </code></pre>
 <p>The server will be available at <code>http://localhost:8080</code>.</p>
+<p><code>docker stop</code> sends <code>SIGTERM</code>. The server stops accepting connections, closes idle connections, and
+waits up to 30 seconds for in-flight requests to finish; a second <code>SIGTERM</code> or Ctrl+C skips the
+wait. Docker sends <code>SIGKILL</code> after 10 seconds by default, so if long requests are possible pass a
+longer timeout (<code>docker stop -t 35 torc-server</code>, or <code>stop_grace_period: 35s</code> in Compose).</p>
 <h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>TORC_AUTH_FILE</code></td><td><em>(required)</em></td><td>Path to htpasswd file inside the container</td></tr>
