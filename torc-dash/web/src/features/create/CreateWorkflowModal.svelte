@@ -3,6 +3,7 @@
   with the wizard. Optional Slurm scheduler generation and initialize-after-create.
 -->
 <script lang="ts">
+  import { highlightByName, prettyJson } from "../../lib/highlight";
   import { tick } from "svelte";
   import { app } from "../../lib/state.svelte";
   import Icon from "../../lib/ui/Icon.svelte";
@@ -111,6 +112,13 @@
       toast.error(e);
     }
   }
+
+  // Highlighted preview of the uploaded spec; JSON is re-indented for display only.
+  let uploadHtml = $derived(
+    upload
+      ? highlightByName(upload.ext === ".json" ? prettyJson(upload.content) : upload.content, upload.ext)
+      : null,
+  );
 
   function detectFormat(text: string): string {
     const t = text.trim();
@@ -330,7 +338,9 @@
                 }}>Clear</button
               >
             </div>
-            <pre class="code-block">{upload.content}</pre>
+            <!-- highlightByName escapes its input. -->
+            {#if uploadHtml !== null}<pre class="code-block hl">{@html uploadHtml}</pre>
+            {:else}<pre class="code-block">{upload.content}</pre>{/if}
           </div>
         {/if}
       {:else if source === "path"}

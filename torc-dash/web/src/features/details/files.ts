@@ -51,28 +51,3 @@ export async function readFirst(
   }
   return { path: paths[0], res };
 }
-
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-const JSON_TOKEN =
-  /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}[\]])/g;
-
-/** Escape and wrap JSON tokens in spans (.k key, .s string, .n number, .b bool/null, .p punct). */
-export function highlightJson(json: string): string {
-  let out = "";
-  let last = 0;
-  for (const m of json.matchAll(JSON_TOKEN)) {
-    out += escapeHtml(json.slice(last, m.index));
-    const [tok, str, colon, lit, num] = m;
-    if (str !== undefined) {
-      out += colon
-        ? `<span class="k">${escapeHtml(str)}</span>${colon}`
-        : `<span class="s">${escapeHtml(str)}</span>`;
-    } else if (lit) out += `<span class="b">${lit}</span>`;
-    else if (num) out += `<span class="n">${num}</span>`;
-    else out += `<span class="p">${tok}</span>`;
-    last = m.index + tok.length;
-  }
-  return out + escapeHtml(json.slice(last));
-}

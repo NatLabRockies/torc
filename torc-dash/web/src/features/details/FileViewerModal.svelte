@@ -1,6 +1,7 @@
 <!-- File viewer. Opens when app.fileViewer is set (app.openFile(path, title)). -->
 <script lang="ts">
   import { errorText } from "../../lib/format";
+  import { highlightByName } from "../../lib/highlight";
   import { app } from "../../lib/state.svelte";
   import LogSearch from "../../lib/ui/LogSearch.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
@@ -62,7 +63,10 @@
     {:else if !res.content}
       <div class="empty">(empty)</div>
     {:else}
-      <pre bind:this={pre} class="content plain">{res.content}</pre>
+      {@const html = highlightByName(res.content, app.fileViewer?.path ?? "")}
+      <!-- highlightByName escapes its input. -->
+      {#if html !== null}<pre bind:this={pre} class="content plain hl">{@html html}</pre>
+      {:else}<pre bind:this={pre} class="content plain">{res.content}</pre>{/if}
     {/if}
   </div>
 </Modal>

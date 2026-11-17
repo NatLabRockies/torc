@@ -4,6 +4,7 @@
   when next() returns false on the last step.
 -->
 <script lang="ts">
+  import { highlightJson } from "../../lib/highlight";
   import { tick } from "svelte";
   import Icon from "../../lib/ui/Icon.svelte";
   import { toast } from "../../lib/ui/toast.svelte";
@@ -297,7 +298,7 @@
             <strong>Generated spec</strong>
             <button type="button" class="btn btn-sm btn-ghost" onclick={copy}>Copy JSON</button>
           </div>
-          <pre class="code-block big">{specJson}</pre>
+          <pre class="code-block big hl">{@html highlightJson(specJson)}</pre>
         </div>
       {/if}
     </section>
@@ -317,7 +318,7 @@
               onclick={() => (showPreview = false)}><Icon name="x" size={14} /></button
             >
           </div>
-          <pre class="code-block">{specJson}</pre>
+          <pre class="code-block hl">{@html highlightJson(specJson)}</pre>
         </aside>
       {:else}
         <button type="button" class="show-preview btn btn-sm btn-ghost" onclick={() => (showPreview = true)}>

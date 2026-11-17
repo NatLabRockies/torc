@@ -352,6 +352,27 @@ input[type="checkbox"] {
   overflow: auto;
 }
 
+/* Syntax-highlight tokens from lib/highlight.ts, inside an element with class "hl". */
+.hl .k {
+  color: var(--accent);
+}
+.hl .s {
+  color: var(--success);
+}
+.hl .n {
+  color: var(--warning);
+}
+.hl .b {
+  color: var(--info);
+}
+.hl .p,
+.hl .c {
+  color: var(--text-muted);
+}
+.hl .c {
+  font-style: italic;
+}
+
 /* ---------- Key/value grid ---------- */
 .kv {
   display: grid;
