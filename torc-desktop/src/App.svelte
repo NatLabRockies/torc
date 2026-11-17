@@ -15,10 +15,8 @@
 
   const saved = load();
   let mode = $state<"local" | "ssh">(saved.mode === "ssh" ? "ssh" : "local");
-  let localCommand = $state(saved.localCommand ?? "torc-dash");
   let host = $state(saved.host ?? "");
   let setup = $state(saved.setup ?? "");
-  let command = $state(saved.remoteCommand ?? "torc-dash");
   let workdir = $state(saved.workdir ?? "");
   // Which torc-server the dashboard talks to, per mode. A blank URL lets torc-dash use
   // TORC_API_URL or `[dash] api_url` from the torc config where it runs.
@@ -50,7 +48,7 @@
       host,
       setup,
       workdir,
-      command: mode === "local" ? localCommand : command,
+      command: "torc-dash",
       standalone: server.private,
       serverUrl: server.private ? "" : server.url,
     };
@@ -66,12 +64,10 @@
         STORAGE_KEY,
         JSON.stringify({
           mode,
-          localCommand,
           serverUrl: servers.local.url,
           startServer: String(servers.local.private),
           host,
           setup,
-          remoteCommand: command,
           workdir,
           remoteServerUrl: servers.ssh.url,
           remotePrivate: String(servers.ssh.private),
@@ -130,11 +126,6 @@
 
     {#if mode === "local"}
       <p class="hint">Starts the Torc dashboard on this computer.</p>
-      <label>
-        Dashboard command
-        <input bind:value={localCommand} required />
-        <span class="optional">Full path if torc-dash isn't on your PATH.</span>
-      </label>
     {:else}
       <p class="hint">
         Opens an SSH session to your login node and starts the Torc dashboard there.
@@ -147,16 +138,12 @@
       <label>
         Environment setup <span class="optional">(optional)</span>
         <input bind:value={setup} placeholder="module load torc" />
+        <span class="optional">Runs before <code>torc-dash</code>; use it to put torc-dash on the PATH.</span>
       </label>
       <label>
         Working directory <span class="optional">(optional)</span>
         <input bind:value={workdir} placeholder="~ (home)" />
         <span class="optional">Where workflows run and write output, e.g. <code>/scratch/$USER</code>.</span>
-      </label>
-      <label>
-        Dashboard command
-        <input bind:value={command} required />
-        <span class="optional">Full path if torc-dash isn't on the login node's PATH.</span>
       </label>
     {/if}
 
