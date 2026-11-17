@@ -1443,12 +1443,8 @@ async fn cli_run_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<WorkflowIdRequest>,
 ) -> impl IntoResponse {
-    let result = run_torc_command(
-        &state.torc_bin,
-        &["workflows", "run", &req.workflow_id],
-        &state.api_url,
-    )
-    .await;
+    let result =
+        run_torc_command(&state.torc_bin, &["run", &req.workflow_id], &state.api_url).await;
     Json(result)
 }
 
@@ -1458,7 +1454,7 @@ async fn cli_submit_handler(
 ) -> impl IntoResponse {
     let result = run_torc_command(
         &state.torc_bin,
-        &["workflows", "submit", &req.workflow_id],
+        &["submit", "--no-prompts", &req.workflow_id],
         &state.api_url,
     )
     .await;
@@ -1505,7 +1501,7 @@ async fn cli_delete_handler(
 ) -> impl IntoResponse {
     let result = run_torc_command(
         &state.torc_bin,
-        &["workflows", "delete", "--no-prompts", &req.workflow_id],
+        &["delete", "--no-prompts", &req.workflow_id],
         &state.api_url,
     )
     .await;
@@ -1519,7 +1515,7 @@ async fn cli_cancel_handler(
 ) -> impl IntoResponse {
     let result = run_torc_command(
         &state.torc_bin,
-        &["workflows", "cancel", &req.workflow_id],
+        &["cancel", "--no-prompts", &req.workflow_id],
         &state.api_url,
     )
     .await;

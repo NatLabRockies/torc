@@ -65,7 +65,7 @@
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 </script>
 
-<Modal bind:open title="Execution plan · workflow {workflowId}" size="lg" {onclose}>
+<Modal bind:open title="Execution plan · workflow {workflowId}" size="xl" {onclose}>
   {#if error}
     <p class="error-text">{error}</p>
   {:else if !plan}

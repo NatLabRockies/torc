@@ -7,10 +7,11 @@ type Toast = { id: number; kind: ToastKind; message: string };
 let nextId = 0;
 export const toasts = $state<Toast[]>([]);
 
-function push(kind: ToastKind, message: string, ms: number) {
+/** `ms` null: stays until dismissed. */
+function push(kind: ToastKind, message: string, ms: number | null) {
   const id = nextId++;
   toasts.push({ id, kind, message });
-  setTimeout(() => dismiss(id), ms);
+  if (ms !== null) setTimeout(() => dismiss(id), ms);
 }
 
 export function dismiss(id: number) {
@@ -21,5 +22,6 @@ export function dismiss(id: number) {
 export const toast = {
   success: (message: string) => push("success", message, 3500),
   info: (message: string) => push("info", message, 3500),
-  error: (e: unknown) => push("error", errorText(e), 8000),
+  // Errors stay so they can be read and copied.
+  error: (e: unknown) => push("error", errorText(e), null),
 };

@@ -14,7 +14,7 @@
   }
 </script>
 
-<Modal bind:open title={current?.title ?? ""} size="sm" onclose={() => finish(false)}>
+<Modal bind:open title={current?.title ?? ""} size="md" onclose={() => finish(false)}>
   {#if current?.message}<p class="msg">{current.message}</p>{/if}
   {#snippet footer()}
     <button class="btn" onclick={() => finish(false)}>Cancel</button>
