@@ -10,12 +10,6 @@
 tag-prefix = "v"
 tag-name = "{{prefix}}{{version}}"
 
-# Update the workspace dependency self-reference in Cargo.toml
-[[pre-release-replacements]]
-file = "Cargo.toml"
-search = 'torc = \{ version = "[^"]+", path = "\." \}'
-replace = 'torc = { version = "{{version}}", path = "." }'
-
 # Keep Python client version in sync
 [[pre-release-replacements]]
 file = "python_client/pyproject.toml"
