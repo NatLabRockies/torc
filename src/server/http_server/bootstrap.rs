@@ -140,18 +140,19 @@ impl SnapshotConfig {
 /// Configured via env vars: `TORC_SERVER_SNAPSHOT_PATH` (default
 /// `./torc-server-snapshot.db`) and `TORC_SERVER_SNAPSHOT_KEEP` (default 5,
 /// minimum 1).
-/// Replace the kernel-default SIGUSR1 disposition (which is "terminate the
-/// process") with a tokio-managed signal stream. Must be called *before* the
-/// server advertises readiness on stdout, so a parent that races between
-/// `TORC_SERVER_PORT=` and the snapshot loop can't accidentally kill the
-/// server with SIGUSR1.
+/// Replace a signal's kernel-default disposition (terminate the process) with a
+/// tokio-managed stream. Call *before* the server advertises readiness on
+/// stdout, so a parent that signals right after `TORC_SERVER_PORT=` can't kill
+/// the server through the default disposition.
 #[cfg(unix)]
-fn register_sigusr1() -> Option<tokio::signal::unix::Signal> {
-    use tokio::signal::unix::{SignalKind, signal};
-    match signal(SignalKind::user_defined1()) {
+fn register_signal(
+    kind: tokio::signal::unix::SignalKind,
+    name: &str,
+) -> Option<tokio::signal::unix::Signal> {
+    match tokio::signal::unix::signal(kind) {
         Ok(s) => Some(s),
         Err(e) => {
-            error!("Failed to install SIGUSR1 handler: {}", e);
+            error!("Failed to install {} handler: {}", name, e);
             None
         }
     }
@@ -277,45 +278,116 @@ async fn rotate_and_promote(cfg: &SnapshotConfig, tmp: &std::path::Path) -> std:
     Ok(())
 }
 
-/// Build the shutdown future for the server. Resolves when any of the configured
-/// triggers fires: Ctrl+C, or (when `shutdown_on_stdin_eof` is true) EOF on stdin.
-/// The stdin-EOF trigger is used by `torc --standalone` to tie the server's
-/// lifetime to the parent process — when the parent dies for any reason
-/// (including std::process::exit, which bypasses destructors), the kernel
-/// closes the pipe write end, stdin sees EOF here, and the server shuts down.
-async fn build_shutdown_future(shutdown_on_stdin_eof: bool) {
-    let stdin_eof = async {
-        if !shutdown_on_stdin_eof {
-            std::future::pending::<()>().await;
-            return;
+/// Shutdown signals: SIGTERM (sent by `docker stop`, Kubernetes, systemd, and
+/// Slurm) and SIGINT/Ctrl+C. On Unix the handlers are installed eagerly by
+/// [`ShutdownSignals::install`], so call it before advertising readiness. The
+/// first signal starts a graceful drain; a second one aborts the drain.
+struct ShutdownSignals {
+    #[cfg(unix)]
+    term: Option<tokio::signal::unix::Signal>,
+    #[cfg(unix)]
+    int: Option<tokio::signal::unix::Signal>,
+}
+
+impl ShutdownSignals {
+    fn install() -> Self {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::SignalKind;
+            Self {
+                term: register_signal(SignalKind::terminate(), "SIGTERM"),
+                int: register_signal(SignalKind::interrupt(), "SIGINT"),
+            }
         }
-        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        std::thread::spawn(move || {
-            use std::io::Read;
-            let mut buf = [0u8; 1024];
-            let stdin = std::io::stdin();
-            let mut lock = stdin.lock();
-            loop {
-                match lock.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(_) => continue,
-                    Err(_) => break,
+        #[cfg(not(unix))]
+        Self {}
+    }
+
+    /// Wait for the next shutdown signal and return its name.
+    async fn recv(&mut self) -> &'static str {
+        #[cfg(unix)]
+        {
+            async fn next(sig: &mut Option<tokio::signal::unix::Signal>) {
+                match sig {
+                    Some(s) => {
+                        s.recv().await;
+                    }
+                    None => std::future::pending().await,
                 }
             }
-            let _ = tx.send(());
-        });
-        let _ = rx.await;
-    };
-    tokio::pin!(stdin_eof);
-    tokio::select! {
-        r = tokio::signal::ctrl_c() => {
-            r.expect("Failed to install Ctrl+C handler");
-            info!("Received shutdown signal, gracefully shutting down...");
+            tokio::select! {
+                _ = next(&mut self.term) => "SIGTERM",
+                _ = next(&mut self.int) => "SIGINT",
+            }
         }
-        _ = &mut stdin_eof => {
-            info!("Parent process exited (stdin EOF), gracefully shutting down...");
+        #[cfg(not(unix))]
+        {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to install Ctrl+C handler");
+            "Ctrl+C"
         }
     }
+}
+
+/// Resolves on stdin EOF when `enabled`, otherwise never. Used by
+/// `torc --standalone` to tie the server's lifetime to the parent process —
+/// when the parent dies for any reason (including std::process::exit, which
+/// bypasses destructors), the kernel closes the pipe write end, stdin sees EOF
+/// here, and the server shuts down.
+async fn stdin_eof(enabled: bool) {
+    if !enabled {
+        return std::future::pending().await;
+    }
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let mut buf = [0u8; 1024];
+        let mut lock = std::io::stdin().lock();
+        while let Ok(n) = lock.read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+        }
+        let _ = tx.send(());
+    });
+    let _ = rx.await;
+}
+
+/// Tell every connection to finish its in-flight request and close (idle
+/// keep-alive connections close at once), then wait up to 30 seconds for them.
+/// A second shutdown signal aborts the wait.
+async fn drain_connections(
+    graceful: hyper_util::server::graceful::GracefulShutdown,
+    mut tasks: tokio::task::JoinSet<Result<(), ()>>,
+    signals: &mut ShutdownSignals,
+    kind: &str,
+) {
+    if tasks.is_empty() {
+        return;
+    }
+    info!(
+        "Waiting up to 30 seconds for {} active {} connections to finish \
+         (signal again to force shutdown)...",
+        tasks.len(),
+        kind
+    );
+    let drain = async {
+        tokio::join!(graceful.shutdown(), async {
+            while tasks.join_next().await.is_some() {}
+        })
+    };
+    tokio::select! {
+        _ = drain => return,
+        _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+            info!("Timeout waiting for {} connections", kind);
+        }
+        sig = signals.recv() => {
+            info!("Received {} during drain, forcing shutdown", sig);
+        }
+    }
+    info!("Aborting {} remaining {} connections", tasks.len(), kind);
+    tasks.abort_all();
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -352,7 +424,12 @@ pub(super) async fn create_server(
     // that races between `TORC_SERVER_PORT=` and snapshot-loop spawn can't
     // accidentally kill the server (default SIGUSR1 disposition is terminate).
     #[cfg(unix)]
-    let sigusr1 = register_sigusr1();
+    let sigusr1 = register_signal(tokio::signal::unix::SignalKind::user_defined1(), "SIGUSR1");
+    // Same reasoning for SIGTERM/SIGINT: an early signal drains instead of
+    // killing the process.
+    let mut signals = ShutdownSignals::install();
+    let stdin_eof = stdin_eof(shutdown_on_stdin_eof);
+    tokio::pin!(stdin_eof);
 
     println!("TORC_SERVER_PORT={}", actual_port);
 
@@ -439,8 +516,7 @@ pub(super) async fn create_server(
             let tls_acceptor = ssl.build();
 
             info!("Starting a server (with https) on port {}", actual_port);
-            let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
-            tokio::pin!(shutdown);
+            let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
             let mut connection_tasks = tokio::task::JoinSet::new();
             let mut consecutive_accept_errors: u32 = 0;
@@ -456,6 +532,7 @@ pub(super) async fn create_server(
                                 let ssl = Ssl::new(tls_acceptor.context()).unwrap();
                                 let _addr = tcp.peer_addr().expect("Unable to get remote address");
                                 let app = app.clone();
+                                let watcher = graceful.watcher();
                                 connection_tasks.spawn(async move {
                                     let mut tls = tokio_openssl::SslStream::new(ssl, tcp).map_err(|_| ())?;
                                     std::pin::Pin::new(&mut tls).accept().await.map_err(|_| ())?;
@@ -463,10 +540,10 @@ pub(super) async fn create_server(
                                         hyper_util::service::TowerToHyperService::new(app.clone());
                                     let io = TokioIo::new(tls);
 
-                                    HyperServerBuilder::new(TokioExecutor::new())
+                                    let conn = HyperServerBuilder::new(TokioExecutor::new())
                                         .serve_connection(io, hyper_service)
-                                        .await
-                                        .map_err(|_| ())
+                                        .into_owned();
+                                    watcher.watch(conn).await.map_err(|_| ())
                                 });
                             }
                             Err(e) => {
@@ -477,29 +554,18 @@ pub(super) async fn create_server(
                             }
                         }
                     }
-                    _ = &mut shutdown => {
+                    sig = signals.recv() => {
+                        info!("Received {}, gracefully shutting down...", sig);
+                        break;
+                    }
+                    _ = &mut stdin_eof => {
+                        info!("Parent process exited (stdin EOF), gracefully shutting down...");
                         break;
                     }
                 }
             }
 
-            if !connection_tasks.is_empty() {
-                info!(
-                    "Waiting up to 30 seconds for {} active TLS connections to finish...",
-                    connection_tasks.len()
-                );
-                let drain = async { while connection_tasks.join_next().await.is_some() {} };
-                if tokio::time::timeout(std::time::Duration::from_secs(30), drain)
-                    .await
-                    .is_err()
-                {
-                    info!(
-                        "Timeout waiting for TLS connections, aborting {} remaining",
-                        connection_tasks.len()
-                    );
-                    connection_tasks.abort_all();
-                }
-            }
+            drain_connections(graceful, connection_tasks, &mut signals, "TLS").await;
 
             actual_port
         }
@@ -508,8 +574,7 @@ pub(super) async fn create_server(
             "Starting a server (over http, so no TLS) on port {}",
             actual_port
         );
-        let shutdown = build_shutdown_future(shutdown_on_stdin_eof);
-        tokio::pin!(shutdown);
+        let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
         let mut connection_tasks = tokio::task::JoinSet::new();
         let mut consecutive_accept_errors: u32 = 0;
@@ -523,15 +588,16 @@ pub(super) async fn create_server(
                         Ok((tcp, _addr)) => {
                             consecutive_accept_errors = 0;
                             let app = app.clone();
+                            let watcher = graceful.watcher();
                             connection_tasks.spawn(async move {
                                 let hyper_service =
                                     hyper_util::service::TowerToHyperService::new(app.clone());
                                 let io = TokioIo::new(tcp);
 
-                                HyperServerBuilder::new(TokioExecutor::new())
+                                let conn = HyperServerBuilder::new(TokioExecutor::new())
                                     .serve_connection(io, hyper_service)
-                                    .await
-                                    .map_err(|_| ())
+                                    .into_owned();
+                                watcher.watch(conn).await.map_err(|_| ())
                             });
                         }
                         Err(e) => {
@@ -542,29 +608,18 @@ pub(super) async fn create_server(
                         }
                     }
                 }
-                _ = &mut shutdown => {
+                sig = signals.recv() => {
+                    info!("Received {}, gracefully shutting down...", sig);
+                    break;
+                }
+                _ = &mut stdin_eof => {
+                    info!("Parent process exited (stdin EOF), gracefully shutting down...");
                     break;
                 }
             }
         }
 
-        if !connection_tasks.is_empty() {
-            info!(
-                "Waiting up to 30 seconds for {} active HTTP connections to finish...",
-                connection_tasks.len()
-            );
-            let drain = async { while connection_tasks.join_next().await.is_some() {} };
-            if tokio::time::timeout(std::time::Duration::from_secs(30), drain)
-                .await
-                .is_err()
-            {
-                info!(
-                    "Timeout waiting for HTTP connections, aborting {} remaining",
-                    connection_tasks.len()
-                );
-                connection_tasks.abort_all();
-            }
-        }
+        drain_connections(graceful, connection_tasks, &mut signals, "HTTP").await;
 
         actual_port
     }
