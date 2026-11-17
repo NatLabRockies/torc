@@ -2,6 +2,7 @@
 <script lang="ts">
   import { errorText } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
+  import LogSearch from "../../lib/ui/LogSearch.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
   import { toast } from "../../lib/ui/toast.svelte";
   import { readFile, type ReadFileResponse } from "./files";
@@ -10,6 +11,7 @@
   let open = $state(false);
   let res = $state<ReadFileResponse | null>(null);
   let error = $state<string | null>(null);
+  let pre = $state<HTMLPreElement>();
 
   $effect(() => {
     const target = app.fileViewer;
@@ -44,6 +46,7 @@
   <div class="viewer">
     <div class="pathbar">
       <code class="grow" title={app.fileViewer?.path}>{app.fileViewer?.path}</code>
+      {#if res?.content && !res.is_json}<LogSearch target={pre} text={res.content} />{/if}
       <button class="btn btn-sm" onclick={copyPath}>Copy path</button>
     </div>
     {#if error}
@@ -59,7 +62,7 @@
     {:else if !res.content}
       <div class="empty">(empty)</div>
     {:else}
-      <pre class="content plain">{res.content}</pre>
+      <pre bind:this={pre} class="content plain">{res.content}</pre>
     {/if}
   </div>
 </Modal>

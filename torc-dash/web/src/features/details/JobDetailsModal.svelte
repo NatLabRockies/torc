@@ -10,6 +10,7 @@
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import { loadOutputDir, resolveLogBaseDir, saveOutputDir } from "./files";
   import { loadJobDetails, type JobDetails } from "./job";
+  import { rerunJobs } from "./jobActions";
   import LogPane from "./LogPane.svelte";
   import Section from "./Section.svelte";
 
@@ -238,6 +239,12 @@
       </div>
     </div>
   {/if}
+  {#snippet footer()}
+    {#if job}
+      <button class="btn" onclick={() => rerunJobs([job!.id!])}>Reset for rerun</button>
+    {/if}
+    <button class="btn" onclick={() => (open = false)}>Close</button>
+  {/snippet}
 </Modal>
 
 <style>

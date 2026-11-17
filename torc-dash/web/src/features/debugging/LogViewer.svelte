@@ -7,6 +7,7 @@
   import { errorText } from "../../lib/format";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import Icon from "../../lib/ui/Icon.svelte";
+  import LogSearch from "../../lib/ui/LogSearch.svelte";
   import type { ReadFileResponse } from "./logs";
 
   let { stdout, stderr }: { stdout: string; stderr: string } = $props();
@@ -77,6 +78,7 @@
       ]}
     />
     <code class="path" title={path}>{path}</code>
+    <LogSearch target={pre} text={content ?? ""} />
     <button class="btn btn-sm" onclick={copy} disabled={!content} title="Copy log contents">
       Copy
     </button>

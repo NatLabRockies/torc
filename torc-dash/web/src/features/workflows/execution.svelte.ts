@@ -1,18 +1,22 @@
 /**
- * Live output of a `torc run` streamed from /api/cli/run-stream (SSE). Module-level so any
- * component can start a run (`execution.start(id)`) and <ExecutionPanel/> shows it.
+ * Live output of a `torc run` or `torc watch` streamed from /api/cli/run-stream (SSE).
+ * Module-level so any component can start one (`execution.start(id, mode)`) and
+ * <ExecutionPanel/> shows it.
  */
 import { app } from "../../lib/state.svelte";
 import { toast } from "../../lib/ui/toast.svelte";
 
 export type LineKind = "info" | "stdout" | "stderr" | "error" | "success" | "warning";
 export type Line = { text: string; kind: LineKind };
+/** run: `torc run`. watch / watch-recover: `torc watch [--recover]`, which stops on Stop. */
+export type ExecutionMode = "run" | "watch" | "watch-recover";
 
 // ponytail: keeps the last 5000 lines in the DOM; virtualize the output if longer logs matter.
 const MAX_LINES = 5000;
 
 class Execution {
   workflowId = $state<number | null>(null);
+  mode = $state<ExecutionMode>("run");
   open = $state(false);
   collapsed = $state(false);
   running = $state(false);
@@ -23,18 +27,20 @@ class Execution {
   #buffer: Line[] = [];
   #flushScheduled = false;
 
-  start(workflowId: number) {
+  start(workflowId: number, mode: ExecutionMode = "run") {
     this.#detach();
     this.workflowId = workflowId;
+    this.mode = mode;
     this.lines = [];
     this.#buffer = [];
     this.open = true;
     this.collapsed = false;
     this.running = true;
     this.result = null;
-    this.#append(`Starting workflow ${workflowId}…`, "info");
+    const watching = mode !== "run";
+    this.#append(`${watching ? "Watching" : "Starting"} workflow ${workflowId}…`, "info");
 
-    const es = new EventSource(`/api/cli/run-stream?workflow_id=${workflowId}`);
+    const es = new EventSource(`/api/cli/run-stream?workflow_id=${workflowId}&mode=${mode}`);
     this.#source = es;
     const on = (type: string, fn: (data: string) => void) =>
       es.addEventListener(type, (e) => {
@@ -47,7 +53,10 @@ class Execution {
     on("status", (d) => this.#append(`[Status] ${d}`, "info"));
     on("end", (status) => {
       if (status === "success") {
-        this.#append("✓ Workflow completed successfully", "success");
+        this.#append(
+          watching ? "✓ Watch finished: workflow complete" : "✓ Workflow completed successfully",
+          "success",
+        );
         toast.success(`Workflow ${workflowId} completed successfully`);
       } else {
         this.#append(`✗ Workflow ${status}`, "error");
@@ -66,11 +75,13 @@ class Execution {
     });
   }
 
-  /** Stop following the stream. The server-side `torc run` process keeps running. */
+  /** Stop following the stream. A `torc watch` stops with it; a `torc run` keeps running. */
   stop() {
     if (!this.running) return;
     this.#append(
-      "⚠ Stopped following output. The run may continue on the server; use Cancel workflow to stop it.",
+      this.mode === "run"
+        ? "⚠ Stopped following output. The run may continue on the server; use Cancel workflow to stop it."
+        : "Stopped watching. The workflow itself is not affected.",
       "warning",
     );
     this.#finish("stopped");

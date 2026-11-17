@@ -26,7 +26,9 @@
   type Action = { id: string; label: string; icon?: IconName; danger?: boolean; run: () => void };
 
   let dialog = $state<Dialog | null>(null);
-  let running = $derived(execution.running && execution.workflowId === workflowId);
+  let running = $derived(
+    execution.running && execution.mode === "run" && execution.workflowId === workflowId,
+  );
 
   const menuId = $props.id();
   let trigger = $state<HTMLButtonElement>();
@@ -40,6 +42,12 @@
       label: "Submit to scheduler",
       icon: "upload",
       run: () => submitWorkflow(id()),
+    },
+    watch: { id: "watch", label: "Watch", run: () => execution.start(id(), "watch") },
+    watchRecover: {
+      id: "watch-recover",
+      label: "Watch with auto-recovery",
+      run: () => execution.start(id(), "watch-recover"),
     },
     init: { id: "init", label: "Initialize", run: () => initializeWorkflow(id()) },
     reinit: { id: "reinit", label: "Reinitialize", run: () => reinitializeWorkflow(id()) },
@@ -70,11 +78,17 @@
     compact
       ? [
           [ACTIONS.init, ACTIONS.reinit, ACTIONS.reset],
+          [ACTIONS.watch, ACTIONS.watchRecover],
           [ACTIONS.graph, ACTIONS.plan],
           [ACTIONS.recover, ACTIONS.sync, ACTIONS.export],
           [ACTIONS.cancel, ACTIONS.delete],
         ]
-      : [[ACTIONS.reset], [ACTIONS.recover, ACTIONS.sync, ACTIONS.export], [ACTIONS.cancel, ACTIONS.delete]],
+      : [
+          [ACTIONS.watch, ACTIONS.watchRecover],
+          [ACTIONS.reset],
+          [ACTIONS.recover, ACTIONS.sync, ACTIONS.export],
+          [ACTIONS.cancel, ACTIONS.delete],
+        ],
   );
 
   /** Anchor the popover (top layer, so table overflow can't clip it) under the trigger. */

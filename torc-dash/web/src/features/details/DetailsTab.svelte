@@ -6,6 +6,8 @@
   import type { SortState } from "../../lib/ui/DataTable.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import { matchesOperator, parseOperatorFilter } from "./filter";
+  import { SvelteSet } from "svelte/reactivity";
+  import { rerunJobs } from "./jobActions";
   import SlurmLogsModal from "./SlurmLogsModal.svelte";
   import { loadCounts, loadRows, QUICK_FILTERS, SUBTABS, type SubTab } from "./subtabs";
   import SubTabTable from "./SubTabTable.svelte";
@@ -36,6 +38,7 @@
   const AUTO_REFRESH_MAX_ROWS = 10_000;
 
   let slurmLogsId = $state<number | null>(null);
+  const selectedJobs = new SvelteSet<string | number>();
   let filterInput = $state<HTMLInputElement>();
 
   // Header + cheap counts.
@@ -74,6 +77,7 @@
     if (wf === null) return;
     if (cacheWorkflow !== wf) {
       cache.clear();
+      selectedJobs.clear();
       cacheWorkflow = wf;
       workflow = null;
       status = null;
@@ -111,6 +115,14 @@
             : counts[t.id],
     })),
   );
+
+  async function rerunSelected() {
+    if (await rerunJobs([...selectedJobs].map(Number))) selectedJobs.clear();
+  }
+
+  function filterTo(key: string, value: string | number | boolean) {
+    filters[sub] = `${key}=${value}`;
+  }
 
   function showStatus(s: JobStatus) {
     filters.jobs = `status=${s}`;
@@ -162,6 +174,13 @@
           onclick={() => (filters[sub] = filterText === q.filter ? "" : q.filter)}>{q.label}</button
         >
       {/each}
+      {#if sub === "jobs" && selectedJobs.size}
+        <span class="selection">
+          {selectedJobs.size.toLocaleString()} selected
+          <button class="btn btn-sm btn-primary" onclick={rerunSelected}>Reset for rerun</button>
+          <button class="btn btn-sm btn-ghost" onclick={() => selectedJobs.clear()}>Clear</button>
+        </span>
+      {/if}
       {#if rowsError}<span class="error-text">Error loading {sub.replace("_", " ")}: {rowsError}</span>{/if}
     </div>
 
@@ -173,6 +192,8 @@
         loading={loading}
         bind:sort={sorts[sub]}
         onSlurmLogs={(id) => (slurmLogsId = id)}
+        {selectedJobs}
+        onCellFilter={filterTo}
       />
     </div>
 
@@ -190,6 +211,13 @@
   }
   .filter {
     width: min(420px, 100%);
+  }
+  .selection {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 13px;
   }
   .btn.on {
     background: var(--accent-soft);

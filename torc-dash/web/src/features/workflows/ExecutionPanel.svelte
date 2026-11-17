@@ -18,6 +18,7 @@
     failed: { text: "Failed", cls: "bad" },
     stopped: { text: "Detached", cls: "warn" },
   } as const;
+  const TITLE = { run: "Run", watch: "Watch", "watch-recover": "Watch (recovery)" } as const;
   let outcome = $derived(execution.result ? STATE[execution.result] : null);
 </script>
 
@@ -36,7 +37,7 @@
         {:else if outcome}
           <span class="dot {outcome.cls}"></span>
         {/if}
-        <span>Run · workflow {execution.workflowId}</span>
+        <span>{TITLE[execution.mode]} · workflow {execution.workflowId}</span>
         <span class="faint">{execution.running ? "running" : (outcome?.text ?? "")}</span>
       </button>
       <div class="grow"></div>
@@ -53,7 +54,9 @@
         <button
           class="btn btn-danger btn-sm"
           onclick={() => execution.stop()}
-          title="Stop following the output (the run itself keeps going on the server)"
+          title={execution.mode === "run"
+            ? "Stop following the output (the run itself keeps going on the server)"
+            : "Stop watching"}
         >
           <Icon name="stop" size={12} /> Stop
         </button>

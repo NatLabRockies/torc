@@ -6,6 +6,7 @@
   import { untrack } from "svelte";
   import { errorText } from "../../lib/format";
   import Icon from "../../lib/ui/Icon.svelte";
+  import LogSearch from "../../lib/ui/LogSearch.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import { readFirst } from "./files";
 
@@ -16,6 +17,7 @@
   let text = $state("");
   let note = $state<string | null>("Loading…");
   let reloadTick = $state(0);
+  let pre = $state<HTMLPreElement>();
 
   $effect(() => {
     const paths = stream === "stdout" ? stdout : stderr;
@@ -53,6 +55,7 @@
       ]}
     />
     <code class="path grow" title={path}>{path}</code>
+    <LogSearch target={pre} {text} />
     <button class="btn btn-sm btn-icon" title="Reload" onclick={() => reloadTick++}>
       <Icon name="refresh" size={14} />
     </button>
@@ -60,7 +63,7 @@
   {#if note}
     <div class="empty">{note}</div>
   {:else}
-    <pre class="code-block out" class:stderr={stream === "stderr"}>{text}</pre>
+    <pre bind:this={pre} class="code-block out" class:stderr={stream === "stderr"}>{text}</pre>
   {/if}
 </div>
 

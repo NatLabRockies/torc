@@ -47,6 +47,7 @@
     empty = "No data",
     rowClass,
     activeKey = null,
+    onCellFilter,
   }: {
     rows: T[];
     columns: Column<T>[];
@@ -62,6 +63,8 @@
     rowClass?: (row: T) => string;
     /** Key of a row to highlight (e.g. the open item). */
     activeKey?: string | number | null;
+    /** Right-clicking a cell with a plain value calls this with the column key and raw value. */
+    onCellFilter?: (key: string, value: string | number | boolean) => void;
   } = $props();
 
   const OVERSCAN = 12;
@@ -142,6 +145,13 @@
     else for (const r of sorted) selected.add(rowKey(r));
   }
 
+  function cellFilter(e: MouseEvent, col: Column<T>, row: T) {
+    const v = (row as Record<string, unknown>)[col.key];
+    if (!onCellFilter || !["string", "number", "boolean"].includes(typeof v) || v === "") return;
+    e.preventDefault();
+    onCellFilter(col.key, v as string | number | boolean);
+  }
+
   function toggleRow(row: T) {
     const k = rowKey(row);
     if (selected.has(k)) selected.delete(k);
@@ -213,7 +223,11 @@
               </td>
             {/if}
             {#each columns as c (c.key)}
-              <td class:mono={c.mono} style:text-align={c.align}>
+              <td
+                class:mono={c.mono}
+                style:text-align={c.align}
+                oncontextmenu={(e) => cellFilter(e, c, row)}
+              >
                 {#if c.cell}{@render c.cell(row)}{:else}{display(valueOf(c, row))}{/if}
               </td>
             {/each}
@@ -239,6 +253,7 @@
       {rows.length === 1 ? "row" : "rows"}
     </span>
     {#if selectable && selected.size}<span>· {selected.size.toLocaleString()} selected</span>{/if}
+    {#if onCellFilter}<span class="hint">Right-click a cell to filter by its value</span>{/if}
   </div>
 </div>
 
@@ -337,6 +352,10 @@
     background: var(--surface-2);
     color: var(--text-muted);
     font-size: 12px;
+  }
+  .hint {
+    margin-left: auto;
+    color: var(--text-faint);
   }
   .spinner.small {
     width: 11px;

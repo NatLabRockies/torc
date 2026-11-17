@@ -707,6 +707,7 @@ async fn main() -> Result<()> {
         .route("/api/cli/cancel", post(cli_cancel_handler))
         .route("/api/cli/reinitialize", post(cli_reinitialize_handler))
         .route("/api/cli/reset-status", post(cli_reset_status_handler))
+        .route("/api/cli/reset-jobs", post(cli_reset_jobs_handler))
         .route("/api/cli/execution-plan", post(cli_execution_plan_handler))
         .route("/api/cli/run-stream", get(cli_run_stream_handler))
         .route("/api/cli/recover", post(cli_recover_handler))
@@ -1554,6 +1555,22 @@ async fn cli_reset_status_handler(
     Json(result)
 }
 
+#[derive(Deserialize)]
+struct ResetJobsRequest {
+    job_ids: Vec<i64>,
+}
+
+/// Reset selected jobs (and, via reinit, their dependents) so they run again.
+async fn cli_reset_jobs_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ResetJobsRequest>,
+) -> impl IntoResponse {
+    let ids: Vec<String> = req.job_ids.iter().map(i64::to_string).collect();
+    let mut args = vec!["jobs", "reset-status", "--no-prompts", "--reinit"];
+    args.extend(ids.iter().map(String::as_str));
+    Json(run_torc_command(&state.torc_bin, &args, &state.api_url).await)
+}
+
 #[derive(Serialize)]
 struct ExecutionPlanResponse {
     success: bool,
@@ -1621,7 +1638,8 @@ async fn cli_execution_plan_handler(
     }
 }
 
-/// Streaming workflow run handler using Server-Sent Events
+/// Streams `torc run <id>`, or with `mode=watch` / `mode=watch-recover`, `torc watch <id>`,
+/// as Server-Sent Events.
 async fn cli_run_stream_handler(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -1633,7 +1651,26 @@ async fn cli_run_stream_handler(
         }
     };
 
-    info!("Starting streaming run for workflow: {}", workflow_id);
+    let mode = params.get("mode").map_or("run", String::as_str);
+    let (args, verb): (Vec<&str>, &str) = match mode {
+        "run" => (vec!["run", &workflow_id], "Running"),
+        "watch" => (vec!["watch", &workflow_id, "--show-job-counts"], "Watching"),
+        "watch-recover" => (
+            vec!["watch", &workflow_id, "--show-job-counts", "--recover"],
+            "Watching (with recovery)",
+        ),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "mode must be run, watch, or watch-recover",
+            ));
+        }
+    };
+    let args: Vec<String> = args.into_iter().map(String::from).collect();
+    let start_msg = format!("{verb} workflow {workflow_id}");
+    // A watch only observes, so stop it when the browser stops listening. A run keeps going.
+    let kill_on_drop = mode != "run";
+    info!("Starting streaming {} for workflow: {}", mode, workflow_id);
 
     let torc_bin = state.torc_bin.clone();
     let api_url = state.api_url.clone();
@@ -1645,11 +1682,12 @@ async fn cli_run_stream_handler(
         // Send start event
         yield Ok::<_, std::convert::Infallible>(Event::default()
             .event("start")
-            .data(format!("Running workflow {}", workflow_id)));
+            .data(start_msg));
 
         // Spawn the command with piped stdout/stderr
         let mut child = match Command::new(&torc_bin)
-            .args(["run", &workflow_id])
+            .args(&args)
+            .kill_on_drop(kill_on_drop)
             .env("TORC_API_URL", &api_url)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -1732,18 +1770,22 @@ async fn cli_run_stream_handler(
                                 let mut disabled = 0i64;
 
                                 for job in jobs {
-                                    let status = job.get("status").and_then(|v| v.as_i64()).unwrap_or(-1);
-                                    match status {
-                                        0 => uninitialized += 1,
-                                        1 => blocked += 1,
-                                        2 => ready += 1,
-                                        3 => pending += 1,
-                                        4 => running += 1,
-                                        5 => completed += 1,
-                                        6 => failed += 1,
-                                        7 => canceled += 1,
-                                        8 => terminated += 1,
-                                        9 => disabled += 1,
+                                    // The API sends status names ("ready"); older servers sent integers.
+                                    let status = job.get("status");
+                                    match status.and_then(|v| v.as_str()).or_else(|| {
+                                        const NAMES: [&str; 10] = ["uninitialized", "blocked", "ready", "pending", "running", "completed", "failed", "canceled", "terminated", "disabled"];
+                                        status.and_then(|v| v.as_u64()).and_then(|i| NAMES.get(i as usize).copied())
+                                    }) {
+                                        Some("uninitialized") => uninitialized += 1,
+                                        Some("blocked") => blocked += 1,
+                                        Some("ready") => ready += 1,
+                                        Some("pending") => pending += 1,
+                                        Some("running") => running += 1,
+                                        Some("completed") => completed += 1,
+                                        Some("failed") => failed += 1,
+                                        Some("canceled") => canceled += 1,
+                                        Some("terminated") => terminated += 1,
+                                        Some("disabled") => disabled += 1,
                                         _ => {} // Unknown status, ignore
                                     }
                                 }

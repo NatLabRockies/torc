@@ -1,5 +1,6 @@
 <!-- One DataTable per Details sub-tab, with the column set ported from legacy app-tables.js. -->
 <script lang="ts">
+  import type { SvelteSet } from "svelte/reactivity";
   import type {
     ComputeNode,
     FileRecord,
@@ -35,6 +36,8 @@
     loading,
     sort = $bindable(),
     onSlurmLogs,
+    selectedJobs,
+    onCellFilter,
   }: {
     tab: SubTab;
     rows: object[];
@@ -42,6 +45,9 @@
     loading: boolean;
     sort: SortState;
     onSlurmLogs: (schedulerId: number) => void;
+    /** Selection for the Jobs table. */
+    selectedJobs: SvelteSet<string | number>;
+    onCellFilter: (key: string, value: string | number | boolean) => void;
   } = $props();
 
   const elapsed = (start: string | null | undefined) => {
@@ -222,8 +228,11 @@
     columns={jobCols}
     rowKey={(j) => j.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
+    selectable
+    selected={selectedJobs}
     empty="No jobs in this workflow"
     onRowClick={(j) => app.openJob(j.id!)}
   />
@@ -233,6 +242,7 @@
     columns={runningCols}
     rowKey={(j) => j.job_id}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No running jobs"
@@ -244,6 +254,7 @@
     columns={resultCols}
     rowKey={(r) => r.id ?? `${r.job_id}_${r.run_id}_${r.attempt_id}`}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No results in this workflow"
@@ -257,6 +268,7 @@
         columns={eventCols}
         rowKey={(e) => e.id!}
         {filter}
+    {onCellFilter}
         {loading}
         bind:sort
         empty="No events in this workflow"
@@ -279,6 +291,7 @@
     columns={fileCols}
     rowKey={(f) => f.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No files in this workflow"
@@ -290,6 +303,7 @@
     columns={userDataCols}
     rowKey={(u) => u.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No user data in this workflow"
@@ -300,6 +314,7 @@
     columns={resourceCols}
     rowKey={(r) => r.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No resource requirements in this workflow"
@@ -310,6 +325,7 @@
     columns={schedulerCols}
     rowKey={(s) => s.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No Slurm schedulers configured for this workflow"
@@ -320,6 +336,7 @@
     columns={computeNodeCols}
     rowKey={(n) => n.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No compute nodes in this workflow"
@@ -330,6 +347,7 @@
     columns={scheduledCols}
     rowKey={(n) => n.id!}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No scheduled compute nodes in this workflow"
@@ -341,6 +359,7 @@
     columns={slurmStatCols}
     rowKey={(s) => s.id ?? `${s.job_id}_${s.run_id}_${s.attempt_id}`}
     {filter}
+    {onCellFilter}
     {loading}
     bind:sort
     empty="No Slurm stats in this workflow"
