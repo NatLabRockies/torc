@@ -98,7 +98,11 @@ class AppState {
     save("torc-workflow-id", id === null ? null : String(id));
   }
 
-  refresh() {
+  /** Whether the latest refresh came from the auto-refresh timer (plain field, not reactive). */
+  lastRefreshAuto = false;
+
+  refresh(auto = false) {
+    this.lastRefreshAuto = auto;
     this.refreshTick++;
   }
 

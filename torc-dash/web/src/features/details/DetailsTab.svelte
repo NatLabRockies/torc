@@ -30,6 +30,10 @@
   // Last rows per sub-tab of the current workflow, so switching back is instant.
   const cache = new Map<SubTab, object[]>();
   let cacheWorkflow: number | null = null;
+  let seenTick = -1;
+  // Auto-refresh skips re-downloading tables bigger than this; manual refresh still reloads.
+  // ponytail: whole-table reload; fetch only changed rows if large tables need live updates.
+  const AUTO_REFRESH_MAX_ROWS = 10_000;
 
   let slurmLogsId = $state<number | null>(null);
   let filterInput = $state<HTMLInputElement>();
@@ -64,7 +68,9 @@
   $effect(() => {
     const wf = app.workflowId;
     const tab = sub;
-    void app.refreshTick;
+    const tick = app.refreshTick;
+    const autoTick = seenTick !== -1 && tick !== seenTick && app.lastRefreshAuto;
+    seenTick = tick;
     if (wf === null) return;
     if (cacheWorkflow !== wf) {
       cache.clear();
@@ -73,7 +79,9 @@
       status = null;
       counts = {};
     }
-    rows = cache.get(tab) ?? [];
+    const cached = cache.get(tab);
+    rows = cached ?? [];
+    if (autoTick && cached && cached.length > AUTO_REFRESH_MAX_ROWS) return;
     rowsError = null;
     loading = true;
     let stale = false;

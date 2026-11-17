@@ -103,14 +103,16 @@
     const col = s && columns.find((c) => c.key === s.key);
     if (!s || !col) return filtered;
     const dir = s.dir === "asc" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      const r = compare(valueOf(col, a), valueOf(col, b));
-      // Keep empties last regardless of direction.
-      const av = valueOf(col, a);
-      const bv = valueOf(col, b);
-      const empty = (v: unknown) => v === null || v === undefined || v === "";
-      return empty(av) || empty(bv) ? r : r * dir;
-    });
+    const empty = (v: unknown) => v === null || v === undefined || v === "";
+    // Compute each key once; column value() can be costly (e.g. JSON.stringify).
+    return filtered
+      .map((row) => ({ row, v: valueOf(col, row) }))
+      .sort((a, b) => {
+        const r = compare(a.v, b.v);
+        // Keep empties last regardless of direction.
+        return empty(a.v) || empty(b.v) ? r : r * dir;
+      })
+      .map((e) => e.row);
   });
 
   function toggleSort(col: Column<T>) {

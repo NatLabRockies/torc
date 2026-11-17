@@ -55,7 +55,11 @@ pub fn find_available_port(host: &str, start_port: u16) -> anyhow::Result<(TcpLi
     loop {
         let addr = format!("{}:{}", host, port);
         match TcpListener::bind(&addr) {
-            Ok(listener) => return Ok((listener, port)),
+            // Report the bound port, which differs from `port` when it is 0 (OS-assigned).
+            Ok(listener) => {
+                let port = listener.local_addr()?.port();
+                return Ok((listener, port));
+            }
             Err(e) => {
                 attempts += 1;
                 if attempts >= MAX_PORT_ATTEMPTS {

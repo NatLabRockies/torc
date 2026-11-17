@@ -13,12 +13,12 @@
   import {
     createWorkflow,
     getHpcProfiles,
-    initializeWorkflow,
     validateSpec,
     type HpcProfiles,
     type SpecBody,
     type ValidationReport,
   } from "./actions";
+  import { initializeWorkflow } from "../workflows/actions";
   import { STEPS, generateSpec, newWizard } from "./spec";
   import ValidationPanel from "./ValidationPanel.svelte";
   import Wizard from "./Wizard.svelte";
@@ -188,13 +188,7 @@
       app.refresh();
       if (id !== null) {
         app.selectWorkflow(id);
-        if (initialize) {
-          try {
-            if (await initializeWorkflow(id)) app.refresh();
-          } catch (e) {
-            toast.error(e);
-          }
-        }
+        if (initialize) await initializeWorkflow(id);
       }
     } catch (e) {
       createError = e instanceof Error ? e.message : String(e);

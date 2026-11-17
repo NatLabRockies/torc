@@ -71,6 +71,7 @@
     } catch (err) {
       error = String(err);
       busy = false;
+      prompt = null; // the attempt is over; its password prompt can no longer be answered
     }
   }
 

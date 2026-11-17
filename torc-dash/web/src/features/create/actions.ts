@@ -1,7 +1,5 @@
 /** torc-dash endpoints used by the create-workflow modal. Shapes match src/bin/torc-dash.rs. */
 import { cli, dashGet, dashPost, type CliResponse } from "../../lib/api/dash";
-import { confirm } from "../../lib/ui/confirm.svelte";
-import { toast } from "../../lib/ui/toast.svelte";
 
 /** Body of /api/cli/create and /api/cli/validate. */
 export type SpecBody = { spec: string; is_file: boolean; file_extension?: string };
@@ -66,36 +64,3 @@ export async function createWorkflow(
   return extractWorkflowId(res.stdout);
 }
 
-/** Initialize a workflow, asking before deleting existing output files (as the legacy UI did). */
-export async function initializeWorkflow(workflowId: number): Promise<boolean> {
-  const workflow_id = String(workflowId);
-  let force = false;
-  const check = await dashPost<CliResponse>("/api/cli/check-initialize", { workflow_id });
-  if (check.success) {
-    try {
-      const dry = JSON.parse(check.stdout) as {
-        existing_output_file_count?: number;
-        existing_output_files?: string[];
-      };
-      const count = dry.existing_output_file_count ?? 0;
-      if (count > 0) {
-        const files = dry.existing_output_files ?? [];
-        const list = files.slice(0, 10).join("\n");
-        const more = files.length > 10 ? `\n… and ${files.length - 10} more` : "";
-        const ok = await confirm({
-          title: "Delete existing output files?",
-          message: `Workflow ${workflowId} has ${count} existing output file(s) that initialization will delete:\n\n${list}${more}`,
-          confirmLabel: "Delete and initialize",
-          danger: true,
-        });
-        if (!ok) return false;
-        force = true;
-      }
-    } catch {
-      // Unparseable dry run: proceed like the legacy UI.
-    }
-  }
-  await cli("initialize", { workflow_id, force });
-  toast.success(`Workflow ${workflowId} initialized`);
-  return true;
-}

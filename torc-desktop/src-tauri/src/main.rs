@@ -13,7 +13,7 @@ use std::hash::{BuildHasher, RandomState};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -164,8 +164,8 @@ fn watch_connection(app: AppHandle) {
                 return; // disconnected on purpose
             };
             if !matches!(child.try_wait(), Ok(None)) {
-                ssh.take();
                 drop(ssh);
+                kill_ssh(&state); // reap it and stop anything it left behind
                 go_home(&app, true);
                 return;
             }
@@ -199,20 +199,23 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
     let state = app.state::<AppState>();
     kill_ssh(&state);
 
-    let port = TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map_err(|e| e.to_string())?
-        .port();
-    let (mut cmd, what) = if args.mode == "local" {
-        (local_command(app, args, port)?, "torc-dash")
+    let local = args.mode == "local";
+    let (mut cmd, what, ssh_port) = if local {
+        // torc-dash picks a free port itself and logs it; see `reported_port`.
+        (local_command(app, args)?, "torc-dash", 0)
     } else {
-        (ssh_command(&state, args, port)?, "ssh")
+        // ssh fails (ExitOnForwardFailure) rather than moving if this port gets taken.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .and_then(|l| l.local_addr())
+            .map_err(|e| e.to_string())?
+            .port();
+        (ssh_command(&state, args, port)?, "ssh", port)
     };
-    cmd.stdout(Stdio::null()).stderr(Stdio::piped());
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(unix)]
     {
         // Own process group, so disconnecting also stops anything torc-dash started
-        // (e.g. its managed torc-server).
+        // (e.g. its managed torc-server) and the askpass helper.
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
@@ -224,13 +227,54 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to run {what}: {e}"))?;
+    let pid = child.id();
 
-    // Drain stderr (ssh errors + remote torc-dash logs) so the pipe never fills; keep the tail.
-    let stderr_tail = Arc::new(Mutex::new(String::new()));
-    let stderr = child.stderr.take().unwrap();
-    let tail = stderr_tail.clone();
+    // Drain output (ssh errors + torc-dash logs) so the pipes never fill; keep the tail and
+    // pick up the port torc-dash reports.
+    let tail = Arc::new(Mutex::new(String::new()));
+    let reported = Arc::new(AtomicU16::new(0));
+    drain(child.stdout.take().unwrap(), &tail, &reported);
+    drain(child.stderr.take().unwrap(), &tail, &reported);
+    let tail_text = || tail.lock().unwrap().clone();
+
+    // Register the child now so Disconnect or quitting the app can stop it mid-connect.
+    *state.ssh.lock().unwrap() = Some(child);
+    let deadline = Instant::now() + CONNECT_TIMEOUT;
+    loop {
+        let status = match state.ssh.lock().unwrap().as_mut() {
+            Some(c) if c.id() == pid => c.try_wait(),
+            _ => return Err("Connection cancelled".into()),
+        };
+        if let Ok(Some(status)) = status {
+            std::thread::sleep(Duration::from_millis(200)); // let the readers catch up
+            kill_ssh(&state); // reap it and stop anything it left behind
+            return Err(format!("{what} exited ({status})\n{}", tail_text()));
+        }
+        let port = if local {
+            reported.load(Ordering::Relaxed)
+        } else {
+            ssh_port
+        };
+        if port != 0 && dashboard_ready(port) {
+            return Ok(format!("http://127.0.0.1:{port}/"));
+        }
+        if Instant::now() > deadline {
+            kill_ssh(&state);
+            return Err(format!("Timed out waiting for torc-dash\n{}", tail_text()));
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
+
+/// Reads `stream` line by line on a thread, keeping the last few KB in `tail` and storing the
+/// port from torc-dash's "Dashboard available at http://host:port" log line in `port`.
+fn drain(stream: impl Read + Send + 'static, tail: &Arc<Mutex<String>>, port: &Arc<AtomicU16>) {
+    let (tail, port) = (tail.clone(), port.clone());
     std::thread::spawn(move || {
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            if let Some(p) = reported_port(&line) {
+                port.store(p, Ordering::Relaxed);
+            }
             let mut t = tail.lock().unwrap();
             t.push_str(&line);
             t.push('\n');
@@ -241,37 +285,25 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
             }
         }
     });
+}
 
-    let deadline = Instant::now() + CONNECT_TIMEOUT;
-    loop {
-        if let Ok(Some(status)) = child.try_wait() {
-            std::thread::sleep(Duration::from_millis(200)); // let the stderr reader catch up
-            return Err(format!(
-                "{what} exited ({status})\n{}",
-                stderr_tail.lock().unwrap()
-            ));
-        }
-        if dashboard_ready(port) {
-            *state.ssh.lock().unwrap() = Some(child);
-            return Ok(format!("http://127.0.0.1:{port}/"));
-        }
-        if Instant::now() > deadline {
-            let _ = child.kill();
-            return Err(format!(
-                "Timed out waiting for torc-dash\n{}",
-                stderr_tail.lock().unwrap()
-            ));
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    }
+fn reported_port(line: &str) -> Option<u16> {
+    let rest = line.split("Dashboard available at http://").nth(1)?;
+    let digits: String = rest
+        .rsplit_once(':')?
+        .1
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok().filter(|&p| p != 0)
 }
 
 /// torc-dash on this computer, listening on 127.0.0.1:<port>. Runs through the user's login
 /// shell so PATH from their profile applies (apps launched from Finder get a minimal PATH).
-fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Command, String> {
-    let mut line = format!("{} --port {port}", args.command.trim());
+fn local_command(app: &AppHandle, args: &ConnectArgs) -> Result<Command, String> {
+    let mut line = format!("{} --host 127.0.0.1 --port 0", args.command.trim());
     match args.server_url.as_deref().map(str::trim) {
-        Some(url) if !url.is_empty() => line += &format!(" --api-url {}", sh_quote(url)),
+        Some(url) if !url.is_empty() => line += &format!(" --api-url {}", quote_arg(url)),
         _ => {
             // Standalone: a localhost-only server with its database in the app's data folder.
             let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -279,7 +311,7 @@ fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Comma
             let db = dir.join("torc.db");
             line += &format!(
                 " --standalone --server-host 127.0.0.1 --database {}",
-                sh_quote(&db.to_string_lossy())
+                quote_arg(&db.to_string_lossy())
             );
         }
     }
@@ -287,18 +319,24 @@ fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Comma
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
         let mut cmd = Command::new(shell);
-        // Common install locations that a GUI app's PATH lacks, in case the profile doesn't add them.
-        cmd.arg("-lc").arg(format!(
+        // Common install locations that a GUI app's PATH lacks, in case the profile doesn't add
+        // them. The script runs under /bin/sh because the login shell may be csh or fish.
+        let script = format!(
             "PATH=\"$PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin\"; exec {line}"
-        ));
+        );
+        cmd.arg("-lc")
+            .arg(format!("exec /bin/sh -c {}", sh_quote(&script)));
         cmd.stdin(Stdio::null());
         set_home_dir(&mut cmd);
         Ok(cmd)
     }
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
         let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg(line).stdin(Stdio::null());
+        // raw_arg: Rust's own quoting (\") is not what cmd.exe expects. /S strips the outer quotes.
+        cmd.raw_arg(format!("/S /C \"{line}\""))
+            .stdin(Stdio::null());
         set_home_dir(&mut cmd);
         Ok(cmd)
     }
@@ -360,6 +398,16 @@ fn remote_command(setup: &str, command: &str, socket: &str) -> String {
     format!("bash -lc {}", sh_quote(&script))
 }
 
+/// Quotes one argument for the local shell: POSIX `sh` on Unix, `cmd.exe` on Windows
+/// (Windows paths cannot contain `"`).
+fn quote_arg(s: &str) -> String {
+    if cfg!(windows) {
+        format!("\"{s}\"")
+    } else {
+        sh_quote(s)
+    }
+}
+
 fn sh_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
@@ -379,12 +427,20 @@ fn dashboard_ready(port: u16) -> bool {
 }
 
 fn kill_ssh(state: &AppState) {
-    if let Some(mut child) = state.ssh.lock().unwrap().take() {
-        // Ask the whole process group to stop (torc-dash plus any server it started), then make
+    // Dropping the senders answers any open password prompt with "cancel", which unblocks its
+    // handler thread and makes the askpass helper exit.
+    state.pending_prompts.lock().unwrap().clear();
+    let child = state.ssh.lock().unwrap().take();
+    if let Some(mut child) = child {
+        // Stop the whole process group/tree (torc-dash plus any server it started), then make
         // sure the direct child is gone.
         #[cfg(unix)]
         let _ = Command::new("kill")
             .args(["-TERM", &format!("-{}", child.id())])
+            .status();
+        #[cfg(windows)]
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
             .status();
         let _ = child.kill();
         let _ = child.wait();
@@ -459,5 +515,19 @@ mod tests {
         assert!(!cmd.contains('\n') && !cmd.contains('!'));
         // The embedded single quotes from `trap` must be escaped for the outer quoting.
         assert!(cmd.contains(r"trap '\''rm -f"));
+    }
+
+    #[test]
+    fn reported_port_parses_dash_log_line() {
+        let line = "\x1b[32m INFO\x1b[0m torc_dash: Dashboard available at http://127.0.0.1:54321";
+        assert_eq!(reported_port(line), Some(54321));
+        assert_eq!(
+            reported_port("Dashboard available at unix:/tmp/x.sock"),
+            None
+        );
+        assert_eq!(
+            reported_port("Dashboard available at http://127.0.0.1:0"),
+            None
+        );
     }
 }

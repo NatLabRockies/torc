@@ -60,7 +60,7 @@
     const seconds = app.refreshSeconds;
     if (seconds <= 0) return;
     const id = setInterval(() => {
-      if (document.visibilityState === "visible") app.refresh();
+      if (document.visibilityState === "visible") app.refresh(true);
     }, seconds * 1000);
     return () => clearInterval(id);
   });

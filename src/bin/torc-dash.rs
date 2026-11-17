@@ -137,7 +137,8 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     server_port: u16,
 
-    /// Host for torc-server to bind to in standalone mode (default: 0.0.0.0 for external access)
+    /// Host for torc-server to bind to in standalone mode (default: 0.0.0.0 for external access,
+    /// or 127.0.0.1 with --socket)
     #[arg(long, default_value = "0.0.0.0")]
     server_host: String,
 
@@ -302,8 +303,20 @@ async fn main() -> Result<()> {
     } else {
         dash_config.server_port
     };
+    #[cfg(unix)]
+    let socket_path = cli
+        .socket
+        .clone()
+        .or_else(|| dash_config.socket.as_ref().map(std::path::PathBuf::from));
+    #[cfg(unix)]
+    let private = socket_path.is_some();
+    #[cfg(not(unix))]
+    let private = false;
     let server_host = if explicit("server_host") {
         cli.server_host.clone()
+    } else if private {
+        // A dashboard on a private socket must not put its managed server on the network.
+        "127.0.0.1".to_string()
     } else {
         dash_config.server_host.clone()
     };
@@ -319,12 +332,6 @@ async fn main() -> Result<()> {
              processes job completions as they arrive"
         );
     }
-
-    #[cfg(unix)]
-    let socket_path = cli
-        .socket
-        .clone()
-        .or_else(|| dash_config.socket.as_ref().map(std::path::PathBuf::from));
 
     #[cfg(unix)]
     if let Some(ref socket_path) = socket_path {
@@ -712,7 +719,16 @@ async fn main() -> Result<()> {
                 .patch(proxy_handler)
                 .delete(proxy_handler),
         )
-        .with_state(state);
+        .with_state(state.clone());
+
+    // Stop the managed torc-server when we are told to exit, so it does not outlive us.
+    let shutdown = async move {
+        shutdown_signal().await;
+        if let Some(pid) = state.managed_server.lock().await.pid.take() {
+            info!("Stopping managed torc-server (PID {})", pid);
+            stop_process(pid);
+        }
+    };
 
     // Bind to UNIX domain socket or TCP, depending on configuration
     #[cfg(unix)]
@@ -734,7 +750,10 @@ async fn main() -> Result<()> {
             socket_path.display()
         );
 
-        axum::serve(uds, app).await?;
+        tokio::select! {
+            r = axum::serve(uds, app).into_future() => r?,
+            () = shutdown => {}
+        }
         return Ok(());
     }
 
@@ -752,9 +771,38 @@ async fn main() -> Result<()> {
     std_listener.set_nonblocking(true)?;
     let listener = tokio::net::TcpListener::from_std(std_listener)?;
 
-    axum::serve(listener, app).await?;
+    tokio::select! {
+        r = axum::serve(listener, app).into_future() => r?,
+        () = shutdown => {}
+    }
 
     Ok(())
+}
+
+/// Resolves on Ctrl-C, or on SIGTERM/SIGHUP on Unix.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        let mut hup = signal(SignalKind::hangup()).expect("install SIGHUP handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+            _ = hup.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = tokio::signal::ctrl_c().await;
+}
+
+fn stop_process(pid: u32) {
+    #[cfg(unix)]
+    let _ = StdCommand::new("kill").arg(pid.to_string()).status();
+    #[cfg(not(unix))]
+    let _ = StdCommand::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .status();
 }
 
 // ============== Static File Handlers ==============
