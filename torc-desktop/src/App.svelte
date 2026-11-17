@@ -19,6 +19,7 @@
   let host = $state(saved.host ?? "");
   let setup = $state(saved.setup ?? "");
   let command = $state(saved.remoteCommand ?? "torc-dash");
+  let workdir = $state(saved.workdir ?? "");
   // Which torc-server the dashboard talks to, per mode. A blank URL lets torc-dash use
   // TORC_API_URL or `[dash] api_url` from the torc config where it runs.
   let servers = $state({
@@ -28,9 +29,6 @@
     },
     ssh: { private: saved.remotePrivate === "true", url: saved.remoteServerUrl ?? "" },
   });
-  // Never stored in the form; the Rust side keeps it in the OS keychain.
-  let password = $state("");
-  let hasSavedPassword = $state(false);
   let busy = $state(false);
   let error = $state("");
   // Set by the Rust side when the SSH session dropped while connected.
@@ -45,42 +43,17 @@
     answer = "";
   });
 
-  /** Connection settings without the password (enough to find a saved one). */
-  function baseArgs() {
+  function connectArgs() {
     const server = servers[mode];
     return {
       mode,
       host,
       setup,
+      workdir,
       command: mode === "local" ? localCommand : command,
       standalone: server.private,
       serverUrl: server.private ? "" : server.url,
-      password: "",
     };
-  }
-
-  function connectArgs() {
-    const args = baseArgs();
-    return { ...args, password: args.standalone ? "" : password };
-  }
-
-  // Whether the keychain has a password for this host + server.
-  $effect(() => {
-    const args = baseArgs();
-    let stale = false;
-    invoke<boolean>("has_saved_password", { args })
-      .then((saved) => !stale && (hasSavedPassword = saved))
-      .catch(() => !stale && (hasSavedPassword = false));
-    return () => (stale = true);
-  });
-
-  async function forgetPassword() {
-    try {
-      await invoke("forget_password", { args: baseArgs() });
-      hasSavedPassword = false;
-    } catch (err) {
-      error = String(err);
-    }
   }
 
   async function connect(e: SubmitEvent) {
@@ -99,6 +72,7 @@
           host,
           setup,
           remoteCommand: command,
+          workdir,
           remoteServerUrl: servers.ssh.url,
           remotePrivate: String(servers.ssh.private),
         }),
@@ -109,7 +83,6 @@
     try {
       // On success the window navigates to the dashboard and this page goes away.
       await invoke("connect", { args: connectArgs() });
-      password = "";
     } catch (err) {
       error = String(err);
       busy = false;
@@ -176,6 +149,11 @@
         <input bind:value={setup} placeholder="module load torc" />
       </label>
       <label>
+        Working directory <span class="optional">(optional)</span>
+        <input bind:value={workdir} placeholder="~ (home)" />
+        <span class="optional">Where workflows run and write output, e.g. <code>/scratch/$USER</code>.</span>
+      </label>
+      <label>
         Dashboard command
         <input bind:value={command} required />
         <span class="optional">Full path if torc-dash isn't on the login node's PATH.</span>
@@ -201,22 +179,12 @@
             torc config{mode === "ssh" ? " on the login node" : ""}.
           </span>
         </label>
-        <label class="indent">
-          Password <span class="optional">(if the server requires a login)</span>
-          <input
-            type="password"
-            bind:value={password}
-            autocomplete="off"
-            placeholder={hasSavedPassword ? "Saved in Keychain" : ""}
-          />
-          <span class="optional">
-            Sent as {mode === "ssh" ? "your login-node user name" : "your user name"} (or
-            <code>TORC_USERNAME</code>). Saved in the system keychain.
-            {#if hasSavedPassword}
-              <button type="button" class="link" onclick={forgetPassword}>Forget saved password</button>
-            {/if}
-          </span>
-        </label>
+        <span class="optional indent">
+          If it requires a login, set <code>TORC_PASSWORD</code> in your shell profile{mode ===
+          "ssh"
+            ? " on the login node"
+            : ""}.
+        </span>
       {/if}
       <label class="check">
         <input type="radio" bind:group={servers[mode].private} value={true} />
@@ -392,12 +360,6 @@
   }
   code {
     font-size: 0.85em;
-  }
-  button.link {
-    padding: 0;
-    background: none;
-    color: var(--accent);
-    font-weight: 500;
   }
   label.check {
     flex-direction: row;

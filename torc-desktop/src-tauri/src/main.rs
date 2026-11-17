@@ -47,56 +47,9 @@ struct ConnectArgs {
     /// Shared torc-server URL when not standalone. Empty: torc-dash uses TORC_API_URL or the
     /// torc config where it runs.
     server_url: String,
-    /// torc-server password (basic auth). Empty: use the one saved in the OS keychain, if any.
+    /// Remote working directory (shell syntax such as `~/work` or `$SCRATCH` works). Empty: home.
     #[serde(default)]
-    password: String,
-}
-
-const KEYCHAIN_SERVICE: &str = "torc-desktop";
-
-/// Keychain entry for a server login. The server username is the user on the machine where
-/// torc-dash runs, so the host is part of the key.
-fn keychain_entry(args: &ConnectArgs) -> Result<keyring::Entry, String> {
-    let host = if args.mode == "local" {
-        "local"
-    } else {
-        args.host.trim()
-    };
-    keyring::Entry::new(
-        KEYCHAIN_SERVICE,
-        &format!("{host}|{}", args.server_url.trim()),
-    )
-    .map_err(|e| e.to_string())
-}
-
-/// The password to give torc-dash: a newly typed one (saved to the keychain), else the saved one.
-fn server_password(args: &ConnectArgs) -> Result<Option<String>, String> {
-    if args.standalone {
-        return Ok(None); // the private server has no login
-    }
-    if args.password.is_empty() {
-        return Ok(keychain_entry(args)?.get_password().ok());
-    }
-    if args.password.contains(['\n', '\r']) {
-        return Err("The password cannot contain line breaks".into());
-    }
-    if let Err(e) = keychain_entry(args)?.set_password(&args.password) {
-        eprintln!("Could not save the password to the keychain: {e}");
-    }
-    Ok(Some(args.password.clone()))
-}
-
-#[tauri::command]
-fn has_saved_password(args: ConnectArgs) -> bool {
-    keychain_entry(&args).is_ok_and(|e| e.get_password().is_ok())
-}
-
-#[tauri::command]
-fn forget_password(args: ConnectArgs) -> Result<(), String> {
-    match keychain_entry(&args)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    workdir: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -179,12 +132,7 @@ fn main() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            connect,
-            askpass_reply,
-            has_saved_password,
-            forget_password
-        ])
+        .invoke_handler(tauri::generate_handler![connect, askpass_reply])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -258,14 +206,9 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
     kill_ssh(&state);
 
     let local = args.mode == "local";
-    let password = server_password(args)?;
     let (mut cmd, what, ssh_port) = if local {
         // torc-dash picks a free port itself and logs it; see `reported_port`.
-        let mut cmd = local_command(app, args)?;
-        if let Some(p) = &password {
-            cmd.env("TORC_PASSWORD", p); // environment, not argv: not visible in `ps`
-        }
-        (cmd, "torc-dash", 0)
+        (local_command(app, args)?, "torc-dash", 0)
     } else {
         // ssh fails (ExitOnForwardFailure) rather than moving if this port gets taken.
         let port = TcpListener::bind("127.0.0.1:0")
@@ -291,16 +234,6 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
         .spawn()
         .map_err(|e| format!("Failed to run {what}: {e}"))?;
     let pid = child.id();
-    if let Some(stdin) = child.stdin.as_mut() {
-        // ssh: the remote script reads the password as its first input line (empty: none).
-        // It travels inside the encrypted session, never on a command line.
-        let line = format!("{}\n", password.as_deref().unwrap_or(""));
-        if let Err(e) = stdin.write_all(line.as_bytes()) {
-            *state.ssh.lock().unwrap() = Some(child);
-            kill_ssh(&state);
-            return Err(format!("Failed to send the password to ssh: {e}"));
-        }
-    }
 
     // Drain output (ssh errors + torc-dash logs) so the pipes never fill; keep the tail and
     // pick up the port torc-dash reports.
@@ -470,6 +403,7 @@ fn ssh_command(state: &AppState, args: &ConnectArgs, port: u16) -> Result<Comman
     .arg(host)
     .arg(remote_command(
         &args.setup,
+        &args.workdir,
         &format!(
             "{}{}",
             args.command.trim(),
@@ -489,16 +423,22 @@ fn ssh_command(state: &AppState, args: &ConnectArgs, port: u16) -> Result<Comman
 /// One-line script for the remote login shell. Kept free of newlines and `!` so it also survives
 /// csh/tcsh login shells. torc-dash runs under `bash -l` so `module`/PATH setup is available; a
 /// watcher stops it when our ssh stdin closes (app quit or dropped connection).
-fn remote_command(setup: &str, command: &str, socket: &str) -> String {
+fn remote_command(setup: &str, workdir: &str, command: &str, socket: &str) -> String {
     let setup = setup.trim().trim_end_matches(';').trim();
     let setup = if setup.is_empty() {
         String::new()
     } else {
         format!("{setup}; ")
     };
+    // Left unquoted, like `setup`, so `~` and `$VARS` expand.
+    let workdir = workdir.trim();
+    let cd = if workdir.is_empty() {
+        String::new()
+    } else {
+        format!("cd {workdir} || exit 1; ")
+    };
     let script = format!(
-        "IFS= read -r P; if [ -n \"$P\" ]; then export TORC_PASSWORD=\"$P\"; fi; unset P; \
-         S={socket}; trap 'rm -f \"$S\"' EXIT; exec 3<&0; {setup}{command} --socket \"$S\" & \
+        "S={socket}; trap 'rm -f \"$S\"' EXIT; exec 3<&0; {cd}{setup}{command} --socket \"$S\" & \
          pid=$(jobs -p %%); {{ cat <&3; kill $pid; }} >/dev/null 2>&1 & wait $pid",
         command = command.trim(),
     );
@@ -544,6 +484,7 @@ fn kill_ssh(state: &AppState) {
         #[cfg(unix)]
         let _ = Command::new("kill")
             .args(["-TERM", &format!("-{}", child.id())])
+            .stderr(Stdio::null()) // the group may already be gone
             .status();
         #[cfg(windows)]
         let _ = Command::new("taskkill")
@@ -616,14 +557,19 @@ mod tests {
 
     #[test]
     fn remote_command_quotes_for_login_shell() {
-        let cmd = remote_command("module load torc;", "torc-dash --standalone", "/tmp/x.sock");
+        let cmd = remote_command(
+            "module load torc;",
+            "~/work",
+            "torc-dash --standalone",
+            "/tmp/x.sock",
+        );
         assert!(cmd.starts_with("bash -lc '"));
-        assert!(cmd.contains("module load torc; torc-dash --standalone --socket"));
+        assert!(
+            cmd.contains("cd ~/work || exit 1; module load torc; torc-dash --standalone --socket")
+        );
         assert!(!cmd.contains('\n') && !cmd.contains('!'));
         // The embedded single quotes from `trap` must be escaped for the outer quoting.
         assert!(cmd.contains(r"trap '\''rm -f"));
-        // The password arrives as the first stdin line, before stdin is kept for the watcher.
-        assert!(cmd.starts_with("bash -lc 'IFS= read -r P;"));
     }
 
     #[test]
@@ -635,7 +581,7 @@ mod tests {
             command: String::new(),
             standalone,
             server_url: url.into(),
-            password: String::new(),
+            workdir: String::new(),
         };
         let db = || Ok("DB".to_string());
         assert_eq!(server_flags(&args(false, " "), sh_quote, db).unwrap(), "");
@@ -662,41 +608,5 @@ mod tests {
             reported_port("Dashboard available at http://127.0.0.1:0"),
             None
         );
-    }
-}
-
-#[cfg(test)]
-mod stdin_password_check {
-    #[test]
-    #[cfg(unix)]
-    fn remote_script_exports_first_stdin_line() {
-        use std::io::Write;
-        use std::process::{Command, Stdio};
-        let out = std::env::temp_dir().join(format!("tdpw-{}", std::process::id()));
-        let cmd = super::remote_command(
-            "",
-            &format!("sh -c 'echo \"$TORC_PASSWORD\" > {}' x", out.display()),
-            "/tmp/unused.sock",
-        );
-        let script = cmd.strip_prefix("bash -lc ").unwrap();
-        let mut child = Command::new("sh")
-            .arg("-c")
-            .arg(format!("bash -c {script}"))
-            .stdin(Stdio::piped())
-            .spawn()
-            .unwrap();
-        // Keep stdin open (as ssh does) until the command has run; closing it stops the command.
-        let mut stdin = child.stdin.take().unwrap();
-        stdin.write_all(b"p@ss w'rd\n").unwrap();
-        for _ in 0..100 {
-            if std::fs::metadata(&out).is_ok_and(|m| m.len() > 0) {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-        drop(stdin);
-        child.wait().unwrap();
-        assert_eq!(std::fs::read_to_string(&out).unwrap(), "p@ss w'rd\n");
-        let _ = std::fs::remove_file(out);
     }
 }

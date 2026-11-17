@@ -23,12 +23,10 @@ In both modes, **Torc server** chooses what the dashboard talks to:
   `~/torc-desktop.db` on the login node, or in the app's data folder locally
   (`~/Library/Application Support/com.github.natlabrockies.torc-desktop/torc.db` on macOS).
 
-If the shared server requires a login, enter your password under the URL. The app saves it in the
-system keychain (Keychain on macOS), never in its settings, and gives it to torc-dash as
-`TORC_PASSWORD`: through the environment locally, or as the first line on the SSH session's stdin
-remotely, so it never appears on a command line. The user name is `TORC_USERNAME` or `USER` where
-torc-dash runs, as for the torc CLI. torc-dash adds this login to the requests it forwards to the
-server, and the torc commands it runs inherit it.
+If the shared server requires a login, set `TORC_PASSWORD` (and `TORC_USERNAME` if it differs from
+`USER`) where torc-dash runs: in `~/.bash_profile` on the login node, or in your login-shell profile
+locally (`~/.zprofile` for zsh; `~/.zshrc` is not read). torc-dash adds this login to the requests
+it forwards to the server, and the torc commands it runs inherit it.
 
 Disconnecting or quitting stops torc-dash and any server it started.
 
@@ -39,7 +37,8 @@ Disconnecting or quitting stops torc-dash and any server it started.
 - Password, MFA, and host-key prompts appear in the app. `SSH_ASKPASS` points at the app's own
   executable, which relays each prompt to the window over loopback, protected by a random token.
 - The remote command runs under `bash -l`, so `module` and login-shell `PATH` setup work. An
-  optional "Environment setup" field (e.g. `module load torc`) runs first.
+  optional "Environment setup" field (e.g. `module load torc`) runs first, in the optional "Working
+  directory" (default: home), where workflows run and write output.
 - `torc-dash` listens on `/tmp/torc-desktop-<random>.sock` (mode 0600). It stops and the socket is
   removed when the SSH session ends, including when the app quits or the connection drops.
 
