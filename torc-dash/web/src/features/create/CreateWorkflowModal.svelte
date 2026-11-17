@@ -294,7 +294,7 @@
             <span class="muted">{formatBytes(upload.size)} · click or drop to replace</span>
           {:else}
             <strong>Drop a workflow spec here, or click to choose</strong>
-            <span class="muted">YAML, JSON, JSON5, or KDL</span>
+            <span class="muted">From this computer · YAML, JSON, JSON5, or KDL</span>
           {/if}
         </button>
         <input
