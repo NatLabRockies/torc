@@ -16,11 +16,21 @@
   const saved = load();
   let mode = $state<"local" | "ssh">(saved.mode === "ssh" ? "ssh" : "local");
   let localCommand = $state(saved.localCommand ?? "torc-dash");
-  let serverUrl = $state(saved.serverUrl ?? "http://localhost:8080/torc-service/v1");
-  let startServer = $state(saved.startServer === "true");
   let host = $state(saved.host ?? "");
   let setup = $state(saved.setup ?? "");
-  let command = $state(saved.command ?? "torc-dash --standalone");
+  let command = $state(saved.remoteCommand ?? "torc-dash");
+  // Which torc-server the dashboard talks to, per mode. A blank URL lets torc-dash use
+  // TORC_API_URL or `[dash] api_url` from the torc config where it runs.
+  let servers = $state({
+    local: {
+      private: saved.startServer === "true",
+      url: saved.serverUrl ?? "http://localhost:8080/torc-service/v1",
+    },
+    ssh: { private: saved.remotePrivate === "true", url: saved.remoteServerUrl ?? "" },
+  });
+  // Never stored in the form; the Rust side keeps it in the OS keychain.
+  let password = $state("");
+  let hasSavedPassword = $state(false);
   let busy = $state(false);
   let error = $state("");
   // Set by the Rust side when the SSH session dropped while connected.
@@ -35,6 +45,44 @@
     answer = "";
   });
 
+  /** Connection settings without the password (enough to find a saved one). */
+  function baseArgs() {
+    const server = servers[mode];
+    return {
+      mode,
+      host,
+      setup,
+      command: mode === "local" ? localCommand : command,
+      standalone: server.private,
+      serverUrl: server.private ? "" : server.url,
+      password: "",
+    };
+  }
+
+  function connectArgs() {
+    const args = baseArgs();
+    return { ...args, password: args.standalone ? "" : password };
+  }
+
+  // Whether the keychain has a password for this host + server.
+  $effect(() => {
+    const args = baseArgs();
+    let stale = false;
+    invoke<boolean>("has_saved_password", { args })
+      .then((saved) => !stale && (hasSavedPassword = saved))
+      .catch(() => !stale && (hasSavedPassword = false));
+    return () => (stale = true);
+  });
+
+  async function forgetPassword() {
+    try {
+      await invoke("forget_password", { args: baseArgs() });
+      hasSavedPassword = false;
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
   async function connect(e: SubmitEvent) {
     e.preventDefault();
     busy = true;
@@ -46,11 +94,13 @@
         JSON.stringify({
           mode,
           localCommand,
-          serverUrl,
-          startServer: String(startServer),
+          serverUrl: servers.local.url,
+          startServer: String(servers.local.private),
           host,
           setup,
-          command,
+          remoteCommand: command,
+          remoteServerUrl: servers.ssh.url,
+          remotePrivate: String(servers.ssh.private),
         }),
       );
     } catch {
@@ -58,16 +108,8 @@
     }
     try {
       // On success the window navigates to the dashboard and this page goes away.
-      const local = mode === "local";
-      await invoke("connect", {
-        args: {
-          mode,
-          host,
-          setup,
-          command: local ? localCommand : command,
-          serverUrl: local && !startServer ? serverUrl : null,
-        },
-      });
+      await invoke("connect", { args: connectArgs() });
+      password = "";
     } catch (err) {
       error = String(err);
       busy = false;
@@ -115,16 +157,6 @@
 
     {#if mode === "local"}
       <p class="hint">Starts the Torc dashboard on this computer.</p>
-      <label class="check">
-        <input type="checkbox" bind:checked={startServer} />
-        Start a new torc-server for me
-      </label>
-      {#if !startServer}
-        <label>
-          torc-server URL
-          <input bind:value={serverUrl} required />
-        </label>
-      {/if}
       <label>
         Dashboard command
         <input bind:value={localCommand} required />
@@ -146,8 +178,57 @@
       <label>
         Dashboard command
         <input bind:value={command} required />
+        <span class="optional">Full path if torc-dash isn't on the login node's PATH.</span>
       </label>
     {/if}
+
+    <fieldset>
+      <legend>Torc server</legend>
+      <label class="check">
+        <input type="radio" bind:group={servers[mode].private} value={false} />
+        Use a shared torc-server
+      </label>
+      {#if !servers[mode].private}
+        <label class="indent">
+          URL
+          <input
+            type="url"
+            bind:value={servers[mode].url}
+            placeholder="https://torc.example.org/torc-service/v1"
+          />
+          <span class="optional">
+            Leave blank to use <code>TORC_API_URL</code> or <code>[dash] api_url</code> in the
+            torc config{mode === "ssh" ? " on the login node" : ""}.
+          </span>
+        </label>
+        <label class="indent">
+          Password <span class="optional">(if the server requires a login)</span>
+          <input
+            type="password"
+            bind:value={password}
+            autocomplete="off"
+            placeholder={hasSavedPassword ? "Saved in Keychain" : ""}
+          />
+          <span class="optional">
+            Sent as {mode === "ssh" ? "your login-node user name" : "your user name"} (or
+            <code>TORC_USERNAME</code>). Saved in the system keychain.
+            {#if hasSavedPassword}
+              <button type="button" class="link" onclick={forgetPassword}>Forget saved password</button>
+            {/if}
+          </span>
+        </label>
+      {/if}
+      <label class="check">
+        <input type="radio" bind:group={servers[mode].private} value={true} />
+        Start a private torc-server for me
+      </label>
+      {#if servers[mode].private}
+        <span class="optional indent">
+          Listens on localhost only; its database is
+          {mode === "ssh" ? "~/torc-desktop.db on the login node" : "kept in the app's data folder"}.
+        </span>
+      {/if}
+    </fieldset>
 
     <button type="submit" disabled={busy}>
       {busy ? "Starting…" : lost ? "Reconnect" : mode === "local" ? "Open dashboard" : "Connect"}
@@ -291,6 +372,32 @@
     background: var(--card);
     color: var(--text);
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+  }
+  fieldset {
+    border: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  legend {
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0;
+    margin-bottom: 10px;
+  }
+  .indent {
+    margin-left: 24px;
+  }
+  code {
+    font-size: 0.85em;
+  }
+  button.link {
+    padding: 0;
+    background: none;
+    color: var(--accent);
+    font-weight: 500;
   }
   label.check {
     flex-direction: row;

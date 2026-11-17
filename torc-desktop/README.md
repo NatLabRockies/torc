@@ -9,13 +9,28 @@ torc workspace.
 
 ## Modes
 
-- **This computer**: starts `torc-dash` locally on a private port, pointed at a torc-server URL you
-  give (default `http://localhost:8080/torc-service/v1`). Or tick "Start a new torc-server for me"
-  to run a localhost-only server whose database lives in the app's data folder
-  (`~/Library/Application Support/com.github.natlabrockies.torc-desktop/torc.db` on macOS).
-  torc-dash runs through your login shell in your home directory, so your profile's `PATH` applies.
-  Disconnecting or quitting stops torc-dash and any server it started.
+- **This computer**: starts `torc-dash` locally on a private port. torc-dash runs through your login
+  shell in your home directory, so your profile's `PATH` applies.
 - **Remote (SSH)**: described below.
+
+In both modes, **Torc server** chooses what the dashboard talks to:
+
+- **Use a shared torc-server**: enter its URL. The app remembers it. Leave it blank to use
+  `TORC_API_URL` or `api_url` in the `[dash]` section of the torc config
+  (`~/.config/torc/config.toml`, or `/etc/torc/config.toml` for a site-wide default) on the machine
+  where torc-dash runs.
+- **Start a private torc-server**: torc-dash starts a localhost-only server. Its database is
+  `~/torc-desktop.db` on the login node, or in the app's data folder locally
+  (`~/Library/Application Support/com.github.natlabrockies.torc-desktop/torc.db` on macOS).
+
+If the shared server requires a login, enter your password under the URL. The app saves it in the
+system keychain (Keychain on macOS), never in its settings, and gives it to torc-dash as
+`TORC_PASSWORD`: through the environment locally, or as the first line on the SSH session's stdin
+remotely, so it never appears on a command line. The user name is `TORC_USERNAME` or `USER` where
+torc-dash runs, as for the torc CLI. torc-dash adds this login to the requests it forwards to the
+server, and the torc commands it runs inherit it.
+
+Disconnecting or quitting stops torc-dash and any server it started.
 
 ## How remote mode works
 

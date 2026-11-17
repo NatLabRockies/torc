@@ -97,6 +97,21 @@ struct AppState {
     llm_model: RwLock<String>,
     /// MCP client connection (lazily initialized)
     mcp_client: Mutex<Option<McpClient>>,
+    /// HTTP basic auth for torc-server: (username, password) from TORC_USERNAME/USER and
+    /// TORC_PASSWORD, like the torc CLI. The torc CLI subprocesses inherit the same variables.
+    server_auth: Option<(String, String)>,
+}
+
+/// Adds the torc-server login to a request bound for torc-server (never for other hosts, such
+/// as the AI chat provider, which share the same HTTP client).
+fn with_server_auth(
+    req: reqwest::RequestBuilder,
+    auth: &Option<(String, String)>,
+) -> reqwest::RequestBuilder {
+    match auth {
+        Some((user, password)) => req.basic_auth(user, Some(password)),
+        None => req,
+    }
 }
 
 /// CLI arguments
@@ -461,7 +476,7 @@ async fn main() -> Result<()> {
 
                     if let Ok(Some(status)) = child.try_wait() {
                         let stderr_output = stderr_output.trim();
-                        let details = if stderr_output.is_empty() {
+                        let mut details = if stderr_output.is_empty() {
                             format!("torc-server exited with status {}", status)
                         } else {
                             format!(
@@ -469,6 +484,12 @@ async fn main() -> Result<()> {
                                 status, stderr_output
                             )
                         };
+                        if database.is_none() {
+                            details.push_str(
+                                "\nHint: no database was given; pass --database <path> to \
+                                 torc-dash (e.g. --database $HOME/torc.db)",
+                            );
+                        }
                         return Err(anyhow::anyhow!(
                             "Managed server failed to start before reporting a port: {}",
                             details
@@ -643,7 +664,15 @@ async fn main() -> Result<()> {
             }
         };
 
+    let server_auth = std::env::var("TORC_PASSWORD")
+        .ok()
+        .filter(|p| !p.is_empty())
+        .map(|p| (torc::get_username(), p));
+    if let Some((user, _)) = &server_auth {
+        info!("Authenticating to torc-server as {}", user);
+    }
     let state = Arc::new(AppState {
+        server_auth,
         api_url: final_api_url,
         client: http_client,
         torc_bin,
@@ -851,6 +880,11 @@ async fn proxy_handler(
 
     // Build the proxied request
     let mut proxy_req = state.client.request(method, &target_url);
+    // A login the browser sent itself takes precedence.
+    let browser_auth = req.headers().contains_key(header::AUTHORIZATION);
+    if !browser_auth {
+        proxy_req = with_server_auth(proxy_req, &state.server_auth);
+    }
 
     // Copy headers
     for (name, value) in req.headers() {
@@ -881,6 +915,12 @@ async fn proxy_handler(
         Ok(resp) => {
             let status = StatusCode::from_u16(resp.status().as_u16())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            if status == StatusCode::UNAUTHORIZED && !browser_auth {
+                // Say why, instead of the server's bare "Unauthorized".
+                let message = unauthorized_message(&state, &target_url, resp.url().as_str());
+                warn!("{}", message);
+                return (status, Json(serde_json::json!({ "message": message }))).into_response();
+            }
             let headers = resp.headers().clone();
 
             let mut response = Response::builder().status(status);
@@ -901,6 +941,28 @@ async fn proxy_handler(
             (StatusCode::BAD_GATEWAY, format!("Proxy error: {}", e)).into_response()
         }
     }
+}
+
+/// Explains a 401 from torc-server so the user can tell a missing login from a rejected one.
+fn unauthorized_message(state: &AppState, requested: &str, final_url: &str) -> String {
+    let Some((user, _)) = &state.server_auth else {
+        return "torc-server requires a login, and torc-dash has none. Set TORC_PASSWORD \
+                (and TORC_USERNAME if your server user name is not your login name) where \
+                torc-dash runs, or enter the password in Torc Desktop."
+            .to_string();
+    };
+    let redirected = if final_url != requested {
+        format!(
+            " The request was redirected to {final_url}; the login is not sent across a \
+             redirect to another host or scheme, so use that URL as the server URL."
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "torc-server rejected the login for user '{user}'. Check the password, or set \
+         TORC_USERNAME if your server user name differs.{redirected}"
+    )
 }
 
 // ============== CLI Command Handlers ==============
@@ -1580,6 +1642,7 @@ async fn cli_run_stream_handler(
     let torc_bin = state.torc_bin.clone();
     let api_url = state.api_url.clone();
     let http_client = state.client.clone();
+    let server_auth = state.server_auth.clone();
 
     // Create the stream
     let stream = async_stream::stream! {
@@ -1655,7 +1718,7 @@ async fn cli_run_stream_handler(
 
                 // Fetch jobs from API and count statuses
                 let url = format!("{}/jobs?workflow_id={}&limit={}", api_url_status, workflow_id_status, torc::MAX_RECORD_TRANSFER_COUNT);
-                match http_client_status.get(&url).send().await {
+                match with_server_auth(http_client_status.get(&url), &server_auth).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(json) = resp.json::<serde_json::Value>().await {
                             // Count jobs by status
