@@ -47,7 +47,6 @@ clap_complete = "4.6"
 axoupdater = { version = "0.10.0", default-features = false, features = ["blocking", "github_releases"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "process", "io-util"] }
 url = "2.5"
-validator = { version = "0.21", features = ["derive"] }
 mime = "0.3"
 futures = "0.3"
 bcrypt = "0.19"
@@ -68,13 +67,11 @@ async-trait = "0.1.24"
 async-stream = "0.3"
 axum = { version = "0.8", features = ["tokio", "http1", "http2"] }
 tower = "0.5"
-tower-http = { version = "0.7", features = ["cors", "fs"] }
 mime_guess = "2.0"
 hyper = { version = "1", features = ["full"] }
 http-body = "1"
 http-body-util = "0.1"
 bytes = "1"
-serde_ignored = "0.1.1"
 percent-encoding = "2.1.0"
 regex = "1.3"
 lazy_static = "1.4"
@@ -83,7 +80,6 @@ anyhow = "1"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite"] }
 dotenvy = "0.15.7"
 iso8601 = "0.6"
-jsonwebtoken = "11.1.0"
 sha2 = "0.11"
 hex = "0.4"
 base64 = "0.23"
@@ -187,7 +183,6 @@ server = [
     "dep:http-body",
     "dep:http-body-util",
     "dep:bytes",
-    "dep:serde_ignored",
     "dep:percent-encoding",
     "dep:regex",
     "dep:lazy_static",
@@ -195,7 +190,6 @@ server = [
     "dep:sqlx",
     "dep:tokio",
     "dep:dotenvy",
-    "dep:jsonwebtoken",
     "dep:sha2",
     "dep:hex",
     "dep:base64",
@@ -283,7 +277,6 @@ dash = [
     "config",
     "dep:axum",
     "dep:tower",
-    "dep:tower-http",
     "dep:mime_guess",
     "dep:uuid",
     "dep:hyper-util",
@@ -305,14 +298,14 @@ slurm-runner = [
     "client",
 ]
 dist = ["client", "tui", "plot_resources", "server-bin", "mcp-server", "dash", "slurm-runner"]
-cli-docs = ["dep:clap-markdown"]
-conversion = ["frunk", "frunk_derives", "frunk_core", "frunk-enum-core", "frunk-enum-derive"]
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "ios"))'.dependencies]
 native-tls = { workspace = true, optional = true }
 hyper-tls = { workspace = true, optional = true }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows", target_os = "ios")))'.dependencies]
+openssl = { workspace = true, optional = true }
+tokio-openssl = { workspace = true, optional = true }
 hyper-openssl = { workspace = true, optional = true }
 
 [dependencies]
@@ -323,7 +316,6 @@ chrono.workspace = true
 log.workspace = true
 mime.workspace = true
 futures.workspace = true
-validator.workspace = true
 
 # Server dependencies (optional)
 async-trait = { workspace = true, optional = true }
@@ -332,7 +324,6 @@ hyper = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
-serde_ignored = { workspace = true, optional = true }
 percent-encoding = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 csv = { workspace = true, optional = true }
@@ -342,7 +333,6 @@ sqlx = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 dotenvy = { workspace = true, optional = true }
 iso8601 = { workspace = true }
-jsonwebtoken = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
@@ -392,8 +382,6 @@ tracing-timing = { workspace = true, optional = true }
 hdrhistogram = { workspace = true, optional = true }
 service-manager = { workspace = true, optional = true }
 file-rotate = { workspace = true, optional = true }
-openssl = { workspace = true, optional = true }
-tokio-openssl = { workspace = true, optional = true }
 
 # MCP server dependencies (optional)
 rmcp = { workspace = true, optional = true }
@@ -403,7 +391,6 @@ tempfile = { version = "3", optional = true }
 # Dashboard dependencies (optional)
 axum = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
-tower-http = { workspace = true, optional = true }
 mime_guess = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 hyper-util = { workspace = true, optional = true }
@@ -413,13 +400,6 @@ utoipa = { workspace = true, optional = true }
 config = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
-
-# Conversion feature dependencies
-frunk = { version = "0.4.0", optional = true }
-frunk_derives = { version = "0.4.0", optional = true }
-frunk_core = { version = "0.4.0", optional = true }
-frunk-enum-derive = { version = "0.3.0", optional = true }
-frunk-enum-core = { version = "0.3.0", optional = true }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows", target_os = "ios")))'.dev-dependencies]
 tokio-openssl = "0.6"
@@ -441,12 +421,5 @@ rstest = "0.28.0"
 tempfile = "3.22.0"
 serial_test = "4.0.1"
 reqwest = { workspace = true }
-clap-markdown = "0.1"
 libc = "0.2"
 cargo-husky = { version = "1", default-features = false, features = ["precommit-hook", "user-hooks"] }
-
-# CLI documentation generator depends on clap-markdown
-# It's also in dev-dependencies for tests
-[dependencies.clap-markdown]
-version = "0.1"
-optional = true
