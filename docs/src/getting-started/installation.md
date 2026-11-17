@@ -151,10 +151,10 @@ docker run -d --name torc-server \
 
 The server will be available at `http://localhost:8080`.
 
-`docker stop` sends `SIGTERM`, and the server stops accepting connections and waits up to 30 seconds
-for in-flight requests to finish. Docker sends `SIGKILL` after 10 seconds by default, so pass a
-longer timeout (`docker stop -t 35 torc-server`, or `stop_grace_period: 35s` in Compose) to allow a
-full drain.
+`docker stop` sends `SIGTERM`. The server stops accepting connections, closes idle connections, and
+waits up to 30 seconds for in-flight requests to finish; a second `SIGTERM` or Ctrl+C skips the
+wait. Docker sends `SIGKILL` after 10 seconds by default, so if long requests are possible pass a
+longer timeout (`docker stop -t 35 torc-server`, or `stop_grace_period: 35s` in Compose).
 
 ### Environment Variables
 
