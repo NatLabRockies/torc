@@ -25,6 +25,8 @@
   let pre = $state<HTMLPreElement>();
   /** Bumped per load; only the latest load may show its result. */
   let loadSeq = 0;
+  /** Path being loaded. A refresh of it is skipped so slow reads still finish and show. */
+  let inflight: string | null = null;
 
   $effect(() => {
     const p = path;
@@ -33,6 +35,8 @@
   });
 
   async function load(p: string) {
+    if (p === inflight) return;
+    inflight = p;
     const seq = ++loadSeq;
     const samePath = p === loadedPath;
     const atBottom = !pre || pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
@@ -55,7 +59,8 @@
     } catch (e) {
       [nextNote, err] = [`Error loading file: ${errorText(e)}`, true];
     }
-    if (seq !== loadSeq) return; // a newer load (another file, or a later refresh) won
+    if (seq !== loadSeq) return; // a newer load of another file won
+    inflight = null;
     content = next;
     note = nextNote;
     isError = err;

@@ -73,26 +73,22 @@ export const SNIPPETS: Snippet[] = [
 /**
  * Append `snippet` to the end of its top-level section, creating the section at the end of the
  * document if missing. Items are indented like the section's existing items (default 2). An empty
- * section (`files: []`, `files: null`, `files: ~`) becomes a block section; a non-empty flow section
- * throws, since rewriting it could lose comments or formatting. Returns the new text and the
- * inserted range.
+ * section (`files: []`, `files: {}`, `files: null`, `files: ~`) becomes a block section; a non-empty
+ * flow section throws, since rewriting it could lose comments or formatting. Returns the new text and
+ * the inserted range.
  */
 export function insertSnippet(text: string, snippet: Snippet): { text: string; from: number; to: number } {
-  const key = new RegExp(`^${snippet.section}\\s*:`);
-  const empty = /^[^:]+:\s*(\[\s*\]|~|null|Null|NULL)\s*(#.*)?$/;
-  const at = text.split("\n").findIndex((l) => key.test(l) && (empty.test(l) || /^[^:]+:\s*[[{]/.test(l)));
-  if (at >= 0) {
-    if (!empty.test(text.split("\n")[at]))
-      throw new Error(
-        `"${snippet.section}" is written in flow style ([...]). Convert it to a block list to insert here.`,
-      );
-    const lines = text.split("\n");
-    const comment = /\s(#.*)$/.exec(lines[at])?.[1];
-    lines[at] = comment ? `${snippet.section}:  ${comment}` : `${snippet.section}:`;
-    text = lines.join("\n");
-  }
   const lines = text.split("\n");
-  const head = lines.findIndex((l) => new RegExp(`^${snippet.section}\\s*:\\s*(#.*)?$`).test(l));
+  let head = lines.findIndex((l) => new RegExp(`^${snippet.section}\\s*:`).test(l));
+  if (head >= 0) {
+    const value = lines[head].replace(/^[^:]+:\s*/, "").replace(/(^|\s)#.*$/, "").trim();
+    if (/^(\[\s*\]|\{\s*\}|~|null|Null|NULL)$/.test(value)) {
+      const comment = /\s(#.*)$/.exec(lines[head])?.[1];
+      lines[head] = comment ? `${snippet.section}:  ${comment}` : `${snippet.section}:`;
+    } else if (/^[[{]/.test(value)) {
+      throw new Error(`"${snippet.section}" is written in flow style. Convert it to a block list to insert here.`);
+    } else if (value) head = -1; // not a section (e.g. a scalar); append a new one
+  }
   if (head < 0) {
     const sep = !text.trim() ? "" : text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n";
     const body = `${snippet.section}:\n${indent(snippet.text, 2)}`;

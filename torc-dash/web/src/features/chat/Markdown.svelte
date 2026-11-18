@@ -4,15 +4,16 @@
 
   /**
    * Assistant text is untrusted: a reply with ![](/api/cli/run-stream?...) would otherwise make a
-   * dashboard request just by being shown. Allow only Markdown elements that fetch nothing, and
-   * links only to absolute http(s) or mailto URLs (a relative link would target the dashboard).
+   * dashboard request just by being shown. Allow only Markdown elements that fetch nothing (images
+   * become links), and links only to http(s) or mailto URLs on another origin, so no link can target
+   * the dashboard. `class` is kept only for code languages, so replies can't borrow app styles.
    */
   const SANITIZE = {
     ALLOWED_TAGS: [
       "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "del", "code", "pre",
-      "blockquote", "ul", "ol", "li", "a", "table", "thead", "tbody", "tr", "th", "td",
+      "blockquote", "ul", "ol", "li", "a", "table", "thead", "tbody", "tr", "th", "td", "input",
     ],
-    ALLOWED_ATTR: ["href", "title", "start", "align", "class"],
+    ALLOWED_ATTR: ["href", "title", "start", "align", "class", "type", "checked"],
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i,
   };
   let renderer: Promise<Render> | null = null;
@@ -20,11 +21,33 @@
   function loadRenderer(): Promise<Render> {
     renderer ??= Promise.all([import("marked"), import("dompurify")]).then(
       ([{ Marked }, { default: DOMPurify }]) => {
-        const marked = new Marked({ breaks: true, gfm: true, async: false });
+        const marked = new Marked({
+          breaks: true,
+          gfm: true,
+          async: false,
+          renderer: {
+            // Show an image as a link to it, labeled with its alt text.
+            image(t) {
+              const tokens = t.text ? t.tokens : [{ type: "text" as const, raw: t.href, text: t.href }];
+              return this.link({ ...t, type: "link", tokens: tokens ?? [] });
+            },
+          },
+        });
+        DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+          if (data.attrName === "class" && !(node.tagName === "CODE" && /^language-[\w+-]+$/.test(data.attrValue)))
+            data.keepAttr = false;
+        });
         DOMPurify.addHook("afterSanitizeAttributes", (node) => {
           if (node.tagName === "A") {
+            const href = node.getAttribute("href");
+            if (href && new URL(href, location.href).origin === location.origin) node.removeAttribute("href");
             node.setAttribute("target", "_blank");
             node.setAttribute("rel", "noopener noreferrer");
+          }
+          // Task-list items: only ever a read-only checkbox.
+          if (node.tagName === "INPUT") {
+            node.setAttribute("type", "checkbox");
+            node.setAttribute("disabled", "");
           }
           if (node.tagName === "PRE") node.classList.add("code-block");
         });

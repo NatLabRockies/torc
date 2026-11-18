@@ -1,5 +1,11 @@
 /** CodeMirror setup for the spec editor: YAML, dashboard colors, and schema completion/hover/lint. */
-import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  insertCompletionText,
+  pickedCompletion,
+  type Completion,
+  type CompletionContext,
+} from "@codemirror/autocomplete";
 import { indentWithTab } from "@codemirror/commands";
 import { yaml } from "@codemirror/lang-yaml";
 import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
@@ -61,15 +67,23 @@ function schemaSupport(schema: SpecSchema) {
           const r = schema.complete(ctx.state.doc.toString(), ctx.pos);
           // Pop up on its own while typing a word, or right after "key: "; Ctrl+Space anywhere.
           if (!r || (!ctx.explicit && r.from === ctx.pos && !ctx.matchBefore(/:\s$/))) return null;
+          // Filter on the text before the cursor (CodeMirror filters on from..to), but replace the
+          // whole word when an option is picked.
           return {
             from: r.from,
-            to: r.to,
             validFor: /^[\w.-]*$/,
             options: r.options.map((o) => ({
               label: o.label,
               detail: o.detail,
               info: o.info ? prose(o.info) : undefined,
-              apply: o.apply,
+              apply: (view: EditorView, c: Completion, from: number, to: number) => {
+                const line = view.state.doc.lineAt(to);
+                const end = to + /^[\w.-]*/.exec(line.text.slice(to - line.from))![0].length;
+                view.dispatch({
+                  ...insertCompletionText(view.state, o.apply, from, end),
+                  annotations: pickedCompletion.of(c),
+                });
+              },
               type: r.kind === "key" ? "property" : "enum",
             })),
           };

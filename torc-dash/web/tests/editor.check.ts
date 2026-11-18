@@ -43,6 +43,7 @@ function accept(src: string, label: string): string {
 assert.equal(accept("nam|: demo", "name"), "name: demo");
 assert.equal(accept("na|me: demo", "name"), "name: demo");
 assert.equal(accept("na|", "name"), "name: ");
+assert.equal(accept("jobs:\n  - na|:8080", "name"), "jobs:\n  - name: :8080");
 assert.equal(accept("execution_config:\n  mode: sl|urm", "slurm"), "execution_config:\n  mode: slurm");
 
 // Values.
@@ -100,6 +101,8 @@ assert.deepEqual(schema.lint(doc), [], doc);
 r = insertSnippet("name: w\nfiles: []  # none yet\njobs:\n  - name: a\n    command: x\n", SNIPPETS.find((s) => s.section === "files")!);
 assert.equal(r.text, "name: w\nfiles:  # none yet\n  - name: raw_data\n    path: data/raw.csv\njobs:\n  - name: a\n    command: x\n");
 assert.throws(() => insertSnippet("jobs: [{name: a, command: x}]\n", job), /flow style/);
+r = insertSnippet("name: w\nuser_data: {}\n", SNIPPETS.find((s) => s.section === "user_data")!);
+assert.equal(r.text, "name: w\nuser_data:\n  - name: config\n    data:\n      key: value\n");
 // A null section is empty too, not missing (which would add a second "files:" key).
 for (const nil of ["null", "~"]) {
   r = insertSnippet(`name: w\nfiles: ${nil}\njobs: []\n`, SNIPPETS.find((s) => s.section === "files")!);

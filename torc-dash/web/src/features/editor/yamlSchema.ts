@@ -196,7 +196,7 @@ export class SpecSchema {
     const present = siblingKeys(lines, li, keyCol);
     const pad = " ".repeat(keyCol + 2);
     // Renaming an existing key (`nam|: x`): insert only the name, keeping its separator and value.
-    const hasColon = /^\s*:/.test(after.slice(to - pos));
+    const hasColon = /^\s*:(\s|$)/.test(after.slice(to - pos));
     const options = Object.entries(props)
       .filter(([k]) => !present.has(k) || k === key[3])
       .map(([k, s]) => {
