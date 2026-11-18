@@ -2363,10 +2363,10 @@ struct TailFileResponse {
     error: Option<String>,
 }
 
-/// How much existing output a new tail shows.
+/// How much existing output a new tail shows, and what a pane jumps to when it falls behind.
 const TAIL_INITIAL_BYTES: u64 = 64 * 1024;
-/// Most bytes returned per call; a writer that is further ahead is caught up over later calls.
-const TAIL_MAX_BYTES: u64 = 1024 * 1024;
+/// A backlog bigger than this (a fast writer, a long pause) is skipped rather than streamed.
+const TAIL_MAX_BYTES: u64 = 512 * 1024;
 
 /// Follow a growing file (a running job's stdout/stderr) by polling with the returned offset.
 async fn cli_tail_file_handler(Json(req): Json<TailFileRequest>) -> Json<TailFileResponse> {
@@ -2382,45 +2382,88 @@ async fn cli_tail_file_handler(Json(req): Json<TailFileRequest>) -> Json<TailFil
     )
 }
 
+/// Open for reading without blocking on a FIFO (O_NONBLOCK); regular-file reads are unaffected.
+async fn open_nonblocking(path: &std::path::Path) -> std::io::Result<tokio::fs::File> {
+    let mut opts = tokio::fs::OpenOptions::new();
+    opts.read(true);
+    #[cfg(unix)]
+    opts.custom_flags(libc::O_NONBLOCK);
+    opts.open(path).await
+}
+
+/// Length of `buf` without a multi-byte character cut off at the end.
+fn complete_utf8_len(buf: &[u8]) -> usize {
+    let from = buf.len().saturating_sub(4);
+    match buf[from..].iter().rposition(|b| b & 0xC0 != 0x80) {
+        Some(i) if matches!(std::str::from_utf8(&buf[from + i..]), Err(e) if e.error_len().is_none()) => {
+            from + i
+        }
+        _ => buf.len(),
+    }
+}
+
 async fn tail_file(path: &str, offset: Option<u64>) -> std::io::Result<TailFileResponse> {
     use tokio::io::AsyncSeekExt;
-    // Opening a FIFO blocks forever and devices never end; only follow regular files.
-    if let Ok(m) = tokio::fs::metadata(path).await
-        && !m.is_file()
-    {
-        return Err(std::io::Error::other("not a regular file"));
-    }
-    let mut file = match tokio::fs::File::open(path).await {
+    let path = match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
+        (Some(rest), Some(home)) => std::path::Path::new(&home).join(rest),
+        _ => std::path::PathBuf::from(path),
+    };
+    let mut file = match open_nonblocking(&path).await {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // Not created yet (job not started) or deleted on success. Read it from the start
-            // once it appears.
+            // A missing directory means a wrong output dir (or a job on another host), not a
+            // job that hasn't started: say so instead of waiting forever.
+            if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty())
+                && !dir.is_dir()
+            {
+                return Err(std::io::Error::other(format!(
+                    "directory {} not found; check the output directory",
+                    dir.display()
+                )));
+            }
+            // Not created yet (job not started) or deleted. Keep the offset so a brief
+            // disappearance doesn't replay the file; a recreated shorter file restarts at 0.
             return Ok(TailFileResponse {
                 exists: false,
                 content: String::new(),
-                offset: 0,
+                offset: offset.unwrap_or(0),
                 error: None,
             });
         }
         r => r?,
     };
-    let len = file.metadata().await?.len();
-    let start = match offset {
-        Some(o) if o <= len => o,
-        Some(_) => 0, // Shorter than before: truncated or recreated.
-        None => len.saturating_sub(TAIL_INITIAL_BYTES),
+    // Checked on the opened handle, so the path can't be swapped in between. Devices never end.
+    let meta = file.metadata().await?;
+    if !meta.is_file() {
+        return Err(std::io::Error::other("not a regular file"));
+    }
+    let len = meta.len();
+    let (start, skipped) = match offset {
+        Some(o) if o > len => (0, 0), // Shorter than before: truncated or recreated.
+        Some(o) if len - o > TAIL_MAX_BYTES => {
+            (len - TAIL_INITIAL_BYTES, len - TAIL_INITIAL_BYTES - o)
+        }
+        Some(o) => (o, 0),
+        None => (len.saturating_sub(TAIL_INITIAL_BYTES), 0),
     };
     file.seek(std::io::SeekFrom::Start(start)).await?;
     let mut buf = Vec::new();
     file.take(TAIL_MAX_BYTES).read_to_end(&mut buf).await?;
-    // Hold back a multi-byte character cut off at the end; the next call returns it whole.
-    let valid = match std::str::from_utf8(&buf) {
-        Err(e) if e.error_len().is_none() => e.valid_up_to(),
-        _ => buf.len(),
+    // Jumping into the middle of the file can land inside a character; drop its tail bytes.
+    let lead = if start > 0 && (offset.is_none() || skipped > 0) {
+        buf.iter().take(3).take_while(|b| *b & 0xC0 == 0x80).count()
+    } else {
+        0
     };
+    // Hold back a character cut off at the end; the next call returns it whole.
+    let end = complete_utf8_len(&buf).max(lead);
+    let mut content = String::from_utf8_lossy(&buf[lead..end]).into_owned();
+    if skipped > 0 {
+        content.insert_str(0, &format!("\n[… skipped {skipped} bytes to catch up …]\n"));
+    }
     Ok(TailFileResponse {
         exists: true,
-        content: String::from_utf8_lossy(&buf[..valid]).into_owned(),
-        offset: start + valid as u64,
+        content,
+        offset: start + end as u64,
         error: None,
     })
 }
@@ -4916,6 +4959,42 @@ mod tests {
 
         // Directories (and FIFOs/devices) are refused instead of opened.
         assert!(tail_file(dir.path().to_str().unwrap(), None).await.is_err());
+
+        // A deleted file keeps the offset, so a brief disappearance doesn't replay it.
+        std::fs::remove_file(&path).unwrap();
+        let r = tail_file(p, Some(100)).await.unwrap();
+        assert_eq!((r.exists, r.offset), (false, 100));
+
+        // A missing directory is an error, not an endless "waiting for file".
+        let wrong = dir.path().join("nope/job.o");
+        assert!(tail_file(wrong.to_str().unwrap(), None).await.is_err());
+
+        // A big backlog is skipped down to the last TAIL_INITIAL_BYTES.
+        std::fs::write(&path, "b".repeat(2_000_000)).unwrap();
+        let r = tail_file(p, Some(0)).await.unwrap();
+        assert_eq!(r.offset, 2_000_000);
+        assert!(r.content.starts_with("\n[… skipped "));
+
+        // An invalid byte earlier in the chunk doesn't defeat holding back a split character.
+        std::fs::write(&path, b"x\xffy\xc3").unwrap();
+        let r = tail_file(p, Some(0)).await.unwrap();
+        assert_eq!((r.content.as_str(), r.offset), ("x\u{fffd}y", 3));
+
+        // A fresh tail whose window starts inside "é" drops the stray continuation byte, and
+        // still holds back a split character at the end.
+        let mut bytes = "\u{e9}".as_bytes().to_vec();
+        bytes.extend(
+            "a".repeat(super::TAIL_INITIAL_BYTES as usize - 2)
+                .as_bytes(),
+        );
+        bytes.push(0xc3);
+        std::fs::write(&path, &bytes).unwrap();
+        let r = tail_file(p, None).await.unwrap();
+        assert_eq!(
+            r.content,
+            "a".repeat(super::TAIL_INITIAL_BYTES as usize - 2)
+        );
+        assert_eq!(r.offset, bytes.len() as u64 - 1);
     }
 
     #[test]

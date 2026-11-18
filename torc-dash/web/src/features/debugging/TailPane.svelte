@@ -23,6 +23,8 @@
   let localPause = $state(false);
   let pre = $state<HTMLPreElement>();
   let active = $derived(!paused && !localPause);
+  // Parent refreshes rebuild `file`; depend on the string so polling only restarts on a new path.
+  let filePath = $derived(file.path);
 
   // "Clear all" from the parent; keeps the offset so only new output shows.
   $effect(() => {
@@ -35,7 +37,7 @@
   let tailedPath = "";
 
   $effect(() => {
-    const path = file.path;
+    const path = filePath;
     if (!active) return;
     // Start over when the path changes (the job's next attempt writes a new file).
     if (path !== tailedPath) {

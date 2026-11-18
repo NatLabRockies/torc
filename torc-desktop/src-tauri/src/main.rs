@@ -420,6 +420,7 @@ fn resolve_work_dir(home: Option<std::path::PathBuf>, workdir: &str) -> Option<s
     let w = workdir.trim();
     let rel = w
         .strip_prefix("~/")
+        .or_else(|| w.strip_prefix("~\\"))
         .unwrap_or(if w == "~" { "" } else { w });
     match home {
         // join() keeps an absolute `rel` as is.
@@ -720,6 +721,7 @@ mod tests {
         assert_eq!(r(home(), " "), Some("/h".into()));
         assert_eq!(r(home(), "~"), Some("/h".into()));
         assert_eq!(r(home(), "~/work"), Some("/h/work".into()));
+        assert_eq!(r(home(), "~\\work"), Some("/h/work".into()));
         assert_eq!(r(home(), "work"), Some("/h/work".into()));
         assert_eq!(r(home(), "/scratch/x"), Some("/scratch/x".into()));
         assert_eq!(r(None, ""), None);

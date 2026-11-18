@@ -82,6 +82,35 @@
     }
   }
 
+  // Live tail follows each job's current attempt (attempt_id, run_id). Refresh just the tailed
+  // jobs on a short cadence so a retry is picked up without waiting for the dashboard refresh.
+  $effect(() => {
+    const id = app.workflowId;
+    if (view !== "tail" || !tailed.size || id === null) return;
+    const timer = setInterval(() => refreshTailed(id), 5000);
+    return () => clearInterval(timer);
+  });
+
+  async function refreshTailed(id: number) {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const [w, js] = await Promise.all([
+        unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })),
+        Promise.all(
+          [...tailed].map((jid) =>
+            unwrap(api.GET("/jobs/{id}", { params: { path: { id: Number(jid) } } })),
+          ),
+        ),
+      ]);
+      if (id !== app.workflowId || !jobs) return;
+      const byId = new Map(js.map((j) => [j.id, j]));
+      jobs = jobs.map((j) => byId.get(j.id) ?? j);
+      wf = w;
+    } catch {
+      // The full refresh reports errors; panes show their own.
+    }
+  }
+
   let baseDir = $derived(resolveLogBaseDir(outputDir.trim() || "torc_output", submissionDir));
 
   let rows = $derived.by((): Row[] => {
