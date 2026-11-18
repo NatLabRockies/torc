@@ -42,6 +42,9 @@
   .error {
     border-left-color: var(--danger);
   }
+  .warning {
+    border-left-color: var(--warning);
+  }
   .msg {
     flex: 1;
     white-space: pre-wrap;

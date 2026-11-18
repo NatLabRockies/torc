@@ -40,14 +40,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111318;
-    --surface: #191c22;
-    --surface-2: #1e2229;
-    --surface-hover: #242932;
-    --border: #2a2f39;
-    --border-strong: #3a4150;
-    --text: #e5e8ee;
-    --text-muted: #9ba3b2;
+    --bg: var(--dark-bg, #111318);
+    --surface: var(--dark-surface, #191c22);
+    --surface-2: var(--dark-surface-2, #1e2229);
+    --surface-hover: var(--dark-surface-hover, #242932);
+    --border: var(--dark-border, #2a2f39);
+    --border-strong: var(--dark-border-strong, #3a4150);
+    --text: var(--dark-text, #e5e8ee);
+    --text-muted: var(--dark-text-muted, #9ba3b2);
     --text-faint: #6b7383;
     --accent: #5b8def;
     --accent-hover: #6f9cf2;
@@ -69,19 +69,101 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #111318;
-  --surface: #191c22;
-  --surface-2: #1e2229;
-  --surface-hover: #242932;
-  --border: #2a2f39;
-  --border-strong: #3a4150;
-  --text: #e5e8ee;
-  --text-muted: #9ba3b2;
+  --bg: var(--dark-bg, #111318);
+  --surface: var(--dark-surface, #191c22);
+  --surface-2: var(--dark-surface-2, #1e2229);
+  --surface-hover: var(--dark-surface-hover, #242932);
+  --border: var(--dark-border, #2a2f39);
+  --border-strong: var(--dark-border-strong, #3a4150);
+  --text: var(--dark-text, #e5e8ee);
+  --text-muted: var(--dark-text-muted, #9ba3b2);
   --text-faint: #6b7383;
   --accent: #5b8def;
   --accent-hover: #6f9cf2;
   --accent-soft: #1f2a42;
-  --success: #3fb96b;
+  --success: #3fb96b;/* Named dark palettes (Settings > Dark palette); they only change the dark theme. */
+:root[data-palette="midnight"] {
+  --dark-bg: #1a1a2e;
+  --dark-surface: #16213e;
+  --dark-surface-2: #16213e;
+  --dark-surface-hover: #0f3460;
+  --dark-border: #2d3748;
+  --dark-border-strong: #2d3748;
+  --dark-text: #e4e4e4;
+  --dark-text-muted: #a0a0a0;
+}
+:root[data-palette="neutral"] {
+  --dark-bg: #0d1117;
+  --dark-surface: #161b22;
+  --dark-surface-2: #161b22;
+  --dark-surface-hover: #21262d;
+  --dark-border: #30363d;
+  --dark-border-strong: #30363d;
+  --dark-text: #e6edf3;
+  --dark-text-muted: #8b949e;
+}
+:root[data-palette="warm"] {
+  --dark-bg: #1a1d21;
+  --dark-surface: #222529;
+  --dark-surface-2: #222529;
+  --dark-surface-hover: #2c2f33;
+  --dark-border: #3a3d41;
+  --dark-border-strong: #3a3d41;
+  --dark-text: #e8e6e3;
+  --dark-text-muted: #9e9b98;
+}
+:root[data-palette="nord"] {
+  --dark-bg: #2e3440;
+  --dark-surface: #3b4252;
+  --dark-surface-2: #3b4252;
+  --dark-surface-hover: #434c5e;
+  --dark-border: #4c566a;
+  --dark-border-strong: #4c566a;
+  --dark-text: #eceff4;
+  --dark-text-muted: #d8dee9;
+}
+:root[data-palette="dracula"] {
+  --dark-bg: #282a36;
+  --dark-surface: #1e1f29;
+  --dark-surface-2: #1e1f29;
+  --dark-surface-hover: #44475a;
+  --dark-border: #6272a4;
+  --dark-border-strong: #6272a4;
+  --dark-text: #f8f8f2;
+  --dark-text-muted: #bfbfbf;
+}
+:root[data-palette="monokai"] {
+  --dark-bg: #272822;
+  --dark-surface: #3e3d32;
+  --dark-surface-2: #3e3d32;
+  --dark-surface-hover: #49483e;
+  --dark-border: #75715e;
+  --dark-border-strong: #75715e;
+  --dark-text: #f8f8f2;
+  --dark-text-muted: #a6a69c;
+}
+:root[data-palette="dimmed"] {
+  --dark-bg: #22272e;
+  --dark-surface: #2d333b;
+  --dark-surface-2: #2d333b;
+  --dark-surface-hover: #444c56;
+  --dark-border: #545d68;
+  --dark-border-strong: #545d68;
+  --dark-text: #adbac7;
+  --dark-text-muted: #768390;
+}
+:root[data-palette="high-contrast"] {
+  --dark-bg: #0a0a0a;
+  --dark-surface: #1a1a1a;
+  --dark-surface-2: #1a1a1a;
+  --dark-surface-hover: #333333;
+  --dark-border: #555555;
+  --dark-border-strong: #555555;
+  --dark-text: #ffffff;
+  --dark-text-muted: #b0b0b0;
+}
+
+
   --success-soft: #16291e;
   --warning: #e0a43a;
   --warning-soft: #2e2512;

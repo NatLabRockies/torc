@@ -7,6 +7,9 @@
  * only show a loading state when there is nothing to show yet.
  */
 
+import { api } from "./api/client";
+import { errorText } from "./format";
+
 export const TABS = [
   { id: "workflows", label: "Workflows", key: "1" },
   { id: "editor", label: "Spec editor", key: "e" },
@@ -31,6 +34,20 @@ export const WORKFLOW_TABS: ReadonlySet<TabId> = new Set([
 ]);
 
 export type ThemeMode = "system" | "light" | "dark";
+
+/** Named dark palettes (defined in app.css); "default" is the built-in dark theme. */
+export const DARK_PALETTES = [
+  { id: "default", label: "Default" },
+  { id: "warm", label: "Warm Gray" },
+  { id: "neutral", label: "Neutral" },
+  { id: "dimmed", label: "Dimmed" },
+  { id: "nord", label: "Nord" },
+  { id: "dracula", label: "Dracula" },
+  { id: "midnight", label: "Midnight Blue" },
+  { id: "high-contrast", label: "High Contrast" },
+  { id: "monokai", label: "Monokai" },
+] as const;
+export type DarkPalette = (typeof DARK_PALETTES)[number]["id"];
 
 function load(key: string): string | null {
   try {
@@ -61,20 +78,40 @@ function tabFromHash(): TabId | null {
   return TABS.some((t) => t.id === id) ? (id as TabId) : null;
 }
 
+// Carry over the pre-Svelte dashboard's dark-mode choice (torc-dark-mode / torc-theme) once.
+if (load("torc-theme-mode") === null && load("torc-dark-mode") !== null) {
+  const dark = load("torc-dark-mode") === "true";
+  save("torc-theme-mode", dark ? "dark" : "light");
+  const old = load("torc-theme");
+  if (dark && old && DARK_PALETTES.some((p) => p.id === old)) save("torc-dark-palette", old);
+  if (dark) document.documentElement.dataset.theme = "dark";
+  else document.documentElement.dataset.theme = "light";
+  if (dark && old) document.documentElement.dataset.palette = old;
+}
+
 class AppState {
   tab = $state<TabId>(tabFromHash() ?? "workflows");
+  /** Tab shown before the current one, for the Graph tab's Back button. */
+  previousTab = $state<TabId | null>(null);
   workflowId = $state<number | null>(Number(load("torc-workflow-id")) || null);
 
   user = $state<string | null>(null);
+  /** True once /api/user has answered or failed; until then workflow lists wait for it. */
+  userChecked = $state(false);
+  /** Access-group filter for the Workflows tab and the workflow picker. */
+  accessGroup = $state("");
   version = $state<string | null>(null);
   /** null until the first health check finishes. */
   connected = $state<boolean | null>(null);
+  /** Why the last health check failed, if it did. */
+  connectionError = $state<string | null>(null);
 
   refreshSeconds = $state(savedRefreshSeconds());
   /** Increments on every auto-refresh and manual refresh. Read it in an $effect to reload. */
   refreshTick = $state(0);
   showAllUsers = $state(load("torc-show-all-users") === "true");
   theme = $state<ThemeMode>((load("torc-theme-mode") as ThemeMode) ?? "system");
+  darkPalette = $state<DarkPalette>((load("torc-dark-palette") as DarkPalette) ?? "default");
 
   /** Job details modal (owned by features/details). Set via openJob(). */
   jobDetailsId = $state<number | null>(null);
@@ -90,15 +127,25 @@ class AppState {
   constructor() {
     window.addEventListener("hashchange", () => {
       const t = tabFromHash();
-      if (t) this.tab = t;
+      if (t) this.setTab(t);
     });
   }
 
   /** Switch tabs, optionally selecting a workflow first. */
   go(tab: TabId, workflowId?: number | null) {
     if (workflowId !== undefined) this.selectWorkflow(workflowId);
-    this.tab = tab;
+    this.setTab(tab);
     if (tabFromHash() !== tab) location.hash = `/${tab}`;
+  }
+
+  private setTab(tab: TabId) {
+    if (tab !== this.tab) this.previousTab = this.tab;
+    this.tab = tab;
+  }
+
+  /** Return to the previous tab, if there is one. */
+  back() {
+    if (this.previousTab) this.go(this.previousTab);
   }
 
   selectWorkflow(id: number | null) {
@@ -114,6 +161,30 @@ class AppState {
     this.refreshTick++;
   }
 
+  /**
+   * Query for the workflow lists (Workflows tab and picker), or null while /api/user is pending.
+   * An access group spans all owners; if the user lookup failed, list everything as main did.
+   */
+  workflowQuery(): { user?: string; access_group?: string } | null {
+    const group = this.accessGroup || undefined;
+    if (this.showAllUsers || group) return { access_group: group };
+    if (this.user) return { user: this.user };
+    return this.userChecked ? {} : null;
+  }
+
+  /** Ping torc-server (through torc-dash) and record the result. */
+  async checkConnection(): Promise<boolean> {
+    try {
+      const r = await api.GET("/ping");
+      this.connected = r.response.ok;
+      this.connectionError = r.response.ok ? null : `HTTP ${r.response.status} ${r.response.statusText}`;
+    } catch (e) {
+      this.connected = false;
+      this.connectionError = errorText(e);
+    }
+    return this.connected;
+  }
+
   openJob(jobId: number) {
     this.jobDetailsId = jobId;
   }
@@ -127,6 +198,13 @@ class AppState {
     save("torc-theme-mode", mode === "system" ? null : mode);
     if (mode === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = mode;
+  }
+
+  setDarkPalette(palette: DarkPalette) {
+    this.darkPalette = palette;
+    save("torc-dark-palette", palette === "default" ? null : palette);
+    if (palette === "default") delete document.documentElement.dataset.palette;
+    else document.documentElement.dataset.palette = palette;
   }
 
   setRefreshSeconds(seconds: number) {

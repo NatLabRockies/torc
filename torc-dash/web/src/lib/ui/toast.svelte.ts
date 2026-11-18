@@ -1,7 +1,7 @@
-/** Global toasts: toast.success("Saved"), toast.error(err), toast.info("…"). */
+/** Global toasts: toast.success("Saved"), toast.error(err), toast.info("…"), toast.warning("…"). */
 import { errorText } from "../format";
 
-export type ToastKind = "success" | "error" | "info";
+export type ToastKind = "success" | "error" | "info" | "warning";
 type Toast = { id: number; kind: ToastKind; message: string };
 
 let nextId = 0;
@@ -22,6 +22,7 @@ export function dismiss(id: number) {
 export const toast = {
   success: (message: string) => push("success", message, 3500),
   info: (message: string) => push("info", message, 3500),
+  warning: (message: string, ms = 5000) => push("warning", message, ms),
   // Errors stay so they can be read and copied.
   error: (e: unknown) => push("error", errorText(e), null),
 };

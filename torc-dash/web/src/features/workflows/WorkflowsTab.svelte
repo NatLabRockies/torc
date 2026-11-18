@@ -14,8 +14,7 @@
   let loaded = $state(false);
   let loadError = $state("");
   let filter = $state("");
-  let groupInput = $state("");
-  let accessGroup = $state("");
+  let groupInput = $state(app.accessGroup);
   let sort = $state<SortState>({ key: "id", dir: "desc" });
   let selected = $state(new SvelteSet<string | number>());
   let importOpen = $state(false);
@@ -24,18 +23,13 @@
   let seq = 0;
   $effect(() => {
     void app.refreshTick;
-    const group = accessGroup || undefined;
-    // An access-group filter spans all owners, so don't also scope to the current user.
-    const allUsers = app.showAllUsers || !!group;
-    const user = allUsers ? undefined : app.user;
-    // ponytail: waits for /api/user before the first "my workflows" load; if it never answers,
-    // the user can tick "All users".
-    if (!allUsers && !user) return;
+    const query = app.workflowQuery();
+    if (!query) return;
     const mine = ++seq;
     listAll((offset, limit) =>
       unwrap(
         api.GET("/workflows", {
-          params: { query: { offset, limit, user, access_group: group } },
+          params: { query: { offset, limit, ...query } },
         }),
       ),
     )
@@ -56,7 +50,7 @@
   });
 
   function applyGroup() {
-    accessGroup = groupInput.trim();
+    app.accessGroup = groupInput.trim();
   }
 
   async function bulkDelete() {
@@ -169,8 +163,8 @@
       loading={!loaded}
       activeKey={app.workflowId}
       onRowClick={(w) => app.go("details", w.id!)}
-      empty={accessGroup
-        ? `No workflows shared with group "${accessGroup}"`
+      empty={app.accessGroup
+        ? `No workflows shared with group "${app.accessGroup}"`
         : "No workflows yet. Create one to get started."}
     />
   </div>

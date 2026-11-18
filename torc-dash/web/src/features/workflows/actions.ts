@@ -30,9 +30,35 @@ export async function submitWorkflow(id: number) {
 }
 
 /**
- * Initialize. If output files from an earlier run exist, say so first: initializing keeps them.
- * (`--force` would only skip the missing-input check, so it is never sent from here.)
+ * Run initialize/reinitialize. If it fails only because input files are missing, offer to
+ * retry with `--force`, which skips that check (as the CLI does).
  */
+async function runInit(cmd: "initialize" | "reinitialize", label: string, id: number) {
+  try {
+    await cli(cmd, { ...wid(id), force: false });
+  } catch (e) {
+    const msg = errorText(e);
+    if (!msg.includes("Missing required files")) {
+      return toast.error(`${label} failed: ${msg}`);
+    }
+    const ok = await confirm({
+      title: "Required input files are missing",
+      message: `${msg}\n\n${label} anyway? Jobs that need these files will fail unless they appear before the jobs run.`,
+      confirmLabel: `${label} anyway`,
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await cli(cmd, { ...wid(id), force: true });
+    } catch (e2) {
+      return toast.error(`${label} failed: ${errorText(e2)}`);
+    }
+  }
+  toast.success(`Workflow ${id} ${cmd}d`);
+  app.refresh();
+}
+
+/** Initialize. If output files from an earlier run exist, say so first: initializing keeps them. */
 export async function initializeWorkflow(id: number) {
   try {
     const check = await dashPost<CliResponse>("/api/cli/check-initialize", wid(id));
@@ -52,19 +78,10 @@ export async function initializeWorkflow(id: number) {
   } catch {
     // The dry run is advisory; fall through to a normal initialize like the CLI would.
   }
-  await act(
-    "Initialize",
-    () => cli("initialize", { ...wid(id), force: false }),
-    `Workflow ${id} initialized`,
-  );
+  await runInit("initialize", "Initialize", id);
 }
 
-export const reinitializeWorkflow = (id: number) =>
-  act(
-    "Reinitialize",
-    () => cli("reinitialize", { ...wid(id), force: false }),
-    `Workflow ${id} reinitialized`,
-  );
+export const reinitializeWorkflow = (id: number) => runInit("reinitialize", "Reinitialize", id);
 
 export async function resetWorkflow(id: number) {
   const ok = await confirm({

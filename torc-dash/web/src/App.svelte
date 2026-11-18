@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { api } from "./lib/api/client";
   import { dashGet } from "./lib/api/dash";
   import { app, TABS, WORKFLOW_TABS, type TabId, type ThemeMode } from "./lib/state.svelte";
   import ConfirmHost from "./lib/ui/ConfirmHost.svelte";
@@ -45,15 +44,26 @@
   let currentLabel = $derived(TABS.find((t) => t.id === app.tab)?.label ?? "");
 
   // Identity and version, once.
-  dashGet<{ user: string }>("/api/user")
-    .then((r) => (app.user = r.user))
-    .catch(() => {});
+  dashGet<{ user: string | null }>("/api/user")
+    .then((r) => (app.user = r.user || null))
+    .catch(() => {})
+    .finally(() => (app.userChecked = true));
   let versionWarning = $state<string | null>(null);
-  dashGet<{ version: string; version_mismatch: string | null }>("/api/version")
+  let serverVersion = $state<string | null>(null);
+  dashGet<{
+    version: string;
+    server_version: string | null;
+    version_mismatch: string | null;
+    mismatch_severity: "major" | "minor" | "patch" | null;
+  }>("/api/version")
     .then((r) => {
       app.version = r.version;
+      serverVersion = r.server_version;
       versionWarning = r.version_mismatch;
-      if (r.version_mismatch) toast.error(r.version_mismatch);
+      // Patch differences only get the sidebar cue; minor ones a passing warning.
+      if (!r.version_mismatch) return;
+      if (r.mismatch_severity === "major") toast.error(r.version_mismatch);
+      else if (r.mismatch_severity === "minor") toast.warning(r.version_mismatch, 10000);
     })
     .catch(() => {});
 
@@ -70,10 +80,7 @@
   // Health check on every refresh.
   $effect(() => {
     void app.refreshTick;
-    api
-      .GET("/ping")
-      .then((r) => (app.connected = r.response.ok))
-      .catch(() => (app.connected = false));
+    app.checkConnection();
   });
 
   function cycleTheme() {
@@ -83,9 +90,16 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
     const t = e.target as HTMLElement;
+    // Esc leaves a text field so the single-key shortcuts work again (dialogs handle their own).
+    if (e.key === "Escape" && t.matches("input, textarea, select") && !t.closest("dialog[open]")) {
+      t.blur();
+      return;
+    }
     if (t.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
     const tab = TABS.find((x) => x.key === e.key);
     if (tab) app.go(tab.id);
+    else if (e.key === "g") app.go("dag");
+    else if (e.key === "Backspace" && app.tab === "dag" && app.previousTab) app.back();
     else if (e.key === "r") app.refresh();
     else if (e.key === "t") cycleTheme();
     else if (e.key === "n") app.createOpen = true;
@@ -124,7 +138,12 @@
       {/each}
     </ul>
     <div class="sidebar-footer">
-      <div class="status" title={app.connected ? "Connected to torc-server" : "Not connected"}>
+      <div
+        class="status"
+        title={app.connected
+          ? "Connected to torc-server"
+          : (app.connectionError ?? "Not connected")}
+      >
         <span
           class="dot"
           class:ok={app.connected === true}
@@ -136,7 +155,7 @@
         {#if app.user}<span title="User"><Icon name="user" size={12} /> {app.user}</span>{/if}
         {#if app.version}
           <span class:warn={versionWarning} title={versionWarning ?? "Version"}>
-            {versionWarning ? "⚠ " : ""}v{app.version}
+            {versionWarning ? "⚠ " : ""}v{app.version}{serverVersion ? ` / server v${serverVersion}` : ""}
           </span>
         {/if}
       </div>
@@ -177,11 +196,14 @@
 <Modal bind:open={app.showShortcuts} title="Keyboard shortcuts" size="sm">
   <dl class="kv shortcuts">
     {#each TABS as t (t.id)}<dt><kbd>{t.key}</kbd></dt><dd>{t.label}</dd>{/each}
+    <dt><kbd>G</kbd></dt><dd>Graph</dd>
+    <dt><kbd>⌫</kbd></dt><dd>Back from the graph</dd>
     <dt><kbd>N</kbd></dt><dd>New workflow</dd>
     <dt><kbd>R</kbd></dt><dd>Refresh</dd>
     <dt><kbd>T</kbd></dt><dd>Cycle theme (system / light / dark)</dd>
     <dt><kbd>?</kbd></dt><dd>This help</dd>
-    <dt><kbd>Esc</kbd></dt><dd>Close dialog</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Close dialog / leave text field</dd>
+    <dt><kbd>/</kbd></dt><dd>Focus the filter</dd>
   </dl>
 </Modal>
 

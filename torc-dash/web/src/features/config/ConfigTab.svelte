@@ -1,6 +1,6 @@
 <!-- Settings: app preferences, version info, and the torc-server process managed by torc-dash. -->
 <script lang="ts">
-  import { app, type ThemeMode } from "../../lib/state.svelte";
+  import { app, DARK_PALETTES, type DarkPalette, type ThemeMode } from "../../lib/state.svelte";
   import { dashGet } from "../../lib/api/dash";
   import Icon, { type IconName } from "../../lib/ui/Icon.svelte";
   import ServerPanel from "./ServerPanel.svelte";
@@ -12,7 +12,21 @@
     server_api_version: string | null;
     version_mismatch: string | null;
     mismatch_severity: "patch" | "minor" | "major" | null;
+    api_url: string;
   };
+
+  let testing = $state(false);
+  let testResult = $state<{ ok: boolean; message: string } | null>(null);
+
+  async function testConnection() {
+    testing = true;
+    const ok = await app.checkConnection();
+    testing = false;
+    const url = version?.api_url ?? "torc-server";
+    testResult = ok
+      ? { ok, message: `Connected to ${url}` }
+      : { ok, message: `Connection to ${url} failed: ${app.connectionError ?? "unknown error"}` };
+  }
 
   let version = $state<Version | null>(null);
   let versionError = $state<string | null>(null);
@@ -64,6 +78,19 @@
         <span class="hint">Press <kbd>T</kbd> anywhere to cycle.</span>
       </div>
 
+      {#if app.theme !== "light"}
+        <label class="field">
+          <span>Dark palette</span>
+          <select
+            class="select"
+            value={app.darkPalette}
+            onchange={(e) => app.setDarkPalette(e.currentTarget.value as DarkPalette)}
+          >
+            {#each DARK_PALETTES as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+          </select>
+        </label>
+      {/if}
+
       <label class="field">
         <span>Auto-refresh</span>
         <select
@@ -108,6 +135,8 @@
               <span class="muted">unreachable</span>
             {/if}
           </dd>
+          <dt>Server URL</dt>
+          <dd class="mono">{version.api_url}</dd>
           <dt>User</dt>
           <dd>{app.user ?? "—"}</dd>
         </dl>
@@ -116,6 +145,14 @@
       {:else}
         <span class="spinner"></span>
       {/if}
+      <div class="test">
+        <button class="btn btn-sm" onclick={testConnection} disabled={testing}>
+          {#if testing}<span class="spinner"></span>{/if} Test connection
+        </button>
+        {#if testResult}
+          <span class:ok-text={testResult.ok} class:error-text={!testResult.ok}>{testResult.message}</span>
+        {/if}
+      </div>
     </section>
 
     <ServerPanel />
@@ -140,6 +177,15 @@
   }
   h3 {
     font-size: 15px;
+  }
+  .test {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ok-text {
+    color: var(--success);
   }
   .seg {
     display: inline-flex;

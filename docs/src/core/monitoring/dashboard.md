@@ -116,9 +116,11 @@ Keyboard shortcuts (press `?` in the dashboard for the list):
 | `E`     | Spec editor                         |
 | `N`     | New workflow                        |
 | `R`     | Refresh                             |
+| `G`     | Graph                               |
+| `⌫`     | Back from the graph                 |
 | `T`     | Cycle theme (system / light / dark) |
 | `/`     | Focus the current tab's filter      |
-| `Esc`   | Close a dialog                      |
+| `Esc`   | Close a dialog or leave a field     |
 
 ### Workflows Tab
 
@@ -426,9 +428,11 @@ Models, `GITHUB_TOKEN` is required. Ollama requires no credentials (runs locally
 
 ### Settings Tab
 
-- **Appearance and behavior**: theme (system, light, dark), auto-refresh interval, and whether to
-  show workflows from all users by default. Preferences are stored in the browser.
-- **Version**: dashboard and server versions, with a warning if they don't match
+- **Appearance and behavior**: theme (system, light, dark), dark palette (Warm Gray, Nord, Dracula,
+  Monokai, and others), auto-refresh interval, and whether to show workflows from all users by
+  default. Preferences are stored in the browser.
+- **Version**: dashboard and server versions, with a warning if they don't match, the server URL,
+  and a **Test connection** button that shows why a connection fails
 - **Server management**: start and stop `torc-server` from the dashboard (port, database path, log
   level) and view its output
 

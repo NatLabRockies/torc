@@ -10,10 +10,12 @@
       try {
         const t = localStorage.getItem("torc-theme-mode");
         if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+        const p = localStorage.getItem("torc-dark-palette");
+        if (p) document.documentElement.dataset.palette = p;
       } catch {}
     </script>
-    <script type="module" crossorigin src="/static/app/assets/index-Bwo1GPnc.js"></script>
-    <link rel="stylesheet" crossorigin href="/static/app/assets/index-DElFwkKr.css">
+    <script type="module" crossorigin src="/static/app/assets/index-IsX_prtc.js"></script>
+    <link rel="stylesheet" crossorigin href="/static/app/assets/index-v4p-9dub.css">
   </head>
   <body>
     <div id="app"></div>

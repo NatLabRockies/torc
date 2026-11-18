@@ -3219,6 +3219,8 @@ struct VersionResponse {
     server_api_version: Option<String>,
     version_mismatch: Option<String>,
     mismatch_severity: Option<String>,
+    /// torc-server URL this dashboard talks to, without any embedded credentials.
+    api_url: String,
 }
 
 /// Return the torc-dash version and check server version compatibility
@@ -3277,7 +3279,20 @@ async fn version_handler(State(state): State<Arc<AppState>>) -> impl IntoRespons
         server_api_version,
         version_mismatch,
         mismatch_severity,
+        api_url: redact_url(&state.api_url),
     })
+}
+
+/// `url` with any user:password removed, for display.
+fn redact_url(url: &str) -> String {
+    match reqwest::Url::parse(url) {
+        Ok(mut u) => {
+            let _ = u.set_password(None);
+            let _ = u.set_username("");
+            u.to_string()
+        }
+        Err(_) => url.to_string(),
+    }
 }
 
 // ============== User Handler ==============
@@ -3622,7 +3637,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("Authorization") // bearer token, as gateways like LiteLLM expect
+                .unwrap_or("x-api-key")
                 .to_string();
             let model = req
                 .model

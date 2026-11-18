@@ -22,6 +22,9 @@
   } = $props();
 
   let dialog = $state<HTMLDialogElement>();
+  // Close on a backdrop click only if the press also started there: a text selection dragged
+  // out of a field ends with a click on the dialog element, which must not close it.
+  let pressedBackdrop = false;
   const titleId = $props.id();
 
   $effect(() => {
@@ -44,7 +47,8 @@
   class="modal {size}"
   aria-labelledby={titleId}
   onclose={handleClose}
-  onclick={(e) => e.target === dialog && dialog?.close()}
+  onmousedown={(e) => (pressedBackdrop = e.target === dialog)}
+  onclick={(e) => pressedBackdrop && e.target === dialog && dialog?.close()}
 >
   {#if open}
     <header>

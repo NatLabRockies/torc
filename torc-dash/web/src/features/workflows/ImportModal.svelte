@@ -39,10 +39,10 @@
       skip_events: skipEvents,
     };
     if (source === "path") {
-      if (!filePath.trim()) return toast.error("Please enter a file path");
+      if (!filePath.trim()) return toast.warning("Please enter a file path");
       body.file_path = filePath.trim();
     } else {
-      if (!upload) return toast.error("Please select a workflow JSON file to upload");
+      if (!upload) return toast.warning("Please select a workflow JSON file to upload");
       try {
         JSON.parse(upload.content);
       } catch {

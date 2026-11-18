@@ -8,13 +8,13 @@
 
   $effect(() => {
     void app.refreshTick;
-    // Wait for /api/user, as the Workflows tab does: an unfiltered list could select another
-    // user's workflow. If it never answers, "All users" still works.
-    const user = app.showAllUsers ? undefined : app.user;
-    if (!app.showAllUsers && !user) return;
+    // Same list as the Workflows tab: waits for /api/user so it doesn't default to another
+    // user's workflow.
+    const query = app.workflowQuery();
+    if (!query) return;
     const id = ++request;
     listAll((offset, limit) =>
-      unwrap(api.GET("/workflows", { params: { query: { offset, limit, user } } })),
+      unwrap(api.GET("/workflows", { params: { query: { offset, limit, ...query } } })),
     )
       .then((list) => {
         if (id !== request) return; // a newer request (user filter or refresh) superseded this

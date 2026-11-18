@@ -60,7 +60,7 @@
   let model = $state("");
   let foundryResource = $state("");
   let baseUrl = $state("");
-  let authHeader = $state("Authorization");
+  let authHeader = $state("x-api-key");
   fill();
 
   /** Load the remembered fields for the selected provider. */
@@ -69,7 +69,7 @@
     baseUrl = f.baseUrl ?? "";
     model = f.model ?? "";
     foundryResource = f.foundryResource ?? "";
-    authHeader = f.authHeader ?? "Authorization";
+    authHeader = f.authHeader ?? "x-api-key";
   }
 
   function remember() {
@@ -171,11 +171,12 @@
   {/if}
   {#if provider === "custom"}
     <label class="field">
-      <span>Authentication</span>
-      <select class="select" bind:value={authHeader}>
-        <option value="Authorization">Bearer token (Authorization header, like ANTHROPIC_AUTH_TOKEN)</option>
-        <option value="x-api-key">API key (x-api-key header, like ANTHROPIC_API_KEY)</option>
-      </select>
+      <span>Auth header</span>
+      <input class="input" bind:value={authHeader} list="auth-headers" placeholder="x-api-key" />
+      <datalist id="auth-headers">
+        <option value="x-api-key">API key, like ANTHROPIC_API_KEY</option>
+        <option value="Authorization">Bearer token, like ANTHROPIC_AUTH_TOKEN</option>
+      </datalist>
     </label>
   {/if}
 

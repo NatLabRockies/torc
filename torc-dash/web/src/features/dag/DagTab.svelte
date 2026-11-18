@@ -324,6 +324,11 @@
 
 <div class="page">
   <div class="page-header">
+    {#if app.previousTab && app.previousTab !== "dag"}
+      <button class="btn btn-sm btn-ghost" onclick={() => app.back()} title="Back (Backspace)">
+        ← Back
+      </button>
+    {/if}
     <h2>Dependency graph</h2>
     <SegmentedTabs
       bind:value={mode}
