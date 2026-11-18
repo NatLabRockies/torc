@@ -943,6 +943,7 @@ async fn main() -> Result<()> {
         .route("/api/cli/import", post(cli_import_handler))
         .route("/api/cli/read-file", post(cli_read_file_handler))
         .route("/api/cli/write-file", post(cli_write_file_handler))
+        .route("/api/cli/tail-file", post(cli_tail_file_handler))
         .route("/api/workflow-schema", get(workflow_schema_handler))
         .route("/api/cli/plot-resources", post(cli_plot_resources_handler))
         .route(
@@ -2344,6 +2345,78 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
             exists: true,
         }),
     }
+}
+
+#[derive(Deserialize)]
+struct TailFileRequest {
+    path: String,
+    /// Byte offset returned by the previous call. Omit to start near the end of the file.
+    offset: Option<u64>,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+struct TailFileResponse {
+    exists: bool,
+    content: String,
+    /// Pass back as `offset` on the next call.
+    offset: u64,
+    error: Option<String>,
+}
+
+/// How much existing output a new tail shows.
+const TAIL_INITIAL_BYTES: u64 = 64 * 1024;
+/// Most bytes returned per call; a writer that is further ahead is caught up over later calls.
+const TAIL_MAX_BYTES: u64 = 1024 * 1024;
+
+/// Follow a growing file (a running job's stdout/stderr) by polling with the returned offset.
+async fn cli_tail_file_handler(Json(req): Json<TailFileRequest>) -> Json<TailFileResponse> {
+    Json(
+        tail_file(&req.path, req.offset)
+            .await
+            .unwrap_or_else(|e| TailFileResponse {
+                exists: true,
+                content: String::new(),
+                offset: req.offset.unwrap_or(0),
+                error: Some(format!("Failed to read file: {e}")),
+            }),
+    )
+}
+
+async fn tail_file(path: &str, offset: Option<u64>) -> std::io::Result<TailFileResponse> {
+    use tokio::io::AsyncSeekExt;
+    let mut file = match tokio::fs::File::open(path).await {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Not created yet (job not started) or deleted on success. Read it from the start
+            // once it appears.
+            return Ok(TailFileResponse {
+                exists: false,
+                content: String::new(),
+                offset: 0,
+                error: None,
+            });
+        }
+        r => r?,
+    };
+    let len = file.metadata().await?.len();
+    let start = match offset {
+        Some(o) if o <= len => o,
+        Some(_) => 0, // Shorter than before: truncated or recreated.
+        None => len.saturating_sub(TAIL_INITIAL_BYTES),
+    };
+    file.seek(std::io::SeekFrom::Start(start)).await?;
+    let mut buf = Vec::new();
+    file.take(TAIL_MAX_BYTES).read_to_end(&mut buf).await?;
+    // Hold back a multi-byte character cut off at the end; the next call returns it whole.
+    let valid = match std::str::from_utf8(&buf) {
+        Err(e) if e.error_len().is_none() => e.valid_up_to(),
+        _ => buf.len(),
+    };
+    Ok(TailFileResponse {
+        exists: true,
+        content: String::from_utf8_lossy(&buf[..valid]).into_owned(),
+        offset: start + valid as u64,
+        error: None,
+    })
 }
 
 #[derive(Deserialize)]
@@ -4801,8 +4874,40 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 mod tests {
     use super::{
         allowed_host_list, anthropic_api_base, apply_spec_edit, check_request, same_secret,
-        take_token_param, workflow_id_from_resource_db_name,
+        tail_file, take_token_param, workflow_id_from_resource_db_name,
     };
+
+    #[tokio::test]
+    async fn tail_file_follows_appends() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("job.o");
+        let p = path.to_str().unwrap();
+
+        let missing = tail_file(p, None).await.unwrap();
+        assert!(!missing.exists);
+
+        std::fs::write(&path, "one\n").unwrap();
+        let r = tail_file(p, Some(missing.offset)).await.unwrap();
+        assert_eq!((r.content.as_str(), r.offset), ("one\n", 4));
+
+        // Append "two é" with the é's second byte not yet written.
+        std::fs::write(&path, b"one\ntwo \xc3").unwrap();
+        let r = tail_file(p, Some(r.offset)).await.unwrap();
+        assert_eq!((r.content.as_str(), r.offset), ("two ", 8));
+        std::fs::write(&path, "one\ntwo \u{e9}\n").unwrap();
+        let r = tail_file(p, Some(r.offset)).await.unwrap();
+        assert_eq!(r.content, "\u{e9}\n");
+
+        // Truncated (recreated) file restarts from 0.
+        std::fs::write(&path, "x").unwrap();
+        let r = tail_file(p, Some(r.offset)).await.unwrap();
+        assert_eq!((r.content.as_str(), r.offset), ("x", 1));
+
+        // A fresh tail shows only the last TAIL_INITIAL_BYTES.
+        std::fs::write(&path, "a".repeat(100_000)).unwrap();
+        let r = tail_file(p, None).await.unwrap();
+        assert_eq!(r.content.len() as u64, super::TAIL_INITIAL_BYTES);
+    }
 
     #[test]
     fn token_param_is_split_from_query() {
