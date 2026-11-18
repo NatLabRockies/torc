@@ -281,6 +281,27 @@ slurm_schedulers:
   scheduler fields, action arguments, file paths, commands, and parameter range values. They do not
   apply to identifier fields (`parameters` keys, `use_parameters` entries).
 
+### User-Specific Values from Environment Variables
+
+A spec checked into git often needs paths that differ per user, such as a Python virtual
+environment. Reference an environment variable inside a variable value with `${env:NAME}`:
+
+```yaml
+variables:
+  venv: "${env:MY_PROJECT_VENV}"
+  data_root: "${env:SCRATCH}/proj42"
+
+jobs:
+  - name: train
+    command: "{venv}/bin/python train.py --data {data_root}"
+```
+
+Each user exports `MY_PROJECT_VENV` and `SCRATCH` before running `torc create`, `torc submit`, or
+`torc run`. If any referenced variable is unset or empty, loading the spec fails and the error lists
+every missing name. The resolved values are stored with the workflow, so jobs do not need the
+environment variables at runtime. `${env:NAME}` is only resolved inside `variables` values;
+elsewhere in the spec, `${...}` is left for the shell as usual.
+
 ### KDL Syntax
 
 ```kdl

@@ -979,8 +979,12 @@ fn apply_workflow_variables(
     let Some(vars_value) = map.get("variables") else {
         return Ok(value);
     };
-    let serde_json::Value::Object(vars_map) = vars_value else {
+    let serde_json::Value::Object(_) = vars_value else {
         return Err("workflow `variables` must be an object of string key/value pairs".into());
+    };
+    resolve_env_refs_in_variables(&mut value)?;
+    let Some(serde_json::Value::Object(vars_map)) = value.get("variables") else {
+        unreachable!("shape validated above");
     };
     if vars_map.is_empty() {
         return Ok(value);
@@ -1052,6 +1056,69 @@ fn apply_workflow_variables(
     substitute_variables_in_value(&mut value, &variables, &valid_token_names, false)?;
 
     Ok(value)
+}
+
+/// Replace `${env:NAME}` references in workflow `variables` values with the
+/// value of environment variable `NAME`, in place.
+///
+/// This lets a checked-in spec carry user-specific paths (e.g. a Python venv)
+/// without edits: each user exports the variable before `torc create`/`submit`.
+/// An unset or empty variable is an error; all missing names are reported at once.
+/// The resolved values are what get stored with the workflow.
+fn resolve_env_refs_in_variables(
+    value: &mut serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error>> {
+    const PREFIX: &str = "${env:";
+    let Some(serde_json::Value::Object(vars)) = value.get_mut("variables") else {
+        return Ok(());
+    };
+    let mut missing: Vec<String> = Vec::new();
+    for (var_name, v) in vars.iter_mut() {
+        let serde_json::Value::String(s) = v else {
+            continue; // non-strings are rejected by the caller
+        };
+        if !s.contains(PREFIX) {
+            continue;
+        }
+        let mut out = String::with_capacity(s.len());
+        let mut rest = s.as_str();
+        while let Some(pos) = rest.find(PREFIX) {
+            out.push_str(&rest[..pos]);
+            let after = &rest[pos + PREFIX.len()..];
+            let Some(end) = after.find('}') else {
+                return Err(format!(
+                    "variable '{}' value '{}' has an unterminated `${{env:...}}` reference",
+                    var_name, s
+                )
+                .into());
+            };
+            let env_name = &after[..end];
+            if !is_identifier(env_name) {
+                return Err(format!(
+                    "variable '{}' value '{}' references invalid environment variable \
+                     name '{}'",
+                    var_name, s, env_name
+                )
+                .into());
+            }
+            match std::env::var(env_name) {
+                Ok(val) if !val.is_empty() => out.push_str(&val),
+                _ => missing.push(format!("{} (used by variable '{}')", env_name, var_name)),
+            }
+            rest = &after[end + 1..];
+        }
+        out.push_str(rest);
+        *s = out;
+    }
+    if !missing.is_empty() {
+        missing.sort();
+        return Err(format!(
+            "the workflow spec requires these environment variables to be set: {}",
+            missing.join(", ")
+        )
+        .into());
+    }
+    Ok(())
 }
 
 /// Validate the tokens inside a workflow variable's value.
@@ -9579,6 +9646,29 @@ jobs:
             msg.contains("variable 'inputs'") && msg.contains("{base}"),
             "error should name both the variable and its bad reference, got: {msg}"
         );
+    }
+
+    #[test]
+    fn test_workflow_variables_env_refs() {
+        // PATH is always set; the other name is never set.
+        let path = std::env::var("PATH").unwrap();
+        let yaml = r#"
+name: env_vars
+variables:
+  bin: "${env:PATH}/x"
+jobs:
+  - name: t
+    command: "{bin} ${HOME}"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml").unwrap();
+        assert_eq!(spec.jobs[0].command, format!("{path}/x ${{HOME}}"));
+        assert_eq!(spec.variables.unwrap()["bin"], format!("{path}/x"));
+
+        let missing = yaml.replace("PATH", "TORC_TEST_SURELY_UNSET_VAR");
+        let err = WorkflowSpec::from_spec_file_content(&missing, "yaml")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("TORC_TEST_SURELY_UNSET_VAR"), "{err}");
     }
 
     #[test]
