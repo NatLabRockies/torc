@@ -264,6 +264,10 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
             port
         };
         if port != 0 && dashboard_ready(port) {
+            if !local && let Err(e) = push_chat_settings(port) {
+                // Not fatal: the AI Chat tab then shows its setup form.
+                eprintln!("Could not send AI Chat settings to torc-dash: {e}");
+            }
             let query = token
                 .as_ref()
                 .map_or(String::new(), |t| format!("?token={t}"));
@@ -502,6 +506,70 @@ fn dashboard_ready(port: u16) -> bool {
         && status.ends_with(b" 200")
 }
 
+/// Sends the AI Chat settings in this computer's torc user config file to the remote torc-dash at
+/// `port`, overriding any it read on the login node, so they need not be set there. The key goes
+/// through the SSH tunnel into torc-dash's memory only: never to disk or a command line there.
+fn push_chat_settings(port: u16) -> Result<(), String> {
+    let Some(path) = dirs::config_dir().map(|d| d.join("torc").join("config.toml")) else {
+        return Ok(());
+    };
+    let Some(body) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| chat_settings(&t))
+    else {
+        return Ok(());
+    };
+    let body = body.to_string();
+    let mut s = TcpStream::connect(("127.0.0.1", port)).map_err(|e| e.to_string())?;
+    let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
+    write!(
+        s,
+        "POST /api/chat/configure HTTP/1.0\r\nHost: localhost\r\nContent-Type: application/json\r\n\
+         Content-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .map_err(|e| e.to_string())?;
+    let mut response = String::new();
+    let _ = s.read_to_string(&mut response);
+    if response.split_whitespace().nth(1) == Some("200") {
+        Ok(())
+    } else {
+        let status = response.lines().next().unwrap_or("no response");
+        let detail = response.split("\r\n\r\n").nth(1).unwrap_or("");
+        Err(format!("{status} {detail}"))
+    }
+}
+
+/// The body of torc-dash's POST /api/chat/configure from a torc config file's `[dash.chat]`, or
+/// None if it has no such section or no key (Ollama needs none).
+fn chat_settings(config: &str) -> Option<serde_json::Value> {
+    let table: toml::Table = config.parse().ok()?;
+    let chat = table.get("dash")?.get("chat")?.as_table()?;
+    let get = |k: &str| {
+        chat.get(k)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    };
+    let mut provider = get("provider").unwrap_or("anthropic").to_lowercase();
+    let api_key = match get("api_key") {
+        Some(key) => key,
+        None if provider == "ollama" => "ollama",
+        None => return None,
+    };
+    // The endpoint's "anthropic" setup ignores base_url and auth_header; "custom" uses them.
+    if provider == "anthropic" && get("base_url").is_some() {
+        provider = "custom".into();
+    }
+    let mut body = serde_json::json!({ "provider": provider, "api_key": api_key });
+    for k in ["model", "base_url", "auth_header", "foundry_resource"] {
+        if let Some(v) = get(k) {
+            body[k] = v.into();
+        }
+    }
+    Some(body)
+}
+
 fn kill_ssh(state: &AppState) {
     // Dropping the senders answers any open password prompt with "cancel", which unblocks its
     // handler thread and makes the askpass helper exit.
@@ -583,6 +651,31 @@ fn random_hex() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chat_settings_from_config() {
+        let body = chat_settings(
+            "[dash]\nport = 1\n[dash.chat]\nprovider = \"custom\"\nbase_url = \"https://gw\"\n\
+             auth_header = \"Authorization\"\nmodel = \"m\"\napi_key = \"k\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({"provider": "custom", "api_key": "k", "model": "m",
+                "base_url": "https://gw", "auth_header": "Authorization"})
+        );
+        // Anthropic with a base URL goes through the endpoint's "custom" setup.
+        let body =
+            chat_settings("[dash.chat]\nbase_url = \"https://gw\"\napi_key = \"k\"").unwrap();
+        assert_eq!(body["provider"], "custom");
+        // Nothing to send without a section or a key; Ollama needs no key.
+        assert_eq!(chat_settings("[dash]\nport = 1\n"), None);
+        assert_eq!(chat_settings("[dash.chat]\nprovider = \"openai\"\n"), None);
+        assert_eq!(
+            chat_settings("[dash.chat]\nprovider = \"ollama\"\n").unwrap()["api_key"],
+            "ollama"
+        );
+    }
 
     #[test]
     fn remote_command_quotes_for_login_shell() {

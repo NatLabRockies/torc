@@ -313,8 +313,13 @@ Precedence is per setting: a flag or environment variable replaces only the sett
 example, an `ANTHROPIC_MODEL` or `ANTHROPIC_BASE_URL` exported in your shell (common for Claude Code
 users) overrides `model` or `base_url` here, while the rest still comes from the file.
 
-When Torc Desktop runs torc-dash on a login node over SSH, torc-dash reads the config file **on that
-node**, so put `[dash.chat]` in the user config file there, not on your own computer.
+**Remote dashboards:** when Torc Desktop starts torc-dash on a login node, it sends the
+`[dash.chat]` settings from the user config file on **your own computer** to that torc-dash, through
+the SSH tunnel, and they replace any the login node has. Set them up once on your computer; you do
+not need a `[dash.chat]` section on the login node. The key is held only in that torc-dash's memory:
+it is not written to disk on the login node or passed on a command line. A section without `api_key`
+(other than for `ollama`) is not sent. Without Torc Desktop (for example, a torc-dash you start
+yourself over SSH), torc-dash reads the config file on the login node.
 
 ## Environment Variables
 

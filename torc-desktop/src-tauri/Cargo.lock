@@ -3594,10 +3594,12 @@ checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 name = "torc-desktop"
 version = "1.1.0"
 dependencies = [
+ "dirs",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]

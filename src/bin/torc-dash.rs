@@ -376,12 +376,8 @@ struct Cli {
     #[arg(long, env = "ANTHROPIC_AUTH_HEADER")]
     anthropic_auth_header: Option<String>,
 
-    /// Model to use for AI chat (default: claude-sonnet-4-20250514)
-    #[arg(
-        long,
-        default_value = "claude-sonnet-4-20250514",
-        env = "ANTHROPIC_MODEL"
-    )]
+    /// Model to use for AI chat (default: claude-opus-5-5)
+    #[arg(long, default_value = "claude-opus-5-5", env = "ANTHROPIC_MODEL")]
     anthropic_model: String,
 
     /// Ollama base URL for local AI chat (OpenAI-compatible API)
@@ -3840,7 +3836,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("claude-sonnet-4-20250514")
+                .unwrap_or("claude-opus-5-5")
                 .to_string();
             info!(
                 "AI Chat: configured via dashboard UI as Azure AI Foundry (resource={})",
@@ -3876,7 +3872,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("claude-sonnet-4-20250514")
+                .unwrap_or("claude-opus-5-5")
                 .to_string();
             info!(
                 "AI Chat: configured via dashboard UI as custom endpoint (url={})",
@@ -3894,7 +3890,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("claude-sonnet-4-20250514")
+                .unwrap_or("claude-opus-5-5")
                 .to_string();
             info!("AI Chat: configured via dashboard UI as direct Anthropic API");
             (

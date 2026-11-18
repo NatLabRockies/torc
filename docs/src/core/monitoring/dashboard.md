@@ -97,7 +97,7 @@ Options:
       --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
       --anthropic-auth-token       Bearer token, e.g. for LiteLLM [env: ANTHROPIC_AUTH_TOKEN]
       --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
-      --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
+      --anthropic-model            Claude model [default: claude-opus-5-5]
       --openai-api-key             OpenAI API key [env: OPENAI_API_KEY]
       --openai-base-url            OpenAI API URL [default: https://api.openai.com/v1]
       --openai-model               OpenAI model [default: gpt-4o] [env: OPENAI_MODEL]
@@ -259,10 +259,11 @@ The dashboard supports multiple LLM providers:
 
 **Setup:**
 
-The simplest setup is a `[dash.chat]` section in your user config file. Unlike environment
-variables, it also reaches torc-dash when Torc Desktop starts it, locally or on a login node over
-SSH. Create the file with `torc config init --user` (it prints the path; on macOS it is
-`~/Library/Application Support/torc/config.toml`) and add, for example for a LiteLLM gateway:
+The simplest setup is a `[dash.chat]` section in the user config file on your own computer. Torc
+Desktop uses it for local dashboards and also sends it to dashboards it starts on a login node, so
+you set it up once and not on each cluster. Create the file with `torc config init --user` (it
+prints the path; on macOS it is `~/Library/Application Support/torc/config.toml`) and add, for
+example for a LiteLLM gateway:
 
 ```toml
 [dash.chat]
@@ -273,9 +274,10 @@ model = "claude-opus-5-5"       # a model name the gateway exposes
 api_key = "sk-..."              # the key itself; then chmod 600 the file
 ```
 
-When torc-dash runs on a login node, this file must be on that node. Environment variables and
-flags, shown below, still work and take precedence setting by setting: an `ANTHROPIC_MODEL` in your
-shell, for example, overrides `model` from the file. See
+The key travels through the SSH tunnel into the remote torc-dash's memory only. A torc-dash you
+start on a login node yourself, without Torc Desktop, reads the file on that node. Environment
+variables and flags, shown below, still work and take precedence setting by setting: an
+`ANTHROPIC_MODEL` in your shell, for example, overrides `model` from the file. See
 [Configuration](../reference/configuration.md#dashchat-section) for all options.
 
 _Option 1: Anthropic Claude (Direct API)_
@@ -318,8 +320,8 @@ torc-dash does not discover models itself (Claude Code's
 instead, choose **Custom via gateway (LiteLLM, proxy)** and enter the gateway URL, the token, and
 the model. The dashboard remembers the URL and model (never the token) in your browser.
 
-When torc-dash runs on a login node (for example from Torc Desktop), set these in `~/.bash_profile`
-there.
+When torc-dash runs on a login node, these variables must be set there (for example in
+`~/.bash_profile`). With Torc Desktop, a `[dash.chat]` section on your own computer is simpler.
 
 _Option 3: OpenAI_
 
@@ -433,7 +435,7 @@ terminal or editor instead of the dashboard.
 | `ANTHROPIC_API_KEY`          | (none)                                  | API key for direct Anthropic API            |
 | `ANTHROPIC_FOUNDRY_API_KEY`  | (none)                                  | API key for Azure AI Foundry                |
 | `ANTHROPIC_FOUNDRY_RESOURCE` | (none)                                  | Foundry resource name                       |
-| `--anthropic-model`          | `claude-sonnet-4-20250514`              | Claude model to use                         |
+| `--anthropic-model`          | `claude-opus-5-5`                       | Claude model to use                         |
 | `OPENAI_API_KEY`             | (none)                                  | OpenAI API key                              |
 | `OPENAI_MODEL`               | `gpt-4o`                                | OpenAI model to use                         |
 | `--openai-base-url`          | `https://api.openai.com/v1`             | OpenAI API URL                              |
@@ -541,7 +543,8 @@ browser or a manual SSH tunnel:
 - **This computer**: starts `torc-dash` locally, pointed at your torc-server or at a new one it
   starts for you
 - **Remote (SSH)**: connects to a login node, starts `torc-dash` there on a private UNIX socket, and
-  forwards it automatically; password and MFA prompts appear in the app
+  forwards it automatically; password and MFA prompts appear in the app. It also sends the AI Chat
+  settings from your computer's `[dash.chat]` config (see [AI Chat Tab](#ai-chat-tab))
 
 See `torc-desktop/README.md` in the repository for building and running it.
 

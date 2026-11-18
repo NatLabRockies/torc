@@ -35,8 +35,8 @@
     custom: "https://litellm.example.org",
   };
   const MODEL_PLACEHOLDER: Partial<Record<Provider, string>> = {
-    anthropic: "claude-sonnet-4-20250514",
-    foundry: "claude-sonnet-4-20250514",
+    anthropic: "claude-opus-5-5",
+    foundry: "claude-opus-5-5",
     custom: "Model name on the gateway",
     openai: "gpt-4o",
     ollama: "llama3.2",
