@@ -400,6 +400,22 @@ range: <code>i: "1:{n_max}"</code> works because that's a parameter value, not a
 scheduler fields, action arguments, file paths, commands, and parameter range values. They do not
 apply to identifier fields (<code>parameters</code> keys, <code>use_parameters</code> entries).</li>
 </ul>
+<h3 id="user-specific-values-from-environment-variables"><a class="header" href="#user-specific-values-from-environment-variables">User-Specific Values from Environment Variables</a></h3>
+<p>A spec checked into git often needs paths that differ per user, such as a Python virtual
+environment. Reference an environment variable inside a variable value with <code>${env:NAME}</code>:</p>
+<pre><code class="language-yaml">variables:
+  venv: "${env:MY_PROJECT_VENV}"
+  data_root: "${env:SCRATCH}/proj42"
+
+jobs:
+  - name: train
+    command: "{venv}/bin/python train.py --data {data_root}"
+</code></pre>
+<p>Each user exports <code>MY_PROJECT_VENV</code> and <code>SCRATCH</code> before running <code>torc create</code>, <code>torc submit</code>, or
+<code>torc run</code>. If any referenced variable is unset or empty, loading the spec fails and the error lists
+every missing name. The resolved values are stored with the workflow, so jobs do not need the
+environment variables at runtime. <code>${env:NAME}</code> is only resolved inside <code>variables</code> values;
+elsewhere in the spec, <code>${...}</code> is left for the shell as usual.</p>
 <h3 id="kdl-syntax"><a class="header" href="#kdl-syntax">KDL Syntax</a></h3>
 <pre><code class="language-kdl">variables {
     data_root "/scratch/proj42"
