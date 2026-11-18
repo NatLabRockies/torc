@@ -119,6 +119,20 @@ The connect page passes one of three choices to torc-dash (`server_flags`):
   `~/torc-desktop.db` on the login node or the app's data folder locally. Loopback-only, because a
   private server on a shared node must not be reachable by other users.
 
+## Build and distribution
+
+- CI (`.github/workflows/dashboard.yml`) type-checks the connect page and runs `cargo fmt`, clippy,
+  and the unit tests on macOS for every pull request.
+- Tagged releases (`.github/workflows/release.yml`) build installers on each OS: a `.dmg` for macOS
+  on Apple Silicon, an `.AppImage` and a `.deb` for Linux x86_64 (built on Ubuntu 22.04 for older
+  glibc), and `.msi` and NSIS `.exe` installers for Windows x64. They are attached to the GitHub
+  release.
+- The macOS app is ad-hoc signed (`signingIdentity: "-"`), not signed with a Developer ID or
+  notarized, so users clear the quarantine flag once after downloading (see the README).
+- The app's version follows torc's. `tauri.conf.json` has no version, so Tauri uses
+  `src-tauri/Cargo.toml`, which `cargo release` updates along with `package.json` and the lock files
+  (`release.toml`).
+
 ## Alternatives considered
 
 - **Built-in SSH library** (for example `russh`): would need its own config parsing, `ProxyJump`,

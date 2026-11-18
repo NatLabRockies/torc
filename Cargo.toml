@@ -131,6 +131,9 @@ edition.workspace = true
 repository.workspace = true
 description.workspace = true
 rust-version = "1.95.0"
+# Not needed to build the crate: the desktop app is its own crate, and the dashboard UI is embedded
+# from the prebuilt torc-dash/static/app/.
+exclude = ["torc-desktop/", "torc-dash/web/"]
 
 [[bin]]
 name = "torc"

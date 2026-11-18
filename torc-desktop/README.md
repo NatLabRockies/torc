@@ -7,6 +7,28 @@ shows the dashboard in its window. No manual SSH tunnel.
 Built with [Tauri 2](https://tauri.app) and Svelte 5. It is a standalone crate, not part of the main
 torc workspace.
 
+## Install
+
+Download the installer for your platform from the
+[GitHub releases](https://github.com/NatLabRockies/torc/releases) page:
+
+- **macOS (Apple Silicon)**: `Torc Desktop_<version>_aarch64.dmg`. Open it and drag the app to
+  Applications. The app is not signed with an Apple Developer ID, so macOS blocks it on first launch
+  ("damaged" or "can't be opened"). Clear the download's quarantine flag once:
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/Torc Desktop.app"
+  ```
+
+- **Linux (x86_64)**: the `.AppImage` (`chmod +x` it and run it) or the `.deb`
+  (`sudo apt install ./<file>.deb`). Requires WebKitGTK 4.1, which current Ubuntu, Debian, and
+  Fedora releases provide.
+- **Windows (x64)**: the `.msi` or the `-setup.exe` installer. SmartScreen may warn about an
+  unrecognized app; choose **More info → Run anyway**.
+
+The app connects to `torc-dash`, which must be installed where it runs (on the login node for remote
+mode, or on this computer for local mode).
+
 ## Modes
 
 - **This computer**: starts `torc-dash` locally on a private port. torc-dash runs through your login
@@ -53,12 +75,18 @@ Design notes (why a UNIX socket, the remote watcher, the askpass relay, the stab
 
 ## Development
 
+CI type-checks the connect page and runs `cargo fmt`, clippy, and the tests for `src-tauri` on every
+pull request (`.github/workflows/dashboard.yml`). Tagged releases build the installers above
+(`.github/workflows/release.yml`). The app's version follows torc's: `cargo release` bumps
+`src-tauri/Cargo.toml` and `package.json` (`tauri.conf.json` takes it from `Cargo.toml`).
+
 ```bash
 cd torc-desktop
 npm install
 npm run tauri dev      # run with hot reload
 npm run check          # svelte-check
 npm run tauri build    # release bundle in src-tauri/target/release/bundle/
+npm run tauri -- build --bundles dmg   # just one installer type
 ```
 
 ## Connection menu

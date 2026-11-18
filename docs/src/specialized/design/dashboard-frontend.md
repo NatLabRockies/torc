@@ -123,6 +123,8 @@ while `specChat.streaming`, which is what keeps the buffer consistent with torc-
   read-only highlighters; `editor.check.ts` covers completion paths, hover, lint, snippet placement,
   and validates every `examples/yaml` spec against the schema from `torc workflows schema` (it runs
   `cargo`).
+- CI (`.github/workflows/dashboard.yml`) runs both, then rebuilds the bundle and fails if
+  `torc-dash/static/app/` differs from what is committed.
 - UI behavior is verified by driving a running torc-dash in a browser; there is no browser test
   suite in the repository.
 
