@@ -15,9 +15,13 @@ npm run dev            # http://localhost:5173/static/app/ with hot reload
 npm run check          # type-check (svelte-check)
 npm run build          # write ../static/app/, then rebuild torc-dash
 npm run gen:api        # regenerate src/lib/api/schema.d.ts after api/openapi.yaml changes
+npm test               # Node checks (highlighting, spec editor schema; needs cargo)
 ```
 
 Set `TORC_DASH_URL` to proxy to a torc-dash on another address.
+
+Design and conventions: `docs/src/specialized/design/dashboard-frontend.md` (UI) and
+`docs/src/specialized/design/dashboard.md` (torc-dash server).
 
 ## Layout
 

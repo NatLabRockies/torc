@@ -42,6 +42,9 @@ Disconnecting or quitting stops torc-dash and any server it started.
 - `torc-dash` listens on `/tmp/torc-desktop-<random>.sock` (mode 0600). It stops and the socket is
   removed when the SSH session ends, including when the app quits or the connection drops.
 
+Design notes (why a UNIX socket, the remote watcher, the askpass relay, the stable port):
+`docs/src/specialized/design/desktop.md`.
+
 ## Requirements
 
 - Rust and Node.js (see <https://tauri.app/start/prerequisites/>)

@@ -103,6 +103,23 @@ sqlx migrate run --source torc-server/migrations
 sqlx migrate revert --source torc-server/migrations
 ```
 
+### Adding Workflow Spec Fields
+
+The workflow spec types in `src/client/workflow_spec.rs` (and the `src/models.rs` types they embed,
+such as `ExecutionConfig`) derive `schemars::JsonSchema`. The generated schema drives
+`torc workflows schema` and the dashboard spec editor's completion, hover docs, and lint. When you
+add or change a field:
+
+- **Write a doc comment.** It becomes the field's description in completion and hover.
+- **Derive `JsonSchema` on new types** with
+  `#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]`; the build fails if a spec type
+  contains a type without it.
+- **Custom deserialization needs a matching schema.** If a field uses `deserialize_with` and accepts
+  more shapes than its Rust type, add `#[cfg_attr(feature = "client", schemars(with = ...))]` (see
+  `ParameterValueSchema` for parameter maps). Otherwise the editor flags valid specs.
+- **Run the dashboard checks:** `cd torc-dash/web && npm ci && npm test`. They validate every
+  `examples/yaml` spec against the schema from your build.
+
 ## Submitting Changes
 
 1. **Create a feature branch:**

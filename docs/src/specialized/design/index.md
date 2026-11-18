@@ -5,7 +5,11 @@ Internal design documentation for developers.
 - [Client Architecture](./client.md) - Torc client design
 - [HTTP API Design](./http-api.md) - REST API conventions and design principles
 - [Workflow Actions](./workflow-actions.md) - Workflow action system
-- [Web Dashboard Design](./dashboard.md) - Dashboard architecture
+- [Web Dashboard Design](./dashboard.md) - torc-dash server: proxy, CLI delegation, AI chat,
+  security model
+- [Dashboard Frontend Design](./dashboard-frontend.md) - Svelte UI structure, state, spec editor
+- [Torc Desktop Design](./desktop.md) - Desktop app: SSH tunnel to a UNIX socket, askpass relay,
+  session lifecycle
 - [Server API Handler](./server.md) - Server implementation
 - [Central Database](./database.md) - Database schema and design
 - [Workflow Recovery Design](./recovery.md) - Recovery system architecture
