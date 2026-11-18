@@ -19,6 +19,11 @@ variables:
   project: proj42
   image_tag: pytorch:2.4
   account: my_hpc_account
+  # User-specific values come from environment variables via ${env:NAME}, so
+  # this spec can be checked into git unchanged. Loading the spec fails if a
+  # referenced variable is unset or empty. HOME keeps the demo runnable as-is;
+  # a real project would use its own variable, e.g. "${env:PROJ42_VENV}".
+  venv: "${env:HOME}/.venvs/proj42"
 
 env:
   PROJECT: "{project}"
@@ -35,7 +40,7 @@ jobs:
   # Variables compose with parameters: {data_root} comes from variables,
   # {i} comes from this job's local parameters and drives expansion.
   - name: "train_{i:02d}"
-    command: "python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt"
+    command: "{venv}/bin/python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt"
     resource_requirements: gpu_job
     depends_on:
       - prepare_inputs

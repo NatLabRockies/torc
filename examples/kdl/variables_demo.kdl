@@ -15,6 +15,9 @@ variables {
     project "proj42"
     image_tag "pytorch:2.4"
     account "my_hpc_account"
+    // User-specific value from an environment variable; spec loading fails if
+    // it is unset. A real project would use its own, e.g. "${env:PROJ42_VENV}".
+    venv "${env:HOME}/.venvs/proj42"
 }
 
 env {
@@ -62,7 +65,7 @@ job "prepare_inputs" {
 // Variables compose with parameters: {data_root} comes from variables,
 // {i} comes from local parameters and drives expansion.
 job "train_{i:02d}" {
-    command "python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt"
+    command "{venv}/bin/python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt"
     resource_requirements "gpu_job"
     depends_on "prepare_inputs"
     parameters {
