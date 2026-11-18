@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "externalBin": [
+      "binaries/torc-dash",
+      "binaries/torc",
+      "binaries/torc-server",
+      "binaries/torc-mcp-server"
+    ]
+  }
+}

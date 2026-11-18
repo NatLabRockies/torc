@@ -26,14 +26,16 @@ Download the installer for your platform from the
 - **Windows (x64)**: the `.msi` or the `-setup.exe` installer. SmartScreen may warn about an
   unrecognized app; choose **More info → Run anyway**.
 
-The app connects to `torc-dash`, which must be installed where it runs (on the login node for remote
-mode, or on this computer for local mode).
+The installers include `torc-dash`, `torc`, `torc-server`, and `torc-mcp-server`, so local mode
+needs no separate install or `PATH` setup. Remote mode needs `torc-dash` installed on the login
+node.
 
 ## Modes
 
-- **This computer**: starts `torc-dash` locally on a private port. torc-dash runs through your login
-  shell, so your profile's `PATH` applies. It starts in the optional **Working directory** (`~/` and
-  relative paths resolve against your home directory), or your home directory if blank.
+- **This computer**: starts the bundled `torc-dash` locally on a private port. It runs through your
+  login shell, so your profile's environment (such as `TORC_PASSWORD`) applies. It starts in the
+  optional **Working directory** (`~/` and relative paths resolve against your home directory), or
+  your home directory if blank.
 - **Remote (SSH)**: described below.
 
 In both modes, **Torc server** chooses what the dashboard talks to:
@@ -88,6 +90,14 @@ npm run tauri dev      # run with hot reload
 npm run check          # svelte-check
 npm run tauri build    # release bundle in src-tauri/target/release/bundle/
 npm run tauri -- build --bundles dmg   # just one installer type
+```
+
+Without the bundled binaries, local mode runs `torc-dash` from `PATH`. To bundle them as the release
+does, copy each of `torc-dash`, `torc`, `torc-server`, and `torc-mcp-server` (plus `.exe` on
+Windows) to `src-tauri/binaries/<name>-<host triple>` (triple from `rustc -vV`), then:
+
+```bash
+npm run tauri -- build --config src-tauri/tauri.bundle.conf.json
 ```
 
 ## Connection menu

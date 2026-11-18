@@ -156,6 +156,8 @@ jobs:
 
   desktop:
     name: Build Torc Desktop (${{ matrix.name }})
+    # Bundles the torc binaries from the build job, so local mode needs nothing on PATH.
+    needs: build
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -164,13 +166,16 @@ jobs:
           - name: macos-arm64
             os: macos-latest
             bundles: dmg
+            torc_target: aarch64-apple-darwin
           # Ubuntu 22.04 keeps the AppImage/deb compatible with older glibc.
           - name: linux-x86_64
             os: ubuntu-22.04
             bundles: appimage,deb
+            torc_target: x86_64-unknown-linux-musl
           - name: windows-x86_64
             os: windows-latest
             bundles: msi,nsis
+            torc_target: x86_64-pc-windows-msvc
     defaults:
       run:
         shell: bash
@@ -211,10 +216,36 @@ jobs:
       - name: Install npm packages
         run: npm ci
 
+      - name: Download torc binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: torc-${{ matrix.torc_target }}
+          path: torc-desktop/torc-dist
+
+      # Tauri's externalBin wants <name>-<host triple>; the host triple can differ from the
+      # torc build target (the static musl binaries go into the gnu Linux bundle).
+      - name: Stage bundled binaries
+        run: |
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          ext=""
+          mkdir -p torc-dist/x src-tauri/binaries
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            ext=".exe"
+            7z x -otorc-dist/x torc-dist/*.zip
+          else
+            tar xzf torc-dist/*.tar.gz -C torc-dist/x
+          fi
+          for bin in torc-dash torc torc-server torc-mcp-server; do
+            cp "torc-dist/x/$bin$ext" "src-tauri/binaries/$bin-$triple$ext"
+          done
+          ls -l src-tauri/binaries
+
       # Not signed with a Developer ID: macOS bundles are ad-hoc signed (tauri.conf.json), and
       # users clear the quarantine flag once (see torc-desktop/README.md).
       - name: Build installers
-        run: npm run tauri -- build --bundles ${{ matrix.bundles }}
+        run: >-
+          npm run tauri -- build --bundles ${{ matrix.bundles }}
+          --config src-tauri/tauri.bundle.conf.json
 
       - name: Collect installers
         run: |
