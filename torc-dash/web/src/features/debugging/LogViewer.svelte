@@ -19,6 +19,9 @@
   let note = $state<string | null>(null);
   let isError = $state(false);
   let loadedPath = $state<string | null>(null);
+  /** The file actually shown: `path`, or the combined `.log` it fell back to. */
+  let shownPath = $state<string | null>(null);
+  let displayPath = $derived(loadedPath === path && shownPath ? shownPath : path);
   let pre = $state<HTMLPreElement>();
 
   $effect(() => {
@@ -37,9 +40,11 @@
     let next: string | null = null;
     let nextNote: string | null = null;
     let err = false;
+    let shown = p;
     try {
       // With stdio mode "combined", the runner writes one .log instead of .o and .e.
-      const { res: r } = await readFirst([p, p.replace(/\.[oe]$/, ".log")]);
+      const { path: found, res: r } = await readFirst([p, p.replace(/\.[oe]$/, ".log")]);
+      shown = r.exists ? found : p;
       if (!r.exists) nextNote = "File does not exist";
       else if (!r.success) [nextNote, err] = [r.error || "Unknown error", true];
       else if (!r.content?.trim()) nextNote = "(empty)";
@@ -52,6 +57,7 @@
     note = nextNote;
     isError = err;
     loadedPath = p;
+    shownPath = shown;
     if (!samePath || atBottom) {
       await tick();
       if (pre) pre.scrollTop = pre.scrollHeight;
@@ -77,14 +83,14 @@
         { id: "stderr", label: "stderr" },
       ]}
     />
-    <code class="path" title={path}>{path}</code>
+    <code class="path" title={displayPath}>{displayPath}</code>
     <LogSearch target={pre} text={content ?? ""} />
     <button class="btn btn-sm" onclick={copy} disabled={!content} title="Copy log contents">
       Copy
     </button>
     <button
       class="btn btn-sm btn-ghost btn-icon"
-      onclick={() => app.openFile(path, stream)}
+      onclick={() => app.openFile(displayPath, stream)}
       title="Open in file viewer"
     >
       <Icon name="external" size={13} />

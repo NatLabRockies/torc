@@ -4,6 +4,7 @@
  */
 import { app } from "../../lib/state.svelte";
 import { confirm } from "../../lib/ui/confirm.svelte";
+import { toast } from "../../lib/ui/toast.svelte";
 import { specChat, type SpecEdit } from "../chat/chat.svelte";
 
 const KEY = "torc-dash.editor";
@@ -53,6 +54,13 @@ class Draft {
    * edits not saved anywhere. Resolves false if the user said no.
    */
   async open(text: string, path: string | null = null): Promise<boolean> {
+    // The assistant's later edits would land on the new text.
+    const assistantBusy = () => {
+      if (!specChat.streaming) return false;
+      toast.info("The spec assistant is still editing. Stop it or wait for it to finish first.");
+      return true;
+    };
+    if (assistantBusy()) return false;
     const unsaved = this.path === null ? this.text.trim() !== "" && this.text !== BLANK : this.dirty;
     if (
       unsaved &&
@@ -64,6 +72,7 @@ class Draft {
       }))
     )
       return false;
+    if (assistantBusy()) return false; // it may have started while the dialog was open
     this.text = text;
     this.path = path;
     this.saved = path ? text : null;

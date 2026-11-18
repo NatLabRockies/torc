@@ -7,7 +7,6 @@
 <script lang="ts">
   let { target, text }: { target: HTMLElement | undefined; text: string } = $props();
 
-  // ponytail: one global highlight name, so two visible searches share it; key per instance if needed.
   const MAX_MATCHES = 10_000;
   const supported = typeof CSS !== "undefined" && "highlights" in CSS;
 
@@ -56,16 +55,30 @@
     current = 0;
   });
 
+  // The highlight names are global (the ::highlight() styles use them) and shared by every open
+  // search, e.g. a log viewer and a file viewer above it. Each instance adds and removes only its
+  // own ranges, so closing one search leaves the others highlighted.
+  function addRanges(name: string, rs: Range[]) {
+    let h = CSS.highlights.get(name);
+    if (!h) CSS.highlights.set(name, (h = new Highlight()));
+    for (const r of rs) h.add(r);
+  }
+  function removeRanges(name: string, rs: Range[]) {
+    const h = CSS.highlights.get(name);
+    if (!h) return;
+    for (const r of rs) h.delete(r);
+    if (h.size === 0) CSS.highlights.delete(name);
+  }
+
   $effect(() => {
     if (!supported) return;
     const all = ranges;
-    const cur = all[current];
-    CSS.highlights.set("log-search", new Highlight(...all));
-    if (cur) CSS.highlights.set("log-search-current", new Highlight(cur));
-    else CSS.highlights.delete("log-search-current");
+    const cur = all[current] ? [all[current]] : [];
+    addRanges("log-search", all);
+    addRanges("log-search-current", cur);
     return () => {
-      CSS.highlights.delete("log-search");
-      CSS.highlights.delete("log-search-current");
+      removeRanges("log-search", all);
+      removeRanges("log-search-current", cur);
     };
   });
 
