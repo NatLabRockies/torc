@@ -207,8 +207,13 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
 
     let local = args.mode == "local";
     let port = local_port(if local { "local" } else { args.host.trim() })?;
-    let (mut cmd, what) = if local {
-        (local_command(app, args, port)?, "torc-dash")
+    // A local torc-dash listens on TCP, where it requires a token; over SSH it uses a private
+    // UNIX socket and needs none. Passed by environment so other users cannot read it from ps.
+    let token = local.then(random_hex);
+    let (mut cmd, what) = if let Some(token) = &token {
+        let mut cmd = local_command(app, args, port)?;
+        cmd.env("TORC_DASH_TOKEN", token);
+        (cmd, "torc-dash")
     } else {
         // ssh fails (ExitOnForwardFailure) rather than moving if this port gets taken.
         (ssh_command(&state, args, port)?, "ssh")
@@ -259,7 +264,10 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
             port
         };
         if port != 0 && dashboard_ready(port) {
-            return Ok(format!("http://127.0.0.1:{port}/"));
+            let query = token
+                .as_ref()
+                .map_or(String::new(), |t| format!("?token={t}"));
+            return Ok(format!("http://127.0.0.1:{port}/{query}"));
         }
         if Instant::now() > deadline {
             kill_ssh(&state);

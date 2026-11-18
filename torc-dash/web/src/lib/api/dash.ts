@@ -11,10 +11,12 @@ export type CliResponse = {
   exit_code: number | null;
 };
 
+import { tokenHeaders } from "./token";
+
 export async function dashFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...tokenHeaders, ...init?.headers },
   });
   const text = await response.text();
   if (!response.ok) throw new Error(text || `HTTP ${response.status}`);

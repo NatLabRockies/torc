@@ -9,6 +9,7 @@
  */
 import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
+import { tokenHeaders } from "./token";
 
 export type Schemas = components["schemas"];
 export type Workflow = Schemas["WorkflowModel"];
@@ -24,7 +25,7 @@ export type ScheduledComputeNode = Schemas["ScheduledComputeNodesModel"];
 export type SlurmScheduler = Schemas["SlurmSchedulerModel"];
 
 export const API_BASE = "/torc-service/v1";
-export const api = createClient<paths>({ baseUrl: API_BASE });
+export const api = createClient<paths>({ baseUrl: API_BASE, headers: tokenHeaders });
 
 export class ApiError extends Error {
   constructor(

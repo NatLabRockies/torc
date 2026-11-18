@@ -102,6 +102,45 @@ struct AppState {
     server_auth: Option<(String, String)>,
     /// Hostnames requests may name in `Host` (lowercase, no port); None allows any.
     allowed_hosts: Option<Vec<String>>,
+    /// Secret that API and proxy requests must carry (header or `token` query parameter). None
+    /// on a UNIX socket, whose file permissions already restrict access, or with --no-token.
+    token: Option<String>,
+}
+
+/// Header carrying the dashboard token. Not `Authorization`, which the proxy passes through to
+/// torc-server as the user's own login.
+const TOKEN_HEADER: &str = "x-torc-dash-token";
+
+/// Whether `path` reaches torc-dash's API or the torc-server proxy, rather than the static UI.
+fn is_api_path(path: &str) -> bool {
+    path.starts_with("/api/") || path.starts_with("/torc-service/")
+}
+
+/// Splits a `token` parameter out of a query string: (token, remaining query).
+fn take_token_param(query: &str) -> (Option<String>, String) {
+    let mut token = None;
+    let rest: Vec<&str> = query
+        .split('&')
+        .filter(
+            |kv| match url::form_urlencoded::parse(kv.as_bytes()).next() {
+                Some((k, v)) if k == "token" => {
+                    token = Some(v.into_owned());
+                    false
+                }
+                _ => !kv.is_empty(),
+            },
+        )
+        .collect();
+    (token, rest.join("&"))
+}
+
+/// Compares secrets without exiting at the first differing byte.
+fn same_secret(a: &str, b: &str) -> bool {
+    a.len() == b.len()
+        && a.bytes()
+            .zip(b.bytes())
+            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+            == 0
 }
 
 /// Hostnames allowed in the `Host` header: loopback names, the bind host when it is a specific
@@ -158,17 +197,18 @@ fn check_request(
             ));
         }
     }
-    let api = path.starts_with("/api/") || path.starts_with("/torc-service/");
-    if api && !matches!(sec_fetch_site, None | Some("same-origin") | Some("none")) {
+    if is_api_path(path) && !matches!(sec_fetch_site, None | Some("same-origin") | Some("none")) {
         return Err("Cross-site requests are not allowed".to_string());
     }
     Ok(())
 }
 
-/// Middleware applying [`check_request`] to every request.
+/// Middleware applying [`check_request`] to every request, and requiring the dashboard token on
+/// API and proxy routes. Anyone who can connect to a TCP port (on a shared login node, every
+/// user) would otherwise act with this user's torc-server login and files.
 async fn guard_requests(
     State(state): State<Arc<AppState>>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: axum::middleware::Next,
 ) -> Response {
     // Scoped so no borrow of the request (whose body isn't Sync) lives across the await.
@@ -181,13 +221,49 @@ async fn guard_requests(
             state.allowed_hosts.as_deref(),
         )
     };
-    match verdict {
-        Ok(()) => next.run(req).await,
-        Err(message) => {
-            warn!("Refused {} {}: {}", req.method(), req.uri().path(), message);
-            (StatusCode::FORBIDDEN, message).into_response()
-        }
+    if let Err(message) = verdict {
+        warn!("Refused {} {}: {}", req.method(), req.uri().path(), message);
+        return (StatusCode::FORBIDDEN, message).into_response();
     }
+    if let Some(expected) = &state.token
+        && is_api_path(req.uri().path())
+    {
+        // EventSource cannot set headers, so streams pass the token as a query parameter.
+        // Strip it so it is never forwarded to torc-server.
+        let (from_query, rest) = take_token_param(req.uri().query().unwrap_or(""));
+        let given = req
+            .headers()
+            .get(TOKEN_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .map(String::from)
+            .or(from_query);
+        if !given.is_some_and(|t| same_secret(&t, expected)) {
+            warn!(
+                "Refused {} {}: missing or wrong token",
+                req.method(),
+                req.uri().path()
+            );
+            let message = "Missing or wrong dashboard token. Open the dashboard with the URL \
+                           torc-dash printed at startup (it ends in ?token=...).";
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "message": message })),
+            )
+                .into_response();
+        }
+        if req.uri().query().is_some() {
+            let path_and_query = if rest.is_empty() {
+                req.uri().path().to_string()
+            } else {
+                format!("{}?{}", req.uri().path(), rest)
+            };
+            if let Ok(uri) = path_and_query.parse() {
+                *req.uri_mut() = uri;
+            }
+        }
+        req.headers_mut().remove(TOKEN_HEADER);
+    }
+    next.run(req).await
 }
 
 /// Adds the torc-server login to a request bound for torc-server (never for other hosts, such
@@ -359,6 +435,12 @@ struct Cli {
     /// Path to torc-mcp-server binary
     #[arg(long, default_value = "torc-mcp-server", env = "TORC_MCP_SERVER_BIN")]
     torc_mcp_server_bin: String,
+
+    /// Serve the API without a token. On TCP, torc-dash otherwise requires a token (from
+    /// TORC_DASH_TOKEN, or generated and printed in the startup URL), because anyone who can
+    /// connect could act as you. Use only behind a proxy that authenticates users itself.
+    #[arg(long)]
+    no_token: bool,
 }
 
 #[tokio::main]
@@ -794,7 +876,30 @@ async fn main() -> Result<()> {
         warn!("Host check disabled (--allowed-hosts '*'); the dashboard is open to DNS rebinding");
     }
 
+    // Read from the environment only: a command-line value would be visible to other users in ps.
+    let token_from_env = std::env::var("TORC_DASH_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+    let token = if private {
+        None
+    } else if cli.no_token {
+        warn!("Token check disabled (--no-token); anyone who can connect can use the dashboard");
+        None
+    } else {
+        Some(
+            token_from_env
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string()),
+        )
+    };
+    // Shown in the startup URL only when generated; a token from the environment stays secret.
+    let url_token_suffix = match (&token, &token_from_env) {
+        (Some(t), None) => format!("/?token={t}"),
+        _ => String::new(),
+    };
+
     let state = Arc::new(AppState {
+        token,
         server_auth,
         api_url: final_api_url,
         client: http_client,
@@ -919,7 +1024,10 @@ async fn main() -> Result<()> {
 
     // TCP path (default)
     let (std_listener, actual_port) = find_available_port(&host, port)?;
-    info!("Dashboard available at http://{}:{}", host, actual_port);
+    info!(
+        "Dashboard available at http://{}:{}{}",
+        host, actual_port, url_token_suffix
+    );
     if actual_port != port {
         info!(
             "Note: Requested port {} was in use, using port {} instead",
@@ -1679,6 +1787,7 @@ async fn cli_reset_jobs_handler(
     Json(req): Json<ResetJobsRequest>,
 ) -> impl IntoResponse {
     let ids: Vec<String> = req.job_ids.iter().map(i64::to_string).collect();
+    info!("Resetting jobs job_ids={}", ids.join(","));
     let mut args = vec!["jobs", "reset-status", "--no-prompts", "--reinit"];
     args.extend(ids.iter().map(String::as_str));
     Json(run_torc_command(&state.torc_bin, &args, &state.api_url).await)
@@ -1783,7 +1892,7 @@ async fn cli_run_stream_handler(
     let start_msg = format!("{verb} workflow {workflow_id}");
     // A watch only observes, so stop it when the browser stops listening. A run keeps going.
     let kill_on_drop = mode != "run";
-    info!("Starting streaming {} for workflow: {}", mode, workflow_id);
+    info!("Starting streaming {} workflow_id={}", mode, workflow_id);
 
     let torc_bin = state.torc_bin.clone();
     let api_url = state.api_url.clone();
@@ -1862,6 +1971,10 @@ async fn cli_run_stream_handler(
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
             loop {
                 interval.tick().await;
+                // The browser left; stop even if the fetches below keep failing.
+                if status_tx.is_closed() {
+                    break;
+                }
 
                 // Fetch jobs from API and count statuses
                 let url = format!("{}/jobs?workflow_id={}&limit={}", api_url_status, workflow_id_status, torc::MAX_RECORD_TRANSFER_COUNT);
@@ -2268,10 +2381,27 @@ async fn cli_write_file_handler(Json(req): Json<WriteFileRequest>) -> impl IntoR
     if path.is_dir() {
         return Json(fail("Path is a directory".into(), true));
     }
-    if path.exists() && !req.overwrite {
-        return Json(fail("File already exists".into(), true));
+    // create_new checks and creates in one step, so a file appearing meanwhile is not clobbered.
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true);
+    if req.overwrite {
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
     }
-    match tokio::fs::write(&path, req.content).await {
+    let mut file = match options.open(&path).await {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Json(fail("File already exists".into(), true));
+        }
+        Err(e) => return Json(fail(format!("Failed to write file: {e}"), false)),
+    };
+    let written = async {
+        use tokio::io::AsyncWriteExt;
+        file.write_all(req.content.as_bytes()).await?;
+        file.flush().await
+    };
+    match written.await {
         Ok(()) => Json(WriteFileResponse {
             success: true,
             path: Some(path.display().to_string()),
@@ -4572,9 +4702,34 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_host_list, anthropic_api_base, apply_spec_edit, check_request,
-        workflow_id_from_resource_db_name,
+        allowed_host_list, anthropic_api_base, apply_spec_edit, check_request, same_secret,
+        take_token_param, workflow_id_from_resource_db_name,
     };
+
+    #[test]
+    fn token_param_is_split_from_query() {
+        let split = |q| take_token_param(q);
+        assert_eq!(
+            split("workflow_id=3&token=abc&mode=watch"),
+            (
+                Some("abc".to_string()),
+                "workflow_id=3&mode=watch".to_string()
+            )
+        );
+        assert_eq!(split("token=abc"), (Some("abc".to_string()), String::new()));
+        assert_eq!(
+            split("token=a%2Bb"),
+            (Some("a+b".to_string()), String::new())
+        );
+        assert_eq!(split("a=1"), (None, "a=1".to_string()));
+        assert_eq!(split(""), (None, String::new()));
+        // Only an exact `token` key counts.
+        assert_eq!(split("mytoken=x"), (None, "mytoken=x".to_string()));
+
+        assert!(same_secret("abc", "abc"));
+        assert!(!same_secret("abc", "abd"));
+        assert!(!same_secret("abc", "ab"));
+    }
 
     #[test]
     fn request_guard_checks_host_and_fetch_site() {

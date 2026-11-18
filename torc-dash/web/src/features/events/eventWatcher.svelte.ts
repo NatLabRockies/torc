@@ -9,6 +9,7 @@
  *   than the newest one seen) on every `app.refreshTick`.
  */
 import { api, API_BASE, unwrap, type TorcEvent } from "../../lib/api/client";
+import { withToken } from "../../lib/api/token";
 import { untrack } from "svelte";
 import { JOB_STATUSES } from "../../lib/format";
 import { app } from "../../lib/state.svelte";
@@ -171,7 +172,7 @@ $effect.root(() => {
     }
     void poll(wf, true);
 
-    const es = new EventSource(`${API_BASE}/workflows/${wf}/events/stream`);
+    const es = new EventSource(withToken(`${API_BASE}/workflows/${wf}/events/stream`));
     watcher.status = "connecting";
     es.onopen = () => (watcher.status = "live");
     // EventSource reconnects on its own unless the server refused the stream outright.

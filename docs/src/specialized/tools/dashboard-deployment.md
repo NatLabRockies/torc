@@ -79,7 +79,8 @@ This single command:
 
 **Step 2: Open your browser**
 
-Navigate to http://localhost:8090
+Open the URL torc-dash prints at startup (`http://127.0.0.1:8090/?token=…`). The token keeps other
+users on the machine out of the dashboard.
 
 **Step 3: Create and run a workflow**
 
@@ -217,11 +218,13 @@ ssh -L 8090:localhost:8090 user@login-node
 > **Important**: Use `localhost` in the tunnel command, not the login node's hostname. This works
 > because torc-dash binds to 127.0.0.1 by default.
 
-Note that in TCP mode, other users on the login node can connect to port 8090.
+In TCP mode, other users on the login node can connect to port 8090; the token in the URL torc-dash
+prints keeps them out of the API.
 
 </details>
 
-Open http://localhost:8090 in your browser.
+Open http://localhost:8090 in your browser (in TCP mode, add the `?token=…` from the URL torc-dash
+printed).
 
 ### Submitting to Slurm
 
@@ -349,7 +352,8 @@ ssh -L 8090:localhost:8090 user@login-node
 > forwards your local port to `localhost:8090` _as seen from the login node_, which matches where
 > torc-dash binds (127.0.0.1:8090).
 
-Note that in TCP mode, other users on the login node can connect to port 8090.
+In TCP mode, other users on the login node can connect to port 8090; open the `?token=…` URL
+torc-dash prints so only you can use the API.
 
 </details>
 

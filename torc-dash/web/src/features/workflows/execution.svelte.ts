@@ -4,6 +4,7 @@
  * <ExecutionPanel/> shows it.
  */
 import { app } from "../../lib/state.svelte";
+import { withToken } from "../../lib/api/token";
 import { toast } from "../../lib/ui/toast.svelte";
 
 export type LineKind = "info" | "stdout" | "stderr" | "error" | "success" | "warning";
@@ -40,7 +41,9 @@ class Execution {
     const watching = mode !== "run";
     this.#append(`${watching ? "Watching" : "Starting"} workflow ${workflowId}…`, "info");
 
-    const es = new EventSource(`/api/cli/run-stream?workflow_id=${workflowId}&mode=${mode}`);
+    const es = new EventSource(
+      withToken(`/api/cli/run-stream?workflow_id=${workflowId}&mode=${mode}`),
+    );
     this.#source = es;
     const on = (type: string, fn: (data: string) => void) =>
       es.addEventListener(type, (e) => {

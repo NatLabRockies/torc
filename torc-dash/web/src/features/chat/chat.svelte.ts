@@ -9,6 +9,7 @@
  *   done        data = ""
  */
 import { app } from "../../lib/state.svelte";
+import { tokenHeaders } from "../../lib/api/token";
 import { errorText } from "../../lib/format";
 
 export type Part =
@@ -46,7 +47,7 @@ export class ChatState {
 
   async checkStatus() {
     try {
-      const r = await fetch("/api/chat/status");
+      const r = await fetch("/api/chat/status", { headers: tokenHeaders });
       const data = (await r.json()) as { available: boolean; reason?: string };
       this.available = data.available;
       this.reason = data.reason ?? null;
@@ -79,7 +80,7 @@ export class ChatState {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...tokenHeaders },
         body: JSON.stringify({
           messages: this.history,
           workflow_id: this.workflowContext ? app.workflowId : null,
@@ -142,7 +143,7 @@ export class ChatState {
   async configure(body: Record<string, string>) {
     const r = await fetch("/api/chat/configure", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...tokenHeaders },
       body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error((await r.text()) || "Failed to configure provider");

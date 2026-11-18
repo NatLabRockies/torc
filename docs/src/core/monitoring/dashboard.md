@@ -50,6 +50,11 @@ This will:
 2. Start the dashboard on http://127.0.0.1:8090
 3. Configure the dashboard to connect to the managed server
 
+Open the URL torc-dash logs at startup, such as
+`Dashboard available at http://127.0.0.1:8090/?token=c1b6…`. The token keeps other users on the same
+machine out of the dashboard's API; the browser remembers it, so later visits to
+http://127.0.0.1:8090 work without it until torc-dash restarts with a new token.
+
 ### Connecting to an Existing Server
 
 If you already have `torc-server` running:
@@ -75,6 +80,7 @@ Options:
       --socket <PATH>         Listen on a UNIX domain socket instead of TCP (unix only)
       --allowed-hosts <HOSTS> Extra hostnames the dashboard may be reached by, comma-separated
                               [env: TORC_DASH_ALLOWED_HOSTS]
+      --no-token              Serve the API without a token (only behind an authenticating proxy)
   -a, --api-url <API_URL>     Torc server API URL [default: http://localhost:8080/torc-service/v1]
       --torc-bin <PATH>       Path to torc CLI binary [default: torc]
       --torc-server-bin       Path to torc-server binary [default: torc-server]
@@ -463,16 +469,23 @@ starts.
 ## Security Considerations
 
 1. **Network Access**: By default, binds to 127.0.0.1 (localhost only)
-2. **UNIX Socket (recommended for HPC)**: Use `--socket /tmp/torc-dash-$USER.sock` on shared login
+2. **Dashboard token**: On TCP, the API and torc-server proxy require a token, because anyone who
+   can connect to the port (on a shared login node, every user) could otherwise act as you: run
+   `torc`, write files, and use your torc-server login. torc-dash generates one and prints it in the
+   startup URL, or takes a fixed one from the `TORC_DASH_TOKEN` environment variable (not printed;
+   append `?token=<value>` to the URL yourself). Scripts send it as an `X-Torc-Dash-Token` header.
+   `--no-token` turns the check off; use it only behind a proxy that authenticates users itself.
+   UNIX sockets need no token.
+3. **UNIX Socket (recommended for HPC)**: Use `--socket /tmp/torc-dash-$USER.sock` on shared login
    nodes. The socket file is created with 0600 permissions, restricting access to your user account.
    Connect via `ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node`.
-3. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS. The
+4. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS. The
    dashboard accepts requests only for `localhost`, `127.0.0.1`, `::1`, and its `--host`; add the
    name users type in the browser with `--allowed-hosts dash.example.org`. Requests for any other
    name get `403 Host '…' is not allowed`.
-4. **Cross-site protection**: Other web pages open in your browser cannot call the dashboard's API;
+5. **Cross-site protection**: Other web pages open in your browser cannot call the dashboard's API;
    torc-dash refuses requests the browser marks as cross-site.
-5. **Authentication**: Torc server supports htpasswd-based authentication (see
+6. **Authentication**: Torc server supports htpasswd-based authentication (see
    [Authentication](../../specialized/admin/authentication.md))
 
 ## Troubleshooting

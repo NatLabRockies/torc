@@ -166,11 +166,20 @@ sequenceDiagram
 ## Security model
 
 - **Who can connect.** Over a socket, only the owning user (mode `0600`). Over TCP, anyone who can
-  reach the port, so the default bind is `127.0.0.1`; on shared hosts use `--socket`. Remote access
-  goes through an SSH tunnel, never an exposed port.
+  reach the port, including other users of a shared login node, so the default bind is `127.0.0.1`
+  and the API requires a token (below). Remote access goes through an SSH tunnel, never an exposed
+  port.
 - **What a connection can do.** Everything the owning user can: run `torc`, read and write files
-  (`read-file`, `write-file`, export/import), and use their torc-server credentials. torc-dash adds
-  no authentication of its own, so the transport is the boundary.
+  (`read-file`, `write-file`, export/import), and use their torc-server credentials.
+- **Dashboard token.** On TCP, `/api/*` and `/torc-service/*` require a secret, from
+  `TORC_DASH_TOKEN` or generated per run and printed in the startup URL (`/?token=…`). The UI reads
+  it from the URL once, keeps it in `localStorage` (per origin, so dashboards on other ports never
+  see it; cookies would be sent to every port on `localhost`), and sends it as `X-Torc-Dash-Token`.
+  `EventSource` cannot set headers, so streams pass `?token=`, which the middleware strips before
+  the proxy forwards a request. Static UI routes are open so the page can load and report a missing
+  token. Torc Desktop's local mode passes a fresh token by environment (never on the command line,
+  where `ps` would show it). Sockets skip the check; `--no-token` disables it for deployments behind
+  an authenticating proxy.
 - **Cross-site requests.** A middleware (`guard_requests`) checks every request before routing:
   - **Host allowlist.** The `Host` header must name `localhost`, `127.0.0.1`, `[::1]`, the `--host`
     bind address when it is a specific name, or an entry in `--allowed-hosts`
