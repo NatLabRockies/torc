@@ -259,6 +259,25 @@ The dashboard supports multiple LLM providers:
 
 **Setup:**
 
+The simplest setup is a `[dash.chat]` section in your user config file. Unlike environment
+variables, it also reaches torc-dash when Torc Desktop starts it, locally or on a login node over
+SSH. Create the file with `torc config init --user` (it prints the path; on macOS it is
+`~/Library/Application Support/torc/config.toml`) and add, for example for a LiteLLM gateway:
+
+```toml
+[dash.chat]
+provider = "custom"
+base_url = "https://litellm.example.org"
+auth_header = "Authorization"   # sent as "Authorization: Bearer <api_key>"
+model = "claude-opus-5-5"       # a model name the gateway exposes
+api_key = "sk-..."              # the key itself; then chmod 600 the file
+```
+
+When torc-dash runs on a login node, this file must be on that node. Environment variables and
+flags, shown below, still work and take precedence setting by setting: an `ANTHROPIC_MODEL` in your
+shell, for example, overrides `model` from the file. See
+[Configuration](../reference/configuration.md#dashchat-section) for all options.
+
 _Option 1: Anthropic Claude (Direct API)_
 
 ```bash

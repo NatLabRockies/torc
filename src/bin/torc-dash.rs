@@ -455,7 +455,7 @@ async fn main() -> Result<()> {
         .init();
 
     let matches = Cli::command().get_matches();
-    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    let mut cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
     // Load configuration from files and merge with CLI arguments
     let file_config = TorcConfig::load().unwrap_or_default();
@@ -463,7 +463,7 @@ async fn main() -> Result<()> {
 
     // Merge CLI config with file config. A value from the command line or its environment
     // variable wins, even when it equals the clap default.
-    let explicit = |id| {
+    let explicit = |id: &str| {
         matches
             .value_source(id)
             .is_some_and(|source| source != ValueSource::DefaultValue)
@@ -731,6 +731,8 @@ async fn main() -> Result<()> {
     let http_client = tls
         .build_async_client()
         .expect("Failed to build HTTP client with TLS config");
+
+    apply_chat_config(&mut cli, &dash_config.chat, &explicit);
 
     // Resolve LLM provider configuration based on --llm-provider or available credentials
     let (llm_provider, llm_api_key, llm_base_url, llm_auth_header, llm_model) =
@@ -3609,6 +3611,106 @@ async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoRes
     };
 
     Json(ChatStatusResponse { available, reason })
+}
+
+/// Fill AI Chat settings from `[dash.chat]` (and the API key from the user config file), mapping
+/// each config provider onto the existing CLI fields. A flag or its environment variable wins.
+fn apply_chat_config(
+    cli: &mut Cli,
+    chat: &torc::config::DashChatConfig,
+    explicit: &dyn Fn(&str) -> bool,
+) {
+    let (api_key, warnings) = torc::config::user_chat_api_key(&torc::config::ConfigPaths::new());
+    for w in warnings {
+        warn!("{w}");
+    }
+    let provider = match &chat.provider {
+        Some(p) if !explicit("llm_provider") => p.to_lowercase(),
+        _ => cli.llm_provider.to_lowercase(),
+    };
+    let fill = |slot: &mut Option<String>, id: &str, value: &Option<String>| {
+        if !explicit(id) && value.is_some() {
+            *slot = value.clone();
+        }
+    };
+    let fill_str = |slot: &mut String, id: &str, value: &Option<String>| {
+        if let Some(v) = value.as_ref().filter(|_| !explicit(id)) {
+            *slot = v.clone();
+        }
+    };
+    match provider.as_str() {
+        "openai" => {
+            fill(&mut cli.openai_api_key, "openai_api_key", &api_key);
+            fill_str(&mut cli.openai_base_url, "openai_base_url", &chat.base_url);
+            fill_str(&mut cli.openai_model, "openai_model", &chat.model);
+        }
+        "ollama" => {
+            fill_str(&mut cli.ollama_base_url, "ollama_base_url", &chat.base_url);
+            fill_str(&mut cli.ollama_model, "ollama_model", &chat.model);
+        }
+        "github" => {
+            fill(&mut cli.github_token, "github_token", &api_key);
+            fill_str(
+                &mut cli.github_models_base_url,
+                "github_models_base_url",
+                &chat.base_url,
+            );
+            fill_str(
+                &mut cli.github_models_model,
+                "github_models_model",
+                &chat.model,
+            );
+        }
+        "foundry" => {
+            fill(
+                &mut cli.anthropic_foundry_api_key,
+                "anthropic_foundry_api_key",
+                &api_key,
+            );
+            fill(
+                &mut cli.anthropic_foundry_resource,
+                "anthropic_foundry_resource",
+                &chat.foundry_resource,
+            );
+            fill(
+                &mut cli.anthropic_auth_header,
+                "anthropic_auth_header",
+                &chat.auth_header,
+            );
+            fill_str(&mut cli.anthropic_model, "anthropic_model", &chat.model);
+        }
+        // A custom gateway is the Anthropic path with a base URL.
+        "anthropic" | "custom" => {
+            fill(&mut cli.anthropic_api_key, "anthropic_api_key", &api_key);
+            fill(
+                &mut cli.anthropic_base_url,
+                "anthropic_base_url",
+                &chat.base_url,
+            );
+            fill(
+                &mut cli.anthropic_auth_header,
+                "anthropic_auth_header",
+                &chat.auth_header,
+            );
+            fill_str(&mut cli.anthropic_model, "anthropic_model", &chat.model);
+        }
+        other => {
+            warn!("Ignoring unknown dash.chat.provider {other:?}");
+            return;
+        }
+    }
+    if provider == "foundry" && cli.anthropic_foundry_resource.is_none() {
+        warn!("dash.chat.provider is \"foundry\" but no foundry_resource is set");
+    }
+    if provider == "custom" && cli.anthropic_base_url.is_none() {
+        warn!("dash.chat.provider is \"custom\" but no base_url is set");
+    }
+    if !explicit("llm_provider") {
+        cli.llm_provider = match provider.as_str() {
+            "foundry" | "custom" => "anthropic".to_string(),
+            p => p.to_string(),
+        };
+    }
 }
 
 /// Claude API base URL ending in /v1, from either the Claude Code form of ANTHROPIC_BASE_URL

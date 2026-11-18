@@ -308,6 +308,12 @@ standalone = false
 
 # Server port for standalone mode (0 = auto-detect)
 server_port = 0
+
+# AI Chat provider (command-line flags and their environment variables take precedence)
+# [dash.chat]
+# provider = "anthropic"   # anthropic, openai, foundry, ollama, github, or custom
+# model = "claude-sonnet-4-20250514"
+# api_key = "..."          # read only from the user config file; chmod 600 it
 "#
         .to_string()
     }

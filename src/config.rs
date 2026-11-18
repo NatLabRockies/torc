@@ -32,6 +32,6 @@ pub use client::{
     ClientConfig, ClientHpcConfig, ClientRunConfig, ClientSlurmConfig, HpcPartitionConfig,
     HpcProfileConfig, HpcProfileOverride,
 };
-pub use dash::DashConfig;
+pub use dash::{DashChatConfig, DashConfig, user_chat_api_key};
 pub use loader::{ConfigPaths, TorcConfig};
 pub use server::{ServerConfig, ServerLoggingConfig};
