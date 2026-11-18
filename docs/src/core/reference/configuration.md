@@ -231,17 +231,24 @@ Settings for `torc-dash`.
 
 ### `[dash]` Section
 
-| Option            | Type   | Default                                 | Description                                |
-| ----------------- | ------ | --------------------------------------- | ------------------------------------------ |
-| `host`            | string | `127.0.0.1`                             | Hostname/IP to bind to                     |
-| `port`            | int    | `8090`                                  | Port to listen on                          |
-| `api_url`         | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                        |
-| `torc_bin`        | string | `torc`                                  | Path to torc CLI binary                    |
-| `torc_server_bin` | string | `torc-server`                           | Path to torc-server binary                 |
-| `standalone`      | bool   | `false`                                 | Auto-start torc-server                     |
-| `server_port`     | int    | `0`                                     | Server port for standalone mode (0 = auto) |
-| `server_host`     | string | `0.0.0.0`                               | Server bind address for standalone mode    |
-| `database`        | string | (none)                                  | Database path for standalone mode          |
+| Option            | Type   | Default                                 | Description                                                 |
+| ----------------- | ------ | --------------------------------------- | ----------------------------------------------------------- |
+| `host`            | string | `127.0.0.1`                             | Hostname/IP to bind to                                      |
+| `port`            | int    | `8090`                                  | Port to listen on                                           |
+| `api_url`         | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                                         |
+| `torc_bin`        | string | `torc`                                  | Path to torc CLI binary                                     |
+| `torc_server_bin` | string | `torc-server`                           | Path to torc-server binary                                  |
+| `standalone`      | bool   | `false`                                 | Auto-start torc-server                                      |
+| `server_port`     | int    | `0`                                     | Server port for standalone mode (0 = auto)                  |
+| `server_host`     | string | `0.0.0.0`                               | Server bind address for standalone mode                     |
+| `database`        | string | (none)                                  | Database path for standalone mode                           |
+| `allowed_hosts`   | list   | `[]`                                    | Extra hostnames the dashboard may be reached by (see below) |
+
+torc-dash refuses requests whose `Host` header names an unknown host, which blocks DNS-rebinding
+attacks. `localhost`, `127.0.0.1`, `::1`, and a specific `host` are always allowed. If users reach
+the dashboard by another name, such as through a reverse proxy or with `host = "0.0.0.0"`, list that
+name in `allowed_hosts` (or `--allowed-hosts`, `TORC_DASH_ALLOWED_HOSTS`). `["*"]` turns the check
+off.
 
 > **Deprecated:** `server.completion_check_interval_secs`, `dash.completion_check_interval_secs`,
 > the `--completion-check-interval-secs` flag of `torc-server` and `torc-dash`, and the

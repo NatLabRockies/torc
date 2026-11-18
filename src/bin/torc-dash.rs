@@ -100,6 +100,94 @@ struct AppState {
     /// HTTP basic auth for torc-server: (username, password) from TORC_USERNAME/USER and
     /// TORC_PASSWORD, like the torc CLI. The torc CLI subprocesses inherit the same variables.
     server_auth: Option<(String, String)>,
+    /// Hostnames requests may name in `Host` (lowercase, no port); None allows any.
+    allowed_hosts: Option<Vec<String>>,
+}
+
+/// Hostnames allowed in the `Host` header: loopback names, the bind host when it is a specific
+/// name, and `extra`. None (no check) if `extra` contains "*".
+fn allowed_host_list(bind_host: &str, extra: &[String]) -> Option<Vec<String>> {
+    let mut hosts: Vec<String> = ["localhost", "127.0.0.1", "[::1]"]
+        .map(String::from)
+        .to_vec();
+    let bind = bind_host.trim().to_lowercase();
+    if !matches!(bind.as_str(), "" | "0.0.0.0" | "::" | "[::]") {
+        hosts.push(if bind.contains(':') && !bind.starts_with('[') {
+            format!("[{bind}]")
+        } else {
+            bind
+        });
+    }
+    for h in extra.iter().map(|h| h.trim().to_lowercase()) {
+        if h == "*" {
+            return None;
+        }
+        if !h.is_empty() {
+            hosts.push(h);
+        }
+    }
+    Some(hosts)
+}
+
+/// Whether to serve a request, given its `Host` and `Sec-Fetch-Site` headers.
+///
+/// - `Host` must be an allowed name. A DNS-rebinding page reaches the dashboard under its own
+///   hostname, so this keeps it out even though the browser considers it same-origin.
+/// - API and proxy routes refuse requests the browser marks as coming from another site
+///   (`Sec-Fetch-Site` other than same-origin or none). That covers requests a hostile page can
+///   make without a CORS preflight, such as a GET of `/api/cli/run-stream`. UI routes are exempt:
+///   opening the dashboard is a navigation, which Torc Desktop makes from its own `tauri://` page.
+///   Clients that don't send the header (curl, Torc Desktop's readiness probe) are unaffected.
+fn check_request(
+    host: Option<&str>,
+    sec_fetch_site: Option<&str>,
+    path: &str,
+    allowed: Option<&[String]>,
+) -> Result<(), String> {
+    if let (Some(allowed), Some(host)) = (allowed, host) {
+        let host = host.trim().to_lowercase();
+        // Drop the port: "[::1]:8090" -> "[::1]", "localhost:8090" -> "localhost".
+        let name = match host.rfind(':') {
+            Some(i) if !host[i..].contains(']') => &host[..i],
+            _ => host.as_str(),
+        };
+        if !allowed.iter().any(|a| a == name) {
+            return Err(format!(
+                "Host '{name}' is not allowed. To reach the dashboard by this name, start \
+                 torc-dash with --allowed-hosts {name}"
+            ));
+        }
+    }
+    let api = path.starts_with("/api/") || path.starts_with("/torc-service/");
+    if api && !matches!(sec_fetch_site, None | Some("same-origin") | Some("none")) {
+        return Err("Cross-site requests are not allowed".to_string());
+    }
+    Ok(())
+}
+
+/// Middleware applying [`check_request`] to every request.
+async fn guard_requests(
+    State(state): State<Arc<AppState>>,
+    req: Request<Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    // Scoped so no borrow of the request (whose body isn't Sync) lives across the await.
+    let verdict = {
+        let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
+        check_request(
+            header("host"),
+            header("sec-fetch-site"),
+            req.uri().path(),
+            state.allowed_hosts.as_deref(),
+        )
+    };
+    match verdict {
+        Ok(()) => next.run(req).await,
+        Err(message) => {
+            warn!("Refused {} {}: {}", req.method(), req.uri().path(), message);
+            (StatusCode::FORBIDDEN, message).into_response()
+        }
+    }
 }
 
 /// Adds the torc-server login to a request bound for torc-server (never for other hosts, such
@@ -126,6 +214,12 @@ struct Cli {
     /// Host to bind to
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
+
+    /// Extra hostnames the dashboard may be reached by, comma-separated (e.g. a reverse proxy's
+    /// name). Requests for other hosts are refused, which blocks DNS-rebinding attacks.
+    /// localhost, 127.0.0.1, ::1, and a specific --host are always allowed; "*" allows any.
+    #[arg(long, env = "TORC_DASH_ALLOWED_HOSTS", value_delimiter = ',')]
+    allowed_hosts: Vec<String>,
 
     /// URL of the torc-server API
     #[arg(
@@ -688,6 +782,18 @@ async fn main() -> Result<()> {
     if let Some((user, _)) = &server_auth {
         info!("Authenticating to torc-server as {}", user);
     }
+    let allowed_hosts = allowed_host_list(
+        &host,
+        if explicit("allowed_hosts") {
+            &cli.allowed_hosts
+        } else {
+            &dash_config.allowed_hosts
+        },
+    );
+    if allowed_hosts.is_none() {
+        warn!("Host check disabled (--allowed-hosts '*'); the dashboard is open to DNS rebinding");
+    }
+
     let state = Arc::new(AppState {
         server_auth,
         api_url: final_api_url,
@@ -702,6 +808,7 @@ async fn main() -> Result<()> {
         llm_auth_header: RwLock::new(llm_auth_header),
         llm_model: RwLock::new(llm_model),
         mcp_client: Mutex::new(None),
+        allowed_hosts,
     });
 
     // Build router
@@ -768,6 +875,10 @@ async fn main() -> Result<()> {
                 .patch(proxy_handler)
                 .delete(proxy_handler),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            guard_requests,
+        ))
         .with_state(state.clone());
 
     // Stop the managed torc-server when we are told to exit, so it does not outlive us.
@@ -4443,7 +4554,50 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 
 #[cfg(test)]
 mod tests {
-    use super::{anthropic_api_base, apply_spec_edit, workflow_id_from_resource_db_name};
+    use super::{
+        allowed_host_list, anthropic_api_base, apply_spec_edit, check_request,
+        workflow_id_from_resource_db_name,
+    };
+
+    #[test]
+    fn request_guard_checks_host_and_fetch_site() {
+        let allowed = allowed_host_list("0.0.0.0", &["dash.example.org".to_string()]);
+        let allowed = allowed.as_deref();
+        let ok = |host, site, path| check_request(Some(host), site, path, allowed).is_ok();
+
+        // Loopback names and configured names, with or without a port.
+        assert!(ok("localhost:8090", None, "/api/cli/run"));
+        assert!(ok("127.0.0.1:23456", Some("same-origin"), "/api/chat"));
+        assert!(ok("[::1]:8090", None, "/"));
+        assert!(ok("Dash.Example.org", None, "/"));
+        // DNS rebinding: an attacker's hostname pointing at loopback.
+        assert!(!ok(
+            "evil.example.com:8090",
+            Some("same-origin"),
+            "/api/cli/write-file"
+        ));
+        // Cross-site requests to API routes, e.g. <img src=".../run-stream?mode=run">.
+        assert!(!ok(
+            "localhost:8090",
+            Some("cross-site"),
+            "/api/cli/run-stream"
+        ));
+        assert!(!ok(
+            "localhost:8090",
+            Some("same-site"),
+            "/torc-service/v1/workflows"
+        ));
+        // ...but navigating to the UI from elsewhere (Torc Desktop's tauri:// page) is fine.
+        assert!(ok("127.0.0.1:23456", Some("cross-site"), "/"));
+        assert!(ok("localhost", Some("none"), "/api/version"));
+        // No Host header (HTTP/1.0 probes) and "*" skip the host check.
+        assert!(check_request(None, None, "/", allowed).is_ok());
+        let any = allowed_host_list("127.0.0.1", &["*".to_string()]);
+        assert!(check_request(Some("anything:1"), None, "/api/x", any.as_deref()).is_ok());
+        // A specific bind host is allowed automatically.
+        let bound = allowed_host_list("login1.hpc.org", &[]);
+        assert!(check_request(Some("login1.hpc.org:8090"), None, "/", bound.as_deref()).is_ok());
+    }
     use serde_json::json;
 
     #[test]

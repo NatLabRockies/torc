@@ -73,6 +73,8 @@ Options:
   -p, --port <PORT>           Dashboard port [default: 8090]
       --host <HOST>           Dashboard host [default: 127.0.0.1]
       --socket <PATH>         Listen on a UNIX domain socket instead of TCP (unix only)
+      --allowed-hosts <HOSTS> Extra hostnames the dashboard may be reached by, comma-separated
+                              [env: TORC_DASH_ALLOWED_HOSTS]
   -a, --api-url <API_URL>     Torc server API URL [default: http://localhost:8080/torc-service/v1]
       --torc-bin <PATH>       Path to torc CLI binary [default: torc]
       --torc-server-bin       Path to torc-server binary [default: torc-server]
@@ -460,8 +462,13 @@ starts.
 2. **UNIX Socket (recommended for HPC)**: Use `--socket /tmp/torc-dash-$USER.sock` on shared login
    nodes. The socket file is created with 0600 permissions, restricting access to your user account.
    Connect via `ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node`.
-3. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS
-4. **Authentication**: Torc server supports htpasswd-based authentication (see
+3. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS. The
+   dashboard accepts requests only for `localhost`, `127.0.0.1`, `::1`, and its `--host`; add the
+   name users type in the browser with `--allowed-hosts dash.example.org`. Requests for any other
+   name get `403 Host '…' is not allowed`.
+4. **Cross-site protection**: Other web pages open in your browser cannot call the dashboard's API;
+   torc-dash refuses requests the browser marks as cross-site.
+5. **Authentication**: Torc server supports htpasswd-based authentication (see
    [Authentication](../../specialized/admin/authentication.md))
 
 ## Troubleshooting

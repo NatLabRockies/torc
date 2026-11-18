@@ -33,6 +33,10 @@ pub struct DashConfig {
     /// Path to the database (for standalone mode)
     pub database: Option<String>,
 
+    /// Extra hostnames the dashboard may be reached by (beyond localhost, 127.0.0.1, ::1, and a
+    /// specific `host`), e.g. a reverse proxy's name. `"*"` allows any.
+    pub allowed_hosts: Vec<String>,
+
     /// UNIX domain socket path (alternative to TCP host:port)
     #[cfg(unix)]
     pub socket: Option<String>,
@@ -54,6 +58,7 @@ impl Default for DashConfig {
             server_port: 0,
             server_host: "0.0.0.0".to_string(),
             database: None,
+            allowed_hosts: Vec::new(),
             #[cfg(unix)]
             socket: None,
             completion_check_interval_secs: None,

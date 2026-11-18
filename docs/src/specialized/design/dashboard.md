@@ -171,13 +171,21 @@ sequenceDiagram
 - **What a connection can do.** Everything the owning user can: run `torc`, read and write files
   (`read-file`, `write-file`, export/import), and use their torc-server credentials. torc-dash adds
   no authentication of its own, so the transport is the boundary.
-- **Cross-site requests.** The JSON endpoints require `Content-Type: application/json`, which makes
-  cross-origin pages send a CORS preflight that torc-dash never approves, so a hostile page in the
-  same browser cannot call them. The chat endpoints also compare the `Origin` header with `Host`.
-- **Known gaps.** `GET /api/cli/run-stream?mode=run` starts a run and, being a plain GET, can be
-  triggered by another page without a preflight (it cannot read the result, and needs a valid
-  workflow ID). torc-dash does not validate the `Host` header, so a DNS-rebinding page could appear
-  same-origin. Both are mitigated by binding to loopback or a socket and are tracked for hardening.
+- **Cross-site requests.** A middleware (`guard_requests`) checks every request before routing:
+  - **Host allowlist.** The `Host` header must name `localhost`, `127.0.0.1`, `[::1]`, the `--host`
+    bind address when it is a specific name, or an entry in `--allowed-hosts`
+    (`[dash]
+    allowed_hosts`; `*` disables the check). A DNS-rebinding page reaches the dashboard
+    under its own hostname, which the browser treats as same-origin; this check refuses it.
+  - **Fetch metadata.** On `/api/*` and `/torc-service/*`, requests whose `Sec-Fetch-Site` header
+    says they come from another site (`cross-site` or `same-site`, such as another port on
+    `localhost`) are refused. This covers requests a page can make without a CORS preflight, such as
+    `<img src=".../api/cli/run-stream?mode=run">`. UI routes are exempt because opening the
+    dashboard is a navigation, which Torc Desktop makes from its own `tauri://` page. Clients that
+    don't send the header (curl, scripts, Torc Desktop's readiness probe) are unaffected.
+  - The JSON endpoints additionally require `Content-Type: application/json`, which forces a CORS
+    preflight from other origins that torc-dash never approves, and the chat endpoints compare
+    `Origin` with `Host`. These cover older browsers that don't send fetch metadata.
 
 ## Alternatives considered
 
