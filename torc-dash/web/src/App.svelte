@@ -18,6 +18,7 @@
   import DetailsTab from "./features/details/DetailsTab.svelte";
   import FileViewerModal from "./features/details/FileViewerModal.svelte";
   import JobDetailsModal from "./features/details/JobDetailsModal.svelte";
+  import EditorTab from "./features/editor/EditorTab.svelte";
   import EventsTab from "./features/events/EventsTab.svelte";
   import ExecutionPanel from "./features/workflows/ExecutionPanel.svelte";
   // Starts the event stream at load so the sidebar badge updates on any tab.
@@ -27,6 +28,7 @@
 
   const VIEWS: Record<TabId, { component: Component; icon: IconName }> = {
     workflows: { component: WorkflowsTab, icon: "layers" },
+    editor: { component: EditorTab, icon: "edit" },
     details: { component: DetailsTab, icon: "list" },
     dag: { component: DagTab, icon: "graph" },
     events: { component: EventsTab, icon: "bell" },

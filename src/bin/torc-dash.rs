@@ -715,6 +715,8 @@ async fn main() -> Result<()> {
         .route("/api/cli/export", post(cli_export_handler))
         .route("/api/cli/import", post(cli_import_handler))
         .route("/api/cli/read-file", post(cli_read_file_handler))
+        .route("/api/cli/write-file", post(cli_write_file_handler))
+        .route("/api/workflow-schema", get(workflow_schema_handler))
         .route("/api/cli/plot-resources", post(cli_plot_resources_handler))
         .route(
             "/api/cli/list-resource-dbs",
@@ -2120,6 +2122,61 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
             exists: true,
         }),
     }
+}
+
+#[derive(Deserialize)]
+struct WriteFileRequest {
+    path: String,
+    content: String,
+    #[serde(default)]
+    overwrite: bool,
+}
+
+#[derive(Serialize)]
+struct WriteFileResponse {
+    success: bool,
+    /// Absolute path written (relative paths resolve against torc-dash's working directory).
+    path: Option<String>,
+    error: Option<String>,
+    /// The file exists and `overwrite` was false; nothing was written.
+    exists: bool,
+}
+
+/// Save text (a workflow spec from the editor) to a file on the machine running torc-dash.
+async fn cli_write_file_handler(Json(req): Json<WriteFileRequest>) -> impl IntoResponse {
+    let fail = |error: String, exists: bool| WriteFileResponse {
+        success: false,
+        path: None,
+        error: Some(error),
+        exists,
+    };
+    let path = match std::path::absolute(req.path.trim()) {
+        Ok(p) if !req.path.trim().is_empty() => p,
+        _ => return Json(fail("Enter a file path".into(), false)),
+    };
+    if path.is_dir() {
+        return Json(fail("Path is a directory".into(), true));
+    }
+    if path.exists() && !req.overwrite {
+        return Json(fail("File already exists".into(), true));
+    }
+    match tokio::fs::write(&path, req.content).await {
+        Ok(()) => Json(WriteFileResponse {
+            success: true,
+            path: Some(path.display().to_string()),
+            error: None,
+            exists: false,
+        }),
+        Err(e) => Json(fail(format!("Failed to write file: {e}"), false)),
+    }
+}
+
+/// JSON Schema for workflow spec files; drives completion, hover, and lint in the spec editor.
+async fn workflow_schema_handler() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        torc::client::workflow_spec::workflow_spec_schema(),
+    )
 }
 
 /// Export a workflow to a JSON file on the server

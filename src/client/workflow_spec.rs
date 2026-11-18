@@ -38,6 +38,18 @@ where
         .transpose()
 }
 
+/// Schema-only shape of a parameter value: a range/list string like `"1:100"`, or a
+/// native sequence.
+#[cfg(feature = "client")]
+#[derive(schemars::JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum ParameterValueSchema {
+    Text(String),
+    List(Vec<serde_json::Value>),
+    Number(f64),
+}
+
 static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
 
@@ -216,6 +228,7 @@ pub struct ValidationSummary {
 use kdl::{KdlDocument, KdlNode};
 
 /// File specification for JSON serialization (without workflow_id and id)
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSpec {
@@ -242,6 +255,10 @@ pub struct FileSpec {
     /// Supports range notation (e.g., "1:100" or "1:100:5") and lists (e.g., "[1,5,10]")
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default, deserialize_with = "deserialize_parameter_map")]
+    #[cfg_attr(
+        feature = "client",
+        schemars(with = "Option<HashMap<String, ParameterValueSchema>>")
+    )]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -316,6 +333,7 @@ impl FileSpec {
 }
 
 /// User data specification for JSON serialization (without workflow_id and id)
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UserDataSpec {
@@ -334,6 +352,10 @@ pub struct UserDataSpec {
     /// `name` and into any string value found inside `data` (recursively).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default, deserialize_with = "deserialize_parameter_map")]
+    #[cfg_attr(
+        feature = "client",
+        schemars(with = "Option<HashMap<String, ParameterValueSchema>>")
+    )]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -427,6 +449,7 @@ fn substitute_parameters_in_json(
 }
 
 /// Workflow action specification for defining conditional actions
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowActionSpec {
@@ -464,6 +487,7 @@ pub struct WorkflowActionSpec {
 }
 
 /// Resource requirements specification for JSON serialization (without workflow_id and id)
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceRequirementsSpec {
@@ -495,6 +519,7 @@ impl ResourceRequirementsSpec {
 }
 
 /// A rule for handling specific exit codes in a failure handler
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FailureHandlerRuleSpec {
@@ -520,6 +545,7 @@ impl FailureHandlerRuleSpec {
 }
 
 /// Failure handler specification for JSON serialization (without workflow_id and id)
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FailureHandlerSpec {
@@ -530,6 +556,7 @@ pub struct FailureHandlerSpec {
 }
 
 /// Slurm scheduler specification for JSON serialization (without workflow_id and id)
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SlurmSchedulerSpec {
@@ -608,6 +635,7 @@ pub const SLURM_EXCLUDED_PARAMS: &[&str] = &[
 ///
 /// Parameters should use the sbatch long option name (without the leading --).
 /// For example: "qos", "constraint", "mail-user", "mail-type", "reservation", etc.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SlurmDefaultsSpec(pub std::collections::HashMap<String, serde_json::Value>);
@@ -669,6 +697,7 @@ impl SlurmDefaultsSpec {
 }
 
 /// Specification for a job within a workflow
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobSpec {
@@ -732,6 +761,10 @@ pub struct JobSpec {
     /// Multiple parameters create a Cartesian product of jobs by default
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default, deserialize_with = "deserialize_parameter_map")]
+    #[cfg_attr(
+        feature = "client",
+        schemars(with = "Option<HashMap<String, ParameterValueSchema>>")
+    )]
     pub parameters: Option<HashMap<String, String>>,
     /// How to combine multiple parameters: "product" (default, Cartesian product) or "zip"
     /// With "zip", parameters are combined element-wise (all must have the same length)
@@ -1556,6 +1589,7 @@ fn substitute_workflow_variables_in_string(
 pub use crate::models::DynamicJobsConfig as DynamicJobsSpec;
 
 /// Specification for a complete workflow
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowSpec {
@@ -1571,6 +1605,10 @@ pub struct WorkflowSpec {
     /// Jobs/files can reference these by setting use_parameters to parameter names
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default, deserialize_with = "deserialize_parameter_map")]
+    #[cfg_attr(
+        feature = "client",
+        schemars(with = "Option<HashMap<String, ParameterValueSchema>>")
+    )]
     pub parameters: Option<HashMap<String, String>>,
     /// Shared CSV/JSON parameter table for the whole workflow. Jobs/files/user_data
     /// opt in by setting `use_parameters_file: true`, which expands them over every
@@ -1651,6 +1689,12 @@ pub struct WorkflowSpec {
     /// name fails the whole create with a clear error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_groups: Option<Vec<String>>,
+}
+
+/// JSON Schema (draft 2020-12) for workflow spec files, pretty-printed.
+pub fn workflow_spec_schema() -> String {
+    let schema = schemars::schema_for!(WorkflowSpec);
+    serde_json::to_string_pretty(&schema).expect("schema serializes")
 }
 
 /// A workflow-spec source resolved from a CLI argument that may be `-` (stdin).

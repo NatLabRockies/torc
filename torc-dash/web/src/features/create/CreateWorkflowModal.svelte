@@ -21,6 +21,7 @@
   } from "./actions";
   import { initializeWorkflow } from "../workflows/actions";
   import { STEPS, generateSpec, newWizard } from "./spec";
+  import { draft } from "../editor/draft.svelte";
   import ValidationPanel from "./ValidationPanel.svelte";
   import Wizard from "./Wizard.svelte";
 
@@ -96,6 +97,13 @@
 
   function close() {
     app.createOpen = false;
+  }
+
+  /** Hand a spec to the spec editor tab; JSON (from the wizard or an upload) becomes YAML. */
+  async function toEditor(text: string, json = false) {
+    if (json) text = (await import("yaml")).stringify(JSON.parse(text));
+    close();
+    if (!(await draft.open(text))) app.createOpen = true;
   }
 
   async function readFile(file: File) {
@@ -329,6 +337,16 @@
                   switchSource("inline");
                 }}>Edit as pasted spec</button
               >
+              {#if /^\.(ya?ml|json)$/.test(upload.ext)}
+                <button
+                  type="button"
+                  class="btn btn-sm btn-ghost"
+                  onclick={() =>
+                    upload &&
+                    toEditor(upload.content, upload.ext === ".json")}
+                  >Open in spec editor</button
+                >
+              {/if}
               <button
                 type="button"
                 class="btn btn-sm btn-ghost"
@@ -453,6 +471,11 @@
         Back
       </button>
       <span class="faint keys"><kbd>[</kbd> <kbd>]</kbd> steps</span>
+      {#if onLastWizardStep}
+        <button type="button" class="btn btn-ghost" onclick={() => toEditor(JSON.stringify(generateSpec(wizard)), true)}>
+          Edit as YAML
+        </button>
+      {/if}
     {/if}
     <span class="grow"></span>
     <span class="faint keys"><kbd>{navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}</kbd><kbd>↵</kbd></span>

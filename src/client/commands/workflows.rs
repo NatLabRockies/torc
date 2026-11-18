@@ -12,6 +12,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
 
 \x1b[1;32mWorkflow Creation:\x1b[0m
   \x1b[1;36mnew\x1b[0m              Create a new empty workflow
+  \x1b[1;36mschema\x1b[0m           Print the JSON Schema for workflow spec files
 
 \x1b[1;32mWorkflow State:\x1b[0m
   \x1b[1;36minit\x1b[0m             Initialize workflow dependencies
@@ -173,6 +174,19 @@ EXAMPLES:
     torc workflows export 123 -o backup.json
 ")]
 pub enum WorkflowCommands {
+    /// Print the JSON Schema for workflow spec files (YAML, JSON, JSON5)
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Save the schema for editor autocomplete
+    torc workflows schema > torc-workflow.schema.json
+
+    # VS Code (YAML extension): first line of a spec file
+    # yaml-language-server: $schema=./torc-workflow.schema.json
+"
+    )]
+    Schema,
     /// Create a new empty workflow
     #[command(
         hide = true,
@@ -3368,6 +3382,9 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
     let current_user = crate::get_username();
 
     match command {
+        WorkflowCommands::Schema => {
+            println!("{}", crate::client::workflow_spec::workflow_spec_schema());
+        }
         WorkflowCommands::New { name, description } => {
             handle_new(config, name, description, &current_user, format);
         }

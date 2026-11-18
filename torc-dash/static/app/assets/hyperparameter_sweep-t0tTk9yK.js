@@ -1,0 +1,124 @@
+var e=`# Machine Learning Hyperparameter Sweep Workflow
+# Demonstrates multi-dimensional parameter sweeps using Cartesian product
+# This creates 3 * 3 * 2 = 18 training jobs with different hyperparameter combinations
+#
+# This example also demonstrates the use of invocation_script to set up the
+# conda environment before running each job. See scripts/conda_setup.sh for
+# the setup script that loads modules and activates the conda environment.
+
+name: hyperparameter_sweep
+description: Grid search over learning rate, batch size, and optimizer
+project: ml-research
+metadata:
+  team: applied-ml
+  experiment: resnet50-tuning
+
+# Prepare datasets (one-time setup jobs)
+jobs:
+  - name: prepare_train_data
+    command: python scripts/prepare_data.py --split=train --output=/data/train.pkl
+    invocation_script: bash scripts/conda_setup.sh
+    resource_requirements: data_prep
+    output_files:
+      - train_data
+
+  - name: prepare_val_data
+    command: python scripts/prepare_data.py --split=validation --output=/data/validation.pkl
+    invocation_script: bash scripts/conda_setup.sh
+    resource_requirements: data_prep
+    output_files:
+      - val_data
+
+  # Training jobs - one job per hyperparameter combination
+  # This single job spec expands to 18 jobs
+  - name: train_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    command: |
+      python train.py \\
+        --learning-rate={lr} \\
+        --batch-size={batch_size} \\
+        --optimizer={optimizer} \\
+        --train-data=/data/train.pkl \\
+        --val-data=/data/validation.pkl \\
+        --model-output=/models/model_lr{lr:.4f}_bs{batch_size}_opt{optimizer}.pt \\
+        --metrics-output=/results/metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}.json
+    invocation_script: bash scripts/conda_setup.sh
+    resource_requirements: gpu_training
+    depends_on:
+      - prepare_train_data
+      - prepare_val_data
+    input_files:
+      - train_data
+      - val_data
+    output_files:
+      - model_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+      - metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    parameters:
+      lr: [0.0001, 0.001, 0.01]
+      batch_size: [16, 32, 64]
+      optimizer: [adam, sgd]
+
+  # Aggregate results for each training run. One aggregate job per
+  # (lr, batch_size, optimizer) combination, mirroring the training jobs.
+  # The name template includes every parameter so post-expansion names are
+  # unique (a name like \`aggregate_results\` with these parameters would
+  # expand to 18 duplicates and be rejected as a duplicate-name error).
+  - name: aggregate_results_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    command: python scripts/aggregate_metrics.py --input-dir=/results --output=/results/summary.csv
+    invocation_script: bash scripts/conda_setup.sh
+    resource_requirements: minimal
+    depends_on:
+      - train_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    input_files:
+      - metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    parameters:
+      lr: [0.0001, 0.001, 0.01]
+      batch_size: [16, 32, 64]
+      optimizer: [adam, sgd]
+
+# File specifications
+files:
+  - name: train_data
+    path: /data/train.pkl
+
+  - name: val_data
+    path: /data/validation.pkl
+
+  # Model files - one per hyperparameter combination
+  - name: model_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    path: /models/model_lr{lr:.4f}_bs{batch_size}_opt{optimizer}.pt
+    parameters:
+      lr: [0.0001, 0.001, 0.01]
+      batch_size: [16, 32, 64]
+      optimizer: [adam, sgd]
+
+  # Metrics files - one per hyperparameter combination
+  - name: metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}
+    path: /results/metrics_lr{lr:.4f}_bs{batch_size}_opt{optimizer}.json
+    parameters:
+      lr: [0.0001, 0.001, 0.01]
+      batch_size: [16, 32, 64]
+      optimizer: [adam, sgd]
+
+# Resource requirements
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 2g
+    runtime: PT5M
+
+  - name: data_prep
+    num_cpus: 4
+    num_gpus: 0
+    num_nodes: 1
+    memory: 8g
+    runtime: PT30M
+
+  - name: gpu_training
+    num_cpus: 8
+    num_gpus: 1
+    num_nodes: 1
+    memory: 32g
+    runtime: PT2H
+`;export{e as default};

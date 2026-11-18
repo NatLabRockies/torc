@@ -3,6 +3,10 @@
 This page documents all data models used in workflow specification files. Workflow specs can be
 written in YAML, JSON, JSON5, or KDL formats.
 
+`torc workflows schema` prints a JSON Schema for these models, which editors can use for completion
+and validation (see the [CLI reference](./cli.md#torc-workflows-schema)). The dashboard's Spec
+Editor tab uses it the same way.
+
 ## WorkflowSpec
 
 The top-level container for a complete workflow definition.

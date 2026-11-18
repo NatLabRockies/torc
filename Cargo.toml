@@ -200,6 +200,7 @@ server = [
     "dep:tower",
 ]
 client = [
+    "dep:schemars",
     "dep:rayon",
     "dep:reqwest",
     "dep:sysinfo",

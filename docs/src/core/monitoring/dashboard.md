@@ -110,6 +110,7 @@ Keyboard shortcuts (press `?` in the dashboard for the list):
 | Key     | Action                              |
 | ------- | ----------------------------------- |
 | `1`–`8` | Switch tabs                         |
+| `E`     | Spec editor                         |
 | `N`     | New workflow                        |
 | `R`     | Refresh                             |
 | `T`     | Cycle theme (system / light / dark) |
@@ -139,6 +140,34 @@ Click **Create workflow** (or press `N`) and choose a source:
 
 **Validate** checks the spec on the server without creating anything. By default the new workflow is
 initialized after creation; if output files already exist you are asked before they are removed.
+
+From an uploaded YAML or JSON file, **Open in spec editor** moves it to the Spec Editor tab; on the
+wizard's last step, **Edit as YAML** does the same with the generated spec.
+
+### Spec Editor Tab
+
+A YAML editor for workflow specs, driven by the workflow-spec JSON Schema:
+
+- **Completion**: type a field name, or press `Ctrl+Space`, for the fields allowed at the cursor
+  with their types and descriptions. After `key:`, fields with fixed values (such as
+  `execution_config.mode` or booleans) list those values.
+- **Hover** a field name for its documentation.
+- **Problems are underlined as you type**: YAML syntax errors, unknown fields, missing required
+  fields, and wrong value types. **Validate** runs the full server-side check
+  (`torc create
+  --dry-run`), which also catches problems the schema can't express, such as
+  references to undefined jobs or files.
+- **New from template** starts from a blank spec or one of a few examples from `examples/yaml`
+  (basics, parameter sweeps and pipelines, Slurm, retries), with a preview.
+- **Insert** adds a building block (job, parameterized job, file, resource requirements, Slurm
+  scheduler, schedule-nodes action, failure handler, user data) to the end of its section, creating
+  the section if needed.
+- **Open local file** opens YAML or JSON from your computer (JSON is converted to YAML). **Open
+  path** and **Save** (`Ctrl+S` / `⌘S`) read and write files on the machine running `torc-dash`;
+  relative paths resolve against its working directory.
+- **Create workflow** creates the workflow from the editor contents, optionally initializing it.
+
+The editor keeps its contents in the browser between visits.
 
 ### Details Tab
 

@@ -9,6 +9,7 @@
 
 export const TABS = [
   { id: "workflows", label: "Workflows", key: "1" },
+  { id: "editor", label: "Spec editor", key: "e" },
   { id: "details", label: "Details", key: "2" },
   { id: "dag", label: "Graph", key: "3" },
   { id: "events", label: "Events", key: "4" },
