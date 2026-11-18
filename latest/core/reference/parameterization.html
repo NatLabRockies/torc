@@ -380,25 +380,42 @@ slurm_schedulers:
 </code></pre>
 <h3 id="validation-rules"><a class="header" href="#validation-rules">Validation Rules</a></h3>
 <ul>
-<li><strong>Variable names must be valid identifiers</strong> (<code>[A-Za-z_][A-Za-z0-9_]*</code>).</li>
-<li><strong>No collisions.</strong> A variable name must not match any parameter name (at the workflow level or in
+<li>
+<p><strong>Variable names must be valid identifiers</strong> (<code>[A-Za-z_][A-Za-z0-9_]*</code>).</p>
+</li>
+<li>
+<p><strong>No collisions.</strong> A variable name must not match any parameter name (at the workflow level or in
 any job/file/user_data <code>parameters</code> map). Spec loading fails with an error pointing at the
-offending name.</li>
-<li><strong>No undefined references.</strong> A <code>{name}</code> token whose name is neither a variable nor a parameter is
+offending name.</p>
+</li>
+<li>
+<p><strong>No undefined references.</strong> A <code>{name}</code> token whose name is neither a variable nor a parameter is
 rejected as a typo. Tokens with non-identifier inner text (e.g. <code>find ... {} \;</code> or JSON-like
 fragments) are ignored. Shell-style <code>${...}</code> expansion (used by <code>${TORC_JOB_ID}</code>,
 <code>${files.input.X}</code>, etc.) is left alone -- the workflow variables system only consumes bare
-<code>{name}</code> tokens.</li>
-<li><strong>Variable values must be plain literal strings.</strong> Any <code>{name}</code> template reference inside a
-variable's value is rejected, whether it points at another variable, a parameter, or a typo. This
-keeps semantics simple and deterministic. Compose at the use site instead: <code>command: "{base}/sub"</code>
-rather than <code>inputs: "{base}/sub"</code>. Shell-style <code>${...}</code> expansion (e.g. <code>${HOME}</code>,
-<code>${TORC_JOB_ID}</code>) is allowed in variable values -- it is preserved verbatim and expanded at
-runtime, not by the spec loader. Note that you can still reference a variable from a parameter
-range: <code>i: "1:{n_max}"</code> works because that's a parameter value, not a variable value.</li>
-<li>Variables apply everywhere a string appears in the spec, including descriptions, env values,
+<code>{name}</code> tokens.</p>
+</li>
+<li>
+<p><strong>Variable values may reference other variables.</strong> <code>{name}</code> inside a variable's value is replaced
+with that variable's resolved value, in dependency order regardless of declaration order. A
+reference cycle (including a variable referencing itself) is an error that names the cycle.
+References to parameters or undefined names are rejected (parameters expand per job, after
+variables are resolved, so compose them at the use site), and format specs such as <code>{n:03d}</code> are
+not allowed in these references. Shell-style <code>${...}</code> expansion (e.g. <code>${HOME}</code>, <code>${TORC_JOB_ID}</code>)
+is allowed in variable values -- it is preserved verbatim and expanded at runtime, not by the spec
+loader. Note that you can still reference a variable from a parameter range: <code>i: "1:{n_max}"</code>
+works because that's a parameter value, not a variable value.</p>
+<pre><code class="language-yaml">variables:
+  root: "${env:SCRATCH}/proj42"
+  outputs: "{root}/outputs"
+  models: "{outputs}/models"
+</code></pre>
+</li>
+<li>
+<p>Variables apply everywhere a string appears in the spec, including descriptions, env values,
 scheduler fields, action arguments, file paths, commands, and parameter range values. They do not
-apply to identifier fields (<code>parameters</code> keys, <code>use_parameters</code> entries).</li>
+apply to identifier fields (<code>parameters</code> keys, <code>use_parameters</code> entries).</p>
+</li>
 </ul>
 <h3 id="user-specific-values-from-environment-variables"><a class="header" href="#user-specific-values-from-environment-variables">User-Specific Values from Environment Variables</a></h3>
 <p>A spec checked into git often needs paths that differ per user, such as a Python virtual
