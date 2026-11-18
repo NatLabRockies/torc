@@ -263,10 +263,11 @@ torc-dash
 The dashboard constructs the Foundry endpoint automatically:
 `https://{resource}.services.ai.azure.com/anthropic/v1/messages`
 
-_Option 2b: Claude through an LLM gateway (LiteLLM)_
+_Option 2b: An LLM gateway (LiteLLM)_
 
 torc-dash reads the same variables as Claude Code, so a gateway setup that works for Claude Code
-works here too. Set the model to a Claude model name the gateway serves:
+works here too. Any model the gateway routes to works, since LiteLLM serves the Anthropic Messages
+API for all of them. Set the model to a name the gateway serves:
 
 ```bash
 export ANTHROPIC_BASE_URL="https://litellm.example.org"   # gateway root, or ending in /v1
@@ -279,8 +280,8 @@ List the gateway's models with
 `curl -s -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN" "$ANTHROPIC_BASE_URL/v1/models"`.
 torc-dash does not discover models itself (Claude Code's
 `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` has no effect). To configure it in the dashboard
-instead, choose **Claude via gateway (LiteLLM, proxy)** and enter the gateway URL, the token, and
-the model.
+instead, choose **Custom via gateway (LiteLLM, proxy)** and enter the gateway URL, the token, and
+the model. The dashboard remembers the URL and model (never the token) in your browser.
 
 When torc-dash runs on a login node (for example from Torc Desktop), set these in `~/.bash_profile`
 there.

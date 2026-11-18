@@ -206,16 +206,12 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
     kill_ssh(&state);
 
     let local = args.mode == "local";
-    let (mut cmd, what, ssh_port) = if local {
-        // torc-dash picks a free port itself and logs it; see `reported_port`.
-        (local_command(app, args)?, "torc-dash", 0)
+    let port = local_port(if local { "local" } else { args.host.trim() })?;
+    let (mut cmd, what) = if local {
+        (local_command(app, args, port)?, "torc-dash")
     } else {
         // ssh fails (ExitOnForwardFailure) rather than moving if this port gets taken.
-        let port = TcpListener::bind("127.0.0.1:0")
-            .and_then(|l| l.local_addr())
-            .map_err(|e| e.to_string())?
-            .port();
-        (ssh_command(&state, args, port)?, "ssh", port)
+        (ssh_command(&state, args, port)?, "ssh")
     };
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(unix)]
@@ -256,10 +252,11 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
             kill_ssh(&state); // reap it and stop anything it left behind
             return Err(format!("{what} exited ({status})\n{}", tail_text()));
         }
+        // Locally, torc-dash reports the port it bound (the same one, barring a race).
         let port = if local {
             reported.load(Ordering::Relaxed)
         } else {
-            ssh_port
+            port
         };
         if port != 0 && dashboard_ready(port) {
             return Ok(format!("http://127.0.0.1:{port}/"));
@@ -270,6 +267,27 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
+}
+
+/// Local port for the dashboard. The same target (a host, or "local") gets the same port each
+/// time it is free, so the dashboard keeps one origin and its saved settings (theme, editor draft,
+/// chat setup) across reconnects. Falls back to any free port.
+fn local_port(target: &str) -> Result<u16, String> {
+    let preferred = stable_port(target);
+    TcpListener::bind(("127.0.0.1", preferred))
+        .or_else(|_| TcpListener::bind("127.0.0.1:0"))
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .map_err(|e| e.to_string())
+}
+
+/// A port in 20000..30000 from an FNV-1a hash of `target`: stable across runs and builds, and
+/// outside the OS ephemeral ranges.
+fn stable_port(target: &str) -> u16 {
+    let hash = target.bytes().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    });
+    20000 + (hash % 10000) as u16
 }
 
 /// Reads `stream` line by line on a thread, keeping the last few KB in `tail` and storing the
@@ -310,14 +328,17 @@ fn reported_port(line: &str) -> Option<u16> {
 
 /// torc-dash on this computer, listening on 127.0.0.1:<port>. Runs through the user's login
 /// shell so PATH from their profile applies (apps launched from Finder get a minimal PATH).
-fn local_command(app: &AppHandle, args: &ConnectArgs) -> Result<Command, String> {
+fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Command, String> {
     let flags = server_flags(args, quote_arg, || {
         // The private server's database lives in the app's data folder.
         let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         Ok(quote_arg(&dir.join("torc.db").to_string_lossy()))
     })?;
-    let line = format!("{} --host 127.0.0.1 --port 0{flags}", args.command.trim());
+    let line = format!(
+        "{} --host 127.0.0.1 --port {port}{flags}",
+        args.command.trim()
+    );
     #[cfg(unix)]
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
@@ -594,6 +615,13 @@ mod tests {
             server_flags(&args(true, "ignored"), sh_quote, db).unwrap(),
             " --standalone --server-host 127.0.0.1 --database DB"
         );
+    }
+
+    #[test]
+    fn stable_port_is_fixed_per_target() {
+        assert_eq!(stable_port("user@kl3"), stable_port("user@kl3"));
+        assert_ne!(stable_port("user@kl3"), stable_port("local"));
+        assert!((20000..30000).contains(&stable_port("")));
     }
 
     #[test]

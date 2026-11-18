@@ -13,7 +13,7 @@
     { id: "foundry", label: "Azure AI Foundry" },
     { id: "ollama", label: "Ollama (Local)" },
     { id: "github", label: "GitHub Models" },
-    { id: "custom", label: "Claude via gateway (LiteLLM, proxy)" },
+    { id: "custom", label: "Custom via gateway (LiteLLM, proxy)" },
   ];
   const KEY_PLACEHOLDER: Record<Provider, string> = {
     anthropic: "sk-ant-…",
@@ -38,12 +38,44 @@
     github: "gpt-4o",
   };
 
-  let provider = $state<Provider>("anthropic");
+  // The last provider used and, per provider, everything but the key (kept in this browser only).
+  type Fields = { baseUrl: string; model: string; foundryResource: string; authHeader: string };
+  const STORE = "torc-dash.chat-setup";
+  function loadSaved(): { provider?: Provider; fields?: Partial<Record<Provider, Partial<Fields>>> } {
+    try {
+      return JSON.parse(localStorage.getItem(STORE) ?? "{}");
+    } catch {
+      return {};
+    }
+  }
+  const saved = loadSaved();
+
+  let provider = $state<Provider>(saved.provider ?? "anthropic");
   let apiKey = $state("");
   let model = $state("");
   let foundryResource = $state("");
   let baseUrl = $state("");
   let authHeader = $state("Authorization");
+  fill();
+
+  /** Load the remembered fields for the selected provider. */
+  function fill() {
+    const f = saved.fields?.[provider] ?? {};
+    baseUrl = f.baseUrl ?? "";
+    model = f.model ?? "";
+    foundryResource = f.foundryResource ?? "";
+    authHeader = f.authHeader ?? "Authorization";
+  }
+
+  function remember() {
+    saved.provider = provider;
+    saved.fields = { ...saved.fields, [provider]: { baseUrl, model, foundryResource, authHeader } };
+    try {
+      localStorage.setItem(STORE, JSON.stringify(saved));
+    } catch {
+      // Remembering the form is a convenience only.
+    }
+  }
   let error = $state<string | null>(null);
   let busy = $state(false);
 
@@ -66,8 +98,8 @@
     error = null;
     try {
       await chat.configure(body);
+      remember();
       apiKey = "";
-      model = "";
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -83,7 +115,10 @@
 
   <label class="field">
     <span>Provider</span>
-    <select class="select" bind:value={provider} onchange={() => (error = null)}>
+    <select class="select" bind:value={provider} onchange={() => {
+        error = null;
+        fill();
+      }}>
       {#each PROVIDERS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
     </select>
   </label>
@@ -96,7 +131,7 @@
   {/if}
   {#if provider === "custom"}
     <label class="field">
-      <span>Base URL <span class="hint">(Anthropic-compatible, e.g. a LiteLLM gateway)</span></span>
+      <span>Base URL <span class="hint">(a gateway with the Anthropic Messages API, as LiteLLM provides for any model)</span></span>
       <input class="input" bind:value={baseUrl} placeholder={URL_PLACEHOLDER.custom} />
     </label>
   {/if}
