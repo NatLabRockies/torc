@@ -108,4 +108,9 @@ for (const nil of ["null", "~"]) {
   r = insertSnippet(`name: w\nfiles: ${nil}\njobs: []\n`, SNIPPETS.find((s) => s.section === "files")!);
   assert.equal(r.text, "name: w\nfiles:\n  - name: raw_data\n    path: data/raw.csv\njobs: []\n");
 }
+// A mapping section is filled once, then refused.
+const exec = SNIPPETS.find((s) => s.section === "execution_config")!;
+r = insertSnippet("name: w\nexecution_config: {}\njobs: []\n", exec);
+assert.equal(r.text, "name: w\nexecution_config:\n  mode: direct\n  limit_resources: true\n  termination_signal: SIGTERM\n  sigterm_lead_seconds: 30\njobs: []\n");
+assert.throws(() => insertSnippet(r.text, exec), /already exists/);
 console.log("snippet checks passed");

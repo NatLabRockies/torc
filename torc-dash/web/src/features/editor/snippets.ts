@@ -1,8 +1,9 @@
 /** Spec building blocks for the editor's Insert menu, and where they go in a YAML document. */
 
-export type Snippet = { label: string; section: string; text: string };
+/** `map`: the section is a mapping (keys, not list items), so it can only be inserted once. */
+export type Snippet = { label: string; section: string; text: string; map?: boolean };
 
-/** List items, written at indent 0; insertSnippet() re-indents them to match the document. */
+/** List items (or mapping keys), written at indent 0; insertSnippet() re-indents them. */
 export const SNIPPETS: Snippet[] = [
   {
     label: "Job",
@@ -49,10 +50,23 @@ export const SNIPPETS: Snippet[] = [
 `,
   },
   {
-    label: "Action: schedule Slurm nodes at start",
+    label: "Execution config",
+    section: "execution_config",
+    map: true,
+    text: `mode: direct
+limit_resources: true
+termination_signal: SIGTERM
+sigterm_lead_seconds: 30
+`,
+  },
+  {
+    // on_jobs_ready, not on_workflow_start: a selective re-run (reset-status --reinit, then
+    // submit) re-schedules only the allocations whose jobs were reset.
+    label: "Action: schedule Slurm nodes when jobs are ready",
     section: "actions",
-    text: `- trigger_type: on_workflow_start
+    text: `- trigger_type: on_jobs_ready
   action_type: schedule_nodes
+  jobs: [my_job]
   scheduler: compute
   scheduler_type: slurm
   num_allocations: 1
@@ -99,6 +113,8 @@ export function insertSnippet(text: string, snippet: Snippet): { text: string; f
   let end = lines.findIndex((l, i) => i > head && /^[^\s#-]/.test(l));
   if (end < 0) end = lines.length;
   while (end - 1 > head && !lines[end - 1].trim()) end--;
+  if (snippet.map && lines.slice(head + 1, end).some((l) => /^\s+[^\s#]/.test(l)))
+    throw new Error(`"${snippet.section}" already exists. Edit it there.`);
   const item = lines.slice(head + 1, end).find((l) => /^\s*- /.test(l));
   const body = indent(snippet.text, item ? item.length - item.trimStart().length : 2).replace(/\n$/, "");
   const before = lines.slice(0, end).join("\n");

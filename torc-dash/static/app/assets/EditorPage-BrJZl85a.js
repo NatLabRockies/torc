@@ -1,4 +1,4 @@
-import{$ as e,A as t,B as n,C as r,D as i,E as a,F as o,G as s,H as c,I as l,J as u,K as d,L as f,M as p,N as m,O as h,P as g,Q as _,R as v,S as y,T as ee,U as te,V as b,W as x,X as S,Y as C,Z as ne,_ as re,a as ie,b as ae,c as oe,d as se,et as ce,f as le,g as ue,h as de,i as fe,j as pe,k as me,l as he,m as ge,n as _e,nt as w,o as ve,p as ye,q as T,r as E,s as be,t as xe,tt as Se,u as Ce,v as we,w as Te,x as Ee,y as De,z as D}from"./index-Bv8-Zs6Z.js";import{a as O,i as Oe,n as ke,parse as Ae,r as je,stringify as Me,t as Ne}from"./browser-CmelHNQV.js";var Pe=[{label:`Job`,section:`jobs`,text:`- name: my_job
+import{$ as e,A as t,B as n,C as r,D as i,E as a,F as o,G as s,H as c,I as l,J as u,K as d,L as f,M as p,N as m,O as h,P as g,Q as _,R as v,S as y,T as ee,U as te,V as b,W as x,X as S,Y as C,Z as ne,_ as re,a as ie,b as ae,c as oe,d as se,et as ce,f as le,g as ue,h as de,i as fe,j as pe,k as me,l as he,m as ge,n as _e,nt as w,o as ve,p as ye,q as T,r as E,s as be,t as xe,tt as Se,u as Ce,v as we,w as Te,x as Ee,y as De,z as D}from"./index-CERzi2LE.js";import{a as O,i as Oe,n as ke,parse as Ae,r as je,stringify as Me,t as Ne}from"./browser-CmelHNQV.js";var Pe=[{label:`Job`,section:`jobs`,text:`- name: my_job
   command: echo hello
 `},{label:`Parameterized job`,section:`jobs`,text:`- name: job_{i:03d}
   command: python run.py --index {i}
@@ -18,8 +18,13 @@ import{$ as e,A as t,B as n,C as r,D as i,E as a,F as o,G as s,H as c,I as l,J a
   account: my_account
   nodes: 1
   walltime: "04:00:00"
-`},{label:`Action: schedule Slurm nodes at start`,section:`actions`,text:`- trigger_type: on_workflow_start
+`},{label:`Execution config`,section:`execution_config`,map:!0,text:`mode: direct
+limit_resources: true
+termination_signal: SIGTERM
+sigterm_lead_seconds: 30
+`},{label:`Action: schedule Slurm nodes when jobs are ready`,section:`actions`,text:`- trigger_type: on_jobs_ready
   action_type: schedule_nodes
+  jobs: [my_job]
   scheduler: compute
   scheduler_type: slurm
   num_allocations: 1
@@ -37,7 +42,7 @@ import{$ as e,A as t,B as n,C as r,D as i,E as a,F as o,G as s,H as c,I as l,J a
 `)?`
 `:`
 
-`:``,r=`${t.section}:\n${Ie(t.text,2)}`,i=e.length+n.length;return{text:e+n+r,from:i,to:i+r.length}}let i=n.findIndex((e,t)=>t>r&&/^[^\s#-]/.test(e));for(i<0&&(i=n.length);i-1>r&&!n[i-1].trim();)i--;let a=n.slice(r+1,i).find(e=>/^\s*- /.test(e)),o=Ie(t.text,a?a.length-a.trimStart().length:2).replace(/\n$/,``),s=n.slice(0,i).join(`
+`:``,r=`${t.section}:\n${Ie(t.text,2)}`,i=e.length+n.length;return{text:e+n+r,from:i,to:i+r.length}}let i=n.findIndex((e,t)=>t>r&&/^[^\s#-]/.test(e));for(i<0&&(i=n.length);i-1>r&&!n[i-1].trim();)i--;if(t.map&&n.slice(r+1,i).some(e=>/^\s+[^\s#]/.test(e)))throw Error(`"${t.section}" already exists. Edit it there.`);let a=n.slice(r+1,i).find(e=>/^\s*- /.test(e)),o=Ie(t.text,a?a.length-a.trimStart().length:2).replace(/\n$/,``),s=n.slice(0,i).join(`
 `),c=s.length+1,l=n.slice(i).join(`
 `);return{text:`${s}\n${o}${i<n.length?`
 `+l:`
