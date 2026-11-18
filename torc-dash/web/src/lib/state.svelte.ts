@@ -12,12 +12,12 @@ import { errorText } from "./format";
 
 export const TABS = [
   { id: "workflows", label: "Workflows", key: "1" },
-  { id: "editor", label: "Spec editor", key: "e" },
   { id: "details", label: "Details", key: "2" },
   { id: "dag", label: "Graph", key: "3" },
   { id: "events", label: "Events", key: "4" },
   { id: "debugging", label: "Debugging", key: "5" },
   { id: "resources", label: "Resources", key: "6" },
+  { id: "editor", label: "Spec editor", key: "e" },
   { id: "chat", label: "AI Chat", key: "7" },
   { id: "config", label: "Settings", key: "8" },
 ] as const;
