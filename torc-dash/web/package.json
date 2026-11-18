@@ -8,7 +8,7 @@
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "gen:api": "openapi-typescript ../../api/openapi.yaml -o src/lib/api/schema.d.ts",
-    "test": "node --experimental-strip-types tests/highlight.check.ts && node --experimental-strip-types tests/editor.check.ts"
+    "test": "node --experimental-strip-types tests/highlight.check.ts && node --experimental-strip-types tests/editor.check.ts && node --experimental-strip-types tests/filter.check.ts"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.6",

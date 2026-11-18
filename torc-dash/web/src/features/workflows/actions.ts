@@ -29,9 +29,11 @@ export async function submitWorkflow(id: number) {
   await act("Submit", () => cli("submit", wid(id)), `Workflow ${id} submitted`);
 }
 
-/** Initialize; if existing output files would be deleted, confirm first (then force). */
+/**
+ * Initialize. If output files from an earlier run exist, say so first: initializing keeps them.
+ * (`--force` would only skip the missing-input check, so it is never sent from here.)
+ */
 export async function initializeWorkflow(id: number) {
-  let force = false;
   try {
     const check = await dashPost<CliResponse>("/api/cli/check-initialize", wid(id));
     const dry = check.success && check.stdout ? JSON.parse(check.stdout) : null;
@@ -41,20 +43,18 @@ export async function initializeWorkflow(id: number) {
       const list = files.slice(0, 10).map((f) => `  • ${f}`);
       if (files.length > 10) list.push(`  … and ${files.length - 10} more`);
       const ok = await confirm({
-        title: "Delete existing output files?",
-        message: `Workflow ${id} has ${count} existing output file(s) that will be deleted:\n\n${list.join("\n")}`,
-        confirmLabel: "Delete files and initialize",
-        danger: true,
+        title: "Output files already exist",
+        message: `Workflow ${id} has ${count} output file(s) from an earlier run. Initializing does not delete them:\n\n${list.join("\n")}`,
+        confirmLabel: "Initialize",
       });
       if (!ok) return;
-      force = true;
     }
   } catch {
     // The dry run is advisory; fall through to a normal initialize like the CLI would.
   }
   await act(
     "Initialize",
-    () => cli("initialize", { ...wid(id), force }),
+    () => cli("initialize", { ...wid(id), force: false }),
     `Workflow ${id} initialized`,
   );
 }

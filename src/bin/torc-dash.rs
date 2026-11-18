@@ -1577,7 +1577,9 @@ async fn cli_initialize_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InitializeRequest>,
 ) -> impl IntoResponse {
-    let mut args = vec!["workflows", "init", &req.workflow_id];
+    // --no-prompts: the CLI otherwise asks on stdin before re-initializing, reads nothing from
+    // the subprocess, and cancels while exiting 0.
+    let mut args = vec!["workflows", "init", "--no-prompts", &req.workflow_id];
     if req.force {
         args.push("--force");
     }

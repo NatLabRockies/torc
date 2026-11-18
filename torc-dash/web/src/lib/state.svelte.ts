@@ -49,6 +49,13 @@ export function save(key: string, value: string | null) {
   }
 }
 
+/** Saved auto-refresh interval; 0 means off. Missing or invalid values fall back to 30 seconds. */
+function savedRefreshSeconds(): number {
+  const saved = load("torc-refresh-interval");
+  const n = saved === null ? NaN : Number(saved);
+  return Number.isFinite(n) && n >= 0 ? n : 30;
+}
+
 function tabFromHash(): TabId | null {
   const id = location.hash.replace(/^#\/?/, "").split(/[/?]/)[0];
   return TABS.some((t) => t.id === id) ? (id as TabId) : null;
@@ -63,7 +70,7 @@ class AppState {
   /** null until the first health check finishes. */
   connected = $state<boolean | null>(null);
 
-  refreshSeconds = $state(Number(load("torc-refresh-interval")) || 30);
+  refreshSeconds = $state(savedRefreshSeconds());
   /** Increments on every auto-refresh and manual refresh. Read it in an $effect to reload. */
   refreshTick = $state(0);
   showAllUsers = $state(load("torc-show-all-users") === "true");

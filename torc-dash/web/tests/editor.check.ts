@@ -83,4 +83,8 @@ assert.equal(r.text, "name: w\n\njobs:\n  - name: my_job\n    command: echo hell
 let doc = "name: w\njobs:\n  - name: a\n    command: x\n";
 for (const s of SNIPPETS) doc = insertSnippet(doc, s).text;
 assert.deepEqual(schema.lint(doc), [], doc);
+// Flow-style sections: an empty one becomes a block section; a non-empty one is refused.
+r = insertSnippet("name: w\nfiles: []  # none yet\njobs:\n  - name: a\n    command: x\n", SNIPPETS.find((s) => s.section === "files")!);
+assert.equal(r.text, "name: w\nfiles:  # none yet\n  - name: raw_data\n    path: data/raw.csv\njobs:\n  - name: a\n    command: x\n");
+assert.throws(() => insertSnippet("jobs: [{name: a, command: x}]\n", job), /flow style/);
 console.log("snippet checks passed");

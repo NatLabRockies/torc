@@ -22,6 +22,7 @@
   } = $props();
 
   let dialog = $state<HTMLDialogElement>();
+  const titleId = $props.id();
 
   $effect(() => {
     if (!dialog) return;
@@ -41,12 +42,13 @@
   autofocus
   bind:this={dialog}
   class="modal {size}"
+  aria-labelledby={titleId}
   onclose={handleClose}
   onclick={(e) => e.target === dialog && dialog?.close()}
 >
   {#if open}
     <header>
-      <h3>{title}</h3>
+      <h3 id={titleId}>{title}</h3>
       <button class="btn btn-ghost btn-icon btn-sm" aria-label="Close" onclick={() => dialog?.close()}>
         ✕
       </button>

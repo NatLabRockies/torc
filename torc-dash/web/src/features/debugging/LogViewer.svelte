@@ -1,14 +1,13 @@
 <!-- stdout/stderr viewer for one job result. Reloads on refresh, sticks to the bottom. -->
 <script lang="ts">
   import { tick, untrack } from "svelte";
-  import { dashPost } from "../../lib/api/dash";
   import { app } from "../../lib/state.svelte";
   import { toast } from "../../lib/ui/toast.svelte";
   import { errorText } from "../../lib/format";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import Icon from "../../lib/ui/Icon.svelte";
   import LogSearch from "../../lib/ui/LogSearch.svelte";
-  import type { ReadFileResponse } from "./logs";
+  import { readFirst } from "../details/files";
 
   let { stdout, stderr }: { stdout: string; stderr: string } = $props();
 
@@ -39,7 +38,8 @@
     let nextNote: string | null = null;
     let err = false;
     try {
-      const r = await dashPost<ReadFileResponse>("/api/cli/read-file", { path: p });
+      // With stdio mode "combined", the runner writes one .log instead of .o and .e.
+      const { res: r } = await readFirst([p, p.replace(/\.[oe]$/, ".log")]);
       if (!r.exists) nextNote = "File does not exist";
       else if (!r.success) [nextNote, err] = [r.error || "Unknown error", true];
       else if (!r.content?.trim()) nextNote = "(empty)";

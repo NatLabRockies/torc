@@ -15,22 +15,41 @@
   let ranges = $state.raw<Range[]>([]);
   let current = $state(0);
 
-  // Recompute matches when the query, element, or text changes.
+  // Recompute matches when the query, element, or text changes. Matching runs on the element's
+  // whole text, so a match can span syntax-highlighting spans; a case-insensitive regex (rather
+  // than lowercasing) keeps offsets aligned with the original text.
   $effect(() => {
-    const q = query.toLowerCase();
+    const q = query;
     const el = target;
     void text;
     const found: Range[] = [];
     if (q && el) {
+      const nodes: Text[] = [];
+      const starts: number[] = [];
+      let all = "";
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      for (let n = walker.nextNode(); n && found.length < MAX_MATCHES; n = walker.nextNode()) {
-        const hay = n.textContent!.toLowerCase();
-        for (let i = hay.indexOf(q); i >= 0 && found.length < MAX_MATCHES; i = hay.indexOf(q, i + q.length)) {
-          const r = document.createRange();
-          r.setStart(n, i);
-          r.setEnd(n, i + q.length);
-          found.push(r);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        nodes.push(n as Text);
+        starts.push(all.length);
+        all += n.textContent;
+      }
+      /** DOM position of a character offset into `all` (the last node starting at or before it). */
+      const at = (offset: number): [Text, number] => {
+        let lo = 0;
+        let hi = nodes.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (starts[mid] <= offset) lo = mid;
+          else hi = mid - 1;
         }
+        return [nodes[lo], offset - starts[lo]];
+      };
+      const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      for (let m = re.exec(all); m && found.length < MAX_MATCHES; m = re.exec(all)) {
+        const r = document.createRange();
+        r.setStart(...at(m.index));
+        r.setEnd(...at(m.index + m[0].length));
+        found.push(r);
       }
     }
     ranges = found;

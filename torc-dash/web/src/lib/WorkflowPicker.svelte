@@ -4,14 +4,20 @@
   import { app } from "./state.svelte";
 
   let workflows = $state<Workflow[]>([]);
+  let request = 0;
 
   $effect(() => {
     void app.refreshTick;
-    const user = app.showAllUsers ? undefined : (app.user ?? undefined);
+    // Wait for /api/user, as the Workflows tab does: an unfiltered list could select another
+    // user's workflow. If it never answers, "All users" still works.
+    const user = app.showAllUsers ? undefined : app.user;
+    if (!app.showAllUsers && !user) return;
+    const id = ++request;
     listAll((offset, limit) =>
       unwrap(api.GET("/workflows", { params: { query: { offset, limit, user } } })),
     )
       .then((list) => {
+        if (id !== request) return; // a newer request (user filter or refresh) superseded this
         workflows = list.sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
         // Default to the newest workflow so workflow tabs never open empty.
         if (app.workflowId === null && workflows[0]?.id) app.selectWorkflow(workflows[0].id);

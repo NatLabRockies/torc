@@ -51,17 +51,19 @@
   ];
 
   async function collect() {
+    const requested = workflowId;
     running = true;
     error = null;
     try {
       const r = await dashPost<{ success: boolean; data: Data | null; error: string | null }>(
         "/api/cli/slurm-sacct",
-        { workflow_id: workflowId, output_dir: outputDir },
+        { workflow_id: requested, output_dir: outputDir },
       );
+      if (requested !== workflowId) return; // the user switched workflows meanwhile
       if (!r.success) throw new Error(r.error || "Unknown error");
       data = r.data ?? {};
     } catch (e) {
-      error = errorText(e);
+      if (requested === workflowId) error = errorText(e);
     } finally {
       running = false;
     }

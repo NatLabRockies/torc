@@ -117,8 +117,12 @@
 
   function insert(i: number) {
     insertMenu?.hidePopover();
-    const r = insertSnippet(draft.text, SNIPPETS[i]);
-    editor?.setText(r.text, r.from, r.to);
+    try {
+      const r = insertSnippet(draft.text, SNIPPETS[i]);
+      editor?.setText(r.text, r.from, r.to);
+    } catch (e) {
+      toast.error(e);
+    }
   }
 
   async function openLocal(file: File) {
