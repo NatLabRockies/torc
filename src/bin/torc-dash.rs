@@ -2384,6 +2384,12 @@ async fn cli_tail_file_handler(Json(req): Json<TailFileRequest>) -> Json<TailFil
 
 async fn tail_file(path: &str, offset: Option<u64>) -> std::io::Result<TailFileResponse> {
     use tokio::io::AsyncSeekExt;
+    // Opening a FIFO blocks forever and devices never end; only follow regular files.
+    if let Ok(m) = tokio::fs::metadata(path).await
+        && !m.is_file()
+    {
+        return Err(std::io::Error::other("not a regular file"));
+    }
     let mut file = match tokio::fs::File::open(path).await {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Not created yet (job not started) or deleted on success. Read it from the start
@@ -4907,6 +4913,9 @@ mod tests {
         std::fs::write(&path, "a".repeat(100_000)).unwrap();
         let r = tail_file(p, None).await.unwrap();
         assert_eq!(r.content.len() as u64, super::TAIL_INITIAL_BYTES);
+
+        // Directories (and FIFOs/devices) are refused instead of opened.
+        assert!(tail_file(dir.path().to_str().unwrap(), None).await.is_err());
     }
 
     #[test]

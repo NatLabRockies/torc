@@ -45,10 +45,17 @@
     let timer: ReturnType<typeof setTimeout>;
 
     async function poll() {
+      // Skip the request while the window is hidden, like App's auto-refresh.
+      if (document.visibilityState !== "visible") {
+        timer = setTimeout(poll, POLL_MS);
+        return;
+      }
       try {
         const r = await dashPost<TailFileResponse>("/api/cli/tail-file", { path, offset });
         if (stopped) return;
-        offset = r.offset;
+        // An error echoes back a placeholder offset; keep ours so a fresh tail still starts
+        // near the end once the file becomes readable.
+        if (!r.error) offset = r.offset;
         isError = !!r.error;
         if (r.error) note = r.error;
         else if (!r.exists) note = text ? "File no longer exists" : "Waiting for file…";

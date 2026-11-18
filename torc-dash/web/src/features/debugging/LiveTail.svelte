@@ -57,6 +57,7 @@
       {filter}
       rowKey={(j) => j.id!}
       selectable
+      selectAll={false}
       {selected}
       onRowClick={(j) => (selected.has(j.id!) ? selected.delete(j.id!) : selected.add(j.id!))}
       loading={!jobs}
