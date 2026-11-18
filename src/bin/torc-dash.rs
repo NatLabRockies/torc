@@ -192,10 +192,15 @@ struct Cli {
     #[arg(long, env = "ANTHROPIC_FOUNDRY_RESOURCE")]
     anthropic_foundry_resource: Option<String>,
 
-    /// Override the Claude API base URL (e.g. "https://my-proxy.example.com/v1").
-    /// The /messages path is appended automatically. Overrides any auto-detected URL.
+    /// Override the Claude API base URL, e.g. a LiteLLM gateway. Accepts the Claude Code form
+    /// ("https://gateway.example.com") or one ending in /v1; /v1/messages is used either way.
     #[arg(long, env = "ANTHROPIC_BASE_URL")]
     anthropic_base_url: Option<String>,
+
+    /// Bearer token for the Claude API, sent as "Authorization: Bearer <token>" (as Claude Code
+    /// does). Used when ANTHROPIC_API_KEY is not set; typical for LLM gateways such as LiteLLM.
+    #[arg(long, env = "ANTHROPIC_AUTH_TOKEN", hide_env_values = true)]
+    anthropic_auth_token: Option<String>,
 
     /// Override the auth header name (default: "x-api-key")
     #[arg(long, env = "ANTHROPIC_AUTH_HEADER")]
@@ -621,7 +626,7 @@ async fn main() -> Result<()> {
                         foundry_resource
                     );
                     if let Some(ref url_override) = cli.anthropic_base_url {
-                        base_url = url_override.clone();
+                        base_url = anthropic_api_base(url_override);
                     }
                     let auth_header = cli
                         .anthropic_auth_header
@@ -634,16 +639,28 @@ async fn main() -> Result<()> {
                         auth_header,
                         cli.anthropic_model.clone(),
                     )
-                } else if let Some(ref api_key) = cli.anthropic_api_key {
-                    info!("AI Chat: using direct Anthropic API");
+                } else if let Some(api_key) = cli
+                    .anthropic_api_key
+                    .as_ref()
+                    .or(cli.anthropic_auth_token.as_ref())
+                {
+                    // An API key goes in x-api-key; an auth token is a bearer token (Claude Code's
+                    // ANTHROPIC_AUTH_TOKEN), which gateways like LiteLLM expect.
+                    let default_header = if cli.anthropic_api_key.is_some() {
+                        "x-api-key"
+                    } else {
+                        "Authorization"
+                    };
                     let base_url = cli
                         .anthropic_base_url
-                        .clone()
+                        .as_deref()
+                        .map(anthropic_api_base)
                         .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
+                    info!("AI Chat: using Claude API at {}", base_url);
                     let auth_header = cli
                         .anthropic_auth_header
                         .clone()
-                        .unwrap_or_else(|| "x-api-key".to_string());
+                        .unwrap_or_else(|| default_header.to_string());
                     (
                         LlmProvider::Anthropic,
                         Some(api_key.clone()),
@@ -3226,7 +3243,7 @@ async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoRes
     let reason = if !available {
         let msg = match provider {
             LlmProvider::Anthropic => {
-                "No API key configured. Set ANTHROPIC_API_KEY or use Azure AI Foundry."
+                "No API key configured. Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, or use Azure AI Foundry."
             }
             LlmProvider::OpenAI => "No API key configured. Set OPENAI_API_KEY.",
             LlmProvider::GitHub => "No GitHub token configured. Set GITHUB_TOKEN.",
@@ -3238,6 +3255,17 @@ async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoRes
     };
 
     Json(ChatStatusResponse { available, reason })
+}
+
+/// Claude API base URL ending in /v1, from either the Claude Code form of ANTHROPIC_BASE_URL
+/// (gateway root; the client appends /v1/messages) or a URL that already ends in /v1.
+fn anthropic_api_base(url: &str) -> String {
+    let url = url.trim().trim_end_matches('/');
+    if url.ends_with("/v1") {
+        url.to_string()
+    } else {
+        format!("{url}/v1")
+    }
 }
 
 #[derive(Deserialize)]
@@ -3378,14 +3406,14 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .ok_or((StatusCode::BAD_REQUEST, "Base URL is required"))?
-                .to_string();
+                .map(anthropic_api_base)
+                .ok_or((StatusCode::BAD_REQUEST, "Base URL is required"))?;
             let header = req
                 .auth_header
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("x-api-key")
+                .unwrap_or("Authorization") // bearer token, as gateways like LiteLLM expect
                 .to_string();
             let model = req
                 .model
@@ -3953,7 +3981,15 @@ async fn chat_handler(
                     "tools": claude_tools,
                 });
 
-                (url, body, api_key.clone())
+                // A bare token in an Authorization header is a bearer token.
+                let auth_value = if auth_header_name.eq_ignore_ascii_case("authorization")
+                    && !api_key.starts_with("Bearer ")
+                {
+                    format!("Bearer {api_key}")
+                } else {
+                    api_key.clone()
+                };
+                (url, body, auth_value)
             };
 
             // Make API request
@@ -4232,7 +4268,28 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 
 #[cfg(test)]
 mod tests {
-    use super::workflow_id_from_resource_db_name;
+    use super::{anthropic_api_base, workflow_id_from_resource_db_name};
+
+    #[test]
+    fn anthropic_base_url_accepts_claude_code_form() {
+        // Claude Code style (gateway root) and explicit /v1 both resolve to .../v1.
+        assert_eq!(
+            anthropic_api_base("https://gw.example.org"),
+            "https://gw.example.org/v1"
+        );
+        assert_eq!(
+            anthropic_api_base("https://gw.example.org/"),
+            "https://gw.example.org/v1"
+        );
+        assert_eq!(
+            anthropic_api_base("https://gw.example.org/v1/"),
+            "https://gw.example.org/v1"
+        );
+        assert_eq!(
+            anthropic_api_base(" https://x.services.ai.azure.com/anthropic/v1"),
+            "https://x.services.ai.azure.com/anthropic/v1"
+        );
+    }
 
     #[test]
     fn parses_workflow_id_from_resource_database_name() {

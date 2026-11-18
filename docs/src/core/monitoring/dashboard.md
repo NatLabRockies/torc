@@ -87,6 +87,7 @@ Options:
       --anthropic-foundry-api-key  Foundry API key [env: ANTHROPIC_FOUNDRY_API_KEY]
       --anthropic-foundry-resource Foundry resource [env: ANTHROPIC_FOUNDRY_RESOURCE]
       --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
+      --anthropic-auth-token       Bearer token, e.g. for LiteLLM [env: ANTHROPIC_AUTH_TOKEN]
       --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
       --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
       --openai-api-key             OpenAI API key [env: OPENAI_API_KEY]
@@ -261,6 +262,28 @@ torc-dash
 
 The dashboard constructs the Foundry endpoint automatically:
 `https://{resource}.services.ai.azure.com/anthropic/v1/messages`
+
+_Option 2b: Claude through an LLM gateway (LiteLLM)_
+
+torc-dash reads the same variables as Claude Code, so a gateway setup that works for Claude Code
+works here too. Set the model to a Claude model name the gateway serves:
+
+```bash
+export ANTHROPIC_BASE_URL="https://litellm.example.org"   # gateway root, or ending in /v1
+export ANTHROPIC_AUTH_TOKEN="sk-..."                       # sent as Authorization: Bearer
+export ANTHROPIC_MODEL="claude-sonnet-4-5"                 # a model the gateway exposes
+torc-dash
+```
+
+List the gateway's models with
+`curl -s -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN" "$ANTHROPIC_BASE_URL/v1/models"`.
+torc-dash does not discover models itself (Claude Code's
+`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` has no effect). To configure it in the dashboard
+instead, choose **Claude via gateway (LiteLLM, proxy)** and enter the gateway URL, the token, and
+the model.
+
+When torc-dash runs on a login node (for example from Torc Desktop), set these in `~/.bash_profile`
+there.
 
 _Option 3: OpenAI_
 

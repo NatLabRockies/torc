@@ -13,7 +13,7 @@
     { id: "foundry", label: "Azure AI Foundry" },
     { id: "ollama", label: "Ollama (Local)" },
     { id: "github", label: "GitHub Models" },
-    { id: "custom", label: "Custom Endpoint" },
+    { id: "custom", label: "Claude via gateway (LiteLLM, proxy)" },
   ];
   const KEY_PLACEHOLDER: Record<Provider, string> = {
     anthropic: "sk-ant-…",
@@ -21,15 +21,18 @@
     foundry: "Foundry API key",
     ollama: "",
     github: "ghp_… (GitHub token)",
-    custom: "API key",
+    custom: "API key or token",
   };
   const URL_PLACEHOLDER: Partial<Record<Provider, string>> = {
     openai: "https://api.openai.com/v1",
     ollama: "http://localhost:11434/v1",
     github: "https://models.inference.ai.azure.com",
-    custom: "https://my-proxy.example.com/v1",
+    custom: "https://litellm.example.org",
   };
   const MODEL_PLACEHOLDER: Partial<Record<Provider, string>> = {
+    anthropic: "claude-sonnet-4-20250514",
+    foundry: "claude-sonnet-4-20250514",
+    custom: "Model name on the gateway",
     openai: "gpt-4o",
     ollama: "llama3.2",
     github: "gpt-4o",
@@ -40,7 +43,7 @@
   let model = $state("");
   let foundryResource = $state("");
   let baseUrl = $state("");
-  let authHeader = $state("");
+  let authHeader = $state("Authorization");
   let error = $state<string | null>(null);
   let busy = $state(false);
 
@@ -57,7 +60,7 @@
     if (model.trim() && MODEL_PLACEHOLDER[provider]) body.model = model.trim();
     if (provider === "foundry") body.foundry_resource = foundryResource.trim();
     if (baseUrl.trim() && URL_PLACEHOLDER[provider]) body.base_url = baseUrl.trim();
-    if (provider === "custom" && authHeader.trim()) body.auth_header = authHeader.trim();
+    if (provider === "custom") body.auth_header = authHeader;
 
     busy = true;
     error = null;
@@ -93,7 +96,7 @@
   {/if}
   {#if provider === "custom"}
     <label class="field">
-      <span>Base URL</span>
+      <span>Base URL <span class="hint">(Anthropic-compatible, e.g. a LiteLLM gateway)</span></span>
       <input class="input" bind:value={baseUrl} placeholder={URL_PLACEHOLDER.custom} />
     </label>
   {/if}
@@ -128,8 +131,11 @@
   {/if}
   {#if provider === "custom"}
     <label class="field">
-      <span>Auth header <span class="hint">(optional, default: x-api-key)</span></span>
-      <input class="input" bind:value={authHeader} placeholder="x-api-key" />
+      <span>Authentication</span>
+      <select class="select" bind:value={authHeader}>
+        <option value="Authorization">Bearer token (Authorization header, like ANTHROPIC_AUTH_TOKEN)</option>
+        <option value="x-api-key">API key (x-api-key header, like ANTHROPIC_API_KEY)</option>
+      </select>
     </label>
   {/if}
 
