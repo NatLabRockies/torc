@@ -1011,6 +1011,32 @@ fn apply_workflow_variables(
         variables.insert(name.clone(), ParameterValue::String(s.clone()));
     }
 
+    // Variable values may reference other variables (`{name}`), resolved in
+    // dependency order; cycles are an error. Any other template reference
+    // (parameter names, typos) is rejected: parameters expand per job, after
+    // variables are resolved. Shell-style `${...}` is left alone.
+    let mut deps: HashMap<String, Vec<String>> = HashMap::with_capacity(vars_map.len());
+    for (name, vars_value) in vars_map {
+        let serde_json::Value::String(s) = vars_value else {
+            continue; // shape already validated above; non-strings already errored
+        };
+        deps.insert(name.clone(), variable_value_refs(name, s, &variables)?);
+    }
+    let mut names: Vec<String> = variables.keys().cloned().collect();
+    names.sort(); // deterministic cycle reporting
+    let mut done: HashSet<String> = HashSet::new();
+    for name in &names {
+        resolve_variable(name, &deps, &mut variables, &mut done, &mut Vec::new())?;
+    }
+    // Store the resolved values so the persisted spec is self-contained.
+    if let Some(serde_json::Value::Object(vars_map)) = value.get_mut("variables") {
+        for (name, v) in vars_map.iter_mut() {
+            if let Some(ParameterValue::String(s)) = variables.get(name) {
+                *v = serde_json::Value::String(s.clone());
+            }
+        }
+    }
+
     let mut parameter_names: HashSet<String> = HashSet::new();
     collect_parameter_names(&value, &variables, &mut parameter_names);
     let mut collisions: Vec<&String> = variables
@@ -1029,22 +1055,6 @@ fn apply_workflow_variables(
                 .join(", ")
         )
         .into());
-    }
-
-    // Variable values must be plain literal strings: no `{...}` template
-    // references at all (shell-style `${...}` is allowed, since it is reserved
-    // for shell expansion and the `${files.input.X}` family). Allowing template
-    // references inside variable values would either (a) make resolution
-    // order-dependent when one variable references another (HashMap iteration
-    // is randomized and cycles would not be detected), or (b) leak unresolved
-    // parameter tokens into wherever the variable is used. Composition belongs
-    // at the use site -- e.g. `command: "{base}/{sub}"`, not
-    // `combo: "{base}/{sub}"`.
-    for (name, vars_value) in vars_map {
-        let serde_json::Value::String(s) = vars_value else {
-            continue; // shape already validated above; non-strings already errored
-        };
-        check_variable_value_tokens(name, s, &variables)?;
     }
 
     let valid_token_names: HashSet<String> = variables
@@ -1121,22 +1131,21 @@ fn resolve_env_refs_in_variables(
     Ok(())
 }
 
-/// Validate the tokens inside a workflow variable's value.
+/// Return the names of other workflow variables referenced by a variable's value.
 ///
-/// Variable values must be plain literal strings: any `{name}` template
-/// reference is rejected. Shell-style `${...}` is allowed (it is reserved for
-/// shell expansion and for the `${files.input.X}` / `${user_data.input.X}`
-/// substitution that runs later in the workflow lifecycle).
-///
-/// The "references another variable" branch produces a more pointed error;
-/// every other template reference (parameter names, undefined names) is
-/// rejected with the same uniform "must be a literal" message.
-fn check_variable_value_tokens(
+/// `{name}` must name another variable and may not carry a format spec
+/// (variables are strings, so formatting is meaningless). Any other `{ident}`
+/// template reference (parameter names, undefined names) is rejected.
+/// Shell-style `${...}` is allowed (it is reserved for shell expansion and for
+/// the `${files.input.X}` / `${user_data.input.X}` substitution that runs later
+/// in the workflow lifecycle).
+fn variable_value_refs(
     var_name: &str,
     s: &str,
     variables: &HashMap<String, ParameterValue>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let bytes = s.as_bytes();
+    let mut refs = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] != b'{' {
@@ -1158,29 +1167,68 @@ fn check_variable_value_tokens(
         }
         let inner = &s[start..j];
         let token_name = inner.split(':').next().unwrap_or("");
+        i = j + 1;
         if !is_identifier(token_name) {
-            i = j + 1;
             continue;
         }
-        return if variables.contains_key(token_name) {
-            Err(format!(
-                "variable '{}' value '{}' references another variable '{{{}}}'. \
-                 Variable values may not reference other variables; resolution \
-                 order would be undefined. Inline the constant or compose at the \
-                 use site.",
+        if !variables.contains_key(token_name) {
+            return Err(format!(
+                "variable '{}' value '{}' contains template reference '{{{}}}', which is \
+                 not a workflow variable. Variable values may reference only other \
+                 variables (shell-style `${{...}}` is allowed); compose parameters at \
+                 the use site instead.",
                 var_name, s, inner
             )
-            .into())
-        } else {
-            Err(format!(
-                "variable '{}' value '{}' contains template reference '{{{}}}'. \
-                 Variable values must be plain literal strings (shell-style \
-                 `${{...}}` is allowed). Compose at the use site instead.",
-                var_name, s, inner
+            .into());
+        }
+        if inner != token_name {
+            return Err(format!(
+                "variable '{}' value '{}' references '{{{}}}' with a format spec. \
+                 Format specs are not supported when one variable references another; \
+                 use '{{{}}}'.",
+                var_name, s, inner, token_name
             )
-            .into())
-        };
+            .into());
+        }
+        refs.push(token_name.to_string());
     }
+    Ok(refs)
+}
+
+/// Resolve `name` (and, first, every variable it references) in place.
+/// `stack` holds the current DFS path for cycle detection and reporting.
+fn resolve_variable(
+    name: &str,
+    deps: &HashMap<String, Vec<String>>,
+    variables: &mut HashMap<String, ParameterValue>,
+    done: &mut HashSet<String>,
+    stack: &mut Vec<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if done.contains(name) {
+        return Ok(());
+    }
+    if let Some(pos) = stack.iter().position(|n| n == name) {
+        let mut cycle = stack[pos..].to_vec();
+        cycle.push(name.to_string());
+        return Err(format!(
+            "workflow `variables` contain a reference cycle: {}",
+            cycle.join(" -> ")
+        )
+        .into());
+    }
+    let refs = deps.get(name).map(Vec::as_slice).unwrap_or(&[]);
+    if !refs.is_empty() {
+        stack.push(name.to_string());
+        for r in refs {
+            resolve_variable(r, deps, variables, done, stack)?;
+        }
+        stack.pop();
+        if let Some(ParameterValue::String(s)) = variables.get(name) {
+            let resolved = substitute_workflow_variables_in_string(s, variables);
+            variables.insert(name.to_string(), ParameterValue::String(resolved));
+        }
+    }
+    done.insert(name.to_string());
     Ok(())
 }
 
@@ -1470,11 +1518,17 @@ fn substitute_workflow_variables_in_string(
             continue;
         }
         let start = i + 1;
-        let Some(rel_end) = s[start..].find('}') else {
+        // Stop at a nested `{` so `{"path":"{root}"}` resolves the inner token,
+        // matching `check_undefined_tokens` and `variable_value_refs`.
+        let Some(rel_end) = s[start..].find(['}', '{']) else {
             i += 1;
             continue;
         };
         let inner_end = start + rel_end;
+        if bytes[inner_end] == b'{' {
+            i = inner_end;
+            continue;
+        }
         let inner = &s[start..inner_end];
         let (name, fmt) = match inner.split_once(':') {
             Some((n, f)) => (n, Some(f)),
@@ -9595,9 +9649,9 @@ jobs:
 
     #[test]
     fn test_workflow_variables_value_with_parameter_reference_rejected() {
-        // Variable values must be plain literal strings; even a
-        // valid-looking `{i}` referencing a parameter is rejected so the rule
-        // stays uniform. Composition belongs at the use site.
+        // Variable values may reference only other variables; a parameter
+        // reference is rejected because parameters expand per job, after
+        // variables are resolved. Composition belongs at the use site.
         let yaml = r#"
 name: param_ref_in_var_value
 variables:
@@ -9612,8 +9666,8 @@ jobs:
             .expect_err("parameter reference inside a variable value must be rejected");
         let msg = err.to_string();
         assert!(
-            msg.contains("must be plain literal strings"),
-            "expected literal-only error, got: {msg}"
+            msg.contains("not a workflow variable"),
+            "expected non-variable reference error, got: {msg}"
         );
         assert!(
             msg.contains("variable 'output_pattern'"),
@@ -9622,30 +9676,105 @@ jobs:
     }
 
     #[test]
-    fn test_workflow_variables_value_referencing_another_variable_rejected() {
-        // Variable values must not reference other variables: HashMap iteration
-        // order would otherwise determine whether the inner reference resolves
-        // or leaks through as a literal token.
+    fn test_workflow_variables_compose_other_variables() {
+        // Declared out of dependency order on purpose: resolution follows
+        // references, not declaration order.
         let yaml = r#"
-name: nested_vars_rejected
+name: composed_vars
 variables:
-  base: /scratch
-  inputs: "{base}/inputs"
+  models: "{outputs}/models"
+  outputs: "{root}/outputs"
+  root: /scratch
+  sh: "${HOME}/{root}"
 jobs:
   - name: t
-    command: "ls {inputs}"
+    command: "ls {models} {sh}"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("variables composing other variables must resolve");
+        assert_eq!(
+            spec.jobs[0].command,
+            "ls /scratch/outputs/models ${HOME}//scratch"
+        );
+        let vars = spec.variables.as_ref().expect("variables preserved");
+        assert_eq!(
+            vars.get("models").map(String::as_str),
+            Some("/scratch/outputs/models"),
+            "stored variables must hold resolved values"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_resolve_inside_json_like_braces() {
+        let yaml = r#"
+name: json_braces
+variables:
+  root: /scratch
+  config: '{"path":"{root}/data"}'
+jobs:
+  - name: t
+    command: "run '{config}' '{\"out\":\"{root}/out\"}'"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("references nested in JSON-like braces must resolve");
+        assert_eq!(
+            spec.jobs[0].command,
+            r#"run '{"path":"/scratch/data"}' '{"out":"/scratch/out"}'"#
+        );
+        let vars = spec.variables.as_ref().expect("variables preserved");
+        assert_eq!(
+            vars.get("config").map(String::as_str),
+            Some(r#"{"path":"/scratch/data"}"#)
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_reference_cycle_rejected() {
+        let yaml = r#"
+name: cyclic_vars
+variables:
+  a: "{b}/x"
+  b: "{c}/y"
+  c: "{a}/z"
+jobs:
+  - name: t
+    command: "ls {a}"
 "#;
         let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
-            .expect_err("variable referencing another variable must be rejected");
+            .expect_err("cyclic variables must be rejected");
         let msg = err.to_string();
         assert!(
-            msg.contains("references another variable"),
-            "expected explicit cross-variable error, got: {msg}"
+            msg.contains("reference cycle: a -> b -> c -> a"),
+            "error should name the cycle, got: {msg}"
         );
-        assert!(
-            msg.contains("variable 'inputs'") && msg.contains("{base}"),
-            "error should name both the variable and its bad reference, got: {msg}"
-        );
+
+        let yaml = r#"
+name: self_ref
+variables:
+  a: "{a}/x"
+jobs:
+  - name: t
+    command: "ls {a}"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("self-referencing variable must be rejected");
+        assert!(err.to_string().contains("reference cycle: a -> a"));
+    }
+
+    #[test]
+    fn test_workflow_variables_reference_with_format_spec_rejected() {
+        let yaml = r#"
+name: fmt_ref
+variables:
+  n: "5"
+  label: "run-{n:03d}"
+jobs:
+  - name: t
+    command: "echo {label}"
+"#;
+        let err = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect_err("format spec on a variable reference must be rejected");
+        assert!(err.to_string().contains("format spec"), "got: {}", err);
     }
 
     #[test]
