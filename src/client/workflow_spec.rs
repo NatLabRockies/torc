@@ -1518,11 +1518,17 @@ fn substitute_workflow_variables_in_string(
             continue;
         }
         let start = i + 1;
-        let Some(rel_end) = s[start..].find('}') else {
+        // Stop at a nested `{` so `{"path":"{root}"}` resolves the inner token,
+        // matching `check_undefined_tokens` and `variable_value_refs`.
+        let Some(rel_end) = s[start..].find(['}', '{']) else {
             i += 1;
             continue;
         };
         let inner_end = start + rel_end;
+        if bytes[inner_end] == b'{' {
+            i = inner_end;
+            continue;
+        }
         let inner = &s[start..inner_end];
         let (name, fmt) = match inner.split_once(':') {
             Some((n, f)) => (n, Some(f)),
@@ -9695,6 +9701,30 @@ jobs:
             vars.get("models").map(String::as_str),
             Some("/scratch/outputs/models"),
             "stored variables must hold resolved values"
+        );
+    }
+
+    #[test]
+    fn test_workflow_variables_resolve_inside_json_like_braces() {
+        let yaml = r#"
+name: json_braces
+variables:
+  root: /scratch
+  config: '{"path":"{root}/data"}'
+jobs:
+  - name: t
+    command: "run '{config}' '{\"out\":\"{root}/out\"}'"
+"#;
+        let spec = WorkflowSpec::from_spec_file_content(yaml, "yaml")
+            .expect("references nested in JSON-like braces must resolve");
+        assert_eq!(
+            spec.jobs[0].command,
+            r#"run '{"path":"/scratch/data"}' '{"out":"/scratch/out"}'"#
+        );
+        let vars = spec.variables.as_ref().expect("variables preserved");
+        assert_eq!(
+            vars.get("config").map(String::as_str),
+            Some(r#"{"path":"/scratch/data"}"#)
         );
     }
 
