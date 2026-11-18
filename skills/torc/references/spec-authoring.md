@@ -351,7 +351,9 @@ resource_monitor:
 `summary` records peak and average CPU/memory per job, which is what `torc results list` and
 `torc workflows check-resources` display. `time_series` writes samples into a SQLite database and is
 required for `torc plot-resources`. Both scopes share `sample_interval_seconds`; time-series samples
-flush every `flush_interval_seconds` (default 300).
+flush every `flush_interval_seconds` (default 300). To watch samples live in torc-dash (Resources →
+Live), set `live_monitoring: true` and lower `flush_interval_seconds` to 15–60; leave it off for
+large runs nobody will watch, because it adds a checkpoint (an extra fsync) per flush.
 
 ## Slurm scheduler fields
 

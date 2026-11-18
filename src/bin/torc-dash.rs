@@ -944,6 +944,10 @@ async fn main() -> Result<()> {
         .route("/api/cli/read-file", post(cli_read_file_handler))
         .route("/api/cli/write-file", post(cli_write_file_handler))
         .route("/api/cli/tail-file", post(cli_tail_file_handler))
+        .route(
+            "/api/cli/resource-samples",
+            post(cli_resource_samples_handler),
+        )
         .route("/api/workflow-schema", get(workflow_schema_handler))
         .route("/api/cli/plot-resources", post(cli_plot_resources_handler))
         .route(
@@ -2345,6 +2349,120 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
             exists: true,
         }),
     }
+}
+
+#[derive(Deserialize)]
+struct ResourceSamplesRequest {
+    db_path: String,
+    /// Return only samples with `timestamp > since` (unix seconds).
+    #[serde(default)]
+    since: i64,
+    #[serde(default)]
+    job_ids: Vec<i64>,
+}
+
+/// Column-oriented samples, ready to hand to Plotly.
+#[derive(Serialize, Default)]
+struct SampleSeries {
+    timestamp: Vec<i64>,
+    cpu_percent: Vec<f64>,
+    memory_bytes: Vec<i64>,
+}
+
+#[derive(Serialize, Default)]
+struct ResourceSamplesResponse {
+    success: bool,
+    system: SampleSeries,
+    /// Samples for the requested `job_ids`, keyed by job ID.
+    jobs: std::collections::HashMap<i64, SampleSeries>,
+    /// All jobs this node has monitored: (job_id, job_name).
+    job_names: Vec<(i64, String)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+/// Samples appended to a live resource metrics database since `since`.
+async fn cli_resource_samples_handler(
+    Json(req): Json<ResourceSamplesRequest>,
+) -> Json<ResourceSamplesResponse> {
+    let result = tokio::task::spawn_blocking(move || read_resource_samples(&req))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r.map_err(|e| e.to_string()));
+    Json(result.unwrap_or_else(|e| ResourceSamplesResponse {
+        error: Some(e),
+        ..Default::default()
+    }))
+}
+
+fn read_resource_samples(
+    req: &ResourceSamplesRequest,
+) -> rusqlite::Result<ResourceSamplesResponse> {
+    use rusqlite::{Connection, OpenFlags};
+    // The writer usually runs on another host. WAL shared memory does not work across hosts
+    // on a network filesystem, so ignore the WAL (`immutable=1`) and read only checkpointed
+    // pages, which the writer produces after each flush when `live_monitoring` is on.
+    // ponytail: a read racing a checkpoint can fail or miss rows; the next poll retries.
+    const URI_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+        .add(b'%')
+        .add(b'?')
+        .add(b'#')
+        .add(b' ');
+    let uri = format!(
+        "file:{}?immutable=1",
+        percent_encoding::utf8_percent_encode(&req.db_path, URI_RESERVED)
+    );
+    let conn = Connection::open_with_flags(
+        &uri,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+    )?;
+    let mut out = ResourceSamplesResponse {
+        success: true,
+        ..Default::default()
+    };
+    // Tables appear at the first checkpoint; until then the database looks empty.
+    let has_table = |name: &str| -> rusqlite::Result<bool> {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [name],
+            |r| r.get(0),
+        )
+    };
+    let read_series = |sql: &str, params: &[&dyn rusqlite::ToSql]| {
+        let mut series = SampleSeries::default();
+        let mut stmt = conn.prepare(sql)?;
+        let mut rows = stmt.query(params)?;
+        while let Some(row) = rows.next()? {
+            series.timestamp.push(row.get(0)?);
+            series.cpu_percent.push(row.get(1)?);
+            series.memory_bytes.push(row.get(2)?);
+        }
+        Ok::<_, rusqlite::Error>(series)
+    };
+    if has_table("system_resource_samples")? {
+        out.system = read_series(
+            "SELECT timestamp, cpu_percent, memory_bytes FROM system_resource_samples \
+             WHERE timestamp > ?1 ORDER BY timestamp",
+            &[&req.since],
+        )?;
+    }
+    if has_table("job_resource_samples")? {
+        for job_id in &req.job_ids {
+            let series = read_series(
+                "SELECT timestamp, cpu_percent, memory_bytes FROM job_resource_samples \
+                 WHERE job_id = ?1 AND timestamp > ?2 ORDER BY timestamp",
+                &[job_id, &req.since],
+            )?;
+            out.jobs.insert(*job_id, series);
+        }
+    }
+    if has_table("job_metadata")? {
+        let mut stmt = conn.prepare("SELECT job_id, job_name FROM job_metadata ORDER BY job_id")?;
+        out.job_names = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+    }
+    Ok(out)
 }
 
 #[derive(Deserialize)]
@@ -4922,9 +5040,49 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_host_list, anthropic_api_base, apply_spec_edit, check_request, same_secret,
-        tail_file, take_token_param, workflow_id_from_resource_db_name,
+        ResourceSamplesRequest, allowed_host_list, anthropic_api_base, apply_spec_edit,
+        check_request, read_resource_samples, same_secret, tail_file, take_token_param,
+        workflow_id_from_resource_db_name,
     };
+
+    #[test]
+    fn resource_samples_see_only_checkpointed_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("resource metrics?.db");
+        let writer = rusqlite::Connection::open(&path).unwrap();
+        writer.pragma_update(None, "journal_mode", "WAL").unwrap();
+        writer
+            .execute_batch(
+                "CREATE TABLE system_resource_samples (id INTEGER PRIMARY KEY, timestamp INTEGER, \
+                   cpu_percent REAL, memory_bytes INTEGER, total_memory_bytes INTEGER);
+                 CREATE TABLE job_resource_samples (job_id INTEGER, timestamp INTEGER, \
+                   cpu_percent REAL, memory_bytes INTEGER, num_processes INTEGER);
+                 CREATE TABLE job_metadata (job_id INTEGER PRIMARY KEY, job_name TEXT);
+                 INSERT INTO system_resource_samples VALUES (NULL, 10, 1.0, 100, 1000), \
+                   (NULL, 20, 2.0, 200, 1000);
+                 INSERT INTO job_resource_samples VALUES (7, 10, 50.0, 5, 1), (7, 20, 60.0, 6, 1), \
+                   (8, 20, 70.0, 7, 1);
+                 INSERT INTO job_metadata VALUES (7, 'a'), (8, 'b');",
+            )
+            .unwrap();
+        let req = ResourceSamplesRequest {
+            db_path: path.to_str().unwrap().to_string(),
+            since: 10,
+            job_ids: vec![7],
+        };
+
+        let before = read_resource_samples(&req).unwrap();
+        assert!(before.system.timestamp.is_empty() && before.job_names.is_empty());
+
+        writer
+            .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()))
+            .unwrap();
+        let after = read_resource_samples(&req).unwrap();
+        assert_eq!(after.system.timestamp, vec![20]);
+        assert_eq!(after.jobs.len(), 1);
+        assert_eq!(after.jobs[&7].cpu_percent, vec![60.0]);
+        assert_eq!(after.job_names, vec![(7, "a".into()), (8, "b".into())]);
+    }
 
     #[tokio::test]
     async fn tail_file_follows_appends() {

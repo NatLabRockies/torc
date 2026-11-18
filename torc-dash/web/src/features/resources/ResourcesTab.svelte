@@ -4,6 +4,8 @@
   import { dashPost } from "../../lib/api/dash";
   import { errorText, formatBytes } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
+  import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
+  import LiveResources from "./LiveResources.svelte";
   import PlotView, { type Figure } from "./PlotView.svelte";
 
   type ResourceDb = {
@@ -15,6 +17,7 @@
   };
   type Plot = { name: string; data: Figure | null };
 
+  let mode = $state<"plots" | "live">("plots");
   let baseDir = $state("torc_output/resource_utilization");
   let dbs = $state.raw<ResourceDb[] | null>(null);
   let scanning = $state(false);
@@ -34,7 +37,8 @@
         ? dbs
         : dbs.filter((d) => d.workflow_id === app.workflowId),
   );
-  let selectedPaths = $derived(visible.filter((d) => selected.has(d.path)).map((d) => d.path));
+  let selectedDbs = $derived(visible.filter((d) => selected.has(d.path)));
+  let selectedPaths = $derived(selectedDbs.map((d) => d.path));
   let current = $derived(plots?.[plotIndex] ?? null);
 
   async function scan() {
@@ -62,7 +66,7 @@
     plotError = null;
     if (visible.length === 1) {
       selected.add(visible[0].path);
-      void generate();
+      if (mode === "plots") void generate();
     }
   }
 
@@ -126,6 +130,13 @@
 <div class="page">
   <div class="page-header">
     <h2>Resource plots</h2>
+    <SegmentedTabs
+      bind:value={mode}
+      tabs={[
+        { id: "plots", label: "Plots" },
+        { id: "live", label: "Live" },
+      ]}
+    />
   </div>
 
   <div class="layout">
@@ -193,18 +204,20 @@
                 {/each}
               </div>
             {/if}
-            <button
-              class="btn btn-primary"
-              disabled={selectedPaths.length === 0 || generating}
-              onclick={generate}
-            >
-              {#if generating}<span class="spinner"></span> Generating…{:else}Generate plots{/if}
-            </button>
+            {#if mode === "plots"}
+              <button
+                class="btn btn-primary"
+                disabled={selectedPaths.length === 0 || generating}
+                onclick={generate}
+              >
+                {#if generating}<span class="spinner"></span> Generating…{:else}Generate plots{/if}
+              </button>
+            {/if}
           {/if}
         </div>
       </section>
 
-      {#if plots && plots.length > 0}
+      {#if mode === "plots" && plots && plots.length > 0}
         <section class="card plot-list">
           {#each plots as p, i (p.name)}
             <button class="plot-item" class:active={i === plotIndex} onclick={() => (plotIndex = i)}>
@@ -216,7 +229,9 @@
     </aside>
 
     <section class="card main">
-      {#if plotError}
+      {#if mode === "live"}
+        <LiveResources dbs={selectedDbs} />
+      {:else if plotError}
         <div class="empty error-text">{plotError}</div>
       {:else if plots === null}
         <div class="empty">

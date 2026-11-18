@@ -30,6 +30,29 @@ This creates:
 - **Overview plots** — Comparison across all jobs
 - **Summary dashboard** — Bar charts of peak and average usage
 
+## Watch Live in the Dashboard
+
+To see CPU and memory while the workflow runs, enable live monitoring and shorten the flush interval
+before you submit the workflow:
+
+```yaml
+resource_monitor:
+  sample_interval_seconds: 5
+  flush_interval_seconds: 30 # plots update this often; the default of 300 means every 5 minutes
+  live_monitoring: true
+  jobs:
+    enabled: true
+    granularity: "time_series"
+  compute_node:
+    enabled: true
+    granularity: "time_series"
+```
+
+Then open the dashboard's **Resources** tab, switch to **Live**, and select the compute node
+databases to watch. Node totals are plotted by default. Check jobs in the job list to add their CPU
+and memory lines. See [Live Monitoring](../reference/resource-monitoring.md#live-monitoring) for the
+performance trade-offs.
+
 ## Plot Specific Jobs
 
 Generate plots for only certain jobs:

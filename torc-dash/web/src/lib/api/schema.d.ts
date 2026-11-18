@@ -2135,6 +2135,13 @@ export interface components {
             /** @default null */
             jobs: components["schemas"]["JobMonitorConfig"];
             /**
+             * @description Checkpoint the time-series database after every flush so readers on other hosts
+             *     (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default:
+             *     each checkpoint adds a small write and fsync to the main database file.
+             * @default false
+             */
+            live_monitoring: boolean;
+            /**
              * Format: int32
              * @default 10
              */

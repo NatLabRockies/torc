@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **generate_plots** | **Bool** |  | [optional] [default to false]
 **granularity** | [***MonitorGranularity**](MonitorGranularity.md) | Deprecated compatibility field. Use &#x60;jobs.granularity&#x60; for new workflow specs. | [optional] [default to nothing]
 **jobs** | [***JobMonitorConfig**](JobMonitorConfig.md) |  | [optional] [default to nothing]
+**live_monitoring** | **Bool** | Checkpoint the time-series database after every flush so readers on other hosts (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default: each checkpoint adds a small write and fsync to the main database file. | [optional] [default to false]
 **sample_interval_seconds** | **Int64** |  | [optional] [default to 10]
 
 
