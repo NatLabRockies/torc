@@ -155,10 +155,18 @@ export class SpecSchema {
     return [];
   }
 
-  /** Completions at `pos`: keys of the enclosing mapping, or allowed values after `key: `. */
-  complete(text: string, pos: number): { from: number; options: Completion[] } | null {
+  /**
+   * Completions at `pos`: keys of the enclosing mapping, or allowed values after `key: `. The
+   * range `from`..`to` covers the whole word at the cursor, so accepting one replaces it.
+   */
+  complete(
+    text: string,
+    pos: number,
+  ): { from: number; to: number; kind: "key" | "value"; options: Completion[] } | null {
     const { lines, li, col } = lineAt(text, pos);
     const before = lines[li].slice(0, col);
+    const after = lines[li].slice(col);
+    const to = pos + /^[\w.-]*/.exec(after)![0].length;
 
     const value = /^(\s*(?:-\s+)*)([\w.-]+):\s+([\w.-]*)$/.exec(before);
     if (value) {
@@ -170,6 +178,8 @@ export class SpecSchema {
       const info = s ? this.describe(s) : "";
       return {
         from: pos - value[3].length,
+        to,
+        kind: "value",
         options: vals.map((v) => ({ label: v, detail: "", info, apply: v })),
       };
     }
@@ -185,17 +195,20 @@ export class SpecSchema {
     if (!props) return null;
     const present = siblingKeys(lines, li, keyCol);
     const pad = " ".repeat(keyCol + 2);
+    // Renaming an existing key (`nam|: x`): insert only the name, keeping its separator and value.
+    const hasColon = /^\s*:/.test(after.slice(to - pos));
     const options = Object.entries(props)
       .filter(([k]) => !present.has(k) || k === key[3])
       .map(([k, s]) => {
         const r = this.resolve(s) ?? {};
         const types = [r.type].flat();
         const nested = types.includes("array") ? `\n${pad}- ` : types.includes("object") && r.properties ? `\n${pad}` : " ";
-        return { label: k, detail: this.typeLabel(s), info: this.describe(s), apply: `${k}:${nested}` };
+        const apply = hasColon ? k : `${k}:${nested}`;
+        return { label: k, detail: this.typeLabel(s), info: this.describe(s), apply };
       });
     const required = new Set<string>(container?.required ?? []);
     options.sort((a, b) => Number(required.has(b.label)) - Number(required.has(a.label)));
-    return { from: pos - key[3].length, options };
+    return { from: pos - key[3].length, to, kind: "key", options };
   }
 
   /** The key under `pos`, its range, type, and description. */

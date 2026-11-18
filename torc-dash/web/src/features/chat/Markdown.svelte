@@ -1,6 +1,20 @@
 <!-- Markdown rendered with marked (lazy-loaded) and sanitized with DOMPurify. -->
 <script lang="ts" module>
   type Render = (text: string) => string;
+
+  /**
+   * Assistant text is untrusted: a reply with ![](/api/cli/run-stream?...) would otherwise make a
+   * dashboard request just by being shown. Allow only Markdown elements that fetch nothing, and
+   * links only to absolute http(s) or mailto URLs (a relative link would target the dashboard).
+   */
+  const SANITIZE = {
+    ALLOWED_TAGS: [
+      "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "del", "code", "pre",
+      "blockquote", "ul", "ol", "li", "a", "table", "thead", "tbody", "tr", "th", "td",
+    ],
+    ALLOWED_ATTR: ["href", "title", "start", "align", "class"],
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i,
+  };
   let renderer: Promise<Render> | null = null;
 
   function loadRenderer(): Promise<Render> {
@@ -14,7 +28,7 @@
           }
           if (node.tagName === "PRE") node.classList.add("code-block");
         });
-        return (text) => DOMPurify.sanitize(marked.parse(text) as string);
+        return (text) => DOMPurify.sanitize(marked.parse(text) as string, SANITIZE);
       },
     );
     return renderer;

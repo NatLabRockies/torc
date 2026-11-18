@@ -73,20 +73,22 @@ export const SNIPPETS: Snippet[] = [
 /**
  * Append `snippet` to the end of its top-level section, creating the section at the end of the
  * document if missing. Items are indented like the section's existing items (default 2). An empty
- * flow sequence (`files: []`) becomes a block section; a non-empty flow section throws, since
- * rewriting it could lose comments or formatting. Returns the new text and the inserted range.
+ * section (`files: []`, `files: null`, `files: ~`) becomes a block section; a non-empty flow section
+ * throws, since rewriting it could lose comments or formatting. Returns the new text and the
+ * inserted range.
  */
 export function insertSnippet(text: string, snippet: Snippet): { text: string; from: number; to: number } {
   const key = new RegExp(`^${snippet.section}\\s*:`);
-  const flow = text.split("\n").findIndex((l) => key.test(l) && /^[^:]+:\s*[[{]/.test(l));
-  if (flow >= 0) {
-    if (!/^[^:]+:\s*\[\s*\]\s*(#.*)?$/.test(text.split("\n")[flow]))
+  const empty = /^[^:]+:\s*(\[\s*\]|~|null|Null|NULL)\s*(#.*)?$/;
+  const at = text.split("\n").findIndex((l) => key.test(l) && (empty.test(l) || /^[^:]+:\s*[[{]/.test(l)));
+  if (at >= 0) {
+    if (!empty.test(text.split("\n")[at]))
       throw new Error(
         `"${snippet.section}" is written in flow style ([...]). Convert it to a block list to insert here.`,
       );
     const lines = text.split("\n");
-    const comment = /\s(#.*)$/.exec(lines[flow])?.[1];
-    lines[flow] = comment ? `${snippet.section}:  ${comment}` : `${snippet.section}:`;
+    const comment = /\s(#.*)$/.exec(lines[at])?.[1];
+    lines[at] = comment ? `${snippet.section}:  ${comment}` : `${snippet.section}:`;
     text = lines.join("\n");
   }
   const lines = text.split("\n");

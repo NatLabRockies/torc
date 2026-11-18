@@ -63,13 +63,14 @@ function schemaSupport(schema: SpecSchema) {
           if (!r || (!ctx.explicit && r.from === ctx.pos && !ctx.matchBefore(/:\s$/))) return null;
           return {
             from: r.from,
+            to: r.to,
             validFor: /^[\w.-]*$/,
             options: r.options.map((o) => ({
               label: o.label,
               detail: o.detail,
               info: o.info ? prose(o.info) : undefined,
               apply: o.apply,
-              type: o.apply.endsWith(" ") || o.apply.includes("\n") ? "property" : "enum",
+              type: r.kind === "key" ? "property" : "enum",
             })),
           };
         },

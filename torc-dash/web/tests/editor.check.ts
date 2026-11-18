@@ -32,6 +32,19 @@ assert.ok(l.includes("num_cpus") && l.includes("memory"), `rr keys: ${l}`);
 l = labels("jobs:\n  - name: a\n    command: |\n      ech|");
 assert.deepEqual(l, [], "no keys inside a block scalar");
 
+// Accepting a key replaces the whole word, keeping an existing ": value".
+function accept(src: string, label: string): string {
+  const pos = src.indexOf("|");
+  const text = src.replace("|", "");
+  const r = schema.complete(text, pos)!;
+  const o = r.options.find((x) => x.label === label)!;
+  return text.slice(0, r.from) + o.apply + text.slice(r.to);
+}
+assert.equal(accept("nam|: demo", "name"), "name: demo");
+assert.equal(accept("na|me: demo", "name"), "name: demo");
+assert.equal(accept("na|", "name"), "name: ");
+assert.equal(accept("execution_config:\n  mode: sl|urm", "slurm"), "execution_config:\n  mode: slurm");
+
 // Values.
 assert.deepEqual(labels("execution_config:\n  mode: |"), ["direct", "slurm", "auto"]);
 assert.deepEqual(labels("enable_ro_crate: |"), ["true", "false"]);
@@ -87,4 +100,9 @@ assert.deepEqual(schema.lint(doc), [], doc);
 r = insertSnippet("name: w\nfiles: []  # none yet\njobs:\n  - name: a\n    command: x\n", SNIPPETS.find((s) => s.section === "files")!);
 assert.equal(r.text, "name: w\nfiles:  # none yet\n  - name: raw_data\n    path: data/raw.csv\njobs:\n  - name: a\n    command: x\n");
 assert.throws(() => insertSnippet("jobs: [{name: a, command: x}]\n", job), /flow style/);
+// A null section is empty too, not missing (which would add a second "files:" key).
+for (const nil of ["null", "~"]) {
+  r = insertSnippet(`name: w\nfiles: ${nil}\njobs: []\n`, SNIPPETS.find((s) => s.section === "files")!);
+  assert.equal(r.text, "name: w\nfiles:\n  - name: raw_data\n    path: data/raw.csv\njobs: []\n");
+}
 console.log("snippet checks passed");

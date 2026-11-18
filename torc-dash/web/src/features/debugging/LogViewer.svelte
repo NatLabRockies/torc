@@ -23,6 +23,8 @@
   let shownPath = $state<string | null>(null);
   let displayPath = $derived(loadedPath === path && shownPath ? shownPath : path);
   let pre = $state<HTMLPreElement>();
+  /** Bumped per load; only the latest load may show its result. */
+  let loadSeq = 0;
 
   $effect(() => {
     const p = path;
@@ -31,6 +33,7 @@
   });
 
   async function load(p: string) {
+    const seq = ++loadSeq;
     const samePath = p === loadedPath;
     const atBottom = !pre || pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
     if (!samePath) {
@@ -52,7 +55,7 @@
     } catch (e) {
       [nextNote, err] = [`Error loading file: ${errorText(e)}`, true];
     }
-    if (p !== path) return; // a newer selection won
+    if (seq !== loadSeq) return; // a newer load (another file, or a later refresh) won
     content = next;
     note = nextNote;
     isError = err;
