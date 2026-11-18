@@ -1,7 +1,12 @@
-<!-- LLM provider setup (POST /api/chat/configure). Credentials live in torc-dash memory only. -->
+<!--
+  LLM provider setup (POST /api/chat/configure). Credentials live in torc-dash memory only, and the
+  provider is shared by every conversation; `session` is the one whose form this is.
+-->
 <script lang="ts">
   import Icon from "../../lib/ui/Icon.svelte";
-  import { chat } from "./chat.svelte";
+  import { chat, type ChatState } from "./chat.svelte";
+
+  let { session = chat }: { session?: ChatState } = $props();
 
   const DOCS =
     "https://natlabrockies.github.io/torc/v0.20.4/core/monitoring/dashboard.html#ai-chat-tab";
@@ -97,7 +102,7 @@
     busy = true;
     error = null;
     try {
-      await chat.configure(body);
+      await session.configure(body);
       remember();
       apiKey = "";
     } catch (err) {
@@ -111,7 +116,7 @@
 <form class="card setup" onsubmit={submit}>
   <div class="icon"><Icon name="chat" size={22} /></div>
   <h3>Connect an AI provider</h3>
-  {#if chat.reason}<p class="muted">{chat.reason}</p>{/if}
+  {#if session.reason}<p class="muted">{session.reason}</p>{/if}
 
   <label class="field">
     <span>Provider</span>
@@ -177,8 +182,8 @@
   {#if error}<p class="error-text">{error}</p>{/if}
 
   <div class="actions">
-    {#if chat.available}
-      <button type="button" class="btn" onclick={() => (chat.setupOpen = false)}>Cancel</button>
+    {#if session.available}
+      <button type="button" class="btn" onclick={() => (session.setupOpen = false)}>Cancel</button>
     {/if}
     <button class="btn btn-primary" disabled={busy}>
       {#if busy}<span class="spinner"></span>{/if} Connect

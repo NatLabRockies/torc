@@ -4,6 +4,7 @@
  */
 import { app } from "../../lib/state.svelte";
 import { confirm } from "../../lib/ui/confirm.svelte";
+import { specChat, type SpecEdit } from "../chat/chat.svelte";
 
 const KEY = "torc-dash.editor";
 
@@ -72,3 +73,24 @@ class Draft {
 }
 
 export const draft = new Draft();
+
+/** Set by the editor page while it is open, so assistant edits go through CodeMirror. */
+export const editorHooks: { apply: ((edit: SpecEdit) => boolean) | null } = { apply: null };
+
+/** Apply an assistant edit to the draft text directly (the editor isn't open). */
+function applyToText(edit: SpecEdit): boolean {
+  if ("content" in edit) {
+    draft.text = edit.content;
+    return true;
+  }
+  const i = draft.text.indexOf(edit.old_str);
+  if (i < 0 || draft.text.indexOf(edit.old_str, i + edit.old_str.length) >= 0) return false;
+  draft.text = draft.text.slice(0, i) + edit.new_str + draft.text.slice(i + edit.old_str.length);
+  return true;
+}
+
+// The editor's assistant shares this draft: it reads it with each message and edits it.
+specChat.spec = {
+  get: () => draft.text,
+  apply: (edit) => (editorHooks.apply ?? applyToText)(edit),
+};

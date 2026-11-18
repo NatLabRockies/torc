@@ -16,7 +16,10 @@
   import { createWorkflow, validateSpec, type ValidationReport } from "../create/actions";
   import ValidationPanel from "../create/ValidationPanel.svelte";
   import { initializeWorkflow } from "../workflows/actions";
-  import { draft } from "./draft.svelte";
+  import { specChat } from "../chat/chat.svelte";
+  import ChatSetup from "../chat/ChatSetup.svelte";
+  import ChatThread from "../chat/ChatThread.svelte";
+  import { draft, editorHooks } from "./draft.svelte";
   import { SNIPPETS, insertSnippet } from "./snippets";
   import SpecEditor from "./SpecEditor.svelte";
   import { BLANK_TEMPLATE, loadTemplates, type Template } from "./templates";
@@ -28,6 +31,46 @@
     .catch(() => null);
 
   let editor = $state<ReturnType<typeof SpecEditor>>();
+  const AI_KEY = "torc-dash.editor.ai-open";
+  let aiOpen = $state(readFlag(AI_KEY));
+  // The assistant takes turns with the user: the editor is read-only while it responds.
+  const aiBusy = $derived(specChat.streaming);
+
+  const AI_EXAMPLES = [
+    "Write a workflow that runs 10 simulations, then aggregates the results",
+    "Add a Slurm scheduler and schedule nodes at workflow start",
+    "Explain this spec",
+    "Validate this spec and fix any problems",
+  ];
+
+  function readFlag(key: string): boolean {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function toggleAi() {
+    aiOpen = !aiOpen;
+    try {
+      localStorage.setItem(AI_KEY, aiOpen ? "1" : "0");
+    } catch {
+      // Remembering the panel is a convenience only.
+    }
+  }
+
+  $effect(() => {
+    if (aiOpen) specChat.checkStatus();
+  });
+
+  // Assistant edits go through CodeMirror while it's mounted (undo steps, selection).
+  $effect(() => {
+    const ed = editor;
+    if (!ed) return;
+    editorHooks.apply = (edit) => ed.applyEdit(edit);
+    return () => (editorHooks.apply = null);
+  });
   let report = $state<ValidationReport | null>(null);
   let validating = $state(false);
   let creating = $state(false);
@@ -193,10 +236,11 @@
 
 <div class="page">
   <div class="toolbar">
-    <button class="btn btn-sm" onclick={showTemplates}><Icon name="plus" size={13} /> New from template</button>
+    <button class="btn btn-sm" onclick={showTemplates} disabled={aiBusy}><Icon name="plus" size={13} /> New from template</button>
     <button
       bind:this={insertTrigger}
       class="btn btn-sm"
+      disabled={aiBusy}
       popovertarget={insertId}
       onclick={placeInsertMenu}>Insert <Icon name="chevronDown" size={13} /></button
     >
@@ -207,10 +251,10 @@
         </button>
       {/each}
     </div>
-    <button class="btn btn-sm" onclick={() => fileInput?.click()} title="Open a YAML or JSON file from this computer">
+    <button class="btn btn-sm" disabled={aiBusy} onclick={() => fileInput?.click()} title="Open a YAML or JSON file from this computer">
       <Icon name="upload" size={13} /> Open local file
     </button>
-    <button class="btn btn-sm" onclick={() => openPathDialog("open")} title="Open a file on the machine running torc-dash">
+    <button class="btn btn-sm" disabled={aiBusy} onclick={() => openPathDialog("open")} title="Open a file on the machine running torc-dash">
       <Icon name="file" size={13} /> Open path
     </button>
     <button class="btn btn-sm" onclick={save} title="Save (⌘S / Ctrl+S)">
@@ -222,7 +266,11 @@
     <span class="file muted" title={draft.path ?? ""}>
       {draft.path ?? "Unsaved draft"}{draft.dirty ? " •" : ""}
     </span>
+    {#if aiBusy}<span class="ai-busy"><span class="spinner small"></span> Assistant is editing…</span>{/if}
     <span class="grow"></span>
+    <button class="btn btn-sm" class:btn-active={aiOpen} onclick={toggleAi} aria-pressed={aiOpen}>
+      <Icon name="chat" size={13} /> Assistant
+    </button>
     <label class="check"><input type="checkbox" bind:checked={initialize} /> Initialize after create</label>
     <button class="btn btn-sm" onclick={validate} disabled={validating}>
       {#if validating}<span class="spinner small"></span>{:else}<Icon name="check" size={13} />{/if} Validate
@@ -247,12 +295,56 @@
     {#await schema}
       <div class="empty"><span class="spinner"></span></div>
     {:then s}
-      <SpecEditor bind:this={editor} bind:value={draft.text} schema={s} />
+      <SpecEditor bind:this={editor} bind:value={draft.text} schema={s} readOnly={aiBusy} />
     {/await}
-    {#if report}
-      <aside>
-        <ValidationPanel {report} busy={validating} />
-        <button class="btn btn-sm btn-ghost" onclick={() => (report = null)}>Dismiss</button>
+    {#if report || aiOpen}
+      <aside class:wide={aiOpen}>
+        {#if report}
+          <div class="report">
+            <ValidationPanel {report} busy={validating} />
+            <button class="btn btn-sm btn-ghost" onclick={() => (report = null)}>Dismiss</button>
+          </div>
+        {/if}
+        {#if aiOpen}
+          <section class="assistant">
+            <header>
+              <strong>Assistant</strong>
+              <span class="faint">reads and edits this spec</span>
+              <span class="grow"></span>
+              {#if specChat.available && !specChat.setupOpen}
+                <button
+                  class="btn btn-sm btn-ghost"
+                  title="AI provider (shared with the AI Chat tab)"
+                  disabled={aiBusy}
+                  onclick={() => (specChat.setupOpen = true)}>Provider</button
+                >
+              {/if}
+              <button
+                class="btn btn-sm btn-ghost btn-icon"
+                title="Clear conversation"
+                aria-label="Clear conversation"
+                disabled={aiBusy || specChat.messages.length === 0}
+                onclick={() => specChat.clear()}><Icon name="trash" size={13} /></button
+              >
+              <button class="btn btn-sm btn-ghost btn-icon" title="Close" aria-label="Close" onclick={toggleAi}
+                ><Icon name="x" size={13} /></button
+              >
+            </header>
+            {#if specChat.available === null}
+              <div class="empty"><span class="spinner"></span></div>
+            {:else if specChat.available === false || specChat.setupOpen}
+              <div class="setup"><ChatSetup session={specChat} /></div>
+            {:else}
+              <ChatThread
+                session={specChat}
+                title="Spec assistant"
+                subtitle="Describe the workflow you want or the change to make. Edits appear in the editor as they happen; ⌘Z / Ctrl+Z undoes each one."
+                examples={AI_EXAMPLES}
+                placeholder="Ask for a change…"
+              />
+            {/if}
+          </section>
+        {/if}
       </aside>
     {/if}
   </div>
@@ -345,8 +437,61 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
+    min-height: 0;
     overflow: auto;
+  }
+  aside.wide {
+    width: min(440px, 40%);
+    overflow: hidden;
+  }
+  .report {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+    max-height: 40%;
+    overflow: auto;
+  }
+  .assistant {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+  }
+  .assistant header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .assistant .setup {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+  .assistant :global(.welcome) {
+    padding: 24px 8px 12px;
+  }
+  .assistant :global(.bubble) {
+    max-width: 100%;
+  }
+  .ai-busy {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent);
+    font-size: 12.5px;
+  }
+  .btn-active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .tips {
     margin: 0;

@@ -167,6 +167,12 @@ A YAML editor for workflow specs, driven by the workflow-spec JSON Schema:
   path** and **Save** (`Ctrl+S` / `⌘S`) read and write files on the machine running `torc-dash`;
   relative paths resolve against its working directory.
 - **Create workflow** creates the workflow from the editor contents, optionally initializing it.
+- **Assistant** opens an AI panel that works on the editor's buffer. It uses the same AI provider as
+  the AI Chat tab; set it from either one with **Provider**. Describe a workflow or a change; the
+  assistant edits the spec directly, validates it with a dry run, and explains what it did. Each
+  edit is selected as it lands and undoes separately with `⌘Z` / `Ctrl+Z`. The editor is read-only
+  while the assistant is responding; **Stop** ends the response. The assistant doesn't create
+  workflows or write files; you do that from the editor.
 
 The editor keeps its contents in the browser between visits.
 

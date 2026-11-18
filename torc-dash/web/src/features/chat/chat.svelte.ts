@@ -4,6 +4,7 @@
  *   text        data = JSON-encoded string (one per model round)
  *   tool_use    data = {"id","name","input"}
  *   tool_result data = {"id","name","result","is_error"}
+ *   spec_edit   data = {"old_str","new_str"} or {"content"} (editor conversations only)
  *   error       data = plain text
  *   done        data = ""
  */
@@ -17,7 +18,17 @@ export type Part =
 
 export type Message = { role: "user"; text: string } | { role: "assistant"; parts: Part[] };
 
-class ChatState {
+/** An edit the assistant made to the spec editor's buffer. */
+export type SpecEdit = { old_str: string; new_str: string } | { content: string };
+/** Connects a conversation to the spec editor: its text goes with each message, edits come back. */
+export type SpecBinding = { get: () => string; apply: (edit: SpecEdit) => boolean };
+
+export class ChatState {
+  /** Send the selected workflow as context (the AI Chat tab, not the editor). */
+  readonly workflowContext: boolean;
+  /** Set by the spec editor for its conversation. */
+  spec: SpecBinding | null = null;
+
   messages = $state<Message[]>([]);
   streaming = $state(false);
   /** null until the first status check. */
@@ -28,6 +39,10 @@ class ChatState {
   /** Conversation sent to the server: plain text turns, as the legacy UI did. */
   private history: { role: "user" | "assistant"; content: string }[] = [];
   private abort: AbortController | null = null;
+
+  constructor(workflowContext: boolean) {
+    this.workflowContext = workflowContext;
+  }
 
   async checkStatus() {
     try {
@@ -65,7 +80,11 @@ class ChatState {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: this.history, workflow_id: app.workflowId }),
+        body: JSON.stringify({
+          messages: this.history,
+          workflow_id: this.workflowContext ? app.workflowId : null,
+          spec: this.spec?.get(),
+        }),
         signal: this.abort.signal,
       });
       if (!response.ok || !response.body) {
@@ -101,6 +120,9 @@ class ChatState {
               part.result = r.result ?? "";
               part.isError = r.is_error;
             }
+          } else if (ev.type === "spec_edit") {
+            const edit = parseJson<SpecEdit>(ev.data);
+            if (edit && !this.spec?.apply(edit)) note("Could not apply an edit: the spec changed.", true);
           } else if (ev.type === "error") {
             note(`Error: ${ev.data}`, true);
           }
@@ -124,8 +146,11 @@ class ChatState {
       body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error((await r.text()) || "Failed to configure provider");
-    this.available = true;
-    this.reason = null;
+    // The provider is torc-dash-wide, so every conversation can use it now.
+    for (const s of [chat, specChat]) {
+      s.available = true;
+      s.reason = null;
+    }
     this.setupOpen = false;
   }
 }
@@ -148,4 +173,7 @@ function parseJson<T>(s: string): T | null {
   }
 }
 
-export const chat = new ChatState();
+/** The AI Chat tab's conversation. */
+export const chat = new ChatState(true);
+/** The spec editor's conversation, about the spec being edited. */
+export const specChat = new ChatState(false);

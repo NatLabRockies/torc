@@ -1433,27 +1433,8 @@ async fn cli_validate_handler(
         )
         .await
     } else {
-        // Spec is inline content - write to temp file with correct extension
-        // Use UUID to avoid race conditions with concurrent requests
         let extension = req.file_extension.as_deref().unwrap_or(".json");
-        let unique_id = uuid::Uuid::new_v4();
-        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, extension);
-        if let Err(e) = tokio::fs::write(&temp_path, &req.spec).await {
-            return Json(CliResponse {
-                success: false,
-                stdout: String::new(),
-                stderr: format!("Failed to write temp file: {}", e),
-                exit_code: None,
-            });
-        }
-        let result = run_torc_command(
-            &state.torc_bin,
-            &["-f", "json", "create", &temp_path, "--dry-run"],
-            &state.api_url,
-        )
-        .await;
-        let _ = tokio::fs::remove_file(&temp_path).await;
-        result
+        dry_run_spec(&state.torc_bin, &state.api_url, &req.spec, extension).await
     };
 
     Json(result)
@@ -3208,6 +3189,121 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     #[serde(default)]
     workflow_id: Option<i64>,
+    /// The spec editor's buffer, when chatting from the editor. Enables the spec tools.
+    #[serde(default)]
+    spec: Option<String>,
+}
+
+/// Tools for the spec editor's buffer, handled in torc-dash rather than by the MCP server:
+/// (name, description, JSON Schema of the input).
+fn spec_tools() -> [(&'static str, &'static str, serde_json::Value); 3] {
+    [
+        (
+            "edit_spec",
+            "Edit the workflow spec in the user's editor: replace old_str, which must occur exactly \
+             once in the spec, with new_str. Include enough surrounding text to make old_str \
+             unique. Keep the user's formatting and comments. The edit appears in the editor \
+             immediately.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "old_str": {"type": "string", "description": "Exact text to replace"},
+                    "new_str": {"type": "string", "description": "Replacement text"}
+                },
+                "required": ["old_str", "new_str"]
+            }),
+        ),
+        (
+            "replace_spec",
+            "Replace the entire workflow spec in the user's editor. Use it to write a new spec or \
+             rewrite most of one; use edit_spec for changes.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "The complete spec (YAML)"}
+                },
+                "required": ["content"]
+            }),
+        ),
+        (
+            "validate_spec",
+            "Validate the spec in the user's editor as `torc create --dry-run` would. Returns \
+             errors, warnings, and a summary (job counts after parameter expansion, etc.).",
+            serde_json::json!({"type": "object", "properties": {}}),
+        ),
+    ]
+}
+
+/// Applies an edit_spec or replace_spec call to `buf`. Returns a message for the model and the
+/// edit to send to the editor, or an error for the model to correct.
+fn apply_spec_edit(
+    buf: &mut String,
+    tool: &str,
+    input: &serde_json::Value,
+) -> Result<(String, serde_json::Value), String> {
+    match tool {
+        "edit_spec" => {
+            let old = input["old_str"].as_str().unwrap_or_default();
+            let new = input["new_str"].as_str().unwrap_or_default();
+            if old.is_empty() {
+                return Err(
+                    "old_str is empty. Use replace_spec to write the whole spec.".to_string(),
+                );
+            }
+            match buf.matches(old).count() {
+                0 => Err(
+                    "old_str was not found. Copy it exactly from the current spec, \
+                          including indentation."
+                        .to_string(),
+                ),
+                1 => {
+                    *buf = buf.replacen(old, new, 1);
+                    Ok((
+                        "Edited the spec.".to_string(),
+                        serde_json::json!({"old_str": old, "new_str": new}),
+                    ))
+                }
+                n => Err(format!(
+                    "old_str occurs {n} times. Include more surrounding text so it is unique."
+                )),
+            }
+        }
+        "replace_spec" => {
+            let content = input["content"]
+                .as_str()
+                .ok_or("content is required")?
+                .to_string();
+            *buf = content.clone();
+            Ok((
+                "Replaced the spec.".to_string(),
+                serde_json::json!({ "content": content }),
+            ))
+        }
+        _ => Err(format!("Unknown spec tool {tool}")),
+    }
+}
+
+/// `torc -f json create --dry-run` on spec text, via a temp file with the given extension.
+async fn dry_run_spec(torc_bin: &str, api_url: &str, spec: &str, extension: &str) -> CliResponse {
+    let temp_path =
+        std::env::temp_dir().join(format!("torc_spec_{}{}", uuid::Uuid::new_v4(), extension));
+    if let Err(e) = tokio::fs::write(&temp_path, spec).await {
+        return CliResponse {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to write temp file: {}", e),
+            exit_code: None,
+        };
+    }
+    let path = temp_path.to_string_lossy();
+    let result = run_torc_command(
+        torc_bin,
+        &["-f", "json", "create", &path, "--dry-run"],
+        api_url,
+    )
+    .await;
+    let _ = tokio::fs::remove_file(&temp_path).await;
+    result
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -3801,7 +3897,7 @@ fn truncate_messages_to_token_limit(
 }
 
 /// The system prompt for the AI chat assistant.
-fn chat_system_prompt(workflow_id: Option<i64>) -> String {
+fn chat_system_prompt(workflow_id: Option<i64>, spec: Option<&str>) -> String {
     let mut prompt = String::from(
         "You are an AI assistant for the Torc workflow orchestration system. \
          You help users manage, monitor, debug, and recover computational workflows. \
@@ -3817,6 +3913,19 @@ fn chat_system_prompt(workflow_id: Option<i64>) -> String {
             "\n\nThe user is currently viewing workflow {}. \
              Use this workflow_id by default when calling tools, unless they specify a different one.",
             wf_id
+        ));
+    }
+
+    if let Some(spec) = spec {
+        prompt.push_str(&format!(
+            "\n\nThe user is editing a Torc workflow spec (YAML) in the dashboard's spec editor, \
+             and you share that buffer. Its current contents:\n\n```yaml\n{spec}\n```\n\n\
+             To change it, call edit_spec for targeted changes (copy old_str exactly) or \
+             replace_spec to write a new spec; the user sees each edit as you make it. After \
+             editing, call validate_spec and fix any errors it reports. Explain briefly what you \
+             changed. Do not create workflows or write files: the user creates the workflow from \
+             the editor. Use get_docs and get_example for spec syntax and patterns. If it is \
+             unclear whether the workflow runs locally or on Slurm, ask."
         ));
     }
 
@@ -3878,6 +3987,7 @@ async fn chat_handler(
     let auth_header_name = state.llm_auth_header.read().await.clone();
     let workflow_id = req.workflow_id;
     let initial_messages = req.messages;
+    let mut spec_buf = req.spec;
 
     // Get MCP client and tools
     let (peer, tools) = match ensure_mcp_client(&state).await {
@@ -3893,8 +4003,36 @@ async fn chat_handler(
         }
     };
 
-    let system_prompt = chat_system_prompt(workflow_id);
+    let system_prompt = chat_system_prompt(workflow_id, spec_buf.as_deref());
     let http_client = state.client.clone();
+    // From the editor, the model edits the buffer instead of saving spec files.
+    let tools: Vec<rmcp::model::Tool> = if spec_buf.is_some() {
+        tools
+            .into_iter()
+            .filter(|t| t.name != "create_workflow")
+            .collect()
+    } else {
+        tools
+    };
+    let local_tools: Vec<_> = if spec_buf.is_some() {
+        spec_tools().to_vec()
+    } else {
+        Vec::new()
+    };
+    let openai_local_tools = local_tools.iter().map(|(name, description, schema)| {
+        serde_json::json!({
+            "type": "function",
+            "function": {"name": name, "description": description, "parameters": schema}
+        })
+    });
+    let openai_local_tools: Vec<serde_json::Value> = openai_local_tools.collect();
+    let claude_local_tools: Vec<serde_json::Value> = local_tools
+        .iter()
+        .map(|(name, description, schema)| {
+            serde_json::json!({"name": name, "description": description, "input_schema": schema})
+        })
+        .collect();
+    let (torc_bin, torc_api_url) = (state.torc_bin.clone(), state.api_url.clone());
 
     // Choose API format based on provider
     let is_openai_compatible = matches!(
@@ -3930,14 +4068,16 @@ async fn chat_handler(
             let (api_url, api_body, auth_header_value) = if is_openai_compatible {
                 // OpenAI-compatible API (Ollama, GitHub Models)
                 let url = format!("{}/chat/completions", base_url);
-                let openai_tools = mcp_tools_to_openai_tools(&tools);
+                let mut openai_tools = mcp_tools_to_openai_tools(&tools);
+                openai_tools.extend(openai_local_tools.iter().cloned());
                 let openai_messages = messages_to_openai_format(&messages, &system_prompt);
 
                 // GitHub Models has a strict 8000 token input limit for gpt-4o
                 // Use filtered essential tools only for GitHub to fit within limit
                 let (final_messages, final_tools, was_truncated) = if provider == LlmProvider::GitHub {
                     // Use only essential tools for GitHub Models
-                    let filtered_tools = mcp_tools_to_openai_tools_filtered(&tools);
+                    let mut filtered_tools = mcp_tools_to_openai_tools_filtered(&tools);
+                    filtered_tools.extend(openai_local_tools.iter().cloned());
                     let tools_json = serde_json::json!(&filtered_tools);
                     let tools_tokens = estimate_tokens(&tools_json);
 
@@ -3971,7 +4111,8 @@ async fn chat_handler(
             } else {
                 // Anthropic API
                 let url = format!("{}/messages", base_url);
-                let claude_tools = mcp_tools_to_claude_tools(&tools);
+                let mut claude_tools = mcp_tools_to_claude_tools(&tools);
+                claude_tools.extend(claude_local_tools.iter().cloned());
 
                 let body = serde_json::json!({
                     "model": model,
@@ -4158,6 +4299,40 @@ async fn chat_handler(
                     "input": tool_call["input"],
                 }));
 
+                // Spec editor tools run here, against this request's copy of the buffer.
+                if let Some(buf) = spec_buf.as_mut()
+                    && local_tools.iter().any(|(name, _, _)| *name == tool_name)
+                {
+                    let (result_text, is_error) = if tool_name == "validate_spec" {
+                        let r = dry_run_spec(&torc_bin, &torc_api_url, buf, ".yaml").await;
+                        let text = if r.stdout.trim().is_empty() { r.stderr } else { r.stdout };
+                        (text, false)
+                    } else {
+                        match apply_spec_edit(buf, tool_name, &tool_call["input"]) {
+                            Ok((message, edit)) => {
+                                yield Ok(Event::default().event("spec_edit").data(edit.to_string()));
+                                (message, false)
+                            }
+                            Err(message) => (message, true),
+                        }
+                    };
+                    yield Ok(Event::default()
+                        .event("tool_result")
+                        .data(serde_json::json!({
+                            "id": tool_id,
+                            "name": tool_name,
+                            "result": result_text,
+                            "is_error": is_error,
+                        }).to_string()));
+                    tool_results.push(serde_json::json!({
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": result_text,
+                        "is_error": is_error,
+                    }));
+                    continue;
+                }
+
                 let arguments = tool_input.cloned();
 
                 let request = arguments.map_or_else(
@@ -4268,7 +4443,34 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 
 #[cfg(test)]
 mod tests {
-    use super::{anthropic_api_base, workflow_id_from_resource_db_name};
+    use super::{anthropic_api_base, apply_spec_edit, workflow_id_from_resource_db_name};
+    use serde_json::json;
+
+    #[test]
+    fn spec_edits_apply_to_the_buffer() {
+        let mut buf = "name: a\njobs:\n  - name: x\n    command: echo\n".to_string();
+        let (_, edit) = apply_spec_edit(
+            &mut buf,
+            "edit_spec",
+            &json!({"old_str": "command: echo", "new_str": "command: echo hi"}),
+        )
+        .unwrap();
+        assert_eq!(buf, "name: a\njobs:\n  - name: x\n    command: echo hi\n");
+        assert_eq!(edit["new_str"], "command: echo hi");
+
+        // Missing, ambiguous, and empty old_str are errors and leave the buffer alone.
+        let before = buf.clone();
+        let edit = |b: &mut String, old: &str| {
+            apply_spec_edit(b, "edit_spec", &json!({"old_str": old, "new_str": "z"}))
+        };
+        assert!(edit(&mut buf, "nope").unwrap_err().contains("not found"));
+        assert!(edit(&mut buf, "name: ").unwrap_err().contains("2 times"));
+        assert!(edit(&mut buf, "").is_err());
+        assert_eq!(buf, before);
+
+        apply_spec_edit(&mut buf, "replace_spec", &json!({"content": "name: b\n"})).unwrap();
+        assert_eq!(buf, "name: b\n");
+    }
 
     #[test]
     fn anthropic_base_url_accepts_claude_code_form() {
