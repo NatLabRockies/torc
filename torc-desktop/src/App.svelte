@@ -17,7 +17,9 @@
   let mode = $state<"local" | "ssh">(saved.mode === "ssh" ? "ssh" : "local");
   let host = $state(saved.host ?? "");
   let setup = $state(saved.setup ?? "");
+  // Per mode: a login-node path rarely exists on this computer.
   let workdir = $state(saved.workdir ?? "");
+  let localWorkdir = $state(saved.localWorkdir ?? "");
   // Which torc-server the dashboard talks to, per mode. A blank URL lets torc-dash use
   // TORC_API_URL or `[dash] api_url` from the torc config where it runs.
   let servers = $state({
@@ -47,7 +49,7 @@
       mode,
       host,
       setup,
-      workdir,
+      workdir: mode === "local" ? localWorkdir : workdir,
       command: "torc-dash",
       standalone: server.private,
       serverUrl: server.private ? "" : server.url,
@@ -69,6 +71,7 @@
           host,
           setup,
           workdir,
+          localWorkdir,
           remoteServerUrl: servers.ssh.url,
           remotePrivate: String(servers.ssh.private),
         }),
@@ -126,6 +129,11 @@
 
     {#if mode === "local"}
       <p class="hint">Starts the Torc dashboard on this computer.</p>
+      <label>
+        Working directory <span class="optional">(optional)</span>
+        <input bind:value={localWorkdir} placeholder="~ (home)" />
+        <span class="optional">Where workflows run and write output, e.g. <code>~/projects/sim</code>.</span>
+      </label>
     {:else}
       <p class="hint">
         Opens an SSH session to your login node and starts the Torc dashboard there.

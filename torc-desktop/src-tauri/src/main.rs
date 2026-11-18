@@ -363,7 +363,7 @@ fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Comma
         cmd.arg("-lc")
             .arg(format!("exec /bin/sh -c {}", sh_quote(&script)));
         cmd.stdin(Stdio::null());
-        set_home_dir(&mut cmd);
+        set_work_dir(&mut cmd, &args.workdir)?;
         Ok(cmd)
     }
     #[cfg(windows)]
@@ -373,7 +373,7 @@ fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Comma
         // raw_arg: Rust's own quoting (\") is not what cmd.exe expects. /S strips the outer quotes.
         cmd.raw_arg(format!("/S /C \"{line}\""))
             .stdin(Stdio::null());
-        set_home_dir(&mut cmd);
+        set_work_dir(&mut cmd, &args.workdir)?;
         Ok(cmd)
     }
 }
@@ -402,11 +402,30 @@ fn server_flags(
     })
 }
 
-/// Run in the home directory: apps launched from Finder start in `/`, and torc writes
-/// relative paths such as `torc_output/`.
-fn set_home_dir(cmd: &mut Command) {
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        cmd.current_dir(home);
+/// Where local torc-dash runs: `workdir`, or the home directory when blank (apps launched from
+/// Finder start in `/`, and torc writes relative paths such as `torc_output/`). `~/` and
+/// relative paths resolve against home.
+fn set_work_dir(cmd: &mut Command, workdir: &str) -> Result<(), String> {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    if let Some(dir) = resolve_work_dir(home.map(std::path::PathBuf::from), workdir) {
+        if !dir.is_dir() {
+            return Err(format!("Working directory not found: {}", dir.display()));
+        }
+        cmd.current_dir(dir);
+    }
+    Ok(())
+}
+
+fn resolve_work_dir(home: Option<std::path::PathBuf>, workdir: &str) -> Option<std::path::PathBuf> {
+    let w = workdir.trim();
+    let rel = w
+        .strip_prefix("~/")
+        .unwrap_or(if w == "~" { "" } else { w });
+    match home {
+        // join() keeps an absolute `rel` as is.
+        Some(home) if !rel.is_empty() => Some(home.join(rel)),
+        Some(home) => Some(home),
+        None => (!rel.is_empty()).then(|| rel.into()),
     }
 }
 
@@ -692,6 +711,19 @@ mod tests {
         assert!(!cmd.contains('\n') && !cmd.contains('!'));
         // The embedded single quotes from `trap` must be escaped for the outer quoting.
         assert!(cmd.contains(r"trap '\''rm -f"));
+    }
+
+    #[test]
+    fn work_dir_resolves_against_home() {
+        let home = || Some(std::path::PathBuf::from("/h"));
+        let r = |h, w| resolve_work_dir(h, w).map(|p| p.to_string_lossy().into_owned());
+        assert_eq!(r(home(), " "), Some("/h".into()));
+        assert_eq!(r(home(), "~"), Some("/h".into()));
+        assert_eq!(r(home(), "~/work"), Some("/h/work".into()));
+        assert_eq!(r(home(), "work"), Some("/h/work".into()));
+        assert_eq!(r(home(), "/scratch/x"), Some("/scratch/x".into()));
+        assert_eq!(r(None, ""), None);
+        assert_eq!(r(None, "/scratch/x"), Some("/scratch/x".into()));
     }
 
     #[test]
