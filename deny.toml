@@ -16,6 +16,7 @@ ignore = [
     { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via serde_yaml - unmaintained, no safe upgrade; replace serde_yaml separately" },
     { id = "RUSTSEC-2026-0374", reason = "basic-toml via askama_derive (proc-macro, compile-time only) via plotly; latest askama_derive still requires it, no upstream upgrade available" },
     { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys 0.30 via sqlx-sqlite 0.9.0 and rusqlite; fix requires libsqlite3-sys 0.39 but sqlx 0.9.0 caps it at <0.38. Local-only, needs attacker-crafted db+wal pair" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; used directly and via rmcp/schemars/file-rotate. Migration to jiff/time tracked in #509" },
 ]
 
 # License compliance - permissive allow-list
