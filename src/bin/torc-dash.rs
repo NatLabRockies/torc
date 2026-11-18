@@ -2354,11 +2354,16 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
 #[derive(Deserialize)]
 struct ResourceSamplesRequest {
     db_path: String,
-    /// Return only samples with `timestamp > since` (unix seconds).
+    /// Return only system samples with `timestamp > since` (unix seconds).
     #[serde(default)]
     since: i64,
+    /// `(job_id, since)` pairs. Each series has its own cursor, so a read that sees the tables
+    /// at different checkpoints can't make one series skip samples another already returned.
     #[serde(default)]
-    job_ids: Vec<i64>,
+    jobs: Vec<(i64, i64)>,
+    /// Return only samples within this many seconds of the newest stored one (0 = all).
+    #[serde(default)]
+    window: i64,
 }
 
 /// Column-oriented samples, ready to hand to Plotly.
@@ -2445,20 +2450,47 @@ fn read_resource_samples(
         }
         Ok::<_, rusqlite::Error>(series)
     };
-    if has_table("system_resource_samples")? {
+    let has_system = has_table("system_resource_samples")?;
+    let has_jobs = has_table("job_resource_samples")?;
+    // Anchor the window on the newest stored sample, not the clock, so finished runs stay
+    // viewable.
+    let floor = if req.window > 0 {
+        let mut newest: Option<i64> = None;
+        if has_system {
+            newest = conn.query_row(
+                "SELECT MAX(timestamp) FROM system_resource_samples",
+                [],
+                |r| r.get(0),
+            )?;
+        }
+        if has_jobs {
+            for (job_id, _) in &req.jobs {
+                let t: Option<i64> = conn.query_row(
+                    "SELECT MAX(timestamp) FROM job_resource_samples WHERE job_id = ?1",
+                    [job_id],
+                    |r| r.get(0),
+                )?;
+                newest = newest.max(t);
+            }
+        }
+        newest.map_or(i64::MIN, |t| t - req.window)
+    } else {
+        i64::MIN
+    };
+    if has_system {
         out.system = read_series(
             "SELECT timestamp, cpu_percent, memory_bytes, total_memory_bytes \
              FROM system_resource_samples \
              WHERE timestamp > ?1 ORDER BY timestamp",
-            &[&req.since],
+            &[&req.since.max(floor)],
         )?;
     }
-    if has_table("job_resource_samples")? {
-        for job_id in &req.job_ids {
+    if has_jobs {
+        for (job_id, since) in &req.jobs {
             let series = read_series(
                 "SELECT timestamp, cpu_percent, memory_bytes FROM job_resource_samples \
                  WHERE job_id = ?1 AND timestamp > ?2 ORDER BY timestamp",
-                &[job_id, &req.since],
+                &[job_id, &(*since).max(floor)],
             )?;
             out.jobs.insert(*job_id, series);
         }
@@ -5075,7 +5107,8 @@ mod tests {
         let req = ResourceSamplesRequest {
             db_path: path.to_str().unwrap().to_string(),
             since: 10,
-            job_ids: vec![7],
+            jobs: vec![(7, 10)],
+            window: 0,
         };
 
         let before = read_resource_samples(&req).unwrap();
@@ -5091,6 +5124,27 @@ mod tests {
         assert_eq!(after.jobs.len(), 1);
         assert_eq!(after.jobs[&7].cpu_percent, vec![60.0]);
         assert_eq!(after.job_names, vec![(7, "a".into()), (8, "b".into())]);
+
+        // Each series resumes from its own cursor.
+        let req = ResourceSamplesRequest {
+            jobs: vec![(7, 0)],
+            ..req
+        };
+        let r = read_resource_samples(&req).unwrap();
+        assert_eq!(r.system.timestamp, vec![20]);
+        assert_eq!(r.jobs[&7].timestamp, vec![10, 20]);
+
+        // A window keeps only samples near the newest stored one (job 8 at 20 anchors it).
+        let req = ResourceSamplesRequest {
+            since: 0,
+            jobs: vec![(7, 0), (8, 0)],
+            window: 5,
+            ..req
+        };
+        let r = read_resource_samples(&req).unwrap();
+        assert_eq!(r.system.timestamp, vec![20]);
+        assert_eq!(r.jobs[&7].timestamp, vec![20]);
+        assert_eq!(r.jobs[&8].timestamp, vec![20]);
     }
 
     #[tokio::test]

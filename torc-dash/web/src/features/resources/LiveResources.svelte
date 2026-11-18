@@ -29,7 +29,7 @@
     jobs: Map<number, Series>;
     names: [number, string][];
     error: string | null;
-    /** Newest sample timestamp read so far; the next poll resumes after it. */
+    /** Newest sample timestamp across all series, for the window and the "last sample" age. */
     newest: number;
   };
 
@@ -72,17 +72,16 @@
   async function pollOne(path: string, label: string, win: number, prev: Node | undefined) {
     const jobIds = jobsFor(path);
     const newest = prev?.newest ?? 0;
-    // A newly selected job needs its history, so reload the window (merge drops duplicates).
-    const known = prev !== undefined && jobIds.every((id) => prev.jobs.has(id));
-    const since = known ? newest : win && newest ? newest - win : 0;
     const node: Node = prev
       ? { ...prev, jobs: new Map(prev.jobs) }
       : { label, system: empty(), jobs: new Map(), names: [], error: null, newest: 0 };
     try {
       const r = await dashPost<SamplesResponse>("/api/cli/resource-samples", {
         db_path: path,
-        since,
-        job_ids: jobIds,
+        since: last(node.system),
+        // A newly selected job starts at 0; the server limits it to the window.
+        jobs: jobIds.map((id) => [id, last(node.jobs.get(id) ?? empty())]),
+        window: win,
       });
       if (!r.success) throw new Error(r.error || "Failed to read samples");
       const top = Math.max(last(r.system), ...Object.values(r.jobs).map(last), newest);
@@ -134,6 +133,11 @@
   });
 
   const GIB = 1024 ** 3;
+  /** Plotly's default colorway. */
+  const COLORS = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+  ];
   type Panel = { title: string; traces: Record<string, unknown>[]; range?: number[] };
 
   // Node utilization is a percentage of the node's capacity; job CPU is per process (100% = one
@@ -143,8 +147,17 @@
     const nodeMem: Panel = { title: "Node memory %", traces: [], range: [0, 100] };
     const jobCpu: Panel = { title: "Job CPU % (100 = 1 core)", traces: [] };
     const jobMem: Panel = { title: "Job memory (GiB)", traces: [] };
-    const line = (name: string, s: Series, extra: Record<string, unknown> = {}) => ({
+    // One color per node/job, shared by its CPU and memory traces (Plotly would otherwise
+    // color by overall trace index, so the memory lines wouldn't match the legend).
+    let seriesIndex = 0;
+    const line = (
+      name: string,
+      s: Series,
+      color: string,
+      extra: Record<string, unknown> = {},
+    ) => ({
       name,
+      line: { color },
       x: s.timestamp.map((t) => new Date(t * 1000)),
       type: "scatter",
       mode: "lines",
@@ -156,9 +169,10 @@
       if (showNodes && sys.timestamp.length) {
         const name = `${n.label} (node)`;
         const total = sys.total_memory_bytes ?? [];
-        nodeCpu.traces.push(line(name, sys, { y: sys.cpu_percent }));
+        const color = COLORS[seriesIndex++ % COLORS.length];
+        nodeCpu.traces.push(line(name, sys, color, { y: sys.cpu_percent }));
         nodeMem.traces.push(
-          line(name, sys, {
+          line(name, sys, color, {
             y: sys.memory_bytes.map((b, i) => (total[i] ? (100 * b) / total[i] : null)),
             customdata: sys.memory_bytes.map((b) => b / GIB),
             hovertemplate: "%{y:.1f}% (%{customdata:.1f} GiB)",
@@ -169,9 +183,10 @@
       const names = new Map(n.names);
       for (const [id, s] of n.jobs) {
         const name = `${names.get(id) ?? "job"} (${id})${nodes.size > 1 ? ` · ${n.label}` : ""}`;
-        jobCpu.traces.push(line(name, s, { y: s.cpu_percent }));
+        const color = COLORS[seriesIndex++ % COLORS.length];
+        jobCpu.traces.push(line(name, s, color, { y: s.cpu_percent }));
         jobMem.traces.push(
-          line(name, s, { y: s.memory_bytes.map((b) => b / GIB), showlegend: false }),
+          line(name, s, color, { y: s.memory_bytes.map((b) => b / GIB), showlegend: false }),
         );
       }
     }
@@ -305,11 +320,13 @@
     flex: 1;
     display: grid;
     grid-template-columns: minmax(200px, 260px) 1fr;
+    grid-template-rows: minmax(0, 1fr);
     min-height: 0;
   }
   @media (max-width: 900px) {
     .body {
       grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
     }
   }
   .jobs {
@@ -344,6 +361,9 @@
     flex-direction: column;
     padding: 8px;
     min-width: 0;
+    /* Stacked panels can be taller than the viewport; scroll instead of clipping. */
+    min-height: 0;
+    overflow: auto;
   }
   .chart :global(.plot) {
     min-height: calc(var(--panels) * 240px);
