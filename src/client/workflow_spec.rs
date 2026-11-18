@@ -9736,6 +9736,14 @@ jobs:
             "image_tag should be substituted, got: {}",
             train.command
         );
+        let home = std::env::var("HOME").expect("HOME is set");
+        assert!(
+            train
+                .command
+                .starts_with(&format!("{home}/.venvs/proj42/bin/python ")),
+            "venv should resolve from ${{env:HOME}}, got: {}",
+            train.command
+        );
         assert!(
             train.command.contains("--in /scratch/proj42/clean"),
             "data_root should be substituted, got: {}",

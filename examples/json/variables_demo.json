@@ -5,7 +5,8 @@
     "results_root": "/shared/proj42/results",
     "project": "proj42",
     "image_tag": "pytorch:2.4",
-    "account": "my_hpc_account"
+    "account": "my_hpc_account",
+    "venv": "${env:HOME}/.venvs/proj42"
   },
   "env": {
     "PROJECT": "{project}",
@@ -21,7 +22,7 @@
     },
     {
       "name": "train_{i:02d}",
-      "command": "python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt",
+      "command": "{venv}/bin/python train.py --shard {i} --img {image_tag} --in {data_root}/clean --out {results_root}/run_{i:02d}.pt",
       "resource_requirements": "gpu_job",
       "depends_on": ["prepare_inputs"],
       "parameters": { "i": "1:4" },
