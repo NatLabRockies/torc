@@ -2367,6 +2367,9 @@ struct SampleSeries {
     timestamp: Vec<i64>,
     cpu_percent: Vec<f64>,
     memory_bytes: Vec<i64>,
+    /// Node capacity, for utilization percentages (system samples only).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    total_memory_bytes: Vec<i64>,
 }
 
 #[derive(Serialize, Default)]
@@ -2436,12 +2439,16 @@ fn read_resource_samples(
             series.timestamp.push(row.get(0)?);
             series.cpu_percent.push(row.get(1)?);
             series.memory_bytes.push(row.get(2)?);
+            if row.as_ref().column_count() > 3 {
+                series.total_memory_bytes.push(row.get(3)?);
+            }
         }
         Ok::<_, rusqlite::Error>(series)
     };
     if has_table("system_resource_samples")? {
         out.system = read_series(
-            "SELECT timestamp, cpu_percent, memory_bytes FROM system_resource_samples \
+            "SELECT timestamp, cpu_percent, memory_bytes, total_memory_bytes \
+             FROM system_resource_samples \
              WHERE timestamp > ?1 ORDER BY timestamp",
             &[&req.since],
         )?;
@@ -5079,6 +5086,8 @@ mod tests {
             .unwrap();
         let after = read_resource_samples(&req).unwrap();
         assert_eq!(after.system.timestamp, vec![20]);
+        assert_eq!(after.system.total_memory_bytes, vec![1000]);
+        assert!(after.jobs[&7].total_memory_bytes.is_empty());
         assert_eq!(after.jobs.len(), 1);
         assert_eq!(after.jobs[&7].cpu_percent, vec![60.0]);
         assert_eq!(after.job_names, vec![(7, "a".into()), (8, "b".into())]);

@@ -8,7 +8,14 @@
 
   let { dbs }: { dbs: { path: string; name: string }[] } = $props();
 
-  type Series = { timestamp: number[]; cpu_percent: number[]; memory_bytes: number[] };
+  type Series = {
+    timestamp: number[];
+    cpu_percent: number[];
+    memory_bytes: number[];
+    /** Node samples only. */
+    total_memory_bytes?: number[];
+  };
+  const COLUMNS = ["timestamp", "cpu_percent", "memory_bytes", "total_memory_bytes"] as const;
   type SamplesResponse = {
     success: boolean;
     system: Series;
@@ -49,24 +56,17 @@
   const jobsFor = (path: string) =>
     [...selectedJobs].filter((k) => k.startsWith(path + "|")).map((k) => Number(k.split("|").pop()));
 
+  const mapColumns = (f: (k: (typeof COLUMNS)[number]) => number[]) =>
+    Object.fromEntries(COLUMNS.map((k) => [k, f(k)])) as Series;
+
   /** Append points newer than what `into` already has, then drop those older than the window. */
   function merge(into: Series, add: Series, cutoff: number): Series {
     const from = add.timestamp.findIndex((t) => t > last(into));
     const out =
-      from < 0
-        ? into
-        : {
-            timestamp: into.timestamp.concat(add.timestamp.slice(from)),
-            cpu_percent: into.cpu_percent.concat(add.cpu_percent.slice(from)),
-            memory_bytes: into.memory_bytes.concat(add.memory_bytes.slice(from)),
-          };
+      from < 0 ? into : mapColumns((k) => (into[k] ?? []).concat((add[k] ?? []).slice(from)));
     const keep = out.timestamp.findIndex((t) => t > cutoff);
     if (keep <= 0) return keep < 0 ? empty() : out;
-    return {
-      timestamp: out.timestamp.slice(keep),
-      cpu_percent: out.cpu_percent.slice(keep),
-      memory_bytes: out.memory_bytes.slice(keep),
-    };
+    return mapColumns((k) => (out[k] ?? []).slice(keep));
   }
 
   async function pollOne(path: string, label: string, win: number, prev: Node | undefined) {
@@ -134,36 +134,74 @@
   });
 
   const GIB = 1024 ** 3;
-  let figure = $derived.by((): Figure => {
-    const traces: Record<string, unknown>[] = [];
-    const add = (name: string, s: Series, dash?: string) => {
-      const x = s.timestamp.map((t) => new Date(t * 1000));
-      const line = { width: dash ? 2 : 1.5, dash };
-      const common = { name, x, type: "scatter", mode: "lines", legendgroup: name, line };
-      traces.push({ ...common, y: s.cpu_percent });
-      traces.push({ ...common, y: s.memory_bytes.map((b) => b / GIB), yaxis: "y2", showlegend: false });
-    };
+  type Panel = { title: string; traces: Record<string, unknown>[]; range?: number[] };
+
+  // Node utilization is a percentage of the node's capacity; job CPU is per process (100% = one
+  // core), so the two get separate panels instead of sharing a misleading axis.
+  let panels = $derived.by((): Panel[] => {
+    const nodeCpu: Panel = { title: "Node CPU %", traces: [], range: [0, 100] };
+    const nodeMem: Panel = { title: "Node memory %", traces: [], range: [0, 100] };
+    const jobCpu: Panel = { title: "Job CPU % (100 = 1 core)", traces: [] };
+    const jobMem: Panel = { title: "Job memory (GiB)", traces: [] };
+    const line = (name: string, s: Series, extra: Record<string, unknown> = {}) => ({
+      name,
+      x: s.timestamp.map((t) => new Date(t * 1000)),
+      type: "scatter",
+      mode: "lines",
+      legendgroup: name,
+      ...extra,
+    });
     for (const n of nodes.values()) {
-      if (showNodes && n.system.timestamp.length) add(`${n.label} (node)`, n.system, "dot");
+      const sys = n.system;
+      if (showNodes && sys.timestamp.length) {
+        const name = `${n.label} (node)`;
+        const total = sys.total_memory_bytes ?? [];
+        nodeCpu.traces.push(line(name, sys, { y: sys.cpu_percent }));
+        nodeMem.traces.push(
+          line(name, sys, {
+            y: sys.memory_bytes.map((b, i) => (total[i] ? (100 * b) / total[i] : null)),
+            customdata: sys.memory_bytes.map((b) => b / GIB),
+            hovertemplate: "%{y:.1f}% (%{customdata:.1f} GiB)",
+            showlegend: false,
+          }),
+        );
+      }
       const names = new Map(n.names);
       for (const [id, s] of n.jobs) {
-        add(`${names.get(id) ?? "job"} (${id})${nodes.size > 1 ? ` · ${n.label}` : ""}`, s);
+        const name = `${names.get(id) ?? "job"} (${id})${nodes.size > 1 ? ` · ${n.label}` : ""}`;
+        jobCpu.traces.push(line(name, s, { y: s.cpu_percent }));
+        jobMem.traces.push(
+          line(name, s, { y: s.memory_bytes.map((b) => b / GIB), showlegend: false }),
+        );
       }
     }
-    return {
-      data: traces,
-      layout: {
-        uirevision: "live",
-        // One shared time axis under two stacked panels.
-        xaxis: { type: "date", anchor: "y2" },
-        yaxis: { title: { text: "CPU %" }, rangemode: "tozero", domain: [0.54, 1] },
-        yaxis2: { title: { text: "Memory (GiB)" }, rangemode: "tozero", domain: [0, 0.46] },
-        legend: { orientation: "h", y: -0.12 },
-        margin: { l: 60, r: 20, t: 20, b: 40 },
-        hovermode: "x unified",
-      },
-    };
+    return [nodeCpu, nodeMem, jobCpu, jobMem].filter((p) => p.traces.length);
   });
+
+  let figure = $derived.by((): Figure => {
+    const gap = 0.06;
+    const h = (1 - gap * (panels.length - 1)) / panels.length;
+    const layout: Record<string, unknown> = {
+      uirevision: "live",
+      // One shared time axis under the stacked panels.
+      xaxis: { type: "date", anchor: `y${panels.length > 1 ? panels.length : ""}` },
+      legend: { orientation: "h", y: -0.08 },
+      margin: { l: 60, r: 20, t: 20, b: 40 },
+      hovermode: "x unified",
+    };
+    const data = panels.flatMap((p, i) => {
+      const axis = i ? `y${i + 1}` : "y";
+      const top = 1 - i * (h + gap);
+      layout[`yaxis${i ? i + 1 : ""}`] = {
+        title: { text: p.title },
+        domain: [Math.max(0, top - h), top],
+        ...(p.range ? { range: p.range } : { rangemode: "tozero" }),
+      };
+      return p.traces.map((t) => ({ ...t, yaxis: axis }));
+    });
+    return { data, layout };
+  });
+  let panelCount = $derived(panels.length);
 
   let hasData = $derived(
     [...nodes.values()].some(
@@ -194,7 +232,7 @@
         {#each WINDOWS as w (w.s)}<option value={w.s}>{w.label}</option>{/each}
       </select>
     </label>
-    <label class="check"><input type="checkbox" bind:checked={showNodes} /> Node totals</label>
+    <label class="check"><input type="checkbox" bind:checked={showNodes} /> Node utilization</label>
     <button class="btn" onclick={() => (paused = !paused)}>{paused ? "Resume" : "Pause"}</button>
     <span class="faint">Updates every {POLL_MS / 1000}s</span>
   </div>
@@ -230,7 +268,7 @@
           </div>
         {/each}
       </aside>
-      <div class="chart">
+      <div class="chart" style="--panels: {Math.max(2, panelCount)}">
         {#if hasData}
           <PlotView {figure} />
         {:else}
@@ -308,7 +346,7 @@
     min-width: 0;
   }
   .chart :global(.plot) {
-    min-height: 560px;
+    min-height: calc(var(--panels) * 240px);
   }
   .empty {
     display: flex;

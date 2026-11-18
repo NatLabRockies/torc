@@ -49,9 +49,11 @@ resource_monitor:
 ```
 
 Then open the dashboard's **Resources** tab, switch to **Live**, and select the compute node
-databases to watch. Node totals are plotted by default. Check jobs in the job list to add their CPU
-and memory lines. See [Live Monitoring](../reference/resource-monitoring.md#live-monitoring) for the
-performance trade-offs.
+databases to watch. Node CPU and memory utilization are plotted by default, as percentages of the
+node's capacity (requires `compute_node` time-series monitoring). Check jobs in the job list to add
+panels for their CPU, where 100% is one core, and their memory in GiB. See
+[Live Monitoring](../reference/resource-monitoring.md#live-monitoring) for the performance
+trade-offs.
 
 ## Plot Specific Jobs
 
