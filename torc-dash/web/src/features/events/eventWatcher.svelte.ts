@@ -2,6 +2,10 @@
  * Background event watcher for the selected workflow. Runs from module import (App imports it), so
  * the sidebar badge (`app.eventBadge`) updates even when the Events tab isn't mounted.
  *
+ * The live stream is opt-in (`watcher.enabled`, toggled on the Events tab and remembered in
+ * localStorage) and is closed while the browser tab is hidden, so idle dash tabs don't each hold
+ * one of the browser's ~6 HTTP/1.1 connections to the server.
+ *
  * Two sources, merged newest-first:
  * - live: the server's SSE stream (`/workflows/{id}/events/stream`). These broadcast events
  *   (job_started, job_completed, ...) are ephemeral and never stored, so we keep them here.
@@ -30,6 +34,7 @@ export type StreamStatus = "off" | "connecting" | "live" | "reconnecting";
 
 const MAX = 1000;
 const PAGE = 200;
+const ENABLED_KEY = "torc-dash.events.live";
 
 /** SSE frames use `event: <type>`; EventSource only routes named events to explicit listeners. */
 const SSE_TYPES = [
@@ -92,7 +97,17 @@ function fromLive(type: string, raw: string): EventRow {
   };
 }
 
+function readEnabled(): boolean {
+  try {
+    return localStorage.getItem(ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 class EventWatcher {
+  /** User opt-in for the live SSE stream. */
+  enabled = $state(readEnabled());
   live = $state.raw<EventRow[]>([]);
   stored = $state.raw<EventRow[]>([]);
   status = $state<StreamStatus>("off");
@@ -156,8 +171,24 @@ export function clearEvents() {
   watcher.stored = [];
 }
 
+let pageVisible = $state(typeof document === "undefined" || document.visibilityState === "visible");
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    pageVisible = document.visibilityState === "visible";
+  });
+}
+
 $effect.root(() => {
-  // Per-workflow: reset, open the SSE stream, and load stored history.
+  $effect(() => {
+    const on = watcher.enabled;
+    try {
+      localStorage.setItem(ENABLED_KEY, on ? "1" : "0");
+    } catch {
+      // Storage unavailable (private mode): the choice lasts for this page only.
+    }
+  });
+
+  // Per-workflow: reset and load stored history.
   $effect(() => {
     const wf = app.workflowId;
     watcher.live = [];
@@ -166,29 +197,48 @@ $effect.root(() => {
     watcher.error = null;
     app.eventBadge = 0;
     maxId = 0;
-    if (wf === null) {
+    if (wf !== null) void poll(wf, true);
+  });
+
+  // Live SSE stream: only when opted in, a workflow is selected, and the page is visible.
+  $effect(() => {
+    const wf = app.workflowId;
+    if (wf === null || !watcher.enabled || !pageVisible) {
       watcher.status = "off";
       return;
     }
-    void poll(wf, true);
-
     const es = new EventSource(withToken(`${API_BASE}/workflows/${wf}/events/stream`));
     watcher.status = "connecting";
     es.onopen = () => (watcher.status = "live");
     // EventSource reconnects on its own unless the server refused the stream outright.
     es.onerror = () =>
       (watcher.status = es.readyState === EventSource.CLOSED ? "off" : "reconnecting");
+    // Batch events per animation frame so a burst (thousands of job completions) costs one
+    // update and re-render per frame instead of one per event.
+    let pending: EventRow[] = [];
+    let frame = 0;
+    const flush = () => {
+      frame = 0;
+      if (!pending.length) return;
+      watcher.live = [...pending.reverse(), ...watcher.live].slice(0, MAX);
+      bump(pending.length);
+      pending = [];
+    };
     const onEvent = (ev: MessageEvent<string>) => {
       try {
-        watcher.live = [fromLive(ev.type, ev.data), ...watcher.live].slice(0, MAX);
-        bump(1);
+        pending.push(fromLive(ev.type, ev.data));
       } catch {
-        // Ignore malformed frames.
+        return; // Ignore malformed frames.
       }
+      frame ||= requestAnimationFrame(flush);
     };
     es.onmessage = onEvent;
     for (const t of SSE_TYPES) es.addEventListener(t, onEvent);
-    return () => es.close();
+    return () => {
+      // Drop the unflushed batch: on a workflow switch it belongs to the old workflow.
+      es.close();
+      cancelAnimationFrame(frame);
+    };
   });
 
   // Incremental refresh of stored events on every app refresh tick.

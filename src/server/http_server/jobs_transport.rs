@@ -1274,7 +1274,11 @@ where
             .reset_job_status(id, failed_only_value, context)
             .await?;
 
-        if let ResetJobStatusResponse::SuccessfulResponse(ref response) = result {
+        // Skip no-op resets (e.g. the pre-step of initializing a fresh workflow) so they don't
+        // show up as user actions.
+        if let ResetJobStatusResponse::SuccessfulResponse(ref response) = result
+            && response.updated_count > 0
+        {
             self.record_user_action_event(
                 id,
                 "reset_job_status",

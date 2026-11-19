@@ -16,7 +16,7 @@
   };
 
   const STATUS_TEXT: Record<StreamStatus, string> = {
-    off: "Disconnected",
+    off: "Paused",
     connecting: "Connecting…",
     live: "Live",
     reconnecting: "Reconnecting…",
@@ -87,9 +87,13 @@
   <div class="page-header">
     <h2>Events</h2>
     {#if app.workflowId !== null}
-      <span class="stream {watcher.status}" title="Live event stream (server-sent events)">
-        <span class="dot"></span>{STATUS_TEXT[watcher.status]}
-      </span>
+      <label
+        class="stream {watcher.status}"
+        title="Stream live events from the server (server-sent events). Paused while this browser tab is hidden."
+      >
+        <input type="checkbox" bind:checked={watcher.enabled} />
+        <span class="dot"></span>{watcher.enabled ? STATUS_TEXT[watcher.status] : "Live updates"}
+      </label>
       <input
         class="input filter"
         placeholder="Filter events  /"
@@ -144,6 +148,7 @@
     gap: 6px;
     font-size: 12.5px;
     color: var(--text-muted);
+    cursor: pointer;
   }
   .dot {
     width: 8px;
