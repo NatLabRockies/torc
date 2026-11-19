@@ -68,10 +68,19 @@ stops. Without it, a dropped connection would leave torc-dash running.
 ## Local mode
 
 `local_command` runs `torc-dash --host 127.0.0.1 --port <port>` through the user's login shell
-(`$SHELL -lc`, then `/bin/sh` for the actual command, because the login shell may be csh or fish).
-Apps started from Finder get a minimal `PATH`; the login shell applies the user's profile, and
-common install locations (`~/.cargo/bin`, Homebrew) are appended as a fallback. torc-dash logs the
-port it bound, which the app reads from its output.
+(`$SHELL -lc`, then `/bin/sh` for the actual command, because the login shell may be csh or fish),
+so profile settings such as `TORC_PASSWORD` apply. torc-dash logs the port it bound, which the app
+reads from its output.
+
+Release bundles ship `torc-dash`, `torc`, `torc-server`, and `torc-mcp-server` next to the app's
+executable (Tauri `externalBin`, configured in `src-tauri/tauri.bundle.conf.json`). The app runs
+that `torc-dash` by absolute path and points it at the other three with `TORC_BIN`,
+`TORC_SERVER_BIN`, and `TORC_MCP_SERVER_BIN`, so local mode needs nothing on `PATH` and always
+matches the app's version. Apps started from Finder get a minimal `PATH`, and a non-interactive zsh
+login shell skips `~/.zshrc`, so relying on `PATH` failed for many users. Dev builds without the
+bundled binaries fall back to `torc-dash` from `PATH` (with `~/.cargo/bin` and Homebrew appended).
+The externalBin list is kept out of `tauri.conf.json` because tauri-build fails when the files are
+missing, which would break `cargo clippy` and `cargo test` for the crate.
 
 ## Passwords and MFA (askpass relay)
 

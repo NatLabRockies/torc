@@ -27,6 +27,12 @@ fn internal_error(msg: String) -> McpError {
     McpError::internal_error(msg, None)
 }
 
+/// The torc CLI: `TORC_BIN` if set (torc-dash passes its own, e.g. the copy bundled with Torc
+/// Desktop), else `torc` from `PATH`.
+fn torc_command() -> Command {
+    Command::new(std::env::var_os("TORC_BIN").unwrap_or_else(|| "torc".into()))
+}
+
 /// Helper to create an invalid params error
 fn invalid_params(msg: &str) -> McpError {
     McpError::invalid_request(msg.to_string(), None)
@@ -585,7 +591,7 @@ pub fn create_workflow(
             // Create slurm workflow: first generate schedulers, then create
             // Step 1: Run torc slurm generate to create spec with schedulers
             let slurm_spec_path = format!("{}_slurm", temp_path.display());
-            let mut gen_cmd = Command::new("torc");
+            let mut gen_cmd = torc_command();
             gen_cmd.args(["slurm", "generate"]);
             gen_cmd.args(["--account", account.unwrap()]);
             gen_cmd.args(["-o", &slurm_spec_path]);
@@ -609,7 +615,7 @@ pub fn create_workflow(
             }
 
             // Step 2: Create the workflow from the generated spec
-            let mut cmd = Command::new("torc");
+            let mut cmd = torc_command();
             cmd.args(["-f", "json", "create"]);
             cmd.args(["--user", user]);
 
@@ -670,7 +676,7 @@ pub fn create_workflow(
             // Generate slurm schedulers and save as JSON
             let output_path = output_path.unwrap();
 
-            let mut cmd = Command::new("torc");
+            let mut cmd = torc_command();
             cmd.args(["slurm", "generate"]);
             cmd.args(["--account", account.unwrap()]);
             cmd.args(["--output", output_path]);
@@ -1214,7 +1220,7 @@ pub fn list_results(
     sort_by: Option<String>,
     reverse_sort: bool,
 ) -> Result<CallToolResult, McpError> {
-    let mut cmd = Command::new("torc");
+    let mut cmd = torc_command();
     cmd.args(["-f", "json", "results", "list", &workflow_id.to_string()]);
 
     if let Some(jid) = job_id {
@@ -1260,7 +1266,7 @@ pub fn list_results(
 
 /// Get Slurm sacct accounting data for a workflow with walltime summary.
 pub fn get_slurm_sacct(workflow_id: i64) -> Result<CallToolResult, McpError> {
-    let output = Command::new("torc")
+    let output = torc_command()
         .args(["-f", "json", "slurm", "sacct", &workflow_id.to_string()])
         .output()
         .map_err(|e| internal_error(format!("Failed to execute torc command: {}", e)))?;
@@ -1343,7 +1349,7 @@ pub fn recover_workflow(
     runtime_multiplier: f64,
     retry_unknown: bool,
 ) -> Result<CallToolResult, McpError> {
-    let mut cmd = Command::new("torc");
+    let mut cmd = torc_command();
     cmd.args(["recover", &workflow_id.to_string()]);
     cmd.args(["--output-dir", &output_dir.display().to_string()]);
     cmd.args(["--memory-multiplier", &memory_multiplier.to_string()]);
@@ -1666,7 +1672,7 @@ pub fn classify_and_resolve_failures(
         // For jobs to retry: reset to ready and bump attempt_id
         for job_id in &jobs_to_retry {
             // Use torc jobs update to reset to ready
-            let output = Command::new("torc")
+            let output = torc_command()
                 .args(["jobs", "update", &job_id.to_string(), "--status", "ready"])
                 .output();
 
@@ -1706,7 +1712,7 @@ pub fn classify_and_resolve_failures(
 
         // For jobs to fail: set to failed status
         for job_id in &jobs_to_fail {
-            let output = Command::new("torc")
+            let output = torc_command()
                 .args(["jobs", "update", &job_id.to_string(), "--status", "failed"])
                 .output();
 

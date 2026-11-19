@@ -4223,6 +4223,8 @@ async fn ensure_mcp_client(
     command
         .arg("--api-url")
         .arg(&state.api_url)
+        // Its tools run the torc CLI; use the same one as the dashboard.
+        .env("TORC_BIN", &state.torc_bin)
         .stderr(std::process::Stdio::inherit());
     let child_process = TokioChildProcess::new(command)
         .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;

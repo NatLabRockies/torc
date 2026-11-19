@@ -213,6 +213,16 @@ fn start_tunnel(app: &AppHandle, args: &ConnectArgs) -> Result<String, String> {
     let (mut cmd, what) = if let Some(token) = &token {
         let mut cmd = local_command(app, args, port)?;
         cmd.env("TORC_DASH_TOKEN", token);
+        // Have the bundled torc-dash run the bundled tools, not whatever PATH finds.
+        for (var, name) in [
+            ("TORC_BIN", "torc"),
+            ("TORC_SERVER_BIN", "torc-server"),
+            ("TORC_MCP_SERVER_BIN", "torc-mcp-server"),
+        ] {
+            if let Some(path) = bundled(name) {
+                cmd.env(var, path);
+            }
+        }
         (cmd, "torc-dash")
     } else {
         // ssh fails (ExitOnForwardFailure) rather than moving if this port gets taken.
@@ -338,6 +348,13 @@ fn reported_port(line: &str) -> Option<u16> {
     digits.parse().ok().filter(|&p| p != 0)
 }
 
+/// A program shipped next to this app's executable (Tauri `externalBin` in release bundles).
+fn bundled(name: &str) -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let path = exe.with_file_name(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    path.is_file().then_some(path)
+}
+
 /// torc-dash on this computer, listening on 127.0.0.1:<port>. Runs through the user's login
 /// shell so PATH from their profile applies (apps launched from Finder get a minimal PATH).
 fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Command, String> {
@@ -347,10 +364,12 @@ fn local_command(app: &AppHandle, args: &ConnectArgs, port: u16) -> Result<Comma
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         Ok(quote_arg(&dir.join("torc.db").to_string_lossy()))
     })?;
-    let line = format!(
-        "{} --host 127.0.0.1 --port {port}{flags}",
-        args.command.trim()
+    // Release bundles ship torc-dash next to the app; fall back to PATH for dev builds.
+    let program = bundled("torc-dash").map_or_else(
+        || args.command.trim().to_string(),
+        |p| quote_arg(&p.to_string_lossy()),
     );
+    let line = format!("{program} --host 127.0.0.1 --port {port}{flags}");
     #[cfg(unix)]
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
