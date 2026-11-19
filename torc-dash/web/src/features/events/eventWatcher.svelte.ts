@@ -2,7 +2,8 @@
  * Background event watcher for the selected workflow. Runs from module import (App imports it), so
  * the sidebar badge (`app.eventBadge`) updates even when the Events tab isn't mounted.
  *
- * The live stream is closed while the browser tab is hidden, so idle dash tabs don't each hold
+ * The live stream is opt-in (`watcher.enabled`, toggled on the Events tab and remembered in
+ * localStorage) and is closed while the browser tab is hidden, so idle dash tabs don't each hold
  * one of the browser's ~6 HTTP/1.1 connections to the server.
  *
  * Two sources, merged newest-first:
@@ -33,6 +34,7 @@ export type StreamStatus = "off" | "connecting" | "live" | "reconnecting";
 
 const MAX = 1000;
 const PAGE = 200;
+const ENABLED_KEY = "torc-dash.events.live";
 
 /** SSE frames use `event: <type>`; EventSource only routes named events to explicit listeners. */
 const SSE_TYPES = [
@@ -95,7 +97,17 @@ function fromLive(type: string, raw: string): EventRow {
   };
 }
 
+function readEnabled(): boolean {
+  try {
+    return localStorage.getItem(ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 class EventWatcher {
+  /** User opt-in for the live SSE stream. */
+  enabled = $state(readEnabled());
   live = $state.raw<EventRow[]>([]);
   stored = $state.raw<EventRow[]>([]);
   status = $state<StreamStatus>("off");
@@ -167,6 +179,15 @@ if (typeof document !== "undefined") {
 }
 
 $effect.root(() => {
+  $effect(() => {
+    const on = watcher.enabled;
+    try {
+      localStorage.setItem(ENABLED_KEY, on ? "1" : "0");
+    } catch {
+      // Storage unavailable (private mode): the choice lasts for this page only.
+    }
+  });
+
   // Per-workflow: reset and load stored history.
   $effect(() => {
     const wf = app.workflowId;
@@ -179,10 +200,10 @@ $effect.root(() => {
     if (wf !== null) void poll(wf, true);
   });
 
-  // Live SSE stream: only when a workflow is selected and the page is visible.
+  // Live SSE stream: only when opted in, a workflow is selected, and the page is visible.
   $effect(() => {
     const wf = app.workflowId;
-    if (wf === null || !pageVisible) {
+    if (wf === null || !watcher.enabled || !pageVisible) {
       watcher.status = "off";
       return;
     }

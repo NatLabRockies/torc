@@ -225,8 +225,12 @@ Sub-tabs analyze Slurm logs for errors and collect `sacct` accounting data for S
 
 Live workflow events via Server-Sent Events (SSE), plus stored events such as retries:
 
-- Job, compute node, and workflow lifecycle events appear as they happen
+- Live streaming is off by default; check **Live updates** to turn it on. The choice is remembered
+  in your browser. Stored events are shown either way
+- With live updates on, job, compute node, and workflow lifecycle events appear as they happen
 - A status indicator shows Live or Reconnecting; reconnection is automatic
+- The stream pauses while the browser tab is hidden, so idle dashboard tabs don't hold server
+  connections
 - The sidebar shows a count of new events while you are on another tab
 - Click an event that refers to a job to open the job
 
