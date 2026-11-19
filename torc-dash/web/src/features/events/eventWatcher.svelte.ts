@@ -2,6 +2,9 @@
  * Background event watcher for the selected workflow. Runs from module import (App imports it), so
  * the sidebar badge (`app.eventBadge`) updates even when the Events tab isn't mounted.
  *
+ * The live stream is closed while the browser tab is hidden, so idle dash tabs don't each hold
+ * one of the browser's ~6 HTTP/1.1 connections to the server.
+ *
  * Two sources, merged newest-first:
  * - live: the server's SSE stream (`/workflows/{id}/events/stream`). These broadcast events
  *   (job_started, job_completed, ...) are ephemeral and never stored, so we keep them here.
@@ -156,8 +159,15 @@ export function clearEvents() {
   watcher.stored = [];
 }
 
+let pageVisible = $state(typeof document === "undefined" || document.visibilityState === "visible");
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    pageVisible = document.visibilityState === "visible";
+  });
+}
+
 $effect.root(() => {
-  // Per-workflow: reset, open the SSE stream, and load stored history.
+  // Per-workflow: reset and load stored history.
   $effect(() => {
     const wf = app.workflowId;
     watcher.live = [];
@@ -166,12 +176,16 @@ $effect.root(() => {
     watcher.error = null;
     app.eventBadge = 0;
     maxId = 0;
-    if (wf === null) {
+    if (wf !== null) void poll(wf, true);
+  });
+
+  // Live SSE stream: only when a workflow is selected and the page is visible.
+  $effect(() => {
+    const wf = app.workflowId;
+    if (wf === null || !pageVisible) {
       watcher.status = "off";
       return;
     }
-    void poll(wf, true);
-
     const es = new EventSource(withToken(`${API_BASE}/workflows/${wf}/events/stream`));
     watcher.status = "connecting";
     es.onopen = () => (watcher.status = "live");
