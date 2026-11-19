@@ -1,0 +1,336 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Desktop App - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/core/monitoring/desktop.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="desktop-app"><a class="header" href="#desktop-app">Desktop App</a></h1>
+<p>Torc Desktop is a native app (macOS, Windows, Linux) that shows the <a href="./dashboard.html">web dashboard</a>
+in its own window. It can run the dashboard on your computer, or on an HPC login node over SSH
+without a manual SSH tunnel.</p>
+<h2 id="install"><a class="header" href="#install">Install</a></h2>
+<p>Download the installer for your platform from the
+<a href="https://github.com/NatLabRockies/torc/releases">GitHub releases</a> page:</p>
+<ul>
+<li>
+<p><strong>macOS (Apple Silicon)</strong>: <code>Torc Desktop_&lt;version&gt;_aarch64.dmg</code>. Open it and drag the app to
+Applications. The app is not signed with an Apple Developer ID, so macOS blocks it on first launch
+("damaged" or "can't be opened"). Clear the download's quarantine flag once:</p>
+<pre><code class="language-bash">xattr -dr com.apple.quarantine "/Applications/Torc Desktop.app"
+</code></pre>
+</li>
+<li>
+<p><strong>Linux (x86_64)</strong>: the <code>.AppImage</code> (<code>chmod +x</code> it and run it) or the <code>.deb</code>
+(<code>sudo apt install ./&lt;file&gt;.deb</code>). Requires WebKitGTK 4.1, which current Ubuntu, Debian, and
+Fedora releases provide.</p>
+</li>
+<li>
+<p><strong>Windows (x64)</strong>: the <code>-setup.exe</code> installer, which installs for the current user and needs no
+admin rights. The <code>.msi</code> installs for all users and requires admin rights. SmartScreen may warn
+about an unrecognized app; choose <strong>More info → Run anyway</strong>.</p>
+</li>
+</ul>
+<p>The installers include <code>torc-dash</code>, <code>torc</code>, <code>torc-server</code>, and <code>torc-mcp-server</code>, so local mode
+needs no separate install or <code>PATH</code> setup.</p>
+<h2 id="connecting"><a class="header" href="#connecting">Connecting</a></h2>
+<p>The connect page offers two modes.</p>
+<h3 id="this-computer"><a class="header" href="#this-computer">This computer</a></h3>
+<p>Starts the bundled <code>torc-dash</code> on a private local port. It runs through your login shell, so your
+profile's environment (such as <code>TORC_API_URL</code> or <code>TORC_PASSWORD</code>) applies.</p>
+<ul>
+<li><strong>Working directory</strong> (optional): where workflows run and write output. <code>~/</code> and relative paths
+resolve against your home directory. Default: your home directory.</li>
+</ul>
+<h3 id="remote-ssh"><a class="header" href="#remote-ssh">Remote (SSH)</a></h3>
+<p>Opens an SSH session to a login node, starts <code>torc-dash</code> there on a private UNIX socket, and
+forwards it to the app. Nothing listens on a network port on the login node.</p>
+<ul>
+<li><strong>Login node</strong>: <code>user@host</code>, or a host alias from <code>~/.ssh/config</code>. The app uses your system <code>ssh</code>
+(OpenSSH 8.4 or later; included in macOS, Linux, and Windows 10+), so <code>~/.ssh/config</code>,
+<code>ProxyJump</code>, keys, and Kerberos work as usual. Password, MFA, and host-key prompts appear in the
+app.</li>
+<li><strong>Environment setup</strong> (optional): a command that runs first, such as <code>module load torc</code>. Use it to
+put <code>torc-dash</code> on the <code>PATH</code>.</li>
+<li><strong>Working directory</strong> (optional): where workflows run and write output, such as <code>/scratch/$USER</code>.
+Shell syntax (<code>~</code>, <code>$VARS</code>) works. Default: your home directory.</li>
+</ul>
+<p>The remote command runs under <code>bash -l</code>, so your login profile (<code>~/.bash_profile</code>) is read.
+<code>torc-dash</code> must be installed on the login node; see
+<a href="../../getting-started/installation.html">Installation</a>.</p>
+<p>The app also sends the AI Chat settings from your computer's <code>[dash.chat]</code> config to the remote
+dashboard; see <a href="./dashboard.html#ai-chat-tab">AI Chat Tab</a>.</p>
+<h3 id="torc-server"><a class="header" href="#torc-server">Torc server</a></h3>
+<p>In both modes, <strong>Torc server</strong> chooses which server the dashboard talks to:</p>
+<ul>
+<li><strong>Use a shared torc-server</strong>: enter its URL, or leave it blank to use <code>TORC_API_URL</code> or <code>api_url</code>
+in the <code>[dash]</code> section of the torc config (<code>~/.config/torc/config.toml</code>, or
+<code>/etc/torc/config.toml</code> for a site-wide default) on the machine where torc-dash runs. With neither
+set, it uses <code>http://localhost:8080/torc-service/v1</code>. A URL entered here overrides <code>TORC_API_URL</code>.</li>
+<li><strong>Start a private torc-server</strong>: torc-dash starts a server that listens on localhost only. Its
+database is <code>~/torc-desktop.db</code> on the login node, or in the app's data folder locally
+(<code>~/Library/Application Support/com.github.natlabrockies.torc-desktop/torc.db</code> on macOS).</li>
+</ul>
+<p>If the shared server requires a login, set <code>TORC_PASSWORD</code> (and <code>TORC_USERNAME</code> if it differs from
+<code>USER</code>) where torc-dash runs: in <code>~/.bash_profile</code> on the login node, or in your login-shell profile
+locally (<code>~/.zprofile</code> for zsh; <code>~/.zshrc</code> is not read). See
+<a href="../how-to/set-up-authentication.html">Set Up Authentication</a>.</p>
+<p>The app remembers the form between launches.</p>
+<h2 id="while-connected"><a class="header" href="#while-connected">While connected</a></h2>
+<p>The <strong>Connection</strong> menu has:</p>
+<ul>
+<li><strong>Reload</strong> (Cmd/Ctrl+R): reloads the dashboard.</li>
+<li><strong>Disconnect</strong> (Cmd/Ctrl+Shift+D): stops torc-dash and returns to the connect page.</li>
+</ul>
+<p>Disconnecting or quitting stops torc-dash and any server it started. If an SSH session drops
+(network change, sleep), the app notices within about 90 seconds and returns to the connect page
+with a <strong>Reconnect</strong> button. Reconnecting signs in again, so MFA users are prompted again.</p>
+<p>Downloads and links that open new windows may not behave as they do in a browser.</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<ul>
+<li><strong>macOS says the app is damaged or can't be opened</strong>: run the <code>xattr</code> command under
+<a href="#install">Install</a>.</li>
+<li><strong>Windows asks for admin rights</strong>: use the <code>-setup.exe</code> installer instead of the <code>.msi</code>.</li>
+<li><strong><code>torc-dash: command not found</code> (remote)</strong>: install torc on the login node, or load it in
+<strong>Environment setup</strong> (for example, <code>module load torc</code>). The app does not install anything
+remotely.</li>
+<li><strong>The dashboard talks to the wrong server</strong>: clear the URL field to use <code>TORC_API_URL</code>. Locally,
+set the variable in <code>~/.zprofile</code> (zsh) rather than <code>~/.zshrc</code>, which the app does not read.</li>
+<li><strong>Authentication errors</strong>: set <code>TORC_PASSWORD</code> as described under <a href="#torc-server">Torc server</a>.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../core/monitoring/dashboard.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../core/monitoring/tui.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../core/monitoring/dashboard.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../core/monitoring/tui.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

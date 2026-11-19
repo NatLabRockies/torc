@@ -428,6 +428,9 @@ Installations from a release archive must be updated by downloading and replacin
 Update crates.io installations with <code>cargo install torc --force</code>, Docker installations with
 <code>docker pull ghcr.io/natlabrockies/torc:latest</code>, and site-managed installations through the site
 administrator.</p>
+<h2 id="desktop-app"><a class="header" href="#desktop-app">Desktop App</a></h2>
+<p>To use the dashboard in a native window, on your computer or on an HPC login node over SSH, install
+Torc Desktop. See <a href="getting-started/../core/monitoring/desktop.html">Desktop App</a>.</p>
 <h2 id="site-specific-installations"><a class="header" href="#site-specific-installations">Site-Specific Installations</a></h2>
 <p>Some HPC facilities maintain pre-installed Torc binaries and shared servers. Check if your site is
 listed below.</p>
@@ -7960,7 +7963,7 @@ torc-dash refuses requests the browser marks as cross-site.</li>
 <li>Check if the port is already in use</li>
 <li>Review console output for error messages</li>
 </ul>
-<h2 id="desktop-app"><a class="header" href="#desktop-app">Desktop App</a></h2>
+<h2 id="desktop-app-1"><a class="header" href="#desktop-app-1">Desktop App</a></h2>
 <p><code>torc-desktop</code> is a native app (macOS, Windows, Linux) that shows the same dashboard without a
 browser or a manual SSH tunnel:</p>
 <ul>
@@ -7970,7 +7973,7 @@ starts for you</li>
 forwards it automatically; password and MFA prompts appear in the app. It also sends the AI Chat
 settings from your computer's <code>[dash.chat]</code> config (see <a href="core/monitoring/dashboard.html#ai-chat-tab">AI Chat Tab</a>)</li>
 </ul>
-<p>See <code>torc-desktop/README.md</code> in the repository for building and running it.</p>
+<p>See <a href="core/monitoring/./desktop.html">Desktop App</a> for installing and using it.</p>
 <h2 id="architecture-2"><a class="header" href="#architecture-2">Architecture</a></h2>
 <p><code>torc-dash</code> is a self-contained Rust binary with:</p>
 <ul>
@@ -7990,6 +7993,99 @@ deployment scenarios</li>
 <li><a href="core/monitoring/../../specialized/admin/authentication.html">Authentication</a> - Secure your deployment</li>
 <li><a href="core/monitoring/../../specialized/admin/server-deployment.html">Server Deployment</a> - Production server
 configuration</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="desktop-app-2"><a class="header" href="#desktop-app-2">Desktop App</a></h1>
+<p>Torc Desktop is a native app (macOS, Windows, Linux) that shows the <a href="core/monitoring/./dashboard.html">web dashboard</a>
+in its own window. It can run the dashboard on your computer, or on an HPC login node over SSH
+without a manual SSH tunnel.</p>
+<h2 id="install"><a class="header" href="#install">Install</a></h2>
+<p>Download the installer for your platform from the
+<a href="https://github.com/NatLabRockies/torc/releases">GitHub releases</a> page:</p>
+<ul>
+<li>
+<p><strong>macOS (Apple Silicon)</strong>: <code>Torc Desktop_&lt;version&gt;_aarch64.dmg</code>. Open it and drag the app to
+Applications. The app is not signed with an Apple Developer ID, so macOS blocks it on first launch
+("damaged" or "can't be opened"). Clear the download's quarantine flag once:</p>
+<pre><code class="language-bash">xattr -dr com.apple.quarantine "/Applications/Torc Desktop.app"
+</code></pre>
+</li>
+<li>
+<p><strong>Linux (x86_64)</strong>: the <code>.AppImage</code> (<code>chmod +x</code> it and run it) or the <code>.deb</code>
+(<code>sudo apt install ./&lt;file&gt;.deb</code>). Requires WebKitGTK 4.1, which current Ubuntu, Debian, and
+Fedora releases provide.</p>
+</li>
+<li>
+<p><strong>Windows (x64)</strong>: the <code>-setup.exe</code> installer, which installs for the current user and needs no
+admin rights. The <code>.msi</code> installs for all users and requires admin rights. SmartScreen may warn
+about an unrecognized app; choose <strong>More info → Run anyway</strong>.</p>
+</li>
+</ul>
+<p>The installers include <code>torc-dash</code>, <code>torc</code>, <code>torc-server</code>, and <code>torc-mcp-server</code>, so local mode
+needs no separate install or <code>PATH</code> setup.</p>
+<h2 id="connecting"><a class="header" href="#connecting">Connecting</a></h2>
+<p>The connect page offers two modes.</p>
+<h3 id="this-computer"><a class="header" href="#this-computer">This computer</a></h3>
+<p>Starts the bundled <code>torc-dash</code> on a private local port. It runs through your login shell, so your
+profile's environment (such as <code>TORC_API_URL</code> or <code>TORC_PASSWORD</code>) applies.</p>
+<ul>
+<li><strong>Working directory</strong> (optional): where workflows run and write output. <code>~/</code> and relative paths
+resolve against your home directory. Default: your home directory.</li>
+</ul>
+<h3 id="remote-ssh"><a class="header" href="#remote-ssh">Remote (SSH)</a></h3>
+<p>Opens an SSH session to a login node, starts <code>torc-dash</code> there on a private UNIX socket, and
+forwards it to the app. Nothing listens on a network port on the login node.</p>
+<ul>
+<li><strong>Login node</strong>: <code>user@host</code>, or a host alias from <code>~/.ssh/config</code>. The app uses your system <code>ssh</code>
+(OpenSSH 8.4 or later; included in macOS, Linux, and Windows 10+), so <code>~/.ssh/config</code>,
+<code>ProxyJump</code>, keys, and Kerberos work as usual. Password, MFA, and host-key prompts appear in the
+app.</li>
+<li><strong>Environment setup</strong> (optional): a command that runs first, such as <code>module load torc</code>. Use it to
+put <code>torc-dash</code> on the <code>PATH</code>.</li>
+<li><strong>Working directory</strong> (optional): where workflows run and write output, such as <code>/scratch/$USER</code>.
+Shell syntax (<code>~</code>, <code>$VARS</code>) works. Default: your home directory.</li>
+</ul>
+<p>The remote command runs under <code>bash -l</code>, so your login profile (<code>~/.bash_profile</code>) is read.
+<code>torc-dash</code> must be installed on the login node; see
+<a href="core/monitoring/../../getting-started/installation.html">Installation</a>.</p>
+<p>The app also sends the AI Chat settings from your computer's <code>[dash.chat]</code> config to the remote
+dashboard; see <a href="core/monitoring/./dashboard.html#ai-chat-tab">AI Chat Tab</a>.</p>
+<h3 id="torc-server"><a class="header" href="#torc-server">Torc server</a></h3>
+<p>In both modes, <strong>Torc server</strong> chooses which server the dashboard talks to:</p>
+<ul>
+<li><strong>Use a shared torc-server</strong>: enter its URL, or leave it blank to use <code>TORC_API_URL</code> or <code>api_url</code>
+in the <code>[dash]</code> section of the torc config (<code>~/.config/torc/config.toml</code>, or
+<code>/etc/torc/config.toml</code> for a site-wide default) on the machine where torc-dash runs. With neither
+set, it uses <code>http://localhost:8080/torc-service/v1</code>. A URL entered here overrides <code>TORC_API_URL</code>.</li>
+<li><strong>Start a private torc-server</strong>: torc-dash starts a server that listens on localhost only. Its
+database is <code>~/torc-desktop.db</code> on the login node, or in the app's data folder locally
+(<code>~/Library/Application Support/com.github.natlabrockies.torc-desktop/torc.db</code> on macOS).</li>
+</ul>
+<p>If the shared server requires a login, set <code>TORC_PASSWORD</code> (and <code>TORC_USERNAME</code> if it differs from
+<code>USER</code>) where torc-dash runs: in <code>~/.bash_profile</code> on the login node, or in your login-shell profile
+locally (<code>~/.zprofile</code> for zsh; <code>~/.zshrc</code> is not read). See
+<a href="core/monitoring/../how-to/set-up-authentication.html">Set Up Authentication</a>.</p>
+<p>The app remembers the form between launches.</p>
+<h2 id="while-connected"><a class="header" href="#while-connected">While connected</a></h2>
+<p>The <strong>Connection</strong> menu has:</p>
+<ul>
+<li><strong>Reload</strong> (Cmd/Ctrl+R): reloads the dashboard.</li>
+<li><strong>Disconnect</strong> (Cmd/Ctrl+Shift+D): stops torc-dash and returns to the connect page.</li>
+</ul>
+<p>Disconnecting or quitting stops torc-dash and any server it started. If an SSH session drops
+(network change, sleep), the app notices within about 90 seconds and returns to the connect page
+with a <strong>Reconnect</strong> button. Reconnecting signs in again, so MFA users are prompted again.</p>
+<p>Downloads and links that open new windows may not behave as they do in a browser.</p>
+<h2 id="troubleshooting-3"><a class="header" href="#troubleshooting-3">Troubleshooting</a></h2>
+<ul>
+<li><strong>macOS says the app is damaged or can't be opened</strong>: run the <code>xattr</code> command under
+<a href="core/monitoring/desktop.html#install">Install</a>.</li>
+<li><strong>Windows asks for admin rights</strong>: use the <code>-setup.exe</code> installer instead of the <code>.msi</code>.</li>
+<li><strong><code>torc-dash: command not found</code> (remote)</strong>: install torc on the login node, or load it in
+<strong>Environment setup</strong> (for example, <code>module load torc</code>). The app does not install anything
+remotely.</li>
+<li><strong>The dashboard talks to the wrong server</strong>: clear the URL field to use <code>TORC_API_URL</code>. Locally,
+set the variable in <code>~/.zprofile</code> (zsh) rather than <code>~/.zshrc</code>, which the app does not read.</li>
+<li><strong>Authentication errors</strong>: set <code>TORC_PASSWORD</code> as described under <a href="core/monitoring/desktop.html#torc-server">Torc server</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="terminal-user-interface-tui"><a class="header" href="#terminal-user-interface-tui">Terminal User Interface (TUI)</a></h1>
 <p>The Torc TUI provides a full-featured terminal interface for managing workflows, designed for HPC
@@ -8219,7 +8315,7 @@ refresh automatically.</p>
 <li>System config file (<code>/etc/torc/config.toml</code>)</li>
 <li>Default values</li>
 </ol>
-<h2 id="troubleshooting-3"><a class="header" href="#troubleshooting-3">Troubleshooting</a></h2>
+<h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
 <h3 id="could-not-connect-to-server"><a class="header" href="#could-not-connect-to-server">"Could not connect to server"</a></h3>
 <ol>
 <li>Ensure the Torc server is running: <code>torc-server run</code></li>
@@ -8526,7 +8622,7 @@ flags.</p>
 <p>Torc also launches this command itself on the non-head nodes of a multi-node Slurm allocation that
 has a single job runner, so every node in the allocation is recorded. See
 <a href="core/monitoring/../reference/resource-monitoring.html#compute-node-monitoring">Resource Monitoring Database</a>.</p>
-<h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
+<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
 <h3 id="no-metrics-recorded"><a class="header" href="#no-metrics-recorded">No metrics recorded</a></h3>
 <ul>
 <li>Check that monitoring wasn't disabled with <code>--no-resource-monitoring</code></li>
@@ -14238,7 +14334,7 @@ See <a href="specialized/hpc/./slurm.html">Advanced Slurm Configuration</a> for 
 <li>Multi-node jobs with specific topology requirements</li>
 <li>Reusing allocations across multiple jobs for efficiency</li>
 </ul>
-<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
+<h2 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h2>
 <h3 id="no-partition-found-for-job"><a class="header" href="#no-partition-found-for-job">"No partition found for job"</a></h3>
 <p>Your resource requirements exceed what's available. Check:</p>
 <ul>
@@ -16370,7 +16466,7 @@ expand the database connection pool:</p>
 torc-server run --threads 8 --database /scratch/$USER/torc.db --host $HOST --port $PORT
 </code></pre>
 <p>The connection pool size is <code>max(threads, 2) + 2</code>, so <code>--threads 8</code> gives 10 connections.</p>
-<h2 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h2>
+<h2 id="troubleshooting-7"><a class="header" href="#troubleshooting-7">Troubleshooting</a></h2>
 <h3 id="connection-refused-from-compute-nodes-1"><a class="header" href="#connection-refused-from-compute-nodes-1">"Connection refused" from compute nodes</a></h3>
 <ol>
 <li>
@@ -16666,7 +16762,7 @@ memory_mb = 192000
 max_walltime_secs = 86400
 requires_explicit_request = true  # Only used when explicitly requested
 </code></pre>
-<h2 id="troubleshooting-7"><a class="header" href="#troubleshooting-7">Troubleshooting</a></h2>
+<h2 id="troubleshooting-8"><a class="header" href="#troubleshooting-8">Troubleshooting</a></h2>
 <h3 id="profile-not-detected"><a class="header" href="#profile-not-detected">Profile Not Detected</a></h3>
 <p>If <code>torc hpc detect</code> doesn't find your profile:</p>
 <ol>
@@ -17074,7 +17170,7 @@ resource_monitor_config:
   sample_interval_seconds: 10
 </code></pre>
 <p>The <code>collect-logs</code> command retrieves these databases along with job logs.</p>
-<h2 id="troubleshooting-8"><a class="header" href="#troubleshooting-8">Troubleshooting</a></h2>
+<h2 id="troubleshooting-9"><a class="header" href="#troubleshooting-9">Troubleshooting</a></h2>
 <h3 id="no-workers-configured"><a class="header" href="#no-workers-configured">No Workers Configured</a></h3>
 <pre><code>No workers configured for workflow 42. Use 'torc remote add-workers' or '--workers' flag.
 </code></pre>
@@ -17626,7 +17722,7 @@ torc watch 42 --recover --poll-interval 300 --show-job-counts
 <pre><code class="language-bash">torc workflows check-resources 42
 </code></pre>
 <p>This helps tune future job specifications.</p>
-<h2 id="troubleshooting-9"><a class="header" href="#troubleshooting-9">Troubleshooting</a></h2>
+<h2 id="troubleshooting-10"><a class="header" href="#troubleshooting-10">Troubleshooting</a></h2>
 <h3 id="jobs-stuck-in-running-status"><a class="header" href="#jobs-stuck-in-running-status">Jobs Stuck in "Running" Status</a></h3>
 <p>If jobs appear stuck in "running" status after a Slurm allocation ended:</p>
 <ol>
@@ -18109,7 +18205,7 @@ exit 0
 LOG_FILE="$TORC_OUTPUT_DIR/recovery_${TORC_JOB_ID}.log"
 echo "$(date): Recovery attempt $TORC_ATTEMPT_ID for exit code $TORC_RETURN_CODE" &gt;&gt; "$LOG_FILE"
 </code></pre>
-<h2 id="troubleshooting-10"><a class="header" href="#troubleshooting-10">Troubleshooting</a></h2>
+<h2 id="troubleshooting-11"><a class="header" href="#troubleshooting-11">Troubleshooting</a></h2>
 <h3 id="recovery-script-not-running"><a class="header" href="#recovery-script-not-running">Recovery Script Not Running</a></h3>
 <ol>
 <li>Check that the script is executable: <code>chmod +x script.sh</code></li>
@@ -19468,7 +19564,7 @@ Buckets are returned newest-first.</p>
 </code></pre>
 <p>This adds detailed timing information for all instrumented functions. Note that timing
 instrumentation works with both console and file logging.</p>
-<h2 id="troubleshooting-11"><a class="header" href="#troubleshooting-11">Troubleshooting</a></h2>
+<h2 id="troubleshooting-12"><a class="header" href="#troubleshooting-12">Troubleshooting</a></h2>
 <h3 id="daemon-wont-start"><a class="header" href="#daemon-wont-start">Daemon won't start</a></h3>
 <ol>
 <li>
@@ -19635,7 +19731,7 @@ memory_gb = 256.0
 num_gpus = 8
 output_dir = "/scratch/user/workflow_output"
 </code></pre>
-<h2 id="troubleshooting-12"><a class="header" href="#troubleshooting-12">Troubleshooting</a></h2>
+<h2 id="troubleshooting-13"><a class="header" href="#troubleshooting-13">Troubleshooting</a></h2>
 <p><strong>Configuration not applied?</strong></p>
 <ol>
 <li>Check which files are loaded: <code>torc config validate</code></li>
@@ -19890,7 +19986,7 @@ torc-server run --auth-file /etc/torc/htpasswd --database prod.db
 # 4. Once all clients authenticate, enable required auth
 torc-server run --auth-file /etc/torc/htpasswd --require-auth --database prod.db
 </code></pre>
-<h2 id="troubleshooting-13"><a class="header" href="#troubleshooting-13">Troubleshooting</a></h2>
+<h2 id="troubleshooting-14"><a class="header" href="#troubleshooting-14">Troubleshooting</a></h2>
 <h3 id="authentication-required-but-no-credentials-provided"><a class="header" href="#authentication-required-but-no-credentials-provided">"Authentication required but no credentials provided"</a></h3>
 <p><strong>Cause:</strong> Server has <code>--require-auth</code> but client didn't send credentials.</p>
 <p><strong>Solution:</strong></p>
@@ -20160,7 +20256,7 @@ let mut config = Configuration::with_tls(tls);
 config.base_path =
     "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
 <span class="boring">}</span></code></pre></pre>
-<h2 id="troubleshooting-14"><a class="header" href="#troubleshooting-14">Troubleshooting</a></h2>
+<h2 id="troubleshooting-15"><a class="header" href="#troubleshooting-15">Troubleshooting</a></h2>
 <h3 id="certificate-verify-failed-or-unable-to-get-local-issuer-certificate"><a class="header" href="#certificate-verify-failed-or-unable-to-get-local-issuer-certificate">"certificate verify failed" or "unable to get local issuer certificate"</a></h3>
 <p>The client cannot verify the server's certificate chain. Provide the CA certificate:</p>
 <pre><code class="language-bash">torc --tls-ca-cert /path/to/ca.pem workflows list
@@ -20695,7 +20791,7 @@ require_auth = true
 enforce_access_control = true
 admin_users = ["alice", "bob"]
 </code></pre>
-<h2 id="troubleshooting-15"><a class="header" href="#troubleshooting-15">Troubleshooting</a></h2>
+<h2 id="troubleshooting-16"><a class="header" href="#troubleshooting-16">Troubleshooting</a></h2>
 <h3 id="anonymous-access-not-allowed"><a class="header" href="#anonymous-access-not-allowed">"Anonymous access not allowed"</a></h3>
 <p>This error appears when:</p>
 <ul>
@@ -21767,7 +21863,7 @@ export TORC_CLIENT__FORMAT="json"
 
 torc run workflow.yaml
 </code></pre>
-<h2 id="troubleshooting-16"><a class="header" href="#troubleshooting-16">Troubleshooting</a></h2>
+<h2 id="troubleshooting-17"><a class="header" href="#troubleshooting-17">Troubleshooting</a></h2>
 <h3 id="configuration-not-loading"><a class="header" href="#configuration-not-loading">Configuration Not Loading</a></h3>
 <p>Check which files are being loaded:</p>
 <pre><code class="language-bash">torc config validate
@@ -22100,7 +22196,7 @@ torc-server run \
 <tr><td>Best for</td><td>Single-computer workflows</td><td>Small HPC workflows (&lt; 100 jobs)</td><td>Large-scale production</td></tr>
 </tbody></table>
 </div>
-<h2 id="troubleshooting-17"><a class="header" href="#troubleshooting-17">Troubleshooting</a></h2>
+<h2 id="troubleshooting-18"><a class="header" href="#troubleshooting-18">Troubleshooting</a></h2>
 <h3 id="cannot-connect-to-server-1"><a class="header" href="#cannot-connect-to-server-1">Cannot connect to server</a></h3>
 <pre><code class="language-bash"># Check if server is running
 curl http://localhost:8080/torc-service/v1/workflows
@@ -22371,7 +22467,7 @@ remains in Torc's database.</p>
 <li>Review proposed actions before they execute</li>
 </ul>
 <hr />
-<h2 id="troubleshooting-18"><a class="header" href="#troubleshooting-18">Troubleshooting</a></h2>
+<h2 id="troubleshooting-19"><a class="header" href="#troubleshooting-19">Troubleshooting</a></h2>
 <h3 id="claude-doesnt-see-the-tools"><a class="header" href="#claude-doesnt-see-the-tools">Claude doesn't see the tools</a></h3>
 <ul>
 <li>Verify the MCP server is configured: <code>claude mcp list</code></li>
@@ -23032,7 +23128,7 @@ tags, ticket IDs, dataset versions, etc.) — that's where datasight unlocks the
 <p>Pin useful results to the dashboard, or export the session as a self-contained HTML page or a
 runnable Python script — see the datasight docs for more.</p>
 <hr />
-<h2 id="troubleshooting-19"><a class="header" href="#troubleshooting-19">Troubleshooting</a></h2>
+<h2 id="troubleshooting-20"><a class="header" href="#troubleshooting-20">Troubleshooting</a></h2>
 <p><strong>The AI keeps writing <code>WHERE status = 'failed'</code>.</strong> Your <code>schema_description.md</code> isn't being loaded.
 Confirm it sits in the project directory next to <code>.env</code> and restart <code>datasight run</code>.</p>
 <p><strong>Queries return nothing for <code>result</code>-table questions.</strong> Either the workflow hasn't run any jobs
@@ -23708,7 +23804,7 @@ else
     echo "Run: torc completions bash &gt; ~/.local/share/bash-completion/completions/torc"
 fi
 </code></pre>
-<h2 id="troubleshooting-20"><a class="header" href="#troubleshooting-20">Troubleshooting</a></h2>
+<h2 id="troubleshooting-21"><a class="header" href="#troubleshooting-21">Troubleshooting</a></h2>
 <h3 id="completions-not-working"><a class="header" href="#completions-not-working">Completions Not Working</a></h3>
 <p><strong>Problem:</strong> Tab completion doesn't show torc commands.</p>
 <p><strong>Solutions:</strong></p>
@@ -24955,8 +25051,8 @@ including on HPC systems.</li>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="torc-desktop-design"><a class="header" href="#torc-desktop-design">Torc Desktop Design</a></h1>
 <p>Torc Desktop (<code>torc-desktop/</code>) is a native app that runs the torc-dash UI in its own window, with
 torc-dash running either on the user's computer or on an HPC login node over SSH. It is a standalone
-Tauri 2 crate, not part of the main workspace. Usage is in <code>torc-desktop/README.md</code>; this page
-explains how it works and why.</p>
+Tauri 2 crate, not part of the main workspace. Usage is in
+<a href="specialized/design/../../core/monitoring/desktop.html">Desktop App</a>; this page explains how it works and why.</p>
 <h2 id="problem-and-goals-1"><a class="header" href="#problem-and-goals-1">Problem and goals</a></h2>
 <p>Using torc-dash on a login node by hand means starting it, picking a free port or socket, opening an
 SSH tunnel, and remembering to stop everything afterwards. The goals:</p>
