@@ -275,17 +275,19 @@
       {/if}
     {:else if view === "tail"}
       <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
-    {:else if wf?.id !== app.workflowId}
+    {:else if wf?.id !== app.workflowId && !loadError}
       <!-- Slurm paths depend on this workflow's submission directory; wait until it's loaded. -->
+      <div class="empty"><span class="spinner"></span> Loading workflow…</div>
+    {:else}
+      <!-- If the workflow can't be read, fall back to cwd-relative paths (as ResourcesTab does). -->
       {#if loadError}
         <p class="error-text">{loadError}</p>
-      {:else}
-        <div class="empty"><span class="spinner"></span> Loading workflow…</div>
       {/if}
-    {:else if view === "slurm-logs"}
-      <SlurmLogs workflowId={app.workflowId} outputDir={baseDir} />
-    {:else}
-      <SlurmSacct workflowId={app.workflowId} outputDir={baseDir} />
+      {#if view === "slurm-logs"}
+        <SlurmLogs workflowId={app.workflowId} outputDir={baseDir} />
+      {:else}
+        <SlurmSacct workflowId={app.workflowId} outputDir={baseDir} />
+      {/if}
     {/if}
   {/if}
 </div>

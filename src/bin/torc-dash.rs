@@ -22,7 +22,6 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use rmcp::{ServiceExt, model::CallToolRequestParams, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
-use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
@@ -1404,9 +1403,10 @@ async fn cli_create_handler(
 
     let result = if req.is_file {
         // Spec is a file path
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "create", &req.spec],
+            &["-f", "json", "create", &spec],
             &state.api_url,
         )
         .await
@@ -1519,10 +1519,10 @@ async fn cli_create_slurm_handler(
     let result = if req.is_file {
         // Spec is a file path - two-step process: generate schedulers then create
         // Step 1: Generate Slurm schedulers
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         let slurm_spec_path = format!(
             "{}_slurm.yaml",
-            req.spec
-                .trim_end_matches(".yaml")
+            spec.trim_end_matches(".yaml")
                 .trim_end_matches(".yml")
                 .trim_end_matches(".json")
                 .trim_end_matches(".json5")
@@ -1535,7 +1535,7 @@ async fn cli_create_slurm_handler(
         }
         gen_args.push("-o");
         gen_args.push(&slurm_spec_path);
-        gen_args.push(&req.spec);
+        gen_args.push(&spec);
 
         let gen_result = run_torc_command(&state.torc_bin, &gen_args, &state.api_url).await;
         if !gen_result.success {
@@ -1649,9 +1649,10 @@ async fn cli_validate_handler(
 ) -> impl IntoResponse {
     let result = if req.is_file {
         // Spec is a file path
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "create", &req.spec, "--dry-run"],
+            &["-f", "json", "create", &spec, "--dry-run"],
             &state.api_url,
         )
         .await
@@ -2133,7 +2134,7 @@ async fn cli_recover_handler(
         "recover".to_string(),
         req.workflow_id.clone(),
         "-o".to_string(),
-        req.output_dir.clone(),
+        expand_tilde(&req.output_dir).to_string_lossy().into_owned(),
         "--memory-multiplier".to_string(),
         req.memory_multiplier.to_string(),
         "--runtime-multiplier".to_string(),
@@ -2419,7 +2420,10 @@ fn read_resource_samples(
         .add(b' ');
     let uri = format!(
         "file:{}?immutable=1",
-        percent_encoding::utf8_percent_encode(&req.db_path, URI_RESERVED)
+        percent_encoding::utf8_percent_encode(
+            &expand_tilde(&req.db_path).to_string_lossy(),
+            URI_RESERVED
+        )
     );
     let conn = Connection::open_with_flags(
         &uri,
@@ -2717,14 +2721,11 @@ async fn cli_export_handler(
     let output_raw = req.output.as_deref().unwrap_or(&default_output);
 
     // Resolve to absolute path so the user knows exactly where the file goes
-    let output_path = FsPath::new(output_raw);
-    let output_abs = if output_path.is_relative() {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(output_path).to_string_lossy().to_string())
-            .unwrap_or_else(|_| output_raw.to_string())
-    } else {
-        output_raw.to_string()
-    };
+    let output_path = expand_tilde(output_raw);
+    let output_abs = std::path::absolute(&output_path)
+        .unwrap_or(output_path)
+        .to_string_lossy()
+        .into_owned();
 
     let mut args = vec![
         "-f",
@@ -2752,9 +2753,11 @@ async fn cli_import_handler(
 ) -> impl IntoResponse {
     // Determine the file path to import from
     let temp_path_owned;
+    let expanded_path;
     let import_path = if let Some(ref path) = req.file_path {
         // Use server-side file path directly
-        path.as_str()
+        expanded_path = expand_tilde(path).to_string_lossy().into_owned();
+        expanded_path.as_str()
     } else if let Some(ref content) = req.content {
         // Write uploaded content to a temp file
         let unique_id = uuid::Uuid::new_v4();
@@ -2886,7 +2889,8 @@ async fn cli_plot_resources_handler(
     let has_custom_output_dir = req.output_dir.is_some();
     let output_dir = req
         .output_dir
-        .map(std::path::PathBuf::from)
+        .as_deref()
+        .map(expand_tilde)
         .unwrap_or(temp_dir.clone());
 
     if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
@@ -2901,8 +2905,12 @@ async fn cli_plot_resources_handler(
     let mut args: Vec<&str> = vec!["plot-resources"];
 
     // Add all database paths
-    let db_paths: Vec<&str> = req.db_paths.iter().map(|s| s.as_str()).collect();
-    args.extend(db_paths.iter());
+    let db_paths: Vec<String> = req
+        .db_paths
+        .iter()
+        .map(|p| expand_tilde(p).to_string_lossy().into_owned())
+        .collect();
+    args.extend(db_paths.iter().map(String::as_str));
 
     let output_dir_str = output_dir.to_string_lossy().to_string();
     args.push("--output-dir");

@@ -83,6 +83,8 @@
     selected.clear();
     plots = null;
     plotError = null;
+    plotSeq++; // invalidate in-flight plot requests, even after an A -> B -> A switch
+    generating = false;
     if (visible.length === 1) {
       selected.add(visible[0].path);
       if (mode === "plots") void generate();
@@ -95,13 +97,9 @@
     void app.workflowId;
     untrack(() => {
       showAll = false;
-      selected.clear();
-      plots = null;
-      plotError = null;
       dbs = null;
       scanError = null;
-      plotSeq++; // invalidate in-flight plot requests, even after an A -> B -> A switch
-      generating = false;
+      resetForWorkflow(); // no dbs yet, so this only clears
       void scan();
     });
   });
