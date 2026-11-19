@@ -383,6 +383,7 @@ Workflow management commands
 ###### **Subcommands:**
 
 - `new` — Create a new empty workflow
+- `schema` — Print the JSON Schema for workflow spec files
 - `init` — Initialize workflow dependencies
 - `reinit` — Reinitialize jobs with changed inputs
 - `reset-status` — Reset workflow and job statuses
@@ -435,6 +436,24 @@ Create a new empty workflow
 - `-n`, `--name <NAME>` — Name of the workflow
 - `-d`, `--description <DESCRIPTION>` — Description of the workflow
 - `-u`, `--user <USER>` — User that owns the workflow (defaults to USER environment variable)
+
+## `torc workflows schema`
+
+Print the JSON Schema (draft 2020-12) for workflow spec files (YAML, JSON, JSON5)
+
+**Usage:** `torc workflows schema`
+
+Editors use it for completion, hover documentation, and validation. For VS Code with the YAML
+extension, save it and reference it from the first line of a spec:
+
+```bash
+torc workflows schema > torc-workflow.schema.json
+```
+
+```yaml
+# yaml-language-server: $schema=./torc-workflow.schema.json
+name: my_workflow
+```
 
 ## `torc workflows list`
 

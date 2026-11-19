@@ -10,17 +10,37 @@
 tag-prefix = "v"
 tag-name = "{{prefix}}{{version}}"
 
-# Update the workspace dependency self-reference in Cargo.toml
-[[pre-release-replacements]]
-file = "Cargo.toml"
-search = 'torc = \{ version = "[^"]+", path = "\." \}'
-replace = 'torc = { version = "{{version}}", path = "." }'
-
 # Keep Python client version in sync
 [[pre-release-replacements]]
 file = "python_client/pyproject.toml"
 search = '^version = "[^"]+"'
 replace = 'version = "{{version}}"'
+
+# Torc Desktop is a separate crate and npm package, so cargo-release doesn't bump it.
+# tauri.conf.json has no version; Tauri takes it from src-tauri/Cargo.toml.
+[[pre-release-replacements]]
+file = "torc-desktop/src-tauri/Cargo.toml"
+search = '^version = "[^"]+"'
+replace = 'version = "{{version}}"'
+exactly = 1
+
+[[pre-release-replacements]]
+file = "torc-desktop/src-tauri/Cargo.lock"
+search = 'name = "torc-desktop"\nversion = "[^"]+"'
+replace = "name = \"torc-desktop\"\nversion = \"{{version}}\""
+exactly = 1
+
+[[pre-release-replacements]]
+file = "torc-desktop/package.json"
+search = '^  "version": "[^"]+"'
+replace = '  "version": "{{version}}"'
+exactly = 1
+
+[[pre-release-replacements]]
+file = "torc-desktop/package-lock.json"
+search = '"name": "torc-desktop",\n(\s+)"version": "[^"]+"'
+replace = "\"name\": \"torc-desktop\",\n${1}\"version\": \"{{version}}\""
+exactly = 2
 
 # Dockerfile usage comment
 [[pre-release-replacements]]

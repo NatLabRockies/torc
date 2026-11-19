@@ -76,8 +76,10 @@ torc/
 │   └── models.rs        # Shared data models
 ├── torc-server/         # Server database migrations
 │   └── migrations/      # SQLx migration files
-├── torc-dash/           # Dashboard static assets
-│   └── static/          # Web UI files
+├── torc-dash/           # Dashboard UI
+│   ├── web/             # Svelte + TS source (npm run build → static/app/, checked in)
+│   └── static/          # Embedded assets: app/ (built UI) and images/
+├── torc-desktop/        # Tauri desktop app: runs torc-dash locally or on a login node via SSH
 ├── python_client/       # Python CLI client and library
 │   ├── src/torc/        # Python package
 │   └── pyproject.toml   # Python project configuration

@@ -1,0 +1,19 @@
+[package]
+name = "torc-desktop"
+version = "1.1.0"
+description = "Native desktop shell for torc-dash on a remote login node"
+edition = "2024"
+publish = false
+
+# Standalone: not part of the main torc workspace.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+dirs = "7"

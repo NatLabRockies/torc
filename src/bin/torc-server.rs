@@ -571,7 +571,12 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
     let database_url = if let Some(db_path) = &config.database {
         format!("sqlite:{}", db_path)
     } else {
-        env::var("DATABASE_URL").expect("DATABASE_URL must be set or --database must be provided")
+        env::var("DATABASE_URL").map_err(|_| {
+            anyhow::anyhow!(
+                "No database configured: pass --database <path>, set DATABASE_URL, or set \
+                 `database` in the [server] section of the torc config file"
+            )
+        })?
     };
 
     // Detect supported SQLite in-memory URLs:

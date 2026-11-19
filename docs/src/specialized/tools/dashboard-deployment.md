@@ -79,15 +79,15 @@ This single command:
 
 **Step 2: Open your browser**
 
-Navigate to http://localhost:8090
+Open the URL torc-dash prints at startup (`http://127.0.0.1:8090/?token=…`). The token keeps other
+users on the machine out of the dashboard.
 
 **Step 3: Create and run a workflow**
 
-1. Click **Create Workflow**
-2. Upload a workflow specification file (YAML, JSON, or KDL)
-3. Click **Create**
-4. Click **Initialize** on the new workflow
-5. Click **Run Locally** to execute
+1. Click **Create workflow**
+2. Upload a workflow specification file (YAML, JSON, JSON5, or KDL)
+3. Click **Create** (the workflow is initialized automatically)
+4. Click the run button on the new workflow to execute it locally
 
 ### Configuration Options
 
@@ -218,19 +218,20 @@ ssh -L 8090:localhost:8090 user@login-node
 > **Important**: Use `localhost` in the tunnel command, not the login node's hostname. This works
 > because torc-dash binds to 127.0.0.1 by default.
 
-Note that in TCP mode, other users on the login node can connect to port 8090.
+In TCP mode, other users on the login node can connect to port 8090; the token in the URL torc-dash
+prints keeps them out of the API.
 
 </details>
 
-Open http://localhost:8090 in your browser.
+Open http://localhost:8090 in your browser (in TCP mode, add the `?token=…` from the URL torc-dash
+printed).
 
 ### Submitting to Slurm
 
 **Via Dashboard:**
 
 1. Create a workflow with Slurm scheduler configuration
-2. Click **Initialize**
-3. Click **Submit** (not "Run Locally")
+2. Click **Submit** on the workflow (not the run button, which runs locally)
 
 **Via CLI:**
 
@@ -351,7 +352,8 @@ ssh -L 8090:localhost:8090 user@login-node
 > forwards your local port to `localhost:8090` _as seen from the login node_, which matches where
 > torc-dash binds (127.0.0.1:8090).
 
-Note that in TCP mode, other users on the login node can connect to port 8090.
+In TCP mode, other users on the login node can connect to port 8090; open the `?token=…` URL
+torc-dash prints so only you can use the API.
 
 </details>
 
@@ -464,7 +466,7 @@ If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name n
 
 ### Dashboard shows "Disconnected"
 
-- Verify API URL in Configuration tab
+- Verify the `--api-url` (or `TORC_API_URL`) that `torc-dash` was started with
 - Check network connectivity to server
 - Ensure server is running and accessible
 

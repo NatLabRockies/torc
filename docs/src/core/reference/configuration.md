@@ -8,7 +8,11 @@ Torc loads configuration from multiple sources in this order (later sources over
 
 1. **Built-in defaults** (lowest priority)
 2. **System config**: `/etc/torc/config.toml`
-3. **User config**: `~/.config/torc/config.toml` (platform-dependent)
+3. **User config**: `config.toml` in the platform's user config directory (run `torc config paths`
+   to see it):
+   - Linux: `~/.config/torc/config.toml` (or `$XDG_CONFIG_HOME/torc/config.toml`)
+   - macOS: `~/Library/Application Support/torc/config.toml`
+   - Windows: `%APPDATA%\torc\config.toml`
 4. **Project config**: `./torc.toml`
 5. **Environment variables**: `TORC_*` prefix
 6. **CLI arguments** (highest priority)
@@ -231,17 +235,24 @@ Settings for `torc-dash`.
 
 ### `[dash]` Section
 
-| Option            | Type   | Default                                 | Description                                |
-| ----------------- | ------ | --------------------------------------- | ------------------------------------------ |
-| `host`            | string | `127.0.0.1`                             | Hostname/IP to bind to                     |
-| `port`            | int    | `8090`                                  | Port to listen on                          |
-| `api_url`         | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                        |
-| `torc_bin`        | string | `torc`                                  | Path to torc CLI binary                    |
-| `torc_server_bin` | string | `torc-server`                           | Path to torc-server binary                 |
-| `standalone`      | bool   | `false`                                 | Auto-start torc-server                     |
-| `server_port`     | int    | `0`                                     | Server port for standalone mode (0 = auto) |
-| `server_host`     | string | `0.0.0.0`                               | Server bind address for standalone mode    |
-| `database`        | string | (none)                                  | Database path for standalone mode          |
+| Option            | Type   | Default                                 | Description                                                 |
+| ----------------- | ------ | --------------------------------------- | ----------------------------------------------------------- |
+| `host`            | string | `127.0.0.1`                             | Hostname/IP to bind to                                      |
+| `port`            | int    | `8090`                                  | Port to listen on                                           |
+| `api_url`         | string | `http://localhost:8080/torc-service/v1` | Torc server API URL                                         |
+| `torc_bin`        | string | `torc`                                  | Path to torc CLI binary                                     |
+| `torc_server_bin` | string | `torc-server`                           | Path to torc-server binary                                  |
+| `standalone`      | bool   | `false`                                 | Auto-start torc-server                                      |
+| `server_port`     | int    | `0`                                     | Server port for standalone mode (0 = auto)                  |
+| `server_host`     | string | `0.0.0.0`                               | Server bind address for standalone mode                     |
+| `database`        | string | (none)                                  | Database path for standalone mode                           |
+| `allowed_hosts`   | list   | `[]`                                    | Extra hostnames the dashboard may be reached by (see below) |
+
+torc-dash refuses requests whose `Host` header names an unknown host, which blocks DNS-rebinding
+attacks. `localhost`, `127.0.0.1`, `::1`, and a specific `host` are always allowed. If users reach
+the dashboard by another name, such as through a reverse proxy or with `host = "0.0.0.0"`, list that
+name in `allowed_hosts` (or `--allowed-hosts`, `TORC_DASH_ALLOWED_HOSTS`). `["*"]` turns the check
+off.
 
 > **Deprecated:** `server.completion_check_interval_secs`, `dash.completion_check_interval_secs`,
 > the `--completion-check-interval-secs` flag of `torc-server` and `torc-dash`, and the
@@ -262,6 +273,53 @@ torc_server_bin = "/usr/local/bin/torc-server"
 standalone = true
 server_port = 0
 ```
+
+### `[dash.chat]` Section
+
+AI Chat provider settings, so the dashboard's AI Chat tab works without entering them in the
+browser. Command-line flags and their environment variables (`--llm-provider`, `ANTHROPIC_API_KEY`,
+`OPENAI_MODEL`, ...) take precedence over these.
+
+| Option             | Type   | Default      | Description                                                                          |
+| ------------------ | ------ | ------------ | ------------------------------------------------------------------------------------ |
+| `provider`         | string | `anthropic`  | `anthropic`, `openai`, `foundry`, `ollama`, `github`, or `custom` (LiteLLM or proxy) |
+| `model`            | string | per provider | Model name                                                                           |
+| `base_url`         | string | per provider | API base URL; required for `custom`                                                  |
+| `foundry_resource` | string | (none)       | Azure AI Foundry resource name; required for `foundry`                               |
+| `auth_header`      | string | `x-api-key`  | Auth header name for `anthropic`, `foundry`, and `custom`                            |
+| `api_key`          | string | (none)       | API key or token; **user config file only** (see below)                              |
+
+`api_key` holds the key itself, as a string. It is read only from the user config file (see
+[Configuration Sources](#configuration-sources) for its location on each platform). It is ignored,
+with a warning, in `/etc/torc/config.toml` and in a project `torc.toml`, which is easy to commit by
+accident. Because the file then contains a secret, torc-dash warns if other users can read it;
+restrict it with `chmod 600 <path>`. `torc config show` never displays `api_key`, so its absence
+there does not mean the key was not read; torc-dash logs which provider it uses at startup.
+
+To set it up, create the user config file if you don't have one and add a `[dash.chat]` section:
+
+```bash
+torc config init --user   # writes a starter file and prints its path
+```
+
+```toml
+[dash.chat]
+provider = "anthropic"
+model = "claude-opus-5-5"
+api_key = "sk-ant-..."
+```
+
+Precedence is per setting: a flag or environment variable replaces only the setting it names. For
+example, an `ANTHROPIC_MODEL` or `ANTHROPIC_BASE_URL` exported in your shell (common for Claude Code
+users) overrides `model` or `base_url` here, while the rest still comes from the file.
+
+**Remote dashboards:** when Torc Desktop starts torc-dash on a login node, it sends the
+`[dash.chat]` settings from the user config file on **your own computer** to that torc-dash, through
+the SSH tunnel, and they replace any the login node has. Set them up once on your computer; you do
+not need a `[dash.chat]` section on the login node. The key is held only in that torc-dash's memory:
+it is not written to disk on the login node or passed on a command line. A section without `api_key`
+(other than for `ollama`) is not sent. Without Torc Desktop (for example, a torc-dash you start
+yourself over SSH), torc-dash reads the config file on the login node.
 
 ## Environment Variables
 

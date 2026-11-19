@@ -1,0 +1,125 @@
+var e=`# Data Processing Pipeline with Parameterization
+# Demonstrates parameterized files and job dependencies
+# Processes data from multiple sources through multiple stages
+
+name: data_pipeline
+description: Multi-stage data processing pipeline for multiple datasets
+
+jobs:
+  # Stage 1: Download raw data for each dataset
+  - name: download_{dataset}
+    command: wget https://example.com/data/{dataset}.csv -O /data/raw/{dataset}.csv
+    resource_requirements: download
+    output_files:
+      - raw_{dataset}
+    parameters:
+      dataset: [sales, inventory, customers, products]
+
+  # Stage 2: Clean and preprocess each dataset
+  - name: preprocess_{dataset}
+    command: python scripts/preprocess.py --input=/data/raw/{dataset}.csv --output=/data/clean/{dataset}.csv
+    resource_requirements: cpu_intensive
+    depends_on:
+      - download_{dataset}
+    input_files:
+      - raw_{dataset}
+    output_files:
+      - clean_{dataset}
+    parameters:
+      dataset: [sales, inventory, customers, products]
+
+  # Stage 3: Run multiple analysis types on each dataset
+  - name: analyze_{dataset}_{analysis_type}
+    command: |
+      python scripts/analyze.py \\
+        --input=/data/clean/{dataset}.csv \\
+        --analysis={analysis_type} \\
+        --output=/results/{dataset}_{analysis_type}_results.json
+    resource_requirements: cpu_intensive
+    depends_on:
+      - preprocess_{dataset}
+    input_files:
+      - clean_{dataset}
+    output_files:
+      - results_{dataset}_{analysis_type}
+    parameters:
+      dataset: [sales, inventory, customers, products]
+      analysis_type: [summary, trends, anomalies]
+
+  # Stage 4: Generate one report per (dataset, analysis_type) combination.
+  # Both varying parameters appear in the name so post-expansion names are
+  # unique; if \`analysis_type\` were dropped from the name we'd get 4 jobs
+  # called \`report_sales\` (one per analysis_type) and the spec would be
+  # rejected as a duplicate-name error.
+  - name: report_{dataset}_{analysis_type}
+    command: |
+      python scripts/generate_report.py \\
+        --dataset={dataset} \\
+        --input-dir=/results \\
+        --output=/reports/{dataset}_{analysis_type}_report.html
+    resource_requirements: minimal
+    depends_on:
+      - analyze_{dataset}_{analysis_type}
+    input_files:
+      - results_{dataset}_{analysis_type}
+    parameters:
+      dataset: [sales, inventory, customers, products]
+      analysis_type: [summary, trends, anomalies]
+
+  # Stage 5: Create executive summary per dataset. \`{dataset}\` appears in
+  # the name template so the 4 expanded jobs have unique names. The summary
+  # for each dataset waits on all three of its parameterized reports.
+  - name: executive_summary_{dataset}
+    command: python scripts/executive_summary.py --input-dir=/reports --output=/reports/executive_summary_{dataset}.pdf
+    resource_requirements: minimal
+    depends_on:
+      - report_{dataset}_summary
+      - report_{dataset}_trends
+      - report_{dataset}_anomalies
+    parameters:
+      dataset: [sales, inventory, customers, products]
+
+# File specifications with parameterization
+files:
+  # Raw data files (downloaded)
+  - name: raw_{dataset}
+    path: /data/raw/{dataset}.csv
+    parameters:
+      dataset: [sales, inventory, customers, products]
+
+  # Cleaned data files
+  - name: clean_{dataset}
+    path: /data/clean/{dataset}.csv
+    parameters:
+      dataset: [sales, inventory, customers, products]
+
+  # Analysis results (4 datasets * 3 analysis types = 12 files)
+  - name: results_{dataset}_{analysis_type}
+    path: /results/{dataset}_{analysis_type}_results.json
+    parameters:
+      dataset: [sales, inventory, customers, products]
+      analysis_type: [summary, trends, anomalies]
+
+# Resource requirements
+resource_requirements:
+  - name: minimal
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 2g
+    runtime: PT10M
+
+  - name: download
+    num_cpus: 1
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1g
+    runtime: PT15M
+
+  - name: cpu_intensive
+    num_cpus: 8
+    num_gpus: 0
+    num_nodes: 1
+    memory: 16g
+    runtime: PT1H
+`;export{e as default};

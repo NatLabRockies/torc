@@ -18,7 +18,7 @@ dprint check
 # Lint shell scripts if shellcheck is available
 if command -v shellcheck >/dev/null 2>&1; then
   echo '+shellcheck (all .sh files)'
-  find . -name '*.sh' -not -path './target/*' -not -path './.venv/*' -not -path '*/\.venv/*' -type f -exec shellcheck {} +
+  find . -name '*.sh' -not -path './target/*' -not -path './.venv/*' -not -path '*/\.venv/*' -not -path '*/node_modules/*' -type f -exec shellcheck {} +
 else
   echo 'shellcheck not found, skipping shell script linting'
 fi

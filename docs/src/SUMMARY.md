@@ -125,6 +125,8 @@
   - [HTTP API Design](./specialized/design/http-api.md)
   - [Workflow Actions](./specialized/design/workflow-actions.md)
   - [Web Dashboard Design](./specialized/design/dashboard.md)
+  - [Dashboard Frontend Design](./specialized/design/dashboard-frontend.md)
+  - [Torc Desktop Design](./specialized/design/desktop.md)
   - [Server API Handler](./specialized/design/server.md)
   - [Central Database](./specialized/design/database.md)
   - [Workflow Recovery Design](./specialized/design/recovery.md)

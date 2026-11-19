@@ -308,6 +308,18 @@ standalone = false
 
 # Server port for standalone mode (0 = auto-detect)
 server_port = 0
+
+# AI Chat provider (command-line flags and their environment variables take precedence,
+# setting by setting). Torc Desktop sends this section from your own computer to a dashboard it
+# starts on a login node, so it does not need to be set there.
+# [dash.chat]
+# provider = "anthropic"            # anthropic, openai, foundry, ollama, github, or custom
+# model = "claude-opus-5-5"
+# base_url = "https://litellm.example.org"  # required for custom (e.g. a LiteLLM gateway)
+# auth_header = "Authorization"     # anthropic/foundry/custom; "Authorization" sends a Bearer token
+# foundry_resource = "my-resource"  # required for foundry
+# api_key = "..."                   # the key itself; read only from the user config file,
+#                                   # which should then be chmod 600
 "#
         .to_string()
     }

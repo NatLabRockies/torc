@@ -643,6 +643,7 @@ pub struct WorkflowModel {
 /// Dynamic job spawning configuration. Used both as the user-authored
 /// `WorkflowSpec.dynamic_jobs` and as the persisted `WorkflowModel.dynamic_jobs`
 /// (stored as JSON in the `workflow.dynamic_jobs` column). Runtime-immutable.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -654,6 +655,7 @@ pub struct DynamicJobsConfig {
 }
 
 /// How to capture stdout and stderr for job processes.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -672,6 +674,7 @@ pub enum StdioMode {
 }
 
 /// Configuration for job stdout/stderr capture.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -688,6 +691,7 @@ pub struct StdioConfig {
 ///
 /// Controls how torc manages job processes during execution, particularly
 /// around termination and resource enforcement.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -710,6 +714,7 @@ pub enum ExecutionMode {
 /// Used both as the user-authored `WorkflowSpec.execution_config` and as the
 /// persisted `WorkflowModel.execution_config` (stored as JSON in the
 /// `workflow.execution_config` column).
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -871,6 +876,7 @@ impl ExecutionConfig {
 }
 
 /// Granularity for resource monitoring sampling.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -881,6 +887,7 @@ pub enum MonitorGranularity {
 }
 
 /// Configuration for per-job resource monitoring.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -899,6 +906,7 @@ impl Default for JobMonitorConfig {
 }
 
 /// Configuration for compute-node resource monitoring.
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -925,6 +933,7 @@ impl Default for ComputeNodeMonitorConfig {
 /// Used both as the user-authored `WorkflowSpec.resource_monitor` and as the
 /// persisted `WorkflowModel.resource_monitor_config` (stored as JSON in the
 /// `workflow.resource_monitor_config` column).
+#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

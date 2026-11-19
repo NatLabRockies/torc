@@ -154,6 +154,84 @@ jobs:
           path: release/*
           retention-days: 7
 
+  desktop:
+    name: Build Torc Desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-latest
+            bundles: dmg
+          # Ubuntu 22.04 keeps the AppImage/deb compatible with older glibc.
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            bundles: appimage,deb
+          - name: windows-x86_64
+            os: windows-latest
+            bundles: msi,nsis
+    defaults:
+      run:
+        shell: bash
+        working-directory: torc-desktop
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: torc-desktop/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev patchelf file
+
+      - name: Cache cargo build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            torc-desktop/src-tauri/target
+          key: ${{ runner.os }}-desktop-${{ hashFiles('torc-desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-
+
+      - name: Install npm packages
+        run: npm ci
+
+      # Not signed with a Developer ID: macOS bundles are ad-hoc signed (tauri.conf.json), and
+      # users clear the quarantine flag once (see torc-desktop/README.md).
+      - name: Build installers
+        run: npm run tauri -- build --bundles ${{ matrix.bundles }}
+
+      - name: Collect installers
+        run: |
+          mkdir -p ../desktop-dist
+          find src-tauri/target/release/bundle -maxdepth 2 -type f \
+            \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.msi' -o -name '*.exe' \) \
+            -exec cp {} ../desktop-dist/ \;
+          ls -l ../desktop-dist
+          test -n "$(ls ../desktop-dist)"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: torc-desktop-${{ matrix.name }}
+          path: desktop-dist/*
+          retention-days: 7
+
   publish-crate:
     name: Publish to crates.io
     needs: build
@@ -170,7 +248,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, desktop]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -196,6 +274,7 @@ jobs:
             artifacts/torc-x86_64-unknown-linux-musl/*.tar.gz
             artifacts/torc-aarch64-unknown-linux-musl/*.tar.gz
             artifacts/torc-x86_64-pc-windows-msvc/*.zip
+            artifacts/torc-desktop-*/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

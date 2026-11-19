@@ -23,7 +23,7 @@ workflows, offering an intuitive alternative to the command-line interface.
 
 ```bash
 # Build torc-dash
-cargo build --release -p torc-dash
+cargo build --release --features dash --bin torc-dash
 
 # Binary location
 ./target/release/torc-dash
@@ -50,6 +50,11 @@ This will:
 2. Start the dashboard on http://127.0.0.1:8090
 3. Configure the dashboard to connect to the managed server
 
+Open the URL torc-dash logs at startup, such as
+`Dashboard available at http://127.0.0.1:8090/?token=c1b6…`. The token keeps other users on the same
+machine out of the dashboard's API; the browser remembers it, so later visits to
+http://127.0.0.1:8090 work without it until torc-dash restarts with a new token.
+
 ### Connecting to an Existing Server
 
 If you already have `torc-server` running:
@@ -73,6 +78,9 @@ Options:
   -p, --port <PORT>           Dashboard port [default: 8090]
       --host <HOST>           Dashboard host [default: 127.0.0.1]
       --socket <PATH>         Listen on a UNIX domain socket instead of TCP (unix only)
+      --allowed-hosts <HOSTS> Extra hostnames the dashboard may be reached by, comma-separated
+                              [env: TORC_DASH_ALLOWED_HOSTS]
+      --no-token              Serve the API without a token (only behind an authenticating proxy)
   -a, --api-url <API_URL>     Torc server API URL [default: http://localhost:8080/torc-service/v1]
       --torc-bin <PATH>       Path to torc CLI binary [default: torc]
       --torc-server-bin       Path to torc-server binary [default: torc-server]
@@ -87,8 +95,9 @@ Options:
       --anthropic-foundry-api-key  Foundry API key [env: ANTHROPIC_FOUNDRY_API_KEY]
       --anthropic-foundry-resource Foundry resource [env: ANTHROPIC_FOUNDRY_RESOURCE]
       --anthropic-base-url         Override API base URL [env: ANTHROPIC_BASE_URL]
+      --anthropic-auth-token       Bearer token, e.g. for LiteLLM [env: ANTHROPIC_AUTH_TOKEN]
       --anthropic-auth-header      Override auth header name [env: ANTHROPIC_AUTH_HEADER]
-      --anthropic-model            Claude model [default: claude-sonnet-4-20250514]
+      --anthropic-model            Claude model [default: claude-opus-5-5]
       --openai-api-key             OpenAI API key [env: OPENAI_API_KEY]
       --openai-base-url            OpenAI API URL [default: https://api.openai.com/v1]
       --openai-model               OpenAI model [default: gpt-4o] [env: OPENAI_MODEL]
@@ -101,92 +110,137 @@ Options:
 
 ## Features
 
+The sidebar switches between tabs. Tabs that work on one workflow (Details, Graph, Events,
+Debugging, Resources) share a **workflow picker** in the top bar. Data refreshes automatically
+(every 30 seconds by default; pauses while the window is hidden) or on demand with **Refresh**.
+
+Keyboard shortcuts (press `?` in the dashboard for the list):
+
+| Key     | Action                              |
+| ------- | ----------------------------------- |
+| `1`–`8` | Switch tabs                         |
+| `E`     | Spec editor                         |
+| `N`     | New workflow                        |
+| `R`     | Refresh                             |
+| `G`     | Graph                               |
+| `⌫`     | Back from the graph                 |
+| `T`     | Cycle theme (system / light / dark) |
+| `/`     | Focus the current tab's filter      |
+| `Esc`   | Close a dialog or leave a field     |
+
 ### Workflows Tab
 
-The main workflows view provides:
-
-- **Workflow list** with ID, name, timestamp, user, and description
-- **Create Workflow** button to upload new workflow specifications
-- **Quick actions** for each workflow:
-  - View details and DAG visualization
-  - Initialize/reinitialize workflow
-  - Run locally or submit to scheduler
-  - Delete workflow
+- **Workflow list** with ID, name, user, project, description, and creation time. Filter by text or
+  access group, or show workflows from all users. Click a row to open its details.
+- **Actions** per workflow: run locally, submit to the scheduler, initialize, reinitialize, reset
+  status, cancel, recover, sync status, execution plan, export, and delete. Select several workflows
+  to delete them together.
+- **Import** a workflow from a file on the server or an uploaded file.
+- **Run output** streams into a panel at the bottom of the window while you keep using the
+  dashboard. Stopping the panel stops the output, not the run; use **Cancel** to stop the run.
 
 #### Creating Workflows
 
-Click "Create Workflow" to open the creation dialog:
+Click **Create workflow** (or press `N`) and choose a source:
 
-1. **Upload a file**: Drag and drop or click to select a workflow specification file
-   - Supports YAML, JSON, JSON5, and KDL formats
-2. **Or enter a file path**: Specify a path on the server filesystem
-3. Click "Create" to register the workflow
+1. **Upload file**: drag and drop or click to select a YAML, JSON, JSON5, or KDL specification
+2. **File path**: a path on the machine running `torc-dash`
+3. **Paste spec**: paste a specification; the format is detected automatically
+4. **Wizard**: build a workflow step by step (jobs, parameters, resources, Slurm schedulers,
+   actions, monitoring) with a live preview of the generated spec
+
+**Validate** checks the spec on the server without creating anything. By default the new workflow is
+initialized after creation; if output files already exist you are asked before they are removed.
+
+From an uploaded YAML or JSON file, **Open in spec editor** moves it to the Spec Editor tab; on the
+wizard's last step, **Edit as YAML** does the same with the generated spec.
+
+### Spec Editor Tab
+
+A YAML editor for workflow specs, driven by the workflow-spec JSON Schema:
+
+- **Completion**: type a field name, or press `Ctrl+Space`, for the fields allowed at the cursor
+  with their types and descriptions. After `key:`, fields with fixed values (such as
+  `execution_config.mode` or booleans) list those values.
+- **Hover** a field name for its documentation.
+- **Problems are underlined as you type**: YAML syntax errors, unknown fields, missing required
+  fields, and wrong value types. **Validate** runs the full server-side check
+  (`torc create
+  --dry-run`), which also catches problems the schema can't express, such as
+  references to undefined jobs or files.
+- **New from template** starts from a blank spec or one of a few examples from `examples/yaml`
+  (basics, parameter sweeps and pipelines, Slurm, retries), with a preview.
+- **Insert** adds a building block (job, parameterized job, file, resource requirements, Slurm
+  scheduler, schedule-nodes action, failure handler, user data) to the end of its section, creating
+  the section if needed.
+- **Open local file** opens YAML or JSON from your computer (JSON is converted to YAML). **Open
+  path** and **Save** (`Ctrl+S` / `⌘S`) read and write files on the machine running `torc-dash`;
+  relative paths resolve against its working directory.
+- **Create workflow** creates the workflow from the editor contents, optionally initializing it.
+- **Assistant** opens an AI panel that works on the editor's buffer. It uses the same AI provider as
+  the AI Chat tab; set it from either one with **Provider**. Describe a workflow or a change; the
+  assistant edits the spec directly, validates it with a dry run, and explains what it did. Each
+  edit is selected as it lands and undoes separately with `⌘Z` / `Ctrl+Z`. The editor is read-only
+  while the assistant is responding; **Stop** ends the response. The assistant doesn't create
+  workflows or write files; you do that from the editor.
+
+The editor keeps its contents in the browser between visits.
 
 ### Details Tab
 
-Explore workflow components with interactive tables:
+A summary of the selected workflow (status counts, execution time, actions) above sub-tabs for jobs,
+running jobs, results, events, files, user data, resource requirements, schedulers, compute nodes,
+scheduled compute nodes, and Slurm stats.
 
-- **Jobs**: View all jobs with status, name, command, and dependencies
-- **Files**: Input/output files with paths and timestamps
-- **User Data**: Key-value data passed between jobs
-- **Results**: Execution results with return codes and resource metrics
-- **Compute Nodes**: Available compute resources
-- **Resource Requirements**: CPU, memory, GPU specifications
-- **Schedulers**: Slurm scheduler configurations
+- **Sorting**: click column headers
+- **Filtering**: plain text matches any column; `field<op>value` filters a column, with `=`, `!=`,
+  `>`, `<`, `>=`, `<=`, `~` (contains), and `:` (e.g. `status=failed`, `exec_time>10`, `name:work`).
+  Quick-filter buttons cover common job statuses.
+- **Job details**: click a job to see its command, results, logs (stdout/stderr), files, user data,
+  resources, and dependencies. Other tabs open the same view.
 
-Features:
+Tables render only the visible rows, so workflows with very large job counts stay responsive.
 
-- **Workflow selector**: Filter by workflow
-- **Column sorting**: Click headers to sort
-- **Row filtering**: Type in filter boxes (supports `column:value` syntax)
-- **Auto-refresh**: Toggle automatic updates
+### Graph Tab
 
-### DAG Visualization
+An interactive dependency graph for the selected workflow:
 
-Click "View" on any workflow to see an interactive dependency graph:
-
-- Nodes represent jobs, colored by status
-- Edges show dependencies (file-based and explicit)
-- Zoom, pan, and click nodes for details
-- Legend shows status colors
+- Views: jobs only, jobs and files, or jobs and user data
+- Nodes are colored by job status; the legend shows counts per status
+- Zoom, pan, and fit to screen; click a job to open its details
+- Very large graphs (thousands of nodes) use a faster layout and ask before rendering
 
 ### Debugging Tab
 
-Investigate failed jobs with the integrated debugger:
+Investigate jobs in the selected workflow:
 
-1. Select a workflow
-2. Configure output directory (where logs are stored)
-3. Toggle "Show only failed jobs" to focus on problems
-4. Click "Generate Report" to fetch results
-5. Click any job row to view its log files:
-   - **stdout**: Standard output from the job
-   - **stderr**: Error output and stack traces
-   - Copy file paths with one click
+1. Set the output directory where job logs are stored (default `torc_output`, relative to the
+   workflow's submission directory)
+2. Keep **Failed only** checked to focus on failures, or uncheck it to see all jobs
+3. Select a job to read its stdout and stderr side by side (copy, or open in the file viewer)
 
-### Events Tab (SSE Live Streaming)
+Sub-tabs analyze Slurm logs for errors and collect `sacct` accounting data for Slurm allocations.
 
-Monitor workflow activity in real-time using Server-Sent Events (SSE):
+### Events Tab
 
-- **Live event streaming** - events appear instantly without polling
-- **Connection status indicator** - shows Live/Reconnecting/Disconnected status
-- **Event types displayed**:
-  - `job_started` / `job_completed` / `job_failed` - Job lifecycle events
-  - `compute_node_started` / `compute_node_stopped` - Worker node lifecycle
-  - `workflow_started` / `workflow_reinitialized` - Workflow initialization events
-  - `scheduler_node_created` - Slurm scheduler events
-- **Clear button** to reset the event list
-- **Auto-reconnect** on connection loss
+Live workflow events via Server-Sent Events (SSE), plus stored events such as retries:
 
-### Resource Plots Tab
+- Job, compute node, and workflow lifecycle events appear as they happen
+- A status indicator shows Live or Reconnecting; reconnection is automatic
+- The sidebar shows a count of new events while you are on another tab
+- Click an event that refers to a job to open the job
 
-Visualize CPU and memory usage over time:
+### Resources Tab
 
-1. Enter a base directory containing resource database files
-2. Click "Scan for Databases" to find `.db` files
-3. Select databases to plot
-4. Click "Generate Plots" for interactive Plotly charts
+Plot CPU and memory usage from resource monitoring databases:
 
-Requires workflows run with `granularity: "time_series"` in `resource_monitor` config.
+1. The dashboard scans the database directory (default `torc_output/resource_utilization`) and lists
+   databases for the selected workflow
+2. Select databases and click **Generate plots**
+3. Choose a plot: summary, CPU and memory across all jobs, or individual jobs
+
+Requires workflows run with resource monitoring enabled; time-series plots need
+`granularity: "time_series"` in the `resource_monitor` config.
 
 ### AI Chat Tab
 
@@ -204,6 +258,27 @@ The dashboard supports multiple LLM providers:
 - **GitHub Models** (Azure-hosted models with GitHub token)
 
 **Setup:**
+
+The simplest setup is a `[dash.chat]` section in the user config file on your own computer. Torc
+Desktop uses it for local dashboards and also sends it to dashboards it starts on a login node, so
+you set it up once and not on each cluster. Create the file with `torc config init --user` (it
+prints the path; on macOS it is `~/Library/Application Support/torc/config.toml`) and add, for
+example for a LiteLLM gateway:
+
+```toml
+[dash.chat]
+provider = "custom"
+base_url = "https://litellm.example.org"
+auth_header = "Authorization"   # sent as "Authorization: Bearer <api_key>"
+model = "claude-opus-5-5"       # a model name the gateway exposes
+api_key = "sk-..."              # the key itself; then chmod 600 the file
+```
+
+The key travels through the SSH tunnel into the remote torc-dash's memory only. A torc-dash you
+start on a login node yourself, without Torc Desktop, reads the file on that node. Environment
+variables and flags, shown below, still work and take precedence setting by setting: an
+`ANTHROPIC_MODEL` in your shell, for example, overrides `model` from the file. See
+[Configuration](../reference/configuration.md#dashchat-section) for all options.
 
 _Option 1: Anthropic Claude (Direct API)_
 
@@ -224,6 +299,29 @@ torc-dash
 
 The dashboard constructs the Foundry endpoint automatically:
 `https://{resource}.services.ai.azure.com/anthropic/v1/messages`
+
+_Option 2b: An LLM gateway (LiteLLM)_
+
+torc-dash reads the same variables as Claude Code, so a gateway setup that works for Claude Code
+works here too. Any model the gateway routes to works, since LiteLLM serves the Anthropic Messages
+API for all of them. Set the model to a name the gateway serves:
+
+```bash
+export ANTHROPIC_BASE_URL="https://litellm.example.org"   # gateway root, or ending in /v1
+export ANTHROPIC_AUTH_TOKEN="sk-..."                       # sent as Authorization: Bearer
+export ANTHROPIC_MODEL="claude-sonnet-4-5"                 # a model the gateway exposes
+torc-dash
+```
+
+List the gateway's models with
+`curl -s -H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN" "$ANTHROPIC_BASE_URL/v1/models"`.
+torc-dash does not discover models itself (Claude Code's
+`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` has no effect). To configure it in the dashboard
+instead, choose **Custom via gateway (LiteLLM, proxy)** and enter the gateway URL, the token, and
+the model. The dashboard remembers the URL and model (never the token) in your browser.
+
+When torc-dash runs on a login node, these variables must be set there (for example in
+`~/.bash_profile`). With Torc Desktop, a `[dash.chat]` section on your own computer is simpler.
 
 _Option 3: OpenAI_
 
@@ -337,7 +435,7 @@ terminal or editor instead of the dashboard.
 | `ANTHROPIC_API_KEY`          | (none)                                  | API key for direct Anthropic API            |
 | `ANTHROPIC_FOUNDRY_API_KEY`  | (none)                                  | API key for Azure AI Foundry                |
 | `ANTHROPIC_FOUNDRY_RESOURCE` | (none)                                  | Foundry resource name                       |
-| `--anthropic-model`          | `claude-sonnet-4-20250514`              | Claude model to use                         |
+| `--anthropic-model`          | `claude-opus-5-5`                       | Claude model to use                         |
 | `OPENAI_API_KEY`             | (none)                                  | OpenAI API key                              |
 | `OPENAI_MODEL`               | `gpt-4o`                                | OpenAI model to use                         |
 | `--openai-base-url`          | `https://api.openai.com/v1`             | OpenAI API URL                              |
@@ -355,62 +453,60 @@ Models, `GITHUB_TOKEN` is required. Ollama requires no credentials (runs locally
 > **Note:** The API key is kept server-side and never sent to the browser. All AI requests are
 > proxied through the `torc-dash` backend.
 
-### Configuration Tab
+### Settings Tab
 
-#### Server Management
+- **Appearance and behavior**: theme (system, light, dark), dark palette (Warm Gray, Nord, Dracula,
+  Monokai, and others), auto-refresh interval, and whether to show workflows from all users by
+  default. Preferences are stored in the browser.
+- **Version**: dashboard and server versions, with a warning if they don't match, the server URL,
+  and a **Test connection** button that shows why a connection fails
+- **Server management**: start and stop `torc-server` from the dashboard (port, database path, log
+  level) and view its output
 
-Start and stop `torc-server` directly from the dashboard:
-
-- **Server Port**: Port to listen on (0 = auto-detect free port)
-- **Database Path**: SQLite database file location
-- **Log Level**: Server logging verbosity
-
-Click "Start Server" to launch, "Stop Server" to terminate.
-
-#### API Configuration
-
-- **API URL**: Torc server endpoint
-- **Test Connection**: Verify connectivity
-
-Settings are saved to browser local storage.
+The dashboard always talks to the server set with `--api-url` (or `TORC_API_URL`) when `torc-dash`
+starts.
 
 ## Common Usage Patterns
 
 ### Running a Workflow
 
-1. Navigate to **Workflows** tab
-2. Click **Create Workflow**
-3. Upload your specification file
-4. Click **Create**
-5. Click **Initialize** on the new workflow
-6. Click **Run Locally** (or **Submit** for Slurm)
-7. Monitor progress in the **Details** tab or **Events** tab
+1. In the **Workflows** tab, click **Create workflow**
+2. Upload or paste your specification and click **Create** (it is initialized automatically)
+3. Click the run button on the workflow (or **Submit** for Slurm)
+4. Watch progress in the **Details** or **Events** tab
 
 ### Debugging a Failed Workflow
 
-1. Go to the **Debugging** tab
-2. Select the workflow
-3. Check "Show only failed jobs"
-4. Click **Generate Report**
-5. Click on a failed job row
-6. Review the **stderr** tab for error messages
-7. Check **stdout** for context
+1. Pick the workflow in the top bar and open the **Debugging** tab
+2. Select a failed job
+3. Read **stderr** for the error and **stdout** for context
 
 ### Monitoring Active Jobs
 
-1. Open **Details** tab
-2. Select "Jobs" and your workflow
-3. Enable **Auto-refresh**
-4. Watch job statuses update in real-time
+1. Open the **Details** tab and pick the workflow
+2. Use the **Running** sub-tab, or the `status=running` filter on **Jobs**
+3. Data refreshes automatically; press `R` to refresh immediately
 
 ## Security Considerations
 
 1. **Network Access**: By default, binds to 127.0.0.1 (localhost only)
-2. **UNIX Socket (recommended for HPC)**: Use `--socket /tmp/torc-dash-$USER.sock` on shared login
+2. **Dashboard token**: On TCP, the API and torc-server proxy require a token, because anyone who
+   can connect to the port (on a shared login node, every user) could otherwise act as you: run
+   `torc`, write files, and use your torc-server login. torc-dash generates one and prints it in the
+   startup URL, or takes a fixed one from the `TORC_DASH_TOKEN` environment variable (not printed;
+   append `?token=<value>` to the URL yourself). Scripts send it as an `X-Torc-Dash-Token` header.
+   `--no-token` turns the check off; use it only behind a proxy that authenticates users itself.
+   UNIX sockets need no token.
+3. **UNIX Socket (recommended for HPC)**: Use `--socket /tmp/torc-dash-$USER.sock` on shared login
    nodes. The socket file is created with 0600 permissions, restricting access to your user account.
    Connect via `ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node`.
-3. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS
-4. **Authentication**: Torc server supports htpasswd-based authentication (see
+4. **Remote Access**: Use `--host 0.0.0.0` with caution; consider a reverse proxy with HTTPS. The
+   dashboard accepts requests only for `localhost`, `127.0.0.1`, `::1`, and its `--host`; add the
+   name users type in the browser with `--allowed-hosts dash.example.org`. Requests for any other
+   name get `403 Host '…' is not allowed`.
+5. **Cross-site protection**: Other web pages open in your browser cannot call the dashboard's API;
+   torc-dash refuses requests the browser marks as cross-site.
+6. **Authentication**: Torc server supports htpasswd-based authentication (see
    [Authentication](../../specialized/admin/authentication.md))
 
 ## Troubleshooting
@@ -418,14 +514,14 @@ Settings are saved to browser local storage.
 ### Cannot Connect to Server
 
 - Verify torc-server is running: `curl http://localhost:8080/torc-service/v1/workflows`
-- Check the API URL in Configuration tab
+- Check the `--api-url` (or `TORC_API_URL`) that `torc-dash` was started with
 - In standalone mode, check server output for startup errors
 
 ### Workflow Creation Fails
 
 - Ensure workflow specification is valid YAML/JSON/KDL
 - Check file paths are accessible from the server
-- Review browser console for error details
+- Use **Validate** in the create dialog to see the server's error message
 
 ### Resource Plots Not Showing
 
@@ -439,21 +535,32 @@ Settings are saved to browser local storage.
 - Check if the port is already in use
 - Review console output for error messages
 
+## Desktop App
+
+`torc-desktop` is a native app (macOS, Windows, Linux) that shows the same dashboard without a
+browser or a manual SSH tunnel:
+
+- **This computer**: starts `torc-dash` locally, pointed at your torc-server or at a new one it
+  starts for you
+- **Remote (SSH)**: connects to a login node, starts `torc-dash` there on a private UNIX socket, and
+  forwards it automatically; password and MFA prompts appear in the app. It also sends the AI Chat
+  settings from your computer's `[dash.chat]` config (see [AI Chat Tab](#ai-chat-tab))
+
+See `torc-desktop/README.md` in the repository for building and running it.
+
 ## Architecture
 
 `torc-dash` is a self-contained Rust binary with:
 
 - **Axum web framework** for HTTP server
-- **Embedded static assets** (HTML, CSS, JavaScript)
+- **Embedded static assets**: the dashboard UI, built at compile time into the binary
 - **API proxy** to forward requests to torc-server
 - **CLI integration** for workflow operations
 - **MCP client** that spawns `torc-mcp-server` as a subprocess for AI Chat
 
-The frontend uses vanilla JavaScript with:
-
-- **Cytoscape.js** for DAG visualization
-- **Plotly.js** for resource charts
-- **Custom components** for tables and forms
+The UI is a Svelte and TypeScript app in `torc-dash/web/`, with typed API calls generated from the
+OpenAPI spec, Cytoscape.js for the dependency graph, and Plotly.js for resource charts (both loaded
+only when needed).
 
 ## Next Steps
 

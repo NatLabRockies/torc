@@ -1,213 +1,209 @@
-# Web Dashboard (torc-dash)
+# Web Dashboard Design (torc-dash)
 
-The `torc-dash` application is a web gateway that provides a browser-based UI for managing Torc
-workflows. It bridges a web frontend with the torc ecosystem by proxying API requests and executing
-CLI commands.
+`torc-dash` serves the browser UI for Torc and acts as the gateway between that UI and everything
+else: torc-server, the `torc` CLI, the Torc MCP server, and an optional LLM provider for the AI
+features. This page covers the server (`src/bin/torc-dash.rs`). The browser UI is described in
+[Dashboard Frontend Design](./dashboard-frontend.md), and the desktop app that hosts it in
+[Torc Desktop Design](./desktop.md).
+
+## Problem and goals
+
+Users need a visual way to create, run, monitor, and debug workflows, often on HPC login nodes they
+reach only over SSH. The design goals:
+
+- **One binary, no runtime dependencies.** The UI is embedded; Node.js is needed only to change it.
+- **Same behavior as the CLI.** Operations that the CLI already implements (create, run, submit,
+  recover, ...) must not be reimplemented with subtly different semantics.
+- **Safe on shared machines.** A login node has many users; the dashboard must be reachable only by
+  its owner.
+- **Works against any torc-server**: a shared, authenticated one or a private one it starts itself.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Browser["Browser<br/>(Web UI)"] <--> Dashboard["torc-dash<br/>(Gateway)"]
-    Dashboard <--> Server["torc-server<br/>(API)"]
-    Dashboard --> CLI["torc CLI<br/>(subprocess)"]
-
-    style Browser fill:#17a2b8,color:#fff
-    style Dashboard fill:#4a9eff,color:#fff
-    style Server fill:#28a745,color:#fff
-    style CLI fill:#4a9eff,color:#fff
+    Browser["Browser / Torc Desktop<br/>(Svelte UI)"] <-->|HTTP + SSE| Dash["torc-dash"]
+    Dash <-->|"proxy /torc-service/*"| Server["torc-server"]
+    Dash -->|subprocess| CLI["torc CLI"]
+    Dash <-->|"MCP over stdio"| MCP["torc-mcp-server"]
+    Dash <-->|HTTPS| LLM["LLM provider<br/>(Anthropic, gateway, OpenAI, Ollama)"]
+    CLI --> Server
+    MCP --> Server
 ```
 
-The dashboard acts as a gateway layer that:
+torc-dash has five jobs:
 
-1. **Serves embedded static assets** - HTML, CSS, and JavaScript bundled into the binary
-2. **Proxies API requests** - Forwards `/torc-service/*` requests to a remote torc-server
-3. **Executes CLI commands** - Runs `torc` CLI as subprocesses for complex operations
-4. **Manages server lifecycle** - Optionally spawns and manages a torc-server instance
+1. **Serve the UI**: the built Svelte app, embedded with `rust_embed` from `torc-dash/static/`.
+2. **Proxy the REST API**: `/torc-service/*` is forwarded to torc-server unchanged, so the UI uses
+   the OpenAPI-typed client directly.
+3. **Run CLI commands**: `/api/cli/*` endpoints run `torc` as a subprocess for anything that
+   involves files, multi-step logic, or long-running execution.
+4. **Manage a private torc-server** in standalone mode.
+5. **Host the AI chat**: an LLM tool loop over the MCP server's tools, plus spec-editing tools.
 
-## Core Components
+## Startup and configuration
 
-### Embedded Static Assets
+Settings merge from, highest priority first: command-line flags, environment variables, and the
+`[dash]` section of the torc config file (see
+[Configuration](../../core/reference/configuration.md)).
 
-Uses the `rust_embed` crate to bundle all files from the `static/` directory directly into the
-binary at compile time:
+- **Listener.** `--port` (TCP, default host `127.0.0.1`) or `--socket <path>` (UNIX domain socket,
+  created with mode `0600` after removing a stale file). A socket restricts access to the owning
+  user at the OS level, which is why it is the recommended mode on login nodes and the one Torc
+  Desktop uses. With `--socket`, a managed server is forced onto `127.0.0.1`.
+- **Standalone mode** (`--standalone`) spawns `torc-server` (on `--server-port`, or port 0 for a
+  free one) and reads the `TORC_SERVER_PORT=<port>` line it prints to learn the actual port. The API
+  URL then points at that server. Stopping torc-dash stops it. The managed server binds `0.0.0.0` by
+  default so compute nodes can reach it; with `--socket` (or `--server-host 127.0.0.1`, as Torc
+  Desktop passes) it stays on loopback.
+- **Ready signal.** torc-dash logs `Dashboard available at http://host:port` (or `unix:<path>`).
+  Torc Desktop parses this line to learn the port in local mode.
 
-```rust
-#[derive(Embed)]
-#[folder = "static/"]
-struct Assets;
+## HTTP surface
+
+Routes are grouped by what backs them. The full list is the `Router::new()` block in `main`.
+
+| Group      | Routes                                                     | Backed by                   |
+| ---------- | ---------------------------------------------------------- | --------------------------- |
+| UI         | `/`, `/static/*`                                           | embedded assets             |
+| REST proxy | `/torc-service/*` (all methods)                            | torc-server                 |
+| Lifecycle  | `/api/cli/*`: create, validate, run, submit, cancel, ...   | `torc` subprocess           |
+| Streaming  | `GET /api/cli/run-stream`                                  | `torc run` / `watch` as SSE |
+| Files      | `/api/cli/*`: read-file, write-file, export, import, plots | filesystem, `torc`          |
+| Slurm      | `/api/cli/*`: slurm-parse-logs, slurm-sacct, hpc-profiles  | `torc`                      |
+| Spec       | `GET /api/workflow-schema`                                 | JSON Schema from Rust types |
+| Server     | `/api/server/{start,stop,status}`                          | managed torc-server         |
+| AI chat    | `/api/chat`, `/api/chat/status`, `/api/chat/configure`     | LLM provider + MCP          |
+| Info       | `/api/version`, `/api/user`                                | torc-dash itself            |
+
+### REST proxy and authentication
+
+The proxy forwards method, headers (except `Host`), and body to `<api_url>/<path>`. If torc-server
+requires a login, torc-dash reads `TORC_PASSWORD` (and `TORC_USERNAME`, defaulting to `USER`) at
+startup, exactly as the CLI does, and adds HTTP basic auth to proxied requests that don't already
+carry an `Authorization` header. The credentials are added only on requests to torc-server, never to
+other hosts that share the same HTTP client (such as the LLM provider). CLI subprocesses inherit the
+same environment variables, so they authenticate the same way.
+
+### CLI delegation
+
+`run_torc_command` runs `torc` with `TORC_API_URL` set to the dashboard's server and returns
+`{success, stdout, stderr, exit_code}`. Endpoints pass `-f json` where they parse the output. Inline
+specs (create, validate) are written to a temp file with the right extension first; `dry_run_spec`
+does this for `torc create --dry-run` and is shared by `/api/cli/validate` and the chat's
+`validate_spec` tool.
+
+Delegating keeps one implementation of each operation, gives the dashboard local file access with
+the user's permissions, and guarantees CLI and dashboard behave the same. The cost is a process per
+request and parsing CLI output, which is acceptable at dashboard request rates.
+
+### Streaming execution
+
+`/api/cli/run-stream` runs `torc run <id>` (mode `run`) or `torc watch <id> --show-job-counts`
+(modes `watch`, `watch-recover` with `--recover`) and streams Server-Sent Events:
+
+| Event                | Data                                                        |
+| -------------------- | ----------------------------------------------------------- |
+| `start`              | what is running                                             |
+| `stdout` / `stderr`  | one line of CLI output                                      |
+| `status`             | job counts by status, polled from the API every few seconds |
+| `end`                | `success` or the failure reason                             |
+| `exit_code`, `error` | process exit code; errors starting or reading the process   |
+
+Watch modes are spawned with `kill_on_drop`, so closing the stream (the UI's Stop) ends the watcher.
+A `run` is deliberately not killed when the stream closes: stopping the output must not abort jobs.
+The UI says so and offers **Cancel workflow** instead.
+
+### Spec schema
+
+`GET /api/workflow-schema` returns `workflow_spec_schema()`: a JSON Schema (draft 2020-12) generated
+with `schemars` from `WorkflowSpec` and the types it contains, with doc comments as descriptions.
+`torc workflows schema` prints the same document. Serving it from torc-dash keeps the editor's
+completion and lint in step with the torc version actually installed. See
+[Adding workflow spec fields](../../contributing.md#adding-workflow-spec-fields).
+
+## AI chat
+
+```mermaid
+sequenceDiagram
+    participant UI as Browser
+    participant D as torc-dash
+    participant L as LLM provider
+    participant M as torc-mcp-server
+    UI->>D: POST /api/chat {messages, workflow_id?, spec?}
+    loop up to 20 rounds
+        D->>L: messages + tools
+        L-->>D: text and/or tool calls
+        D-->>UI: SSE text, tool_use
+        D->>M: call_tool (MCP tools)
+        D->>D: edit_spec / replace_spec / validate_spec (spec tools)
+        D-->>UI: SSE tool_result (and spec_edit)
+    end
+    D-->>UI: SSE done
 ```
 
-This enables single-binary deployment with no external file dependencies.
+- **Providers.** One provider is active per torc-dash process, held in `AppState` (`llm_*` fields)
+  and shared by every conversation. It is set at startup from flags/environment or at runtime with
+  `/api/chat/configure` (memory only). Anthropic-format providers (direct API, Azure AI Foundry, and
+  gateways such as LiteLLM) use `<base>/v1/messages`; OpenAI, Ollama, and GitHub Models use
+  `/chat/completions`. `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` have Claude Code's meaning (a
+  gateway root, and a bearer token), so a Claude Code gateway setup works unchanged.
+- **Tools.** torc-dash starts `torc-mcp-server` lazily as a child process speaking MCP over stdio,
+  and offers its tools to the model. The model's tool calls run in torc-dash, not in the browser, so
+  API keys and torc credentials never reach the page.
+- **Workflow context.** The AI Chat tab sends the selected workflow ID, which goes into the system
+  prompt as the default for tool calls.
+- **Spec editing.** When the request comes from the spec editor it includes `spec`, the editor's
+  buffer. torc-dash then puts the buffer in the system prompt, withholds the MCP `create_workflow`
+  tool, and adds three local tools that act on this request's copy of the buffer:
+  `edit_spec(old_str, new_str)` (the snippet must occur exactly once), `replace_spec(content)`, and
+  `validate_spec()`. Each successful edit is streamed to the browser as a `spec_edit` event, which
+  the editor applies. The editor is read-only while the response streams, so the browser's buffer
+  and torc-dash's copy cannot diverge; the next message carries the buffer as it then is.
+- **History.** The browser sends the conversation as plain text turns. Tool calls are not replayed
+  in later requests; the model re-queries tools (or reads the current spec) as needed.
 
-### Application State
+## Security model
 
-Shared state across all request handlers:
+- **Who can connect.** Over a socket, only the owning user (mode `0600`). Over TCP, anyone who can
+  reach the port, including other users of a shared login node, so the default bind is `127.0.0.1`
+  and the API requires a token (below). Remote access goes through an SSH tunnel, never an exposed
+  port.
+- **What a connection can do.** Everything the owning user can: run `torc`, read and write files
+  (`read-file`, `write-file`, export/import), and use their torc-server credentials.
+- **Dashboard token.** On TCP, `/api/*` and `/torc-service/*` require a secret, from
+  `TORC_DASH_TOKEN` or generated per run and printed in the startup URL (`/?token=…`). The UI reads
+  it from the URL once, keeps it in `localStorage` (per origin, so dashboards on other ports never
+  see it; cookies would be sent to every port on `localhost`), and sends it as `X-Torc-Dash-Token`.
+  `EventSource` cannot set headers, so streams pass `?token=`, which the middleware strips before
+  the proxy forwards a request. Static UI routes are open so the page can load and report a missing
+  token. Torc Desktop's local mode passes a fresh token by environment (never on the command line,
+  where `ps` would show it). Sockets skip the check; `--no-token` disables it for deployments behind
+  an authenticating proxy.
+- **Cross-site requests.** A middleware (`guard_requests`) checks every request before routing:
+  - **Host allowlist.** The `Host` header must name `localhost`, `127.0.0.1`, `[::1]`, the `--host`
+    bind address when it is a specific name, or an entry in `--allowed-hosts`
+    (`[dash]
+    allowed_hosts`; `*` disables the check). A DNS-rebinding page reaches the dashboard
+    under its own hostname, which the browser treats as same-origin; this check refuses it.
+  - **Fetch metadata.** On `/api/*` and `/torc-service/*`, requests whose `Sec-Fetch-Site` header
+    says they come from another site (`cross-site` or `same-site`, such as another port on
+    `localhost`) are refused. This covers requests a page can make without a CORS preflight, such as
+    `<img src=".../api/cli/run-stream?mode=run">`. UI routes are exempt because opening the
+    dashboard is a navigation, which Torc Desktop makes from its own `tauri://` page. Clients that
+    don't send the header (curl, scripts, Torc Desktop's readiness probe) are unaffected.
+  - The JSON endpoints additionally require `Content-Type: application/json`, which forces a CORS
+    preflight from other origins that torc-dash never approves, and the chat endpoints compare
+    `Origin` with `Host`. These cover older browsers that don't send fetch metadata.
 
-```rust
-struct AppState {
-    api_url: String,           // Remote torc-server URL
-    client: reqwest::Client,   // HTTP client for proxying
-    torc_bin: String,          // Path to torc CLI binary
-    torc_server_bin: String,   // Path to torc-server binary
-    managed_server: Mutex<ManagedServer>,  // Optional embedded server state
-}
-```
+## Alternatives considered
 
-### Standalone Mode
-
-When launched with `--standalone`, torc-dash automatically spawns a `torc-server` subprocess:
-
-1. Starts torc-server with configurable port (0 for auto-detection)
-2. Reads `TORC_SERVER_PORT=<port>` from stdout to discover actual port
-3. Configures API URL to point to the managed server
-4. Tracks process ID for lifecycle management
-
-This enables single-command deployment for local development or simple production setups.
-
-## Request Routing
-
-### Static File Routes
-
-| Route       | Handler          | Purpose                                |
-| ----------- | ---------------- | -------------------------------------- |
-| `/`         | `index_handler`  | Serves `index.html`                    |
-| `/static/*` | `static_handler` | Serves embedded assets with MIME types |
-
-### API Proxy
-
-All `/torc-service/*` requests are transparently proxied to the remote torc-server:
-
-```
-Browser: GET /torc-service/v1/workflows
-    ↓
-torc-dash: forwards to http://localhost:8080/torc-service/v1/workflows
-    ↓
-torc-server: responds with workflow list
-    ↓
-torc-dash: returns response to browser
-```
-
-The proxy preserves HTTP methods (GET, POST, PUT, PATCH, DELETE), headers, and request bodies.
-
-### CLI Command Endpoints
-
-These endpoints execute the `torc` CLI as subprocesses, enabling operations that require local file
-access or complex orchestration:
-
-| Endpoint                     | CLI Command                   | Purpose                        |
-| ---------------------------- | ----------------------------- | ------------------------------ |
-| `POST /api/cli/create`       | `torc create`                 | Create workflow from spec file |
-| `POST /api/cli/run`          | `torc run`                    | Run workflow locally           |
-| `POST /api/cli/submit`       | `torc submit`                 | Submit to scheduler            |
-| `POST /api/cli/initialize`   | `torc workflows init`         | Initialize job dependencies    |
-| `POST /api/cli/delete`       | `torc delete`                 | Delete workflow                |
-| `POST /api/cli/reinitialize` | `torc workflows reinit`       | Reinitialize workflow          |
-| `POST /api/cli/reset-status` | `torc workflows reset-status` | Reset job statuses             |
-| `GET /api/cli/run-stream`    | `torc run`                    | SSE streaming execution        |
-
-### Server Management Endpoints
-
-| Endpoint                 | Purpose                     |
-| ------------------------ | --------------------------- |
-| `POST /api/server/start` | Start a managed torc-server |
-| `POST /api/server/stop`  | Stop the managed server     |
-| `GET /api/server/status` | Check server running status |
-
-### Utility Endpoints
-
-| Endpoint                          | Purpose                         |
-| --------------------------------- | ------------------------------- |
-| `POST /api/cli/read-file`         | Read local file contents        |
-| `POST /api/cli/plot-resources`    | Generate resource plots from DB |
-| `POST /api/cli/list-resource-dbs` | Find resource database files    |
-
-## Key Features
-
-### Streaming Workflow Execution
-
-The `/api/cli/run-stream` endpoint uses Server-Sent Events (SSE) to provide real-time feedback:
-
-```
-Event: start
-Data: Running workflow abc123
-
-Event: stdout
-Data: Job job_1 started
-
-Event: status
-Data: Jobs: 3 running, 7 completed (total: 10)
-
-Event: stdout
-Data: Job job_1 completed
-
-Event: end
-Data: success
-
-Event: exit_code
-Data: 0
-```
-
-The stream includes:
-
-- **stdout/stderr** from the torc CLI process
-- **Periodic status updates** fetched from the API every 3 seconds
-- **Exit code** when the process completes
-
-### CLI Execution Pattern
-
-All CLI commands follow a consistent execution pattern:
-
-```rust
-async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliResponse {
-    Command::new(torc_bin)
-        .args(args)
-        .env("TORC_API_URL", api_url)  // Pass server URL to CLI
-        .output()
-        .await
-}
-```
-
-Returns structured JSON:
-
-```json
-{
-  "success": true,
-  "stdout": "Workflow created: abc123",
-  "stderr": "",
-  "exit_code": 0
-}
-```
-
-### Configuration Merging
-
-Configuration is merged from multiple sources (highest to lowest priority):
-
-1. **CLI arguments** - Command-line flags
-2. **Environment variables** - `TORC_API_URL`, `TORC_BIN`, etc.
-3. **Configuration file** - `TorcConfig` from `~/.torc.toml` or similar
-
-## Design Rationale
-
-### Why Proxy Instead of Direct API Access?
-
-1. **CORS avoidance** - Browser same-origin policy doesn't apply to server-side requests
-2. **Authentication layer** - Can add authentication/authorization without modifying torc-server
-3. **Request transformation** - Can modify requests/responses as needed
-4. **Logging and monitoring** - Centralized request logging
-
-### Why CLI Delegation?
-
-Complex operations like workflow creation are delegated to the existing `torc` CLI rather than
-reimplementing:
-
-1. **Code reuse** - Leverages tested CLI implementation
-2. **Local file access** - CLI can read workflow specs from the filesystem
-3. **Consistent behavior** - Same behavior as command-line usage
-4. **Maintenance** - Single implementation to maintain
-
-### Why Standalone Mode?
-
-1. **Single-binary deployment** - One command starts everything needed
-2. **Development convenience** - Quick local testing without separate server
-3. **Port auto-detection** - Avoids port conflicts with port 0 support
+- **Browser talks to torc-server directly.** Would need CORS on torc-server, expose its credentials
+  to the page, and still need a local process for file access and CLI operations.
+- **Reimplement operations in the dashboard.** Faster per request, but two implementations of
+  workflow creation, recovery, and submission would drift.
+- **Run the LLM tool loop in the browser.** Would put API keys and torc credentials in the page and
+  need a browser MCP client; the server-side loop keeps both on the machine running torc-dash.
+- **Merge AI edits with concurrent user typing.** Would need operational transforms or round trips
+  from browser to server mid-response; turn-taking (read-only during a response) is simpler and
+  matches how users work with the assistant.

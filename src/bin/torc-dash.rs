@@ -97,6 +97,185 @@ struct AppState {
     llm_model: RwLock<String>,
     /// MCP client connection (lazily initialized)
     mcp_client: Mutex<Option<McpClient>>,
+    /// HTTP basic auth for torc-server: (username, password) from TORC_USERNAME/USER and
+    /// TORC_PASSWORD, like the torc CLI. The torc CLI subprocesses inherit the same variables.
+    server_auth: Option<(String, String)>,
+    /// Hostnames requests may name in `Host` (lowercase, no port); None allows any.
+    allowed_hosts: Option<Vec<String>>,
+    /// Secret that API and proxy requests must carry (header or `token` query parameter). None
+    /// on a UNIX socket, whose file permissions already restrict access, or with --no-token.
+    token: Option<String>,
+}
+
+/// Header carrying the dashboard token. Not `Authorization`, which the proxy passes through to
+/// torc-server as the user's own login.
+const TOKEN_HEADER: &str = "x-torc-dash-token";
+
+/// Whether `path` reaches torc-dash's API or the torc-server proxy, rather than the static UI.
+fn is_api_path(path: &str) -> bool {
+    path.starts_with("/api/") || path.starts_with("/torc-service/")
+}
+
+/// Splits a `token` parameter out of a query string: (token, remaining query).
+fn take_token_param(query: &str) -> (Option<String>, String) {
+    let mut token = None;
+    let rest: Vec<&str> = query
+        .split('&')
+        .filter(
+            |kv| match url::form_urlencoded::parse(kv.as_bytes()).next() {
+                Some((k, v)) if k == "token" => {
+                    token = Some(v.into_owned());
+                    false
+                }
+                _ => !kv.is_empty(),
+            },
+        )
+        .collect();
+    (token, rest.join("&"))
+}
+
+/// Compares secrets without exiting at the first differing byte.
+fn same_secret(a: &str, b: &str) -> bool {
+    a.len() == b.len()
+        && a.bytes()
+            .zip(b.bytes())
+            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+            == 0
+}
+
+/// Hostnames allowed in the `Host` header: loopback names, the bind host when it is a specific
+/// name, and `extra`. None (no check) if `extra` contains "*".
+fn allowed_host_list(bind_host: &str, extra: &[String]) -> Option<Vec<String>> {
+    let mut hosts: Vec<String> = ["localhost", "127.0.0.1", "[::1]"]
+        .map(String::from)
+        .to_vec();
+    let bind = bind_host.trim().to_lowercase();
+    if !matches!(bind.as_str(), "" | "0.0.0.0" | "::" | "[::]") {
+        hosts.push(if bind.contains(':') && !bind.starts_with('[') {
+            format!("[{bind}]")
+        } else {
+            bind
+        });
+    }
+    for h in extra.iter().map(|h| h.trim().to_lowercase()) {
+        if h == "*" {
+            return None;
+        }
+        if !h.is_empty() {
+            hosts.push(h);
+        }
+    }
+    Some(hosts)
+}
+
+/// Whether to serve a request, given its `Host` and `Sec-Fetch-Site` headers.
+///
+/// - `Host` must be an allowed name. A DNS-rebinding page reaches the dashboard under its own
+///   hostname, so this keeps it out even though the browser considers it same-origin.
+/// - API and proxy routes refuse requests the browser marks as coming from another site
+///   (`Sec-Fetch-Site` other than same-origin or none). That covers requests a hostile page can
+///   make without a CORS preflight, such as a GET of `/api/cli/run-stream`. UI routes are exempt:
+///   opening the dashboard is a navigation, which Torc Desktop makes from its own `tauri://` page.
+///   Clients that don't send the header (curl, Torc Desktop's readiness probe) are unaffected.
+fn check_request(
+    host: Option<&str>,
+    sec_fetch_site: Option<&str>,
+    path: &str,
+    allowed: Option<&[String]>,
+) -> Result<(), String> {
+    if let (Some(allowed), Some(host)) = (allowed, host) {
+        let host = host.trim().to_lowercase();
+        // Drop the port: "[::1]:8090" -> "[::1]", "localhost:8090" -> "localhost".
+        let name = match host.rfind(':') {
+            Some(i) if !host[i..].contains(']') => &host[..i],
+            _ => host.as_str(),
+        };
+        if !allowed.iter().any(|a| a == name) {
+            return Err(format!(
+                "Host '{name}' is not allowed. To reach the dashboard by this name, start \
+                 torc-dash with --allowed-hosts {name}"
+            ));
+        }
+    }
+    if is_api_path(path) && !matches!(sec_fetch_site, None | Some("same-origin") | Some("none")) {
+        return Err("Cross-site requests are not allowed".to_string());
+    }
+    Ok(())
+}
+
+/// Middleware applying [`check_request`] to every request, and requiring the dashboard token on
+/// API and proxy routes. Anyone who can connect to a TCP port (on a shared login node, every
+/// user) would otherwise act with this user's torc-server login and files.
+async fn guard_requests(
+    State(state): State<Arc<AppState>>,
+    mut req: Request<Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    // Scoped so no borrow of the request (whose body isn't Sync) lives across the await.
+    let verdict = {
+        let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
+        check_request(
+            header("host"),
+            header("sec-fetch-site"),
+            req.uri().path(),
+            state.allowed_hosts.as_deref(),
+        )
+    };
+    if let Err(message) = verdict {
+        warn!("Refused {} {}: {}", req.method(), req.uri().path(), message);
+        return (StatusCode::FORBIDDEN, message).into_response();
+    }
+    if let Some(expected) = &state.token
+        && is_api_path(req.uri().path())
+    {
+        // EventSource cannot set headers, so streams pass the token as a query parameter.
+        // Strip it so it is never forwarded to torc-server.
+        let (from_query, rest) = take_token_param(req.uri().query().unwrap_or(""));
+        let given = req
+            .headers()
+            .get(TOKEN_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .map(String::from)
+            .or(from_query);
+        if !given.is_some_and(|t| same_secret(&t, expected)) {
+            warn!(
+                "Refused {} {}: missing or wrong token",
+                req.method(),
+                req.uri().path()
+            );
+            let message = "Missing or wrong dashboard token. Open the dashboard with the URL \
+                           torc-dash printed at startup (it ends in ?token=...).";
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "message": message })),
+            )
+                .into_response();
+        }
+        if req.uri().query().is_some() {
+            let path_and_query = if rest.is_empty() {
+                req.uri().path().to_string()
+            } else {
+                format!("{}?{}", req.uri().path(), rest)
+            };
+            if let Ok(uri) = path_and_query.parse() {
+                *req.uri_mut() = uri;
+            }
+        }
+        req.headers_mut().remove(TOKEN_HEADER);
+    }
+    next.run(req).await
+}
+
+/// Adds the torc-server login to a request bound for torc-server (never for other hosts, such
+/// as the AI chat provider, which share the same HTTP client).
+fn with_server_auth(
+    req: reqwest::RequestBuilder,
+    auth: &Option<(String, String)>,
+) -> reqwest::RequestBuilder {
+    match auth {
+        Some((user, password)) => req.basic_auth(user, Some(password)),
+        None => req,
+    }
 }
 
 /// CLI arguments
@@ -111,6 +290,12 @@ struct Cli {
     /// Host to bind to
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
+
+    /// Extra hostnames the dashboard may be reached by, comma-separated (e.g. a reverse proxy's
+    /// name). Requests for other hosts are refused, which blocks DNS-rebinding attacks.
+    /// localhost, 127.0.0.1, ::1, and a specific --host are always allowed; "*" allows any.
+    #[arg(long, env = "TORC_DASH_ALLOWED_HOSTS", value_delimiter = ',')]
+    allowed_hosts: Vec<String>,
 
     /// URL of the torc-server API
     #[arg(
@@ -137,7 +322,8 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     server_port: u16,
 
-    /// Host for torc-server to bind to in standalone mode (default: 0.0.0.0 for external access)
+    /// Host for torc-server to bind to in standalone mode (default: 0.0.0.0 for external access,
+    /// or 127.0.0.1 with --socket)
     #[arg(long, default_value = "0.0.0.0")]
     server_host: String,
 
@@ -176,21 +362,22 @@ struct Cli {
     #[arg(long, env = "ANTHROPIC_FOUNDRY_RESOURCE")]
     anthropic_foundry_resource: Option<String>,
 
-    /// Override the Claude API base URL (e.g. "https://my-proxy.example.com/v1").
-    /// The /messages path is appended automatically. Overrides any auto-detected URL.
+    /// Override the Claude API base URL, e.g. a LiteLLM gateway. Accepts the Claude Code form
+    /// ("https://gateway.example.com") or one ending in /v1; /v1/messages is used either way.
     #[arg(long, env = "ANTHROPIC_BASE_URL")]
     anthropic_base_url: Option<String>,
+
+    /// Bearer token for the Claude API, sent as "Authorization: Bearer <token>" (as Claude Code
+    /// does). Used when ANTHROPIC_API_KEY is not set; typical for LLM gateways such as LiteLLM.
+    #[arg(long, env = "ANTHROPIC_AUTH_TOKEN", hide_env_values = true)]
+    anthropic_auth_token: Option<String>,
 
     /// Override the auth header name (default: "x-api-key")
     #[arg(long, env = "ANTHROPIC_AUTH_HEADER")]
     anthropic_auth_header: Option<String>,
 
-    /// Model to use for AI chat (default: claude-sonnet-4-20250514)
-    #[arg(
-        long,
-        default_value = "claude-sonnet-4-20250514",
-        env = "ANTHROPIC_MODEL"
-    )]
+    /// Model to use for AI chat (default: claude-opus-5-5)
+    #[arg(long, default_value = "claude-opus-5-5", env = "ANTHROPIC_MODEL")]
     anthropic_model: String,
 
     /// Ollama base URL for local AI chat (OpenAI-compatible API)
@@ -244,6 +431,12 @@ struct Cli {
     /// Path to torc-mcp-server binary
     #[arg(long, default_value = "torc-mcp-server", env = "TORC_MCP_SERVER_BIN")]
     torc_mcp_server_bin: String,
+
+    /// Serve the API without a token. On TCP, torc-dash otherwise requires a token (from
+    /// TORC_DASH_TOKEN, or generated and printed in the startup URL), because anyone who can
+    /// connect could act as you. Use only behind a proxy that authenticates users itself.
+    #[arg(long)]
+    no_token: bool,
 }
 
 #[tokio::main]
@@ -258,7 +451,7 @@ async fn main() -> Result<()> {
         .init();
 
     let matches = Cli::command().get_matches();
-    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    let mut cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
     // Load configuration from files and merge with CLI arguments
     let file_config = TorcConfig::load().unwrap_or_default();
@@ -266,7 +459,7 @@ async fn main() -> Result<()> {
 
     // Merge CLI config with file config. A value from the command line or its environment
     // variable wins, even when it equals the clap default.
-    let explicit = |id| {
+    let explicit = |id: &str| {
         matches
             .value_source(id)
             .is_some_and(|source| source != ValueSource::DefaultValue)
@@ -302,8 +495,20 @@ async fn main() -> Result<()> {
     } else {
         dash_config.server_port
     };
+    #[cfg(unix)]
+    let socket_path = cli
+        .socket
+        .clone()
+        .or_else(|| dash_config.socket.as_ref().map(std::path::PathBuf::from));
+    #[cfg(unix)]
+    let private = socket_path.is_some();
+    #[cfg(not(unix))]
+    let private = false;
     let server_host = if explicit("server_host") {
         cli.server_host.clone()
+    } else if private {
+        // A dashboard on a private socket must not put its managed server on the network.
+        "127.0.0.1".to_string()
     } else {
         dash_config.server_host.clone()
     };
@@ -319,12 +524,6 @@ async fn main() -> Result<()> {
              processes job completions as they arrive"
         );
     }
-
-    #[cfg(unix)]
-    let socket_path = cli
-        .socket
-        .clone()
-        .or_else(|| dash_config.socket.as_ref().map(std::path::PathBuf::from));
 
     #[cfg(unix)]
     if let Some(ref socket_path) = socket_path {
@@ -454,7 +653,7 @@ async fn main() -> Result<()> {
 
                     if let Ok(Some(status)) = child.try_wait() {
                         let stderr_output = stderr_output.trim();
-                        let details = if stderr_output.is_empty() {
+                        let mut details = if stderr_output.is_empty() {
                             format!("torc-server exited with status {}", status)
                         } else {
                             format!(
@@ -462,6 +661,12 @@ async fn main() -> Result<()> {
                                 status, stderr_output
                             )
                         };
+                        if database.is_none() {
+                            details.push_str(
+                                "\nHint: no database was given; pass --database <path> to \
+                                 torc-dash (e.g. --database $HOME/torc.db)",
+                            );
+                        }
                         return Err(anyhow::anyhow!(
                             "Managed server failed to start before reporting a port: {}",
                             details
@@ -522,6 +727,8 @@ async fn main() -> Result<()> {
     let http_client = tls
         .build_async_client()
         .expect("Failed to build HTTP client with TLS config");
+
+    apply_chat_config(&mut cli, &dash_config.chat, &explicit);
 
     // Resolve LLM provider configuration based on --llm-provider or available credentials
     let (llm_provider, llm_api_key, llm_base_url, llm_auth_header, llm_model) =
@@ -593,7 +800,7 @@ async fn main() -> Result<()> {
                         foundry_resource
                     );
                     if let Some(ref url_override) = cli.anthropic_base_url {
-                        base_url = url_override.clone();
+                        base_url = anthropic_api_base(url_override);
                     }
                     let auth_header = cli
                         .anthropic_auth_header
@@ -606,16 +813,28 @@ async fn main() -> Result<()> {
                         auth_header,
                         cli.anthropic_model.clone(),
                     )
-                } else if let Some(ref api_key) = cli.anthropic_api_key {
-                    info!("AI Chat: using direct Anthropic API");
+                } else if let Some(api_key) = cli
+                    .anthropic_api_key
+                    .as_ref()
+                    .or(cli.anthropic_auth_token.as_ref())
+                {
+                    // An API key goes in x-api-key; an auth token is a bearer token (Claude Code's
+                    // ANTHROPIC_AUTH_TOKEN), which gateways like LiteLLM expect.
+                    let default_header = if cli.anthropic_api_key.is_some() {
+                        "x-api-key"
+                    } else {
+                        "Authorization"
+                    };
                     let base_url = cli
                         .anthropic_base_url
-                        .clone()
+                        .as_deref()
+                        .map(anthropic_api_base)
                         .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
+                    info!("AI Chat: using Claude API at {}", base_url);
                     let auth_header = cli
                         .anthropic_auth_header
                         .clone()
-                        .unwrap_or_else(|| "x-api-key".to_string());
+                        .unwrap_or_else(|| default_header.to_string());
                     (
                         LlmProvider::Anthropic,
                         Some(api_key.clone()),
@@ -636,7 +855,50 @@ async fn main() -> Result<()> {
             }
         };
 
+    let server_auth = std::env::var("TORC_PASSWORD")
+        .ok()
+        .filter(|p| !p.is_empty())
+        .map(|p| (torc::get_username(), p));
+    if let Some((user, _)) = &server_auth {
+        info!("Authenticating to torc-server as {}", user);
+    }
+    let allowed_hosts = allowed_host_list(
+        &host,
+        if explicit("allowed_hosts") {
+            &cli.allowed_hosts
+        } else {
+            &dash_config.allowed_hosts
+        },
+    );
+    if allowed_hosts.is_none() {
+        warn!("Host check disabled (--allowed-hosts '*'); the dashboard is open to DNS rebinding");
+    }
+
+    // Read from the environment only: a command-line value would be visible to other users in ps.
+    let token_from_env = std::env::var("TORC_DASH_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+    let token = if private {
+        None
+    } else if cli.no_token {
+        warn!("Token check disabled (--no-token); anyone who can connect can use the dashboard");
+        None
+    } else {
+        Some(
+            token_from_env
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string()),
+        )
+    };
+    // Shown in the startup URL only when generated; a token from the environment stays secret.
+    let url_token_suffix = match (&token, &token_from_env) {
+        (Some(t), None) => format!("/?token={t}"),
+        _ => String::new(),
+    };
+
     let state = Arc::new(AppState {
+        token,
+        server_auth,
         api_url: final_api_url,
         client: http_client,
         torc_bin,
@@ -649,6 +911,7 @@ async fn main() -> Result<()> {
         llm_auth_header: RwLock::new(llm_auth_header),
         llm_model: RwLock::new(llm_model),
         mcp_client: Mutex::new(None),
+        allowed_hosts,
     });
 
     // Build router
@@ -671,6 +934,7 @@ async fn main() -> Result<()> {
         .route("/api/cli/cancel", post(cli_cancel_handler))
         .route("/api/cli/reinitialize", post(cli_reinitialize_handler))
         .route("/api/cli/reset-status", post(cli_reset_status_handler))
+        .route("/api/cli/reset-jobs", post(cli_reset_jobs_handler))
         .route("/api/cli/execution-plan", post(cli_execution_plan_handler))
         .route("/api/cli/run-stream", get(cli_run_stream_handler))
         .route("/api/cli/recover", post(cli_recover_handler))
@@ -678,6 +942,8 @@ async fn main() -> Result<()> {
         .route("/api/cli/export", post(cli_export_handler))
         .route("/api/cli/import", post(cli_import_handler))
         .route("/api/cli/read-file", post(cli_read_file_handler))
+        .route("/api/cli/write-file", post(cli_write_file_handler))
+        .route("/api/workflow-schema", get(workflow_schema_handler))
         .route("/api/cli/plot-resources", post(cli_plot_resources_handler))
         .route(
             "/api/cli/list-resource-dbs",
@@ -712,7 +978,20 @@ async fn main() -> Result<()> {
                 .patch(proxy_handler)
                 .delete(proxy_handler),
         )
-        .with_state(state);
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            guard_requests,
+        ))
+        .with_state(state.clone());
+
+    // Stop the managed torc-server when we are told to exit, so it does not outlive us.
+    let shutdown = async move {
+        shutdown_signal().await;
+        if let Some(pid) = state.managed_server.lock().await.pid.take() {
+            info!("Stopping managed torc-server (PID {})", pid);
+            stop_process(pid);
+        }
+    };
 
     // Bind to UNIX domain socket or TCP, depending on configuration
     #[cfg(unix)]
@@ -734,13 +1013,19 @@ async fn main() -> Result<()> {
             socket_path.display()
         );
 
-        axum::serve(uds, app).await?;
+        tokio::select! {
+            r = axum::serve(uds, app).into_future() => r?,
+            () = shutdown => {}
+        }
         return Ok(());
     }
 
     // TCP path (default)
     let (std_listener, actual_port) = find_available_port(&host, port)?;
-    info!("Dashboard available at http://{}:{}", host, actual_port);
+    info!(
+        "Dashboard available at http://{}:{}{}",
+        host, actual_port, url_token_suffix
+    );
     if actual_port != port {
         info!(
             "Note: Requested port {} was in use, using port {} instead",
@@ -752,17 +1037,47 @@ async fn main() -> Result<()> {
     std_listener.set_nonblocking(true)?;
     let listener = tokio::net::TcpListener::from_std(std_listener)?;
 
-    axum::serve(listener, app).await?;
+    tokio::select! {
+        r = axum::serve(listener, app).into_future() => r?,
+        () = shutdown => {}
+    }
 
     Ok(())
 }
 
+/// Resolves on Ctrl-C, or on SIGTERM/SIGHUP on Unix.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        let mut hup = signal(SignalKind::hangup()).expect("install SIGHUP handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+            _ = hup.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = tokio::signal::ctrl_c().await;
+}
+
+fn stop_process(pid: u32) {
+    #[cfg(unix)]
+    let _ = StdCommand::new("kill").arg(pid.to_string()).status();
+    #[cfg(not(unix))]
+    let _ = StdCommand::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .status();
+}
+
 // ============== Static File Handlers ==============
 
+/// The dashboard UI, built from torc-dash/web into torc-dash/static/app/.
 async fn index_handler() -> impl IntoResponse {
-    match Assets::get("index.html") {
+    match Assets::get("app/index.html") {
         Some(content) => Html(content.data.into_owned()).into_response(),
-        None => (StatusCode::NOT_FOUND, "index.html not found").into_response(),
+        None => (StatusCode::NOT_FOUND, "app/index.html not found").into_response(),
     }
 }
 
@@ -802,6 +1117,11 @@ async fn proxy_handler(
 
     // Build the proxied request
     let mut proxy_req = state.client.request(method, &target_url);
+    // A login the browser sent itself takes precedence.
+    let browser_auth = req.headers().contains_key(header::AUTHORIZATION);
+    if !browser_auth {
+        proxy_req = with_server_auth(proxy_req, &state.server_auth);
+    }
 
     // Copy headers
     for (name, value) in req.headers() {
@@ -832,6 +1152,12 @@ async fn proxy_handler(
         Ok(resp) => {
             let status = StatusCode::from_u16(resp.status().as_u16())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            if status == StatusCode::UNAUTHORIZED && !browser_auth {
+                // Say why, instead of the server's bare "Unauthorized".
+                let message = unauthorized_message(&state, &target_url, resp.url().as_str());
+                warn!("{}", message);
+                return (status, Json(serde_json::json!({ "message": message }))).into_response();
+            }
             let headers = resp.headers().clone();
 
             let mut response = Response::builder().status(status);
@@ -852,6 +1178,28 @@ async fn proxy_handler(
             (StatusCode::BAD_GATEWAY, format!("Proxy error: {}", e)).into_response()
         }
     }
+}
+
+/// Explains a 401 from torc-server so the user can tell a missing login from a rejected one.
+fn unauthorized_message(state: &AppState, requested: &str, final_url: &str) -> String {
+    let Some((user, _)) = &state.server_auth else {
+        return "torc-server requires a login, and torc-dash has none. Set TORC_PASSWORD \
+                (and TORC_USERNAME if your server user name is not your login name) where \
+                torc-dash runs, or enter the password in Torc Desktop."
+            .to_string();
+    };
+    let redirected = if final_url != requested {
+        format!(
+            " The request was redirected to {final_url}; the login is not sent across a \
+             redirect to another host or scheme, so use that URL as the server URL."
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "torc-server rejected the login for user '{user}'. Check the password, or set \
+         TORC_USERNAME if your server user name differs.{redirected}"
+    )
 }
 
 // ============== CLI Command Handlers ==============
@@ -1302,27 +1650,8 @@ async fn cli_validate_handler(
         )
         .await
     } else {
-        // Spec is inline content - write to temp file with correct extension
-        // Use UUID to avoid race conditions with concurrent requests
         let extension = req.file_extension.as_deref().unwrap_or(".json");
-        let unique_id = uuid::Uuid::new_v4();
-        let temp_path = format!("/tmp/torc_spec_{}{}", unique_id, extension);
-        if let Err(e) = tokio::fs::write(&temp_path, &req.spec).await {
-            return Json(CliResponse {
-                success: false,
-                stdout: String::new(),
-                stderr: format!("Failed to write temp file: {}", e),
-                exit_code: None,
-            });
-        }
-        let result = run_torc_command(
-            &state.torc_bin,
-            &["-f", "json", "create", &temp_path, "--dry-run"],
-            &state.api_url,
-        )
-        .await;
-        let _ = tokio::fs::remove_file(&temp_path).await;
-        result
+        dry_run_spec(&state.torc_bin, &state.api_url, &req.spec, extension).await
     };
 
     Json(result)
@@ -1332,12 +1661,8 @@ async fn cli_run_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<WorkflowIdRequest>,
 ) -> impl IntoResponse {
-    let result = run_torc_command(
-        &state.torc_bin,
-        &["workflows", "run", &req.workflow_id],
-        &state.api_url,
-    )
-    .await;
+    let result =
+        run_torc_command(&state.torc_bin, &["run", &req.workflow_id], &state.api_url).await;
     Json(result)
 }
 
@@ -1347,7 +1672,7 @@ async fn cli_submit_handler(
 ) -> impl IntoResponse {
     let result = run_torc_command(
         &state.torc_bin,
-        &["workflows", "submit", &req.workflow_id],
+        &["submit", "--no-prompts", &req.workflow_id],
         &state.api_url,
     )
     .await;
@@ -1358,7 +1683,9 @@ async fn cli_initialize_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<InitializeRequest>,
 ) -> impl IntoResponse {
-    let mut args = vec!["workflows", "init", &req.workflow_id];
+    // --no-prompts: the CLI otherwise asks on stdin before re-initializing, reads nothing from
+    // the subprocess, and cancels while exiting 0.
+    let mut args = vec!["workflows", "init", "--no-prompts", &req.workflow_id];
     if req.force {
         args.push("--force");
     }
@@ -1394,7 +1721,7 @@ async fn cli_delete_handler(
 ) -> impl IntoResponse {
     let result = run_torc_command(
         &state.torc_bin,
-        &["workflows", "delete", "--no-prompts", &req.workflow_id],
+        &["delete", "--no-prompts", &req.workflow_id],
         &state.api_url,
     )
     .await;
@@ -1408,7 +1735,7 @@ async fn cli_cancel_handler(
 ) -> impl IntoResponse {
     let result = run_torc_command(
         &state.torc_bin,
-        &["workflows", "cancel", &req.workflow_id],
+        &["cancel", "--no-prompts", &req.workflow_id],
         &state.api_url,
     )
     .await;
@@ -1445,6 +1772,23 @@ async fn cli_reset_status_handler(
     )
     .await;
     Json(result)
+}
+
+#[derive(Deserialize)]
+struct ResetJobsRequest {
+    job_ids: Vec<i64>,
+}
+
+/// Reset selected jobs (and, via reinit, their dependents) so they run again.
+async fn cli_reset_jobs_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ResetJobsRequest>,
+) -> impl IntoResponse {
+    let ids: Vec<String> = req.job_ids.iter().map(i64::to_string).collect();
+    info!("Resetting jobs job_ids={}", ids.join(","));
+    let mut args = vec!["jobs", "reset-status", "--no-prompts", "--reinit"];
+    args.extend(ids.iter().map(String::as_str));
+    Json(run_torc_command(&state.torc_bin, &args, &state.api_url).await)
 }
 
 #[derive(Serialize)]
@@ -1514,7 +1858,8 @@ async fn cli_execution_plan_handler(
     }
 }
 
-/// Streaming workflow run handler using Server-Sent Events
+/// Streams `torc run <id>`, or with `mode=watch` / `mode=watch-recover`, `torc watch <id>`,
+/// as Server-Sent Events.
 async fn cli_run_stream_handler(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
@@ -1526,22 +1871,43 @@ async fn cli_run_stream_handler(
         }
     };
 
-    info!("Starting streaming run for workflow: {}", workflow_id);
+    let mode = params.get("mode").map_or("run", String::as_str);
+    let (args, verb): (Vec<&str>, &str) = match mode {
+        "run" => (vec!["run", &workflow_id], "Running"),
+        "watch" => (vec!["watch", &workflow_id, "--show-job-counts"], "Watching"),
+        "watch-recover" => (
+            vec!["watch", &workflow_id, "--show-job-counts", "--recover"],
+            "Watching (with recovery)",
+        ),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "mode must be run, watch, or watch-recover",
+            ));
+        }
+    };
+    let args: Vec<String> = args.into_iter().map(String::from).collect();
+    let start_msg = format!("{verb} workflow {workflow_id}");
+    // A watch only observes, so stop it when the browser stops listening. A run keeps going.
+    let kill_on_drop = mode != "run";
+    info!("Starting streaming {} workflow_id={}", mode, workflow_id);
 
     let torc_bin = state.torc_bin.clone();
     let api_url = state.api_url.clone();
     let http_client = state.client.clone();
+    let server_auth = state.server_auth.clone();
 
     // Create the stream
     let stream = async_stream::stream! {
         // Send start event
         yield Ok::<_, std::convert::Infallible>(Event::default()
             .event("start")
-            .data(format!("Running workflow {}", workflow_id)));
+            .data(start_msg));
 
         // Spawn the command with piped stdout/stderr
         let mut child = match Command::new(&torc_bin)
-            .args(["run", &workflow_id])
+            .args(&args)
+            .kill_on_drop(kill_on_drop)
             .env("TORC_API_URL", &api_url)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -1603,10 +1969,14 @@ async fn cli_run_stream_handler(
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
             loop {
                 interval.tick().await;
+                // The browser left; stop even if the fetches below keep failing.
+                if status_tx.is_closed() {
+                    break;
+                }
 
                 // Fetch jobs from API and count statuses
                 let url = format!("{}/jobs?workflow_id={}&limit={}", api_url_status, workflow_id_status, torc::MAX_RECORD_TRANSFER_COUNT);
-                match http_client_status.get(&url).send().await {
+                match with_server_auth(http_client_status.get(&url), &server_auth).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(json) = resp.json::<serde_json::Value>().await {
                             // Count jobs by status
@@ -1624,18 +1994,22 @@ async fn cli_run_stream_handler(
                                 let mut disabled = 0i64;
 
                                 for job in jobs {
-                                    let status = job.get("status").and_then(|v| v.as_i64()).unwrap_or(-1);
-                                    match status {
-                                        0 => uninitialized += 1,
-                                        1 => blocked += 1,
-                                        2 => ready += 1,
-                                        3 => pending += 1,
-                                        4 => running += 1,
-                                        5 => completed += 1,
-                                        6 => failed += 1,
-                                        7 => canceled += 1,
-                                        8 => terminated += 1,
-                                        9 => disabled += 1,
+                                    // The API sends status names ("ready"); older servers sent integers.
+                                    let status = job.get("status");
+                                    match status.and_then(|v| v.as_str()).or_else(|| {
+                                        const NAMES: [&str; 10] = ["uninitialized", "blocked", "ready", "pending", "running", "completed", "failed", "canceled", "terminated", "disabled"];
+                                        status.and_then(|v| v.as_u64()).and_then(|i| NAMES.get(i as usize).copied())
+                                    }) {
+                                        Some("uninitialized") => uninitialized += 1,
+                                        Some("blocked") => blocked += 1,
+                                        Some("ready") => ready += 1,
+                                        Some("pending") => pending += 1,
+                                        Some("running") => running += 1,
+                                        Some("completed") => completed += 1,
+                                        Some("failed") => failed += 1,
+                                        Some("canceled") => canceled += 1,
+                                        Some("terminated") => terminated += 1,
+                                        Some("disabled") => disabled += 1,
                                         _ => {} // Unknown status, ignore
                                     }
                                 }
@@ -1970,6 +2344,78 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
             exists: true,
         }),
     }
+}
+
+#[derive(Deserialize)]
+struct WriteFileRequest {
+    path: String,
+    content: String,
+    #[serde(default)]
+    overwrite: bool,
+}
+
+#[derive(Serialize)]
+struct WriteFileResponse {
+    success: bool,
+    /// Absolute path written (relative paths resolve against torc-dash's working directory).
+    path: Option<String>,
+    error: Option<String>,
+    /// The file exists and `overwrite` was false; nothing was written.
+    exists: bool,
+}
+
+/// Save text (a workflow spec from the editor) to a file on the machine running torc-dash.
+async fn cli_write_file_handler(Json(req): Json<WriteFileRequest>) -> impl IntoResponse {
+    let fail = |error: String, exists: bool| WriteFileResponse {
+        success: false,
+        path: None,
+        error: Some(error),
+        exists,
+    };
+    let path = match std::path::absolute(req.path.trim()) {
+        Ok(p) if !req.path.trim().is_empty() => p,
+        _ => return Json(fail("Enter a file path".into(), false)),
+    };
+    if path.is_dir() {
+        return Json(fail("Path is a directory".into(), true));
+    }
+    // create_new checks and creates in one step, so a file appearing meanwhile is not clobbered.
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true);
+    if req.overwrite {
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
+    }
+    let mut file = match options.open(&path).await {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Json(fail("File already exists".into(), true));
+        }
+        Err(e) => return Json(fail(format!("Failed to write file: {e}"), false)),
+    };
+    let written = async {
+        use tokio::io::AsyncWriteExt;
+        file.write_all(req.content.as_bytes()).await?;
+        file.flush().await
+    };
+    match written.await {
+        Ok(()) => Json(WriteFileResponse {
+            success: true,
+            path: Some(path.display().to_string()),
+            error: None,
+            exists: false,
+        }),
+        Err(e) => Json(fail(format!("Failed to write file: {e}"), false)),
+    }
+}
+
+/// JSON Schema for workflow spec files; drives completion, hover, and lint in the spec editor.
+async fn workflow_schema_handler() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        torc::client::workflow_spec::workflow_spec_schema(),
+    )
 }
 
 /// Export a workflow to a JSON file on the server
@@ -2901,6 +3347,8 @@ struct VersionResponse {
     server_api_version: Option<String>,
     version_mismatch: Option<String>,
     mismatch_severity: Option<String>,
+    /// torc-server URL this dashboard talks to, without any embedded credentials.
+    api_url: String,
 }
 
 /// Return the torc-dash version and check server version compatibility
@@ -2959,7 +3407,20 @@ async fn version_handler(State(state): State<Arc<AppState>>) -> impl IntoRespons
         server_api_version,
         version_mismatch,
         mismatch_severity,
+        api_url: redact_url(&state.api_url),
     })
+}
+
+/// `url` with any user:password removed, for display.
+fn redact_url(url: &str) -> String {
+    match reqwest::Url::parse(url) {
+        Ok(mut u) => {
+            let _ = u.set_password(None);
+            let _ = u.set_username("");
+            u.to_string()
+        }
+        Err(_) => url.to_string(),
+    }
 }
 
 // ============== User Handler ==============
@@ -2984,6 +3445,121 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     #[serde(default)]
     workflow_id: Option<i64>,
+    /// The spec editor's buffer, when chatting from the editor. Enables the spec tools.
+    #[serde(default)]
+    spec: Option<String>,
+}
+
+/// Tools for the spec editor's buffer, handled in torc-dash rather than by the MCP server:
+/// (name, description, JSON Schema of the input).
+fn spec_tools() -> [(&'static str, &'static str, serde_json::Value); 3] {
+    [
+        (
+            "edit_spec",
+            "Edit the workflow spec in the user's editor: replace old_str, which must occur exactly \
+             once in the spec, with new_str. Include enough surrounding text to make old_str \
+             unique. Keep the user's formatting and comments. The edit appears in the editor \
+             immediately.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "old_str": {"type": "string", "description": "Exact text to replace"},
+                    "new_str": {"type": "string", "description": "Replacement text"}
+                },
+                "required": ["old_str", "new_str"]
+            }),
+        ),
+        (
+            "replace_spec",
+            "Replace the entire workflow spec in the user's editor. Use it to write a new spec or \
+             rewrite most of one; use edit_spec for changes.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "The complete spec (YAML)"}
+                },
+                "required": ["content"]
+            }),
+        ),
+        (
+            "validate_spec",
+            "Validate the spec in the user's editor as `torc create --dry-run` would. Returns \
+             errors, warnings, and a summary (job counts after parameter expansion, etc.).",
+            serde_json::json!({"type": "object", "properties": {}}),
+        ),
+    ]
+}
+
+/// Applies an edit_spec or replace_spec call to `buf`. Returns a message for the model and the
+/// edit to send to the editor, or an error for the model to correct.
+fn apply_spec_edit(
+    buf: &mut String,
+    tool: &str,
+    input: &serde_json::Value,
+) -> Result<(String, serde_json::Value), String> {
+    match tool {
+        "edit_spec" => {
+            let old = input["old_str"].as_str().unwrap_or_default();
+            let new = input["new_str"].as_str().unwrap_or_default();
+            if old.is_empty() {
+                return Err(
+                    "old_str is empty. Use replace_spec to write the whole spec.".to_string(),
+                );
+            }
+            match buf.matches(old).count() {
+                0 => Err(
+                    "old_str was not found. Copy it exactly from the current spec, \
+                          including indentation."
+                        .to_string(),
+                ),
+                1 => {
+                    *buf = buf.replacen(old, new, 1);
+                    Ok((
+                        "Edited the spec.".to_string(),
+                        serde_json::json!({"old_str": old, "new_str": new}),
+                    ))
+                }
+                n => Err(format!(
+                    "old_str occurs {n} times. Include more surrounding text so it is unique."
+                )),
+            }
+        }
+        "replace_spec" => {
+            let content = input["content"]
+                .as_str()
+                .ok_or("content is required")?
+                .to_string();
+            *buf = content.clone();
+            Ok((
+                "Replaced the spec.".to_string(),
+                serde_json::json!({ "content": content }),
+            ))
+        }
+        _ => Err(format!("Unknown spec tool {tool}")),
+    }
+}
+
+/// `torc -f json create --dry-run` on spec text, via a temp file with the given extension.
+async fn dry_run_spec(torc_bin: &str, api_url: &str, spec: &str, extension: &str) -> CliResponse {
+    let temp_path =
+        std::env::temp_dir().join(format!("torc_spec_{}{}", uuid::Uuid::new_v4(), extension));
+    if let Err(e) = tokio::fs::write(&temp_path, spec).await {
+        return CliResponse {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to write temp file: {}", e),
+            exit_code: None,
+        };
+    }
+    let path = temp_path.to_string_lossy();
+    let result = run_torc_command(
+        torc_bin,
+        &["-f", "json", "create", &path, "--dry-run"],
+        api_url,
+    )
+    .await;
+    let _ = tokio::fs::remove_file(&temp_path).await;
+    result
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -3019,7 +3595,7 @@ async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoRes
     let reason = if !available {
         let msg = match provider {
             LlmProvider::Anthropic => {
-                "No API key configured. Set ANTHROPIC_API_KEY or use Azure AI Foundry."
+                "No API key configured. Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, or use Azure AI Foundry."
             }
             LlmProvider::OpenAI => "No API key configured. Set OPENAI_API_KEY.",
             LlmProvider::GitHub => "No GitHub token configured. Set GITHUB_TOKEN.",
@@ -3031,6 +3607,117 @@ async fn chat_status_handler(State(state): State<Arc<AppState>>) -> impl IntoRes
     };
 
     Json(ChatStatusResponse { available, reason })
+}
+
+/// Fill AI Chat settings from `[dash.chat]` (and the API key from the user config file), mapping
+/// each config provider onto the existing CLI fields. A flag or its environment variable wins.
+fn apply_chat_config(
+    cli: &mut Cli,
+    chat: &torc::config::DashChatConfig,
+    explicit: &dyn Fn(&str) -> bool,
+) {
+    let (api_key, warnings) = torc::config::user_chat_api_key(&torc::config::ConfigPaths::new());
+    for w in warnings {
+        warn!("{w}");
+    }
+    let provider = match &chat.provider {
+        Some(p) if !explicit("llm_provider") => p.to_lowercase(),
+        _ => cli.llm_provider.to_lowercase(),
+    };
+    let fill = |slot: &mut Option<String>, id: &str, value: &Option<String>| {
+        if !explicit(id) && value.is_some() {
+            *slot = value.clone();
+        }
+    };
+    let fill_str = |slot: &mut String, id: &str, value: &Option<String>| {
+        if let Some(v) = value.as_ref().filter(|_| !explicit(id)) {
+            *slot = v.clone();
+        }
+    };
+    match provider.as_str() {
+        "openai" => {
+            fill(&mut cli.openai_api_key, "openai_api_key", &api_key);
+            fill_str(&mut cli.openai_base_url, "openai_base_url", &chat.base_url);
+            fill_str(&mut cli.openai_model, "openai_model", &chat.model);
+        }
+        "ollama" => {
+            fill_str(&mut cli.ollama_base_url, "ollama_base_url", &chat.base_url);
+            fill_str(&mut cli.ollama_model, "ollama_model", &chat.model);
+        }
+        "github" => {
+            fill(&mut cli.github_token, "github_token", &api_key);
+            fill_str(
+                &mut cli.github_models_base_url,
+                "github_models_base_url",
+                &chat.base_url,
+            );
+            fill_str(
+                &mut cli.github_models_model,
+                "github_models_model",
+                &chat.model,
+            );
+        }
+        "foundry" => {
+            fill(
+                &mut cli.anthropic_foundry_api_key,
+                "anthropic_foundry_api_key",
+                &api_key,
+            );
+            fill(
+                &mut cli.anthropic_foundry_resource,
+                "anthropic_foundry_resource",
+                &chat.foundry_resource,
+            );
+            fill(
+                &mut cli.anthropic_auth_header,
+                "anthropic_auth_header",
+                &chat.auth_header,
+            );
+            fill_str(&mut cli.anthropic_model, "anthropic_model", &chat.model);
+        }
+        // A custom gateway is the Anthropic path with a base URL.
+        "anthropic" | "custom" => {
+            fill(&mut cli.anthropic_api_key, "anthropic_api_key", &api_key);
+            fill(
+                &mut cli.anthropic_base_url,
+                "anthropic_base_url",
+                &chat.base_url,
+            );
+            fill(
+                &mut cli.anthropic_auth_header,
+                "anthropic_auth_header",
+                &chat.auth_header,
+            );
+            fill_str(&mut cli.anthropic_model, "anthropic_model", &chat.model);
+        }
+        other => {
+            warn!("Ignoring unknown dash.chat.provider {other:?}");
+            return;
+        }
+    }
+    if provider == "foundry" && cli.anthropic_foundry_resource.is_none() {
+        warn!("dash.chat.provider is \"foundry\" but no foundry_resource is set");
+    }
+    if provider == "custom" && cli.anthropic_base_url.is_none() {
+        warn!("dash.chat.provider is \"custom\" but no base_url is set");
+    }
+    if !explicit("llm_provider") {
+        cli.llm_provider = match provider.as_str() {
+            "foundry" | "custom" => "anthropic".to_string(),
+            p => p.to_string(),
+        };
+    }
+}
+
+/// Claude API base URL ending in /v1, from either the Claude Code form of ANTHROPIC_BASE_URL
+/// (gateway root; the client appends /v1/messages) or a URL that already ends in /v1.
+fn anthropic_api_base(url: &str) -> String {
+    let url = url.trim().trim_end_matches('/');
+    if url.ends_with("/v1") {
+        url.to_string()
+    } else {
+        format!("{url}/v1")
+    }
 }
 
 #[derive(Deserialize)]
@@ -3149,7 +3836,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("claude-sonnet-4-20250514")
+                .unwrap_or("claude-opus-5-5")
                 .to_string();
             info!(
                 "AI Chat: configured via dashboard UI as Azure AI Foundry (resource={})",
@@ -3171,8 +3858,8 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .ok_or((StatusCode::BAD_REQUEST, "Base URL is required"))?
-                .to_string();
+                .map(anthropic_api_base)
+                .ok_or((StatusCode::BAD_REQUEST, "Base URL is required"))?;
             let header = req
                 .auth_header
                 .as_deref()
@@ -3185,7 +3872,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("claude-sonnet-4-20250514")
+                .unwrap_or("claude-opus-5-5")
                 .to_string();
             info!(
                 "AI Chat: configured via dashboard UI as custom endpoint (url={})",
@@ -3203,7 +3890,7 @@ async fn configure_chat_handler(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or("claude-sonnet-4-20250514")
+                .unwrap_or("claude-opus-5-5")
                 .to_string();
             info!("AI Chat: configured via dashboard UI as direct Anthropic API");
             (
@@ -3566,7 +4253,7 @@ fn truncate_messages_to_token_limit(
 }
 
 /// The system prompt for the AI chat assistant.
-fn chat_system_prompt(workflow_id: Option<i64>) -> String {
+fn chat_system_prompt(workflow_id: Option<i64>, spec: Option<&str>) -> String {
     let mut prompt = String::from(
         "You are an AI assistant for the Torc workflow orchestration system. \
          You help users manage, monitor, debug, and recover computational workflows. \
@@ -3582,6 +4269,19 @@ fn chat_system_prompt(workflow_id: Option<i64>) -> String {
             "\n\nThe user is currently viewing workflow {}. \
              Use this workflow_id by default when calling tools, unless they specify a different one.",
             wf_id
+        ));
+    }
+
+    if let Some(spec) = spec {
+        prompt.push_str(&format!(
+            "\n\nThe user is editing a Torc workflow spec (YAML) in the dashboard's spec editor, \
+             and you share that buffer. Its current contents:\n\n```yaml\n{spec}\n```\n\n\
+             To change it, call edit_spec for targeted changes (copy old_str exactly) or \
+             replace_spec to write a new spec; the user sees each edit as you make it. After \
+             editing, call validate_spec and fix any errors it reports. Explain briefly what you \
+             changed. Do not create workflows or write files: the user creates the workflow from \
+             the editor. Use get_docs and get_example for spec syntax and patterns. If it is \
+             unclear whether the workflow runs locally or on Slurm, ask."
         ));
     }
 
@@ -3643,6 +4343,7 @@ async fn chat_handler(
     let auth_header_name = state.llm_auth_header.read().await.clone();
     let workflow_id = req.workflow_id;
     let initial_messages = req.messages;
+    let mut spec_buf = req.spec;
 
     // Get MCP client and tools
     let (peer, tools) = match ensure_mcp_client(&state).await {
@@ -3658,8 +4359,36 @@ async fn chat_handler(
         }
     };
 
-    let system_prompt = chat_system_prompt(workflow_id);
+    let system_prompt = chat_system_prompt(workflow_id, spec_buf.as_deref());
     let http_client = state.client.clone();
+    // From the editor, the model edits the buffer instead of saving spec files.
+    let tools: Vec<rmcp::model::Tool> = if spec_buf.is_some() {
+        tools
+            .into_iter()
+            .filter(|t| t.name != "create_workflow")
+            .collect()
+    } else {
+        tools
+    };
+    let local_tools: Vec<_> = if spec_buf.is_some() {
+        spec_tools().to_vec()
+    } else {
+        Vec::new()
+    };
+    let openai_local_tools = local_tools.iter().map(|(name, description, schema)| {
+        serde_json::json!({
+            "type": "function",
+            "function": {"name": name, "description": description, "parameters": schema}
+        })
+    });
+    let openai_local_tools: Vec<serde_json::Value> = openai_local_tools.collect();
+    let claude_local_tools: Vec<serde_json::Value> = local_tools
+        .iter()
+        .map(|(name, description, schema)| {
+            serde_json::json!({"name": name, "description": description, "input_schema": schema})
+        })
+        .collect();
+    let (torc_bin, torc_api_url) = (state.torc_bin.clone(), state.api_url.clone());
 
     // Choose API format based on provider
     let is_openai_compatible = matches!(
@@ -3695,14 +4424,16 @@ async fn chat_handler(
             let (api_url, api_body, auth_header_value) = if is_openai_compatible {
                 // OpenAI-compatible API (Ollama, GitHub Models)
                 let url = format!("{}/chat/completions", base_url);
-                let openai_tools = mcp_tools_to_openai_tools(&tools);
+                let mut openai_tools = mcp_tools_to_openai_tools(&tools);
+                openai_tools.extend(openai_local_tools.iter().cloned());
                 let openai_messages = messages_to_openai_format(&messages, &system_prompt);
 
                 // GitHub Models has a strict 8000 token input limit for gpt-4o
                 // Use filtered essential tools only for GitHub to fit within limit
                 let (final_messages, final_tools, was_truncated) = if provider == LlmProvider::GitHub {
                     // Use only essential tools for GitHub Models
-                    let filtered_tools = mcp_tools_to_openai_tools_filtered(&tools);
+                    let mut filtered_tools = mcp_tools_to_openai_tools_filtered(&tools);
+                    filtered_tools.extend(openai_local_tools.iter().cloned());
                     let tools_json = serde_json::json!(&filtered_tools);
                     let tools_tokens = estimate_tokens(&tools_json);
 
@@ -3736,7 +4467,8 @@ async fn chat_handler(
             } else {
                 // Anthropic API
                 let url = format!("{}/messages", base_url);
-                let claude_tools = mcp_tools_to_claude_tools(&tools);
+                let mut claude_tools = mcp_tools_to_claude_tools(&tools);
+                claude_tools.extend(claude_local_tools.iter().cloned());
 
                 let body = serde_json::json!({
                     "model": model,
@@ -3746,7 +4478,15 @@ async fn chat_handler(
                     "tools": claude_tools,
                 });
 
-                (url, body, api_key.clone())
+                // A bare token in an Authorization header is a bearer token.
+                let auth_value = if auth_header_name.eq_ignore_ascii_case("authorization")
+                    && !api_key.starts_with("Bearer ")
+                {
+                    format!("Bearer {api_key}")
+                } else {
+                    api_key.clone()
+                };
+                (url, body, auth_value)
             };
 
             // Make API request
@@ -3915,6 +4655,40 @@ async fn chat_handler(
                     "input": tool_call["input"],
                 }));
 
+                // Spec editor tools run here, against this request's copy of the buffer.
+                if let Some(buf) = spec_buf.as_mut()
+                    && local_tools.iter().any(|(name, _, _)| *name == tool_name)
+                {
+                    let (result_text, is_error) = if tool_name == "validate_spec" {
+                        let r = dry_run_spec(&torc_bin, &torc_api_url, buf, ".yaml").await;
+                        let text = if r.stdout.trim().is_empty() { r.stderr } else { r.stdout };
+                        (text, false)
+                    } else {
+                        match apply_spec_edit(buf, tool_name, &tool_call["input"]) {
+                            Ok((message, edit)) => {
+                                yield Ok(Event::default().event("spec_edit").data(edit.to_string()));
+                                (message, false)
+                            }
+                            Err(message) => (message, true),
+                        }
+                    };
+                    yield Ok(Event::default()
+                        .event("tool_result")
+                        .data(serde_json::json!({
+                            "id": tool_id,
+                            "name": tool_name,
+                            "result": result_text,
+                            "is_error": is_error,
+                        }).to_string()));
+                    tool_results.push(serde_json::json!({
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": result_text,
+                        "is_error": is_error,
+                    }));
+                    continue;
+                }
+
                 let arguments = tool_input.cloned();
 
                 let request = arguments.map_or_else(
@@ -4025,7 +4799,123 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 
 #[cfg(test)]
 mod tests {
-    use super::workflow_id_from_resource_db_name;
+    use super::{
+        allowed_host_list, anthropic_api_base, apply_spec_edit, check_request, same_secret,
+        take_token_param, workflow_id_from_resource_db_name,
+    };
+
+    #[test]
+    fn token_param_is_split_from_query() {
+        let split = |q| take_token_param(q);
+        assert_eq!(
+            split("workflow_id=3&token=abc&mode=watch"),
+            (
+                Some("abc".to_string()),
+                "workflow_id=3&mode=watch".to_string()
+            )
+        );
+        assert_eq!(split("token=abc"), (Some("abc".to_string()), String::new()));
+        assert_eq!(
+            split("token=a%2Bb"),
+            (Some("a+b".to_string()), String::new())
+        );
+        assert_eq!(split("a=1"), (None, "a=1".to_string()));
+        assert_eq!(split(""), (None, String::new()));
+        // Only an exact `token` key counts.
+        assert_eq!(split("mytoken=x"), (None, "mytoken=x".to_string()));
+
+        assert!(same_secret("abc", "abc"));
+        assert!(!same_secret("abc", "abd"));
+        assert!(!same_secret("abc", "ab"));
+    }
+
+    #[test]
+    fn request_guard_checks_host_and_fetch_site() {
+        let allowed = allowed_host_list("0.0.0.0", &["dash.example.org".to_string()]);
+        let allowed = allowed.as_deref();
+        let ok = |host, site, path| check_request(Some(host), site, path, allowed).is_ok();
+
+        // Loopback names and configured names, with or without a port.
+        assert!(ok("localhost:8090", None, "/api/cli/run"));
+        assert!(ok("127.0.0.1:23456", Some("same-origin"), "/api/chat"));
+        assert!(ok("[::1]:8090", None, "/"));
+        assert!(ok("Dash.Example.org", None, "/"));
+        // DNS rebinding: an attacker's hostname pointing at loopback.
+        assert!(!ok(
+            "evil.example.com:8090",
+            Some("same-origin"),
+            "/api/cli/write-file"
+        ));
+        // Cross-site requests to API routes, e.g. <img src=".../run-stream?mode=run">.
+        assert!(!ok(
+            "localhost:8090",
+            Some("cross-site"),
+            "/api/cli/run-stream"
+        ));
+        assert!(!ok(
+            "localhost:8090",
+            Some("same-site"),
+            "/torc-service/v1/workflows"
+        ));
+        // ...but navigating to the UI from elsewhere (Torc Desktop's tauri:// page) is fine.
+        assert!(ok("127.0.0.1:23456", Some("cross-site"), "/"));
+        assert!(ok("localhost", Some("none"), "/api/version"));
+        // No Host header (HTTP/1.0 probes) and "*" skip the host check.
+        assert!(check_request(None, None, "/", allowed).is_ok());
+        let any = allowed_host_list("127.0.0.1", &["*".to_string()]);
+        assert!(check_request(Some("anything:1"), None, "/api/x", any.as_deref()).is_ok());
+        // A specific bind host is allowed automatically.
+        let bound = allowed_host_list("login1.hpc.org", &[]);
+        assert!(check_request(Some("login1.hpc.org:8090"), None, "/", bound.as_deref()).is_ok());
+    }
+    use serde_json::json;
+
+    #[test]
+    fn spec_edits_apply_to_the_buffer() {
+        let mut buf = "name: a\njobs:\n  - name: x\n    command: echo\n".to_string();
+        let (_, edit) = apply_spec_edit(
+            &mut buf,
+            "edit_spec",
+            &json!({"old_str": "command: echo", "new_str": "command: echo hi"}),
+        )
+        .unwrap();
+        assert_eq!(buf, "name: a\njobs:\n  - name: x\n    command: echo hi\n");
+        assert_eq!(edit["new_str"], "command: echo hi");
+
+        // Missing, ambiguous, and empty old_str are errors and leave the buffer alone.
+        let before = buf.clone();
+        let edit = |b: &mut String, old: &str| {
+            apply_spec_edit(b, "edit_spec", &json!({"old_str": old, "new_str": "z"}))
+        };
+        assert!(edit(&mut buf, "nope").unwrap_err().contains("not found"));
+        assert!(edit(&mut buf, "name: ").unwrap_err().contains("2 times"));
+        assert!(edit(&mut buf, "").is_err());
+        assert_eq!(buf, before);
+
+        apply_spec_edit(&mut buf, "replace_spec", &json!({"content": "name: b\n"})).unwrap();
+        assert_eq!(buf, "name: b\n");
+    }
+
+    #[test]
+    fn anthropic_base_url_accepts_claude_code_form() {
+        // Claude Code style (gateway root) and explicit /v1 both resolve to .../v1.
+        assert_eq!(
+            anthropic_api_base("https://gw.example.org"),
+            "https://gw.example.org/v1"
+        );
+        assert_eq!(
+            anthropic_api_base("https://gw.example.org/"),
+            "https://gw.example.org/v1"
+        );
+        assert_eq!(
+            anthropic_api_base("https://gw.example.org/v1/"),
+            "https://gw.example.org/v1"
+        );
+        assert_eq!(
+            anthropic_api_base(" https://x.services.ai.azure.com/anthropic/v1"),
+            "https://x.services.ai.azure.com/anthropic/v1"
+        );
+    }
 
     #[test]
     fn parses_workflow_id_from_resource_database_name() {

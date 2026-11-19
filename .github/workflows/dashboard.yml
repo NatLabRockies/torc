@@ -1,0 +1,124 @@
+name: Dashboard and Desktop
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  web:
+    name: Dashboard UI (torc-dash/web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: torc-dash/web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: torc-dash/web/package-lock.json
+
+      # npm test builds `torc` to get the workflow-spec JSON Schema.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-web-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-web-
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      # torc-dash embeds the checked-in bundle, so it must match the sources.
+      - name: Check the built bundle is up to date
+        run: |
+          npm run build
+          if [ -n "$(git status --porcelain -- ../static/app)" ]; then
+            git status --short -- ../static/app
+            echo "::error::torc-dash/static/app is out of date. Run 'npm run build' in torc-dash/web and commit the result."
+            exit 1
+          fi
+
+  desktop:
+    name: Torc Desktop (torc-desktop)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: torc-desktop
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: torc-desktop/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            torc-desktop/src-tauri/target
+          key: ${{ runner.os }}-desktop-check-${{ hashFiles('torc-desktop/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-check-
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Type-check the connect page
+        run: npm run check
+
+      # The Rust build embeds the connect page from dist/.
+      - name: Build the connect page
+        run: npm run build
+
+      - name: Check Rust formatting
+        working-directory: torc-desktop/src-tauri
+        run: cargo fmt -- --check
+
+      - name: Run Clippy
+        working-directory: torc-desktop/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        working-directory: torc-desktop/src-tauri
+        run: cargo test

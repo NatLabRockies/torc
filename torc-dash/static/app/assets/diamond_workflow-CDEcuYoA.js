@@ -1,0 +1,57 @@
+var e=`# Diamond Workflow
+# This demonstrates a classic diamond-shaped dependency graph where one job fans out
+# to parallel jobs, which then converge back to a final job.
+#
+# Workflow structure:
+#       f1
+#       |
+#   preprocess
+#      / \\
+#    f2   f3
+#    |     |
+#  work1  work2
+#    |     |
+#   f4    f5
+#     \\   /
+#  postprocess
+#      |
+#     f6
+
+name: diamond_workflow
+description: A diamond-shaped workflow demonstrating fan-out and fan-in job dependencies
+
+# Job definitions
+# Note: input/output files are automatically inferred from \${files.input.NAME} and \${files.output.NAME}
+jobs:
+  - name: preprocess
+    command: "bash tests/scripts/preprocess.sh -i \${files.input.f1} -o \${files.output.f2} -o \${files.output.f3}"
+
+  - name: work1
+    command: "bash tests/scripts/work.sh -i \${files.input.f2} -o \${files.output.f4}"
+
+  - name: work2
+    command: "bash tests/scripts/work.sh -i \${files.input.f3} -o \${files.output.f5}"
+
+  - name: postprocess
+    command: "bash tests/scripts/postprocess.sh -i \${files.input.f4} -i \${files.input.f5} -o \${files.output.f6}"
+
+# File definitions - representing the data files in the workflow
+files:
+  - name: f1
+    path: f1.json
+
+  - name: f2
+    path: f2.json
+
+  - name: f3
+    path: f3.json
+
+  - name: f4
+    path: f4.json
+
+  - name: f5
+    path: f5.json
+
+  - name: f6
+    path: f6.json
+`;export{e as default};

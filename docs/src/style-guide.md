@@ -95,7 +95,7 @@ All features must be documented in Markdown in the `docs/` directory following t
 
 ### Design Documentation
 
-Significant design choices must be documented in `docs/src/explanation/design/`. Each design
+Significant design choices must be documented in `docs/src/specialized/design/`. Each design
 document should cover:
 
 - **Problem Statement**: What problem does this solve?
@@ -108,7 +108,9 @@ Existing design documents include:
 
 - `server.md` - API handler design and request processing
 - `database.md` - SQLite schema and concurrency model
-- `dashboard.md` - Web dashboard architecture
+- `dashboard.md` - Web dashboard server architecture
+- `dashboard-frontend.md` - Dashboard UI structure and conventions
+- `desktop.md` - Torc Desktop app
 - `recovery.md` - Workflow recovery mechanisms
 - `workflow-graph.md` - Dependency graph implementation
 
@@ -328,34 +330,18 @@ clients are auto-generated. Ensure:
 
 ### Dashboard (torc-dash)
 
-The dashboard is an Axum-based web server with embedded static assets:
-
-```rust
-// In torc-dash/src/main.rs
-
-async fn handle_feature_list(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<Feature>>, StatusCode> {
-    // Proxy request to Torc API server
-    let features = state.client
-        .get(&format!("{}/features", state.api_url))
-        .send()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .json()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(Json(features))
-}
-```
+`torc-dash` (`src/bin/torc-dash.rs`) is an Axum server that embeds the Svelte UI from
+`torc-dash/web/`. See [Web Dashboard Design](./specialized/design/dashboard.md) and
+[Dashboard Frontend Design](./specialized/design/dashboard-frontend.md).
 
 **Dashboard Conventions:**
 
-- Proxy API requests to the Torc server
-- Use Axum extractors for request handling
-- Return JSON for API endpoints
-- Serve static files for the frontend
+- Read torc-server data in the UI with the typed client through the `/torc-service` proxy; add a
+  torc-dash endpoint only when the server API can't do the job.
+- Put operations the CLI already implements behind `/api/cli/*` endpoints that run `torc` (see
+  `run_torc_command`) rather than reimplementing them.
+- Rebuild the UI (`npm run build`) and commit `torc-dash/static/app/` with any UI change.
+- Run `npm run check` and `npm test` in `torc-dash/web/` for UI changes.
 
 ### TUI (Terminal User Interface)
 
