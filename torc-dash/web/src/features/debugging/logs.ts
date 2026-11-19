@@ -25,7 +25,7 @@ export function saveOutputDir(dir: string) {
  * drive, UNC) are returned unchanged; the torc-dash backend expands `~`.
  */
 export function resolveLogBaseDir(outputDir: string, submissionDir?: string | null): string {
-  if (/^(\/|~|[A-Za-z]:[\\/]|\\\\)/.test(outputDir) || !submissionDir) return outputDir;
+  if (/^(\/|~([\\/]|$)|[A-Za-z]:[\\/]|\\\\)/.test(outputDir) || !submissionDir) return outputDir;
   return `${submissionDir.replace(/[\\/]+$/, "")}/${outputDir}`;
 }
 

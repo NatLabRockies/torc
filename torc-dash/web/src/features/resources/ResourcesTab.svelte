@@ -97,6 +97,7 @@
       selected.clear();
       plots = null;
       plotError = null;
+      generating = false; // a stale generate's finally won't clear it once the id changes
       void scan();
     });
   });
@@ -136,9 +137,9 @@
       );
       plotIndex = 0;
     } catch (e) {
-      plotError = errorText(e);
+      if (id === app.workflowId) plotError = errorText(e);
     } finally {
-      generating = false;
+      if (id === app.workflowId) generating = false;
     }
   }
 

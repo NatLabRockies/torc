@@ -51,6 +51,7 @@
         jobs = null;
         // Drop the old submission directory so Slurm views can't resolve paths against it.
         wf = null;
+        loadedFor = null;
         loadError = null;
         selectedKey = null;
         tailed.clear();
@@ -61,7 +62,11 @@
 
   async function load(id: number, all: boolean) {
     try {
-      const [j, r, w] = await Promise.all([
+      // Set wf as soon as it arrives: the Slurm views only need it, not the job/result listings.
+      const wfReq = unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })).then((w) => {
+        if (id === app.workflowId) wf = w;
+      });
+      const [j, r] = await Promise.all([
         listAll((offset, limit) =>
           unwrap(api.GET("/jobs", { params: { query: { workflow_id: id, offset, limit } } })),
         ),
@@ -72,12 +77,11 @@
             }),
           ),
         ),
-        unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })),
+        wfReq,
       ]);
       if (id !== app.workflowId) return;
       jobs = j;
       results = r;
-      wf = w;
       loadedFor = id;
       loadError = null;
     } catch (e) {
@@ -271,7 +275,7 @@
       {/if}
     {:else if view === "tail"}
       <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
-    {:else if loadedFor !== app.workflowId}
+    {:else if wf?.id !== app.workflowId}
       <!-- Slurm paths depend on this workflow's submission directory; wait until it's loaded. -->
       {#if loadError}
         <p class="error-text">{loadError}</p>
