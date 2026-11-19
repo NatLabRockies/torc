@@ -521,7 +521,8 @@ async fn main() -> Result<()> {
     {
         warn!(
             "completion_check_interval_secs is deprecated and ignored: torc-server now \
-             processes job completions as they arrive"
+             processes job completions as they arrive. Remove it from your torc config file \
+             (see 'torc config paths') or the command line"
         );
     }
 

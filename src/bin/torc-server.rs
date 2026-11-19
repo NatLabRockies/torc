@@ -740,7 +740,9 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
         if config.completion_check_interval_secs.is_some() {
             warn!(
                 "completion_check_interval_secs is deprecated and ignored: job completions are \
-                 now processed as they arrive"
+                 now processed as they arrive. Remove it from your torc config file \
+                 (see 'torc config paths'), --completion-check-interval-secs, or \
+                 TORC_COMPLETION_CHECK_INTERVAL_SECS"
             );
         }
 
