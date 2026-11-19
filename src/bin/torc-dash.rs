@@ -2661,7 +2661,7 @@ async fn cli_write_file_handler(Json(req): Json<WriteFileRequest>) -> impl IntoR
         error: Some(error),
         exists,
     };
-    let path = match std::path::absolute(req.path.trim()) {
+    let path = match std::path::absolute(expand_tilde(req.path.trim())) {
         Ok(p) if !req.path.trim().is_empty() => p,
         _ => return Json(fail("Enter a file path".into(), false)),
     };

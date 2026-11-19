@@ -46,6 +46,7 @@
 
   /** Bumped per scan so a slow scan for a previous workflow can't overwrite a newer one. */
   let scanSeq = 0;
+  let plotSeq = 0;
 
   async function scan() {
     const seq = ++scanSeq;
@@ -97,7 +98,10 @@
       selected.clear();
       plots = null;
       plotError = null;
-      generating = false; // a stale generate's finally won't clear it once the id changes
+      dbs = null;
+      scanError = null;
+      plotSeq++; // invalidate in-flight plot requests, even after an A -> B -> A switch
+      generating = false;
       void scan();
     });
   });
@@ -121,8 +125,8 @@
 
   async function generate() {
     const paths = selectedPaths;
-    const id = app.workflowId;
     if (paths.length === 0) return;
+    const seq = ++plotSeq;
     generating = true;
     plotError = null;
     try {
@@ -130,16 +134,16 @@
         "/api/cli/plot-resources",
         { db_paths: paths, prefix: "resource_plot" },
       );
-      if (id !== app.workflowId) return;
+      if (seq !== plotSeq) return;
       if (!res.success) throw new Error(res.error || "Plot generation failed");
       plots = (res.plots ?? []).toSorted(
         (a, b) => plotRank(a.name) - plotRank(b.name) || collator.compare(a.name, b.name),
       );
       plotIndex = 0;
     } catch (e) {
-      if (id === app.workflowId) plotError = errorText(e);
+      if (seq === plotSeq) plotError = errorText(e);
     } finally {
-      if (id === app.workflowId) generating = false;
+      if (seq === plotSeq) generating = false;
     }
   }
 

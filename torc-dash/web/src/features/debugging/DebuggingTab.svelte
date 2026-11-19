@@ -36,7 +36,8 @@
   let wf = $state<Workflow | null>(null);
   let submissionDir = $derived(wf?.submission_directory ?? null);
   let loadError = $state<string | null>(null);
-  let loadedFor = $state<number | null>(null);
+  // The workflow whose state is shown; a refresh of the same workflow must not clear it.
+  let shownFor: number | null = null;
   let selectedKey = $state<string | null>(null);
 
   $effect(() => saveOutputDir(outputDir));
@@ -47,11 +48,11 @@
     void app.refreshTick;
     if (id === null) return;
     untrack(() => {
-      if (id !== loadedFor) {
+      if (id !== shownFor) {
+        shownFor = id;
         jobs = null;
         // Drop the old submission directory so Slurm views can't resolve paths against it.
         wf = null;
-        loadedFor = null;
         loadError = null;
         selectedKey = null;
         tailed.clear();
@@ -82,7 +83,6 @@
       if (id !== app.workflowId) return;
       jobs = j;
       results = r;
-      loadedFor = id;
       loadError = null;
     } catch (e) {
       if (id === app.workflowId) loadError = errorText(e);
