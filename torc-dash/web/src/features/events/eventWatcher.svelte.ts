@@ -178,17 +178,32 @@ $effect.root(() => {
     // EventSource reconnects on its own unless the server refused the stream outright.
     es.onerror = () =>
       (watcher.status = es.readyState === EventSource.CLOSED ? "off" : "reconnecting");
+    // Batch events per animation frame so a burst (thousands of job completions) costs one
+    // update and re-render per frame instead of one per event.
+    let pending: EventRow[] = [];
+    let frame = 0;
+    const flush = () => {
+      frame = 0;
+      if (!pending.length) return;
+      watcher.live = [...pending.reverse(), ...watcher.live].slice(0, MAX);
+      bump(pending.length);
+      pending = [];
+    };
     const onEvent = (ev: MessageEvent<string>) => {
       try {
-        watcher.live = [fromLive(ev.type, ev.data), ...watcher.live].slice(0, MAX);
-        bump(1);
+        pending.push(fromLive(ev.type, ev.data));
       } catch {
-        // Ignore malformed frames.
+        return; // Ignore malformed frames.
       }
+      frame ||= requestAnimationFrame(flush);
     };
     es.onmessage = onEvent;
     for (const t of SSE_TYPES) es.addEventListener(t, onEvent);
-    return () => es.close();
+    return () => {
+      // Drop the unflushed batch: on a workflow switch it belongs to the old workflow.
+      es.close();
+      cancelAnimationFrame(frame);
+    };
   });
 
   // Incremental refresh of stored events on every app refresh tick.
