@@ -809,6 +809,9 @@ fn deactivate_dead_local_compute_nodes(
         // Job commands inherit TORC_WORKFLOW_ID and outlive a SIGKILLed runner, so
         // scan this host's processes once (with environment) for the runner and for
         // surviving job processes.
+        // ponytail: macOS hides the environment of platform binaries (/bin/bash,
+        // /bin/sleep), so surviving jobs go unseen there and a SIGKILLed runner's
+        // jobs could run twice after reset. Track job pids/process groups if needed.
         let sys = sys.get_or_insert_with(|| {
             let mut s = sysinfo::System::new();
             s.refresh_processes_specifics(
@@ -825,12 +828,15 @@ fn deactivate_dead_local_compute_nodes(
         {
             continue;
         }
-        let marker = format!("TORC_WORKFLOW_ID={}", workflow_id);
-        if let Some(p) = sys
-            .processes()
-            .values()
-            .find(|p| p.environ().iter().any(|e| *e == *marker))
-        {
+        // Workflow IDs are per server, so match the server URL too.
+        // ponytail: exact URL string; an equivalent spelling (127.0.0.1 vs localhost)
+        // won't match. Normalize if users mix them.
+        let wf_marker = format!("TORC_WORKFLOW_ID={}", workflow_id);
+        let url_marker = format!("TORC_API_URL={}", config.base_path);
+        if let Some(p) = sys.processes().values().find(|p| {
+            let env = p.environ();
+            env.iter().any(|e| *e == *wf_marker) && env.iter().any(|e| *e == *url_marker)
+        }) {
             warn!(
                 "Not deactivating compute node workflow_id={} compute_node_id={}: runner pid {} \
                  is gone but job process pid {} is still running",

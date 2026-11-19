@@ -667,6 +667,39 @@ fn test_reset_status_dead_local_runner(start_server: &ServerProcess) {
             .unwrap(),
         JobStatus::Uninitialized
     );
+
+    // Linux only: macOS hides the environment of platform binaries like sleep.
+    if !cfg!(target_os = "linux") {
+        return;
+    }
+    // A dead runner whose job process survives (runner SIGKILLed) keeps its node
+    // active, so reset still requires --force.
+    let mut survivor = std::process::Command::new("sleep")
+        .arg("60")
+        .env("TORC_WORKFLOW_ID", workflow_id.to_string())
+        .env("TORC_API_URL", &config.base_path)
+        .spawn()
+        .unwrap();
+    let mut node2 = apis::compute_nodes_api::get_compute_node(config, node_id).unwrap();
+    node2.id = None;
+    node2.is_active = Some(true);
+    let node2_id = apis::compute_nodes_api::create_compute_node(config, node2)
+        .unwrap()
+        .id
+        .unwrap();
+    let result = run_cli_with_json(
+        &["jobs", "reset-status", "--no-prompts", &job_id.to_string()],
+        start_server,
+        None,
+    );
+    survivor.kill().unwrap();
+    survivor.wait().unwrap();
+    assert!(
+        result.is_err(),
+        "reset must refuse while a job process lives"
+    );
+    let node2 = apis::compute_nodes_api::get_compute_node(config, node2_id).unwrap();
+    assert_eq!(node2.is_active, Some(true));
 }
 
 // ---------------------------------------------------------------------------
