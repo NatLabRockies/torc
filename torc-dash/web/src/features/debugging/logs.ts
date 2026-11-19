@@ -22,7 +22,7 @@ export function saveOutputDir(dir: string) {
 /**
  * Join a relative output dir to the workflow's submission directory (where logs are written) so
  * paths resolve regardless of torc-dash's working directory. Absolute paths (POSIX, `~`, Windows
- * drive, UNC) are returned unchanged.
+ * drive, UNC) are returned unchanged; the torc-dash backend expands `~`.
  */
 export function resolveLogBaseDir(outputDir: string, submissionDir?: string | null): string {
   if (/^(\/|~|[A-Za-z]:[\\/]|\\\\)/.test(outputDir) || !submissionDir) return outputDir;

@@ -49,6 +49,9 @@
     untrack(() => {
       if (id !== loadedFor) {
         jobs = null;
+        // Drop the old submission directory so Slurm views can't resolve paths against it.
+        wf = null;
+        loadError = null;
         selectedKey = null;
         tailed.clear();
       }
@@ -268,6 +271,13 @@
       {/if}
     {:else if view === "tail"}
       <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
+    {:else if loadedFor !== app.workflowId}
+      <!-- Slurm paths depend on this workflow's submission directory; wait until it's loaded. -->
+      {#if loadError}
+        <p class="error-text">{loadError}</p>
+      {:else}
+        <div class="empty"><span class="spinner"></span> Loading workflow…</div>
+      {/if}
     {:else if view === "slurm-logs"}
       <SlurmLogs workflowId={app.workflowId} outputDir={baseDir} />
     {:else}

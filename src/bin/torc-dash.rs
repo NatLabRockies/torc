@@ -2293,7 +2293,7 @@ async fn cli_sync_status_handler(
 
 /// Read file contents from filesystem
 async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoResponse {
-    let path = FsPath::new(&req.path);
+    let path = expand_tilde(&req.path);
     let exists = path.exists();
 
     if !exists {
@@ -2318,7 +2318,7 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
     }
 
     // Read the file contents
-    match tokio::fs::read_to_string(&req.path).await {
+    match tokio::fs::read_to_string(&path).await {
         Ok(content) => {
             // Check if it's JSON by file extension and try to parse
             let is_json = req.path.to_lowercase().ends_with(".json")
@@ -2560,12 +2560,21 @@ fn complete_utf8_len(buf: &[u8]) -> usize {
     }
 }
 
+/// Expand a leading `~` or `~/` to the home directory; the browser sends paths verbatim and
+/// neither the filesystem nor the torc CLI expands `~`.
+fn expand_tilde(path: &str) -> std::path::PathBuf {
+    let rest = path
+        .strip_prefix('~')
+        .filter(|r| r.is_empty() || r.starts_with(['/', '\\']));
+    match (rest, dirs::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest.trim_start_matches(['/', '\\'])),
+        _ => std::path::PathBuf::from(path),
+    }
+}
+
 async fn tail_file(path: &str, offset: Option<u64>) -> std::io::Result<TailFileResponse> {
     use tokio::io::AsyncSeekExt;
-    let path = match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
-        (Some(rest), Some(home)) => std::path::Path::new(&home).join(rest),
-        _ => std::path::PathBuf::from(path),
-    };
+    let path = expand_tilde(path);
     let mut file = match open_nonblocking(&path).await {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // A missing directory means a wrong output dir (or a job on another host), not a
@@ -2987,7 +2996,7 @@ async fn cli_plot_resources_handler(
 async fn cli_list_resource_dbs_handler(
     Json(req): Json<ListResourceDbsRequest>,
 ) -> impl IntoResponse {
-    let base_path = FsPath::new(&req.base_dir);
+    let base_path = &expand_tilde(&req.base_dir);
 
     if !base_path.exists() {
         return Json(ListResourceDbsResponse {
@@ -3106,13 +3115,14 @@ async fn cli_slurm_parse_logs_handler(
     Json(req): Json<SlurmParseLogsRequest>,
 ) -> impl IntoResponse {
     let workflow_id_str = req.workflow_id.to_string();
+    let output_dir = expand_tilde(&req.output_dir).to_string_lossy().into_owned();
 
     let mut args = vec![
         "-f",
         "json",
         "slurm",
         "parse-logs",
-        &req.output_dir,
+        &output_dir,
         "--workflow-id",
         &workflow_id_str,
     ];
@@ -3173,6 +3183,7 @@ async fn cli_slurm_sacct_handler(
     Json(req): Json<SlurmSacctRequest>,
 ) -> impl IntoResponse {
     let workflow_id_str = req.workflow_id.to_string();
+    let output_dir = expand_tilde(&req.output_dir).to_string_lossy().into_owned();
 
     let args = vec![
         "-f",
@@ -3181,7 +3192,7 @@ async fn cli_slurm_sacct_handler(
         "sacct",
         &workflow_id_str,
         "--output-dir",
-        &req.output_dir,
+        &output_dir,
     ];
 
     info!("Running: {} {}", state.torc_bin, args.join(" "));
@@ -5083,8 +5094,8 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 mod tests {
     use super::{
         ResourceSamplesRequest, allowed_host_list, anthropic_api_base, apply_spec_edit,
-        check_request, read_resource_samples, same_secret, tail_file, take_token_param,
-        workflow_id_from_resource_db_name,
+        check_request, expand_tilde, read_resource_samples, same_secret, tail_file,
+        take_token_param, workflow_id_from_resource_db_name,
     };
 
     #[test]
@@ -5331,6 +5342,18 @@ mod tests {
         assert_eq!(
             anthropic_api_base(" https://x.services.ai.azure.com/anthropic/v1"),
             "https://x.services.ai.azure.com/anthropic/v1"
+        );
+    }
+
+    #[test]
+    fn expand_tilde_only_expands_a_leading_home_component() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(expand_tilde("~"), home);
+        assert_eq!(expand_tilde("~/runs/out"), home.join("runs/out"));
+        assert_eq!(expand_tilde("~bob/x"), std::path::PathBuf::from("~bob/x"));
+        assert_eq!(
+            expand_tilde("/abs/~/x"),
+            std::path::PathBuf::from("/abs/~/x")
         );
     }
 
