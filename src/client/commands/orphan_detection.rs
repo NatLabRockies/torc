@@ -800,20 +800,45 @@ fn deactivate_dead_local_compute_nodes(
     .map_err(|e| format!("Failed to list active compute nodes: {}", e))?;
 
     let mut count = 0;
+    let mut sys: Option<sysinfo::System> = None;
     for node in nodes {
         let Some(id) = node.id else { continue };
         if node.compute_node_type != "local" || node.hostname != this_host || node.pid <= 1 {
             continue;
         }
+        // Job commands inherit TORC_WORKFLOW_ID and outlive a SIGKILLed runner, so
+        // scan this host's processes once (with environment) for the runner and for
+        // surviving job processes.
+        let sys = sys.get_or_insert_with(|| {
+            let mut s = sysinfo::System::new();
+            s.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::All,
+                true,
+                sysinfo::ProcessRefreshKind::nothing().with_environ(sysinfo::UpdateKind::Always),
+            );
+            s
+        });
         // ponytail: a recycled pid reads as alive, so the node stays active (safe side).
-        let pid = sysinfo::Pid::from_u32(node.pid as u32);
-        let mut sys = sysinfo::System::new();
-        sys.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::Some(&[pid]),
-            true,
-            sysinfo::ProcessRefreshKind::nothing(),
-        );
-        if sys.process(pid).is_some() {
+        if sys
+            .process(sysinfo::Pid::from_u32(node.pid as u32))
+            .is_some()
+        {
+            continue;
+        }
+        let marker = format!("TORC_WORKFLOW_ID={}", workflow_id);
+        if let Some(p) = sys
+            .processes()
+            .values()
+            .find(|p| p.environ().iter().any(|e| *e == *marker))
+        {
+            warn!(
+                "Not deactivating compute node workflow_id={} compute_node_id={}: runner pid {} \
+                 is gone but job process pid {} is still running",
+                workflow_id,
+                id,
+                node.pid,
+                p.pid()
+            );
             continue;
         }
         if dry_run {

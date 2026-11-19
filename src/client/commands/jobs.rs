@@ -1847,16 +1847,38 @@ fn handle_reset_job_status(
     if !force {
         // If workers look active, they may be dead runners that never deactivated
         // (e.g. a killed `torc run`). Run the `torc recover` orphan cleanup to
-        // deactivate them and fail their stuck Running jobs before checking.
-        if !dry_run
+        // deactivate them and fail their stuck Running jobs before checking. The
+        // cleanup is workflow-wide, so preview it and confirm before applying.
+        use crate::client::commands::orphan_detection::cleanup_orphaned_jobs;
+        let preview = if !dry_run
             && crate::client::commands::recover::check_no_active_workers(config, workflow_id)
                 .is_err()
         {
-            match crate::client::commands::orphan_detection::cleanup_orphaned_jobs(
-                config,
-                workflow_id,
-                false,
-            ) {
+            cleanup_orphaned_jobs(config, workflow_id, true)
+                .ok()
+                .filter(|p| p.any_cleaned())
+        } else {
+            None
+        };
+        if let Some(p) = preview {
+            if !no_prompts && format != "json" {
+                eprintln!(
+                    "Workflow {} has {} compute node(s) whose job runner is gone. Cleanup will \
+                     mark them inactive and fail their Running jobs (workflow-wide, not just \
+                     the jobs being reset).",
+                    workflow_id, p.compute_nodes_deactivated
+                );
+                eprint!("Clean up orphaned workers and jobs? (y/N): ");
+                io::stderr().flush().unwrap();
+                let mut input = String::new();
+                let yes = io::stdin().read_line(&mut input).is_ok()
+                    && matches!(input.trim().to_lowercase().as_str(), "y" | "yes");
+                if !yes {
+                    eprintln!("Reset cancelled.");
+                    std::process::exit(0);
+                }
+            }
+            match cleanup_orphaned_jobs(config, workflow_id, false) {
                 Ok(r) if r.total_jobs_failed() > 0 => {
                     for job in unique_jobs.iter_mut() {
                         if let Ok(fresh) = apis::jobs_api::get_job(config, require_job_id(job)) {
