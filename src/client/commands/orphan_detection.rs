@@ -72,9 +72,10 @@ impl OrphanCleanupResult {
 
 /// Detect and clean up orphaned jobs from terminated Slurm allocations.
 ///
-/// This function performs four types of cleanup:
+/// This function performs five types of cleanup:
 /// 1. Fails jobs from active scheduled compute nodes whose Slurm jobs are no longer running
 /// 2. Cleans up pending scheduled compute nodes whose Slurm jobs were cancelled
+///    (2b. Deactivates local compute nodes on this host whose runner process is gone)
 /// 3. Fails running jobs that have no active compute nodes (fallback for non-Slurm)
 /// 4. Deactivates compute nodes still marked active whose Slurm allocation is gone
 ///
@@ -101,6 +102,12 @@ pub fn cleanup_orphaned_jobs(
     result.pending_allocations_cleaned =
         cleanup_dead_pending_slurm_jobs(config, workflow_id, dry_run)?;
 
+    // Step 2b: Deactivate local compute nodes on this host whose runner process is gone
+    // (e.g. a `torc run` that was killed). Must precede Step 3 so their running jobs
+    // are seen as orphaned.
+    result.compute_nodes_deactivated +=
+        deactivate_dead_local_compute_nodes(config, workflow_id, dry_run)?;
+
     // Step 3: Fail orphaned running jobs (jobs stuck in running with no active compute nodes)
     // This is a fallback for non-Slurm schedulers or edge cases
     let (running_failed, running_details) =
@@ -112,7 +119,7 @@ pub fn cleanup_orphaned_jobs(
     // is gone. This catches nodes stranded by an ungraceful job runner exit (e.g.
     // after `torc cancel` issues `scancel`), which Step 1 misses because it only
     // looks at scheduled compute nodes still in "active" status.
-    result.compute_nodes_deactivated =
+    result.compute_nodes_deactivated +=
         deactivate_orphaned_compute_nodes(config, workflow_id, dry_run)?;
 
     Ok(result)
@@ -770,6 +777,95 @@ fn deactivate_orphaned_compute_nodes(
     }
 
     Ok(total_deactivated)
+}
+
+/// Deactivate active `local` compute nodes registered from this host whose runner
+/// process no longer exists. Nodes from other hosts are left alone, as are nodes
+/// with pid <= 1 (recorded before torc stored the real runner pid).
+///
+/// Returns the number of compute nodes that were deactivated.
+fn deactivate_dead_local_compute_nodes(
+    config: &Configuration,
+    workflow_id: i64,
+    dry_run: bool,
+) -> Result<usize, String> {
+    let Some(this_host) = hostname::get().ok().and_then(|h| h.into_string().ok()) else {
+        return Ok(0);
+    };
+    let nodes = paginate_compute_nodes(
+        config,
+        workflow_id,
+        ComputeNodeListParams::new().with_is_active(true),
+    )
+    .map_err(|e| format!("Failed to list active compute nodes: {}", e))?;
+
+    let mut count = 0;
+    let mut sys: Option<sysinfo::System> = None;
+    for node in nodes {
+        let Some(id) = node.id else { continue };
+        if node.compute_node_type != "local" || node.hostname != this_host || node.pid <= 1 {
+            continue;
+        }
+        // Job commands inherit TORC_WORKFLOW_ID and outlive a SIGKILLed runner, so
+        // scan this host's processes once (with environment) for the runner and for
+        // surviving job processes.
+        // ponytail: macOS hides the environment of platform binaries (/bin/bash,
+        // /bin/sleep), so surviving jobs go unseen there and a SIGKILLed runner's
+        // jobs could run twice after reset. Track job pids/process groups if needed.
+        let sys = sys.get_or_insert_with(|| {
+            let mut s = sysinfo::System::new();
+            s.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::All,
+                true,
+                sysinfo::ProcessRefreshKind::nothing().with_environ(sysinfo::UpdateKind::Always),
+            );
+            s
+        });
+        // ponytail: a recycled pid reads as alive, so the node stays active (safe side).
+        if sys
+            .process(sysinfo::Pid::from_u32(node.pid as u32))
+            .is_some()
+        {
+            continue;
+        }
+        // Workflow IDs are per server, so match the server URL too.
+        // ponytail: exact URL string; an equivalent spelling (127.0.0.1 vs localhost)
+        // won't match. Normalize if users mix them.
+        let wf_marker = format!("TORC_WORKFLOW_ID={}", workflow_id);
+        let url_marker = format!("TORC_API_URL={}", config.base_path);
+        if let Some(p) = sys.processes().values().find(|p| {
+            let env = p.environ();
+            env.iter().any(|e| *e == *wf_marker) && env.iter().any(|e| *e == *url_marker)
+        }) {
+            warn!(
+                "Not deactivating compute node workflow_id={} compute_node_id={}: runner pid {} \
+                 is gone but job process pid {} is still running",
+                workflow_id,
+                id,
+                node.pid,
+                p.pid()
+            );
+            continue;
+        }
+        if dry_run {
+            info!(
+                "[DRY RUN] Would deactivate compute node {} (runner pid {} is gone)",
+                id, node.pid
+            );
+        } else {
+            let pid = node.pid;
+            let mut updated = node;
+            updated.is_active = Some(false);
+            apis::compute_nodes_api::update_compute_node(config, id, updated)
+                .map_err(|e| format!("Failed to deactivate compute node {}: {}", id, e))?;
+            info!(
+                "Deactivated compute node workflow_id={} compute_node_id={} (runner pid {} is gone)",
+                workflow_id, id, pid
+            );
+        }
+        count += 1;
+    }
+    Ok(count)
 }
 
 /// Mark all still-active compute nodes associated with a scheduled compute node
