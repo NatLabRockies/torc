@@ -1843,7 +1843,31 @@ fn handle_reset_job_status(
     // The workflow does NOT need to be complete — only quiet. Requiring
     // completeness would make this command non-rerunnable: the first reset
     // leaves jobs uninitialized, so the workflow is no longer "complete".
+    let mut unique_jobs = unique_jobs;
     if !force {
+        // If workers look active, they may be dead runners that never deactivated
+        // (e.g. a killed `torc run`). Run the `torc recover` orphan cleanup to
+        // deactivate them and fail their stuck Running jobs before checking.
+        if !dry_run
+            && crate::client::commands::recover::check_no_active_workers(config, workflow_id)
+                .is_err()
+        {
+            match crate::client::commands::orphan_detection::cleanup_orphaned_jobs(
+                config,
+                workflow_id,
+                false,
+            ) {
+                Ok(r) if r.total_jobs_failed() > 0 => {
+                    for job in unique_jobs.iter_mut() {
+                        if let Ok(fresh) = apis::jobs_api::get_job(config, require_job_id(job)) {
+                            *job = fresh;
+                        }
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => log::warn!("Orphan cleanup failed workflow_id={}: {}", workflow_id, e),
+            }
+        }
         if let Err(msg) =
             crate::client::commands::recover::check_no_active_workers(config, workflow_id)
         {

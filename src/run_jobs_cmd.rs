@@ -286,7 +286,7 @@ pub fn run(args: &Args) -> WorkerResult {
     resources.time_limit.clone_from(&args.time_limit);
     let labels = (!args.labels.is_empty()).then(|| args.labels.clone());
     resources.labels.clone_from(&labels);
-    let pid = 1; // TODO
+    let pid = std::process::id() as i64;
     let unique_label = format!("wf{}_h{}_r{}", workflow_id, hostname, run_id);
 
     let mut compute_node_model = models::ComputeNodeModel::new(

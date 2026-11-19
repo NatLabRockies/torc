@@ -72,9 +72,10 @@ impl OrphanCleanupResult {
 
 /// Detect and clean up orphaned jobs from terminated Slurm allocations.
 ///
-/// This function performs four types of cleanup:
+/// This function performs five types of cleanup:
 /// 1. Fails jobs from active scheduled compute nodes whose Slurm jobs are no longer running
 /// 2. Cleans up pending scheduled compute nodes whose Slurm jobs were cancelled
+///    (2b. Deactivates local compute nodes on this host whose runner process is gone)
 /// 3. Fails running jobs that have no active compute nodes (fallback for non-Slurm)
 /// 4. Deactivates compute nodes still marked active whose Slurm allocation is gone
 ///
@@ -101,6 +102,12 @@ pub fn cleanup_orphaned_jobs(
     result.pending_allocations_cleaned =
         cleanup_dead_pending_slurm_jobs(config, workflow_id, dry_run)?;
 
+    // Step 2b: Deactivate local compute nodes on this host whose runner process is gone
+    // (e.g. a `torc run` that was killed). Must precede Step 3 so their running jobs
+    // are seen as orphaned.
+    result.compute_nodes_deactivated +=
+        deactivate_dead_local_compute_nodes(config, workflow_id, dry_run)?;
+
     // Step 3: Fail orphaned running jobs (jobs stuck in running with no active compute nodes)
     // This is a fallback for non-Slurm schedulers or edge cases
     let (running_failed, running_details) =
@@ -112,7 +119,7 @@ pub fn cleanup_orphaned_jobs(
     // is gone. This catches nodes stranded by an ungraceful job runner exit (e.g.
     // after `torc cancel` issues `scancel`), which Step 1 misses because it only
     // looks at scheduled compute nodes still in "active" status.
-    result.compute_nodes_deactivated =
+    result.compute_nodes_deactivated +=
         deactivate_orphaned_compute_nodes(config, workflow_id, dry_run)?;
 
     Ok(result)
@@ -770,6 +777,64 @@ fn deactivate_orphaned_compute_nodes(
     }
 
     Ok(total_deactivated)
+}
+
+/// Deactivate active `local` compute nodes registered from this host whose runner
+/// process no longer exists. Nodes from other hosts are left alone, as are nodes
+/// with pid <= 1 (recorded before torc stored the real runner pid).
+///
+/// Returns the number of compute nodes that were deactivated.
+fn deactivate_dead_local_compute_nodes(
+    config: &Configuration,
+    workflow_id: i64,
+    dry_run: bool,
+) -> Result<usize, String> {
+    let Some(this_host) = hostname::get().ok().and_then(|h| h.into_string().ok()) else {
+        return Ok(0);
+    };
+    let nodes = paginate_compute_nodes(
+        config,
+        workflow_id,
+        ComputeNodeListParams::new().with_is_active(true),
+    )
+    .map_err(|e| format!("Failed to list active compute nodes: {}", e))?;
+
+    let mut count = 0;
+    for node in nodes {
+        let Some(id) = node.id else { continue };
+        if node.compute_node_type != "local" || node.hostname != this_host || node.pid <= 1 {
+            continue;
+        }
+        // ponytail: a recycled pid reads as alive, so the node stays active (safe side).
+        let pid = sysinfo::Pid::from_u32(node.pid as u32);
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[pid]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        if sys.process(pid).is_some() {
+            continue;
+        }
+        if dry_run {
+            info!(
+                "[DRY RUN] Would deactivate compute node {} (runner pid {} is gone)",
+                id, node.pid
+            );
+        } else {
+            let pid = node.pid;
+            let mut updated = node;
+            updated.is_active = Some(false);
+            apis::compute_nodes_api::update_compute_node(config, id, updated)
+                .map_err(|e| format!("Failed to deactivate compute node {}: {}", id, e))?;
+            info!(
+                "Deactivated compute node workflow_id={} compute_node_id={} (runner pid {} is gone)",
+                workflow_id, id, pid
+            );
+        }
+        count += 1;
+    }
+    Ok(count)
 }
 
 /// Mark all still-active compute nodes associated with a scheduled compute node

@@ -610,6 +610,66 @@ fn test_reset_status_active_job_guard(start_server: &ServerProcess) {
 }
 
 // ---------------------------------------------------------------------------
+// A local runner that died without deactivating its compute node must not block
+// reset-status: the stale node is deactivated and its Running job reset.
+// ---------------------------------------------------------------------------
+#[rstest]
+fn test_reset_status_dead_local_runner(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reset_dead_local_runner");
+    let workflow_id = workflow.id.unwrap();
+    let job = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "stuck".to_string(), "sleep 60".to_string()),
+    )
+    .expect("create job");
+    let job_id = job.id.unwrap();
+    let run_id = initialize_workflow(config, &workflow);
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("set running");
+
+    // A pid that has exited, registered as an active local node on this host.
+    let mut child = std::process::Command::new("true").spawn().unwrap();
+    let dead_pid = child.id() as i64;
+    child.wait().unwrap();
+    let hostname = hostname::get().unwrap().into_string().unwrap();
+    let mut node = models::ComputeNodeModel::new(
+        workflow_id,
+        hostname,
+        dead_pid,
+        chrono::Utc::now().to_rfc3339(),
+        1,
+        1.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    node.is_active = Some(true);
+    let node_id = apis::compute_nodes_api::create_compute_node(config, node)
+        .unwrap()
+        .id
+        .unwrap();
+
+    let json = run_cli_with_json(
+        &["jobs", "reset-status", "--no-prompts", &job_id.to_string()],
+        start_server,
+        None,
+    )
+    .expect("reset-status should clean up the dead runner and succeed");
+    assert_eq!(json["status"], "success");
+    let node = apis::compute_nodes_api::get_compute_node(config, node_id).unwrap();
+    assert_eq!(node.is_active, Some(false));
+    assert_eq!(
+        apis::jobs_api::get_job(config, job_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Uninitialized
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 6: Dry-run — no status changes occur, output lists jobs
 // ---------------------------------------------------------------------------
 #[rstest]
