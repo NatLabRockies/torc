@@ -602,6 +602,7 @@ See
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>sample_interval_seconds</code></td><td>integer</td><td><code>10</code></td><td>Shared sampling interval in seconds</td></tr>
 <tr><td><code>flush_interval_seconds</code></td><td>integer</td><td><code>300</code></td><td>Flush interval for buffered time-series samples</td></tr>
+<tr><td><code>live_monitoring</code></td><td>boolean</td><td><code>false</code></td><td>Checkpoint after each flush for live plots</td></tr>
 <tr><td><code>generate_plots</code></td><td>boolean</td><td><code>false</code></td><td>Generate resource usage plots</td></tr>
 <tr><td><code>jobs</code></td><td>JobMonitorConfig</td><td>none</td><td>Per-job monitoring config</td></tr>
 <tr><td><code>compute_node</code></td><td>ComputeNodeMonitorConfig</td><td>none</td><td>Overall compute-node monitoring</td></tr>
@@ -625,8 +626,10 @@ overall compute-node monitoring, so a workflow can store per-job summaries while
 compute-node time series. Both scopes use the parent <code>sample_interval_seconds</code>; there is not a
 separate sampling interval per scope. When time-series monitoring is enabled, samples are flushed to
 SQLite every <code>flush_interval_seconds</code>, which trades lower commit overhead for a bounded amount of
-crash-exposed buffered data. The current compute-node monitor records CPU and memory; GPU monitoring
-is expected to use the same nested <code>compute_node</code> configuration in a future release.</p>
+crash-exposed buffered data. To watch samples while the workflow runs, set <code>live_monitoring: true</code>
+and lower <code>flush_interval_seconds</code>; see <a href="resource-monitoring.html#live-monitoring">Live Monitoring</a>.
+The current compute-node monitor records CPU and memory; GPU monitoring is expected to use the same
+nested <code>compute_node</code> configuration in a future release.</p>
 <p>For backwards compatibility, top-level <code>enabled</code> and <code>granularity</code> fields are still accepted and
 apply to job monitoring when <code>jobs</code> is omitted. New workflow specs should use <code>jobs</code>.</p>
 <h3 id="jobmonitorconfig"><a class="header" href="#jobmonitorconfig">JobMonitorConfig</a></h3>

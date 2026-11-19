@@ -205,6 +205,26 @@
 <li><strong>Overview plots</strong> — Comparison across all jobs</li>
 <li><strong>Summary dashboard</strong> — Bar charts of peak and average usage</li>
 </ul>
+<h2 id="watch-live-in-the-dashboard"><a class="header" href="#watch-live-in-the-dashboard">Watch Live in the Dashboard</a></h2>
+<p>To see CPU and memory while the workflow runs, enable live monitoring and shorten the flush interval
+before you submit the workflow:</p>
+<pre><code class="language-yaml">resource_monitor:
+  sample_interval_seconds: 5
+  flush_interval_seconds: 30 # plots update this often; the default of 300 means every 5 minutes
+  live_monitoring: true
+  jobs:
+    enabled: true
+    granularity: "time_series"
+  compute_node:
+    enabled: true
+    granularity: "time_series"
+</code></pre>
+<p>Then open the dashboard's <strong>Resources</strong> tab, switch to <strong>Live</strong>, and select the compute node
+databases to watch. Node CPU and memory utilization are plotted by default, as percentages of the
+node's capacity (requires <code>compute_node</code> time-series monitoring). Check jobs in the job list to add
+panels for their CPU, where 100% is one core, and their memory in GiB. See
+<a href="../reference/resource-monitoring.html#live-monitoring">Live Monitoring</a> for the performance
+trade-offs.</p>
 <h2 id="plot-specific-jobs"><a class="header" href="#plot-specific-jobs">Plot Specific Jobs</a></h2>
 <p>Generate plots for only certain jobs:</p>
 <pre><code class="language-bash">torc plot-resources output/resource_utilization/resource_metrics_*.db \

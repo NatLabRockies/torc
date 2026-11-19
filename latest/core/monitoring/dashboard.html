@@ -390,6 +390,12 @@ databases for the selected workflow</li>
 </ol>
 <p>Requires workflows run with resource monitoring enabled; time-series plots need
 <code>granularity: "time_series"</code> in the <code>resource_monitor</code> config.</p>
+<p>Switch to <strong>Live</strong> to follow a running workflow. Select one or more compute node databases, and the
+view plots node CPU and memory utilization as percentages of each node's capacity, refreshing every
+5 seconds. Check jobs in the job list to add panels for their CPU (100% is one core) and memory, and
+pick a time window or pause updates from the toolbar. Live plots require <code>live_monitoring: true</code>,
+and they update only as often as <code>flush_interval_seconds</code> (default 300). See
+<a href="../reference/resource-monitoring.html#live-monitoring">Live Monitoring</a>.</p>
 <h3 id="ai-chat-tab"><a class="header" href="#ai-chat-tab">AI Chat Tab</a></h3>
 <p>The AI Chat tab provides an AI assistant that can interact with your workflows using natural
 language. The assistant uses the Torc MCP server to access workflow data, job logs, and management

@@ -243,10 +243,18 @@ stops. Without it, a dropped connection would leave torc-dash running.</p>
 <code>dashboard_ready</code> sends a real <code>GET /</code> through the tunnel and waits for <code>HTTP/1.1 200</code>.</p>
 <h2 id="local-mode"><a class="header" href="#local-mode">Local mode</a></h2>
 <p><code>local_command</code> runs <code>torc-dash --host 127.0.0.1 --port &lt;port&gt;</code> through the user's login shell
-(<code>$SHELL -lc</code>, then <code>/bin/sh</code> for the actual command, because the login shell may be csh or fish).
-Apps started from Finder get a minimal <code>PATH</code>; the login shell applies the user's profile, and
-common install locations (<code>~/.cargo/bin</code>, Homebrew) are appended as a fallback. torc-dash logs the
-port it bound, which the app reads from its output.</p>
+(<code>$SHELL -lc</code>, then <code>/bin/sh</code> for the actual command, because the login shell may be csh or fish),
+so profile settings such as <code>TORC_PASSWORD</code> apply. torc-dash logs the port it bound, which the app
+reads from its output.</p>
+<p>Release bundles ship <code>torc-dash</code>, <code>torc</code>, <code>torc-server</code>, and <code>torc-mcp-server</code> next to the app's
+executable (Tauri <code>externalBin</code>, configured in <code>src-tauri/tauri.bundle.conf.json</code>). The app runs
+that <code>torc-dash</code> by absolute path and points it at the other three with <code>TORC_BIN</code>,
+<code>TORC_SERVER_BIN</code>, and <code>TORC_MCP_SERVER_BIN</code>, so local mode needs nothing on <code>PATH</code> and always
+matches the app's version. Apps started from Finder get a minimal <code>PATH</code>, and a non-interactive zsh
+login shell skips <code>~/.zshrc</code>, so relying on <code>PATH</code> failed for many users. Dev builds without the
+bundled binaries fall back to <code>torc-dash</code> from <code>PATH</code> (with <code>~/.cargo/bin</code> and Homebrew appended).
+The externalBin list is kept out of <code>tauri.conf.json</code> because tauri-build fails when the files are
+missing, which would break <code>cargo clippy</code> and <code>cargo test</code> for the crate.</p>
 <h2 id="passwords-and-mfa-askpass-relay"><a class="header" href="#passwords-and-mfa-askpass-relay">Passwords and MFA (askpass relay)</a></h2>
 <p>ssh asks for passwords through <code>SSH_ASKPASS</code> when it has no terminal. The app sets <code>SSH_ASKPASS</code> to
 its own executable and <code>SSH_ASKPASS_REQUIRE=force</code>. When started with <code>TORC_DESKTOP_ASKPASS_ADDR</code>
