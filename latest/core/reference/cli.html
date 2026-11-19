@@ -512,6 +512,7 @@ guide</li>
 <h6 id="subcommands-1"><a class="header" href="#subcommands-1"><strong>Subcommands:</strong></a></h6>
 <ul>
 <li><code>new</code> — Create a new empty workflow</li>
+<li><code>schema</code> — Print the JSON Schema for workflow spec files</li>
 <li><code>init</code> — Initialize workflow dependencies</li>
 <li><code>reinit</code> — Reinitialize jobs with changed inputs</li>
 <li><code>reset-status</code> — Reset workflow and job statuses</li>
@@ -558,6 +559,16 @@ summary of what would be created including job count after parameter expansion.<
 <li><code>-d</code>, <code>--description &lt;DESCRIPTION&gt;</code> — Description of the workflow</li>
 <li><code>-u</code>, <code>--user &lt;USER&gt;</code> — User that owns the workflow (defaults to USER environment variable)</li>
 </ul>
+<h2 id="torc-workflows-schema"><a class="header" href="#torc-workflows-schema"><code>torc workflows schema</code></a></h2>
+<p>Print the JSON Schema (draft 2020-12) for workflow spec files (YAML, JSON, JSON5)</p>
+<p><strong>Usage:</strong> <code>torc workflows schema</code></p>
+<p>Editors use it for completion, hover documentation, and validation. For VS Code with the YAML
+extension, save it and reference it from the first line of a spec:</p>
+<pre><code class="language-bash">torc workflows schema &gt; torc-workflow.schema.json
+</code></pre>
+<pre><code class="language-yaml"># yaml-language-server: $schema=./torc-workflow.schema.json
+name: my_workflow
+</code></pre>
 <h2 id="torc-workflows-list"><a class="header" href="#torc-workflows-list"><code>torc workflows list</code></a></h2>
 <p>List workflows</p>
 <p><strong>Usage:</strong> <code>torc workflows list [OPTIONS]</code></p>

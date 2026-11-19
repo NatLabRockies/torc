@@ -263,6 +263,22 @@ sqlx migrate run --source torc-server/migrations
 # To revert
 sqlx migrate revert --source torc-server/migrations
 </code></pre>
+<h3 id="adding-workflow-spec-fields"><a class="header" href="#adding-workflow-spec-fields">Adding Workflow Spec Fields</a></h3>
+<p>The workflow spec types in <code>src/client/workflow_spec.rs</code> (and the <code>src/models.rs</code> types they embed,
+such as <code>ExecutionConfig</code>) derive <code>schemars::JsonSchema</code>. The generated schema drives
+<code>torc workflows schema</code> and the dashboard spec editor's completion, hover docs, and lint. When you
+add or change a field:</p>
+<ul>
+<li><strong>Write a doc comment.</strong> It becomes the field's description in completion and hover.</li>
+<li><strong>Derive <code>JsonSchema</code> on new types</strong> with
+<code>#[cfg_attr(feature = "client", derive(schemars::JsonSchema))]</code>; the build fails if a spec type
+contains a type without it.</li>
+<li><strong>Custom deserialization needs a matching schema.</strong> If a field uses <code>deserialize_with</code> and accepts
+more shapes than its Rust type, add <code>#[cfg_attr(feature = "client", schemars(with = ...))]</code> (see
+<code>ParameterValueSchema</code> for parameter maps). Otherwise the editor flags valid specs.</li>
+<li><strong>Run the dashboard checks:</strong> <code>cd torc-dash/web &amp;&amp; npm ci &amp;&amp; npm test</code>. They validate every
+<code>examples/yaml</code> spec against the schema from your build.</li>
+</ul>
 <h2 id="submitting-changes"><a class="header" href="#submitting-changes">Submitting Changes</a></h2>
 <ol>
 <li><strong>Create a feature branch:</strong></li>

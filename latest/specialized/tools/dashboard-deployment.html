@@ -251,14 +251,14 @@ want to run workflows entirely on your local computer without HPC resources.</p>
 <li>Configures the dashboard to connect to the managed server</li>
 </ul>
 <p><strong>Step 2: Open your browser</strong></p>
-<p>Navigate to http://localhost:8090</p>
+<p>Open the URL torc-dash prints at startup (<code>http://127.0.0.1:8090/?token=…</code>). The token keeps other
+users on the machine out of the dashboard.</p>
 <p><strong>Step 3: Create and run a workflow</strong></p>
 <ol>
-<li>Click <strong>Create Workflow</strong></li>
-<li>Upload a workflow specification file (YAML, JSON, or KDL)</li>
-<li>Click <strong>Create</strong></li>
-<li>Click <strong>Initialize</strong> on the new workflow</li>
-<li>Click <strong>Run Locally</strong> to execute</li>
+<li>Click <strong>Create workflow</strong></li>
+<li>Upload a workflow specification file (YAML, JSON, JSON5, or KDL)</li>
+<li>Click <strong>Create</strong> (the workflow is initialized automatically)</li>
+<li>Click the run button on the new workflow to execute it locally</li>
 </ol>
 <h3 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h3>
 <pre><code class="language-bash"># Custom dashboard port
@@ -358,15 +358,16 @@ natively supports forwarding local TCP ports to remote UNIX sockets.</p>
 <p><strong>Important</strong>: Use <code>localhost</code> in the tunnel command, not the login node's hostname. This works
 because torc-dash binds to 127.0.0.1 by default.</p>
 </blockquote>
-<p>Note that in TCP mode, other users on the login node can connect to port 8090.</p>
+<p>In TCP mode, other users on the login node can connect to port 8090; the token in the URL torc-dash
+prints keeps them out of the API.</p>
 </details>
-<p>Open http://localhost:8090 in your browser.</p>
+<p>Open http://localhost:8090 in your browser (in TCP mode, add the <code>?token=…</code> from the URL torc-dash
+printed).</p>
 <h3 id="submitting-to-slurm"><a class="header" href="#submitting-to-slurm">Submitting to Slurm</a></h3>
 <p><strong>Via Dashboard:</strong></p>
 <ol>
 <li>Create a workflow with Slurm scheduler configuration</li>
-<li>Click <strong>Initialize</strong></li>
-<li>Click <strong>Submit</strong> (not "Run Locally")</li>
+<li>Click <strong>Submit</strong> on the workflow (not the run button, which runs locally)</li>
 </ol>
 <p><strong>Via CLI:</strong></p>
 <pre><code class="language-bash"># Create workflow with Slurm actions
@@ -455,7 +456,8 @@ torc-dash --port 8090
 forwards your local port to <code>localhost:8090</code> <em>as seen from the login node</em>, which matches where
 torc-dash binds (127.0.0.1:8090).</p>
 </blockquote>
-<p>Note that in TCP mode, other users on the login node can connect to port 8090.</p>
+<p>In TCP mode, other users on the login node can connect to port 8090; open the <code>?token=…</code> URL
+torc-dash prints so only you can use the API.</p>
 </details>
 <h3 id="using-the-cli"><a class="header" href="#using-the-cli">Using the CLI</a></h3>
 <p>Users can also interact with the shared server via CLI:</p>
@@ -542,7 +544,7 @@ use <code>--host</code>:</p>
 </ol>
 <h3 id="dashboard-shows-disconnected"><a class="header" href="#dashboard-shows-disconnected">Dashboard shows "Disconnected"</a></h3>
 <ul>
-<li>Verify API URL in Configuration tab</li>
+<li>Verify the <code>--api-url</code> (or <code>TORC_API_URL</code>) that <code>torc-dash</code> was started with</li>
 <li>Check network connectivity to server</li>
 <li>Ensure server is running and accessible</li>
 </ul>

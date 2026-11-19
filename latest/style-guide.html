@@ -251,7 +251,7 @@ dprint fmt     # Auto-format
 </tbody></table>
 </div>
 <h3 id="design-documentation"><a class="header" href="#design-documentation">Design Documentation</a></h3>
-<p>Significant design choices must be documented in <code>docs/src/explanation/design/</code>. Each design
+<p>Significant design choices must be documented in <code>docs/src/specialized/design/</code>. Each design
 document should cover:</p>
 <ul>
 <li><strong>Problem Statement</strong>: What problem does this solve?</li>
@@ -264,7 +264,9 @@ document should cover:</p>
 <ul>
 <li><code>server.md</code> - API handler design and request processing</li>
 <li><code>database.md</code> - SQLite schema and concurrency model</li>
-<li><code>dashboard.md</code> - Web dashboard architecture</li>
+<li><code>dashboard.md</code> - Web dashboard server architecture</li>
+<li><code>dashboard-frontend.md</code> - Dashboard UI structure and conventions</li>
+<li><code>desktop.md</code> - Torc Desktop app</li>
 <li><code>recovery.md</code> - Workflow recovery mechanisms</li>
 <li><code>workflow-graph.md</code> - Dependency graph implementation</li>
 </ul>
@@ -461,33 +463,17 @@ clients are auto-generated. Ensure:</p>
 <li>Run <code>sync_openapi.sh clients</code> to regenerate clients</li>
 </ol>
 <h3 id="dashboard-torc-dash"><a class="header" href="#dashboard-torc-dash">Dashboard (torc-dash)</a></h3>
-<p>The dashboard is an Axum-based web server with embedded static assets:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// In torc-dash/src/main.rs
-
-async fn handle_feature_list(
-    State(state): State&lt;AppState&gt;,
-) -&gt; Result&lt;Json&lt;Vec&lt;Feature&gt;&gt;, StatusCode&gt; {
-    // Proxy request to Torc API server
-    let features = state.client
-        .get(&amp;format!("{}/features", state.api_url))
-        .send()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .json()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(Json(features))
-}
-<span class="boring">}</span></code></pre></pre>
+<p><code>torc-dash</code> (<code>src/bin/torc-dash.rs</code>) is an Axum server that embeds the Svelte UI from
+<code>torc-dash/web/</code>. See <a href="./specialized/design/dashboard.html">Web Dashboard Design</a> and
+<a href="./specialized/design/dashboard-frontend.html">Dashboard Frontend Design</a>.</p>
 <p><strong>Dashboard Conventions:</strong></p>
 <ul>
-<li>Proxy API requests to the Torc server</li>
-<li>Use Axum extractors for request handling</li>
-<li>Return JSON for API endpoints</li>
-<li>Serve static files for the frontend</li>
+<li>Read torc-server data in the UI with the typed client through the <code>/torc-service</code> proxy; add a
+torc-dash endpoint only when the server API can't do the job.</li>
+<li>Put operations the CLI already implements behind <code>/api/cli/*</code> endpoints that run <code>torc</code> (see
+<code>run_torc_command</code>) rather than reimplementing them.</li>
+<li>Rebuild the UI (<code>npm run build</code>) and commit <code>torc-dash/static/app/</code> with any UI change.</li>
+<li>Run <code>npm run check</code> and <code>npm test</code> in <code>torc-dash/web/</code> for UI changes.</li>
 </ul>
 <h3 id="tui-terminal-user-interface"><a class="header" href="#tui-terminal-user-interface">TUI (Terminal User Interface)</a></h3>
 <p>The TUI uses <code>ratatui</code> with a component-based architecture:</p>

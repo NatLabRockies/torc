@@ -1,0 +1,372 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Dashboard Frontend Design - Torc Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Distributed workflow orchestration for complex computational pipelines">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+        <link rel="stylesheet" href="../../pagetoc.css">
+        <link rel="stylesheet" href="../../version-selector.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Torc Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/NatLabRockies/torc/edit/main/docs/src/specialized/design/dashboard-frontend.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="dashboard-frontend-design"><a class="header" href="#dashboard-frontend-design">Dashboard Frontend Design</a></h1>
+<p>The torc-dash UI is a Svelte 5 + TypeScript single-page app in <code>torc-dash/web/</code>. This page explains
+how it is put together and the conventions to follow when changing it. The server it runs against is
+described in <a href="./dashboard.html">Web Dashboard Design</a>.</p>
+<h2 id="build-and-delivery"><a class="header" href="#build-and-delivery">Build and delivery</a></h2>
+<ul>
+<li><code>npm run build</code> (Vite) writes the bundle to <code>torc-dash/static/app/</code>, which <code>torc-dash</code> embeds at
+compile time and serves at <code>/</code> (assets under <code>/static/app/</code>).</li>
+<li><strong>The built bundle is checked in</strong>, so building torc never needs Node.js. Any UI change is
+committed together with its rebuilt <code>static/app/</code>. Asset names are content-hashed, so a rebuild
+replaces files rather than editing them.</li>
+<li><code>npm run dev</code> serves the UI with hot reload and proxies <code>/api</code>, <code>/torc-service</code>, and
+<code>/static/images</code> to a running torc-dash (<code>TORC_DASH_URL</code>, default <code>http://127.0.0.1:8090</code>).</li>
+<li>Heavy libraries load on demand as separate chunks: Plotly (Resources), Cytoscape (Graph),
+marked/DOMPurify (chat Markdown), and the whole spec editor (CodeMirror, the YAML parser, the JSON
+Schema validator, templates). The main bundle stays near 275 KB.</li>
+</ul>
+<h2 id="structure"><a class="header" href="#structure">Structure</a></h2>
+<pre><code>src/
+  App.svelte            shell: sidebar, top bar, global shortcuts, auto-refresh, health check
+  app.css               design tokens (light/dark), shared classes, read-only syntax colors (.hl)
+  lib/
+    state.svelte.ts     global app state (`app`) and tab list
+    api/client.ts       typed torc-server client (openapi-fetch + generated schema.d.ts)
+    api/dash.ts         torc-dash endpoints (/api/*): dashGet, dashPost, cli()
+    highlight.ts        read-only YAML/JSON highlighting
+    ui/                 DataTable, Modal, toasts, confirm(), LogSearch, Icon, ...
+  features/&lt;tab&gt;/       one directory per tab or feature
+tests/                  Node checks run by `npm test`
+</code></pre>
+<p>Feature directories own their components and state. A feature that other tabs open (job details,
+file viewer, create-workflow modal) exposes a field on <code>app</code> (for example <code>app.jobDetailsId</code>) rather
+than being imported by those tabs.</p>
+<h2 id="state-and-data-loading"><a class="header" href="#state-and-data-loading">State and data loading</a></h2>
+<ul>
+<li><strong>Global state</strong> lives in <code>app</code> (<code>lib/state.svelte.ts</code>) as Svelte 5 runes: the current tab
+(mirrored in the URL hash), the selected workflow, theme, refresh interval, and modal triggers.</li>
+<li><strong>Feature state that must outlive a tab switch</strong> lives in module-level classes with rune fields:
+<code>execution</code> (run/watch output), <code>chat</code> and <code>specChat</code> (conversations), <code>draft</code> (the spec being
+edited), the event watcher.</li>
+<li><strong>Loading convention.</strong> A feature reloads in an <code>$effect</code> that reads <code>app.refreshTick</code> (and
+<code>app.workflowId</code> if relevant). The tick increments on manual refresh and on the auto-refresh
+timer, which pauses while the window is hidden. Keep showing the previous data while a refresh is
+in flight; show a loading state only when there is nothing to show.</li>
+<li><strong>Persistence.</strong> Preferences and conveniences use <code>localStorage</code> with <code>try</code>/<code>catch</code> around every
+access (it can be unavailable). Nothing that must not be lost lives only there. Saved items: the
+theme, selected workflow, refresh interval, editor draft, assistant panel state, and chat setup
+fields (never API keys).</li>
+</ul>
+<h2 id="talking-to-the-backend"><a class="header" href="#talking-to-the-backend">Talking to the backend</a></h2>
+<ul>
+<li><strong>torc-server REST</strong> goes through the proxy with the typed client:
+<code>unwrap(api.GET("/workflows/{id}", ...))</code>. Types come from <code>api/openapi.yaml</code> via
+<code>npm run gen:api</code>; <code>schema.d.ts</code> is generated and never edited. <code>listAll</code> pages through list
+endpoints.</li>
+<li><strong>torc-dash endpoints</strong> use <code>dashGet</code> / <code>dashPost</code>, or <code>cli(endpoint, body)</code>, which throws with
+the command's stderr when it fails. Request and response types are declared next to the feature
+that uses them.</li>
+<li><strong>Streams.</strong> Run/watch output uses <code>EventSource</code> on <code>/api/cli/run-stream</code>. Chat uses <code>fetch</code> on
+<code>POST /api/chat</code> and parses the SSE stream from the response body, since it needs a request body
+and cancellation through <code>AbortController</code>. Live workflow events come from torc-server's SSE
+stream through the proxy.</li>
+<li><strong>Errors</strong> surface as toasts; error toasts persist until dismissed.</li>
+</ul>
+<h2 id="spec-editor"><a class="header" href="#spec-editor">Spec editor</a></h2>
+<p>The editor tab (<code>features/editor/</code>) is a CodeMirror 6 YAML editor driven by the workflow-spec JSON
+Schema.</p>
+<pre class="mermaid">flowchart LR
+    Rust[&quot;WorkflowSpec&lt;br/&gt;(schemars)&quot;] --&gt; Endpoint[&quot;GET /api/workflow-schema&quot;]
+    Endpoint --&gt; Schema[&quot;SpecSchema&lt;br/&gt;(yamlSchema.ts)&quot;]
+    Schema --&gt; Complete[&quot;completion&quot;]
+    Schema --&gt; Hover[&quot;hover docs&quot;]
+    Schema --&gt; Lint[&quot;lint&quot;]
+</pre>
+<ul>
+<li><code>yamlSchema.ts</code> has no CodeMirror dependency, so it runs under Node in tests. Completion and hover
+compute the cursor's path (<code>jobs</code> → item → <code>resource_requirements</code>) from indentation rather than
+from a parse, so they work while the document is half typed. They follow <code>$ref</code>s and unwrap
+<code>Option</code> (<code>anyOf: [T, null]</code>). Block-style YAML only; flow collections get no completion.</li>
+<li>Lint parses with <code>yaml</code>, reports syntax errors, then validates with <code>@cfworker/json-schema</code>. The
+validator reports every level of nesting and both branches of each <code>anyOf</code>; lint keeps only the
+most specific error per location and rewrites it ("Unknown property", "Expected one of: ...").</li>
+<li><strong>Validate</strong> runs the server-side dry run (<code>/api/cli/validate</code>), which catches what a schema
+cannot, such as references to undefined jobs or files.</li>
+<li><code>cm.ts</code> wires the pieces into CodeMirror and themes it from the design tokens, so dark mode
+follows the app.</li>
+<li><strong>Templates</strong> are a curated allowlist of <code>examples/yaml</code> files (<code>templates.ts</code>), bundled as lazy
+chunks; only listed files are included. <strong>Snippets</strong> (<code>snippets.ts</code>) append a block to the end of
+its top-level section, matching the section's indentation.</li>
+<li><strong><code>draft</code></strong> holds the text and the file path on the torc-dash host. Every path that replaces the
+text goes through <code>draft.open()</code>, which asks before discarding unsaved edits.</li>
+</ul>
+<h2 id="ai-conversations"><a class="header" href="#ai-conversations">AI conversations</a></h2>
+<p><code>ChatState</code> (<code>features/chat/chat.svelte.ts</code>) is one conversation: messages, streaming state, and the
+SSE parsing. There are two instances:</p>
+<ul>
+<li><code>chat</code> for the AI Chat tab, which sends the selected workflow ID as context.</li>
+<li><code>specChat</code> for the editor's Assistant panel. Its <code>spec</code> binding (set in <code>draft.svelte.ts</code>)
+supplies the buffer with each message and applies <code>spec_edit</code> events. While the editor is open,
+edits go through <code>SpecEditor.applyEdit()</code>, which makes each one its own undo step and selects it;
+otherwise they apply to <code>draft.text</code> directly.</li>
+</ul>
+<p><code>ChatThread.svelte</code> renders either conversation. The provider is shared by both (it lives in
+torc-dash), so a successful setup in either place marks both available. The editor is read-only
+while <code>specChat.streaming</code>, which is what keeps the buffer consistent with torc-dash's copy (see
+<a href="./dashboard.html#ai-chat">AI chat</a>).</p>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<ul>
+<li><code>npm run check</code>: svelte-check (types and Svelte diagnostics).</li>
+<li><code>npm test</code>: Node checks with <code>--experimental-strip-types</code>, so tested modules must avoid
+TypeScript-only runtime syntax such as parameter properties. <code>highlight.check.ts</code> covers the
+read-only highlighters; <code>editor.check.ts</code> covers completion paths, hover, lint, snippet placement,
+and validates every <code>examples/yaml</code> spec against the schema from <code>torc workflows schema</code> (it runs
+<code>cargo</code>).</li>
+<li>CI (<code>.github/workflows/dashboard.yml</code>) runs both, then rebuilds the bundle and fails if
+<code>torc-dash/static/app/</code> differs from what is committed.</li>
+<li>UI behavior is verified by driving a running torc-dash in a browser; there is no browser test
+suite in the repository.</li>
+</ul>
+<h2 id="alternatives-considered"><a class="header" href="#alternatives-considered">Alternatives considered</a></h2>
+<ul>
+<li><strong>Monaco</strong> instead of CodeMirror: heavier, harder to theme from CSS variables, and its YAML
+support needs a language server.</li>
+<li><strong><code>codemirror-json-schema</code></strong>: would pull in <code>shiki</code> (a large syntax-highlighting library) to
+render hover text, and validates with an older JSON Schema draft. The schema glue is about 250
+lines here.</li>
+<li><strong>Not checking in the bundle</strong>: would make Node.js a build dependency of every torc build,
+including on HPC systems.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../specialized/design/dashboard.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../specialized/design/desktop.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../specialized/design/dashboard.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../specialized/design/desktop.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../mermaid.min.js"></script>
+        <script src="../../mermaid-init.js"></script>
+        <script src="../../pagetoc.js"></script>
+        <script src="../../version-selector.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
