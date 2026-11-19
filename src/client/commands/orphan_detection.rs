@@ -23,12 +23,7 @@ use crate::client::hpc::hpc_interface::HpcInterface;
 use crate::client::hpc::slurm_interface::SlurmInterface;
 use crate::models;
 
-/// Return code used when failing jobs orphaned by an ungraceful job runner termination.
-/// This value (-128) is chosen to be:
-/// - Negative, clearly distinguishing it from normal exit codes
-/// - Related to signal convention (128 is the base for signal exits)
-/// - Easy to identify in logs and results
-pub const ORPHANED_JOB_RETURN_CODE: i64 = -128;
+pub use crate::models::ORPHANED_JOB_RETURN_CODE;
 
 /// Result of orphan cleanup operation
 #[derive(Debug, Clone, Serialize)]

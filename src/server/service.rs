@@ -41,6 +41,8 @@ pub struct ServiceConfig {
     pub admin_users: Vec<String>,
     pub disable_admin_sql: bool,
     pub disable_admin_sql_writes: bool,
+    pub compute_node_heartbeat_timeout_secs: u64,
+    pub compute_node_sweep_interval_secs: u64,
 }
 
 impl ServiceConfig {
@@ -67,6 +69,8 @@ impl ServiceConfig {
             admin_users: Vec::new(),
             disable_admin_sql: false,
             disable_admin_sql_writes: false,
+            compute_node_heartbeat_timeout_secs: 0,
+            compute_node_sweep_interval_secs: 30,
         }
     }
 
@@ -93,6 +97,8 @@ impl ServiceConfig {
             admin_users: Vec::new(),
             disable_admin_sql: false,
             disable_admin_sql_writes: false,
+            compute_node_heartbeat_timeout_secs: 0,
+            compute_node_sweep_interval_secs: 30,
         }
     }
 
@@ -229,6 +235,18 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
     if config.disable_admin_sql_writes {
         args.push("--disable-admin-sql-writes".into());
     }
+
+    // Always written, like the credential cache TTL, so the install-time value (including 0)
+    // takes precedence over the config file.
+    args.push("--compute-node-heartbeat-timeout-secs".into());
+    args.push(
+        config
+            .compute_node_heartbeat_timeout_secs
+            .to_string()
+            .into(),
+    );
+    args.push("--compute-node-sweep-interval-secs".into());
+    args.push(config.compute_node_sweep_interval_secs.to_string().into());
 
     // Create service install context
     let install_ctx = ServiceInstallCtx {

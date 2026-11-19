@@ -98,6 +98,26 @@ struct ServerConfig {
     #[arg(short, long, env = "TORC_COMPLETION_CHECK_INTERVAL_SECS", hide = true)]
     completion_check_interval_secs: Option<f64>,
 
+    /// Seconds without a heartbeat after which an active compute node is marked inactive and
+    /// its running jobs are failed. 0 (the default) disables expiry. Nodes whose runner never
+    /// sent a heartbeat are never expired. Use at least four times the runner's
+    /// `client.run.heartbeat_interval_secs` (30 by default).
+    #[arg(
+        long,
+        default_value_t = 0,
+        env = "TORC_COMPUTE_NODE_HEARTBEAT_TIMEOUT_SECS"
+    )]
+    compute_node_heartbeat_timeout_secs: u64,
+
+    /// Seconds between compute node heartbeat sweeps. Used only when
+    /// --compute-node-heartbeat-timeout-secs is above 0.
+    #[arg(
+        long,
+        default_value_t = 30,
+        env = "TORC_COMPUTE_NODE_SWEEP_INTERVAL_SECS"
+    )]
+    compute_node_sweep_interval_secs: u64,
+
     /// Users to add to the admin group (can be specified multiple times).
     /// These users can create and manage access groups.
     #[arg(long = "admin-user", env = "TORC_ADMIN_USERS")]
@@ -406,6 +426,18 @@ fn handle_service_action(
                 disable_admin_sql: config.disable_admin_sql || defaults.disable_admin_sql,
                 disable_admin_sql_writes: config.disable_admin_sql_writes
                     || defaults.disable_admin_sql_writes,
+                compute_node_heartbeat_timeout_secs: if explicit(
+                    "compute_node_heartbeat_timeout_secs",
+                ) {
+                    config.compute_node_heartbeat_timeout_secs
+                } else {
+                    defaults.compute_node_heartbeat_timeout_secs
+                },
+                compute_node_sweep_interval_secs: if explicit("compute_node_sweep_interval_secs") {
+                    config.compute_node_sweep_interval_secs
+                } else {
+                    defaults.compute_node_sweep_interval_secs
+                },
             };
             (service::ServiceCommand::Install, user, Some(svc_config))
         }
@@ -477,6 +509,16 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
         completion_check_interval_secs: cli_config
             .completion_check_interval_secs
             .or(server_file_config.completion_check_interval_secs),
+        compute_node_heartbeat_timeout_secs: if explicit("compute_node_heartbeat_timeout_secs") {
+            cli_config.compute_node_heartbeat_timeout_secs
+        } else {
+            server_file_config.compute_node_heartbeat_timeout_secs
+        },
+        compute_node_sweep_interval_secs: if explicit("compute_node_sweep_interval_secs") {
+            cli_config.compute_node_sweep_interval_secs
+        } else {
+            server_file_config.compute_node_sweep_interval_secs
+        },
         admin_users: cli_config.admin_users,
         disable_admin_sql: cli_config.disable_admin_sql || server_file_config.disable_admin_sql,
         disable_admin_sql_writes: cli_config.disable_admin_sql_writes
@@ -774,6 +816,17 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
             info!("Admin raw-SQL writes are DISABLED (read-only queries allowed)");
         }
 
+        let compute_node_sweep = torc::server::live_state::ComputeNodeSweepConfig {
+            heartbeat_timeout_secs: config.compute_node_heartbeat_timeout_secs,
+            sweep_interval_secs: config.compute_node_sweep_interval_secs,
+        };
+        if compute_node_sweep.heartbeat_timeout_secs > 0 {
+            info!(
+                "Compute node expiry is ENABLED: nodes silent for {}s are marked inactive and their running jobs fail",
+                compute_node_sweep.heartbeat_timeout_secs
+            );
+        }
+
         http_server::create(
             &addr,
             config.https,
@@ -788,6 +841,7 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
             config.auth_file.clone(),
             config.shutdown_on_stdin_eof,
             admin_sql,
+            compute_node_sweep,
         )
         .await;
         Ok(())

@@ -38,6 +38,16 @@ impl Default for AdminSqlConfig {
     }
 }
 
+/// Expiry of compute nodes whose runner stopped sending heartbeats. A zero
+/// `heartbeat_timeout_secs` disables the sweep.
+#[derive(Debug, Clone, Copy)]
+pub struct ComputeNodeSweepConfig {
+    /// Seconds without a heartbeat after which an active node is expired. 0 disables expiry.
+    pub heartbeat_timeout_secs: u64,
+    /// Seconds between sweeps.
+    pub sweep_interval_secs: u64,
+}
+
 #[derive(Clone)]
 pub struct LiveServerState {
     pub pool: Arc<SqlitePool>,

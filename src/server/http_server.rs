@@ -244,6 +244,7 @@ macro_rules! authorize_workflow_group {
 mod access_checks;
 mod access_control_transport;
 mod bootstrap;
+mod compute_node_liveness;
 mod compute_nodes_transport;
 mod files_transport;
 mod jobs_transport;
@@ -338,6 +339,7 @@ pub async fn create(
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
     admin_sql: crate::server::live_state::AdminSqlConfig,
+    compute_node_sweep: crate::server::live_state::ComputeNodeSweepConfig,
 ) -> u16 {
     bootstrap::create_server(
         addr,
@@ -353,6 +355,7 @@ pub async fn create(
         auth_file_path,
         shutdown_on_stdin_eof,
         admin_sql,
+        compute_node_sweep,
     )
     .await
 }
@@ -2221,6 +2224,15 @@ where
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError> {
         self.transport_update_compute_node(id, body, context).await
+    }
+
+    /// Record a heartbeat for a compute node.
+    async fn heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError> {
+        self.transport_heartbeat_compute_node(id, context).await
     }
 
     /// Update an event.

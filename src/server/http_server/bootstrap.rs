@@ -405,6 +405,7 @@ pub(super) async fn create_server(
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
     admin_sql: crate::server::live_state::AdminSqlConfig,
+    compute_node_sweep: crate::server::live_state::ComputeNodeSweepConfig,
 ) -> u16 {
     let addr = tokio::net::lookup_host(addr)
         .await
@@ -466,6 +467,18 @@ pub(super) async fn create_server(
     tokio::spawn(async move {
         super::unblock_processing::background_unblock_task(server_clone).await;
     });
+
+    if compute_node_sweep.heartbeat_timeout_secs > 0 {
+        let sweep_server = server.clone();
+        tokio::spawn(async move {
+            super::compute_node_liveness::background_compute_node_sweep_task(
+                sweep_server,
+                std::time::Duration::from_secs(compute_node_sweep.heartbeat_timeout_secs),
+                std::time::Duration::from_secs(compute_node_sweep.sweep_interval_secs.max(1)),
+            )
+            .await;
+        });
+    }
 
     #[cfg(unix)]
     if let Some(sig) = sigusr1 {
