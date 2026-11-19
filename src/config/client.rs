@@ -78,6 +78,12 @@ pub struct ClientRunConfig {
     /// jobs. Set to `poll_interval` (or lower) to disable backoff.
     pub claim_backoff_max_secs: f64,
 
+    /// Seconds between heartbeats a runner sends for its compute node. The server uses
+    /// them to expire nodes of runners that died without a graceful exit (see
+    /// `torc-server --compute-node-heartbeat-timeout-secs`). The heartbeat timer is
+    /// independent of the claim backoff. 0 disables heartbeats.
+    pub heartbeat_interval_secs: u64,
+
     /// Maximum number of parallel jobs to run concurrently
     pub max_parallel_jobs: Option<i64>,
 
@@ -99,6 +105,7 @@ impl Default for ClientRunConfig {
         Self {
             poll_interval: 5.0,
             claim_backoff_max_secs: 300.0,
+            heartbeat_interval_secs: 30,
             max_parallel_jobs: None,
             output_dir: PathBuf::from("torc_output"),
             num_cpus: None,
@@ -336,6 +343,7 @@ mod tests {
         let config = ClientRunConfig::default();
         assert_eq!(config.poll_interval, 5.0);
         assert_eq!(config.claim_backoff_max_secs, 300.0);
+        assert_eq!(config.heartbeat_interval_secs, 30);
         assert!(config.max_parallel_jobs.is_none());
         assert_eq!(config.output_dir, PathBuf::from("torc_output"));
     }

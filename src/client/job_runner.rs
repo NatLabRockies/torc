@@ -591,10 +591,59 @@ pub struct JobRunner {
     offline_journal: Option<OfflineJournal>,
     /// Monotonic timestamp of the last drain-mode resume ping.
     last_drain_ping: Option<Instant>,
+    /// Heartbeat thread, running from `run_worker` until the runner is dropped.
+    heartbeat: Option<HeartbeatService>,
     /// Probe used by `maybe_try_resume` to ask whether the server is reachable.
     /// In production this pings the server; tests override it to drive the
     /// drain/resume state machine deterministically without a real server.
     server_reachable_probe: fn(&Configuration) -> bool,
+}
+
+/// Sends the heartbeats of a runner's compute node from a thread of its own.
+///
+/// The main loop can block for a long time (a `run_commands` action, a retry window, a slow
+/// request), so heartbeats must not depend on it. The first heartbeat goes out at once. The
+/// thread stops when the service is dropped.
+struct HeartbeatService {
+    paused: Arc<AtomicBool>,
+    /// Dropping the sender disconnects the channel, which stops the thread.
+    _stop: std::sync::mpsc::Sender<()>,
+}
+
+impl HeartbeatService {
+    fn start(
+        interval: Duration,
+        paused: Arc<AtomicBool>,
+        mut beat: impl FnMut() + Send + 'static,
+    ) -> Self {
+        let (stop, stopped) = std::sync::mpsc::channel::<()>();
+        let thread_paused = paused.clone();
+        let spawned = std::thread::Builder::new()
+            .name("torc-heartbeat".to_string())
+            .spawn(move || {
+                loop {
+                    if !thread_paused.load(Ordering::Relaxed) {
+                        beat();
+                    }
+                    match stopped.recv_timeout(interval) {
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                        _ => break,
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            warn!("Failed to start the heartbeat thread: {}", e);
+        }
+        Self {
+            paused,
+            _stop: stop,
+        }
+    }
+
+    /// Stop sending heartbeats (offline-drain) or resume them.
+    fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
 }
 
 /// Production server-reachability probe: a successful ping means reachable.
@@ -880,6 +929,7 @@ impl JobRunner {
             offline: false,
             offline_journal: None,
             last_drain_ping: None,
+            heartbeat: None,
             server_reachable_probe: default_server_reachable_probe,
         }
     }
@@ -1178,6 +1228,8 @@ impl JobRunner {
         if version_result.severity.has_warning() {
             version_check::print_version_warning(&version_result);
         }
+
+        self.start_heartbeat();
 
         // Check for and execute on_workflow_start and on_worker_start actions before entering main loop
         self.execute_workflow_start_actions();
@@ -1543,8 +1595,9 @@ impl JobRunner {
         }
 
         // Deactivate compute node and set duration. Skip when offline: the
-        // server is unreachable, so the node is left active and will be
-        // reconciled (or expire) once connectivity returns.
+        // server is unreachable, so the node stays active with its last
+        // heartbeat. If the server expires nodes for missed heartbeats, it
+        // deactivates this one after the timeout and fails its running jobs.
         if self.offline {
             warn!(
                 "Exiting in offline-drain mode; skipping compute node deactivation \
@@ -1576,13 +1629,50 @@ impl JobRunner {
         })
     }
 
+    /// Start the heartbeat thread when `client.run.heartbeat_interval_secs` is above 0.
+    ///
+    /// A failed heartbeat is logged and does not stop the runner: the next one follows one
+    /// interval later, well inside the server's expiry timeout.
+    fn start_heartbeat(&mut self) {
+        let interval_secs = self.torc_config.client.run.heartbeat_interval_secs;
+        if interval_secs == 0 {
+            return;
+        }
+        let config = self.config.clone();
+        let (workflow_id, run_id, node_id) = (self.workflow_id, self.run_id, self.compute_node_id);
+        let mut warned = false;
+        self.heartbeat = Some(HeartbeatService::start(
+            Duration::from_secs(interval_secs),
+            Arc::new(AtomicBool::new(false)),
+            move || match apis::compute_nodes_api::heartbeat_compute_node(&config, node_id) {
+                Ok(node) => {
+                    if node.is_active == Some(false) && !warned {
+                        warned = true;
+                        warn!(
+                            "The server marked this compute node inactive after missed \
+                             heartbeats. It may have failed this runner's running jobs, and it \
+                             rejects their completions workflow_id={} run_id={} compute_node_id={}",
+                            workflow_id, run_id, node_id
+                        );
+                    }
+                }
+                Err(e) => warn!(
+                    "Heartbeat failed workflow_id={} compute_node_id={}: {}",
+                    workflow_id, node_id, e
+                ),
+            },
+        ));
+    }
+
     /// Kill all running child processes without making any API calls.
     ///
     /// Used when the server is unreachable or this runner's run is stale.
     /// Jobs are left in their current server-side status. For a stale run the
     /// reset that bumped run_id owns those rows (a full reset already set them
-    /// uninitialized); any left "running" are failed by orphan cleanup once
-    /// this runner's compute node is deactivated.
+    /// uninitialized). Any other job left "running" stays running until the server
+    /// expires this compute node for missed heartbeats (only when
+    /// `--compute-node-heartbeat-timeout-secs` is set) or until orphan cleanup
+    /// (`torc recover`, `torc workflows sync-status`) runs.
     fn kill_running_jobs(&mut self) {
         if self.running_jobs.is_empty() {
             return;
@@ -1610,6 +1700,9 @@ impl JobRunner {
             return;
         }
         self.offline = true;
+        if let Some(heartbeat) = &self.heartbeat {
+            heartbeat.set_paused(true);
+        }
         // Wait a full ping interval before the first resume attempt.
         self.last_drain_ping = Some(Instant::now());
 
@@ -1674,6 +1767,9 @@ impl JobRunner {
                     count, self.workflow_id
                 );
                 self.offline = false;
+                if let Some(heartbeat) = &self.heartbeat {
+                    heartbeat.set_paused(false);
+                }
                 self.offline_journal = None;
             }
             Err(e) => {
@@ -4381,6 +4477,50 @@ mod tests {
         let mut runner = make_runner(ComputeNodesResources::new(1, 1.0, 0, 1));
         runner.output_dir = tmp.path().to_path_buf();
         runner
+    }
+
+    #[test]
+    fn heartbeat_service_beats_at_once_then_every_interval_and_stops_on_drop() {
+        let beats = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = beats.clone();
+        let service = HeartbeatService::start(
+            Duration::from_millis(20),
+            Arc::new(AtomicBool::new(false)),
+            move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(beats.load(Ordering::SeqCst) >= 3, "expected repeated beats");
+
+        drop(service);
+        std::thread::sleep(Duration::from_millis(60));
+        let after_stop = beats.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(
+            beats.load(Ordering::SeqCst),
+            after_stop,
+            "beats continued after drop"
+        );
+    }
+
+    #[test]
+    fn heartbeat_service_does_not_beat_while_paused() {
+        let beats = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = beats.clone();
+        let service = HeartbeatService::start(
+            Duration::from_millis(20),
+            Arc::new(AtomicBool::new(true)),
+            move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(beats.load(Ordering::SeqCst), 0);
+
+        service.set_paused(false);
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(beats.load(Ordering::SeqCst) >= 1);
     }
 
     fn failed_result(job_id: i64, run_id: i64) -> ResultModel {
