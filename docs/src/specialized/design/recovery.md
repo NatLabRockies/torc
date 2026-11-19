@@ -41,6 +41,14 @@ The orphan detection logic checks for three types of orphaned resources:
 3. **Running jobs with no active compute nodes**: Jobs marked as "running" but with no active
    compute nodes to process them (fallback for non-Slurm cases)
 
+The checks above run on the client. A runner that dies without a normal exit in a container or on
+another host leaves its compute node active, and the client cannot see it. The server can expire
+such nodes itself: when `--compute-node-heartbeat-timeout-secs` is set, it marks nodes that stopped
+sending heartbeats inactive and fails their running jobs with the same return code (`-128`). See
+[Compute Node Heartbeats and Expiry][heartbeats].
+
+[heartbeats]: ../../core/concepts/job-runners.md#compute-node-heartbeats-and-expiry
+
 ```mermaid
 flowchart TD
     A[Start Orphan Detection] --> B[List active ScheduledComputeNodes]

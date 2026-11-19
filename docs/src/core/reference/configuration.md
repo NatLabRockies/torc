@@ -56,6 +56,12 @@ Settings for `torc run` command.
 | `memory_gb`              | float | (none)        | Available memory (GB) for resource-based scheduling                    |
 | `num_gpus`               | int   | (none)        | Available GPUs for resource-based scheduling                           |
 
+Heartbeats: `heartbeat_interval_secs` (int, default `30`, environment variable
+`TORC_CLIENT__RUN__HEARTBEAT_INTERVAL_SECS`) sets the seconds between compute node heartbeats. `0`
+turns them off. See [Compute Node Heartbeats and Expiry][heartbeats].
+
+[heartbeats]: ./../concepts/job-runners.md#compute-node-heartbeats-and-expiry
+
 ### `[client.offline]` Section
 
 Settings for offline-drain behavior when a job runner loses contact with the server.
@@ -201,6 +207,14 @@ Settings for `torc-server`.
 | `require_auth`           | bool         | `false`   | Require authentication for all requests                 |
 | `enforce_access_control` | bool         | `false`   | Enforce access control based on workflow ownership      |
 | `admin_users`            | string array | `[]`      | Users to add to the admin group                         |
+
+Compute node expiry (see [Compute Node Heartbeats and Expiry][heartbeats]):
+
+- `compute_node_heartbeat_timeout_secs` (int, default `0`, environment variable
+  `TORC_SERVER__COMPUTE_NODE_HEARTBEAT_TIMEOUT_SECS`): seconds without a heartbeat after which an
+  active node is marked inactive and its running jobs fail. `0` turns expiry off.
+- `compute_node_sweep_interval_secs` (int, default `30`, environment variable
+  `TORC_SERVER__COMPUTE_NODE_SWEEP_INTERVAL_SECS`): seconds between expiry sweeps.
 
 ### `[server.logging]` Section
 
