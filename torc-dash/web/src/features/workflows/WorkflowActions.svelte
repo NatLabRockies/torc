@@ -2,6 +2,8 @@
   Actions for one workflow. Used by the Workflows table rows (compact) and the Details tab header.
     <WorkflowActions workflowId={id} compact? />
   compact: Run and Submit icon buttons plus a "more" menu. Full: primary buttons plus a menu.
+  Run and Submit are peers (most users submit to Slurm), so they share one style instead of one
+  being highlighted, and are set apart from the setup actions.
 -->
 <script lang="ts">
   import { app } from "../../lib/state.svelte";
@@ -121,7 +123,7 @@
       {#if running}<span class="spinner small"></span>{:else}<Icon name="play" size={14} />{/if}
     </button>
     <button
-      class="btn btn-ghost btn-icon btn-sm"
+      class="btn btn-ghost btn-icon btn-sm submit"
       title="Submit to scheduler"
       aria-label="Submit to scheduler"
       onclick={ACTIONS.submit.run}
@@ -129,12 +131,13 @@
       <Icon name="upload" size={14} />
     </button>
   {:else}
-    <button class="btn btn-primary btn-sm" disabled={running} onclick={ACTIONS.run.run}>
+    <button class="btn btn-sm exec" disabled={running} onclick={ACTIONS.run.run}>
       {#if running}<span class="spinner small"></span> Running…{:else}<Icon name="play" size={13} /> Run{/if}
     </button>
-    <button class="btn btn-sm" onclick={ACTIONS.submit.run}>
+    <button class="btn btn-sm exec" onclick={ACTIONS.submit.run}>
       <Icon name="upload" size={13} /> Submit
     </button>
+    <span class="sep" aria-hidden="true"></span>
     <button class="btn btn-sm" onclick={ACTIONS.init.run}>Initialize</button>
     <button class="btn btn-sm" onclick={ACTIONS.reinit.run}>Reinitialize</button>
     <button class="btn btn-sm" onclick={ACTIONS.plan.run}>Execution plan</button>
@@ -185,6 +188,24 @@
   }
   .run:not(:disabled) {
     color: var(--success);
+  }
+  .submit {
+    color: var(--accent);
+  }
+  .exec {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .exec:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 4px;
+    background: var(--border);
   }
   .spinner.small {
     width: 12px;
