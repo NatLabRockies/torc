@@ -128,6 +128,16 @@ where
         }
         Ok(result)
     }
+    pub(super) async fn transport_heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError> {
+        authorize_resource!(self, id, "compute_node", context, UpdateComputeNodeResponse);
+        self.compute_nodes_api
+            .heartbeat_compute_node(id, context)
+            .await
+    }
     pub(super) async fn transport_delete_compute_node(
         &self,
         id: i64,

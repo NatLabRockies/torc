@@ -143,6 +143,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
                 .delete(delete_compute_node),
         )
         .route(
+            "/torc-service/v1/compute_nodes/{id}/heartbeat",
+            post(heartbeat_compute_node),
+        )
+        .route(
             "/torc-service/v1/events",
             get(list_events).post(create_event).delete(delete_events),
         )
@@ -1335,6 +1339,31 @@ pub async fn update_compute_node(
     Json(body): Json<models::ComputeNodeModel>,
 ) -> Response<Body> {
     match state.server.update_compute_node(id, body, &context).await {
+        Ok(response) => update_compute_node_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "compute_nodes",
+    path = "/compute_nodes/{id}/heartbeat",
+    operation_id = "heartbeat_compute_node",
+    params(("id" = i64, Path, description = "ID of the compute node.")),
+    responses(
+        (status = 200, description = "Successful response", body = models::ComputeNodeModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn heartbeat_compute_node(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state.server.heartbeat_compute_node(id, &context).await {
         Ok(response) => update_compute_node_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }

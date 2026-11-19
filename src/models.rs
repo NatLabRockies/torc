@@ -105,6 +105,13 @@ pub struct VersionResponse {
     pub git_hash: Option<String>,
 }
 
+/// Return code used when failing jobs orphaned by an ungraceful job runner termination.
+/// This value (-128) is chosen to be:
+/// - Negative, clearly distinguishing it from normal exit codes
+/// - Related to signal convention (128 is the base for signal exits)
+/// - Easy to identify in logs and results
+pub const ORPHANED_JOB_RETURN_CODE: i64 = -128;
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComputeNodeModel {
@@ -118,6 +125,11 @@ pub struct ComputeNodeModel {
     /// Used to compute remaining walltime for active nodes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_time: Option<String>,
+    /// Time of the last liveness signal from the runner that owns this node (RFC3339, UTC).
+    /// Unset for runners that do not send heartbeats. The server never expires such a node.
+    /// Set at creation and by the heartbeat endpoint only; updates ignore it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_heartbeat: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1466,6 +1478,7 @@ impl ComputeNodeModel {
             pid,
             start_time,
             end_time: None,
+            last_heartbeat: None,
             duration_seconds: None,
             is_active: None,
             num_cpus,
@@ -2732,6 +2745,7 @@ mod tests {
             pid: 1234,
             start_time: "2026-03-20T12:00:00Z".into(),
             end_time: Some("2026-03-20T13:00:00Z".into()),
+            last_heartbeat: Some("2026-03-20T12:30:00Z".into()),
             duration_seconds: Some(10.5),
             is_active: Some(true),
             num_cpus: 8,

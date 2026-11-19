@@ -8,6 +8,7 @@ Method | HTTP request | Description
 [**delete_compute_node**](ComputeNodesApi.md#delete_compute_node) | **DELETE** /compute_nodes/{id} | 
 [**delete_compute_nodes**](ComputeNodesApi.md#delete_compute_nodes) | **DELETE** /compute_nodes | 
 [**get_compute_node**](ComputeNodesApi.md#get_compute_node) | **GET** /compute_nodes/{id} | 
+[**heartbeat_compute_node**](ComputeNodesApi.md#heartbeat_compute_node) | **POST** /compute_nodes/{id}/heartbeat | 
 [**list_compute_nodes**](ComputeNodesApi.md#list_compute_nodes) | **GET** /compute_nodes | 
 [**update_compute_node**](ComputeNodesApi.md#update_compute_node) | **PUT** /compute_nodes/{id} | 
 
@@ -108,6 +109,34 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **_api** | **ComputeNodesApi** | API context | 
 **id** | **Int64** | ID of the compute node record |
+
+### Return type
+
+[**ComputeNodeModel**](ComputeNodeModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **heartbeat_compute_node**
+> heartbeat_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing) -> ComputeNodeModel, OpenAPI.Clients.ApiResponse <br/>
+> heartbeat_compute_node(_api::ComputeNodesApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ComputeNodeModel }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **ComputeNodesApi** | API context | 
+**id** | **Int64** | ID of the compute node. |
 
 ### Return type
 

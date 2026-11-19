@@ -713,6 +713,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /compute_nodes/{id}/heartbeat:
+    post:
+      tags:
+      - compute_nodes
+      operationId: heartbeat_compute_node
+      parameters:
+      - name: id
+        in: path
+        description: ID of the compute node.
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /events:
     get:
       tags:
@@ -6070,6 +6114,14 @@ components:
           description: |-
             Labels the runner was started with; it claims only jobs whose every
             label it has (or only unlabeled jobs, when unset).
+        last_heartbeat:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Time of the last liveness signal from the runner that owns this node (RFC3339, UTC).
+            Unset for runners that do not send heartbeats. The server never expires such a node.
+            Set at creation and by the heartbeat endpoint only; updates ignore it.
         memory_gb:
           type: number
           format: double

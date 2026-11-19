@@ -65,6 +65,13 @@ pub trait ComputeNodesApi<C> {
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError>;
 
+    /// Record a liveness signal for an active compute node.
+    async fn heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError>;
+
     /// Delete a compute node.
     async fn delete_compute_node(
         &self,
@@ -96,6 +103,7 @@ const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "compute_node_type",
     "labels",
     "end_time",
+    "last_heartbeat",
     "sample_count",
     "peak_cpu_percent",
     "avg_cpu_percent",
@@ -154,7 +162,8 @@ where
                 ,avg_memory_bytes
                 ,end_time
                 ,labels
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                ,last_heartbeat
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             RETURNING id
             "#,
         )
@@ -179,6 +188,7 @@ where
         .bind(body.avg_memory_bytes)
         .bind(&body.end_time)
         .bind(models::labels_to_json(body.labels.as_deref()))
+        .bind(&body.last_heartbeat)
         .fetch_one(self.context.pool.as_ref())
         .await
         {
@@ -250,7 +260,7 @@ where
                    num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id,
                    compute_node_type, scheduler, sample_count,
                    peak_cpu_percent, avg_cpu_percent,
-                   peak_memory_bytes, avg_memory_bytes, end_time, labels
+                   peak_memory_bytes, avg_memory_bytes, end_time, labels, last_heartbeat
             FROM compute_node
             WHERE id = $1
             "#,
@@ -285,6 +295,7 @@ where
             pid: record.get("pid"),
             start_time: record.get("start_time"),
             end_time: record.get("end_time"),
+            last_heartbeat: record.get("last_heartbeat"),
             duration_seconds,
             is_active: if is_active_val == 1 {
                 Some(true)
@@ -363,6 +374,7 @@ where
                 ,avg_memory_bytes
                 ,end_time
                 ,labels
+                ,last_heartbeat
             FROM compute_node"
             .to_string();
 
@@ -442,6 +454,7 @@ where
                 pid: record.get("pid"),
                 start_time: record.get("start_time"),
                 end_time: record.get("end_time"),
+                last_heartbeat: record.get("last_heartbeat"),
                 duration_seconds,
                 is_active: if is_active_val == 1 {
                     Some(true)
@@ -540,6 +553,9 @@ where
             }
         };
 
+        // `last_heartbeat` is deliberately not updated here: only creation and the heartbeat
+        // endpoint set it, so a stale model sent back by a client cannot roll it back.
+
         // Convert boolean to integer for database storage
         let is_active_val = body.is_active.map(|b| if b { 1i64 } else { 0i64 });
 
@@ -622,6 +638,52 @@ where
         Ok(UpdateComputeNodeResponse::SuccessfulResponse(
             updated_compute_node,
         ))
+    }
+
+    /// Record a liveness signal for an active compute node.
+    ///
+    /// The server stamps its own clock, so runner clock skew does not matter. Only an active
+    /// node is touched: a node the server already expired stays inactive, and the returned
+    /// model shows that to the caller.
+    async fn heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError> {
+        debug!(
+            "heartbeat_compute_node({}) - X-Span-ID: {:?}",
+            id,
+            context.get().0.clone()
+        );
+
+        if let Err(e) = sqlx::query(
+            "UPDATE compute_node SET last_heartbeat = $1 WHERE id = $2 AND is_active = 1",
+        )
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(id)
+        .execute(self.context.pool.as_ref())
+        .await
+        {
+            return Err(database_error_with_msg(
+                e,
+                "Failed to record compute node heartbeat",
+            ));
+        }
+
+        match self.get_compute_node(id, context).await? {
+            GetComputeNodeResponse::SuccessfulResponse(node) => {
+                Ok(UpdateComputeNodeResponse::SuccessfulResponse(node))
+            }
+            GetComputeNodeResponse::ForbiddenErrorResponse(err) => {
+                Ok(UpdateComputeNodeResponse::ForbiddenErrorResponse(err))
+            }
+            GetComputeNodeResponse::NotFoundErrorResponse(err) => {
+                Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(err))
+            }
+            GetComputeNodeResponse::DefaultErrorResponse(_) => {
+                Err(ApiError("Failed to get compute node".to_string()))
+            }
+        }
     }
 
     /// Delete a compute node.

@@ -131,6 +131,37 @@ function get_compute_node(_api::ComputeNodesApi, response_stream::Channel, id::I
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_heartbeat_compute_node_ComputeNodesApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ComputeNodeModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_heartbeat_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_heartbeat_compute_node_ComputeNodesApi, "/compute_nodes/{id}/heartbeat", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+
+Return: ComputeNodeModel, OpenAPI.Clients.ApiResponse
+"""
+function heartbeat_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_heartbeat_compute_node(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function heartbeat_compute_node(_api::ComputeNodesApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_heartbeat_compute_node(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_list_compute_nodes_ComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListComputeNodesResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -210,5 +241,6 @@ export create_compute_node
 export delete_compute_node
 export delete_compute_nodes
 export get_compute_node
+export heartbeat_compute_node
 export list_compute_nodes
 export update_compute_node

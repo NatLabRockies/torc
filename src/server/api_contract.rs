@@ -852,6 +852,13 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError>;
 
+    /// Record a heartbeat for a compute node.
+    async fn heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError>;
+
     /// Update an event.
     async fn update_event(
         &self,
