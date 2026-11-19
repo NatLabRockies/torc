@@ -32,7 +32,8 @@ mode, or on this computer for local mode).
 ## Modes
 
 - **This computer**: starts `torc-dash` locally on a private port. torc-dash runs through your login
-  shell in your home directory, so your profile's `PATH` applies.
+  shell, so your profile's `PATH` applies. It starts in the optional **Working directory** (`~/` and
+  relative paths resolve against your home directory), or your home directory if blank.
 - **Remote (SSH)**: described below.
 
 In both modes, **Torc server** chooses what the dashboard talks to:

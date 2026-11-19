@@ -1,12 +1,14 @@
 <!-- Debugging: job results with stdout/stderr, Slurm log analysis, Slurm accounting. -->
 <script lang="ts">
   import { untrack } from "svelte";
-  import { api, listAll, unwrap, type Job, type Result } from "../../lib/api/client";
+  import { SvelteSet } from "svelte/reactivity";
+  import { api, listAll, unwrap, type Job, type Result, type Workflow } from "../../lib/api/client";
   import { app } from "../../lib/state.svelte";
   import { errorText } from "../../lib/format";
   import Badge from "../../lib/ui/Badge.svelte";
   import DataTable, { type Column } from "../../lib/ui/DataTable.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
+  import LiveTail from "./LiveTail.svelte";
   import LogViewer from "./LogViewer.svelte";
   import SlurmLogs from "./SlurmLogs.svelte";
   import SlurmSacct from "./SlurmSacct.svelte";
@@ -20,7 +22,9 @@
     stderr: string | null;
   };
 
-  let view = $state<"jobs" | "slurm-logs" | "sacct">("jobs");
+  let view = $state<"jobs" | "tail" | "slurm-logs" | "sacct">("jobs");
+  /** Jobs followed in Live tail; kept here so switching views doesn't drop them. */
+  const tailed = new SvelteSet<string | number>();
   let outputDir = $state(loadOutputDir());
   let failedOnly = $state(true);
   let allRuns = $state(false);
@@ -29,7 +33,8 @@
 
   let jobs = $state<Job[] | null>(null);
   let results = $state<Result[]>([]);
-  let submissionDir = $state<string | null>(null);
+  let wf = $state<Workflow | null>(null);
+  let submissionDir = $derived(wf?.submission_directory ?? null);
   let loadError = $state<string | null>(null);
   let loadedFor = $state<number | null>(null);
   let selectedKey = $state<string | null>(null);
@@ -45,6 +50,7 @@
       if (id !== loadedFor) {
         jobs = null;
         selectedKey = null;
+        tailed.clear();
       }
       load(id, all);
     });
@@ -52,7 +58,7 @@
 
   async function load(id: number, all: boolean) {
     try {
-      const [j, r, wf] = await Promise.all([
+      const [j, r, w] = await Promise.all([
         listAll((offset, limit) =>
           unwrap(api.GET("/jobs", { params: { query: { workflow_id: id, offset, limit } } })),
         ),
@@ -68,7 +74,7 @@
       if (id !== app.workflowId) return;
       jobs = j;
       results = r;
-      submissionDir = wf.submission_directory ?? null;
+      wf = w;
       loadedFor = id;
       loadError = null;
     } catch (e) {
@@ -76,9 +82,40 @@
     }
   }
 
+  // Live tail follows each job's current attempt (attempt_id, run_id). Refresh just the tailed
+  // jobs on a short cadence so a retry is picked up without waiting for the dashboard refresh.
+  $effect(() => {
+    const id = app.workflowId;
+    if (view !== "tail" || !tailed.size || id === null) return;
+    const timer = setInterval(() => refreshTailed(id), 5000);
+    return () => clearInterval(timer);
+  });
+
+  async function refreshTailed(id: number) {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const [w, js] = await Promise.all([
+        unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })),
+        Promise.all(
+          [...tailed].map((jid) =>
+            unwrap(api.GET("/jobs/{id}", { params: { path: { id: Number(jid) } } })),
+          ),
+        ),
+      ]);
+      if (id !== app.workflowId || !jobs) return;
+      const byId = new Map(js.map((j) => [j.id, j]));
+      jobs = jobs.map((j) => byId.get(j.id) ?? j);
+      wf = w;
+    } catch {
+      // The full refresh reports errors; panes show their own.
+    }
+  }
+
+  let baseDir = $derived(resolveLogBaseDir(outputDir.trim() || "torc_output", submissionDir));
+
   let rows = $derived.by((): Row[] => {
     if (!jobs) return [];
-    const base = resolveLogBaseDir(outputDir.trim() || "torc_output", submissionDir);
+    const base = baseDir;
     const byJob = new Map<number, Result[]>();
     for (const r of results) byJob.set(r.job_id, [...(byJob.get(r.job_id) ?? []), r]);
     const out: Row[] = [];
@@ -171,14 +208,19 @@
         bind:value={view}
         tabs={[
           { id: "jobs", label: "Job logs", count: jobs ? rows.length : null },
+          { id: "tail", label: "Live tail", count: tailed.size || null },
           { id: "slurm-logs", label: "Slurm log analysis" },
           { id: "sacct", label: "Slurm accounting" },
         ]}
       />
-      {#if view === "jobs"}
+      {#if view === "jobs" || view === "tail"}
         <div class="grow"></div>
+      {/if}
+      {#if view === "jobs"}
         <label class="check"><input type="checkbox" bind:checked={failedOnly} /> Failed only</label>
         <label class="check"><input type="checkbox" bind:checked={allRuns} /> All runs</label>
+      {/if}
+      {#if view === "jobs" || view === "tail"}
         <input
           class="input filter"
           bind:this={filterInput}
@@ -224,6 +266,8 @@
           </div>
         </div>
       {/if}
+    {:else if view === "tail"}
+      <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
     {:else if view === "slurm-logs"}
       <SlurmLogs workflowId={app.workflowId} outputDir={outputDir.trim() || "torc_output"} />
     {:else}

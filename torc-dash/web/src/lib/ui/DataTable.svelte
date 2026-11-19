@@ -40,6 +40,7 @@
     filter = "",
     onRowClick,
     selectable = false,
+    selectAll = true,
     selected = $bindable(new SvelteSet<string | number>()),
     rowHeight = 36,
     sort = $bindable<SortState>(null),
@@ -55,6 +56,8 @@
     filter?: string;
     onRowClick?: (row: T) => void;
     selectable?: boolean;
+    /** Show the header "Select all" checkbox (when `selectable`). */
+    selectAll?: boolean;
     selected?: SvelteSet<string | number>;
     rowHeight?: number;
     sort?: SortState;
@@ -174,13 +177,13 @@
         <tr>
           {#if selectable}
             <th class="check-col">
-              <input
+              {#if selectAll}<input
                 type="checkbox"
                 aria-label="Select all"
                 checked={allSelected}
                 indeterminate={someSelected}
                 onchange={toggleAll}
-              />
+              />{/if}
             </th>
           {/if}
           {#each columns as c (c.key)}
