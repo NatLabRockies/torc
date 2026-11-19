@@ -23,8 +23,9 @@ Download the installer for your platform from the
 - **Linux (x86_64)**: the `.AppImage` (`chmod +x` it and run it) or the `.deb`
   (`sudo apt install ./<file>.deb`). Requires WebKitGTK 4.1, which current Ubuntu, Debian, and
   Fedora releases provide.
-- **Windows (x64)**: the `.msi` or the `-setup.exe` installer. SmartScreen may warn about an
-  unrecognized app; choose **More info → Run anyway**.
+- **Windows (x64)**: the `-setup.exe` installer, which installs for the current user and needs no
+  admin rights. The `.msi` installs for all users and requires admin rights. SmartScreen may warn
+  about an unrecognized app; choose **More info → Run anyway**.
 
 The installers include `torc-dash`, `torc`, `torc-server`, and `torc-mcp-server`, so local mode
 needs no separate install or `PATH` setup. Remote mode needs `torc-dash` installed on the login

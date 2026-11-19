@@ -25,7 +25,9 @@
   let servers = $state({
     local: {
       private: saved.startServer === "true",
-      url: saved.serverUrl ?? "http://localhost:8080/torc-service/v1",
+      // Earlier versions saved this default, which hid TORC_API_URL; blank means the same thing.
+      url:
+        saved.serverUrl === "http://localhost:8080/torc-service/v1" ? "" : (saved.serverUrl ?? ""),
     },
     ssh: { private: saved.remotePrivate === "true", url: saved.remoteServerUrl ?? "" },
   });
