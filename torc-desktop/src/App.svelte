@@ -25,9 +25,12 @@
   let servers = $state({
     local: {
       private: saved.startServer === "true",
-      // Earlier versions saved this default, which hid TORC_API_URL; blank means the same thing.
+      // Settings saved before version 2 hold this pre-filled default, which hid TORC_API_URL;
+      // blank means the same thing. Later saves keep it as an explicit choice.
       url:
-        saved.serverUrl === "http://localhost:8080/torc-service/v1" ? "" : (saved.serverUrl ?? ""),
+        !saved.version && saved.serverUrl === "http://localhost:8080/torc-service/v1"
+          ? ""
+          : (saved.serverUrl ?? ""),
     },
     ssh: { private: saved.remotePrivate === "true", url: saved.remoteServerUrl ?? "" },
   });
@@ -67,6 +70,7 @@
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
+          version: "2",
           mode,
           serverUrl: servers.local.url,
           startServer: String(servers.local.private),
