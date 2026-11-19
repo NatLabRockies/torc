@@ -130,8 +130,8 @@ Keyboard shortcuts (press `?` in the dashboard for the list):
 
 ### Workflows Tab
 
-- **Workflow list** with ID, name, user, project, description, and creation time. Filter by text or
-  access group, or show workflows from all users. Click a row to open its details.
+- **Workflow list** with ID, name, user, description, and creation time. Filter by text or access
+  group, or show workflows from all users. Click a row to open its details.
 - **Actions** per workflow: run locally, submit to the scheduler, initialize, reinitialize, reset
   status, cancel, recover, sync status, execution plan, export, and delete. Select several workflows
   to delete them together.

@@ -70,7 +70,6 @@
     { key: "id", label: "ID", width: "72px", mono: true },
     { key: "name", label: "Name", cell: nameCell },
     { key: "user", label: "User", width: "12%" },
-    { key: "project", label: "Project", width: "12%" },
     { key: "description", label: "Description", width: "28%", cell: descriptionCell },
     { key: "timestamp", label: "Created", width: "130px", cell: createdCell },
     { key: "actions", label: "", width: "124px", sortable: false, value: () => null, cell: actionsCell },
