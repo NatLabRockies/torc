@@ -54,6 +54,7 @@
   - [Dynamic Jobs (Orchestrator Continuation)](./core/tutorials/dynamic-jobs.md)
 - [Monitoring & Debugging](./core/monitoring/index.md)
   - [Web Dashboard](./core/monitoring/dashboard.md)
+  - [Desktop App](./core/monitoring/desktop.md)
   - [Terminal UI (TUI)](./core/monitoring/tui.md)
   - [Workflow Reports](./core/monitoring/workflow-reports.md)
   - [Resource Monitoring](./core/monitoring/resource-monitoring.md)

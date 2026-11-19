@@ -2,8 +2,8 @@
 
 Torc Desktop (`torc-desktop/`) is a native app that runs the torc-dash UI in its own window, with
 torc-dash running either on the user's computer or on an HPC login node over SSH. It is a standalone
-Tauri 2 crate, not part of the main workspace. Usage is in `torc-desktop/README.md`; this page
-explains how it works and why.
+Tauri 2 crate, not part of the main workspace. Usage is in
+[Desktop App](../../core/monitoring/desktop.md); this page explains how it works and why.
 
 ## Problem and goals
 
