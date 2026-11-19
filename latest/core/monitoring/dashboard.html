@@ -292,8 +292,8 @@ Debugging, Resources) share a <strong>workflow picker</strong> in the top bar. D
 </div>
 <h3 id="workflows-tab"><a class="header" href="#workflows-tab">Workflows Tab</a></h3>
 <ul>
-<li><strong>Workflow list</strong> with ID, name, user, project, description, and creation time. Filter by text or
-access group, or show workflows from all users. Click a row to open its details.</li>
+<li><strong>Workflow list</strong> with ID, name, user, description, and creation time. Filter by text or access
+group, or show workflows from all users. Click a row to open its details.</li>
 <li><strong>Actions</strong> per workflow: run locally, submit to the scheduler, initialize, reinitialize, reset
 status, cancel, recover, sync status, execution plan, export, and delete. Select several workflows
 to delete them together.</li>
@@ -375,8 +375,12 @@ workflow's submission directory)</li>
 <h3 id="events-tab"><a class="header" href="#events-tab">Events Tab</a></h3>
 <p>Live workflow events via Server-Sent Events (SSE), plus stored events such as retries:</p>
 <ul>
-<li>Job, compute node, and workflow lifecycle events appear as they happen</li>
+<li>Live streaming is off by default; check <strong>Live updates</strong> to turn it on. The choice is remembered
+in your browser. Stored events are shown either way</li>
+<li>With live updates on, job, compute node, and workflow lifecycle events appear as they happen</li>
 <li>A status indicator shows Live or Reconnecting; reconnection is automatic</li>
+<li>The stream pauses while the browser tab is hidden, so idle dashboard tabs don't hold server
+connections</li>
 <li>The sidebar shows a count of new events while you are on another tab</li>
 <li>Click an event that refers to a job to open the job</li>
 </ul>
