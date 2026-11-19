@@ -56,6 +56,11 @@ Update crates.io installations with `cargo install torc --force`, Docker install
 `docker pull ghcr.io/natlabrockies/torc:latest`, and site-managed installations through the site
 administrator.
 
+## Desktop App
+
+To use the dashboard in a native window, on your computer or on an HPC login node over SSH, install
+Torc Desktop. See [Desktop App](../core/monitoring/desktop.md).
+
 ## Site-Specific Installations
 
 Some HPC facilities maintain pre-installed Torc binaries and shared servers. Check if your site is

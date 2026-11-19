@@ -557,7 +557,7 @@ browser or a manual SSH tunnel:
   forwards it automatically; password and MFA prompts appear in the app. It also sends the AI Chat
   settings from your computer's `[dash.chat]` config (see [AI Chat Tab](#ai-chat-tab))
 
-See `torc-desktop/README.md` in the repository for building and running it.
+See [Desktop App](./desktop.md) for installing and using it.
 
 ## Architecture
 
