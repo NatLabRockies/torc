@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
+  import { api, unwrap } from "../../lib/api/client";
   import { dashPost } from "../../lib/api/dash";
+  import { resolveLogBaseDir } from "../debugging/logs";
   import { errorText, formatBytes } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
@@ -44,9 +46,13 @@
   async function scan() {
     scanning = true;
     try {
+      // Relative dirs resolve against the workflow's submission directory, not torc-dash's cwd.
+      const id = app.workflowId;
+      const wf =
+        id === null ? null : await unwrap(api.GET("/workflows/{id}", { params: { path: { id } } }));
       const res = await dashPost<{ success: boolean; databases?: ResourceDb[]; error?: string }>(
         "/api/cli/list-resource-dbs",
-        { base_dir: baseDir },
+        { base_dir: resolveLogBaseDir(baseDir.trim(), wf?.submission_directory) },
       );
       if (!res.success) throw new Error(res.error || "Scan failed");
       dbs = res.databases ?? [];
@@ -74,7 +80,7 @@
     void app.workflowId;
     untrack(() => {
       showAll = false;
-      if (dbs) resetForWorkflow();
+      if (dbs) void scan();
     });
   });
 

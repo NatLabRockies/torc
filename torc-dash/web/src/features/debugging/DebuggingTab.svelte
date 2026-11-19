@@ -269,9 +269,9 @@
     {:else if view === "tail"}
       <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
     {:else if view === "slurm-logs"}
-      <SlurmLogs workflowId={app.workflowId} outputDir={outputDir.trim() || "torc_output"} />
+      <SlurmLogs workflowId={app.workflowId} outputDir={baseDir} />
     {:else}
-      <SlurmSacct workflowId={app.workflowId} outputDir={outputDir.trim() || "torc_output"} />
+      <SlurmSacct workflowId={app.workflowId} outputDir={baseDir} />
     {/if}
   {/if}
 </div>
