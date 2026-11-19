@@ -509,6 +509,7 @@ Configuration for resource usage monitoring.
 | ------------------------- | ------------------------ | ------- | ----------------------------------------------- |
 | `sample_interval_seconds` | integer                  | `10`    | Shared sampling interval in seconds             |
 | `flush_interval_seconds`  | integer                  | `300`   | Flush interval for buffered time-series samples |
+| `live_monitoring`         | boolean                  | `false` | Checkpoint after each flush for live plots      |
 | `generate_plots`          | boolean                  | `false` | Generate resource usage plots                   |
 | `jobs`                    | JobMonitorConfig         | none    | Per-job monitoring config                       |
 | `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node monitoring                 |
@@ -534,8 +535,10 @@ overall compute-node monitoring, so a workflow can store per-job summaries while
 compute-node time series. Both scopes use the parent `sample_interval_seconds`; there is not a
 separate sampling interval per scope. When time-series monitoring is enabled, samples are flushed to
 SQLite every `flush_interval_seconds`, which trades lower commit overhead for a bounded amount of
-crash-exposed buffered data. The current compute-node monitor records CPU and memory; GPU monitoring
-is expected to use the same nested `compute_node` configuration in a future release.
+crash-exposed buffered data. To watch samples while the workflow runs, set `live_monitoring: true`
+and lower `flush_interval_seconds`; see [Live Monitoring](resource-monitoring.md#live-monitoring).
+The current compute-node monitor records CPU and memory; GPU monitoring is expected to use the same
+nested `compute_node` configuration in a future release.
 
 For backwards compatibility, top-level `enabled` and `granularity` fields are still accepted and
 apply to job monitoring when `jobs` is omitted. New workflow specs should use `jobs`.

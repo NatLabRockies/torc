@@ -12,6 +12,7 @@ Configuration for resource monitoring.  Used both as the user-authored &#x60;Wor
         generate_plots=false,
         granularity=nothing,
         jobs=nothing,
+        live_monitoring=false,
         sample_interval_seconds=10,
     )
 
@@ -21,6 +22,7 @@ Configuration for resource monitoring.  Used both as the user-authored &#x60;Wor
     - generate_plots::Bool
     - granularity::MonitorGranularity : Deprecated compatibility field. Use &#x60;jobs.granularity&#x60; for new workflow specs.
     - jobs::JobMonitorConfig
+    - live_monitoring::Bool : Checkpoint the time-series database after every flush so readers on other hosts (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default: each checkpoint adds a small write and fsync to the main database file.
     - sample_interval_seconds::Int64
 """
 Base.@kwdef mutable struct ResourceMonitorConfig <: OpenAPI.APIModel
@@ -30,16 +32,17 @@ Base.@kwdef mutable struct ResourceMonitorConfig <: OpenAPI.APIModel
     generate_plots::Union{Nothing, Bool} = false
     granularity = nothing # spec type: Union{ Nothing, MonitorGranularity }
     jobs = nothing # spec type: Union{ Nothing, JobMonitorConfig }
+    live_monitoring::Union{Nothing, Bool} = false
     sample_interval_seconds::Union{Nothing, Int64} = 10
 
-    function ResourceMonitorConfig(compute_node, enabled, flush_interval_seconds, generate_plots, granularity, jobs, sample_interval_seconds, )
-        o = new(compute_node, enabled, flush_interval_seconds, generate_plots, granularity, jobs, sample_interval_seconds, )
+    function ResourceMonitorConfig(compute_node, enabled, flush_interval_seconds, generate_plots, granularity, jobs, live_monitoring, sample_interval_seconds, )
+        o = new(compute_node, enabled, flush_interval_seconds, generate_plots, granularity, jobs, live_monitoring, sample_interval_seconds, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ResourceMonitorConfig
 
-const _property_types_ResourceMonitorConfig = Dict{Symbol,String}(Symbol("compute_node")=>"ComputeNodeMonitorConfig", Symbol("enabled")=>"Bool", Symbol("flush_interval_seconds")=>"Int64", Symbol("generate_plots")=>"Bool", Symbol("granularity")=>"MonitorGranularity", Symbol("jobs")=>"JobMonitorConfig", Symbol("sample_interval_seconds")=>"Int64", )
+const _property_types_ResourceMonitorConfig = Dict{Symbol,String}(Symbol("compute_node")=>"ComputeNodeMonitorConfig", Symbol("enabled")=>"Bool", Symbol("flush_interval_seconds")=>"Int64", Symbol("generate_plots")=>"Bool", Symbol("granularity")=>"MonitorGranularity", Symbol("jobs")=>"JobMonitorConfig", Symbol("live_monitoring")=>"Bool", Symbol("sample_interval_seconds")=>"Int64", )
 OpenAPI.property_type(::Type{ ResourceMonitorConfig }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResourceMonitorConfig[name]))}
 
 function OpenAPI.check_required(o::ResourceMonitorConfig)
@@ -53,6 +56,7 @@ function OpenAPI.validate_properties(o::ResourceMonitorConfig)
     OpenAPI.validate_property(ResourceMonitorConfig, Symbol("generate_plots"), o.generate_plots)
     OpenAPI.validate_property(ResourceMonitorConfig, Symbol("granularity"), o.granularity)
     OpenAPI.validate_property(ResourceMonitorConfig, Symbol("jobs"), o.jobs)
+    OpenAPI.validate_property(ResourceMonitorConfig, Symbol("live_monitoring"), o.live_monitoring)
     OpenAPI.validate_property(ResourceMonitorConfig, Symbol("sample_interval_seconds"), o.sample_interval_seconds)
 end
 
@@ -63,6 +67,7 @@ function OpenAPI.validate_property(::Type{ ResourceMonitorConfig }, name::Symbol
     if name === Symbol("flush_interval_seconds")
         OpenAPI.validate_param(name, "ResourceMonitorConfig", :format, val, "int32")
     end
+
 
 
 

@@ -35,8 +35,9 @@ class ResourceMonitorConfig(BaseModel):
     generate_plots: Optional[StrictBool] = False
     granularity: Optional[MonitorGranularity] = Field(default=None, description="Deprecated compatibility field. Use `jobs.granularity` for new workflow specs.")
     jobs: Optional[JobMonitorConfig] = None
+    live_monitoring: Optional[StrictBool] = Field(default=False, description="Checkpoint the time-series database after every flush so readers on other hosts (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default: each checkpoint adds a small write and fsync to the main database file.")
     sample_interval_seconds: Optional[StrictInt] = 10
-    __properties: ClassVar[List[str]] = ["compute_node", "enabled", "flush_interval_seconds", "generate_plots", "granularity", "jobs", "sample_interval_seconds"]
+    __properties: ClassVar[List[str]] = ["compute_node", "enabled", "flush_interval_seconds", "generate_plots", "granularity", "jobs", "live_monitoring", "sample_interval_seconds"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -101,6 +102,7 @@ class ResourceMonitorConfig(BaseModel):
             "generate_plots": obj.get("generate_plots") if obj.get("generate_plots") is not None else False,
             "granularity": obj.get("granularity"),
             "jobs": JobMonitorConfig.from_dict(obj["jobs"]) if obj.get("jobs") is not None else None,
+            "live_monitoring": obj.get("live_monitoring") if obj.get("live_monitoring") is not None else False,
             "sample_interval_seconds": obj.get("sample_interval_seconds") if obj.get("sample_interval_seconds") is not None else 10
         })
         return _obj

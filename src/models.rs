@@ -945,6 +945,10 @@ pub struct ResourceMonitorConfig {
     pub sample_interval_seconds: i32,
     /// How often buffered time-series samples are flushed to SQLite, in seconds.
     pub flush_interval_seconds: i32,
+    /// Checkpoint the time-series database after every flush so readers on other hosts
+    /// (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default:
+    /// each checkpoint adds a small write and fsync to the main database file.
+    pub live_monitoring: bool,
     pub generate_plots: bool,
     pub jobs: Option<JobMonitorConfig>,
     pub compute_node: Option<ComputeNodeMonitorConfig>,
@@ -957,6 +961,7 @@ impl Default for ResourceMonitorConfig {
             granularity: MonitorGranularity::Summary,
             sample_interval_seconds: 10,
             flush_interval_seconds: 300,
+            live_monitoring: false,
             generate_plots: false,
             jobs: None,
             compute_node: None,

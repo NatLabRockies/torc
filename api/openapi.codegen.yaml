@@ -7562,6 +7562,13 @@ components:
         jobs:
           default: null
           $ref: '#/components/schemas/JobMonitorConfig'
+        live_monitoring:
+          type: boolean
+          description: |-
+            Checkpoint the time-series database after every flush so readers on other hosts
+            (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default:
+            each checkpoint adds a small write and fsync to the main database file.
+          default: false
         sample_interval_seconds:
           type: integer
           format: int32

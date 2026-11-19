@@ -36,6 +36,10 @@ pub struct Args {
     /// Seconds between SQLite flushes (no workflow only)
     #[arg(long, default_value_t = 300)]
     pub flush_interval_seconds: i32,
+    /// Checkpoint after each flush so torc-dash on another host can plot samples live
+    /// (no workflow only)
+    #[arg(long)]
+    pub live_monitoring: bool,
     /// Store only the lifetime summary, not every sample (no workflow only)
     #[arg(long)]
     pub summary_only: bool,
@@ -89,6 +93,7 @@ pub fn run(config: &Configuration, args: &Args) -> i32 {
             let monitor_config = ResourceMonitorConfig {
                 sample_interval_seconds: args.sample_interval_seconds,
                 flush_interval_seconds: args.flush_interval_seconds,
+                live_monitoring: args.live_monitoring,
                 compute_node: Some(ComputeNodeMonitorConfig {
                     enabled: true,
                     granularity: if args.summary_only {

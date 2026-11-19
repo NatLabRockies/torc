@@ -5534,9 +5534,12 @@ impl WorkflowSpec {
                             );
                         }
                     }
-                    "generate_plots" => {
+                    "generate_plots" | "live_monitoring" => {
                         if let Some(v) = child.entries().first().and_then(|e| e.value().as_bool()) {
-                            obj.insert("generate_plots".to_string(), serde_json::Value::Bool(v));
+                            obj.insert(
+                                child.name().value().to_string(),
+                                serde_json::Value::Bool(v),
+                            );
                         }
                     }
                     "jobs" | "compute_node" => {
@@ -6149,6 +6152,9 @@ impl WorkflowSpec {
                 "    flush_interval_seconds {}",
                 monitor.flush_interval_seconds
             ));
+            if monitor.live_monitoring {
+                lines.push("    live_monitoring #true".to_string());
+            }
             lines.push(format!(
                 "    generate_plots {}",
                 if monitor.generate_plots {
@@ -7016,6 +7022,7 @@ resource_monitor {
     granularity "time_series"
     sample_interval_seconds 2
     flush_interval_seconds 17
+    live_monitoring #true
 }
 
 job "job1" {
@@ -7032,6 +7039,7 @@ job "job1" {
         assert_eq!(jobs.granularity, MonitorGranularity::TimeSeries);
         assert_eq!(monitor.sample_interval_seconds, 2);
         assert_eq!(monitor.flush_interval_seconds, 17);
+        assert!(monitor.live_monitoring);
         assert!(monitor.compute_node_config().is_none());
     }
 

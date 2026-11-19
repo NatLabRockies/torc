@@ -23,6 +23,7 @@ resource_monitor:
 | ------------------------- | ------------------------ | ------- | -------------------------------------------------------------- |
 | `sample_interval_seconds` | integer                  | `10`    | Seconds between all resource samples                           |
 | `flush_interval_seconds`  | integer                  | `300`   | Seconds between batched SQLite flushes for time-series samples |
+| `live_monitoring`         | boolean                  | `false` | Make time-series data readable while running (see below)       |
 | `generate_plots`          | boolean                  | `false` | Emit HTML plots after the job runner exits                     |
 | `jobs`                    | JobMonitorConfig         | none    | Per-job CPU and memory monitoring                              |
 | `compute_node`            | ComputeNodeMonitorConfig | none    | Overall compute-node CPU/memory monitoring                     |
@@ -43,6 +44,52 @@ New workflow specs should use the explicit `jobs` block.
 `flush_interval_seconds` only affects time-series persistence. Samples are still collected every
 `sample_interval_seconds`, but they are buffered in memory and written to SQLite in batches to
 reduce transaction overhead.
+
+### Live Monitoring
+
+Set `live_monitoring: true` to watch time-series samples while the workflow runs, for example in the
+dashboard's **Resources → Live** view. Two settings control what you see:
+
+- **`live_monitoring: true`** makes new samples readable from other hosts. Leave it off unless
+  someone will watch the run.
+- **`flush_interval_seconds`** sets how fresh the data is. Samples reach the database only when they
+  are flushed, so with the default of 300 the plots update every 5 minutes. For live viewing, use
+  15–60 seconds.
+
+```yaml
+resource_monitor:
+  sample_interval_seconds: 5
+  flush_interval_seconds: 30
+  live_monitoring: true
+  jobs:
+    enabled: true
+    granularity: time_series
+  compute_node:
+    enabled: true
+    granularity: time_series
+```
+
+Both settings are read when a job runner starts, so choose them before you submit the workflow.
+
+**Why the option exists.** Each metrics database is written in SQLite WAL mode: new samples go to
+the `-wal` file first and are copied into the main `.db` file later, at a checkpoint. A reader on
+the same host finds the new samples through the `-shm` shared-memory index. That index does not work
+across hosts on a network filesystem (Lustre, GPFS, NFS), and on HPC the runner writes on a compute
+node while the dashboard reads on a login node. The dashboard therefore reads only the main database
+file. With `live_monitoring` on, the runner checkpoints after each flush, so the main file holds
+every flushed sample.
+
+**Cost.** With `live_monitoring` off (the default), nothing changes. When it is on, each flush adds
+one passive checkpoint: SQLite copies the pages written since the last checkpoint into the main file
+and syncs both files. A flush writes only a few pages, and those pages would be copied at the next
+automatic checkpoint anyway, so the extra cost is mostly the two fsyncs. Across a cluster this is
+about `nodes / flush_interval_seconds` checkpoints per second: about 2 per second for 500 nodes at
+the default 300-second flush, or about 17 per second at 30 seconds. That is small for a parallel
+filesystem, but for very large runs, enable live monitoring only on workflows you plan to watch and
+avoid flush intervals much below 30 seconds.
+
+Until the first checkpoint, a database looks empty to the dashboard. A dashboard read that races a
+checkpoint can fail. The next poll retries.
 
 ### Job Monitoring
 

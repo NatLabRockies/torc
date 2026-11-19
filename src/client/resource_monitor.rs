@@ -966,6 +966,13 @@ fn run_monitoring_loop(
                 &mut pending_system_samples,
                 None,
             );
+            // Readers on other hosts open the DB with `immutable=1` (WAL shared memory does
+            // not work over network filesystems), so they only see checkpointed pages.
+            if config.live_monitoring
+                && let Err(e) = conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()))
+            {
+                warn!("Failed to checkpoint resource metrics database: {}", e);
+            }
             last_flush_time = Instant::now();
         }
     }

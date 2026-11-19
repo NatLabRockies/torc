@@ -242,6 +242,13 @@ Plot CPU and memory usage from resource monitoring databases:
 Requires workflows run with resource monitoring enabled; time-series plots need
 `granularity: "time_series"` in the `resource_monitor` config.
 
+Switch to **Live** to follow a running workflow. Select one or more compute node databases, and the
+view plots node CPU and memory utilization as percentages of each node's capacity, refreshing every
+5 seconds. Check jobs in the job list to add panels for their CPU (100% is one core) and memory, and
+pick a time window or pause updates from the toolbar. Live plots require `live_monitoring: true`,
+and they update only as often as `flush_interval_seconds` (default 300). See
+[Live Monitoring](../reference/resource-monitoring.md#live-monitoring).
+
 ### AI Chat Tab
 
 The AI Chat tab provides an AI assistant that can interact with your workflows using natural
