@@ -1992,6 +1992,16 @@ fn test_lifecycle_actions_record_user_action_events(start_server: &ServerProcess
             .is_empty()
     );
 
+    // A reset_job_status that changes nothing (fresh workflow) must NOT record an event.
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(false))
+        .expect("reset_job_status failed");
+    assert!(
+        list_events_in_category(config, workflow_id, Some("user_action"))
+            .items
+            .is_empty(),
+        "no-op reset_job_status should not record an event"
+    );
+
     // A dry-run of process_changed_job_inputs must NOT record an event.
     apis::workflows_api::process_changed_job_inputs(config, workflow_id, Some(true))
         .expect("dry-run process_changed_job_inputs failed");
