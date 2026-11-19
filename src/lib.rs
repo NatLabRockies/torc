@@ -25,10 +25,10 @@ macro_rules! stale_run_text {
 pub const STALE_RUN: &str = stale_run_text!();
 
 /// Message a claim returns (with 422) when its run_id is not the workflow's current run or its
-/// compute_node_id is not a node of the workflow. Starts with [`STALE_RUN`].
+/// compute_node_id is not an active node of the workflow. Starts with [`STALE_RUN`].
 pub const CLAIM_START_MISMATCH: &str = concat!(
     stale_run_text!(),
-    " or compute_node_id is not a node of this workflow"
+    " or compute_node_id is not an active node of this workflow"
 );
 
 /// Get the current username from environment variables.

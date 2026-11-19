@@ -636,6 +636,50 @@ struct CompletedJobRecord {
     result_id: i64,
 }
 
+/// A completion is rejected when it comes from a runner that no longer owns the job: the
+/// result reports another attempt, the job records another node, or the job is not running and
+/// the reporting node is inactive (for example expired by the heartbeat sweep). This stops a
+/// late completion from a silent runner after its job was failed, reset, retried, or restarted
+/// elsewhere. Status values: 3 = pending, 4 = running.
+macro_rules! job_ownership_sql {
+    ($set:literal) => {
+        concat!(
+            "UPDATE job SET ",
+            $set,
+            " WHERE id = ? AND attempt_id = ? AND (compute_node_id IS NULL OR compute_node_id = ?) ",
+            "AND NOT (status NOT IN (3, 4) ",
+            "AND EXISTS (SELECT 1 FROM compute_node WHERE id = ? AND is_active = 0))"
+        )
+    };
+}
+const JOB_OWNERSHIP_CHECK_SQL: &str = job_ownership_sql!("start_time = start_time");
+const JOB_OWNERSHIP_CLEAR_SQL: &str =
+    job_ownership_sql!("start_time = NULL, compute_node_id = NULL");
+
+fn job_ownership_outcome(
+    outcome: Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error>,
+    id: i64,
+    result: &models::ResultModel,
+) -> Result<(), CompletionMutationError> {
+    match outcome {
+        Ok(done) if done.rows_affected() == 1 => Ok(()),
+        Ok(_) => Err(CompletionMutationError::Response(Box::new(
+            CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
+                format!(
+                    "job_id={} does not belong to attempt_id={} on compute_node_id={}: it was \
+                     reset, retried, or restarted elsewhere, or the node is inactive",
+                    id,
+                    result.attempt_id.unwrap_or(1),
+                    result.compute_node_id
+                ),
+            )),
+        ))),
+        Err(e) => Err(CompletionMutationError::Transport(
+            database_lock_aware_error(e, "Failed to verify job ownership"),
+        )),
+    }
+}
+
 enum CompletionMutationError {
     Response(Box<CompleteJobResponse>),
     Transport(ApiError),
@@ -1509,16 +1553,20 @@ where
         let pending_int = models::JobStatus::Pending.to_int();
         let running_int = models::JobStatus::Running.to_int();
         let start_time = chrono::Utc::now().to_rfc3339();
-        let start_result = sqlx::query!(
+        // The node check is part of the update, so a start cannot slip in after the server
+        // deactivated the node and failed its jobs.
+        let start_result = sqlx::query(
             "UPDATE job
              SET status = ?, start_time = ?, compute_node_id = ?
-             WHERE id = ? AND status = ?",
-            running_int,
-            start_time,
-            compute_node_id,
-            id,
-            pending_int,
+             WHERE id = ? AND status = ?
+               AND NOT EXISTS (SELECT 1 FROM compute_node WHERE id = ? AND is_active = 0)",
         )
+        .bind(running_int)
+        .bind(start_time)
+        .bind(compute_node_id)
+        .bind(id)
+        .bind(pending_int)
+        .bind(compute_node_id)
         .execute(self.pool.as_ref())
         .await
         .map_err(|e| {
@@ -1527,6 +1575,24 @@ where
         })?;
 
         if start_result.rows_affected() == 0 {
+            let node_inactive: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM compute_node WHERE id = ? AND is_active = 0)",
+            )
+            .bind(compute_node_id)
+            .fetch_one(self.pool.as_ref())
+            .await
+            .map_err(|e| {
+                error!("Failed to check compute node for start_job: {}", e);
+                ApiError("Database error".to_string())
+            })?;
+            if node_inactive {
+                return Ok(StartJobResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "compute_node_id={} is not active, cannot start job_id={}",
+                        compute_node_id, id
+                    )),
+                ));
+            }
             error!(
                 "start_job: job_id={} status was concurrently changed from Pending, cannot start",
                 id
@@ -1581,6 +1647,37 @@ where
             }
             Err(CompletionMutationError::Response(response)) => Ok(*response),
             Err(CompletionMutationError::Transport(error)) => Err(error),
+        }
+    }
+
+    /// Fail a running job on the server's own authority, for example when the compute node
+    /// that runs it stopped reporting. There is no caller to authorize. The job takes the
+    /// normal completion path, so its result is stored and its dependents are released.
+    pub(super) async fn fail_job_as_server(
+        &self,
+        id: i64,
+        run_id: i64,
+        result: models::ResultModel,
+        context: &C,
+    ) -> Result<(), String> {
+        match self
+            .apply_job_completion_state(
+                None,
+                id,
+                models::JobStatus::Failed,
+                run_id,
+                result,
+                context,
+            )
+            .await
+        {
+            Ok(completion) => {
+                self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
+                    .await;
+                Ok(())
+            }
+            Err(CompletionMutationError::Response(response)) => Err(format!("{:?}", response)),
+            Err(CompletionMutationError::Transport(error)) => Err(error.0),
         }
     }
 
@@ -1654,23 +1751,19 @@ where
 
         job.status = Some(status);
 
-        match sqlx::query!(
-            "UPDATE job SET start_time = NULL, compute_node_id = NULL WHERE id = ?",
-            id
-        )
-        .execute(self.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!("Cleared start_time and compute_node_id for job_id={}", id);
-            }
-            Err(e) => {
-                error!(
-                    "Failed to clear runtime state on job for job_id={}: {}",
-                    id, e
-                );
-            }
-        }
+        // The status change below clears the job's runtime state. Until then the job keeps its
+        // node, so a failure after this point leaves it owned and retryable.
+        job_ownership_outcome(
+            sqlx::query(JOB_OWNERSHIP_CHECK_SQL)
+                .bind(id)
+                .bind(result.attempt_id.unwrap_or(1))
+                .bind(result.compute_node_id)
+                .bind(result.compute_node_id)
+                .execute(self.pool.as_ref())
+                .await,
+            id,
+            &result,
+        )?;
 
         let result_return_code = result.return_code;
         let result_response = self
@@ -1859,18 +1952,19 @@ where
             )));
         }
 
-        if let Err(e) = sqlx::query!(
-            "UPDATE job SET start_time = NULL, compute_node_id = NULL WHERE id = ?",
-            id
-        )
-        .execute(&mut **tx)
-        .await
-        {
-            error!(
-                "Failed to clear runtime state on job for job_id={}: {}",
-                id, e
-            );
-        }
+        // Verify ownership and clear the runtime state in one statement. The transaction
+        // rolls back if a later write fails.
+        job_ownership_outcome(
+            sqlx::query(JOB_OWNERSHIP_CLEAR_SQL)
+                .bind(id)
+                .bind(result.attempt_id.unwrap_or(1))
+                .bind(result.compute_node_id)
+                .bind(result.compute_node_id)
+                .execute(&mut **tx)
+                .await,
+            id,
+            &result,
+        )?;
 
         let result_return_code = result.return_code;
         let attempt_id = result.attempt_id.unwrap_or(1);
