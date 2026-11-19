@@ -1,6 +1,6 @@
 [package]
 name = "torc-desktop"
-version = "1.1.0"
+version = "1.2.0"
 description = "Native desktop shell for torc-dash on a remote login node"
 edition = "2024"
 publish = false
