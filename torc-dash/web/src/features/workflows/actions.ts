@@ -36,46 +36,45 @@ const ACTIVE_WORK = /jobs are currently running or pending|compute nodes are cur
  * Run initialize/reinitialize. If it fails only because input files are missing, offer to
  * retry with `--force`, which skips that check (as the CLI does). If it fails because jobs or
  * allocations still look active (e.g., after `scancel`), returns "needs-sync" when the user
- * chooses to check Slurm status.
+ * chooses to check Slurm status. The file check runs before the active-work guard, so the
+ * forced retry can hit that guard too; both attempts share one error handler.
  */
 async function runInit(
   cmd: "initialize" | "reinitialize",
   label: string,
   id: number,
 ): Promise<"needs-sync" | void> {
-  try {
-    await cli(cmd, { ...wid(id), force: false });
-  } catch (e) {
-    const msg = errorText(e);
-    if (ACTIVE_WORK.test(msg)) {
-      const ok = await confirm({
-        title: "Workflow still has active jobs",
-        message:
-          `Workflow ${id} has jobs marked running or Slurm allocations marked active, so it ` +
-          `can't be ${cmd}d yet.\n\nIf those Slurm jobs were canceled (scancel), timed out, or ` +
-          `died, check Slurm status to mark the orphaned jobs as failed, then ${label.toLowerCase()}.`,
-        confirmLabel: "Check Slurm status…",
-      });
-      return ok ? "needs-sync" : undefined;
-    }
-    if (!msg.includes("Missing required files")) {
-      return toast.error(`${label} failed: ${msg}`);
-    }
-    const ok = await confirm({
-      title: "Required input files are missing",
-      message: `${msg}\n\n${label} anyway? Jobs that need these files will fail unless they appear before the jobs run.`,
-      confirmLabel: `${label} anyway`,
-      danger: true,
-    });
-    if (!ok) return;
+  for (const force of [false, true]) {
     try {
-      await cli(cmd, { ...wid(id), force: true });
-    } catch (e2) {
-      return toast.error(`${label} failed: ${errorText(e2)}`);
+      await cli(cmd, { ...wid(id), force });
+      toast.success(`Workflow ${id} ${cmd}d`);
+      app.refresh();
+      return;
+    } catch (e) {
+      const msg = errorText(e);
+      if (ACTIVE_WORK.test(msg)) {
+        const ok = await confirm({
+          title: "Workflow still has active jobs",
+          message:
+            `Workflow ${id} has jobs marked running or Slurm allocations marked active, so it ` +
+            `can't be ${cmd}d yet.\n\nIf those Slurm jobs were canceled (scancel), timed out, or ` +
+            `died, check Slurm status to mark the orphaned jobs as failed, then ${label.toLowerCase()}.`,
+          confirmLabel: "Check Slurm status…",
+        });
+        return ok ? "needs-sync" : undefined;
+      }
+      if (force || !msg.includes("Missing required files")) {
+        return toast.error(`${label} failed: ${msg}`);
+      }
+      const ok = await confirm({
+        title: "Required input files are missing",
+        message: `${msg}\n\n${label} anyway? Jobs that need these files will fail unless they appear before the jobs run.`,
+        confirmLabel: `${label} anyway`,
+        danger: true,
+      });
+      if (!ok) return;
     }
   }
-  toast.success(`Workflow ${id} ${cmd}d`);
-  app.refresh();
 }
 
 /** Initialize. If output files from an earlier run exist, say so first: initializing keeps them. */
