@@ -36,7 +36,8 @@
   let wf = $state<Workflow | null>(null);
   let submissionDir = $derived(wf?.submission_directory ?? null);
   let loadError = $state<string | null>(null);
-  let loadedFor = $state<number | null>(null);
+  // The workflow whose state is shown; a refresh of the same workflow must not clear it.
+  let shownFor: number | null = null;
   let selectedKey = $state<string | null>(null);
 
   $effect(() => saveOutputDir(outputDir));
@@ -47,8 +48,12 @@
     void app.refreshTick;
     if (id === null) return;
     untrack(() => {
-      if (id !== loadedFor) {
+      if (id !== shownFor) {
+        shownFor = id;
         jobs = null;
+        // Drop the old submission directory so Slurm views can't resolve paths against it.
+        wf = null;
+        loadError = null;
         selectedKey = null;
         tailed.clear();
       }
@@ -57,8 +62,12 @@
   });
 
   async function load(id: number, all: boolean) {
+    // Set wf as soon as it arrives: the Slurm views only need it, not the job/result listings.
+    const wfReq = unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })).then((w) => {
+      if (id === app.workflowId) wf = w;
+    });
     try {
-      const [j, r, w] = await Promise.all([
+      const [j, r] = await Promise.all([
         listAll((offset, limit) =>
           unwrap(api.GET("/jobs", { params: { query: { workflow_id: id, offset, limit } } })),
         ),
@@ -69,15 +78,16 @@
             }),
           ),
         ),
-        unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })),
+        wfReq,
       ]);
       if (id !== app.workflowId) return;
       jobs = j;
       results = r;
-      wf = w;
-      loadedFor = id;
       loadError = null;
     } catch (e) {
+      // A failed listing can reject before wfReq settles; wait for it so the Slurm views don't
+      // treat the error as "workflow loaded" and fall back to cwd-relative paths.
+      await wfReq.catch(() => {});
       if (id === app.workflowId) loadError = errorText(e);
     }
   }
@@ -268,10 +278,19 @@
       {/if}
     {:else if view === "tail"}
       <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
-    {:else if view === "slurm-logs"}
-      <SlurmLogs workflowId={app.workflowId} outputDir={baseDir} />
+    {:else if wf?.id !== app.workflowId && !loadError}
+      <!-- Slurm paths depend on this workflow's submission directory; wait until it's loaded. -->
+      <div class="empty"><span class="spinner"></span> Loading workflow…</div>
     {:else}
-      <SlurmSacct workflowId={app.workflowId} outputDir={baseDir} />
+      <!-- If the workflow can't be read, fall back to cwd-relative paths (as ResourcesTab does). -->
+      {#if loadError}
+        <p class="error-text">{loadError}</p>
+      {/if}
+      {#if view === "slurm-logs"}
+        <SlurmLogs workflowId={app.workflowId} outputDir={baseDir} />
+      {:else}
+        <SlurmSacct workflowId={app.workflowId} outputDir={baseDir} />
+      {/if}
     {/if}
   {/if}
 </div>

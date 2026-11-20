@@ -8,7 +8,7 @@
   import type { Column } from "../../lib/ui/DataTable.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
-  import { loadOutputDir, resolveLogBaseDir, saveOutputDir } from "./files";
+  import { loadOutputDir, resolveLogBaseDir, saveOutputDir } from "../debugging/logs";
   import { loadJobDetails, type JobDetails } from "./job";
   import { rerunJobs } from "./jobActions";
   import LogPane from "./LogPane.svelte";

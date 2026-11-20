@@ -22,7 +22,6 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use rmcp::{ServiceExt, model::CallToolRequestParams, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
-use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
@@ -1404,9 +1403,10 @@ async fn cli_create_handler(
 
     let result = if req.is_file {
         // Spec is a file path
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "create", &req.spec],
+            &["-f", "json", "create", &spec],
             &state.api_url,
         )
         .await
@@ -1519,10 +1519,10 @@ async fn cli_create_slurm_handler(
     let result = if req.is_file {
         // Spec is a file path - two-step process: generate schedulers then create
         // Step 1: Generate Slurm schedulers
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         let slurm_spec_path = format!(
             "{}_slurm.yaml",
-            req.spec
-                .trim_end_matches(".yaml")
+            spec.trim_end_matches(".yaml")
                 .trim_end_matches(".yml")
                 .trim_end_matches(".json")
                 .trim_end_matches(".json5")
@@ -1535,7 +1535,7 @@ async fn cli_create_slurm_handler(
         }
         gen_args.push("-o");
         gen_args.push(&slurm_spec_path);
-        gen_args.push(&req.spec);
+        gen_args.push(&spec);
 
         let gen_result = run_torc_command(&state.torc_bin, &gen_args, &state.api_url).await;
         if !gen_result.success {
@@ -1649,9 +1649,10 @@ async fn cli_validate_handler(
 ) -> impl IntoResponse {
     let result = if req.is_file {
         // Spec is a file path
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "create", &req.spec, "--dry-run"],
+            &["-f", "json", "create", &spec, "--dry-run"],
             &state.api_url,
         )
         .await
@@ -2133,7 +2134,7 @@ async fn cli_recover_handler(
         "recover".to_string(),
         req.workflow_id.clone(),
         "-o".to_string(),
-        req.output_dir.clone(),
+        expand_tilde(&req.output_dir).to_string_lossy().into_owned(),
         "--memory-multiplier".to_string(),
         req.memory_multiplier.to_string(),
         "--runtime-multiplier".to_string(),
@@ -2293,7 +2294,7 @@ async fn cli_sync_status_handler(
 
 /// Read file contents from filesystem
 async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoResponse {
-    let path = FsPath::new(&req.path);
+    let path = expand_tilde(&req.path);
     let exists = path.exists();
 
     if !exists {
@@ -2318,7 +2319,7 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
     }
 
     // Read the file contents
-    match tokio::fs::read_to_string(&req.path).await {
+    match tokio::fs::read_to_string(&path).await {
         Ok(content) => {
             // Check if it's JSON by file extension and try to parse
             let is_json = req.path.to_lowercase().ends_with(".json")
@@ -2419,7 +2420,10 @@ fn read_resource_samples(
         .add(b' ');
     let uri = format!(
         "file:{}?immutable=1",
-        percent_encoding::utf8_percent_encode(&req.db_path, URI_RESERVED)
+        percent_encoding::utf8_percent_encode(
+            &expand_tilde(&req.db_path).to_string_lossy(),
+            URI_RESERVED
+        )
     );
     let conn = Connection::open_with_flags(
         &uri,
@@ -2560,12 +2564,21 @@ fn complete_utf8_len(buf: &[u8]) -> usize {
     }
 }
 
+/// Expand a leading `~` or `~/` to the home directory; the browser sends paths verbatim and
+/// neither the filesystem nor the torc CLI expands `~`.
+fn expand_tilde(path: &str) -> std::path::PathBuf {
+    let rest = path
+        .strip_prefix('~')
+        .filter(|r| r.is_empty() || r.starts_with(std::path::is_separator));
+    match (rest, dirs::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest.trim_start_matches(std::path::is_separator)),
+        _ => std::path::PathBuf::from(path),
+    }
+}
+
 async fn tail_file(path: &str, offset: Option<u64>) -> std::io::Result<TailFileResponse> {
     use tokio::io::AsyncSeekExt;
-    let path = match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
-        (Some(rest), Some(home)) => std::path::Path::new(&home).join(rest),
-        _ => std::path::PathBuf::from(path),
-    };
+    let path = expand_tilde(path);
     let mut file = match open_nonblocking(&path).await {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // A missing directory means a wrong output dir (or a job on another host), not a
@@ -2652,7 +2665,7 @@ async fn cli_write_file_handler(Json(req): Json<WriteFileRequest>) -> impl IntoR
         error: Some(error),
         exists,
     };
-    let path = match std::path::absolute(req.path.trim()) {
+    let path = match std::path::absolute(expand_tilde(req.path.trim())) {
         Ok(p) if !req.path.trim().is_empty() => p,
         _ => return Json(fail("Enter a file path".into(), false)),
     };
@@ -2708,14 +2721,11 @@ async fn cli_export_handler(
     let output_raw = req.output.as_deref().unwrap_or(&default_output);
 
     // Resolve to absolute path so the user knows exactly where the file goes
-    let output_path = FsPath::new(output_raw);
-    let output_abs = if output_path.is_relative() {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(output_path).to_string_lossy().to_string())
-            .unwrap_or_else(|_| output_raw.to_string())
-    } else {
-        output_raw.to_string()
-    };
+    let output_path = expand_tilde(output_raw);
+    let output_abs = std::path::absolute(&output_path)
+        .unwrap_or(output_path)
+        .to_string_lossy()
+        .into_owned();
 
     let mut args = vec![
         "-f",
@@ -2743,9 +2753,11 @@ async fn cli_import_handler(
 ) -> impl IntoResponse {
     // Determine the file path to import from
     let temp_path_owned;
+    let expanded_path;
     let import_path = if let Some(ref path) = req.file_path {
         // Use server-side file path directly
-        path.as_str()
+        expanded_path = expand_tilde(path).to_string_lossy().into_owned();
+        expanded_path.as_str()
     } else if let Some(ref content) = req.content {
         // Write uploaded content to a temp file
         let unique_id = uuid::Uuid::new_v4();
@@ -2872,28 +2884,53 @@ async fn cli_plot_resources_handler(
         });
     }
 
-    // Create a temp directory for output
-    let temp_dir = std::env::temp_dir().join(format!("torc_plots_{}", std::process::id()));
-    let has_custom_output_dir = req.output_dir.is_some();
-    let output_dir = req
-        .output_dir
-        .map(std::path::PathBuf::from)
-        .unwrap_or(temp_dir.clone());
+    // Each request gets its own temp dir, so concurrent requests can't read or delete each
+    // other's plots.
+    let mut temp_dir = None;
+    let output_dir = match req.output_dir.as_deref() {
+        Some(dir) => expand_tilde(dir),
+        None => match tempfile::Builder::new().prefix("torc_plots_").tempdir() {
+            Ok(dir) => temp_dir.insert(dir).path().to_path_buf(),
+            Err(e) => {
+                return Json(PlotResourcesResponse {
+                    success: false,
+                    plots: vec![],
+                    error: Some(format!("Failed to create output directory: {}", e)),
+                });
+            }
+        },
+    };
+    let response = plot_resources(&state.torc_bin, &req, &output_dir).await;
+    // Dropping a TempDir deletes it synchronously; keep that off the async worker threads.
+    if let Some(dir) = temp_dir {
+        tokio::task::spawn_blocking(move || dir.close());
+    }
+    Json(response)
+}
 
-    if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
-        return Json(PlotResourcesResponse {
+async fn plot_resources(
+    torc_bin: &str,
+    req: &PlotResourcesRequest,
+    output_dir: &std::path::Path,
+) -> PlotResourcesResponse {
+    if let Err(e) = tokio::fs::create_dir_all(output_dir).await {
+        return PlotResourcesResponse {
             success: false,
             plots: vec![],
             error: Some(format!("Failed to create output directory: {}", e)),
-        });
+        };
     }
 
     // Build command arguments
     let mut args: Vec<&str> = vec!["plot-resources"];
 
     // Add all database paths
-    let db_paths: Vec<&str> = req.db_paths.iter().map(|s| s.as_str()).collect();
-    args.extend(db_paths.iter());
+    let db_paths: Vec<String> = req
+        .db_paths
+        .iter()
+        .map(|p| expand_tilde(p).to_string_lossy().into_owned())
+        .collect();
+    args.extend(db_paths.iter().map(String::as_str));
 
     let output_dir_str = output_dir.to_string_lossy().to_string();
     args.push("--output-dir");
@@ -2905,25 +2942,25 @@ async fn cli_plot_resources_handler(
     args.push("--format");
     args.push("json");
 
-    info!("Running: {} {}", state.torc_bin, args.join(" "));
+    info!("Running: {} {}", torc_bin, args.join(" "));
 
-    let output = Command::new(&state.torc_bin).args(&args).output().await;
+    let output = Command::new(torc_bin).args(&args).output().await;
 
     match output {
         Ok(output) => {
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Json(PlotResourcesResponse {
+                return PlotResourcesResponse {
                     success: false,
                     plots: vec![],
                     error: Some(format!("Command failed: {}", stderr)),
-                });
+                };
             }
 
             // Read all generated JSON files
             let mut plots = Vec::new();
 
-            match tokio::fs::read_dir(&output_dir).await {
+            match tokio::fs::read_dir(output_dir).await {
                 Ok(mut entries) => {
                     while let Ok(Some(entry)) = entries.next_entry().await {
                         let path = entry.path();
@@ -2953,33 +2990,28 @@ async fn cli_plot_resources_handler(
                     }
                 }
                 Err(e) => {
-                    return Json(PlotResourcesResponse {
+                    return PlotResourcesResponse {
                         success: false,
                         plots: vec![],
                         error: Some(format!("Failed to read output directory: {}", e)),
-                    });
+                    };
                 }
-            }
-
-            // Clean up temp directory if we created it
-            if !has_custom_output_dir {
-                let _ = tokio::fs::remove_dir_all(&temp_dir).await;
             }
 
             // Sort plots by name for consistent ordering
             plots.sort_by(|a, b| a.name.cmp(&b.name));
 
-            Json(PlotResourcesResponse {
+            PlotResourcesResponse {
                 success: true,
                 plots,
                 error: None,
-            })
+            }
         }
-        Err(e) => Json(PlotResourcesResponse {
+        Err(e) => PlotResourcesResponse {
             success: false,
             plots: vec![],
             error: Some(format!("Failed to execute command: {}", e)),
-        }),
+        },
     }
 }
 
@@ -2987,7 +3019,7 @@ async fn cli_plot_resources_handler(
 async fn cli_list_resource_dbs_handler(
     Json(req): Json<ListResourceDbsRequest>,
 ) -> impl IntoResponse {
-    let base_path = FsPath::new(&req.base_dir);
+    let base_path = &expand_tilde(&req.base_dir);
 
     if !base_path.exists() {
         return Json(ListResourceDbsResponse {
@@ -3106,13 +3138,14 @@ async fn cli_slurm_parse_logs_handler(
     Json(req): Json<SlurmParseLogsRequest>,
 ) -> impl IntoResponse {
     let workflow_id_str = req.workflow_id.to_string();
+    let output_dir = expand_tilde(&req.output_dir).to_string_lossy().into_owned();
 
     let mut args = vec![
         "-f",
         "json",
         "slurm",
         "parse-logs",
-        &req.output_dir,
+        &output_dir,
         "--workflow-id",
         &workflow_id_str,
     ];
@@ -3173,6 +3206,7 @@ async fn cli_slurm_sacct_handler(
     Json(req): Json<SlurmSacctRequest>,
 ) -> impl IntoResponse {
     let workflow_id_str = req.workflow_id.to_string();
+    let output_dir = expand_tilde(&req.output_dir).to_string_lossy().into_owned();
 
     let args = vec![
         "-f",
@@ -3181,7 +3215,7 @@ async fn cli_slurm_sacct_handler(
         "sacct",
         &workflow_id_str,
         "--output-dir",
-        &req.output_dir,
+        &output_dir,
     ];
 
     info!("Running: {} {}", state.torc_bin, args.join(" "));
@@ -5083,8 +5117,8 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 mod tests {
     use super::{
         ResourceSamplesRequest, allowed_host_list, anthropic_api_base, apply_spec_edit,
-        check_request, read_resource_samples, same_secret, tail_file, take_token_param,
-        workflow_id_from_resource_db_name,
+        check_request, expand_tilde, read_resource_samples, same_secret, tail_file,
+        take_token_param, workflow_id_from_resource_db_name,
     };
 
     #[test]
@@ -5332,6 +5366,25 @@ mod tests {
             anthropic_api_base(" https://x.services.ai.azure.com/anthropic/v1"),
             "https://x.services.ai.azure.com/anthropic/v1"
         );
+    }
+
+    #[test]
+    fn expand_tilde_only_expands_a_leading_home_component() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(expand_tilde("~"), home);
+        assert_eq!(expand_tilde("~/runs/out"), home.join("runs/out"));
+        assert_eq!(expand_tilde("~bob/x"), std::path::PathBuf::from("~bob/x"));
+        assert_eq!(
+            expand_tilde("/abs/~/x"),
+            std::path::PathBuf::from("/abs/~/x")
+        );
+        // Backslash is a filename character on Unix, a separator on Windows.
+        let backslash = if cfg!(windows) {
+            home.join("x")
+        } else {
+            std::path::PathBuf::from("~\\x")
+        };
+        assert_eq!(expand_tilde("~\\x"), backslash);
     }
 
     #[test]

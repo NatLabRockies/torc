@@ -1,7 +1,7 @@
 <!-- Slurm allocation stdout/stderr: {output_dir}/slurm_output_wf{wf}_sl{slurm_job_id}.o/.e -->
 <script lang="ts">
   import Modal from "../../lib/ui/Modal.svelte";
-  import { loadOutputDir, resolveLogBaseDir, saveOutputDir } from "./files";
+  import { loadOutputDir, resolveLogBaseDir, saveOutputDir } from "../debugging/logs";
   import LogPane from "./LogPane.svelte";
 
   let {
