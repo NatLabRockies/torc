@@ -28,6 +28,16 @@
   type Action = { id: string; label: string; icon?: IconName; danger?: boolean; run: () => void };
 
   let dialog = $state<Dialog | null>(null);
+  // Set when the sync dialog was opened because (re)initialize was blocked by orphaned jobs.
+  let retryInit = $state<{ label: string; run: () => unknown } | null>(null);
+
+  /** Run init/reinit; if blocked by jobs that look active, open the sync dialog with a retry. */
+  async function initOrSync(label: string, run: (id: number) => Promise<"needs-sync" | void>) {
+    if ((await run(workflowId)) === "needs-sync") {
+      retryInit = { label, run: () => initOrSync(label, run) };
+      dialog = "sync";
+    }
+  }
   let running = $derived(
     execution.running && execution.mode === "run" && execution.workflowId === workflowId,
   );
@@ -51,8 +61,8 @@
       label: "Watch with auto-recovery",
       run: () => execution.start(id(), "watch-recover"),
     },
-    init: { id: "init", label: "Initialize", run: () => initializeWorkflow(id()) },
-    reinit: { id: "reinit", label: "Reinitialize", run: () => reinitializeWorkflow(id()) },
+    init: { id: "init", label: "Initialize", run: () => initOrSync("Initialize", initializeWorkflow) },
+    reinit: { id: "reinit", label: "Reinitialize", run: () => initOrSync("Reinitialize", reinitializeWorkflow) },
     reset: { id: "reset", label: "Reset status", run: () => resetWorkflow(id()) },
     plan: { id: "plan", label: "Execution plan", run: () => (dialog = "plan") },
     graph: { id: "graph", label: "View graph", icon: "graph", run: () => app.go("dag", id()) },
@@ -169,7 +179,11 @@
   {:else if dialog === "recover"}
     <RecoverModal {workflowId} onclose={() => (dialog = null)} />
   {:else if dialog === "sync"}
-    <SyncStatusModal {workflowId} onclose={() => (dialog = null)} />
+    <SyncStatusModal
+      {workflowId}
+      retry={retryInit ?? undefined}
+      onclose={() => ((dialog = null), (retryInit = null))}
+    />
   {:else if dialog === "export"}
     <ExportModal {workflowId} onclose={() => (dialog = null)} />
   {/if}

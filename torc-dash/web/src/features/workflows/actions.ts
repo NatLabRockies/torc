@@ -29,15 +29,35 @@ export async function submitWorkflow(id: number) {
   await act("Submit", () => cli("submit", wid(id)), `Workflow ${id} submitted`);
 }
 
+/** Server refusals for a reset while jobs or Slurm allocations still look active. */
+const ACTIVE_WORK = /jobs are currently running or pending|compute nodes are currently pending or active/;
+
 /**
  * Run initialize/reinitialize. If it fails only because input files are missing, offer to
- * retry with `--force`, which skips that check (as the CLI does).
+ * retry with `--force`, which skips that check (as the CLI does). If it fails because jobs or
+ * allocations still look active (e.g., after `scancel`), returns "needs-sync" when the user
+ * chooses to check Slurm status.
  */
-async function runInit(cmd: "initialize" | "reinitialize", label: string, id: number) {
+async function runInit(
+  cmd: "initialize" | "reinitialize",
+  label: string,
+  id: number,
+): Promise<"needs-sync" | void> {
   try {
     await cli(cmd, { ...wid(id), force: false });
   } catch (e) {
     const msg = errorText(e);
+    if (ACTIVE_WORK.test(msg)) {
+      const ok = await confirm({
+        title: "Workflow still has active jobs",
+        message:
+          `Workflow ${id} has jobs marked running or Slurm allocations marked active, so it ` +
+          `can't be ${cmd}d yet.\n\nIf those Slurm jobs were canceled (scancel), timed out, or ` +
+          `died, check Slurm status to mark the orphaned jobs as failed, then ${label.toLowerCase()}.`,
+        confirmLabel: "Check Slurm status…",
+      });
+      return ok ? "needs-sync" : undefined;
+    }
     if (!msg.includes("Missing required files")) {
       return toast.error(`${label} failed: ${msg}`);
     }
@@ -78,7 +98,7 @@ export async function initializeWorkflow(id: number) {
   } catch {
     // The dry run is advisory; fall through to a normal initialize like the CLI would.
   }
-  await runInit("initialize", "Initialize", id);
+  return runInit("initialize", "Initialize", id);
 }
 
 export const reinitializeWorkflow = (id: number) => runInit("reinitialize", "Reinitialize", id);
