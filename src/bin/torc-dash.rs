@@ -2884,13 +2884,13 @@ async fn cli_plot_resources_handler(
         });
     }
 
-    // Each request gets its own temp dir (removed on drop), so concurrent requests can't
-    // read or delete each other's plots.
-    let mut _temp_dir = None;
+    // Each request gets its own temp dir, so concurrent requests can't read or delete each
+    // other's plots.
+    let mut temp_dir = None;
     let output_dir = match req.output_dir.as_deref() {
         Some(dir) => expand_tilde(dir),
         None => match tempfile::Builder::new().prefix("torc_plots_").tempdir() {
-            Ok(dir) => _temp_dir.insert(dir).path().to_path_buf(),
+            Ok(dir) => temp_dir.insert(dir).path().to_path_buf(),
             Err(e) => {
                 return Json(PlotResourcesResponse {
                     success: false,
@@ -2900,13 +2900,25 @@ async fn cli_plot_resources_handler(
             }
         },
     };
+    let response = plot_resources(&state.torc_bin, &req, &output_dir).await;
+    // Dropping a TempDir deletes it synchronously; keep that off the async worker threads.
+    if let Some(dir) = temp_dir {
+        tokio::task::spawn_blocking(move || dir.close());
+    }
+    Json(response)
+}
 
-    if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
-        return Json(PlotResourcesResponse {
+async fn plot_resources(
+    torc_bin: &str,
+    req: &PlotResourcesRequest,
+    output_dir: &std::path::Path,
+) -> PlotResourcesResponse {
+    if let Err(e) = tokio::fs::create_dir_all(output_dir).await {
+        return PlotResourcesResponse {
             success: false,
             plots: vec![],
             error: Some(format!("Failed to create output directory: {}", e)),
-        });
+        };
     }
 
     // Build command arguments
@@ -2930,25 +2942,25 @@ async fn cli_plot_resources_handler(
     args.push("--format");
     args.push("json");
 
-    info!("Running: {} {}", state.torc_bin, args.join(" "));
+    info!("Running: {} {}", torc_bin, args.join(" "));
 
-    let output = Command::new(&state.torc_bin).args(&args).output().await;
+    let output = Command::new(torc_bin).args(&args).output().await;
 
     match output {
         Ok(output) => {
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Json(PlotResourcesResponse {
+                return PlotResourcesResponse {
                     success: false,
                     plots: vec![],
                     error: Some(format!("Command failed: {}", stderr)),
-                });
+                };
             }
 
             // Read all generated JSON files
             let mut plots = Vec::new();
 
-            match tokio::fs::read_dir(&output_dir).await {
+            match tokio::fs::read_dir(output_dir).await {
                 Ok(mut entries) => {
                     while let Ok(Some(entry)) = entries.next_entry().await {
                         let path = entry.path();
@@ -2978,28 +2990,28 @@ async fn cli_plot_resources_handler(
                     }
                 }
                 Err(e) => {
-                    return Json(PlotResourcesResponse {
+                    return PlotResourcesResponse {
                         success: false,
                         plots: vec![],
                         error: Some(format!("Failed to read output directory: {}", e)),
-                    });
+                    };
                 }
             }
 
             // Sort plots by name for consistent ordering
             plots.sort_by(|a, b| a.name.cmp(&b.name));
 
-            Json(PlotResourcesResponse {
+            PlotResourcesResponse {
                 success: true,
                 plots,
                 error: None,
-            })
+            }
         }
-        Err(e) => Json(PlotResourcesResponse {
+        Err(e) => PlotResourcesResponse {
             success: false,
             plots: vec![],
             error: Some(format!("Failed to execute command: {}", e)),
-        }),
+        },
     }
 }
 
