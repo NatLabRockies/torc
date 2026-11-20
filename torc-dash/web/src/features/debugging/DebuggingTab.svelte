@@ -62,11 +62,11 @@
   });
 
   async function load(id: number, all: boolean) {
+    // Set wf as soon as it arrives: the Slurm views only need it, not the job/result listings.
+    const wfReq = unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })).then((w) => {
+      if (id === app.workflowId) wf = w;
+    });
     try {
-      // Set wf as soon as it arrives: the Slurm views only need it, not the job/result listings.
-      const wfReq = unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })).then((w) => {
-        if (id === app.workflowId) wf = w;
-      });
       const [j, r] = await Promise.all([
         listAll((offset, limit) =>
           unwrap(api.GET("/jobs", { params: { query: { workflow_id: id, offset, limit } } })),
@@ -85,6 +85,9 @@
       results = r;
       loadError = null;
     } catch (e) {
+      // A failed listing can reject before wfReq settles; wait for it so the Slurm views don't
+      // treat the error as "workflow loaded" and fall back to cwd-relative paths.
+      await wfReq.catch(() => {});
       if (id === app.workflowId) loadError = errorText(e);
     }
   }

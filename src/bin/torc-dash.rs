@@ -2569,9 +2569,9 @@ fn complete_utf8_len(buf: &[u8]) -> usize {
 fn expand_tilde(path: &str) -> std::path::PathBuf {
     let rest = path
         .strip_prefix('~')
-        .filter(|r| r.is_empty() || r.starts_with(['/', '\\']));
+        .filter(|r| r.is_empty() || r.starts_with(std::path::is_separator));
     match (rest, dirs::home_dir()) {
-        (Some(rest), Some(home)) => home.join(rest.trim_start_matches(['/', '\\'])),
+        (Some(rest), Some(home)) => home.join(rest.trim_start_matches(std::path::is_separator)),
         _ => std::path::PathBuf::from(path),
     }
 }
@@ -2884,14 +2884,22 @@ async fn cli_plot_resources_handler(
         });
     }
 
-    // Create a temp directory for output
-    let temp_dir = std::env::temp_dir().join(format!("torc_plots_{}", std::process::id()));
-    let has_custom_output_dir = req.output_dir.is_some();
-    let output_dir = req
-        .output_dir
-        .as_deref()
-        .map(expand_tilde)
-        .unwrap_or(temp_dir.clone());
+    // Each request gets its own temp dir (removed on drop), so concurrent requests can't
+    // read or delete each other's plots.
+    let mut _temp_dir = None;
+    let output_dir = match req.output_dir.as_deref() {
+        Some(dir) => expand_tilde(dir),
+        None => match tempfile::Builder::new().prefix("torc_plots_").tempdir() {
+            Ok(dir) => _temp_dir.insert(dir).path().to_path_buf(),
+            Err(e) => {
+                return Json(PlotResourcesResponse {
+                    success: false,
+                    plots: vec![],
+                    error: Some(format!("Failed to create output directory: {}", e)),
+                });
+            }
+        },
+    };
 
     if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
         return Json(PlotResourcesResponse {
@@ -2976,11 +2984,6 @@ async fn cli_plot_resources_handler(
                         error: Some(format!("Failed to read output directory: {}", e)),
                     });
                 }
-            }
-
-            // Clean up temp directory if we created it
-            if !has_custom_output_dir {
-                let _ = tokio::fs::remove_dir_all(&temp_dir).await;
             }
 
             // Sort plots by name for consistent ordering
@@ -5363,6 +5366,13 @@ mod tests {
             expand_tilde("/abs/~/x"),
             std::path::PathBuf::from("/abs/~/x")
         );
+        // Backslash is a filename character on Unix, a separator on Windows.
+        let backslash = if cfg!(windows) {
+            home.join("x")
+        } else {
+            std::path::PathBuf::from("~\\x")
+        };
+        assert_eq!(expand_tilde("~\\x"), backslash);
     }
 
     #[test]
