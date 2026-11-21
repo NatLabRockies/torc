@@ -2620,15 +2620,8 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             }
         };
 
-        // Check if user owns the workflow
-        if workflow.user != user_name {
-            let error_msg = format!(
-                "Cannot delete workflow owned by user '{}' (you are '{}').",
-                workflow.user, user_name
-            );
-            failed_deletions.push((selected_id, error_msg));
-            continue;
-        }
+        // No client-side ownership check: the server authorizes the delete against the
+        // authenticated identity (owner, admin, or access-group member).
 
         // Count jobs in this workflow
         let job_count = match apis::jobs_api::list_jobs(

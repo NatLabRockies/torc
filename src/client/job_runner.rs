@@ -2301,6 +2301,17 @@ impl JobRunner {
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
+            // Offline: the server is unreachable, so only files whose model is already cached
+            // can be checked. Fetching would wait out the full retry window and then fail a
+            // job that succeeded.
+            if self.offline && !self.file_model_cache.contains_key(file_id) {
+                warn!(
+                    "Offline: skipping existence check for output file_id={} of job_id={} \
+                     (file model not cached)",
+                    file_id, job_id
+                );
+                continue;
+            }
             let file_model = match self.get_file_model_cached(*file_id) {
                 Ok(file) => file,
                 Err(e) => {
@@ -2355,6 +2366,12 @@ impl JobRunner {
                 job_id,
                 missing_files.join(", ")
             ));
+        }
+
+        // Offline: skip the server-side st_mtime and RO-Crate updates. `torc workflows
+        // reconcile` refreshes output mtimes after replaying the journal.
+        if self.offline {
+            return Ok(());
         }
 
         // Update st_mtime for all files and collect file models for RO-Crate

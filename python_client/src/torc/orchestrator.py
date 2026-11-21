@@ -133,7 +133,11 @@ class Orchestrator:
     def _fetch_generation(self) -> int:
         prefix = f"{LINEAGE_RECORD_PREFIX}{self.lineage}__g"
         pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-        records = self.api.list_user_data(self.workflow_id, limit=_USER_DATA_PAGE_LIMIT)
+        # Filter server-side by name (substring match) so the lineage records are found
+        # even when the workflow has more user_data rows than one page holds.
+        records = self.api.list_user_data(
+            self.workflow_id, name=prefix, limit=_USER_DATA_PAGE_LIMIT
+        )
         generations = [
             int(m.group(1))
             for ud in (records.items or [])

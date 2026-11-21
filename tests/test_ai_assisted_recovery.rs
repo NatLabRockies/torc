@@ -402,3 +402,80 @@ fn test_classify_and_resolve_failures_applies(start_server: &ServerProcess) {
     let failed = apis::jobs_api::get_job(config, fail_id).unwrap();
     assert_eq!(failed.status, Some(JobStatus::Failed));
 }
+
+/// regroup_job_resources must reject a group that omits num_gpus when its jobs currently
+/// use different values, instead of silently applying the first job's value to all.
+#[cfg(feature = "mcp-server")]
+#[rstest]
+fn test_regroup_rejects_ambiguous_omitted_gpus(start_server: &ServerProcess) {
+    use torc::mcp_server::tools::{ResourceGroup, regroup_job_resources};
+
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "regroup_ambiguous")
+        .id
+        .unwrap();
+
+    let mut job_ids = Vec::new();
+    for (name, gpus) in [("cpu_rr", 0), ("gpu_rr", 1)] {
+        let rr = apis::resource_requirements_api::create_resource_requirements(
+            config,
+            models::ResourceRequirementsModel {
+                id: None,
+                workflow_id,
+                name: name.to_string(),
+                num_cpus: 1,
+                num_gpus: gpus,
+                num_nodes: 1,
+                memory: "1g".to_string(),
+                runtime: "PT10M".to_string(),
+            },
+        )
+        .unwrap();
+        let mut job = models::JobModel::new(workflow_id, format!("job_{}", name), "true".into());
+        job.resource_requirements_id = rr.id;
+        job_ids.push(apis::jobs_api::create_job(config, job).unwrap().id.unwrap());
+    }
+    let rr_count = |config| {
+        apis::resource_requirements_api::list_resource_requirements(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .items
+        .len()
+    };
+    let before = rr_count(config);
+
+    regroup_job_resources(
+        config,
+        workflow_id,
+        vec![ResourceGroup {
+            memory: "2g".to_string(),
+            num_cpus: 2,
+            runtime: "PT20M".to_string(),
+            num_gpus: None,
+            num_nodes: None,
+            name: Some("merged".to_string()),
+            job_ids: job_ids.clone(),
+        }],
+        false,
+    )
+    .expect("regroup_job_resources returned an error");
+
+    assert_eq!(
+        rr_count(config),
+        before,
+        "no resource requirements should be created"
+    );
+}

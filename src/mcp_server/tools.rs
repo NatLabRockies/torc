@@ -371,6 +371,11 @@ pub fn update_job_resources(
             "memory": updated.memory,
             "runtime": updated.runtime,
         },
+        "shared_record_note": format!(
+            "Updated resource_requirements_id={} ('{}'). Every job assigned to this record \
+             now uses these values, not only job_id={}.",
+            req_id, updated.name, job_id
+        ),
         "next_steps": {
             "note": "Resource updated. To restart the workflow after fixing all issues, \
                     use the recover_workflow tool (recommended) or manual commands.",
@@ -1556,7 +1561,7 @@ pub fn classify_and_resolve_failures(
     // The per-job validation ensures we only act on jobs genuinely in pending_failed status.
 
     let mut results: Vec<serde_json::Value> = Vec::new();
-    let mut jobs_to_retry: Vec<i64> = Vec::new();
+    let mut jobs_to_retry: Vec<(i64, i64)> = Vec::new();
     let mut jobs_to_fail: Vec<i64> = Vec::new();
 
     for classification in &classifications {
@@ -2191,6 +2196,19 @@ pub fn regroup_job_resources(
                     ));
                 }
             }
+        }
+
+        // Don't leave behind a record that no job uses.
+        if jobs_updated.is_empty() {
+            if let Err(e) =
+                apis::resource_requirements_api::delete_resource_requirement(config, new_rr_id)
+            {
+                apply_errors.push(format!(
+                    "Failed to delete unused RR id={} for group '{}': {}",
+                    new_rr_id, group_name, e
+                ));
+            }
+            continue;
         }
 
         applied_groups.push(serde_json::json!({
