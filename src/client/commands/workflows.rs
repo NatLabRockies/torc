@@ -3942,6 +3942,15 @@ fn handle_import(
         );
     }
 
+    // Group jobs into dependency levels before creating anything, so a cycle fails fast.
+    let levels = match job_levels(&export.jobs) {
+        Ok(levels) => levels,
+        Err(e) => {
+            eprintln!("Error importing jobs: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     let mut mappings = IdMappings::new();
 
     // Create workflow with optional name override
@@ -4156,14 +4165,6 @@ fn handle_import(
 
     // Create jobs in bulk, one dependency level at a time, so that every job's
     // depends_on_job_ids already exist on the server when it is created.
-    let levels = match job_levels(&export.jobs) {
-        Ok(levels) => levels,
-        Err(e) => abort_import(
-            config,
-            new_workflow_id,
-            Some(format!("importing jobs: {}", e)),
-        ),
-    };
     for level in levels {
         for chunk in unique_name_chunks(&level, batch_size, |j| &j.name) {
             let new_jobs = chunk
