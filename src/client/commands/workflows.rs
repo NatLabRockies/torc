@@ -1981,12 +1981,22 @@ fn handle_reset_status(
     }
 
     // If reinitialize is true, reinitialize the workflow
-    if reinitialize {
+    // The workflow reset above already bumped run_id, so skip WorkflowManager::reinitialize
+    // (which would reset and bump again) and run only its check + job reinitialization.
+    if reinitialize && !workflow_reset_success {
+        errors.push("skipped reinitialize because the workflow status reset failed".to_string());
+        if format != "json" {
+            eprintln!("Skipping reinitialize because the workflow status reset failed");
+        }
+    } else if reinitialize {
         match apis::workflows_api::get_workflow(config, selected_workflow_id) {
             Ok(workflow) => {
                 let torc_config = TorcConfig::load().unwrap_or_default();
                 let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
-                match workflow_manager.reinitialize(false, false) {
+                match workflow_manager
+                    .check_workflow(false)
+                    .and_then(|()| workflow_manager.reinitialize_jobs(false))
+                {
                     Ok(()) => {
                         reinitialize_success = true;
                         if format != "json" {

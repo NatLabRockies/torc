@@ -341,6 +341,34 @@ fn test_regenerate_command_dry_run(start_server: &ServerProcess) {
     let (workflow_id, _job_ids) =
         create_workflow_with_ready_jobs(config, "test_regenerate_dry_run", 5);
 
+    // An existing schedule_nodes action. A real regenerate claims it (suppressing it);
+    // a dry run must leave it untouched.
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        models::WorkflowActionModel {
+            id: None,
+            workflow_id,
+            trigger_type: "on_workflow_start".to_string(),
+            action_type: "schedule_nodes".to_string(),
+            action_config: serde_json::json!({
+                "scheduler_type": "slurm",
+                "scheduler_id": 1,
+                "num_allocations": 1
+            }),
+            job_ids: None,
+            trigger_count: 0,
+            required_triggers: 1,
+            executed: false,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: false,
+        },
+    )
+    .expect("Failed to create schedule_nodes action");
+    let action_id = action.id.unwrap();
+
     // Run regenerate with dry-run to verify it works without actually submitting
     let args = [
         "slurm",
@@ -372,4 +400,12 @@ fn test_regenerate_command_dry_run(start_server: &ServerProcess) {
         Some(true),
         "Should indicate dry run"
     );
+
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let action = actions
+        .iter()
+        .find(|a| a.id == Some(action_id))
+        .expect("action not found");
+    assert!(!action.executed, "dry run must not claim existing actions");
 }

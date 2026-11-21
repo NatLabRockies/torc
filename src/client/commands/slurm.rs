@@ -5171,56 +5171,59 @@ fn handle_regenerate(
     let mut warnings: Vec<String> = Vec::new();
 
     // Mark existing schedule_nodes actions as executed to prevent duplicate allocations
-    // This is critical for recovery scenarios where original actions would otherwise fire again
-    match utils::send_with_retries(
-        config,
-        || apis::workflow_actions_api::get_workflow_actions(config, workflow_id),
-        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-    ) {
-        Ok(actions) => {
-            for action in actions {
-                // Only mark non-recovery, unexecuted schedule_nodes actions
-                if action.action_type == "schedule_nodes"
-                    && !action.is_recovery
-                    && !action.executed
-                    && let Some(action_id) = action.id
-                {
-                    match utils::send_with_retries(
-                        config,
-                        || {
-                            apis::workflow_actions_api::claim_action(
-                                config,
-                                workflow_id,
-                                action_id,
-                                models::ClaimActionRequest {
-                                    compute_node_id: None,
-                                },
-                            )
-                        },
-                        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-                    ) {
-                        Ok(_) => {
-                            info!(
-                                "Marked action {} ({} -> schedule_nodes) as executed for recovery",
-                                action_id, action.trigger_type
-                            );
-                        }
-                        Err(e) => {
-                            // 409 Conflict means already claimed, which is fine
-                            if !format!("{:?}", e).contains("409") {
-                                warnings.push(format!(
-                                    "Failed to mark action {} as executed: {:?}",
-                                    action_id, e
-                                ));
+    // This is critical for recovery scenarios where original actions would otherwise fire again.
+    // Claiming is a state change, so skip it in dry-run mode.
+    if !dry_run {
+        match utils::send_with_retries(
+            config,
+            || apis::workflow_actions_api::get_workflow_actions(config, workflow_id),
+            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+        ) {
+            Ok(actions) => {
+                for action in actions {
+                    // Only mark non-recovery, unexecuted schedule_nodes actions
+                    if action.action_type == "schedule_nodes"
+                        && !action.is_recovery
+                        && !action.executed
+                        && let Some(action_id) = action.id
+                    {
+                        match utils::send_with_retries(
+                            config,
+                            || {
+                                apis::workflow_actions_api::claim_action(
+                                    config,
+                                    workflow_id,
+                                    action_id,
+                                    models::ClaimActionRequest {
+                                        compute_node_id: None,
+                                    },
+                                )
+                            },
+                            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+                        ) {
+                            Ok(_) => {
+                                info!(
+                                    "Marked action {} ({} -> schedule_nodes) as executed for recovery",
+                                    action_id, action.trigger_type
+                                );
+                            }
+                            Err(e) => {
+                                // 409 Conflict means already claimed, which is fine
+                                if !format!("{:?}", e).contains("409") {
+                                    warnings.push(format!(
+                                        "Failed to mark action {} as executed: {:?}",
+                                        action_id, e
+                                    ));
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        Err(e) => {
-            // Non-fatal: we can still proceed with regeneration
-            warnings.push(format!("Failed to fetch workflow actions: {:?}", e));
+            Err(e) => {
+                // Non-fatal: we can still proceed with regeneration
+                warnings.push(format!("Failed to fetch workflow actions: {:?}", e));
+            }
         }
     }
 

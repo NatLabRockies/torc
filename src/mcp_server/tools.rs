@@ -617,7 +617,8 @@ pub fn create_workflow(
             // Step 2: Create the workflow from the generated spec
             let mut cmd = torc_command();
             cmd.args(["-f", "json", "create"]);
-            cmd.args(["--user", user]);
+            // `torc create` has no --user flag; it reads the owner from TORC_USERNAME.
+            cmd.env("TORC_USERNAME", user);
 
             cmd.arg(&slurm_spec_path);
 
