@@ -257,6 +257,92 @@ async fn bulk_insert_job_2col(
     Ok(())
 }
 
+/// Each id-valued reference on a job: field name, target table, and an extractor.
+type JobRefField = (&'static str, &'static str, fn(&models::JobModel) -> &[i64]);
+const JOB_REF_FIELDS: [JobRefField; 8] = [
+    ("depends_on_job_ids", "job", |j| {
+        j.depends_on_job_ids.as_deref().unwrap_or_default()
+    }),
+    ("input_file_ids", "file", |j| {
+        j.input_file_ids.as_deref().unwrap_or_default()
+    }),
+    ("output_file_ids", "file", |j| {
+        j.output_file_ids.as_deref().unwrap_or_default()
+    }),
+    ("input_user_data_ids", "user_data", |j| {
+        j.input_user_data_ids.as_deref().unwrap_or_default()
+    }),
+    ("output_user_data_ids", "user_data", |j| {
+        j.output_user_data_ids.as_deref().unwrap_or_default()
+    }),
+    ("resource_requirements_id", "resource_requirements", |j| {
+        j.resource_requirements_id.as_slice()
+    }),
+    // Jobs are only ever bound to Slurm schedulers (see `slurm_scheduler_to_id` in
+    // workflow_spec.rs and the `scheduler_config_id` filter in claim queries).
+    ("scheduler_id", "slurm_scheduler", |j| {
+        j.scheduler_id.as_slice()
+    }),
+    ("failure_handler_id", "failure_handler", |j| {
+        j.failure_handler_id.as_slice()
+    }),
+];
+
+/// Check that every id a job references (dependencies, files, user data, resource
+/// requirements, scheduler, failure handler) is a record in `workflow_id`. Foreign keys only
+/// check that the target exists somewhere. Ids are collected across `jobs` and checked once
+/// per field. Returns `Some(message)` naming the offending ids (missing or in another
+/// workflow), for a 422.
+pub(crate) async fn job_refs_outside_workflow(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    jobs: &[&models::JobModel],
+) -> Result<Option<String>, ApiError> {
+    const MAX_IDS_IN_MESSAGE: usize = 20;
+    let mut problems = Vec::new();
+    for (field, table, extract) in JOB_REF_FIELDS {
+        let ids: std::collections::BTreeSet<i64> =
+            jobs.iter().flat_map(|j| extract(j)).copied().collect();
+        if ids.is_empty() {
+            continue;
+        }
+        // Pass the ids as one JSON array so a 100k-job batch needs one query per field
+        // instead of chunked IN lists.
+        let ids_json = serde_json::to_string(&ids)
+            .map_err(|e| ApiError(format!("Failed to serialize {}: {}", field, e)))?;
+        let sql = format!(
+            "SELECT j.value FROM json_each(?) j \
+             LEFT JOIN {table} t ON t.id = j.value AND t.workflow_id = ? \
+             WHERE t.id IS NULL ORDER BY j.value"
+        );
+        let bad: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+            .bind(ids_json)
+            .bind(workflow_id)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, format!("Failed to validate {}", field)))?;
+        if !bad.is_empty() {
+            let mut shown: Vec<String> = bad
+                .iter()
+                .take(MAX_IDS_IN_MESSAGE)
+                .map(i64::to_string)
+                .collect();
+            if bad.len() > MAX_IDS_IN_MESSAGE {
+                shown.push(format!("... ({} more)", bad.len() - MAX_IDS_IN_MESSAGE));
+            }
+            problems.push(format!("{} [{}]", field, shown.join(", ")));
+        }
+    }
+    if problems.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "Job references records that do not exist in workflow_id={}: {}",
+        workflow_id,
+        problems.join("; ")
+    )))
+}
+
 /// Trait defining job-related API operations
 #[async_trait]
 pub trait JobsApi<C> {
@@ -1456,6 +1542,16 @@ where
         job.env = Self::merge_env(workflow_env.as_ref(), job.env.as_ref());
         let job_env = crate::tx_try!(tx, serialize_env_map(job.env.clone(), "job env"));
 
+        if let Some(msg) = crate::tx_try!(
+            tx,
+            job_refs_outside_workflow(&mut tx, job.workflow_id, &[&job]).await
+        ) {
+            let _ = tx.rollback().await;
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(msg),
+            ));
+        }
+
         let job_result = match sqlx::query(
             r#"
             INSERT INTO job
@@ -1733,6 +1829,34 @@ where
             });
         }
 
+        // Validate references once per field across the whole batch. The transport layer
+        // already requires a single workflow_id per batch; re-check for in-process callers.
+        let workflow_id = prepared[0].job.workflow_id;
+        if let Some(other) = prepared.iter().find(|p| p.job.workflow_id != workflow_id) {
+            let _ = transaction.rollback().await;
+            return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "All jobs in a batch must have the same workflow_id. Found workflow_ids: {} and {}",
+                    workflow_id, other.job.workflow_id
+                )),
+            ));
+        }
+        let job_refs: Vec<&models::JobModel> = prepared.iter().map(|p| &p.job).collect();
+        let refs_check = job_refs_outside_workflow(&mut transaction, workflow_id, &job_refs).await;
+        match refs_check {
+            Ok(None) => {}
+            Ok(Some(msg)) => {
+                let _ = transaction.rollback().await;
+                return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(msg),
+                ));
+            }
+            Err(e) => {
+                let _ = transaction.rollback().await;
+                return Err(e);
+            }
+        }
+
         // Phase B: bulk INSERT job rows in chunks, capturing each row's generated id
         // by name. Job names are unique per workflow — duplicates after parameter
         // expansion are rejected client-side by
@@ -1808,7 +1932,6 @@ where
                 }
             };
             job.id = Some(job_id);
-            let workflow_id = job.workflow_id;
 
             if let Some(ids) = &job.depends_on_job_ids {
                 for &blocking_id in ids {
@@ -1902,7 +2025,6 @@ where
             return Err(database_error_with_msg(e, "Failed to commit transaction"));
         }
 
-        let workflow_id = added_jobs.first().map(|j| j.workflow_id).unwrap_or(0);
         info!(
             "Jobs created workflow_id={} count={}",
             workflow_id,
@@ -2483,6 +2605,34 @@ where
                 message_error_response(err),
             ));
         }
+
+        // Only check references this update writes and changes, so a client re-sending the
+        // full job object isn't blocked by values already stored.
+        let mut refs =
+            models::JobModel::new(existing_job.workflow_id, String::new(), String::new());
+        if depends_on_job_ids_changed {
+            refs.depends_on_job_ids = body.depends_on_job_ids.clone();
+        }
+        refs.resource_requirements_id = body
+            .resource_requirements_id
+            .filter(|id| Some(*id) != existing_job.resource_requirements_id);
+        refs.scheduler_id = body
+            .scheduler_id
+            .filter(|id| Some(*id) != existing_job.scheduler_id);
+        let mut conn = self
+            .context
+            .pool
+            .acquire()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to acquire connection"))?;
+        if let Some(msg) =
+            job_refs_outside_workflow(&mut conn, existing_job.workflow_id, &[&refs]).await?
+        {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(msg),
+            ));
+        }
+        drop(conn);
 
         // `Some("[]")` clears, `None` keeps; labels_to_json folds an empty set to None.
         let labels_update = body
