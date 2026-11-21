@@ -84,26 +84,50 @@ impl<C> Server<C> {
 
         let new_status_int = new_status.to_int();
 
-        // Resolving a PendingFailed job (e.g. AI classification decided "fail"). The terminal
-        // UPDATE below skips PendingFailed rows for idempotency, so handle it here. The result
-        // row already exists from the original completion.
+        // Resolving a PendingFailed job (AI classification decided "fail"). The terminal
+        // UPDATE below skips PendingFailed rows for idempotency, so handle it here. Only Failed
+        // is allowed: the existing result records a failed attempt. Update that result row too
+        // so job and result status agree.
         if current_status == models::JobStatus::PendingFailed && new_status.is_complete() {
+            if *new_status != models::JobStatus::Failed {
+                return Err(ApiError(format!(
+                    "job_id={} is pending_failed; it can only be resolved to failed (or retried)",
+                    job_id
+                )));
+            }
             let pending_failed_int = models::JobStatus::PendingFailed.to_int();
+            let mut tx = begin_immediate(&self.pool)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
             let result = sqlx::query(
                 "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL WHERE id = ? AND status = ?",
             )
             .bind(new_status_int)
             .bind(job_id)
             .bind(pending_failed_int)
-            .execute(self.pool.as_ref())
+            .execute(&mut *tx)
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to update job status"))?;
             if result.rows_affected() == 0 {
+                let _ = tx.rollback().await;
                 return Err(ApiError(format!(
                     "job_id={} changed status during transition from pending_failed",
                     job_id
                 )));
             }
+            sqlx::query(
+                "UPDATE result SET status = ? WHERE job_id = ? AND run_id = ? AND status = ?",
+            )
+            .bind(new_status_int)
+            .bind(job_id)
+            .bind(run_id)
+            .bind(pending_failed_int)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to update result status"))?;
+            tx.commit()
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
             self.signal_job_completion();
             return Ok(());
         }

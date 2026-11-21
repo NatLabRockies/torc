@@ -808,13 +808,23 @@ impl WorkflowManager {
 
         // st_mtime is also set on output files once their job completes, so exclude any file
         // a job produces; otherwise re-initializing after a run records outputs as inputs.
-        let output_file_ids: std::collections::HashSet<i64> = iter_files(
+        // A partial list would misclassify outputs, so skip input entities on any error.
+        let output_file_ids: std::collections::HashSet<i64> = match iter_files(
             &self.config,
             self.workflow_id,
             FileListParams::new().with_is_output(true),
         )
-        .filter_map(|f| f.ok().and_then(|f| f.id))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(files) => files.into_iter().filter_map(|f| f.id).collect(),
+            Err(e) => {
+                warn!(
+                    "Skipping RO-Crate input entities for workflow {}: failed to list output files: {}",
+                    self.workflow_id, e
+                );
+                return;
+            }
+        };
 
         // Collect all files with st_mtime set (input files)
         let params = FileListParams::new();

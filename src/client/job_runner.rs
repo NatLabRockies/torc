@@ -1707,6 +1707,7 @@ impl JobRunner {
             return Ok(0);
         }
         let count = entries.len();
+        let mut metadata_failures = 0usize;
         for chunk in entries.chunks(FLUSH_BATCH_SIZE) {
             let request = BatchCompleteJobsRequest {
                 completions: chunk.to_vec(),
@@ -1733,11 +1734,25 @@ impl JobRunner {
                         && response.completed.contains(&entry.job_id)
                 })
                 .collect();
-            crate::client::commands::reconcile::restore_offline_output_metadata(
-                &self.config,
-                self.workflow_id,
-                &completed,
+            metadata_failures +=
+                crate::client::commands::reconcile::restore_offline_output_metadata(
+                    &self.config,
+                    self.workflow_id,
+                    &completed,
+                    None,
+                );
+        }
+        if metadata_failures > 0 {
+            // Keep the journal: `torc workflows reconcile` retries metadata restoration for
+            // completions the server already accepted.
+            warn!(
+                "Resume flush: could not restore output metadata for {} job(s); keeping the \
+                 offline journal {} so `torc workflows reconcile` can retry. workflow_id={}",
+                metadata_failures,
+                journal.path().display(),
+                self.workflow_id
             );
+            return Ok(count);
         }
         journal
             .clear()
@@ -3310,6 +3325,17 @@ impl JobRunner {
             let rr_id = job
                 .resource_requirements_id
                 .expect("Job must have a resource_requirements_id");
+            // Cache output file models while the server is reachable, so output validation
+            // still works if the runner goes offline before the job finishes. Completion
+            // fetches these anyway, so this only moves the calls earlier. Best effort, no
+            // retries: on failure, completion fetches them as before.
+            for file_id in job.output_file_ids.iter().flatten() {
+                if !self.file_model_cache.contains_key(file_id)
+                    && let Ok(file) = apis::files_api::get_file(&self.config, *file_id)
+                {
+                    self.cache_file_model(*file_id, file);
+                }
+            }
             let mut async_job = AsyncCliCommand::new(job);
             let effective_job_env = async_job.job.env.clone();
 

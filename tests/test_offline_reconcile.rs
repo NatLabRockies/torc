@@ -446,3 +446,86 @@ fn test_reconcile_restores_ro_crate_output_provenance() {
         "the job should get a CreateAction entity"
     );
 }
+
+/// Relative output paths resolve against the workflow's submission directory, and a failed
+/// metadata restore (output not visible yet) is retried by re-running reconcile even though
+/// the completion itself was already accepted.
+#[test]
+#[serial(offline_reconcile)]
+fn test_reconcile_resolves_relative_paths_and_retries_metadata() {
+    let server = start_server();
+    let config = &server.config;
+    let base = tempfile::tempdir().expect("tempdir");
+
+    let mut workflow = models::WorkflowModel::new(
+        "offline_reconcile_relative".to_string(),
+        "test_user".to_string(),
+    );
+    workflow.submission_directory = Some(base.path().to_string_lossy().to_string());
+    let workflow = apis::workflows_api::create_workflow(config, workflow).expect("create workflow");
+    let workflow_id = workflow.id.unwrap();
+
+    let output_id = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "out".to_string(), "rel_out.txt".to_string()),
+    )
+    .expect("create file")
+    .id
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "producer".into(), "true".into());
+    job.output_file_ids = Some(vec![output_id]);
+    let job_id = apis::jobs_api::create_job(config, job)
+        .expect("create job")
+        .id
+        .unwrap();
+
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    OfflineJournal::open_or_create(
+        &base.path().join("torc_output"),
+        workflow_id,
+        run_id,
+        "node",
+    )
+    .expect("open journal")
+    .append(&completion_entry(
+        workflow_id,
+        run_id,
+        compute_node_id,
+        job_id,
+    ))
+    .expect("append");
+
+    // First reconcile: the completion is accepted, but the output is not visible yet.
+    let summary = reconcile(config, workflow_id, run_id, base.path(), "table").expect("reconcile");
+    assert_eq!(summary.accepted, 1);
+    assert!(
+        apis::files_api::get_file(config, output_id)
+            .unwrap()
+            .st_mtime
+            .is_none(),
+        "no mtime while the output is missing"
+    );
+
+    // The output appears (relative to the submission directory); re-running retries it.
+    std::fs::write(base.path().join("rel_out.txt"), "done").expect("write output");
+    let summary = reconcile(config, workflow_id, run_id, base.path(), "table").expect("reconcile");
+    assert_eq!(summary.accepted, 0, "the completion was already accepted");
+    assert!(
+        apis::files_api::get_file(config, output_id)
+            .unwrap()
+            .st_mtime
+            .is_some(),
+        "re-running reconcile should restore the mtime"
+    );
+}

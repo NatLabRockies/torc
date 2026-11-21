@@ -1434,10 +1434,12 @@ where
         }
 
         // Completion statuses go through complete_job, which records the result. The one
-        // exception is resolving a PendingFailed job (its result already exists), e.g. when
-        // AI classification decides the failure is permanent.
+        // exception is resolving a PendingFailed job to Failed (its result already exists),
+        // when AI classification decides the failure is permanent.
         if status.is_complete() {
-            if current_status != models::JobStatus::PendingFailed {
+            if current_status != models::JobStatus::PendingFailed
+                || status != models::JobStatus::Failed
+            {
                 error!(
                     "manage_status_change: cannot set completion status '{}' for job_id={}. Use complete_job instead.",
                     status, id

@@ -555,10 +555,41 @@ fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &
         "workflow is not complete while pending_failed"
     );
 
+    // A pending_failed job records a failed attempt; it cannot be resolved to Completed.
+    match apis::jobs_api::manage_status_change(config, job_id, JobStatus::Completed, run_id) {
+        Err(apis::Error::ResponseError(r)) => assert_eq!(r.status, 422),
+        other => panic!(
+            "expected 422 resolving pending_failed to completed, got {:?}",
+            other
+        ),
+    }
+
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
         .expect("Failed to resolve pending_failed job");
     assert!(
         triggered(config),
         "on_workflow_complete should be triggered"
+    );
+
+    // The result row follows the job to Failed, so status filters agree.
+    let failed_results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        Some(job_id),
+        None,
+        None,
+        Some(JobStatus::Failed),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list results");
+    assert_eq!(
+        failed_results.items.len(),
+        1,
+        "result status should be failed"
     );
 }

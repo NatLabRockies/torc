@@ -60,6 +60,16 @@ pub fn reconcile(
         files: files.len(),
         ..Default::default()
     };
+    // Relative output paths resolve against the workflow's submission directory (falling
+    // back to the current directory), and the current run_id identifies already-accepted
+    // completions whose output metadata may still need restoring.
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).ok();
+    let submission_dir = workflow
+        .as_ref()
+        .and_then(|w| w.submission_directory.clone())
+        .map(std::path::PathBuf::from);
+    let current_run_id = workflow.as_ref().and_then(|w| w.run_id);
+    let mut metadata_failures = 0usize;
 
     for path in &files {
         let entries = match OfflineJournal::read_file(path) {
@@ -87,15 +97,23 @@ pub fn reconcile(
                 Ok(response) => {
                     summary.accepted += response.completed.len();
                     // Output metadata was not recorded while the runner was offline. Restore
-                    // it per batch so a later failed request cannot skip it.
+                    // it per batch so a later failed request cannot skip it. Also restore it
+                    // for completions an earlier reconcile already replayed (now rejected as
+                    // duplicates) so a failed restore can be retried by re-running reconcile.
                     let completed: Vec<&JobCompletionEntry> = chunk
                         .iter()
+                        .filter(|entry| entry.status == JobStatus::Completed)
                         .filter(|entry| {
-                            entry.status == JobStatus::Completed
-                                && response.completed.contains(&entry.job_id)
+                            response.completed.contains(&entry.job_id)
+                                || already_completed_in_run(config, entry, current_run_id)
                         })
                         .collect();
-                    restore_offline_output_metadata(config, workflow_id, &completed);
+                    metadata_failures += restore_offline_output_metadata(
+                        config,
+                        workflow_id,
+                        &completed,
+                        submission_dir.as_deref(),
+                    );
                     for err in &response.errors {
                         summary.rejected += 1;
                         warn!(
@@ -115,6 +133,15 @@ pub fn reconcile(
                 }
             }
         }
+    }
+
+    if metadata_failures > 0 {
+        warn!(
+            "Could not restore output metadata for {} job(s); see the warnings above. Fix the \
+             cause (e.g. run from the directory the output paths are relative to) and re-run \
+             reconcile to retry.",
+            metadata_failures
+        );
     }
 
     if format == "json" {
@@ -146,16 +173,20 @@ pub fn reconcile(
 
 /// Restore the output metadata a runner skips while offline: each output file's on-disk
 /// mtime and, for RO-Crate workflows, the CreateAction and output File provenance entities.
-/// Call it with journal entries the server accepted as Completed. Paths resolve against the
-/// current directory, as they do for the runner.
+/// Call it with journal entries the server accepted as Completed.
+///
+/// Relative output paths resolve against `base_dir` when given, else the current directory.
+/// Returns the number of jobs whose metadata could not be fully restored.
 pub(crate) fn restore_offline_output_metadata(
     config: &Configuration,
     workflow_id: i64,
     entries: &[&JobCompletionEntry],
-) {
+    base_dir: Option<&std::path::Path>,
+) -> usize {
     if entries.is_empty() {
-        return;
+        return 0;
     }
+    let mut failures = 0;
     let ro_crate = match apis::workflows_api::get_workflow(config, workflow_id) {
         Ok(w) => w.enable_ro_crate == Some(true),
         Err(e) => {
@@ -176,13 +207,21 @@ pub(crate) fn restore_offline_output_metadata(
                     "Failed to list output files workflow_id={} job_id={}: {}",
                     workflow_id, job_id, e
                 );
+                failures += 1;
                 continue;
             }
         };
         let mut updated = Vec::with_capacity(files.len());
+        let mut job_failed = false;
         for mut file in files {
             let Some(file_id) = file.id else { continue };
-            let st_mtime = match std::fs::metadata(&file.path).and_then(|m| m.modified()) {
+            let path = match base_dir {
+                Some(base) if std::path::Path::new(&file.path).is_relative() => {
+                    base.join(&file.path)
+                }
+                _ => std::path::PathBuf::from(&file.path),
+            };
+            let st_mtime = match std::fs::metadata(&path).and_then(|m| m.modified()) {
                 Ok(t) => t
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_secs_f64())
@@ -190,21 +229,45 @@ pub(crate) fn restore_offline_output_metadata(
                 Err(e) => {
                     warn!(
                         "Cannot stat output file {} (file_id={}) for job_id={}: {}",
-                        file.path, file_id, job_id, e
+                        path.display(),
+                        file_id,
+                        job_id,
+                        e
                     );
+                    job_failed = true;
                     continue;
                 }
             };
             file.st_mtime = Some(st_mtime);
             match apis::files_api::update_file(config, file_id, file.clone()) {
                 Ok(_) => updated.push(file),
-                Err(e) => warn!("Failed to update st_mtime for file_id={}: {}", file_id, e),
+                Err(e) => {
+                    warn!("Failed to update st_mtime for file_id={}: {}", file_id, e);
+                    job_failed = true;
+                }
             }
         }
         if ro_crate && !updated.is_empty() {
-            restore_output_provenance(config, workflow_id, entry, &updated);
+            restore_output_provenance(config, workflow_id, entry, &updated, base_dir);
+        }
+        if job_failed {
+            failures += 1;
         }
     }
+    failures
+}
+
+/// True if the server already has this journaled completion: the job is Completed in the
+/// current run. Used to retry metadata restoration for completions an earlier reconcile
+/// replayed.
+fn already_completed_in_run(
+    config: &Configuration,
+    entry: &JobCompletionEntry,
+    current_run_id: Option<i64>,
+) -> bool {
+    current_run_id == Some(entry.run_id)
+        && apis::jobs_api::get_job(config, entry.job_id)
+            .is_ok_and(|job| job.status == Some(JobStatus::Completed))
 }
 
 /// Create the RO-Crate entities the runner would have created at completion, using the
@@ -214,6 +277,7 @@ fn restore_output_provenance(
     workflow_id: i64,
     entry: &JobCompletionEntry,
     output_files: &[FileModel],
+    base_dir: Option<&std::path::Path>,
 ) {
     let job = match apis::jobs_api::get_job(config, entry.job_id) {
         Ok(job) => job,
@@ -244,7 +308,11 @@ fn restore_output_provenance(
         &output_file_paths,
     );
     for file in output_files {
-        let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
+        let path = match base_dir {
+            Some(base) if std::path::Path::new(&file.path).is_relative() => base.join(&file.path),
+            _ => std::path::PathBuf::from(&file.path),
+        };
+        let content_size = std::fs::metadata(&path).ok().map(|m| m.len());
         ro_crate_utils::create_ro_crate_entity_for_output_file(
             config,
             workflow_id,
