@@ -1629,28 +1629,52 @@ where
 
         authorize_job!(self, id, context, CompleteJobResponse);
 
-        let mut tx = begin_immediate(&self.pool)
-            .await
-            .map_err(|e| database_lock_aware_error(e, "Failed to begin completion transaction"))?;
         match self
-            .apply_job_completion_state_tx(&mut tx, None, id, status, run_id, result)
+            .complete_job_in_tx("completion", id, status, run_id, result)
             .await
         {
             Ok(completion) => {
-                tx.commit().await.map_err(|e| {
-                    database_lock_aware_error(e, "Failed to commit completion transaction")
-                })?;
                 self.signal_job_completion();
                 let job = completion.job.clone();
                 self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
                     .await;
                 Ok(CompleteJobResponse::SuccessfulResponse(job))
             }
-            Err(CompletionMutationError::Response(response)) => {
-                let _ = tx.rollback().await;
-                Ok(*response)
+            Err(CompletionMutationError::Response(response)) => Ok(*response),
+            Err(CompletionMutationError::Transport(error)) => Err(error),
+        }
+    }
+
+    /// Begin, apply the completion, then commit. Roll back on any error. `stage` names the
+    /// transaction in error messages.
+    async fn complete_job_in_tx(
+        &self,
+        stage: &str,
+        id: i64,
+        status: models::JobStatus,
+        run_id: i64,
+        result: models::ResultModel,
+    ) -> Result<CompletedJobRecord, CompletionMutationError> {
+        let mut tx = begin_immediate(&self.pool).await.map_err(|e| {
+            CompletionMutationError::Transport(database_lock_aware_error(
+                e,
+                format!("Failed to begin {stage} transaction"),
+            ))
+        })?;
+        match self
+            .apply_job_completion_state_tx(&mut tx, None, id, status, run_id, result)
+            .await
+        {
+            Ok(completion) => {
+                tx.commit().await.map_err(|e| {
+                    CompletionMutationError::Transport(database_lock_aware_error(
+                        e,
+                        format!("Failed to commit {stage} transaction"),
+                    ))
+                })?;
+                Ok(completion)
             }
-            Err(CompletionMutationError::Transport(error)) => {
+            Err(error) => {
                 let _ = tx.rollback().await;
                 Err(error)
             }
@@ -1667,38 +1691,19 @@ where
         result: models::ResultModel,
         context: &C,
     ) -> Result<(), ServerFailJobError> {
-        let mut tx = begin_immediate(&self.pool).await.map_err(|e| {
-            ServerFailJobError::Transport(
-                database_lock_aware_error(e, "Failed to begin fail transaction").0,
-            )
-        })?;
         match self
-            .apply_job_completion_state_tx(
-                &mut tx,
-                None,
-                id,
-                models::JobStatus::Failed,
-                run_id,
-                result,
-            )
+            .complete_job_in_tx("fail", id, models::JobStatus::Failed, run_id, result)
             .await
         {
             Ok(completion) => {
-                tx.commit().await.map_err(|e| {
-                    ServerFailJobError::Transport(
-                        database_lock_aware_error(e, "Failed to commit fail transaction").0,
-                    )
-                })?;
                 self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
                     .await;
                 Ok(())
             }
             Err(CompletionMutationError::Response(response)) => {
-                let _ = tx.rollback().await;
                 Err(ServerFailJobError::Rejected(format!("{:?}", response)))
             }
             Err(CompletionMutationError::Transport(error)) => {
-                let _ = tx.rollback().await;
                 Err(ServerFailJobError::Transport(error.0))
             }
         }

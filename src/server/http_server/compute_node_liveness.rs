@@ -3,7 +3,6 @@ use crate::models;
 use crate::server::api::ComputeNodesApi;
 use crate::server::api::compute_nodes::update_response_from_get;
 use crate::server::api_responses::{GetComputeNodeResponse, UpdateComputeNodeResponse};
-use crate::server::event_broadcast::BroadcastEvent;
 use crate::server::transport_types::auth_types::Authorization;
 use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use chrono::Utc;
@@ -105,18 +104,16 @@ where
                 "Failed compute node workflow_id={} compute_node_id={} hostname={} pid={}",
                 node.workflow_id, id, node.hostname, node.pid
             );
-            self.event_broadcaster.broadcast(BroadcastEvent {
-                workflow_id: node.workflow_id,
-                timestamp: Utc::now().timestamp_millis(),
-                event_type: "compute_node_stopped".to_string(),
-                severity: models::EventSeverity::Warning,
-                data: serde_json::json!({
+            self.broadcast_compute_node_stopped(
+                node.workflow_id,
+                models::EventSeverity::Warning,
+                serde_json::json!({
                     "compute_node_id": id,
                     "hostname": node.hostname,
                     "pid": node.pid,
                     "reason": "failed",
                 }),
-            });
+            );
         }
         if transport_failed {
             return Err(ApiError(format!(

@@ -6,6 +6,21 @@ impl<C> Server<C>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync,
 {
+    pub(super) fn broadcast_compute_node_stopped(
+        &self,
+        workflow_id: i64,
+        severity: models::EventSeverity,
+        data: serde_json::Value,
+    ) {
+        self.event_broadcaster.broadcast(BroadcastEvent {
+            workflow_id,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            event_type: "compute_node_stopped".to_string(),
+            severity,
+            data,
+        });
+    }
+
     pub(super) async fn transport_create_compute_node(
         &self,
         body: models::ComputeNodeModel,
@@ -114,19 +129,17 @@ where
         if let UpdateComputeNodeResponse::SuccessfulResponse(ref _updated) = result
             && body.is_active == Some(false)
         {
-            self.event_broadcaster.broadcast(BroadcastEvent {
-                workflow_id: body.workflow_id,
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                event_type: "compute_node_stopped".to_string(),
-                severity: models::EventSeverity::Info,
-                data: serde_json::json!({
+            self.broadcast_compute_node_stopped(
+                body.workflow_id,
+                models::EventSeverity::Info,
+                serde_json::json!({
                     "compute_node_id": id,
                     "hostname": body.hostname,
                     "pid": body.pid,
                     "duration_seconds": body.duration_seconds,
                     "compute_node_type": body.compute_node_type,
                 }),
-            });
+            );
         }
         Ok(result)
     }

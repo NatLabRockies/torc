@@ -168,6 +168,44 @@ impl ComputeNodesApiImpl {
         chrono::DateTime::parse_from_rfc3339(last_heartbeat)
             .is_ok_and(|seen| is_active && seen < cutoff)
     }
+
+    fn row_to_model(
+        record: &sqlx::sqlite::SqliteRow,
+        cutoff: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> models::ComputeNodeModel {
+        let is_active_val: Option<i64> = record.get("is_active");
+        let scheduler_str: Option<String> = record.get("scheduler");
+        let scheduler = scheduler_str.and_then(|s| serde_json::from_str(&s).ok());
+        let last_heartbeat: Option<String> = record.get("last_heartbeat");
+        let is_stale = Self::is_stale(cutoff, is_active_val != Some(0), last_heartbeat.as_deref());
+
+        models::ComputeNodeModel {
+            id: Some(record.get("id")),
+            workflow_id: record.get("workflow_id"),
+            hostname: record.get("hostname"),
+            pid: record.get("pid"),
+            start_time: record.get("start_time"),
+            end_time: record.get("end_time"),
+            last_heartbeat,
+            is_stale: Some(is_stale),
+            duration_seconds: record.get("duration_seconds"),
+            is_active: is_active_val.map(|v| v == 1),
+            num_cpus: record.get("num_cpus"),
+            memory_gb: record.get("memory_gb"),
+            num_gpus: record.get("num_gpus"),
+            num_nodes: record.get("num_nodes"),
+            time_limit: record.get("time_limit"),
+            scheduler_config_id: record.get("scheduler_config_id"),
+            compute_node_type: record.get("compute_node_type"),
+            labels: labels_column(record, "labels"),
+            scheduler,
+            sample_count: record.get("sample_count"),
+            peak_cpu_percent: record.get("peak_cpu_percent"),
+            avg_cpu_percent: record.get("avg_cpu_percent"),
+            peak_memory_bytes: record.get("peak_memory_bytes"),
+            avg_memory_bytes: record.get("avg_memory_bytes"),
+        }
+    }
 }
 
 #[async_trait]
@@ -333,47 +371,7 @@ where
             }
         };
 
-        let is_active_val: Option<i64> = record.get("is_active");
-        let duration_seconds: Option<f64> = record.get("duration_seconds");
-        let time_limit: Option<String> = record.get("time_limit");
-        let scheduler_str: Option<String> = record.get("scheduler");
-
-        // Deserialize scheduler JSON string to Value
-        let scheduler = scheduler_str.and_then(|s| serde_json::from_str(&s).ok());
-
-        let last_heartbeat: Option<String> = record.get("last_heartbeat");
-        let is_stale = Self::is_stale(
-            self.stale_cutoff(),
-            is_active_val != Some(0),
-            last_heartbeat.as_deref(),
-        );
-
-        let compute_node_model = models::ComputeNodeModel {
-            id: Some(record.get("id")),
-            workflow_id: record.get("workflow_id"),
-            hostname: record.get("hostname"),
-            pid: record.get("pid"),
-            start_time: record.get("start_time"),
-            end_time: record.get("end_time"),
-            last_heartbeat,
-            is_stale: Some(is_stale),
-            duration_seconds,
-            is_active: is_active_val.map(|v| v == 1),
-            num_cpus: record.get("num_cpus"),
-            memory_gb: record.get("memory_gb"),
-            num_gpus: record.get("num_gpus"),
-            num_nodes: record.get("num_nodes"),
-            time_limit,
-            scheduler_config_id: record.get("scheduler_config_id"),
-            compute_node_type: record.get("compute_node_type"),
-            labels: labels_column(&record, "labels"),
-            scheduler,
-            sample_count: record.get("sample_count"),
-            peak_cpu_percent: record.get("peak_cpu_percent"),
-            avg_cpu_percent: record.get("avg_cpu_percent"),
-            peak_memory_bytes: record.get("peak_memory_bytes"),
-            avg_memory_bytes: record.get("avg_memory_bytes"),
-        };
+        let compute_node_model = Self::row_to_model(&record, self.stale_cutoff());
 
         Ok(GetComputeNodeResponse::SuccessfulResponse(
             compute_node_model,
@@ -516,47 +514,10 @@ where
             }
         };
 
-        let mut items: Vec<models::ComputeNodeModel> = Vec::new();
-        for record in records {
-            let is_active_val: Option<i64> = record.get("is_active");
-            let duration_seconds: Option<f64> = record.get("duration_seconds");
-            let time_limit: Option<String> = record.get("time_limit");
-            let scheduler_str: Option<String> = record.get("scheduler");
-
-            // Deserialize scheduler JSON string to Value
-            let scheduler = scheduler_str.and_then(|s| serde_json::from_str(&s).ok());
-
-            let last_heartbeat: Option<String> = record.get("last_heartbeat");
-            let is_stale =
-                Self::is_stale(cutoff, is_active_val != Some(0), last_heartbeat.as_deref());
-
-            items.push(models::ComputeNodeModel {
-                id: Some(record.get("id")),
-                workflow_id: record.get("workflow_id"),
-                hostname: record.get("hostname"),
-                pid: record.get("pid"),
-                start_time: record.get("start_time"),
-                end_time: record.get("end_time"),
-                last_heartbeat,
-                is_stale: Some(is_stale),
-                duration_seconds,
-                is_active: is_active_val.map(|v| v == 1),
-                num_cpus: record.get("num_cpus"),
-                memory_gb: record.get("memory_gb"),
-                num_gpus: record.get("num_gpus"),
-                num_nodes: record.get("num_nodes"),
-                time_limit,
-                scheduler_config_id: record.get("scheduler_config_id"),
-                compute_node_type: record.get("compute_node_type"),
-                labels: labels_column(&record, "labels"),
-                scheduler,
-                sample_count: record.get("sample_count"),
-                peak_cpu_percent: record.get("peak_cpu_percent"),
-                avg_cpu_percent: record.get("avg_cpu_percent"),
-                peak_memory_bytes: record.get("peak_memory_bytes"),
-                avg_memory_bytes: record.get("avg_memory_bytes"),
-            });
-        }
+        let items: Vec<models::ComputeNodeModel> = records
+            .iter()
+            .map(|record| Self::row_to_model(record, cutoff))
+            .collect();
 
         // For proper pagination, we should get the total count without LIMIT/OFFSET
         let count_query =
@@ -736,17 +697,34 @@ where
             context.get().0.clone()
         );
 
-        if let Err(e) = sqlx::query(
-            "UPDATE compute_node SET last_heartbeat = $1 WHERE id = $2 AND (is_active IS NULL OR is_active = 1)",
+        let updated = match sqlx::query(
+            r#"
+            UPDATE compute_node SET last_heartbeat = $1
+            WHERE id = $2 AND (is_active IS NULL OR is_active = 1)
+            RETURNING id, workflow_id, hostname, pid, start_time, duration_seconds, is_active,
+                   num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id,
+                   compute_node_type, scheduler, sample_count,
+                   peak_cpu_percent, avg_cpu_percent,
+                   peak_memory_bytes, avg_memory_bytes, end_time, labels, last_heartbeat
+            "#,
         )
         .bind(chrono::Utc::now().to_rfc3339())
         .bind(id)
-        .execute(self.context.pool.as_ref())
+        .fetch_optional(self.context.pool.as_ref())
         .await
         {
-            return Err(database_error_with_msg(
-                e,
-                "Failed to record compute node heartbeat",
+            Ok(updated) => updated,
+            Err(e) => {
+                return Err(database_error_with_msg(
+                    e,
+                    "Failed to record compute node heartbeat",
+                ));
+            }
+        };
+
+        if let Some(record) = updated {
+            return Ok(UpdateComputeNodeResponse::SuccessfulResponse(
+                Self::row_to_model(&record, self.stale_cutoff()),
             ));
         }
 
