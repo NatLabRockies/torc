@@ -96,6 +96,7 @@ fn verify_diamond_workflow_completion(
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -421,6 +422,7 @@ fn verify_many_jobs_completion(
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -611,6 +613,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -742,6 +745,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after reset");
 
@@ -819,6 +823,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after second run");
 
@@ -1016,6 +1021,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1090,6 +1096,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after reinitialize");
 
@@ -1163,6 +1170,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after second run");
 
@@ -1752,6 +1760,7 @@ fn get_job_statuses(
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 

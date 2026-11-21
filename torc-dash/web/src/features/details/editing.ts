@@ -4,7 +4,7 @@
  * Shared definitions are only edited while nothing is running, so running jobs and submitted
  * allocations never disagree with the records that describe them.
  */
-import { api, listAll, unwrap, type Job, type ResourceRequirements } from "../../lib/api/client";
+import { api, unwrap, type Job, type ResourceRequirements } from "../../lib/api/client";
 
 /** Why the workflow's shared definitions can't be edited now, or null if they can. */
 export async function editBlockedReason(workflowId: number): Promise<string | null> {
@@ -70,25 +70,16 @@ export async function setJobResources(
   return "cloned";
 }
 
-// ponytail: lists every job to count users of one requirement; add a resource_requirements_id
-// filter to GET /jobs if this is slow on very large workflows.
 async function sharedWithOthers(job: Job, rrId: number): Promise<boolean> {
-  const jobs = await listAll((offset, limit) =>
-    unwrap(api.GET("/jobs", { params: { query: { workflow_id: job.workflow_id, offset, limit } } })),
-  );
-  return jobs.some((j) => j.id !== job.id && j.resource_requirements_id === rrId);
+  return (await jobsUsing(job.workflow_id, rrId)) > 1;
 }
 
-/** How many jobs use each resource requirement, for the Resources sub-tab's warning. */
-export async function jobsPerRequirement(workflowId: number): Promise<Map<number, number>> {
-  const jobs = await listAll((offset, limit) =>
-    unwrap(api.GET("/jobs", { params: { query: { workflow_id: workflowId, offset, limit } } })),
+/** How many jobs use a resource requirement. */
+export async function jobsUsing(workflowId: number, rrId: number): Promise<number> {
+  const r = await unwrap(
+    api.GET("/jobs", {
+      params: { query: { workflow_id: workflowId, resource_requirements_id: rrId, limit: 1 } },
+    }),
   );
-  const counts = new Map<number, number>();
-  for (const j of jobs) {
-    if (j.resource_requirements_id != null) {
-      counts.set(j.resource_requirements_id, (counts.get(j.resource_requirements_id) ?? 0) + 1);
-    }
-  }
-  return counts;
+  return r.total_count;
 }

@@ -8,7 +8,7 @@
   import { app } from "../../lib/state.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
   import { toast } from "../../lib/ui/toast.svelte";
-  import { editBlockedReason, jobsPerRequirement } from "./editing";
+  import { editBlockedReason, jobsUsing } from "./editing";
   import ResourceInputs from "./ResourceInputs.svelte";
 
   type Target =
@@ -34,8 +34,7 @@
     const wf = target.record.workflow_id;
     blocked = await editBlockedReason(wf).catch((e) => `Could not check job status: ${errorText(e)}`);
     if (target.kind === "resources") {
-      const counts = await jobsPerRequirement(wf).catch(() => null);
-      users = counts?.get(target.record.id!) ?? 0;
+      users = await jobsUsing(wf, target.record.id!).catch(() => null);
     }
   }
   check();

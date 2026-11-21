@@ -141,6 +141,7 @@ impl Paginatable for JobModel {
             None, // name
             None, // command
             None, // label
+            None, // resource_requirements_id
         )?;
 
         Ok(PaginatedResponse {
