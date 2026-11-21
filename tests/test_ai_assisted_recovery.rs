@@ -479,3 +479,86 @@ fn test_regroup_rejects_ambiguous_omitted_gpus(start_server: &ServerProcess) {
         "no resource requirements should be created"
     );
 }
+
+/// Resolving the last pending_failed job to Failed completes the workflow, so it must
+/// trigger on_workflow_complete actions.
+#[rstest]
+fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) =
+        create_and_initialize_workflow(config, "test_pending_failed_workflow_complete");
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        models::WorkflowActionModel {
+            id: None,
+            workflow_id,
+            trigger_type: "on_workflow_complete".to_string(),
+            action_type: "run_commands".to_string(),
+            action_config: serde_json::json!({"commands": ["true"]}),
+            job_ids: None,
+            trigger_count: 0,
+            required_triggers: 1,
+            executed: false,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: false,
+        },
+    )
+    .expect("Failed to create action");
+    let action_id = action.id.unwrap();
+
+    let job_id = create_test_job(config, workflow_id, "only_job").id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+    let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
+    apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to claim jobs");
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("Failed to set job running");
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::PendingFailed,
+    );
+    apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+        .expect("Failed to complete job");
+
+    let triggered = |config| {
+        let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+            .expect("Failed to get actions");
+        let a = actions
+            .iter()
+            .find(|a| a.id == Some(action_id))
+            .expect("action not found");
+        a.trigger_count >= a.required_triggers
+    };
+    assert!(
+        !triggered(config),
+        "workflow is not complete while pending_failed"
+    );
+
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
+        .expect("Failed to resolve pending_failed job");
+    assert!(
+        triggered(config),
+        "on_workflow_complete should be triggered"
+    );
+}

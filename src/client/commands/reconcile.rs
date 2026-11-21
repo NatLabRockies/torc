@@ -59,9 +59,6 @@ pub fn reconcile(
         files: files.len(),
         ..Default::default()
     };
-    // Jobs whose Completed status was accepted; their output mtimes were not recorded
-    // while the runner was offline.
-    let mut completed_job_ids: Vec<i64> = Vec::new();
 
     for path in &files {
         let entries = match OfflineJournal::read_file(path) {
@@ -88,11 +85,17 @@ pub fn reconcile(
             match apis::workflows_api::batch_complete_jobs(config, workflow_id, request) {
                 Ok(response) => {
                     summary.accepted += response.completed.len();
-                    completed_job_ids.extend(chunk.iter().filter_map(|entry| {
-                        (entry.status == JobStatus::Completed
-                            && response.completed.contains(&entry.job_id))
-                        .then_some(entry.job_id)
-                    }));
+                    // Output mtimes were not recorded while the runner was offline. Refresh
+                    // them per batch so a later failed request cannot skip them.
+                    let completed: Vec<i64> = chunk
+                        .iter()
+                        .filter(|entry| {
+                            entry.status == JobStatus::Completed
+                                && response.completed.contains(&entry.job_id)
+                        })
+                        .map(|entry| entry.job_id)
+                        .collect();
+                    refresh_output_file_mtimes(config, workflow_id, &completed);
                     for err in &response.errors {
                         summary.rejected += 1;
                         warn!(
@@ -113,8 +116,6 @@ pub fn reconcile(
             }
         }
     }
-
-    refresh_output_file_mtimes(config, workflow_id, &completed_job_ids);
 
     if format == "json" {
         println!(
@@ -146,7 +147,11 @@ pub fn reconcile(
 /// Record the on-disk mtime of each output file produced by the given jobs. The runner
 /// skips these updates while offline. Paths resolve against the current directory, as they
 /// do for the runner.
-fn refresh_output_file_mtimes(config: &Configuration, workflow_id: i64, job_ids: &[i64]) {
+pub(crate) fn refresh_output_file_mtimes(
+    config: &Configuration,
+    workflow_id: i64,
+    job_ids: &[i64],
+) {
     for &job_id in job_ids {
         let files = match paginate_files(
             config,

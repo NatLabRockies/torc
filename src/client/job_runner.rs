@@ -1724,6 +1724,21 @@ impl JobRunner {
                     self.workflow_id, err.job_id, err.message
                 );
             }
+            // Output mtimes were skipped while offline; record them before the journal
+            // (the only record of these completions) is cleared.
+            let completed: Vec<i64> = chunk
+                .iter()
+                .filter(|entry| {
+                    entry.status == JobStatus::Completed
+                        && response.completed.contains(&entry.job_id)
+                })
+                .map(|entry| entry.job_id)
+                .collect();
+            crate::client::commands::reconcile::refresh_output_file_mtimes(
+                &self.config,
+                self.workflow_id,
+                &completed,
+            );
         }
         journal
             .clear()

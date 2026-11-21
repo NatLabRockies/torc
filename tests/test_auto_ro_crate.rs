@@ -1022,8 +1022,17 @@ fn test_auto_ro_crate_initialize_skips_output_files_with_mtime(start_server: &Se
     output.st_mtime = Some(1704153600.0);
     apis::files_api::update_file(config, output_file_id, output).unwrap();
 
-    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
-        .expect("Failed to initialize jobs");
+    // WorkflowManager::initialize exercises both the server-side upsert (during
+    // initialize_jobs) and the CLI's own input-entity pass.
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize workflow");
 
     let items = apis::ro_crate_api::list_ro_crate_entities(
         config,

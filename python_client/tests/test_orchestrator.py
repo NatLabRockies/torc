@@ -32,7 +32,10 @@ def _make_api(user_data_items: list[Any] | None = None) -> MagicMock:
     the request payload it received.
     """
     api = MagicMock()
-    api.list_user_data.return_value = SimpleNamespace(items=user_data_items or [])
+    items = user_data_items or []
+    api.list_user_data.return_value = SimpleNamespace(
+        items=items, count=len(items), has_more=False
+    )
     api.spawn_jobs.return_value = SpawnJobsResponse(spawned_job_ids=[], iteration=0)
     return api
 
@@ -154,6 +157,20 @@ def test_generation_filters_user_data_by_lineage_name() -> None:
     assert api.list_user_data.call_args.kwargs["name"] == f"{LINEAGE_RECORD_PREFIX}a__g"
 
 
+def test_generation_reads_every_page() -> None:
+    """Lineage records beyond the first page must still count."""
+    api = _make_api()
+    api.list_user_data.side_effect = [
+        SimpleNamespace(items=[_ud(f"{LINEAGE_RECORD_PREFIX}a__g000001")], count=1, has_more=True),
+        SimpleNamespace(
+            items=[_ud(f"{LINEAGE_RECORD_PREFIX}a__g000007")], count=1, has_more=False
+        ),
+    ]
+    orch = Orchestrator(api=api, workflow_id=1, job_id=2, lineage="a")
+    assert orch.generation == 7
+    assert api.list_user_data.call_count == 2
+
+
 def test_generation_is_cached_until_spawn() -> None:
     api = _make_api(user_data_items=[_ud(f"{LINEAGE_RECORD_PREFIX}a__g000002")])
     orch = Orchestrator(api=api, workflow_id=1, job_id=2, lineage="a")
@@ -210,7 +227,9 @@ def test_spawn_invalidates_cached_generation() -> None:
         items=[
             _ud(f"{LINEAGE_RECORD_PREFIX}a__g000001"),
             _ud(f"{LINEAGE_RECORD_PREFIX}a__g000002"),
-        ]
+        ],
+        count=2,
+        has_more=False,
     )
     orch.spawn(jobs=[SpawnJobModel(name="c", command="echo")])
     assert orch.generation == 2

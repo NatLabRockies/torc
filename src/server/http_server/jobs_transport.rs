@@ -1440,6 +1440,26 @@ where
             }
             job.status = Some(status);
             self.manage_job_status_change(&job, run_id).await?;
+            // The original complete_job already counted this job for on_jobs_complete, so
+            // only broadcast the new status and check whether the workflow is now complete.
+            self.event_broadcaster.broadcast(BroadcastEvent {
+                workflow_id: job.workflow_id,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                event_type: format!("job_{}", status.to_string().to_lowercase()),
+                severity: if status == models::JobStatus::Failed {
+                    models::EventSeverity::Error
+                } else {
+                    models::EventSeverity::Warning
+                },
+                data: serde_json::json!({
+                    "job_id": id,
+                    "job_name": job.name,
+                    "status": status.to_string(),
+                    "previous_status": current_status.to_string(),
+                }),
+            });
+            self.trigger_workflow_complete_if_done(job.workflow_id, context)
+                .await;
             return Ok(ManageStatusChangeResponse::SuccessfulResponse(job));
         }
 
@@ -2180,6 +2200,12 @@ where
             );
         }
 
+        self.trigger_workflow_complete_if_done(workflow_id, context)
+            .await;
+    }
+
+    /// Trigger on_workflow_complete actions if no jobs remain in a non-terminal state.
+    async fn trigger_workflow_complete_if_done(&self, workflow_id: i64, context: &C) {
         match self
             .workflows_api
             .is_workflow_complete(workflow_id, context)
