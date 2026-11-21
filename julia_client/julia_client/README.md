@@ -39,6 +39,7 @@ Class | Method
 *ComputeNodesApi* | [**create_compute_node**](docs/ComputeNodesApi.md#create_compute_node)<br/>**POST** /compute_nodes<br/>
 *ComputeNodesApi* | [**delete_compute_node**](docs/ComputeNodesApi.md#delete_compute_node)<br/>**DELETE** /compute_nodes/{id}<br/>
 *ComputeNodesApi* | [**delete_compute_nodes**](docs/ComputeNodesApi.md#delete_compute_nodes)<br/>**DELETE** /compute_nodes<br/>
+*ComputeNodesApi* | [**fail_compute_node**](docs/ComputeNodesApi.md#fail_compute_node)<br/>**POST** /compute_nodes/{id}/fail<br/>
 *ComputeNodesApi* | [**get_compute_node**](docs/ComputeNodesApi.md#get_compute_node)<br/>**GET** /compute_nodes/{id}<br/>
 *ComputeNodesApi* | [**heartbeat_compute_node**](docs/ComputeNodesApi.md#heartbeat_compute_node)<br/>**POST** /compute_nodes/{id}/heartbeat<br/>
 *ComputeNodesApi* | [**list_compute_nodes**](docs/ComputeNodesApi.md#list_compute_nodes)<br/>**GET** /compute_nodes<br/>

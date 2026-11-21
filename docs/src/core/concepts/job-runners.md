@@ -148,7 +148,7 @@ flowchart TD
 While the worker is in offline-drain mode, `on_worker_complete` and `deactivate_compute_node` are
 both skipped — the server is unreachable, so the node is left active and the journal is replayed via
 `torc workflows reconcile` once connectivity returns. Heartbeats are also paused while the runner is
-offline (see [Compute Node Heartbeats](#compute-node-heartbeats-and-expiry)).
+offline (see [Compute Node Heartbeats](#compute-node-heartbeats-and-stale-nodes)).
 
 ### Per-Iteration Logic
 
@@ -301,17 +301,18 @@ Without the idle clamp, a node that drained near the start of a 1-hour backoff w
 asleep for nearly the full hour after the workflow completed elsewhere. The clamp bounds that
 worst-case waste to ~30s.
 
-## Compute Node Heartbeats and Expiry
+## Compute Node Heartbeats and Stale Nodes
 
 A runner marks its compute node `is_active` when it starts and clears the flag when it exits
 normally. If the runner dies without a normal exit (`SIGKILL`, an out-of-memory kill, a lost host),
-nothing clears the flag. The node stays active and its jobs stay `running`, and
-`torc workflows reset-status` and `torc recover` refuse to continue without `--force`. The client
-check in `torc recover` finds dead runners only on the machine that runs the command. It cannot see
-a runner in a container or on another host.
+nothing clears the flag. The node stays active and its jobs stay `running`, and `torc watch`,
+`torc workflows reset-status` and `torc recover` wait or refuse to continue without `--force`. The
+client check in `torc recover` finds dead runners only on the machine that runs the command. It
+cannot see a runner in a container or on another host.
 
-To close this gap, a runner sends a heartbeat for its compute node, and the server can expire nodes
-that stop sending them.
+To close this gap, a runner sends a heartbeat for its compute node, and the server marks nodes that
+stop sending them as stale. The server never decides that a node is dead. Something that can check
+the host does.
 
 **Runner side.** Every `client.run.heartbeat_interval_secs` (default 30, `0` turns heartbeats off)
 the runner calls `POST /compute_nodes/{id}/heartbeat`. The server stamps `last_heartbeat` with its
@@ -319,53 +320,89 @@ own clock, so clock differences between hosts do not matter. A thread of its own
 heartbeats. It starts with the runner and sends the first heartbeat at once. Slow claims, long
 `run_commands` actions, and the claim backoff therefore cannot delay it. A failed heartbeat is
 logged and the runner continues. The runner sends no heartbeats in offline-drain mode. With
-heartbeats off, the node keeps no `last_heartbeat` and the server never expires it.
+heartbeats off, the node keeps no `last_heartbeat` and is never stale.
 
-**Server side.** Expiry is off by default. Turn it on with
-`--compute-node-heartbeat-timeout-secs <N>` (environment variable
-`TORC_COMPUTE_NODE_HEARTBEAT_TIMEOUT_SECS`, config key
-`server.compute_node_heartbeat_timeout_secs`). A background task runs every
-`--compute-node-sweep-interval-secs` (default 30). For each active node whose `last_heartbeat` is
-older than the timeout, it:
+**Stale nodes.** The server setting `compute_node_stale_after_secs` (default 600, `0` turns stale
+marking off) sets the threshold. Set it with `--compute-node-stale-after-secs <N>`, the environment
+variable `TORC_COMPUTE_NODE_STALE_AFTER_SECS`, or the config key
+`server.compute_node_stale_after_secs`. A node is stale when it is active, has a `last_heartbeat`,
+and that heartbeat is older than the threshold. A node without a `last_heartbeat` is never stale.
+This covers runners that predate heartbeats.
 
-1. sets `is_active = false`, and
-2. fails each job that is `running` on that node with return code `-128` (the code the client orphan
-   cleanup uses), so dependents are released as for any other failure.
-
-A node without a `last_heartbeat` is never expired. This covers nodes of runners that predate
-heartbeats. The first sweep runs one timeout after the server starts, so a server that was down does
-not expire nodes before their runners can reach it again. Each expiry is logged with the node and
-job IDs.
+The server computes staleness when it reads a node. It runs no background task and changes no node
+or job. `ComputeNodeModel.is_stale` reports the result. `GET /compute_nodes?stale=true` (or
+`stale=false`) filters on it, and `torc compute-nodes list --stale` does the same and shows a Stale
+column.
 
 Communication goes one way only: the runner calls the server, and the server records the call. The
 server never contacts a runner, so the server and its runners can be on different networks (for
-example a server in the cloud and runners on an HPC system or on cloud VMs). Expiry needs no shared
-host, process namespace, or file system. Because the server fails the jobs and deactivates the node,
-`torc watch`, `torc recover`, and `torc workflows reset-status` no longer wait for, or refuse to
-continue because of, a dead runner that does not use Slurm and runs on another machine. They see no
-active node and no running job, so they need no `--force`.
+example a server in the cloud and runners on an HPC system or on cloud VMs). Stale marking needs no
+shared host, process namespace, or file system.
 
-Choose a timeout of at least four heartbeat intervals (120 seconds with the default interval) so
-that a few lost heartbeats do not expire a healthy node.
+Choose a threshold of at least four heartbeat intervals (120 seconds with the default interval) so
+that a few lost heartbeats do not mark a healthy node stale.
+
+**Server crash and restart.** When the server stops or crashes, no runner can send a heartbeat.
+Runners keep their jobs alive. Each API call retries for
+`compute_node_wait_for_healthy_database_minutes` (default 20). Then the runner enters offline-drain
+mode and checks for the server every `drain_ping_interval_secs` (default 120). After the server
+returns, a healthy runner needs up to about 150 seconds (one drain check plus one 30-second
+heartbeat interval) to send a new heartbeat.
+
+Without a guard, an outage longer than the threshold would make every active node stale the moment
+the server returns. A person or detector that trusts the stale flag could then fail a healthy node,
+and its jobs could run twice. The guard: no node is stale until the server has run for one full
+threshold. The server keeps its start time in memory.
+
+This is the least-cost answer. It needs no database column, no write on the heartbeat path, and no
+shutdown hook, so it works the same after a crash, a `kill -9`, or a host reboot. It does not depend
+on the length of the outage. The cost: after a restart, a dead node shows as stale up to one
+threshold later (600 seconds by default). Stale is a hint. A late hint is safe. An early hint is
+not.
+
+**Failing a node.** `POST /compute_nodes/{id}/fail` (CLI: `torc compute-nodes fail <id>`) declares a
+node dead. The server:
+
+1. sets `is_active = false`,
+2. fails each job that is `running` on that node with return code `-128` (the code the client orphan
+   cleanup uses), so dependents are released as for any other failure, and
+3. broadcasts a `compute_node_stopped` event with reason `failed`.
+
+The call is idempotent and works on any node, stale or not. It is a declaration, not a request. The
+caller must first confirm outside torc that the node is dead: for example a cloud VM status check, a
+scheduler query, or a person who looked at the host. A stale flag alone does not prove it. The
+server cannot stop processes on a host, so a node that is still alive and failed by mistake keeps
+running its jobs until its runner is fenced.
+
+**Runner fence.** When a heartbeat reply reports `is_active == false`, the runner kills its running
+jobs and exits. A runner whose node was failed during a server outage is fenced by its first
+heartbeat after offline-drain ends.
 
 **Ownership of a job.** The server rejects a completion (HTTP 422) from a runner that no longer owns
 the job. That happens when the result reports another `attempt_id` than the job's current one, when
 the job records another compute node, or when the job is not running and the reporting node is
-inactive. A late completion from an expired runner is therefore rejected while the job is still
-failed, after a retry (new attempt), after `torc jobs reset-status` makes it ready, and after a
-replacement attempt starts on another node. A start or claim for an inactive node is rejected too,
-so a job cannot start on a node that the server just expired. The sweep fails only jobs that are
-still running on the expired node.
+inactive. A late completion from a failed node is therefore rejected after a retry (new attempt),
+after `torc jobs reset-status` makes it ready, and after a replacement attempt starts on another
+node. A completion from a stale node that is still active is accepted if its job still runs. A start
+or claim for an inactive node is rejected too, so a job cannot start on a node that was just failed.
+
+**`torc watch`, `torc recover` and `reset-status`.** `torc watch`, `torc recover` and
+`torc jobs reset-status` (without `--force`) wait or refuse while any compute node of the workflow
+is active, unless orphan cleanup proves the runner dead (a dead local PID on the same host, or an
+ended Slurm job). A stale node that is still active therefore blocks them, even when it runs no job.
+`torc workflows reset-status` (without `--force`) refuses only while jobs are running or submitted.
+`torc compute-nodes fail <id>` deactivates the node and fails its running jobs, which ends the wait
+once you know the node is dead.
 
 **Trade-offs.**
 
-- A runner that cannot reach the server for longer than the timeout is expired, even if it is
-  healthy. This includes a runner in offline-drain mode that stays offline longer than the timeout.
-  Its jobs are failed on the server, and it cannot complete them later.
-- Expiry changes only the database. It cannot stop job processes that are still running on a host
-  whose runner died. A job that you rerun can run twice at the same time.
-- If failing a job does not succeed, the sweep tries again on its next pass. It selects every
-  running job whose node is inactive and has a heartbeat, not only jobs of newly expired nodes.
+- The server cannot stop processes on a host. A job that you rerun after failing a node whose host
+  is still running can run twice at the same time.
+- A node that is truly dead but never failed blocks `torc recover` and `torc watch` until someone
+  fails it. Stale marking only helps you find it.
+- A threshold below a few heartbeat intervals marks healthy nodes stale. This is harmless, because
+  it only changes the hint.
+- After a server restart, stale marking starts one threshold late (see above).
 
 ## Surviving Server Outages (Offline Drain)
 

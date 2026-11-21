@@ -88,9 +88,10 @@ mod openapi_bulk_user_data_paths {
 mod openapi_compute_node_paths {
     pub use crate::server::live_router::{
         __path_create_compute_node, __path_delete_compute_node, __path_delete_compute_nodes,
-        __path_get_compute_node, __path_heartbeat_compute_node, __path_list_compute_nodes,
-        __path_update_compute_node, create_compute_node, delete_compute_node, delete_compute_nodes,
-        get_compute_node, heartbeat_compute_node, list_compute_nodes, update_compute_node,
+        __path_fail_compute_node, __path_get_compute_node, __path_heartbeat_compute_node,
+        __path_list_compute_nodes, __path_update_compute_node, create_compute_node,
+        delete_compute_node, delete_compute_nodes, fail_compute_node, get_compute_node,
+        heartbeat_compute_node, list_compute_nodes, update_compute_node,
     };
 }
 
@@ -465,6 +466,7 @@ fn resolve_schema_properties<'a>(
         openapi_compute_node_paths::get_compute_node,
         openapi_compute_node_paths::update_compute_node,
         openapi_compute_node_paths::heartbeat_compute_node,
+        openapi_compute_node_paths::fail_compute_node,
         openapi_event_paths::create_event,
         openapi_event_paths::delete_events,
         openapi_event_paths::list_events,
@@ -1123,6 +1125,14 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
         "heartbeat_compute_node",
         &mut issues,
     );
+    check_operation_id(
+        source,
+        &emitted,
+        "/compute_nodes/{id}/fail",
+        "post",
+        "fail_compute_node",
+        &mut issues,
+    );
     check_component_properties(
         &emitted,
         "ComputeNodeModel",
@@ -1143,6 +1153,7 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "compute_node_type",
             "scheduler",
             "last_heartbeat",
+            "is_stale",
         ],
         &mut issues,
     );

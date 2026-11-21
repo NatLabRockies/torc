@@ -147,6 +147,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(heartbeat_compute_node),
         )
         .route(
+            "/torc-service/v1/compute_nodes/{id}/fail",
+            post(fail_compute_node),
+        )
+        .route(
             "/torc-service/v1/events",
             get(list_events).post(create_event).delete(delete_events),
         )
@@ -1196,6 +1200,8 @@ pub struct ComputeNodesQuery {
     pub is_active: Option<bool>,
     #[param(nullable = true)]
     pub scheduled_compute_node_id: Option<i64>,
+    #[param(nullable = true)]
+    pub stale: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -1232,6 +1238,7 @@ pub async fn list_compute_nodes(
             query.hostname,
             query.is_active,
             query.scheduled_compute_node_id,
+            query.stale,
             &context,
         )
         .await
@@ -1354,7 +1361,6 @@ pub async fn update_compute_node(
         (status = 200, description = "Successful response", body = models::ComputeNodeModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -1364,6 +1370,30 @@ pub async fn heartbeat_compute_node(
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
     match state.server.heartbeat_compute_node(id, &context).await {
+        Ok(response) => update_compute_node_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "compute_nodes",
+    path = "/compute_nodes/{id}/fail",
+    operation_id = "fail_compute_node",
+    params(("id" = i64, Path, description = "ID of the compute node.")),
+    responses(
+        (status = 200, description = "Successful response", body = models::ComputeNodeModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn fail_compute_node(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state.server.fail_compute_node(id, &context).await {
         Ok(response) => update_compute_node_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -5729,6 +5759,7 @@ mod live_router_tests {
             None,
             credential_cache,
             crate::server::live_state::AdminSqlConfig::default(),
+            0,
         )
     }
 
@@ -5761,6 +5792,7 @@ mod live_router_tests {
                 None,
                 credential_cache,
                 crate::server::live_state::AdminSqlConfig::default(),
+                0,
             ),
             db_file,
         )

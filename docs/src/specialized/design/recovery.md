@@ -42,12 +42,13 @@ The orphan detection logic checks for three types of orphaned resources:
    compute nodes to process them (fallback for non-Slurm cases)
 
 The checks above run on the client. A runner that dies without a normal exit in a container or on
-another host leaves its compute node active, and the client cannot see it. The server can expire
-such nodes itself: when `--compute-node-heartbeat-timeout-secs` is set, it marks nodes that stopped
-sending heartbeats inactive and fails their running jobs with the same return code (`-128`). See
-[Compute Node Heartbeats and Expiry][heartbeats].
+another host leaves its compute node active, and the client cannot see it. The server marks nodes
+that stopped sending heartbeats as stale (`compute_node_stale_after_secs`). It does not fail their
+jobs. Once you confirm the node is dead, `torc compute-nodes fail <id>` marks it inactive and fails
+its running jobs with the same return code (`-128`). See
+[Compute Node Heartbeats and Stale Nodes][heartbeats].
 
-[heartbeats]: ../../core/concepts/job-runners.md#compute-node-heartbeats-and-expiry
+[heartbeats]: ../../core/concepts/job-runners.md#compute-node-heartbeats-and-stale-nodes
 
 ```mermaid
 flowchart TD

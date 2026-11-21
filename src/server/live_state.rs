@@ -38,16 +38,6 @@ impl Default for AdminSqlConfig {
     }
 }
 
-/// Expiry of compute nodes whose runner stopped sending heartbeats. A zero
-/// `heartbeat_timeout_secs` disables the sweep.
-#[derive(Debug, Clone, Copy)]
-pub struct ComputeNodeSweepConfig {
-    /// Seconds without a heartbeat after which an active node is expired. 0 disables expiry.
-    pub heartbeat_timeout_secs: u64,
-    /// Seconds between sweeps.
-    pub sweep_interval_secs: u64,
-}
-
 #[derive(Clone)]
 pub struct LiveServerState {
     pub pool: Arc<SqlitePool>,
@@ -87,6 +77,7 @@ impl LiveServerState {
         auth_file_path: Option<String>,
         credential_cache: SharedCredentialCache,
         admin_sql: AdminSqlConfig,
+        compute_node_stale_after_secs: u64,
     ) -> Self {
         let pool_arc = Arc::new(pool);
         let api_context = ApiContext::new(pool_arc.as_ref().clone());
@@ -106,7 +97,10 @@ impl LiveServerState {
             credential_cache,
             admin_sql,
             access_groups_api: AccessGroupsApiImpl::new(api_context.clone()),
-            compute_nodes_api: ComputeNodesApiImpl::new(api_context.clone()),
+            compute_nodes_api: ComputeNodesApiImpl::new(
+                api_context.clone(),
+                compute_node_stale_after_secs,
+            ),
             events_api: EventsApiImpl::new(api_context.clone()),
             failure_handlers_api: FailureHandlersApiImpl::new(api_context.clone()),
             files_api: FilesApiImpl::new(api_context.clone()),

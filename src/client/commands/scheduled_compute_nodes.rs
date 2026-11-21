@@ -194,6 +194,7 @@ pub fn handle_scheduled_compute_node_commands(
                 None,      // hostname
                 None,      // is_active
                 Some(*id), // scheduled_compute_node_id
+                None,      // stale
             ) {
                 Ok(response) => response.items,
                 Err(e) => {

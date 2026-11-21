@@ -49,14 +49,9 @@ pub struct ServerConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_check_interval_secs: Option<f64>,
 
-    /// Seconds without a heartbeat after which an active compute node is marked inactive and
-    /// its running jobs are failed. 0 disables expiry. Nodes whose runner never sent a
-    /// heartbeat are never expired.
-    pub compute_node_heartbeat_timeout_secs: u64,
-
-    /// Seconds between compute node heartbeat sweeps. Used only when
-    /// `compute_node_heartbeat_timeout_secs` is above 0.
-    pub compute_node_sweep_interval_secs: u64,
+    /// Seconds without a heartbeat after which an active compute node is marked stale. 0 turns
+    /// stale marking off. Nodes whose runner never sent a heartbeat are never stale.
+    pub compute_node_stale_after_secs: u64,
 
     /// Logging configuration
     pub logging: ServerLoggingConfig,
@@ -90,8 +85,7 @@ impl Default for ServerConfig {
             credential_cache_ttl_secs: 60,
             enforce_access_control: false,
             completion_check_interval_secs: None,
-            compute_node_heartbeat_timeout_secs: 0,
-            compute_node_sweep_interval_secs: 30,
+            compute_node_stale_after_secs: 600,
             logging: ServerLoggingConfig::default(),
             admin_users: Vec::new(),
             disable_admin_sql: false,
@@ -130,8 +124,7 @@ mod tests {
         assert!(!config.require_auth);
         assert!(!config.enforce_access_control);
         assert_eq!(config.completion_check_interval_secs, None);
-        assert_eq!(config.compute_node_heartbeat_timeout_secs, 0);
-        assert_eq!(config.compute_node_sweep_interval_secs, 30);
+        assert_eq!(config.compute_node_stale_after_secs, 600);
     }
 
     #[test]

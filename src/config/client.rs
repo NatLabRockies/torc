@@ -79,9 +79,8 @@ pub struct ClientRunConfig {
     pub claim_backoff_max_secs: f64,
 
     /// Seconds between heartbeats a runner sends for its compute node. The server uses
-    /// them to expire nodes of runners that died without a graceful exit (see
-    /// `torc-server --compute-node-heartbeat-timeout-secs`). The heartbeat timer is
-    /// independent of the claim backoff. 0 disables heartbeats.
+    /// them to mark nodes of runners that died without a graceful exit as stale. The heartbeat
+    /// timer is independent of the claim backoff. 0 disables heartbeats.
     pub heartbeat_interval_secs: u64,
 
     /// Maximum number of parallel jobs to run concurrently

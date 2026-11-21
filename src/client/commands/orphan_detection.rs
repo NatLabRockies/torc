@@ -475,6 +475,51 @@ fn cleanup_dead_pending_slurm_jobs(
     Ok(total_cleaned)
 }
 
+/// Returns any compute node of the workflow, or creates a recovery node. Returns 0 on failure.
+fn find_or_create_recovery_node(config: &Configuration, workflow_id: i64) -> i64 {
+    let compute_node_id = match apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,    // offset
+        Some(1), // limit
+        None,    // sort_by
+        None,    // reverse_sort
+        None,    // hostname
+        None,    // is_active - any status
+        None,    // scheduled_compute_node_id
+        None,    // stale
+    ) {
+        Ok(response) => response.items.first().and_then(|node| node.id).unwrap_or(0),
+        Err(_) => 0,
+    };
+
+    if compute_node_id != 0 {
+        return compute_node_id;
+    }
+
+    match apis::compute_nodes_api::create_compute_node(
+        config,
+        models::ComputeNodeModel::new(
+            workflow_id,
+            "orphan-recovery".to_string(),
+            0, // pid
+            Utc::now().to_rfc3339(),
+            1,   // num_cpus
+            1.0, // memory_gb
+            0,   // num_gpus
+            1,   // num_nodes
+            "local".to_string(),
+            None, // scheduler
+        ),
+    ) {
+        Ok(node) => node.id.unwrap_or(0),
+        Err(e) => {
+            warn!("Could not create recovery compute node: {}", e);
+            0
+        }
+    }
+}
+
 /// Detect and fail orphaned running jobs.
 ///
 /// This handles the case where a job runner (e.g., torc-slurm-job-runner) was killed
@@ -508,6 +553,7 @@ fn fail_orphaned_running_jobs(
         None,       // hostname
         Some(true), // is_active = true
         None,       // scheduled_compute_node_id
+        None,       // stale
     )
     .map_err(|e| format!("Failed to list active compute nodes: {}", e))?;
 
@@ -557,48 +603,10 @@ fn fail_orphaned_running_jobs(
         return Ok((details.len(), details));
     }
 
-    // Get or create a compute node for recording the failure
-    // First, try to find any existing compute node for this workflow
-    let compute_node_id = match apis::compute_nodes_api::list_compute_nodes(
-        config,
-        workflow_id,
-        None,    // offset
-        Some(1), // limit
-        None,    // sort_by
-        None,    // reverse_sort
-        None,    // hostname
-        None,    // is_active - any status
-        None,    // scheduled_compute_node_id
-    ) {
-        Ok(response) => response.items.first().and_then(|node| node.id).unwrap_or(0),
-        Err(_) => 0,
-    };
-
-    // If no compute node exists, create a recovery node
-    let compute_node_id = if compute_node_id == 0 {
-        match apis::compute_nodes_api::create_compute_node(
-            config,
-            models::ComputeNodeModel::new(
-                workflow_id,
-                "orphan-recovery".to_string(),
-                0, // pid
-                Utc::now().to_rfc3339(),
-                1,   // num_cpus
-                1.0, // memory_gb
-                0,   // num_gpus
-                1,   // num_nodes
-                "local".to_string(),
-                None, // scheduler
-            ),
-        ) {
-            Ok(node) => node.id.unwrap_or(0),
-            Err(e) => {
-                warn!("Could not create recovery compute node: {}", e);
-                0
-            }
-        }
+    let fallback_node_id = if running_jobs.iter().all(|job| job.compute_node_id.is_some()) {
+        0
     } else {
-        compute_node_id
+        find_or_create_recovery_node(config, workflow_id)
     };
 
     let mut failed_count = 0;
@@ -624,7 +632,7 @@ fn fail_orphaned_running_jobs(
             workflow_id,
             run_id,
             attempt_id,
-            compute_node_id,
+            job.compute_node_id.unwrap_or(fallback_node_id),
             ORPHANED_JOB_RETURN_CODE, // Unique return code for orphaned jobs
             0.0,                      // exec_time_minutes - unknown
             Utc::now().to_rfc3339(),  // completion_time

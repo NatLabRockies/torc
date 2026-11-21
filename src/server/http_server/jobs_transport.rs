@@ -2,9 +2,8 @@ use super::*;
 use crate::CLAIM_START_MISMATCH;
 use crate::server::api::jobs::{ClaimStart, claim_start_is_valid, finish_claim, run_id_mismatch};
 use crate::server::api::{
-    JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
-    database_lock_aware_error, labels_column, message_error_response, parse_job_status,
-    resource_not_found_response,
+    JobsApi, WorkflowsApi, begin_immediate, claimable_labels_sql, database_lock_aware_error,
+    labels_column, message_error_response, parse_job_status, resource_not_found_response,
 };
 
 const RESOURCE_CLAIM_ORDER_BY: &str = "\
@@ -638,23 +637,13 @@ struct CompletedJobRecord {
 
 /// A completion is rejected when it comes from a runner that no longer owns the job: the
 /// result reports another attempt, the job records another node, or the job is not running and
-/// the reporting node is inactive (for example expired by the heartbeat sweep). This stops a
-/// late completion from a silent runner after its job was failed, reset, retried, or restarted
-/// elsewhere. Status values: 3 = pending, 4 = running.
-macro_rules! job_ownership_sql {
-    ($set:literal) => {
-        concat!(
-            "UPDATE job SET ",
-            $set,
-            " WHERE id = ? AND attempt_id = ? AND (compute_node_id IS NULL OR compute_node_id = ?) ",
-            "AND NOT (status NOT IN (3, 4) ",
-            "AND EXISTS (SELECT 1 FROM compute_node WHERE id = ? AND is_active = 0))"
-        )
-    };
-}
-const JOB_OWNERSHIP_CHECK_SQL: &str = job_ownership_sql!("start_time = start_time");
-const JOB_OWNERSHIP_CLEAR_SQL: &str =
-    job_ownership_sql!("start_time = NULL, compute_node_id = NULL");
+/// the reporting node is inactive (for example failed through `POST /compute_nodes/{id}/fail`).
+/// This stops a late completion from a silent runner after its job was failed, reset, retried,
+/// or restarted elsewhere. Status value 4 = running.
+const JOB_OWNERSHIP_CLEAR_SQL: &str = "UPDATE job SET start_time = NULL, compute_node_id = NULL \
+     WHERE id = ? AND attempt_id = ? AND (compute_node_id IS NULL OR compute_node_id = ?) \
+     AND NOT (status != 4 \
+     AND EXISTS (SELECT 1 FROM compute_node WHERE id = ? AND is_active = 0))";
 
 fn job_ownership_outcome(
     outcome: Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error>,
@@ -678,6 +667,11 @@ fn job_ownership_outcome(
             database_lock_aware_error(e, "Failed to verify job ownership"),
         )),
     }
+}
+
+pub(super) enum ServerFailJobError {
+    Rejected(String),
+    Transport(String),
 }
 
 enum CompletionMutationError {
@@ -722,7 +716,7 @@ fn completion_error_message(err: &models::ErrorResponse) -> String {
 
 /// Verify that a `ResultModel` matches the target identifiers a caller is completing against.
 /// Returns the validation error as a 422 `ErrorResponse` so the two completion paths
-/// (`apply_job_completion_state` and `apply_job_completion_state_tx`) can wrap it identically.
+/// can wrap it identically.
 fn validate_result_matches_target(
     id: i64,
     job_workflow_id: i64,
@@ -1635,18 +1629,31 @@ where
 
         authorize_job!(self, id, context, CompleteJobResponse);
 
+        let mut tx = begin_immediate(&self.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin completion transaction"))?;
         match self
-            .apply_job_completion_state(None, id, status, run_id, result, context)
+            .apply_job_completion_state_tx(&mut tx, None, id, status, run_id, result)
             .await
         {
             Ok(completion) => {
+                tx.commit().await.map_err(|e| {
+                    database_lock_aware_error(e, "Failed to commit completion transaction")
+                })?;
+                self.signal_job_completion();
                 let job = completion.job.clone();
                 self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
                     .await;
                 Ok(CompleteJobResponse::SuccessfulResponse(job))
             }
-            Err(CompletionMutationError::Response(response)) => Ok(*response),
-            Err(CompletionMutationError::Transport(error)) => Err(error),
+            Err(CompletionMutationError::Response(response)) => {
+                let _ = tx.rollback().await;
+                Ok(*response)
+            }
+            Err(CompletionMutationError::Transport(error)) => {
+                let _ = tx.rollback().await;
+                Err(error)
+            }
         }
     }
 
@@ -1659,194 +1666,42 @@ where
         run_id: i64,
         result: models::ResultModel,
         context: &C,
-    ) -> Result<(), String> {
+    ) -> Result<(), ServerFailJobError> {
+        let mut tx = begin_immediate(&self.pool).await.map_err(|e| {
+            ServerFailJobError::Transport(
+                database_lock_aware_error(e, "Failed to begin fail transaction").0,
+            )
+        })?;
         match self
-            .apply_job_completion_state(
+            .apply_job_completion_state_tx(
+                &mut tx,
                 None,
                 id,
                 models::JobStatus::Failed,
                 run_id,
                 result,
-                context,
             )
             .await
         {
             Ok(completion) => {
+                tx.commit().await.map_err(|e| {
+                    ServerFailJobError::Transport(
+                        database_lock_aware_error(e, "Failed to commit fail transaction").0,
+                    )
+                })?;
                 self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
                     .await;
                 Ok(())
             }
-            Err(CompletionMutationError::Response(response)) => Err(format!("{:?}", response)),
-            Err(CompletionMutationError::Transport(error)) => Err(error.0),
-        }
-    }
-
-    async fn apply_job_completion_state(
-        &self,
-        expected_workflow_id: Option<i64>,
-        id: i64,
-        status: models::JobStatus,
-        run_id: i64,
-        result: models::ResultModel,
-        context: &C,
-    ) -> Result<CompletedJobRecord, CompletionMutationError> {
-        if !status.is_terminal() {
-            error!(
-                "Attempted to complete job {} with non-terminal status '{}'",
-                id, status
-            );
-            return Err(CompletionMutationError::Transport(ApiError(format!(
-                "Status '{}' is not a terminal status for job completion",
-                status
-            ))));
-        }
-
-        let mut job = match self.jobs_api.get_job(id, context).await {
-            Ok(response) => match translate_get_job_response!(response, id, CompleteJobResponse) {
-                Ok(job) => job,
-                Err(err_response) => {
-                    return Err(CompletionMutationError::Response(Box::new(err_response)));
-                }
-            },
-            Err(error) => return Err(CompletionMutationError::Transport(error)),
-        };
-
-        if let Some(expected_workflow_id) = expected_workflow_id
-            && job.workflow_id != expected_workflow_id
-        {
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
-                    format!(
-                        "job_id={} belongs to workflow_id={} but batch target is workflow_id={}",
-                        id, job.workflow_id, expected_workflow_id
-                    ),
-                )),
-            )));
-        }
-
-        if let Some(current_status) = &job.status
-            && current_status.is_complete()
-        {
-            error!(
-                "job_id={} is already complete with status={}",
-                id, current_status
-            );
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
-                    format!(
-                        "job_id={} is already complete with status={}",
-                        id, current_status
-                    ),
-                )),
-            )));
-        }
-
-        if let Err(error_response) =
-            validate_result_matches_target(id, job.workflow_id, status, run_id, &result)
-        {
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(error_response),
-            )));
-        }
-
-        job.status = Some(status);
-
-        // The status change below clears the job's runtime state. Until then the job keeps its
-        // node, so a failure after this point leaves it owned and retryable.
-        job_ownership_outcome(
-            sqlx::query(JOB_OWNERSHIP_CHECK_SQL)
-                .bind(id)
-                .bind(result.attempt_id.unwrap_or(1))
-                .bind(result.compute_node_id)
-                .bind(result.compute_node_id)
-                .execute(self.pool.as_ref())
-                .await,
-            id,
-            &result,
-        )?;
-
-        let result_return_code = result.return_code;
-        let result_response = self
-            .results_api
-            .create_result(result, context)
-            .await
-            .map_err(CompletionMutationError::Transport)?;
-
-        let result_id = match result_response {
-            CreateResultResponse::SuccessfulResponse(result) => {
-                debug!(
-                    "complete_job: added result with ID {:?} for job_id={}",
-                    result.id, id
-                );
-                result.id
+            Err(CompletionMutationError::Response(response)) => {
+                let _ = tx.rollback().await;
+                Err(ServerFailJobError::Rejected(format!("{:?}", response)))
             }
-            CreateResultResponse::ForbiddenErrorResponse(err) => {
-                error!("Forbidden to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::ForbiddenErrorResponse(err),
-                )));
-            }
-            CreateResultResponse::NotFoundErrorResponse(err) => {
-                error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::NotFoundErrorResponse(err),
-                )));
-            }
-            CreateResultResponse::DefaultErrorResponse(err) => {
-                error!("Failed to add result for job {}: {:?}", id, err);
-                return Err(CompletionMutationError::Response(Box::new(
-                    CompleteJobResponse::DefaultErrorResponse(err),
-                )));
-            }
-        };
-
-        let workflow_id = job.workflow_id;
-        let result_id_value = result_id.ok_or_else(|| {
-            error!("Result ID is missing after creating result");
-            CompletionMutationError::Transport(ApiError("Result ID is missing".to_string()))
-        })?;
-
-        match sqlx::query!(
-            r#"
-            INSERT OR REPLACE INTO workflow_result (workflow_id, job_id, result_id)
-            VALUES (?, ?, ?)
-            "#,
-            workflow_id,
-            id,
-            result_id_value
-        )
-        .execute(self.pool.as_ref())
-        .await
-        {
-            Ok(_) => {
-                debug!(
-                    "complete_job: added workflow_result record for workflow_id={}, job_id={}, result_id={}",
-                    workflow_id, id, result_id_value
-                );
-            }
-            Err(e) => {
-                error!(
-                    "Failed to insert workflow_result for workflow_id={}, job_id={}, result_id={}: {}",
-                    workflow_id, id, result_id_value, e
-                );
-                return Err(CompletionMutationError::Transport(ApiError(
-                    "Database error".to_string(),
-                )));
+            Err(CompletionMutationError::Transport(error)) => {
+                let _ = tx.rollback().await;
+                Err(ServerFailJobError::Transport(error.0))
             }
         }
-
-        self.manage_job_status_change(&job, run_id)
-            .await
-            .map_err(CompletionMutationError::Transport)?;
-
-        Ok(CompletedJobRecord {
-            job,
-            job_id: id,
-            workflow_id,
-            status,
-            result_return_code,
-            result_id: result_id_value,
-        })
     }
 
     async fn apply_job_completion_state_tx(

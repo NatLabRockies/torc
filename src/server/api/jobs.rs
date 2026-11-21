@@ -80,7 +80,8 @@ pub(crate) async fn run_id_mismatch(
 }
 
 /// True when `start` is absent or names the workflow's current run and one of its compute nodes
-/// that the server has not deactivated (for example by heartbeat expiry).
+/// that the server has not deactivated (for example failed through
+/// `POST /compute_nodes/{id}/fail`).
 pub(crate) async fn claim_start_is_valid(
     conn: &mut sqlx::SqliteConnection,
     workflow_id: i64,

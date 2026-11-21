@@ -7,6 +7,7 @@ Method | HTTP request | Description
 [**create_compute_node**](ComputeNodesApi.md#create_compute_node) | **POST** /compute_nodes | 
 [**delete_compute_node**](ComputeNodesApi.md#delete_compute_node) | **DELETE** /compute_nodes/{id} | 
 [**delete_compute_nodes**](ComputeNodesApi.md#delete_compute_nodes) | **DELETE** /compute_nodes | 
+[**fail_compute_node**](ComputeNodesApi.md#fail_compute_node) | **POST** /compute_nodes/{id}/fail | 
 [**get_compute_node**](ComputeNodesApi.md#get_compute_node) | **GET** /compute_nodes/{id} | 
 [**heartbeat_compute_node**](ComputeNodesApi.md#heartbeat_compute_node) | **POST** /compute_nodes/{id}/heartbeat | 
 [**list_compute_nodes**](ComputeNodesApi.md#list_compute_nodes) | **GET** /compute_nodes | 
@@ -97,6 +98,34 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
+# **fail_compute_node**
+> fail_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing) -> ComputeNodeModel, OpenAPI.Clients.ApiResponse <br/>
+> fail_compute_node(_api::ComputeNodesApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ComputeNodeModel }, OpenAPI.Clients.ApiResponse
+
+
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **ComputeNodesApi** | API context | 
+**id** | **Int64** | ID of the compute node. |
+
+### Return type
+
+[**ComputeNodeModel**](ComputeNodeModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
 # **get_compute_node**
 > get_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing) -> ComputeNodeModel, OpenAPI.Clients.ApiResponse <br/>
 > get_compute_node(_api::ComputeNodesApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ ComputeNodeModel }, OpenAPI.Clients.ApiResponse
@@ -154,8 +183,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_compute_nodes**
-> list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, _mediaType=nothing) -> ListComputeNodesResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_compute_nodes(_api::ComputeNodesApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, _mediaType=nothing) -> Channel{ ListComputeNodesResponse }, OpenAPI.Clients.ApiResponse
+> list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, stale=nothing, _mediaType=nothing) -> ListComputeNodesResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_compute_nodes(_api::ComputeNodesApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, stale=nothing, _mediaType=nothing) -> Channel{ ListComputeNodesResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -177,6 +206,7 @@ Name | Type | Description  | Notes
  **hostname** | **String** |  | [default to nothing]
  **is_active** | **Bool** |  | [default to nothing]
  **scheduled_compute_node_id** | **Int64** |  | [default to nothing]
+ **stale** | **Bool** |  | [default to nothing]
 
 ### Return type
 

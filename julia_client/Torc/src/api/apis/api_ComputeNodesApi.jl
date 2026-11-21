@@ -101,6 +101,36 @@ function delete_compute_nodes(_api::ComputeNodesApi, response_stream::Channel, w
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_fail_compute_node_ComputeNodesApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ComputeNodeModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_fail_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_fail_compute_node_ComputeNodesApi, "/compute_nodes/{id}/fail", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Params:
+- id::Int64 (required)
+
+Return: ComputeNodeModel, OpenAPI.Clients.ApiResponse
+"""
+function fail_compute_node(_api::ComputeNodesApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_fail_compute_node(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function fail_compute_node(_api::ComputeNodesApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_fail_compute_node(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_get_compute_node_ComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ComputeNodeModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -135,7 +165,6 @@ const _returntypes_heartbeat_compute_node_ComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ComputeNodeModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
-    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
@@ -169,7 +198,7 @@ const _returntypes_list_compute_nodes_ComputeNodesApi = Dict{Regex,Type}(
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, _mediaType=nothing)
+function _oacinternal_list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, stale=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_compute_nodes_ComputeNodesApi, "/compute_nodes", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
@@ -179,6 +208,7 @@ function _oacinternal_list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int
     OpenAPI.Clients.set_param(_ctx.query, "hostname", hostname; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "is_active", is_active; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_param(_ctx.query, "scheduled_compute_node_id", scheduled_compute_node_id; style="form", is_explode=true)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "stale", stale; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -193,16 +223,17 @@ end
 - hostname::String
 - is_active::Bool
 - scheduled_compute_node_id::Int64
+- stale::Bool
 
 Return: ListComputeNodesResponse, OpenAPI.Clients.ApiResponse
 """
-function list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_compute_nodes(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, hostname=hostname, is_active=is_active, scheduled_compute_node_id=scheduled_compute_node_id, _mediaType=_mediaType)
+function list_compute_nodes(_api::ComputeNodesApi, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, stale=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_compute_nodes(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, hostname=hostname, is_active=is_active, scheduled_compute_node_id=scheduled_compute_node_id, stale=stale, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_compute_nodes(_api::ComputeNodesApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_compute_nodes(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, hostname=hostname, is_active=is_active, scheduled_compute_node_id=scheduled_compute_node_id, _mediaType=_mediaType)
+function list_compute_nodes(_api::ComputeNodesApi, response_stream::Channel, workflow_id::Int64; offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, hostname=nothing, is_active=nothing, scheduled_compute_node_id=nothing, stale=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_compute_nodes(_api, workflow_id; offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, hostname=hostname, is_active=is_active, scheduled_compute_node_id=scheduled_compute_node_id, stale=stale, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
@@ -240,6 +271,7 @@ end
 export create_compute_node
 export delete_compute_node
 export delete_compute_nodes
+export fail_compute_node
 export get_compute_node
 export heartbeat_compute_node
 export list_compute_nodes

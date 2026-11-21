@@ -54,6 +54,7 @@ pub trait ComputeNodesApi<C> {
         hostname: Option<String>,
         is_active: Option<bool>,
         scheduled_compute_node_id: Option<i64>,
+        stale: Option<bool>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError>;
 
@@ -84,7 +85,12 @@ pub trait ComputeNodesApi<C> {
 #[derive(Clone)]
 pub struct ComputeNodesApiImpl {
     pub context: ApiContext,
+    stale_after: Option<std::time::Duration>,
+    started: std::time::Instant,
 }
+
+const STALE_CONDITION: &str = "(is_active IS NULL OR is_active = 1) AND last_heartbeat IS NOT NULL AND \
+     julianday(last_heartbeat) < julianday(?)";
 
 const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "id",
@@ -111,9 +117,56 @@ const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "avg_memory_bytes",
 ];
 
+pub(crate) fn update_response_from_get(
+    response: GetComputeNodeResponse,
+) -> Result<UpdateComputeNodeResponse, ApiError> {
+    match response {
+        GetComputeNodeResponse::SuccessfulResponse(node) => {
+            Ok(UpdateComputeNodeResponse::SuccessfulResponse(node))
+        }
+        GetComputeNodeResponse::ForbiddenErrorResponse(err) => {
+            Ok(UpdateComputeNodeResponse::ForbiddenErrorResponse(err))
+        }
+        GetComputeNodeResponse::NotFoundErrorResponse(err) => {
+            Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(err))
+        }
+        GetComputeNodeResponse::DefaultErrorResponse(_) => {
+            Err(ApiError("Failed to get compute node".to_string()))
+        }
+    }
+}
+
 impl ComputeNodesApiImpl {
-    pub fn new(context: ApiContext) -> Self {
-        Self { context }
+    /// `stale_after_secs` of 0 turns stale marking off.
+    pub fn new(context: ApiContext, stale_after_secs: u64) -> Self {
+        Self {
+            context,
+            stale_after: (stale_after_secs > 0)
+                .then(|| std::time::Duration::from_secs(stale_after_secs)),
+            started: std::time::Instant::now(),
+        }
+    }
+
+    /// Heartbeats older than the cutoff are stale. There is no cutoff before the server has run
+    /// for one full threshold: while it was down, no runner could send a heartbeat.
+    fn stale_cutoff(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let stale_after = self.stale_after?;
+        if self.started.elapsed() < stale_after {
+            return None;
+        }
+        Some(chrono::Utc::now() - chrono::Duration::from_std(stale_after).ok()?)
+    }
+
+    fn is_stale(
+        cutoff: Option<chrono::DateTime<chrono::Utc>>,
+        is_active: bool,
+        last_heartbeat: Option<&str>,
+    ) -> bool {
+        let (Some(cutoff), Some(last_heartbeat)) = (cutoff, last_heartbeat) else {
+            return false;
+        };
+        chrono::DateTime::parse_from_rfc3339(last_heartbeat)
+            .is_ok_and(|seen| is_active && seen < cutoff)
     }
 }
 
@@ -280,13 +333,20 @@ where
             }
         };
 
-        let is_active_val: i64 = record.get("is_active");
+        let is_active_val: Option<i64> = record.get("is_active");
         let duration_seconds: Option<f64> = record.get("duration_seconds");
         let time_limit: Option<String> = record.get("time_limit");
         let scheduler_str: Option<String> = record.get("scheduler");
 
         // Deserialize scheduler JSON string to Value
         let scheduler = scheduler_str.and_then(|s| serde_json::from_str(&s).ok());
+
+        let last_heartbeat: Option<String> = record.get("last_heartbeat");
+        let is_stale = Self::is_stale(
+            self.stale_cutoff(),
+            is_active_val != Some(0),
+            last_heartbeat.as_deref(),
+        );
 
         let compute_node_model = models::ComputeNodeModel {
             id: Some(record.get("id")),
@@ -295,13 +355,10 @@ where
             pid: record.get("pid"),
             start_time: record.get("start_time"),
             end_time: record.get("end_time"),
-            last_heartbeat: record.get("last_heartbeat"),
+            last_heartbeat,
+            is_stale: Some(is_stale),
             duration_seconds,
-            is_active: if is_active_val == 1 {
-                Some(true)
-            } else {
-                Some(false)
-            },
+            is_active: is_active_val.map(|v| v == 1),
             num_cpus: record.get("num_cpus"),
             memory_gb: record.get("memory_gb"),
             num_gpus: record.get("num_gpus"),
@@ -334,10 +391,11 @@ where
         hostname: Option<String>,
         is_active: Option<bool>,
         scheduled_compute_node_id: Option<i64>,
+        stale: Option<bool>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError> {
         debug!(
-            "list_compute_nodes({}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_compute_nodes({}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             offset,
             limit,
@@ -346,8 +404,11 @@ where
             hostname,
             is_active,
             scheduled_compute_node_id,
+            stale,
             context.get().0.clone()
         );
+
+        let cutoff = self.stale_cutoff();
 
         // Build base query
         let base_query = "
@@ -391,6 +452,21 @@ where
             // Filter by scheduler.scheduler_id in the JSON field
             where_conditions.push("json_extract(scheduler, '$.scheduler_id') = ?".to_string());
         }
+        let stale_cutoff_bind = match (stale, cutoff) {
+            (Some(true), Some(cutoff)) => {
+                where_conditions.push(STALE_CONDITION.to_string());
+                Some(cutoff.to_rfc3339())
+            }
+            (Some(true), None) => {
+                where_conditions.push("0 = 1".to_string());
+                None
+            }
+            (Some(false), Some(cutoff)) => {
+                where_conditions.push(format!("NOT COALESCE(({STALE_CONDITION}), 0)"));
+                Some(cutoff.to_rfc3339())
+            }
+            (Some(false), None) | (None, _) => None,
+        };
         let where_clause = where_conditions.join(" AND ");
         let sort_by = if let Some(ref col) = sort_by {
             if COMPUTE_NODE_COLUMNS.contains(&col.as_str()) {
@@ -429,6 +505,9 @@ where
         if let Some(scn_id) = scheduled_compute_node_id {
             sqlx_query = sqlx_query.bind(scn_id);
         }
+        if let Some(ref bound) = stale_cutoff_bind {
+            sqlx_query = sqlx_query.bind(bound.clone());
+        }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
             Ok(recs) => recs,
@@ -439,13 +518,17 @@ where
 
         let mut items: Vec<models::ComputeNodeModel> = Vec::new();
         for record in records {
-            let is_active_val: i64 = record.get("is_active");
+            let is_active_val: Option<i64> = record.get("is_active");
             let duration_seconds: Option<f64> = record.get("duration_seconds");
             let time_limit: Option<String> = record.get("time_limit");
             let scheduler_str: Option<String> = record.get("scheduler");
 
             // Deserialize scheduler JSON string to Value
             let scheduler = scheduler_str.and_then(|s| serde_json::from_str(&s).ok());
+
+            let last_heartbeat: Option<String> = record.get("last_heartbeat");
+            let is_stale =
+                Self::is_stale(cutoff, is_active_val != Some(0), last_heartbeat.as_deref());
 
             items.push(models::ComputeNodeModel {
                 id: Some(record.get("id")),
@@ -454,13 +537,10 @@ where
                 pid: record.get("pid"),
                 start_time: record.get("start_time"),
                 end_time: record.get("end_time"),
-                last_heartbeat: record.get("last_heartbeat"),
+                last_heartbeat,
+                is_stale: Some(is_stale),
                 duration_seconds,
-                is_active: if is_active_val == 1 {
-                    Some(true)
-                } else {
-                    Some(false)
-                },
+                is_active: is_active_val.map(|v| v == 1),
                 num_cpus: record.get("num_cpus"),
                 memory_gb: record.get("memory_gb"),
                 num_gpus: record.get("num_gpus"),
@@ -499,6 +579,9 @@ where
         }
         if let Some(scn_id) = scheduled_compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(scn_id);
+        }
+        if let Some(ref bound) = stale_cutoff_bind {
+            count_sqlx_query = count_sqlx_query.bind(bound.clone());
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
@@ -552,9 +635,6 @@ where
                 return Err(ApiError("Failed to get compute node".to_string()));
             }
         };
-
-        // `last_heartbeat` is deliberately not updated here: only creation and the heartbeat
-        // endpoint set it, so a stale model sent back by a client cannot roll it back.
 
         // Convert boolean to integer for database storage
         let is_active_val = body.is_active.map(|b| if b { 1i64 } else { 0i64 });
@@ -643,7 +723,7 @@ where
     /// Record a liveness signal for an active compute node.
     ///
     /// The server stamps its own clock, so runner clock skew does not matter. Only an active
-    /// node is touched: a node the server already expired stays inactive, and the returned
+    /// node is touched: a node that was failed stays inactive, and the returned
     /// model shows that to the caller.
     async fn heartbeat_compute_node(
         &self,
@@ -657,7 +737,7 @@ where
         );
 
         if let Err(e) = sqlx::query(
-            "UPDATE compute_node SET last_heartbeat = $1 WHERE id = $2 AND is_active = 1",
+            "UPDATE compute_node SET last_heartbeat = $1 WHERE id = $2 AND (is_active IS NULL OR is_active = 1)",
         )
         .bind(chrono::Utc::now().to_rfc3339())
         .bind(id)
@@ -670,20 +750,7 @@ where
             ));
         }
 
-        match self.get_compute_node(id, context).await? {
-            GetComputeNodeResponse::SuccessfulResponse(node) => {
-                Ok(UpdateComputeNodeResponse::SuccessfulResponse(node))
-            }
-            GetComputeNodeResponse::ForbiddenErrorResponse(err) => {
-                Ok(UpdateComputeNodeResponse::ForbiddenErrorResponse(err))
-            }
-            GetComputeNodeResponse::NotFoundErrorResponse(err) => {
-                Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(err))
-            }
-            GetComputeNodeResponse::DefaultErrorResponse(_) => {
-                Err(ApiError("Failed to get compute node".to_string()))
-            }
-        }
+        update_response_from_get(self.get_compute_node(id, context).await?)
     }
 
     /// Delete a compute node.

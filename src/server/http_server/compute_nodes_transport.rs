@@ -66,6 +66,7 @@ where
         hostname: Option<String>,
         is_active: Option<bool>,
         scheduled_compute_node_id: Option<i64>,
+        stale: Option<bool>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -86,6 +87,7 @@ where
                 hostname,
                 is_active,
                 scheduled_compute_node_id,
+                stale,
                 context,
             )
             .await
@@ -137,6 +139,17 @@ where
         self.compute_nodes_api
             .heartbeat_compute_node(id, context)
             .await
+    }
+    pub(super) async fn transport_fail_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError>
+    where
+        C: 'static,
+    {
+        authorize_resource!(self, id, "compute_node", context, UpdateComputeNodeResponse);
+        self.fail_compute_node_as_server(id, context).await
     }
     pub(super) async fn transport_delete_compute_node(
         &self,

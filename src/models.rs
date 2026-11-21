@@ -126,10 +126,14 @@ pub struct ComputeNodeModel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_time: Option<String>,
     /// Time of the last liveness signal from the runner that owns this node (RFC3339, UTC).
-    /// Unset for runners that do not send heartbeats. The server never expires such a node.
+    /// Unset for runners that do not send heartbeats. The server never marks such a node stale.
     /// Set at creation and by the heartbeat endpoint only; updates ignore it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_heartbeat: Option<String>,
+    /// True when the node is active and its last heartbeat is older than the server's stale
+    /// threshold. Read-only: the server computes it when it reads the node.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_stale: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1479,6 +1483,7 @@ impl ComputeNodeModel {
             start_time,
             end_time: None,
             last_heartbeat: None,
+            is_stale: None,
             duration_seconds: None,
             is_active: None,
             num_cpus,
@@ -2746,6 +2751,7 @@ mod tests {
             start_time: "2026-03-20T12:00:00Z".into(),
             end_time: Some("2026-03-20T13:00:00Z".into()),
             last_heartbeat: Some("2026-03-20T12:30:00Z".into()),
+            is_stale: Some(false),
             duration_seconds: Some(10.5),
             is_active: Some(true),
             num_cpus: 8,

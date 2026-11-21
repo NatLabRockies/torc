@@ -34,8 +34,9 @@ class ComputeNodeModel(BaseModel):
     hostname: StrictStr
     id: Optional[StrictInt] = None
     is_active: Optional[StrictBool] = None
+    is_stale: Optional[StrictBool] = Field(default=None, description="True when the node is active and its last heartbeat is older than the server's stale threshold. Read-only: the server computes it when it reads the node.")
     labels: Optional[List[StrictStr]] = Field(default=None, description="Labels the runner was started with; it claims only jobs whose every label it has (or only unlabeled jobs, when unset).")
-    last_heartbeat: Optional[StrictStr] = Field(default=None, description="Time of the last liveness signal from the runner that owns this node (RFC3339, UTC). Unset for runners that do not send heartbeats. The server never expires such a node. Set at creation and by the heartbeat endpoint only; updates ignore it.")
+    last_heartbeat: Optional[StrictStr] = Field(default=None, description="Time of the last liveness signal from the runner that owns this node (RFC3339, UTC). Unset for runners that do not send heartbeats. The server never marks such a node stale. Set at creation and by the heartbeat endpoint only; updates ignore it.")
     memory_gb: Union[StrictFloat, StrictInt]
     num_cpus: StrictInt
     num_gpus: StrictInt
@@ -49,7 +50,7 @@ class ComputeNodeModel(BaseModel):
     start_time: StrictStr
     time_limit: Optional[StrictStr] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "end_time", "hostname", "id", "is_active", "labels", "last_heartbeat", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["avg_cpu_percent", "avg_memory_bytes", "compute_node_type", "duration_seconds", "end_time", "hostname", "id", "is_active", "is_stale", "labels", "last_heartbeat", "memory_gb", "num_cpus", "num_gpus", "num_nodes", "peak_cpu_percent", "peak_memory_bytes", "pid", "sample_count", "scheduler", "scheduler_config_id", "start_time", "time_limit", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -120,6 +121,11 @@ class ComputeNodeModel(BaseModel):
         if self.is_active is None and "is_active" in self.model_fields_set:
             _dict['is_active'] = None
 
+        # set to None if is_stale (nullable) is None
+        # and model_fields_set contains the field
+        if self.is_stale is None and "is_stale" in self.model_fields_set:
+            _dict['is_stale'] = None
+
         # set to None if labels (nullable) is None
         # and model_fields_set contains the field
         if self.labels is None and "labels" in self.model_fields_set:
@@ -180,6 +186,7 @@ class ComputeNodeModel(BaseModel):
             "hostname": obj.get("hostname"),
             "id": obj.get("id"),
             "is_active": obj.get("is_active"),
+            "is_stale": obj.get("is_stale"),
             "labels": obj.get("labels"),
             "last_heartbeat": obj.get("last_heartbeat"),
             "memory_gb": obj.get("memory_gb"),

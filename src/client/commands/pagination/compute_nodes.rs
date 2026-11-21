@@ -28,6 +28,8 @@ pub struct ComputeNodeListParams {
     pub is_active: Option<bool>,
     /// Filter by scheduled compute node ID
     pub scheduled_compute_node_id: Option<i64>,
+    /// Filter by stale state
+    pub stale: Option<bool>,
 }
 
 impl ComputeNodeListParams {
@@ -62,6 +64,11 @@ impl ComputeNodeListParams {
 
     pub fn with_is_active(mut self, is_active: bool) -> Self {
         self.is_active = Some(is_active);
+        self
+    }
+
+    pub fn with_stale(mut self, stale: bool) -> Self {
+        self.stale = Some(stale);
         self
     }
 
@@ -112,6 +119,7 @@ impl Paginatable for ComputeNodeModel {
             params.hostname.as_deref(),
             params.is_active,
             params.scheduled_compute_node_id,
+            params.stale,
         )?;
 
         Ok(PaginatedResponse {

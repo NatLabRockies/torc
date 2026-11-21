@@ -225,6 +225,7 @@ fn has_active_workers(config: &Configuration, workflow_id: i64) -> bool {
             None,       // hostname
             Some(true), // is_active = true
             None,       // scheduled_compute_node_id
+            None,       // stale
         ))
     }) && !response.items.is_empty()
     {

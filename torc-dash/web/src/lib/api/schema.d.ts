@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/compute_nodes/{id}/fail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["fail_compute_node"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/compute_nodes/{id}/heartbeat": {
         parameters: {
             query?: never;
@@ -1440,13 +1456,18 @@ export interface components {
             id?: number | null;
             is_active?: boolean | null;
             /**
+             * @description True when the node is active and its last heartbeat is older than the server's stale
+             *     threshold. Read-only: the server computes it when it reads the node.
+             */
+            is_stale?: boolean | null;
+            /**
              * @description Labels the runner was started with; it claims only jobs whose every
              *     label it has (or only unlabeled jobs, when unset).
              */
             labels?: string[] | null;
             /**
              * @description Time of the last liveness signal from the runner that owns this node (RFC3339, UTC).
-             *     Unset for runners that do not send heartbeats. The server never expires such a node.
+             *     Unset for runners that do not send heartbeats. The server never marks such a node stale.
              *     Set at creation and by the heartbeat endpoint only; updates ignore it.
              */
             last_heartbeat?: string | null;
@@ -3153,6 +3174,7 @@ export interface operations {
                 hostname?: string | null;
                 is_active?: boolean | null;
                 scheduled_compute_node_id?: number | null;
+                stale?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -3461,7 +3483,7 @@ export interface operations {
             };
         };
     };
-    heartbeat_compute_node: {
+    fail_compute_node: {
         parameters: {
             query?: never;
             header?: never;
@@ -3500,8 +3522,49 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content */
-            422: {
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    heartbeat_compute_node: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID of the compute node. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComputeNodeModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
