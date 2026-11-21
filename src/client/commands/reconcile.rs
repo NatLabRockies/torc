@@ -17,7 +17,8 @@ use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
 use crate::client::commands::pagination::files::{FileListParams, paginate_files};
 use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
-use crate::models::{BatchCompleteJobsRequest, JobStatus};
+use crate::client::ro_crate_utils;
+use crate::models::{BatchCompleteJobsRequest, FileModel, JobCompletionEntry, JobStatus};
 
 /// Outcome of a reconcile run, returned for testing and JSON output.
 #[derive(Debug, Default)]
@@ -85,17 +86,16 @@ pub fn reconcile(
             match apis::workflows_api::batch_complete_jobs(config, workflow_id, request) {
                 Ok(response) => {
                     summary.accepted += response.completed.len();
-                    // Output mtimes were not recorded while the runner was offline. Refresh
-                    // them per batch so a later failed request cannot skip them.
-                    let completed: Vec<i64> = chunk
+                    // Output metadata was not recorded while the runner was offline. Restore
+                    // it per batch so a later failed request cannot skip it.
+                    let completed: Vec<&JobCompletionEntry> = chunk
                         .iter()
                         .filter(|entry| {
                             entry.status == JobStatus::Completed
                                 && response.completed.contains(&entry.job_id)
                         })
-                        .map(|entry| entry.job_id)
                         .collect();
-                    refresh_output_file_mtimes(config, workflow_id, &completed);
+                    restore_offline_output_metadata(config, workflow_id, &completed);
                     for err in &response.errors {
                         summary.rejected += 1;
                         warn!(
@@ -144,15 +144,27 @@ pub fn reconcile(
     Ok(summary)
 }
 
-/// Record the on-disk mtime of each output file produced by the given jobs. The runner
-/// skips these updates while offline. Paths resolve against the current directory, as they
-/// do for the runner.
-pub(crate) fn refresh_output_file_mtimes(
+/// Restore the output metadata a runner skips while offline: each output file's on-disk
+/// mtime and, for RO-Crate workflows, the CreateAction and output File provenance entities.
+/// Call it with journal entries the server accepted as Completed. Paths resolve against the
+/// current directory, as they do for the runner.
+pub(crate) fn restore_offline_output_metadata(
     config: &Configuration,
     workflow_id: i64,
-    job_ids: &[i64],
+    entries: &[&JobCompletionEntry],
 ) {
-    for &job_id in job_ids {
+    if entries.is_empty() {
+        return;
+    }
+    let ro_crate = match apis::workflows_api::get_workflow(config, workflow_id) {
+        Ok(w) => w.enable_ro_crate == Some(true),
+        Err(e) => {
+            warn!("Failed to get workflow_id={}: {}", workflow_id, e);
+            false
+        }
+    };
+    for entry in entries {
+        let job_id = entry.job_id;
         let files = match paginate_files(
             config,
             workflow_id,
@@ -167,6 +179,7 @@ pub(crate) fn refresh_output_file_mtimes(
                 continue;
             }
         };
+        let mut updated = Vec::with_capacity(files.len());
         for mut file in files {
             let Some(file_id) = file.id else { continue };
             let st_mtime = match std::fs::metadata(&file.path).and_then(|m| m.modified()) {
@@ -183,9 +196,64 @@ pub(crate) fn refresh_output_file_mtimes(
                 }
             };
             file.st_mtime = Some(st_mtime);
-            if let Err(e) = apis::files_api::update_file(config, file_id, file) {
-                warn!("Failed to update st_mtime for file_id={}: {}", file_id, e);
+            match apis::files_api::update_file(config, file_id, file.clone()) {
+                Ok(_) => updated.push(file),
+                Err(e) => warn!("Failed to update st_mtime for file_id={}: {}", file_id, e),
             }
         }
+        if ro_crate && !updated.is_empty() {
+            restore_output_provenance(config, workflow_id, entry, &updated);
+        }
+    }
+}
+
+/// Create the RO-Crate entities the runner would have created at completion, using the
+/// run and attempt recorded in the journal entry.
+fn restore_output_provenance(
+    config: &Configuration,
+    workflow_id: i64,
+    entry: &JobCompletionEntry,
+    output_files: &[FileModel],
+) {
+    let job = match apis::jobs_api::get_job(config, entry.job_id) {
+        Ok(job) => job,
+        Err(e) => {
+            warn!(
+                "Could not fetch job_id={} for RO-Crate provenance: {}",
+                entry.job_id, e
+            );
+            return;
+        }
+    };
+    let attempt_id = entry.result.attempt_id.unwrap_or(1);
+    let input_file_paths: Vec<String> = job
+        .input_file_ids
+        .iter()
+        .flatten()
+        .filter_map(|id| apis::files_api::get_file(config, *id).ok())
+        .map(|f| f.path)
+        .collect();
+    let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();
+    ro_crate_utils::create_create_action_entity(
+        config,
+        workflow_id,
+        entry.run_id,
+        &job,
+        attempt_id,
+        &input_file_paths,
+        &output_file_paths,
+    );
+    for file in output_files {
+        let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
+        ro_crate_utils::create_ro_crate_entity_for_output_file(
+            config,
+            workflow_id,
+            entry.run_id,
+            file,
+            content_size,
+            entry.job_id,
+            attempt_id,
+            &input_file_paths,
+        );
     }
 }

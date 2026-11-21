@@ -288,6 +288,15 @@ where
         all_ready_job_ids.len()
     );
 
+    // Cancelling the dependents of a failed job can be what completes the workflow. The
+    // completion path checked before these cancellations existed, so check again here.
+    // check_and_trigger_actions only fires actions that have not triggered yet.
+    if workflow_has_failures {
+        server
+            .trigger_workflow_complete_if_done(workflow_id, &EmptyContext::default())
+            .await;
+    }
+
     if !all_ready_job_ids.is_empty() {
         debug!(
             "process_workflow_unblocks: checking on_jobs_ready actions for {} jobs that became ready",

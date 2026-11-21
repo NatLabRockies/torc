@@ -359,3 +359,90 @@ fn test_reconcile_refreshes_output_file_mtimes() {
         "reconcile should record the output file's mtime"
     );
 }
+
+/// For RO-Crate workflows, reconcile restores the output provenance (File and CreateAction
+/// entities) that the runner skips while offline.
+#[test]
+#[serial(offline_reconcile)]
+fn test_reconcile_restores_ro_crate_output_provenance() {
+    let server = start_server();
+    let config = &server.config;
+
+    let mut workflow = create_test_workflow(config, "offline_reconcile_ro_crate");
+    let workflow_id = workflow.id.unwrap();
+    workflow.enable_ro_crate = Some(true);
+    let workflow = apis::workflows_api::update_workflow(config, workflow_id, workflow)
+        .expect("enable RO-Crate");
+
+    let base = tempfile::tempdir().expect("tempdir");
+    let output_path = base.path().join("out.txt");
+    let output_id = apis::files_api::create_file(
+        config,
+        models::FileModel::new(
+            workflow_id,
+            "out".to_string(),
+            output_path.to_string_lossy().to_string(),
+        ),
+    )
+    .expect("create file")
+    .id
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "producer".into(), "true".into());
+    job.output_file_ids = Some(vec![output_id]);
+    let job_id = apis::jobs_api::create_job(config, job)
+        .expect("create job")
+        .id
+        .unwrap();
+
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    std::fs::write(&output_path, "done").expect("write output");
+    OfflineJournal::open_or_create(
+        &base.path().join("torc_output"),
+        workflow_id,
+        run_id,
+        "node",
+    )
+    .expect("open journal")
+    .append(&completion_entry(
+        workflow_id,
+        run_id,
+        compute_node_id,
+        job_id,
+    ))
+    .expect("append");
+
+    reconcile(config, workflow_id, run_id, base.path(), "table").expect("reconcile");
+
+    let entities = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("list entities")
+    .items;
+    assert!(
+        entities.iter().any(|e| e.file_id == Some(output_id)),
+        "output file should get a provenance entity"
+    );
+    assert!(
+        entities.iter().any(|e| e.entity_type == "CreateAction"),
+        "the job should get a CreateAction entity"
+    );
+}

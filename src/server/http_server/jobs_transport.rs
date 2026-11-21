@@ -70,6 +70,60 @@ where
     None
 }
 
+/// Find a cycle in the workflow's job dependency graph, combining explicit dependencies
+/// with the edges `initialize_jobs` derives from files and user_data. Takes any executor so
+/// it can run inside the initialization transaction.
+pub(super) async fn find_dependency_cycle<'e, E>(
+    executor: E,
+    workflow_id: i64,
+) -> Result<Option<Vec<i64>>, ApiError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let edges: Vec<(i64, i64)> = sqlx::query_as(
+        r#"
+        SELECT job_id, depends_on_job_id FROM job_depends_on WHERE workflow_id = $1
+        UNION
+        SELECT i.job_id, o.job_id
+        FROM job_input_file i
+        JOIN job_output_file o ON i.file_id = o.file_id
+        WHERE i.workflow_id = $1
+        UNION
+        SELECT i.job_id, o.job_id
+        FROM job_input_user_data i
+        JOIN job_output_user_data o ON i.user_data_id = o.user_data_id
+        JOIN job j ON i.job_id = j.id
+        WHERE j.workflow_id = $1
+        "#,
+    )
+    .bind(workflow_id)
+    .fetch_all(executor)
+    .await
+    .map_err(|e| {
+        crate::server::api::database_error_with_msg(e, "Failed to load job dependencies")
+    })?;
+
+    let mut adjacency: std::collections::HashMap<i64, Vec<i64>> = std::collections::HashMap::new();
+    for (job_id, depends_on) in edges {
+        adjacency.entry(job_id).or_default().push(depends_on);
+    }
+    Ok(find_cycle(&adjacency))
+}
+
+/// Error message for a dependency cycle, e.g. "... cycle (job_id depends on job_id): 3 -> 5 -> 3".
+pub(super) fn dependency_cycle_message(cycle: &[i64]) -> String {
+    let path = cycle
+        .iter()
+        .chain(cycle.first())
+        .map(|job_id| job_id.to_string())
+        .collect::<Vec<_>>()
+        .join(" -> ");
+    format!(
+        "Job dependency graph contains a cycle (job_id depends on job_id): {}",
+        path
+    )
+}
+
 // ---------------------------------------------------------------------------
 // spawn_jobs helpers
 // ---------------------------------------------------------------------------
@@ -1024,18 +1078,11 @@ where
 
         // Reject dependency cycles (explicit, file-derived, or user_data-derived): jobs in a
         // cycle would stay blocked forever and the workflow would never complete.
-        if let Some(cycle) = self.find_dependency_cycle(id).await? {
-            let path = cycle
-                .iter()
-                .chain(cycle.first())
-                .map(|job_id| job_id.to_string())
-                .collect::<Vec<_>>()
-                .join(" -> ");
+        // initialize_jobs_core re-checks inside its transaction; this preflight gives the
+        // common case an immediate 422.
+        if let Some(cycle) = find_dependency_cycle(self.pool.as_ref(), id).await? {
             return Ok(InitializeJobsResponse::UnprocessableContentErrorResponse(
-                message_error_response(format!(
-                    "Job dependency graph contains a cycle (job_id depends on job_id): {}",
-                    path
-                )),
+                message_error_response(dependency_cycle_message(&cycle)),
             ));
         }
 
@@ -1099,40 +1146,6 @@ where
         Ok(InitializeJobsResponse::SuccessfulResponse(
             serde_json::json!({"message": "Initialized job status"}),
         ))
-    }
-
-    /// Find a cycle in the workflow's job dependency graph, combining explicit dependencies
-    /// with the edges `initialize_jobs` derives from files and user_data.
-    async fn find_dependency_cycle(&self, workflow_id: i64) -> Result<Option<Vec<i64>>, ApiError> {
-        let edges: Vec<(i64, i64)> = sqlx::query_as(
-            r#"
-            SELECT job_id, depends_on_job_id FROM job_depends_on WHERE workflow_id = $1
-            UNION
-            SELECT i.job_id, o.job_id
-            FROM job_input_file i
-            JOIN job_output_file o ON i.file_id = o.file_id
-            WHERE i.workflow_id = $1
-            UNION
-            SELECT i.job_id, o.job_id
-            FROM job_input_user_data i
-            JOIN job_output_user_data o ON i.user_data_id = o.user_data_id
-            JOIN job j ON i.job_id = j.id
-            WHERE j.workflow_id = $1
-            "#,
-        )
-        .bind(workflow_id)
-        .fetch_all(self.pool.as_ref())
-        .await
-        .map_err(|e| {
-            crate::server::api::database_error_with_msg(e, "Failed to load job dependencies")
-        })?;
-
-        let mut adjacency: std::collections::HashMap<i64, Vec<i64>> =
-            std::collections::HashMap::new();
-        for (job_id, depends_on) in edges {
-            adjacency.entry(job_id).or_default().push(depends_on);
-        }
-        Ok(find_cycle(&adjacency))
     }
 
     pub(super) async fn transport_delete_jobs(
@@ -2204,42 +2217,6 @@ where
             .await;
     }
 
-    /// Trigger on_workflow_complete actions if no jobs remain in a non-terminal state.
-    async fn trigger_workflow_complete_if_done(&self, workflow_id: i64, context: &C) {
-        match self
-            .workflows_api
-            .is_workflow_complete(workflow_id, context)
-            .await
-        {
-            Ok(response) => {
-                if let IsWorkflowCompleteResponse::SuccessfulResponse(completion_status) = response
-                    && completion_status.is_complete
-                {
-                    debug!(
-                        "Workflow {} is complete, triggering on_workflow_complete actions",
-                        workflow_id
-                    );
-                    if let Err(e) = self
-                        .workflow_actions_api
-                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None)
-                        .await
-                    {
-                        error!(
-                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
-                            e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Failed to check if workflow {} is complete: {}",
-                    workflow_id, e
-                );
-            }
-        }
-    }
-
     pub(super) async fn transport_batch_complete_jobs(
         &self,
         workflow_id: i64,
@@ -2956,5 +2933,52 @@ where
         };
 
         Ok(ClaimJobsBasedOnResources::SuccessfulResponse(response))
+    }
+}
+
+// Not bound by the transport impl's context requirements, so the background unblock
+// task (which has no request context) can call it.
+impl<C> Server<C> {
+    /// Trigger on_workflow_complete actions if no jobs remain in a non-terminal state.
+    /// Generic over the context so the background unblock task can call it.
+    pub(super) async fn trigger_workflow_complete_if_done<Ctx>(
+        &self,
+        workflow_id: i64,
+        context: &Ctx,
+    ) where
+        Ctx: Has<XSpanIdString> + Send + Sync,
+    {
+        match self
+            .workflows_api
+            .is_workflow_complete(workflow_id, context)
+            .await
+        {
+            Ok(response) => {
+                if let IsWorkflowCompleteResponse::SuccessfulResponse(completion_status) = response
+                    && completion_status.is_complete
+                {
+                    debug!(
+                        "Workflow {} is complete, triggering on_workflow_complete actions",
+                        workflow_id
+                    );
+                    if let Err(e) = self
+                        .workflow_actions_api
+                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None)
+                        .await
+                    {
+                        error!(
+                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Failed to check if workflow {} is complete: {}",
+                    workflow_id, e
+                );
+            }
+        }
     }
 }

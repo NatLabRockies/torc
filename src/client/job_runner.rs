@@ -1724,17 +1724,16 @@ impl JobRunner {
                     self.workflow_id, err.job_id, err.message
                 );
             }
-            // Output mtimes were skipped while offline; record them before the journal
-            // (the only record of these completions) is cleared.
-            let completed: Vec<i64> = chunk
+            // Output mtimes and RO-Crate provenance were skipped while offline; restore them
+            // before the journal (the only record of these completions) is cleared.
+            let completed: Vec<&JobCompletionEntry> = chunk
                 .iter()
                 .filter(|entry| {
                     entry.status == JobStatus::Completed
                         && response.completed.contains(&entry.job_id)
                 })
-                .map(|entry| entry.job_id)
                 .collect();
-            crate::client::commands::reconcile::refresh_output_file_mtimes(
+            crate::client::commands::reconcile::restore_offline_output_metadata(
                 &self.config,
                 self.workflow_id,
                 &completed,
@@ -2383,8 +2382,8 @@ impl JobRunner {
             ));
         }
 
-        // Offline: skip the server-side st_mtime and RO-Crate updates. `torc workflows
-        // reconcile` refreshes output mtimes after replaying the journal.
+        // Offline: skip the server-side st_mtime and RO-Crate updates. Journal replay
+        // (automatic on reconnect, or `torc workflows reconcile`) restores them.
         if self.offline {
             return Ok(());
         }
