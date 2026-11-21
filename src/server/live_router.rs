@@ -4092,10 +4092,24 @@ pub async fn reset_job_status(
     Path(id): Path<i64>,
     Query(query): Query<ResetJobStatusQuery>,
     Extension(context): Extension<EmptyContext>,
-    body: Option<Json<Option<models::ResetJobStatusRequest>>>,
+    body: axum::body::Bytes,
 ) -> Response<Body> {
-    // Generated clients send `null` for an omitted optional body; treat it like no body.
-    let body = body.and_then(|Json(body)| body);
+    // No body, an empty body, and `null` all mean "no body". Parse by hand rather than with
+    // `Option<Json<_>>`: generated clients (Rust sends `null`; Python sends an empty body with a
+    // JSON content type) and plain callers that send no content type must all keep working.
+    let body = if body.iter().all(u8::is_ascii_whitespace) {
+        None
+    } else {
+        match serde_json::from_slice::<Option<models::ResetJobStatusRequest>>(&body) {
+            Ok(body) => body,
+            Err(e) => {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid request body: {}", e),
+                );
+            }
+        }
+    };
     match state
         .server
         .reset_job_status(id, query.failed_only, query.force, body, &context)

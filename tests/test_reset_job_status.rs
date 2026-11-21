@@ -153,7 +153,10 @@ fn test_reset_refuses_busy_workflow_unless_forced(start_server: &ServerProcess) 
 }
 
 /// A claim racing a reset must serialize with it: either the claim lands first and the reset
-/// is refused (workflow busy), or the reset lands first and succeeds. Never a server error.
+/// is refused (workflow busy), or the reset lands first and succeeds. Never a server error
+/// (e.g. SQLITE_BUSY from a lock upgrade). Which order won is not observable here, so this
+/// checks for consistent outcomes, not atomicity itself; that comes from the reset running
+/// its check and writes in one BEGIN IMMEDIATE transaction.
 #[rstest]
 fn test_reset_concurrent_with_claim(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -220,4 +223,75 @@ fn test_retry_enforces_failure_handler_limit(start_server: &ServerProcess) {
     let err = apis::jobs_api::retry_job(config, job_id, run_id, Some(100)).unwrap_err();
     assert_eq!(status_code(&err), 422);
     assert_eq!(status(config, job_id), JobStatus::Failed);
+}
+
+#[rstest]
+fn test_retry_rule_without_max_retries_defaults_to_three(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let wf = create_test_workflow(config, "retry_default_limit")
+        .id
+        .unwrap();
+    let handler = apis::failure_handlers_api::create_failure_handler(
+        config,
+        models::FailureHandlerModel::new(
+            wf,
+            "fh".to_string(),
+            r#"[{"exit_codes":[1]}]"#.to_string(),
+        ),
+    )
+    .unwrap();
+    let mut job = models::JobModel::new(wf, "job".to_string(), "false".to_string());
+    job.failure_handler_id = handler.id;
+    let job_id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    initialize(config, wf);
+    let run_id = run_id(config, wf);
+
+    // Same as the job runner's default: attempts 1 and 2 may retry, attempt 3 may not.
+    for expected_attempt in [2, 3] {
+        fail_job(config, wf, job_id);
+        let retried = apis::jobs_api::retry_job(config, job_id, run_id, None).unwrap();
+        assert_eq!(retried.attempt_id, Some(expected_attempt));
+    }
+    fail_job(config, wf, job_id);
+    let err = apis::jobs_api::retry_job(config, job_id, run_id, None).unwrap_err();
+    assert_eq!(status_code(&err), 422);
+}
+
+/// Requests without a usable body keep the legacy whole-workflow behavior, however the client
+/// spells "no body": no body at all, an empty body with a JSON content type (the generated
+/// Python client), or `null` (the generated Rust client).
+#[rstest]
+fn test_reset_without_body_keeps_legacy_behavior(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let requests: [(Option<&str>, &str); 3] = [
+        (None, ""),
+        (Some("application/json"), ""),
+        (Some("application/json"), "null"),
+    ];
+    for (i, (content_type, body)) in requests.into_iter().enumerate() {
+        let wf = create_test_workflow(config, &format!("reset_no_body_{}", i))
+            .id
+            .unwrap();
+        let failed = create_test_job(config, wf, "failed").id.unwrap();
+        initialize(config, wf);
+        fail_job(config, wf, failed);
+        let url = format!(
+            "{}/workflows/{}/reset_job_status?failed_only=true",
+            config.base_path, wf
+        );
+        let mut req = config.client.post(&url).body(body.to_string());
+        if let Some(ct) = content_type {
+            req = req.header("Content-Type", ct);
+        }
+        let resp = config.apply_auth(req).send().unwrap();
+        assert_eq!(
+            resp.status().as_u16(),
+            200,
+            "content_type={content_type:?} body={body:?}"
+        );
+        let response: models::ResetJobStatusResponse = resp.json().unwrap();
+        assert_eq!(response.updated_count, 1);
+        assert_eq!(response.reset, None);
+        assert_eq!(status(config, failed), JobStatus::Uninitialized);
+    }
 }
