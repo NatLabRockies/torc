@@ -82,6 +82,7 @@ from torc.openapi_client.models.list_workflows_response import ListWorkflowsResp
 from torc.openapi_client.models.local_scheduler_model import LocalSchedulerModel
 from torc.openapi_client.models.message_response import MessageResponse
 from torc.openapi_client.models.monitor_granularity import MonitorGranularity
+from torc.openapi_client.models.output_file_stat import OutputFileStat
 from torc.openapi_client.models.ping_response import PingResponse
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse
 from torc.openapi_client.models.reload_auth_response import ReloadAuthResponse

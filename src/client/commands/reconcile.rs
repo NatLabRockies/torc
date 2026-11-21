@@ -167,8 +167,11 @@ pub fn reconcile(
     Ok(summary)
 }
 
-/// Restore the output metadata a runner skips while offline: each output file's on-disk
-/// mtime and, for RO-Crate workflows, the CreateAction and output File provenance entities.
+/// Restore the output metadata the server could not record from the journal entry itself:
+/// the on-disk mtime of output files missing from `entry.output_files` (journals written by
+/// older runners, or files an offline runner could not check) and, for RO-Crate workflows,
+/// the CreateAction and output File provenance entities. Mtimes present in
+/// `entry.output_files` were applied by the server with the completion and are not restatted.
 /// Call it with journal entries the server accepted as Completed.
 ///
 /// Relative output paths resolve against `base_dir` when given, else the current directory.
@@ -211,6 +214,15 @@ pub(crate) fn restore_offline_output_metadata(
         let mut job_failed = false;
         for mut file in files {
             let Some(file_id) = file.id else { continue };
+            if entry
+                .output_files
+                .iter()
+                .flatten()
+                .any(|f| f.file_id == file_id)
+            {
+                updated.push(file);
+                continue;
+            }
             let path = match base_dir {
                 Some(base) if std::path::Path::new(&file.path).is_relative() => {
                     base.join(&file.path)

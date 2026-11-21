@@ -228,6 +228,7 @@ Class | Method
  - [LocalSchedulerModel](docs/LocalSchedulerModel.md)
  - [MessageResponse](docs/MessageResponse.md)
  - [MonitorGranularity](docs/MonitorGranularity.md)
+ - [OutputFileStat](docs/OutputFileStat.md)
  - [PingResponse](docs/PingResponse.md)
  - [ProcessChangedJobInputsResponse](docs/ProcessChangedJobInputsResponse.md)
  - [ReloadAuthResponse](docs/ReloadAuthResponse.md)

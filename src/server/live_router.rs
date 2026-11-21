@@ -5730,6 +5730,8 @@ mod live_router_tests {
                     chrono::Utc::now().to_rfc3339(),
                     JobStatus::Completed,
                 ),
+                output_files: None,
+                slurm_stats: None,
             }],
         };
 

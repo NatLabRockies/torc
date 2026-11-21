@@ -115,6 +115,7 @@ __all__ = [
     "LocalSchedulerModel",
     "MessageResponse",
     "MonitorGranularity",
+    "OutputFileStat",
     "PingResponse",
     "ProcessChangedJobInputsResponse",
     "ReloadAuthResponse",
@@ -252,6 +253,7 @@ from torc.openapi_client.models.list_workflows_response import ListWorkflowsResp
 from torc.openapi_client.models.local_scheduler_model import LocalSchedulerModel as LocalSchedulerModel
 from torc.openapi_client.models.message_response import MessageResponse as MessageResponse
 from torc.openapi_client.models.monitor_granularity import MonitorGranularity as MonitorGranularity
+from torc.openapi_client.models.output_file_stat import OutputFileStat as OutputFileStat
 from torc.openapi_client.models.ping_response import PingResponse as PingResponse
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse as ProcessChangedJobInputsResponse
 from torc.openapi_client.models.reload_auth_response import ReloadAuthResponse as ReloadAuthResponse

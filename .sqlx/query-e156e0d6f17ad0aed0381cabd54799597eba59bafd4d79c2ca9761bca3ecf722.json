@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT jof.file_id\n        FROM job_output_file jof\n        JOIN file f ON f.id = jof.file_id\n        WHERE jof.job_id = ? AND f.workflow_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job_output_file",
+            "name": "file_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e156e0d6f17ad0aed0381cabd54799597eba59bafd4d79c2ca9761bca3ecf722"
+}

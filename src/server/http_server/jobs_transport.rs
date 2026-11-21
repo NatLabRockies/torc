@@ -788,6 +788,54 @@ fn validate_result_matches_target(
     Ok(())
 }
 
+/// Check the optional `output_files` and `slurm_stats` of a completion entry. Every
+/// `file_id` must be an output of the job and belong to its workflow, and the stats must
+/// identify the same job and run. Returns a rejection message, or `None` when valid.
+async fn validate_completion_payload(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    job_id: i64,
+    workflow_id: i64,
+    run_id: i64,
+    output_files: &[models::OutputFileStat],
+    slurm_stats: Option<&models::SlurmStatsModel>,
+) -> Result<Option<String>, sqlx::Error> {
+    if let Some(stats) = slurm_stats
+        && (stats.job_id != job_id || stats.workflow_id != workflow_id || stats.run_id != run_id)
+    {
+        return Ok(Some(format!(
+            "slurm_stats (workflow_id={} job_id={} run_id={}) do not match completion \
+             (workflow_id={} job_id={} run_id={})",
+            stats.workflow_id, stats.job_id, stats.run_id, workflow_id, job_id, run_id
+        )));
+    }
+    if output_files.is_empty() {
+        return Ok(None);
+    }
+    let outputs: std::collections::HashSet<i64> = sqlx::query_scalar!(
+        r#"
+        SELECT jof.file_id
+        FROM job_output_file jof
+        JOIN file f ON f.id = jof.file_id
+        WHERE jof.job_id = ? AND f.workflow_id = ?
+        "#,
+        job_id,
+        workflow_id
+    )
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .collect();
+    Ok(output_files
+        .iter()
+        .find(|f| !outputs.contains(&f.file_id))
+        .map(|f| {
+            format!(
+                "file_id={} is not an output file of job_id={} in workflow_id={}",
+                f.file_id, job_id, workflow_id
+            )
+        }))
+}
+
 struct BackfillClaimParams {
     workflow_id: i64,
     ready_status: i32,
@@ -1885,11 +1933,16 @@ where
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         expected_workflow_id: Option<i64>,
-        id: i64,
-        status: models::JobStatus,
-        run_id: i64,
-        result: models::ResultModel,
+        entry: models::JobCompletionEntry,
     ) -> Result<CompletedJobRecord, CompletionMutationError> {
+        let models::JobCompletionEntry {
+            job_id: id,
+            status,
+            run_id,
+            result,
+            output_files,
+            slurm_stats,
+        } = entry;
         if !status.is_terminal() {
             return Err(CompletionMutationError::Transport(ApiError(format!(
                 "Status '{}' is not a terminal status for job completion",
@@ -1979,6 +2032,29 @@ where
                 ))
             })?
         {
+            return Err(CompletionMutationError::Response(Box::new(
+                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(msg)),
+            )));
+        }
+
+        // Validate the optional payload before any write so a rejected entry leaves
+        // nothing behind in the shared batch transaction.
+        let output_files = output_files.unwrap_or_default();
+        if let Some(msg) = validate_completion_payload(
+            tx,
+            id,
+            job_workflow_id,
+            run_id,
+            &output_files,
+            slurm_stats.as_ref(),
+        )
+        .await
+        .map_err(|e| {
+            CompletionMutationError::Transport(database_lock_aware_error(
+                e,
+                "Failed to validate completion output files",
+            ))
+        })? {
             return Err(CompletionMutationError::Response(Box::new(
                 CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(msg)),
             )));
@@ -2124,6 +2200,56 @@ where
             }
         }
 
+        // The completion is accepted: record what the runner observed in the same transaction.
+        for file in &output_files {
+            sqlx::query!(
+                "UPDATE file SET st_mtime = ? WHERE id = ?",
+                file.st_mtime,
+                file.file_id
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to update output file st_mtime",
+                ))
+            })?;
+        }
+        if let Some(stats) = slurm_stats {
+            // REPLACE: a stale row for the same (job, run, attempt) must not abort the batch.
+            sqlx::query!(
+                r#"
+                INSERT OR REPLACE INTO slurm_stats
+                (workflow_id, job_id, run_id, attempt_id,
+                 slurm_job_id,
+                 max_rss_bytes, max_vm_size_bytes,
+                 max_disk_read_bytes, max_disk_write_bytes,
+                 ave_cpu_seconds, node_list)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                "#,
+                stats.workflow_id,
+                stats.job_id,
+                stats.run_id,
+                stats.attempt_id,
+                stats.slurm_job_id,
+                stats.max_rss_bytes,
+                stats.max_vm_size_bytes,
+                stats.max_disk_read_bytes,
+                stats.max_disk_write_bytes,
+                stats.ave_cpu_seconds,
+                stats.node_list,
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to store slurm_stats",
+                ))
+            })?;
+        }
+
         // Construct a JobModel for the completion record from the row we already fetched
         // through `tx`. Relationships and optional metadata are not needed by downstream
         // consumers on the batch path (finalize_completed_jobs only reads `name`); leaving
@@ -2259,14 +2385,7 @@ where
         for entry in body.completions {
             let job_id = entry.job_id;
             match self
-                .apply_job_completion_state_tx(
-                    &mut tx,
-                    Some(workflow_id),
-                    job_id,
-                    entry.status,
-                    entry.run_id,
-                    entry.result,
-                )
+                .apply_job_completion_state_tx(&mut tx, Some(workflow_id), entry)
                 .await
             {
                 Ok(completion) => {
