@@ -84,6 +84,30 @@ impl<C> Server<C> {
 
         let new_status_int = new_status.to_int();
 
+        // Resolving a PendingFailed job (e.g. AI classification decided "fail"). The terminal
+        // UPDATE below skips PendingFailed rows for idempotency, so handle it here. The result
+        // row already exists from the original completion.
+        if current_status == models::JobStatus::PendingFailed && new_status.is_complete() {
+            let pending_failed_int = models::JobStatus::PendingFailed.to_int();
+            let result = sqlx::query(
+                "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL WHERE id = ? AND status = ?",
+            )
+            .bind(new_status_int)
+            .bind(job_id)
+            .bind(pending_failed_int)
+            .execute(self.pool.as_ref())
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to update job status"))?;
+            if result.rows_affected() == 0 {
+                return Err(ApiError(format!(
+                    "job_id={} changed status during transition from pending_failed",
+                    job_id
+                )));
+            }
+            self.signal_job_completion();
+            return Ok(());
+        }
+
         if new_status.is_complete() {
             let completed_int = models::JobStatus::Completed.to_int();
             let failed_int = models::JobStatus::Failed.to_int();

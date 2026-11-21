@@ -2097,3 +2097,65 @@ fn test_lifecycle_actions_record_user_action_events(start_server: &ServerProcess
         Some(true)
     );
 }
+
+fn assert_initialize_rejects_cycle(config: &Configuration, workflow_id: i64) {
+    match apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None) {
+        Err(apis::Error::ResponseError(r)) => {
+            assert_eq!(r.status, 422, "unexpected response: {}", r.content);
+            assert!(
+                r.content.contains("cycle"),
+                "unexpected message: {}",
+                r.content
+            );
+        }
+        other => panic!(
+            "initialize_jobs should reject a dependency cycle, got {:?}",
+            other
+        ),
+    }
+}
+
+#[rstest]
+fn test_initialize_rejects_explicit_dependency_cycle(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cycle_explicit").id.unwrap();
+    let a = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "a".into(), "true".into()),
+    )
+    .unwrap();
+    let mut b = models::JobModel::new(workflow_id, "b".into(), "true".into());
+    b.depends_on_job_ids = Some(vec![a.id.unwrap()]);
+    let b = apis::jobs_api::create_job(config, b).unwrap();
+    let mut a_update = a.clone();
+    a_update.depends_on_job_ids = Some(vec![b.id.unwrap()]);
+    apis::jobs_api::update_job(config, a.id.unwrap(), a_update).unwrap();
+
+    assert_initialize_rejects_cycle(config, workflow_id);
+}
+
+#[rstest]
+fn test_initialize_rejects_file_dependency_cycle(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cycle_files").id.unwrap();
+    let f1 = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "f1".into(), "f1.txt".into()),
+    )
+    .unwrap();
+    let f2 = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "f2".into(), "f2.txt".into()),
+    )
+    .unwrap();
+    let mut a = models::JobModel::new(workflow_id, "a".into(), "true".into());
+    a.input_file_ids = Some(vec![f1.id.unwrap()]);
+    a.output_file_ids = Some(vec![f2.id.unwrap()]);
+    let mut b = models::JobModel::new(workflow_id, "b".into(), "true".into());
+    b.input_file_ids = Some(vec![f2.id.unwrap()]);
+    b.output_file_ids = Some(vec![f1.id.unwrap()]);
+    apis::jobs_api::create_job(config, a).unwrap();
+    apis::jobs_api::create_job(config, b).unwrap();
+
+    assert_initialize_rejects_cycle(config, workflow_id);
+}

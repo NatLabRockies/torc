@@ -15,8 +15,9 @@ use log::{info, warn};
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
+use crate::client::commands::pagination::files::{FileListParams, paginate_files};
 use crate::client::offline_journal::{FLUSH_BATCH_SIZE, OfflineJournal};
-use crate::models::BatchCompleteJobsRequest;
+use crate::models::{BatchCompleteJobsRequest, JobStatus};
 
 /// Outcome of a reconcile run, returned for testing and JSON output.
 #[derive(Debug, Default)]
@@ -84,6 +85,17 @@ pub fn reconcile(
             match apis::workflows_api::batch_complete_jobs(config, workflow_id, request) {
                 Ok(response) => {
                     summary.accepted += response.completed.len();
+                    // Output mtimes were not recorded while the runner was offline. Refresh
+                    // them per batch so a later failed request cannot skip them.
+                    let completed: Vec<i64> = chunk
+                        .iter()
+                        .filter(|entry| {
+                            entry.status == JobStatus::Completed
+                                && response.completed.contains(&entry.job_id)
+                        })
+                        .map(|entry| entry.job_id)
+                        .collect();
+                    refresh_output_file_mtimes(config, workflow_id, &completed);
                     for err in &response.errors {
                         summary.rejected += 1;
                         warn!(
@@ -130,4 +142,50 @@ pub fn reconcile(
     }
 
     Ok(summary)
+}
+
+/// Record the on-disk mtime of each output file produced by the given jobs. The runner
+/// skips these updates while offline. Paths resolve against the current directory, as they
+/// do for the runner.
+pub(crate) fn refresh_output_file_mtimes(
+    config: &Configuration,
+    workflow_id: i64,
+    job_ids: &[i64],
+) {
+    for &job_id in job_ids {
+        let files = match paginate_files(
+            config,
+            workflow_id,
+            FileListParams::new().with_produced_by_job_id(job_id),
+        ) {
+            Ok(files) => files,
+            Err(e) => {
+                warn!(
+                    "Failed to list output files workflow_id={} job_id={}: {}",
+                    workflow_id, job_id, e
+                );
+                continue;
+            }
+        };
+        for mut file in files {
+            let Some(file_id) = file.id else { continue };
+            let st_mtime = match std::fs::metadata(&file.path).and_then(|m| m.modified()) {
+                Ok(t) => t
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs_f64())
+                    .unwrap_or(0.0),
+                Err(e) => {
+                    warn!(
+                        "Cannot stat output file {} (file_id={}) for job_id={}: {}",
+                        file.path, file_id, job_id, e
+                    );
+                    continue;
+                }
+            };
+            file.st_mtime = Some(st_mtime);
+            if let Err(e) = apis::files_api::update_file(config, file_id, file) {
+                warn!("Failed to update st_mtime for file_id={}: {}", file_id, e);
+            }
+        }
+    }
 }

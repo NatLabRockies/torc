@@ -991,6 +991,8 @@ pub enum InitializeJobsResponse {
     NotFoundErrorResponse(models::ErrorResponse),
     /// Conflict error response
     ConflictErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (e.g. the job dependency graph contains a cycle)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

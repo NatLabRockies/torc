@@ -376,16 +376,22 @@ pub fn recover_workflow(
                     }
                 }
             }
+        }
+
+        // pending_failed jobs keep the workflow incomplete, so the precondition check below
+        // would fail with a misleading "not complete" error. Stop here with the real reason.
+        let remaining = if args.ai_recovery && !args.dry_run {
+            count_pending_failed_jobs(config, args.workflow_id).unwrap_or(pending_failed_count)
         } else {
-            warn!(
-                "{} job(s) in pending_failed status (awaiting classification)",
-                pending_failed_count
-            );
-            warn!("Use --ai-recovery to enable AI-assisted classification via MCP tools.");
-            warn!(
-                "Or reset them manually: torc workflows reset-status {} --failed-only",
-                args.workflow_id
-            );
+            pending_failed_count
+        };
+        if remaining > 0 {
+            return Err(format!(
+                "{} job(s) in pending_failed status are awaiting classification; recovery \
+                 cannot proceed until they are resolved. Classify them with --ai-recovery, or \
+                 reset them with: torc workflows reset-status {} --failed-only",
+                remaining, args.workflow_id
+            ));
         }
     }
 

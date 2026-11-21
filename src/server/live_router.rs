@@ -3874,6 +3874,7 @@ pub async fn get_active_task_for_workflow(
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
         (status = 409, description = "Conflict", body = models::ErrorResponse),
+        (status = 422, description = "Job dependency graph contains a cycle", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]

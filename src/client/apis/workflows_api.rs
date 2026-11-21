@@ -138,6 +138,7 @@ pub enum InitializeJobsError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
     Status409(models::ErrorResponse),
+    Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }

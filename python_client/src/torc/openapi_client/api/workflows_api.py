@@ -3866,6 +3866,7 @@ class WorkflowsApi:
             '403': "ErrorResponse",
             '404': "ErrorResponse",
             '409': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -3949,6 +3950,7 @@ class WorkflowsApi:
             '403': "ErrorResponse",
             '404': "ErrorResponse",
             '409': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -4032,6 +4034,7 @@ class WorkflowsApi:
             '403': "ErrorResponse",
             '404': "ErrorResponse",
             '409': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(

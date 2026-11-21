@@ -292,3 +292,70 @@ fn test_reconcile_rejects_stale_run_id() {
         "job must not be completed by a stale-run reconcile"
     );
 }
+
+/// The runner skips output-file st_mtime updates while offline, so reconcile records them
+/// after replaying the completions.
+#[test]
+#[serial(offline_reconcile)]
+fn test_reconcile_refreshes_output_file_mtimes() {
+    let server = start_server();
+    let config = &server.config;
+
+    let workflow = create_test_workflow(config, "offline_reconcile_mtimes");
+    let workflow_id = workflow.id.unwrap();
+
+    let base = tempfile::tempdir().expect("tempdir");
+    let output_path = base.path().join("out.txt");
+    let output = apis::files_api::create_file(
+        config,
+        models::FileModel::new(
+            workflow_id,
+            "out".to_string(),
+            output_path.to_string_lossy().to_string(),
+        ),
+    )
+    .expect("create file");
+    let output_id = output.id.unwrap();
+
+    let mut job = models::JobModel::new(workflow_id, "producer".into(), "true".into());
+    job.output_file_ids = Some(vec![output_id]);
+    let job_id = apis::jobs_api::create_job(config, job)
+        .expect("create job")
+        .id
+        .unwrap();
+
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    WorkflowManager::new(config.clone(), torc_config, workflow)
+        .initialize(true)
+        .expect("Failed to initialize");
+    let run_id = 1;
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    // The job "ran" offline and wrote its output.
+    std::fs::write(&output_path, "done").expect("write output");
+    let journal = OfflineJournal::open_or_create(
+        &base.path().join("torc_output"),
+        workflow_id,
+        run_id,
+        "node",
+    )
+    .expect("open journal");
+    journal
+        .append(&completion_entry(
+            workflow_id,
+            run_id,
+            compute_node_id,
+            job_id,
+        ))
+        .expect("append");
+
+    let summary = reconcile(config, workflow_id, run_id, base.path(), "table")
+        .expect("reconcile should succeed");
+    assert_eq!(summary.accepted, 1);
+
+    let file = apis::files_api::get_file(config, output_id).expect("get file");
+    assert!(
+        file.st_mtime.is_some(),
+        "reconcile should record the output file's mtime"
+    );
+}

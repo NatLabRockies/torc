@@ -836,7 +836,9 @@ USE CASES:
 
     /// Update resource requirements for a job.
     #[tool(
-        description = "Update a job's resource requirements (CPU, memory, runtime). \
+        description = "Update the resource requirements record (CPU, memory, runtime) assigned to a job. \
+        NOTE: the record is shared by every job assigned to it, so all of those jobs get the new values. \
+        To change one job independently, use regroup_job_resources to move it to its own group. \
         Use this for jobs that failed or will fail due to resource constraints. \
         IMPORTANT: Update ALL jobs with over-utilization from check_resource_utilization, not just failed ones. \
         After updating resources, use the recover_workflow tool or tell user the command: \

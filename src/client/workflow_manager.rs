@@ -806,6 +806,16 @@ impl WorkflowManager {
             &workflow.name,
         );
 
+        // st_mtime is also set on output files once their job completes, so exclude any file
+        // a job produces; otherwise re-initializing after a run records outputs as inputs.
+        let output_file_ids: std::collections::HashSet<i64> = iter_files(
+            &self.config,
+            self.workflow_id,
+            FileListParams::new().with_is_output(true),
+        )
+        .filter_map(|f| f.ok().and_then(|f| f.id))
+        .collect();
+
         // Collect all files with st_mtime set (input files)
         let params = FileListParams::new();
         let files_iterator = iter_files(&self.config, self.workflow_id, params);
@@ -814,8 +824,10 @@ impl WorkflowManager {
         for file_result in files_iterator {
             match file_result {
                 Ok(file) => {
-                    // Input files have st_mtime set
-                    if file.st_mtime.is_some() {
+                    // Input files have st_mtime set and are not produced by a job
+                    if file.st_mtime.is_some()
+                        && !file.id.is_some_and(|id| output_file_ids.contains(&id))
+                    {
                         input_files.push(file);
                     }
                 }

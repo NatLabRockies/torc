@@ -696,6 +696,11 @@ resource_requirements:
 
     // === Reset status with --failed-only and --reinitialize ===
 
+    let run_id_before = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("Failed to get workflow")
+        .run_id
+        .unwrap_or(0);
+
     run_cli_command(
         &[
             "workflows",
@@ -709,6 +714,16 @@ resource_requirements:
         None,
     )
     .expect("Failed to reset workflow status");
+
+    let run_id_after = apis::workflows_api::get_workflow(config, workflow_id)
+        .expect("Failed to get workflow")
+        .run_id
+        .unwrap_or(0);
+    assert_eq!(
+        run_id_after,
+        run_id_before + 1,
+        "reset-status --reinitialize must bump run_id exactly once"
+    );
 
     // Verify job statuses after reset
     let jobs = apis::jobs_api::list_jobs(
