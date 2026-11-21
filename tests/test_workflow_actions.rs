@@ -4234,3 +4234,85 @@ fn test_update_workflow_action_preserves_job_metadata(start_server: &ServerProce
     assert!(stored_ids.contains(&job1.id.unwrap()));
     assert!(stored_ids.contains(&job2.id.unwrap()));
 }
+
+/// When a failed job's dependents are cancelled by the background unblock task, that
+/// cancellation can complete the workflow. on_workflow_complete must still fire even though
+/// the completion call itself checked before the dependents were cancelled.
+#[rstest]
+fn test_on_workflow_complete_fires_after_dependents_cancelled(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "workflow_complete_after_cancel");
+    let workflow_id = workflow.id.unwrap();
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_workflow_complete",
+            "run_commands",
+            json!({"commands": ["true"]}),
+            None,
+        ),
+    )
+    .expect("Failed to create action");
+    let action_id = action.id.unwrap();
+
+    let upstream = create_test_job(config, workflow_id, "upstream").unwrap();
+    let upstream_id = upstream.id.unwrap();
+    let mut downstream = JobModel::new(workflow_id, "downstream".into(), "true".into());
+    downstream.depends_on_job_ids = Some(vec![upstream_id]);
+    downstream.cancel_on_blocking_job_failure = Some(true);
+    let downstream_id = apis::jobs_api::create_job(config, downstream)
+        .unwrap()
+        .id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).unwrap();
+
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+
+    apis::jobs_api::manage_status_change(config, upstream_id, JobStatus::Running, run_id)
+        .expect("Failed to set upstream running");
+    let result = ResultModel::new(
+        upstream_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::Failed,
+    );
+    apis::jobs_api::complete_job(config, upstream_id, JobStatus::Failed, run_id, result)
+        .expect("Failed to complete upstream");
+
+    // The unblock task runs in the background; wait for the cancellation and the trigger.
+    let mut triggered = false;
+    for _ in 0..100 {
+        let downstream = apis::jobs_api::get_job(config, downstream_id).unwrap();
+        let actions =
+            apis::workflow_actions_api::get_workflow_actions(config, workflow_id).unwrap();
+        let a = actions.iter().find(|a| a.id == Some(action_id)).unwrap();
+        if downstream.status == Some(JobStatus::Canceled) && a.trigger_count >= a.required_triggers
+        {
+            triggered = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        triggered,
+        "on_workflow_complete should fire once the downstream job is cancelled"
+    );
+}

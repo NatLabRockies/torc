@@ -28,7 +28,7 @@ import os
 import re
 from typing import Any
 
-from torc.api import DefaultApi, make_api
+from torc.api import DefaultApi, iter_documents, make_api
 from torc.openapi_client.models.spawn_job_model import SpawnJobModel
 from torc.openapi_client.models.spawn_jobs_request import SpawnJobsRequest
 from torc.openapi_client.models.spawn_jobs_response import SpawnJobsResponse
@@ -39,12 +39,6 @@ from torc.openapi_client.models.spawn_jobs_response import SpawnJobsResponse
 # torc's lineage namespace if they need to, but typical orchestrators
 # just use the `Orchestrator.generation` property.
 LINEAGE_RECORD_PREFIX = "__torc_lineage__"
-
-# Generous safety upper bound for paging `list_user_data`. The server's
-# default `dynamic_jobs.max_iterations` is 1000; with one record per
-# generation and a few non-lineage user_data rows, fetching 10k in one
-# page covers any realistic lineage.
-_USER_DATA_PAGE_LIMIT = 10_000
 
 
 class Orchestrator:
@@ -133,11 +127,11 @@ class Orchestrator:
     def _fetch_generation(self) -> int:
         prefix = f"{LINEAGE_RECORD_PREFIX}{self.lineage}__g"
         pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-        records = self.api.list_user_data(self.workflow_id, limit=_USER_DATA_PAGE_LIMIT)
+        # Filter server-side by name (substring match) and read every page, so the
+        # lineage records are found however many user_data rows the workflow has.
+        records = iter_documents(self.api.list_user_data, self.workflow_id, name=prefix)
         generations = [
-            int(m.group(1))
-            for ud in (records.items or [])
-            if (m := pattern.match(ud.name)) is not None
+            int(m.group(1)) for ud in records if (m := pattern.match(ud.name)) is not None
         ]
         return max(generations, default=0)
 

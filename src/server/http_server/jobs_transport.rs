@@ -19,34 +19,109 @@ const RESOURCE_CLAIM_ORDER_BY: &str = "\
 /// Detect a cycle in a directed graph given as adjacency lists (node -> deps).
 /// Used to reject self-referential `spawn_jobs` batches.
 fn has_cycle(adjacency: &std::collections::HashMap<&str, Vec<&str>>) -> bool {
+    find_cycle(adjacency).is_some()
+}
+
+/// Return the nodes of one cycle in a directed graph (node -> deps), if any.
+/// Iterative DFS so long dependency chains cannot overflow the stack.
+fn find_cycle<T>(adjacency: &std::collections::HashMap<T, Vec<T>>) -> Option<Vec<T>>
+where
+    T: Copy + Eq + std::hash::Hash + Ord,
+{
     #[derive(Clone, Copy, PartialEq)]
     enum Mark {
         Visiting,
         Done,
     }
-    fn dfs<'a>(
-        node: &'a str,
-        adjacency: &std::collections::HashMap<&'a str, Vec<&'a str>>,
-        marks: &mut std::collections::HashMap<&'a str, Mark>,
-    ) -> bool {
-        match marks.get(node) {
-            Some(Mark::Visiting) => return true,
-            Some(Mark::Done) => return false,
-            None => {}
+    let mut marks: std::collections::HashMap<T, Mark> = std::collections::HashMap::new();
+    let mut starts: Vec<T> = adjacency.keys().copied().collect();
+    starts.sort();
+    for start in starts {
+        if marks.contains_key(&start) {
+            continue;
         }
-        marks.insert(node, Mark::Visiting);
-        for next in adjacency.get(node).map(|v| v.as_slice()).unwrap_or(&[]) {
-            if dfs(next, adjacency, marks) {
-                return true;
+        marks.insert(start, Mark::Visiting);
+        // (node, index of the next dependency to visit); the stack is the current path.
+        let mut stack: Vec<(T, usize)> = vec![(start, 0)];
+        while let Some(&(node, idx)) = stack.last() {
+            let deps = adjacency.get(&node).map(|v| v.as_slice()).unwrap_or(&[]);
+            if idx == deps.len() {
+                marks.insert(node, Mark::Done);
+                stack.pop();
+                continue;
+            }
+            if let Some(top) = stack.last_mut() {
+                top.1 += 1;
+            }
+            let next = deps[idx];
+            match marks.get(&next) {
+                Some(Mark::Visiting) => {
+                    let pos = stack.iter().position(|(n, _)| *n == next).unwrap_or(0);
+                    return Some(stack[pos..].iter().map(|(n, _)| *n).collect());
+                }
+                Some(Mark::Done) => {}
+                None => {
+                    marks.insert(next, Mark::Visiting);
+                    stack.push((next, 0));
+                }
             }
         }
-        marks.insert(node, Mark::Done);
-        false
     }
-    let mut marks: std::collections::HashMap<&str, Mark> = std::collections::HashMap::new();
-    adjacency
-        .keys()
-        .any(|node| dfs(node, adjacency, &mut marks))
+    None
+}
+
+/// Find a cycle in the workflow's job dependency graph, combining explicit dependencies
+/// with the edges `initialize_jobs` derives from files and user_data. Takes any executor so
+/// it can run inside the initialization transaction.
+pub(super) async fn find_dependency_cycle<'e, E>(
+    executor: E,
+    workflow_id: i64,
+) -> Result<Option<Vec<i64>>, ApiError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let edges: Vec<(i64, i64)> = sqlx::query_as(
+        r#"
+        SELECT job_id, depends_on_job_id FROM job_depends_on WHERE workflow_id = $1
+        UNION
+        SELECT i.job_id, o.job_id
+        FROM job_input_file i
+        JOIN job_output_file o ON i.file_id = o.file_id
+        WHERE i.workflow_id = $1
+        UNION
+        SELECT i.job_id, o.job_id
+        FROM job_input_user_data i
+        JOIN job_output_user_data o ON i.user_data_id = o.user_data_id
+        JOIN job j ON i.job_id = j.id
+        WHERE j.workflow_id = $1
+        "#,
+    )
+    .bind(workflow_id)
+    .fetch_all(executor)
+    .await
+    .map_err(|e| {
+        crate::server::api::database_error_with_msg(e, "Failed to load job dependencies")
+    })?;
+
+    let mut adjacency: std::collections::HashMap<i64, Vec<i64>> = std::collections::HashMap::new();
+    for (job_id, depends_on) in edges {
+        adjacency.entry(job_id).or_default().push(depends_on);
+    }
+    Ok(find_cycle(&adjacency))
+}
+
+/// Error message for a dependency cycle, e.g. "... cycle (job_id depends on job_id): 3 -> 5 -> 3".
+pub(super) fn dependency_cycle_message(cycle: &[i64]) -> String {
+    let path = cycle
+        .iter()
+        .chain(cycle.first())
+        .map(|job_id| job_id.to_string())
+        .collect::<Vec<_>>()
+        .join(" -> ");
+    format!(
+        "Job dependency graph contains a cycle (job_id depends on job_id): {}",
+        path
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1001,6 +1076,16 @@ where
         );
         authorize_workflow!(self, id, context, InitializeJobsResponse);
 
+        // Reject dependency cycles (explicit, file-derived, or user_data-derived): jobs in a
+        // cycle would stay blocked forever and the workflow would never complete.
+        // initialize_jobs_core re-checks inside its transaction; this preflight gives the
+        // common case an immediate 422.
+        if let Some(cycle) = find_dependency_cycle(self.pool.as_ref(), id).await? {
+            return Ok(InitializeJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(dependency_cycle_message(&cycle)),
+            ));
+        }
+
         let username = username_from_context(context);
 
         if async_.unwrap_or(false) {
@@ -1311,21 +1396,6 @@ where
             run_id,
         );
 
-        if status.is_complete() {
-            error!(
-                "manage_status_change: cannot set completion status '{}' for job_id={}. Use complete_job instead.",
-                status, id
-            );
-            return Ok(
-                ManageStatusChangeResponse::UnprocessableContentErrorResponse(
-                    message_error_response(format!(
-                        "Cannot set completion status '{}' via manage_status_change. Use complete_job API instead.",
-                        status
-                    )),
-                ),
-            );
-        }
-
         authorize_job!(self, id, context, ManageStatusChangeResponse);
 
         let mut job = match self.jobs_api.get_job(id, context).await? {
@@ -1361,6 +1431,51 @@ where
                     message_error_response(e),
                 ),
             );
+        }
+
+        // Completion statuses go through complete_job, which records the result. The one
+        // exception is resolving a PendingFailed job to Failed (its result already exists),
+        // when AI classification decides the failure is permanent.
+        if status.is_complete() {
+            if current_status != models::JobStatus::PendingFailed
+                || status != models::JobStatus::Failed
+            {
+                error!(
+                    "manage_status_change: cannot set completion status '{}' for job_id={}. Use complete_job instead.",
+                    status, id
+                );
+                return Ok(
+                    ManageStatusChangeResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "Cannot set completion status '{}' via manage_status_change. Use complete_job API instead.",
+                            status
+                        )),
+                    ),
+                );
+            }
+            job.status = Some(status);
+            self.manage_job_status_change(&job, run_id).await?;
+            // The original complete_job already counted this job for on_jobs_complete, so
+            // only broadcast the new status and check whether the workflow is now complete.
+            self.event_broadcaster.broadcast(BroadcastEvent {
+                workflow_id: job.workflow_id,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                event_type: format!("job_{}", status.to_string().to_lowercase()),
+                severity: if status == models::JobStatus::Failed {
+                    models::EventSeverity::Error
+                } else {
+                    models::EventSeverity::Warning
+                },
+                data: serde_json::json!({
+                    "job_id": id,
+                    "job_name": job.name,
+                    "status": status.to_string(),
+                    "previous_status": current_status.to_string(),
+                }),
+            });
+            self.trigger_workflow_complete_if_done(job.workflow_id, context)
+                .await;
+            return Ok(ManageStatusChangeResponse::SuccessfulResponse(job));
         }
 
         job.status = Some(status);
@@ -2100,38 +2215,8 @@ where
             );
         }
 
-        match self
-            .workflows_api
-            .is_workflow_complete(workflow_id, context)
-            .await
-        {
-            Ok(response) => {
-                if let IsWorkflowCompleteResponse::SuccessfulResponse(completion_status) = response
-                    && completion_status.is_complete
-                {
-                    debug!(
-                        "Workflow {} is complete, triggering on_workflow_complete actions",
-                        workflow_id
-                    );
-                    if let Err(e) = self
-                        .workflow_actions_api
-                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None)
-                        .await
-                    {
-                        error!(
-                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
-                            e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Failed to check if workflow {} is complete: {}",
-                    workflow_id, e
-                );
-            }
-        }
+        self.trigger_workflow_complete_if_done(workflow_id, context)
+            .await;
     }
 
     pub(super) async fn transport_batch_complete_jobs(
@@ -2850,5 +2935,52 @@ where
         };
 
         Ok(ClaimJobsBasedOnResources::SuccessfulResponse(response))
+    }
+}
+
+// Not bound by the transport impl's context requirements, so the background unblock
+// task (which has no request context) can call it.
+impl<C> Server<C> {
+    /// Trigger on_workflow_complete actions if no jobs remain in a non-terminal state.
+    /// Generic over the context so the background unblock task can call it.
+    pub(super) async fn trigger_workflow_complete_if_done<Ctx>(
+        &self,
+        workflow_id: i64,
+        context: &Ctx,
+    ) where
+        Ctx: Has<XSpanIdString> + Send + Sync,
+    {
+        match self
+            .workflows_api
+            .is_workflow_complete(workflow_id, context)
+            .await
+        {
+            Ok(response) => {
+                if let IsWorkflowCompleteResponse::SuccessfulResponse(completion_status) = response
+                    && completion_status.is_complete
+                {
+                    debug!(
+                        "Workflow {} is complete, triggering on_workflow_complete actions",
+                        workflow_id
+                    );
+                    if let Err(e) = self
+                        .workflow_actions_api
+                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None)
+                        .await
+                    {
+                        error!(
+                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Failed to check if workflow {} is complete: {}",
+                    workflow_id, e
+                );
+            }
+        }
     }
 }

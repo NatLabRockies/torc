@@ -3192,14 +3192,16 @@ where
             }
         };
 
+        // PendingFailed is retried when AI classification decides the failure was transient.
         if current_status != JobStatus::Running
             && current_status != JobStatus::Failed
             && current_status != JobStatus::Terminated
+            && current_status != JobStatus::PendingFailed
         {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(format!(
-                    "Job cannot be retried: status is {:?}, must be Running, Failed, or Terminated",
+                    "Job cannot be retried: status is {:?}, must be Running, Failed, Terminated, or PendingFailed",
                     current_status
                 )),
             ));

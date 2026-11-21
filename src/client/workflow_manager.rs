@@ -806,6 +806,26 @@ impl WorkflowManager {
             &workflow.name,
         );
 
+        // st_mtime is also set on output files once their job completes, so exclude any file
+        // a job produces; otherwise re-initializing after a run records outputs as inputs.
+        // A partial list would misclassify outputs, so skip input entities on any error.
+        let output_file_ids: std::collections::HashSet<i64> = match iter_files(
+            &self.config,
+            self.workflow_id,
+            FileListParams::new().with_is_output(true),
+        )
+        .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(files) => files.into_iter().filter_map(|f| f.id).collect(),
+            Err(e) => {
+                warn!(
+                    "Skipping RO-Crate input entities for workflow {}: failed to list output files: {}",
+                    self.workflow_id, e
+                );
+                return;
+            }
+        };
+
         // Collect all files with st_mtime set (input files)
         let params = FileListParams::new();
         let files_iterator = iter_files(&self.config, self.workflow_id, params);
@@ -814,8 +834,10 @@ impl WorkflowManager {
         for file_result in files_iterator {
             match file_result {
                 Ok(file) => {
-                    // Input files have st_mtime set
-                    if file.st_mtime.is_some() {
+                    // Input files have st_mtime set and are not produced by a job
+                    if file.st_mtime.is_some()
+                        && !file.id.is_some_and(|id| output_file_ids.contains(&id))
+                    {
                         input_files.push(file);
                     }
                 }

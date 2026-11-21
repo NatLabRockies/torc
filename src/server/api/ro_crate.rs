@@ -188,6 +188,23 @@ impl RoCrateApiImpl {
             }
         };
 
+        // st_mtime is also set on output files once their job completes, so exclude any
+        // file a job produces; otherwise re-initializing after a run records outputs as inputs.
+        let output_file_ids: std::collections::HashSet<i64> =
+            sqlx::query_scalar("SELECT file_id FROM job_output_file WHERE workflow_id = $1")
+                .bind(workflow_id)
+                .fetch_all(self.context.pool.as_ref())
+                .await
+                .map_err(|e| {
+                    super::database_error_with_msg(e, "Failed to list output files for RO-Crate")
+                })?
+                .into_iter()
+                .collect();
+        let input_files: Vec<_> = input_files
+            .into_iter()
+            .filter(|f| !output_file_ids.contains(&f.id))
+            .collect();
+
         // Get existing RO-Crate entities by file_id for upsert
         let existing_entities: std::collections::HashMap<i64, (i64, String)> = match sqlx::query!(
             r#"

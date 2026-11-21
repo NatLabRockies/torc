@@ -1981,12 +1981,22 @@ fn handle_reset_status(
     }
 
     // If reinitialize is true, reinitialize the workflow
-    if reinitialize {
+    // The workflow reset above already bumped run_id, so skip WorkflowManager::reinitialize
+    // (which would reset and bump again) and run only its check + job reinitialization.
+    if reinitialize && !workflow_reset_success {
+        errors.push("skipped reinitialize because the workflow status reset failed".to_string());
+        if format != "json" {
+            eprintln!("Skipping reinitialize because the workflow status reset failed");
+        }
+    } else if reinitialize {
         match apis::workflows_api::get_workflow(config, selected_workflow_id) {
             Ok(workflow) => {
                 let torc_config = TorcConfig::load().unwrap_or_default();
                 let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
-                match workflow_manager.reinitialize(false, false) {
+                match workflow_manager
+                    .check_workflow(false)
+                    .and_then(|()| workflow_manager.reinitialize_jobs(false))
+                {
                     Ok(()) => {
                         reinitialize_success = true;
                         if format != "json" {
@@ -2610,15 +2620,8 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             }
         };
 
-        // Check if user owns the workflow
-        if workflow.user != user_name {
-            let error_msg = format!(
-                "Cannot delete workflow owned by user '{}' (you are '{}').",
-                workflow.user, user_name
-            );
-            failed_deletions.push((selected_id, error_msg));
-            continue;
-        }
+        // No client-side ownership check: the server authorizes the delete against the
+        // authenticated identity (owner, admin, or access-group member).
 
         // Count jobs in this workflow
         let job_count = match apis::jobs_api::list_jobs(

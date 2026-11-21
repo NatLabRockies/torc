@@ -134,9 +134,11 @@ impl HpcInterface for SlurmInterface {
         let format = field_names.join(",");
         let squeue = Self::get_squeue_exec();
 
+        // No `-u` filter: the job ID is specific, and squeue ANDs `-u` with `-j`, so a
+        // shared workflow's allocation submitted by another user would look gone.
         let (return_code, stdout, stderr) = self.run_command_with_retries(
             &squeue,
-            &["-u", &self.user, "--Format", &format, "-h", "-j", job_id],
+            &["--Format", &format, "-h", "-j", job_id],
             6,
             10,
             &["Invalid job id specified"],

@@ -279,7 +279,7 @@ Retries a failed job by resetting its status to Ready.
 
 1. Job must exist
 2. `run_id` must match workflow's current run
-3. Job status must be Running, Failed, or Terminated
+3. Job status must be Running, Failed, Terminated, or PendingFailed
 4. `attempt_id` must be less than `max_retries`
 
 **Transaction Safety:**

@@ -1707,6 +1707,18 @@ impl JobRunner {
             return Ok(0);
         }
         let count = entries.len();
+        // Use the server's current run, not the cached `self.run_id`: after a reset while
+        // offline, a stale completion must not be mistaken for an already-delivered one.
+        let current_run_id = self
+            .send_with_retries(|| {
+                Self::box_retry_error(apis::workflows_api::get_workflow(
+                    &self.config,
+                    self.workflow_id,
+                ))
+            })?
+            .run_id
+            .unwrap_or(0);
+        let mut metadata_failures = 0usize;
         for chunk in entries.chunks(FLUSH_BATCH_SIZE) {
             let request = BatchCompleteJobsRequest {
                 completions: chunk.to_vec(),
@@ -1724,6 +1736,37 @@ impl JobRunner {
                     self.workflow_id, err.job_id, err.message
                 );
             }
+            // Output mtimes and RO-Crate provenance were skipped while offline; restore them
+            // before the journal (the only record of these completions) is cleared.
+            // Include completions an earlier flush already delivered (now rejected as
+            // duplicates): if that flush failed partway, their metadata may still be missing.
+            let (completed, lookup_failures) =
+                crate::client::commands::reconcile::completions_to_restore(
+                    &self.config,
+                    chunk,
+                    &response.completed,
+                    current_run_id,
+                );
+            metadata_failures += lookup_failures;
+            metadata_failures +=
+                crate::client::commands::reconcile::restore_offline_output_metadata(
+                    &self.config,
+                    self.workflow_id,
+                    &completed,
+                    None,
+                );
+        }
+        if metadata_failures > 0 {
+            // Keep the journal: `torc workflows reconcile` retries metadata restoration for
+            // completions the server already accepted.
+            warn!(
+                "Resume flush: could not restore output metadata for {} job(s); keeping the \
+                 offline journal {} so `torc workflows reconcile` can retry. workflow_id={}",
+                metadata_failures,
+                journal.path().display(),
+                self.workflow_id
+            );
+            return Ok(count);
         }
         journal
             .clear()
@@ -2301,6 +2344,17 @@ impl JobRunner {
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
+            // Offline: the server is unreachable, so only files whose model is already cached
+            // can be checked. Fetching would wait out the full retry window and then fail a
+            // job that succeeded.
+            if self.offline && !self.file_model_cache.contains_key(file_id) {
+                warn!(
+                    "Offline: skipping existence check for output file_id={} of job_id={} \
+                     (file model not cached)",
+                    file_id, job_id
+                );
+                continue;
+            }
             let file_model = match self.get_file_model_cached(*file_id) {
                 Ok(file) => file,
                 Err(e) => {
@@ -2355,6 +2409,12 @@ impl JobRunner {
                 job_id,
                 missing_files.join(", ")
             ));
+        }
+
+        // Offline: skip the server-side st_mtime and RO-Crate updates. Journal replay
+        // (automatic on reconnect, or `torc workflows reconcile`) restores them.
+        if self.offline {
+            return Ok(());
         }
 
         // Update st_mtime for all files and collect file models for RO-Crate
@@ -3279,6 +3339,17 @@ impl JobRunner {
             let rr_id = job
                 .resource_requirements_id
                 .expect("Job must have a resource_requirements_id");
+            // Cache output file models while the server is reachable, so output validation
+            // still works if the runner goes offline before the job finishes. Completion
+            // fetches these anyway, so this only moves the calls earlier. Best effort, no
+            // retries: on failure, completion fetches them as before.
+            for file_id in job.output_file_ids.iter().flatten() {
+                if !self.file_model_cache.contains_key(file_id)
+                    && let Ok(file) = apis::files_api::get_file(&self.config, *file_id)
+                {
+                    self.cache_file_model(*file_id, file);
+                }
+            }
             let mut async_job = AsyncCliCommand::new(job);
             let effective_job_env = async_job.job.env.clone();
 

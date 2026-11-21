@@ -826,6 +826,22 @@ impl<C> Server<C> {
             return Err(e);
         }
 
+        // Step 1c: Reject dependency cycles, checked inside this transaction so the async
+        // task path is covered and the transport's preflight check cannot race with a
+        // concurrent dependency update. If another writer commits after this read, the
+        // writes in steps 3-4 fail on the stale snapshot and the transaction rolls back.
+        match jobs_transport::find_dependency_cycle(&mut *tx, id).await {
+            Ok(None) => {}
+            Ok(Some(cycle)) => {
+                let _ = tx.rollback().await;
+                return Err(ApiError(jobs_transport::dependency_cycle_message(&cycle)));
+            }
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
+            }
+        }
+
         // Step 2: Uninitialize blocked jobs (only needed during reinitialization)
         // This is skipped during initial workflow start because Step 3 will set all job statuses anyway.
         // During reinitialization, this ensures jobs transitively blocked by reset jobs are also reset.
