@@ -71,6 +71,7 @@ pub enum ListResultsError {
 pub enum UpdateResultError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }

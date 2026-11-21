@@ -1550,6 +1550,7 @@ class LocalSchedulersApi:
             '200': "LocalSchedulerModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1623,6 +1624,7 @@ class LocalSchedulersApi:
             '200': "LocalSchedulerModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1696,6 +1698,7 @@ class LocalSchedulersApi:
             '200': "LocalSchedulerModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(

@@ -1059,16 +1059,15 @@ where
             r#"
             UPDATE local_scheduler
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,memory = COALESCE($2, memory)
-                ,num_cpus = COALESCE($3, num_cpus)
-            WHERE id = $4
+                memory = COALESCE($1, memory)
+                ,num_cpus = COALESCE($2, num_cpus)
+            WHERE id = $3 AND workflow_id = $4
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.memory)
         .bind(body.num_cpus)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -1079,9 +1078,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateLocalSchedulerResponse::NotFoundErrorResponse(
-                resource_not_found_response("Local scheduler", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "local_scheduler", id).await? {
+                    UpdateLocalSchedulerResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateLocalSchedulerResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Local scheduler", id),
+                    )
+                },
+            );
         }
 
         // Return the updated local scheduler by fetching it again
@@ -1135,20 +1143,19 @@ where
             r#"
             UPDATE scheduled_compute_node
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,scheduler_id = COALESCE($2, scheduler_id)
-                ,scheduler_config_id = COALESCE($3, scheduler_config_id)
-                ,scheduler_type = COALESCE($4, scheduler_type)
-                ,status = COALESCE($5, status)
-            WHERE id = $6
+                scheduler_id = COALESCE($1, scheduler_id)
+                ,scheduler_config_id = COALESCE($2, scheduler_config_id)
+                ,scheduler_type = COALESCE($3, scheduler_type)
+                ,status = COALESCE($4, status)
+            WHERE id = $5 AND workflow_id = $6
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.scheduler_id)
         .bind(body.scheduler_config_id)
         .bind(body.scheduler_type)
         .bind(body.status)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -1159,9 +1166,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(
-                resource_not_found_response("Scheduled compute node", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "scheduled_compute_node", id).await? {
+                    UpdateScheduledComputeNodeResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Scheduled compute node", id),
+                    )
+                },
+            );
         }
 
         // Return the updated scheduled compute node by fetching it again
@@ -1216,23 +1232,21 @@ where
             r#"
             UPDATE slurm_scheduler
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,name = COALESCE($2, name)
-                ,account = COALESCE($3, account)
-                ,gres = COALESCE($4, gres)
-                ,mem = COALESCE($5, mem)
-                ,nodes = COALESCE($6, nodes)
-                ,ntasks_per_node = COALESCE($7, ntasks_per_node)
-                ,partition = COALESCE($8, partition)
-                ,qos = COALESCE($9, qos)
-                ,tmp = COALESCE($10, tmp)
-                ,walltime = COALESCE($11, walltime)
-                ,extra = COALESCE($12, extra)
-                ,serialize_allocations = COALESCE($13, serialize_allocations)
-            WHERE id = $14
+                name = COALESCE($1, name)
+                ,account = COALESCE($2, account)
+                ,gres = COALESCE($3, gres)
+                ,mem = COALESCE($4, mem)
+                ,nodes = COALESCE($5, nodes)
+                ,ntasks_per_node = COALESCE($6, ntasks_per_node)
+                ,partition = COALESCE($7, partition)
+                ,qos = COALESCE($8, qos)
+                ,tmp = COALESCE($9, tmp)
+                ,walltime = COALESCE($10, walltime)
+                ,extra = COALESCE($11, extra)
+                ,serialize_allocations = COALESCE($12, serialize_allocations)
+            WHERE id = $13 AND workflow_id = $14
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.name)
         .bind(body.account)
         .bind(body.gres)
@@ -1246,6 +1260,7 @@ where
         .bind(body.extra)
         .bind(body.serialize_allocations)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -1256,9 +1271,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateSlurmSchedulerResponse::NotFoundErrorResponse(
-                resource_not_found_response("Slurm scheduler", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "slurm_scheduler", id).await? {
+                    UpdateSlurmSchedulerResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateSlurmSchedulerResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Slurm scheduler", id),
+                    )
+                },
+            );
         }
 
         // Return the updated Slurm scheduler by fetching it again

@@ -1657,6 +1657,7 @@ class ResultsApi:
             '200': "ResultModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1730,6 +1731,7 @@ class ResultsApi:
             '200': "ResultModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1803,6 +1805,7 @@ class ResultsApi:
             '200': "ResultModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(

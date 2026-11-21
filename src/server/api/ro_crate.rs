@@ -661,13 +661,14 @@ where
             r#"
             UPDATE ro_crate_entity
             SET file_id = $1, entity_id = $2, entity_type = $3, metadata = $4
-            WHERE id = $5
+            WHERE id = $5 AND workflow_id = $6
             "#,
             body.file_id,
             body.entity_id,
             body.entity_type,
             metadata_str,
             id,
+            body.workflow_id,
         )
         .execute(self.context.pool.as_ref())
         .await
@@ -698,9 +699,19 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateRoCrateEntityResponse::NotFoundErrorResponse(
-                resource_not_found_response("RO-Crate entity", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "ro_crate_entity", id).await? {
+                    UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateRoCrateEntityResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "RO-Crate entity",
+                        id,
+                    ))
+                },
+            );
         }
 
         body.id = Some(id);

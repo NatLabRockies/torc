@@ -1331,6 +1331,7 @@ pub async fn get_compute_node(
         (status = 200, description = "Successful response", body = models::ComputeNodeModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -1693,6 +1694,7 @@ pub async fn get_file(
         (status = 200, description = "Successful response", body = models::FileModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -1873,6 +1875,7 @@ pub async fn get_local_scheduler(
         (status = 200, description = "Successful response", body = models::LocalSchedulerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2100,7 +2103,7 @@ pub async fn get_resource_requirements(
         (status = 200, description = "Successful response", body = models::ResourceRequirementsModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2544,7 +2547,7 @@ pub async fn get_job(
         (status = 200, description = "Successful response", body = models::JobModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2926,6 +2929,7 @@ pub async fn get_user_data(
         (status = 200, description = "Successful response", body = models::UserDataModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3134,6 +3138,7 @@ pub async fn get_result(
         (status = 200, description = "Successful response", body = models::ResultModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3334,6 +3339,7 @@ pub async fn get_scheduled_compute_node(
         (status = 200, description = "scheduled compute node updated in the table.", body = models::ScheduledComputeNodesModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3512,6 +3518,7 @@ pub async fn get_slurm_scheduler(
         (status = 200, description = "Successful response", body = models::SlurmSchedulerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -4636,7 +4643,7 @@ pub async fn get_ro_crate_entity(
         (status = 200, description = "Successful response", body = models::RoCrateEntityModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]

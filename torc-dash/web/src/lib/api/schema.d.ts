@@ -3410,6 +3410,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -4181,6 +4190,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -4545,7 +4563,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (invalid label) */
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5156,6 +5174,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -5499,7 +5526,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content */
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5840,6 +5867,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -6054,7 +6090,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content */
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6373,6 +6409,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -6673,6 +6718,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7133,6 +7187,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -131,38 +131,49 @@ map_response!(
 map_response!(
     update_compute_node_response,
     UpdateComputeNodeResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_event_response,
     UpdateEventResponse,
     SuccessfulResponse
 );
-map_response!(update_file_response, UpdateFileResponse, SuccessfulResponse);
+map_response!(
+    update_file_response,
+    UpdateFileResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
 map_response!(
     update_local_scheduler_response,
     UpdateLocalSchedulerResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_result_response,
     UpdateResultResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_user_data_response,
     UpdateUserDataResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_scheduled_compute_node_response,
     UpdateScheduledComputeNodeResponse,
-    ScheduledComputeNodeUpdatedInTheTable
+    ScheduledComputeNodeUpdatedInTheTable,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_slurm_scheduler_response,
     UpdateSlurmSchedulerResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_resource_requirements_response,

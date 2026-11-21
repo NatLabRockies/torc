@@ -1516,6 +1516,7 @@ class SlurmSchedulersApi:
             '200': "SlurmSchedulerModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1589,6 +1590,7 @@ class SlurmSchedulersApi:
             '200': "SlurmSchedulerModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1662,6 +1664,7 @@ class SlurmSchedulersApi:
             '200': "SlurmSchedulerModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(

@@ -1567,6 +1567,7 @@ class ScheduledComputeNodesApi:
             '200': "ScheduledComputeNodesModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1640,6 +1641,7 @@ class ScheduledComputeNodesApi:
             '200': "ScheduledComputeNodesModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1713,6 +1715,7 @@ class ScheduledComputeNodesApi:
             '200': "ScheduledComputeNodesModel",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(

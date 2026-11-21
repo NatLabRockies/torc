@@ -203,6 +203,29 @@ pub fn resource_not_found_response(
     message_error_response(format!("{} not found with ID: {}", resource, id))
 }
 
+/// Build the 422 body for an update whose `workflow_id` differs from the stored one.
+pub fn workflow_id_immutable_response() -> models::ErrorResponse {
+    message_error_response("workflow_id cannot be changed")
+}
+
+/// Explain an `UPDATE ... WHERE id = ? AND workflow_id = ?` that matched no row:
+/// `Ok(true)` if the record exists, so the body's `workflow_id` differs from the
+/// stored one (422); `Ok(false)` if the record is gone (404).
+pub async fn workflow_id_mismatch(
+    pool: &SqlitePool,
+    table: &'static str,
+    id: i64,
+) -> Result<bool, ApiError> {
+    // `table` is a compile-time literal at every call site, never caller input.
+    let sql = format!("SELECT 1 FROM {table} WHERE id = ?");
+    sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map(|row| row.is_some())
+        .map_err(|e| database_error_with_msg(e, format!("Failed to look up {table}")))
+}
+
 /// Escape SQL LIKE wildcard characters in user input.
 /// Escapes `%`, `_`, and `\` with a backslash prefix.
 pub fn escape_like_pattern(input: &str) -> String {
