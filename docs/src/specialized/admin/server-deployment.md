@@ -147,9 +147,14 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
   `./torc-server-snapshot.db`). See
   [In-Memory Database with Snapshots](#in-memory-database-with-snapshots-advanced).
 - `TORC_SERVER_SNAPSHOT_KEEP`: Number of snapshots to retain (default `5`, minimum `1`)
+- `TORC_COMPUTE_NODE_STALE_AFTER_SECS`: Seconds without a runner heartbeat after which an active
+  compute node shows as stale (default `600`, `0` turns stale marking off). The server changes no
+  node or job. See [Compute Node Heartbeats and Stale Nodes][heartbeats].
 - `TORC_API_EVENT_BODY_MAX_BYTES`: Per-direction cap on captured request/response bodies surfaced
   through `torc admin tail-api` (default `8192`). See
   [Live API Request Inspection](#live-api-request-inspection).
+
+[heartbeats]: ../../core/concepts/job-runners.md#compute-node-heartbeats-and-stale-nodes
 
 Example:
 

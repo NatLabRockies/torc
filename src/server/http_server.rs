@@ -244,6 +244,7 @@ macro_rules! authorize_workflow_group {
 mod access_checks;
 mod access_control_transport;
 mod bootstrap;
+mod compute_node_liveness;
 mod compute_nodes_transport;
 mod files_transport;
 mod jobs_transport;
@@ -261,6 +262,8 @@ mod system_transport;
 mod unblock_processing;
 mod user_data_transport;
 mod workflows_transport;
+
+use jobs_transport::ServerFailJobError;
 
 /// Extract the authenticated subject from the request context, falling back to "unknown" when
 /// the request is anonymous. Used for attribution fields on audit/user-action events.
@@ -338,6 +341,7 @@ pub async fn create(
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
     admin_sql: crate::server::live_state::AdminSqlConfig,
+    compute_node_stale_after_secs: u64,
 ) -> u16 {
     bootstrap::create_server(
         addr,
@@ -353,6 +357,7 @@ pub async fn create(
         auth_file_path,
         shutdown_on_stdin_eof,
         admin_sql,
+        compute_node_stale_after_secs,
     )
     .await
 }
@@ -387,6 +392,7 @@ impl<C> Server<C> {
         auth_file_path: Option<String>,
         credential_cache: crate::server::auth::SharedCredentialCache,
         admin_sql: crate::server::live_state::AdminSqlConfig,
+        compute_node_stale_after_secs: u64,
     ) -> Self {
         Server {
             marker: PhantomData,
@@ -397,6 +403,7 @@ impl<C> Server<C> {
                 auth_file_path,
                 credential_cache,
                 admin_sql,
+                compute_node_stale_after_secs,
             )),
         }
     }
@@ -1600,6 +1607,7 @@ where
         hostname: Option<String>,
         is_active: Option<bool>,
         scheduled_compute_node_id: Option<i64>,
+        stale: Option<bool>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError> {
         self.transport_list_compute_nodes(
@@ -1611,6 +1619,7 @@ where
             hostname,
             is_active,
             scheduled_compute_node_id,
+            stale,
             context,
         )
         .await
@@ -2221,6 +2230,24 @@ where
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError> {
         self.transport_update_compute_node(id, body, context).await
+    }
+
+    /// Record a heartbeat for a compute node.
+    async fn heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError> {
+        self.transport_heartbeat_compute_node(id, context).await
+    }
+
+    /// Declare a compute node dead: deactivate it and fail its running jobs.
+    async fn fail_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError> {
+        self.transport_fail_compute_node(id, context).await
     }
 
     /// Update an event.

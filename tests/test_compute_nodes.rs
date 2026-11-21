@@ -50,6 +50,7 @@ fn test_list_compute_nodes_active_filter(start_server: &ServerProcess) {
             None,
             Some(active),
             None,
+            None,
         )
         .expect("Failed to list compute nodes by active state")
     };
@@ -87,6 +88,7 @@ fn test_list_compute_nodes_hostname_substring(start_server: &ServerProcess) {
         Some("alpha"),
         None,
         None,
+        None,
     )
     .expect("Failed to list compute nodes by hostname");
     assert_eq!(alpha.total_count, 1);
@@ -102,6 +104,7 @@ fn test_list_compute_nodes_hostname_substring(start_server: &ServerProcess) {
         None,
         None,
         Some("node-"),
+        None,
         None,
         None,
     )
@@ -144,6 +147,7 @@ fn test_compute_node_resource_summary_round_trip(start_server: &ServerProcess) {
     let listed = apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
+        None,
         None,
         None,
         None,

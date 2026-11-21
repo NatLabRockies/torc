@@ -98,6 +98,16 @@ struct ServerConfig {
     #[arg(short, long, env = "TORC_COMPLETION_CHECK_INTERVAL_SECS", hide = true)]
     completion_check_interval_secs: Option<f64>,
 
+    /// Seconds without a heartbeat after which an active compute node is marked stale. 0 turns
+    /// stale marking off. Nodes whose runner never sent a heartbeat are never stale. Use at
+    /// least four times the runner's `client.run.heartbeat_interval_secs` (30 by default).
+    #[arg(
+        long,
+        default_value_t = 600,
+        env = "TORC_COMPUTE_NODE_STALE_AFTER_SECS"
+    )]
+    compute_node_stale_after_secs: u64,
+
     /// Users to add to the admin group (can be specified multiple times).
     /// These users can create and manage access groups.
     #[arg(long = "admin-user", env = "TORC_ADMIN_USERS")]
@@ -406,6 +416,11 @@ fn handle_service_action(
                 disable_admin_sql: config.disable_admin_sql || defaults.disable_admin_sql,
                 disable_admin_sql_writes: config.disable_admin_sql_writes
                     || defaults.disable_admin_sql_writes,
+                compute_node_stale_after_secs: if explicit("compute_node_stale_after_secs") {
+                    config.compute_node_stale_after_secs
+                } else {
+                    defaults.compute_node_stale_after_secs
+                },
             };
             (service::ServiceCommand::Install, user, Some(svc_config))
         }
@@ -477,6 +492,11 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
         completion_check_interval_secs: cli_config
             .completion_check_interval_secs
             .or(server_file_config.completion_check_interval_secs),
+        compute_node_stale_after_secs: if explicit("compute_node_stale_after_secs") {
+            cli_config.compute_node_stale_after_secs
+        } else {
+            server_file_config.compute_node_stale_after_secs
+        },
         admin_users: cli_config.admin_users,
         disable_admin_sql: cli_config.disable_admin_sql || server_file_config.disable_admin_sql,
         disable_admin_sql_writes: cli_config.disable_admin_sql_writes
@@ -774,6 +794,15 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
             info!("Admin raw-SQL writes are DISABLED (read-only queries allowed)");
         }
 
+        if config.compute_node_stale_after_secs > 0 {
+            info!(
+                "Compute node stale marking: nodes without a heartbeat for {}s are marked stale",
+                config.compute_node_stale_after_secs
+            );
+        } else {
+            info!("Compute node stale marking is DISABLED");
+        }
+
         http_server::create(
             &addr,
             config.https,
@@ -788,6 +817,7 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
             config.auth_file.clone(),
             config.shutdown_on_stdin_eof,
             admin_sql,
+            config.compute_node_stale_after_secs,
         )
         .await;
         Ok(())

@@ -688,6 +688,7 @@ pub(crate) fn check_no_active_workers(
         None,       // hostname
         Some(true), // is_active = true
         None,       // scheduled_compute_node_id
+        None,       // stale
     )
     .map_err(|e| format!("Failed to check for active compute nodes: {}", e))?;
 

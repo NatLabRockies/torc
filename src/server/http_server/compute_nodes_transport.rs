@@ -6,6 +6,21 @@ impl<C> Server<C>
 where
     C: Has<XSpanIdString> + Has<Option<Authorization>> + Send + Sync,
 {
+    pub(super) fn broadcast_compute_node_stopped(
+        &self,
+        workflow_id: i64,
+        severity: models::EventSeverity,
+        data: serde_json::Value,
+    ) {
+        self.event_broadcaster.broadcast(BroadcastEvent {
+            workflow_id,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            event_type: "compute_node_stopped".to_string(),
+            severity,
+            data,
+        });
+    }
+
     pub(super) async fn transport_create_compute_node(
         &self,
         body: models::ComputeNodeModel,
@@ -66,6 +81,7 @@ where
         hostname: Option<String>,
         is_active: Option<bool>,
         scheduled_compute_node_id: Option<i64>,
+        stale: Option<bool>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -86,6 +102,7 @@ where
                 hostname,
                 is_active,
                 scheduled_compute_node_id,
+                stale,
                 context,
             )
             .await
@@ -112,21 +129,40 @@ where
         if let UpdateComputeNodeResponse::SuccessfulResponse(ref _updated) = result
             && body.is_active == Some(false)
         {
-            self.event_broadcaster.broadcast(BroadcastEvent {
-                workflow_id: body.workflow_id,
-                timestamp: chrono::Utc::now().timestamp_millis(),
-                event_type: "compute_node_stopped".to_string(),
-                severity: models::EventSeverity::Info,
-                data: serde_json::json!({
+            self.broadcast_compute_node_stopped(
+                body.workflow_id,
+                models::EventSeverity::Info,
+                serde_json::json!({
                     "compute_node_id": id,
                     "hostname": body.hostname,
                     "pid": body.pid,
                     "duration_seconds": body.duration_seconds,
                     "compute_node_type": body.compute_node_type,
                 }),
-            });
+            );
         }
         Ok(result)
+    }
+    pub(super) async fn transport_heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError> {
+        authorize_resource!(self, id, "compute_node", context, UpdateComputeNodeResponse);
+        self.compute_nodes_api
+            .heartbeat_compute_node(id, context)
+            .await
+    }
+    pub(super) async fn transport_fail_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError>
+    where
+        C: 'static,
+    {
+        authorize_resource!(self, id, "compute_node", context, UpdateComputeNodeResponse);
+        self.fail_compute_node_as_server(id, context).await
     }
     pub(super) async fn transport_delete_compute_node(
         &self,

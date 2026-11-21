@@ -79,7 +79,9 @@ pub(crate) async fn run_id_mismatch(
     })
 }
 
-/// True when `start` is absent or names the workflow's current run and one of its compute nodes.
+/// True when `start` is absent or names the workflow's current run and one of its compute nodes
+/// that the server has not deactivated (for example failed through
+/// `POST /compute_nodes/{id}/fail`).
 pub(crate) async fn claim_start_is_valid(
     conn: &mut sqlx::SqliteConnection,
     workflow_id: i64,
@@ -90,7 +92,8 @@ pub(crate) async fn claim_start_is_valid(
     };
     let row = sqlx::query(
         "SELECT 1 FROM workflow w JOIN compute_node c ON c.workflow_id = w.id \
-         WHERE w.id = ? AND w.run_id = ? AND c.id = ?",
+         WHERE w.id = ? AND w.run_id = ? AND c.id = ? \
+         AND (c.is_active IS NULL OR c.is_active = 1)",
     )
     .bind(workflow_id)
     .bind(s.run_id)

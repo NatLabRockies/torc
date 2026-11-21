@@ -45,10 +45,30 @@ pub enum DeleteComputeNodesError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`fail_compute_node`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum FailComputeNodeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`get_compute_node`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetComputeNodeError {
+    Status403(models::ErrorResponse),
+    Status404(models::ErrorResponse),
+    Status500(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`heartbeat_compute_node`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum HeartbeatComputeNodeError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
     Status500(models::ErrorResponse),
@@ -243,6 +263,64 @@ pub fn delete_compute_nodes(
     }
 }
 
+pub fn fail_compute_node(
+    configuration: &configuration::Configuration,
+    id: i64,
+) -> Result<models::ComputeNodeModel, Error<FailComputeNodeError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_id = id;
+
+    let uri_str = format!(
+        "{}/compute_nodes/{id}/fail",
+        configuration.base_path,
+        id = p_path_id
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = configuration.apply_auth(req_builder);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => {
+                return Err(Error::from(serde_json::Error::custom(
+                    "Received `text/plain` content type response that cannot be converted to `models::ComputeNodeModel`",
+                )));
+            }
+            ContentType::Unsupported(unknown_type) => {
+                return Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::ComputeNodeModel`"
+                ))));
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<FailComputeNodeError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
 pub fn get_compute_node(
     configuration: &configuration::Configuration,
     id: i64,
@@ -299,6 +377,64 @@ pub fn get_compute_node(
     }
 }
 
+pub fn heartbeat_compute_node(
+    configuration: &configuration::Configuration,
+    id: i64,
+) -> Result<models::ComputeNodeModel, Error<HeartbeatComputeNodeError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_id = id;
+
+    let uri_str = format!(
+        "{}/compute_nodes/{id}/heartbeat",
+        configuration.base_path,
+        id = p_path_id
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = configuration.apply_auth(req_builder);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req)?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text()?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => {
+                return Err(Error::from(serde_json::Error::custom(
+                    "Received `text/plain` content type response that cannot be converted to `models::ComputeNodeModel`",
+                )));
+            }
+            ContentType::Unsupported(unknown_type) => {
+                return Err(Error::from(serde_json::Error::custom(format!(
+                    "Received `{unknown_type}` content type response that cannot be converted to `models::ComputeNodeModel`"
+                ))));
+            }
+        }
+    } else {
+        let content = resp.text()?;
+        let entity: Option<HeartbeatComputeNodeError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
 pub fn list_compute_nodes(
     configuration: &configuration::Configuration,
     workflow_id: i64,
@@ -309,6 +445,7 @@ pub fn list_compute_nodes(
     hostname: Option<&str>,
     is_active: Option<bool>,
     scheduled_compute_node_id: Option<i64>,
+    stale: Option<bool>,
 ) -> Result<models::ListComputeNodesResponse, Error<ListComputeNodesError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
@@ -319,6 +456,7 @@ pub fn list_compute_nodes(
     let p_query_hostname = hostname;
     let p_query_is_active = is_active;
     let p_query_scheduled_compute_node_id = scheduled_compute_node_id;
+    let p_query_stale = stale;
 
     let uri_str = format!("{}/compute_nodes", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -344,6 +482,9 @@ pub fn list_compute_nodes(
     }
     if let Some(ref param_value) = p_query_scheduled_compute_node_id {
         req_builder = req_builder.query(&[("scheduled_compute_node_id", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_stale {
+        req_builder = req_builder.query(&[("stale", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
