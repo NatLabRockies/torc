@@ -25763,7 +25763,7 @@ where multiple processes might try to retry the same job.</p>
 <ol>
 <li>Job must exist</li>
 <li><code>run_id</code> must match workflow's current run</li>
-<li>Job status must be Running, Failed, or Terminated</li>
+<li>Job status must be Running, Failed, Terminated, or PendingFailed</li>
 <li><code>attempt_id</code> must be less than <code>max_retries</code></li>
 </ol>
 <p><strong>Transaction Safety:</strong></p>
