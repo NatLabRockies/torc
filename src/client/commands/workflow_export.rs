@@ -273,6 +273,104 @@ impl IdMappings {
     }
 }
 
+/// Split `items` into consecutive chunks of at most `max_len` items, starting a new chunk
+/// whenever a name repeats within the current one.
+///
+/// The bulk create endpoints reject duplicate names within one request, but exported
+/// workflows can contain duplicates because the database doesn't enforce unique names.
+pub fn unique_name_chunks<T>(items: &[T], max_len: usize, name: impl Fn(&T) -> &str) -> Vec<&[T]> {
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    let mut seen = std::collections::HashSet::new();
+    for (i, item) in items.iter().enumerate() {
+        if i - start == max_len || !seen.insert(name(item)) {
+            chunks.push(&items[start..i]);
+            start = i;
+            seen.clear();
+            seen.insert(name(item));
+        }
+    }
+    if start < items.len() {
+        chunks.push(&items[start..]);
+    }
+    chunks
+}
+
+/// Record `old_ids[i] -> new_ids[i]` for a bulk create whose response is in request order.
+pub fn map_positionally(
+    map: &mut HashMap<i64, i64>,
+    old_ids: impl ExactSizeIterator<Item = i64>,
+    new_ids: impl ExactSizeIterator<Item = Option<i64>>,
+) -> Result<(), String> {
+    if old_ids.len() != new_ids.len() {
+        return Err(format!(
+            "server returned {} records, expected {}",
+            new_ids.len(),
+            old_ids.len()
+        ));
+    }
+    for (old_id, new_id) in old_ids.zip(new_ids) {
+        map.insert(
+            old_id,
+            new_id.ok_or("server returned a record without an ID")?,
+        );
+    }
+    Ok(())
+}
+
+/// Group exported jobs into dependency levels by their old IDs: every job's
+/// `depends_on_job_ids` refer only to jobs in earlier levels. Dependencies on jobs that are
+/// not in the export are ignored (import drops them). Jobs keep their export order within a
+/// level. Returns an error if the dependencies contain a cycle.
+pub fn job_levels(jobs: &[JobModel]) -> Result<Vec<Vec<&JobModel>>, String> {
+    let index: HashMap<i64, usize> = jobs
+        .iter()
+        .enumerate()
+        .filter_map(|(i, job)| job.id.map(|id| (id, i)))
+        .collect();
+    let mut num_blockers = vec![0usize; jobs.len()];
+    let mut dependents = vec![Vec::new(); jobs.len()];
+    for (i, job) in jobs.iter().enumerate() {
+        let blockers: std::collections::HashSet<usize> = job
+            .depends_on_job_ids
+            .iter()
+            .flatten()
+            .filter_map(|id| index.get(id).copied())
+            .collect();
+        num_blockers[i] = blockers.len();
+        for b in blockers {
+            dependents[b].push(i);
+        }
+    }
+
+    let mut levels = Vec::new();
+    let mut placed = 0;
+    let mut level: Vec<usize> = (0..jobs.len()).filter(|&i| num_blockers[i] == 0).collect();
+    while !level.is_empty() {
+        placed += level.len();
+        let mut next = Vec::new();
+        for &i in &level {
+            for &d in &dependents[i] {
+                num_blockers[d] -= 1;
+                if num_blockers[d] == 0 {
+                    next.push(d);
+                }
+            }
+        }
+        next.sort_unstable();
+        levels.push(level.iter().map(|&i| &jobs[i]).collect());
+        level = next;
+    }
+    if placed != jobs.len() {
+        return Err(format!(
+            "job dependencies contain a cycle ({} of {} jobs are in or behind it)",
+            jobs.len() - placed,
+            jobs.len()
+        ));
+    }
+    Ok(levels)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,5 +432,46 @@ mod tests {
         // File entities should pass through unchanged
         let (new_entity_id, _) = mappings.remap_ro_crate_job_ids("data/output.csv", &metadata);
         assert_eq!(new_entity_id, "data/output.csv");
+    }
+
+    #[test]
+    fn test_unique_name_chunks() {
+        let names = ["a", "b", "a", "c", "d", "e", "f"];
+        let chunks = unique_name_chunks(&names, 3, |n| n);
+        assert_eq!(
+            chunks,
+            vec![&["a", "b"][..], &["a", "c", "d"][..], &["e", "f"][..]]
+        );
+        assert!(unique_name_chunks(&[] as &[&str], 3, |n| n).is_empty());
+    }
+
+    fn job(id: i64, deps: &[i64]) -> JobModel {
+        let mut job = JobModel::new(1, "j".to_string(), "true".to_string());
+        job.id = Some(id);
+        job.depends_on_job_ids = Some(deps.to_vec());
+        job
+    }
+
+    #[test]
+    fn test_job_levels() {
+        // 30 <- 10, 20 <- 30; 40 has a dangling dependency on a job not in the export.
+        let jobs = vec![
+            job(30, &[10, 20]),
+            job(10, &[]),
+            job(20, &[10]),
+            job(40, &[99]),
+        ];
+        let levels: Vec<Vec<i64>> = job_levels(&jobs)
+            .unwrap()
+            .iter()
+            .map(|l| l.iter().map(|j| j.id.unwrap()).collect())
+            .collect();
+        assert_eq!(levels, vec![vec![10, 40], vec![20], vec![30]]);
+    }
+
+    #[test]
+    fn test_job_levels_cycle() {
+        let jobs = vec![job(1, &[]), job(2, &[3]), job(3, &[2])];
+        assert!(job_levels(&jobs).unwrap_err().contains("cycle"));
     }
 }
