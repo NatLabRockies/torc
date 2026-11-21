@@ -12,12 +12,16 @@ use std::collections::HashMap;
 use std::hash::{BuildHasher, RandomState};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State, Url};
+use tauri::webview::{DownloadEvent, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, Url, Webview};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri_plugin_notification::NotificationExt;
 
 const ASKPASS_ADDR: &str = "TORC_DESKTOP_ASKPASS_ADDR";
 const ASKPASS_TOKEN: &str = "TORC_DESKTOP_ASKPASS_TOKEN";
@@ -32,6 +36,8 @@ struct AppState {
     askpass_token: String,
     next_prompt_id: AtomicU64,
     pending_prompts: Mutex<HashMap<u64, mpsc::Sender<Option<String>>>>,
+    /// Temporary file of each download in progress, by URL.
+    downloads: Mutex<HashMap<String, PathBuf>>,
 }
 
 #[derive(Deserialize)]
@@ -82,9 +88,13 @@ fn main() {
         askpass_token: random_hex(),
         next_prompt_id: AtomicU64::new(0),
         pending_prompts: Mutex::new(HashMap::new()),
+        downloads: Mutex::new(HashMap::new()),
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        // Also polyfills the Web Notification API, which the dashboard uses.
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -97,9 +107,11 @@ fn main() {
                 }
             });
 
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = app.state::<AppState>().home_url.set(window.url()?);
-            }
+            // Created here rather than from the config alone, to handle downloads.
+            let window = WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                .on_download(on_download)
+                .build()?;
+            let _ = app.state::<AppState>().home_url.set(window.url()?);
             let menu = Menu::default(app.handle())?;
             menu.append(&Submenu::with_items(
                 app,
@@ -197,6 +209,97 @@ fn askpass_reply(state: State<AppState>, id: u64, answer: Option<String>) {
     if let Some(tx) = state.pending_prompts.lock().unwrap().remove(&id) {
         let _ = tx.send(answer);
     }
+}
+
+/// Webviews ignore downloads unless handled. The webview needs a destination before a save dialog
+/// could answer, so each download goes to a temporary file first; when it finishes, the user picks
+/// where to keep it.
+fn on_download(webview: Webview, event: DownloadEvent) -> bool {
+    let app = webview.app_handle();
+    let state = app.state::<AppState>();
+    match event {
+        DownloadEvent::Requested { url, destination } => {
+            // The webview suggests <Downloads>/<name from Content-Disposition>.
+            let name = destination
+                .file_name()
+                .map_or_else(|| "download".into(), |n| n.to_owned());
+            let dir = std::env::temp_dir().join(format!("torc-desktop-{}", random_hex()));
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                show_error(app, &format!("Download failed: {}: {e}", dir.display()));
+                return false;
+            }
+            *destination = dir.join(name);
+            state
+                .downloads
+                .lock()
+                .unwrap()
+                .insert(url.to_string(), destination.clone());
+        }
+        DownloadEvent::Finished { url, success, .. } => {
+            let Some(tmp) = state.downloads.lock().unwrap().remove(url.as_str()) else {
+                return true;
+            };
+            if success {
+                save_download(app, tmp);
+            } else {
+                remove_temp(&tmp);
+                show_error(app, &format!("Download failed: {url}"));
+            }
+        }
+        _ => {}
+    }
+    true
+}
+
+/// Asks where to save the finished download `tmp` and moves it there.
+fn save_download(app: &AppHandle, tmp: PathBuf) {
+    let name = tmp.file_name().unwrap_or_default().to_string_lossy();
+    let mut dialog = app.dialog().file().set_file_name(name);
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    let app = app.clone();
+    dialog.save_file(move |dest| {
+        let result = match dest.map(|d| d.into_path()) {
+            None => Ok(None), // cancelled
+            Some(Ok(dest)) => move_file(&tmp, &dest).map(|()| Some(dest)),
+            Some(Err(e)) => Err(e.to_string()),
+        };
+        remove_temp(&tmp);
+        match result {
+            Ok(Some(dest)) => {
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Download saved")
+                    .body(dest.display().to_string())
+                    .show();
+            }
+            Ok(None) => {}
+            Err(e) => show_error(&app, &format!("Could not save the download: {e}")),
+        }
+    });
+}
+
+/// Rename, or copy when `dest` is on another file system.
+fn move_file(from: &Path, to: &Path) -> Result<(), String> {
+    std::fs::rename(from, to)
+        .or_else(|_| std::fs::copy(from, to).map(|_| ()))
+        .map_err(|e| format!("{}: {e}", to.display()))
+}
+
+/// Removes a download's temporary file and the directory made for it.
+fn remove_temp(tmp: &Path) {
+    if let Some(dir) = tmp.parent() {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+fn show_error(app: &AppHandle, message: &str) {
+    app.dialog()
+        .message(message)
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
 }
 
 /// Starts torc-dash (over SSH or locally) and waits until it answers on a local port.

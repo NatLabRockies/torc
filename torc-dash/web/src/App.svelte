@@ -22,6 +22,8 @@
   import ExecutionPanel from "./features/workflows/ExecutionPanel.svelte";
   // Starts the event stream at load so the sidebar badge updates on any tab.
   import "./features/events/eventWatcher.svelte";
+  // Desktop notifications when followed workflows finish.
+  import "./features/notify/notify.svelte";
   import ResourcesTab from "./features/resources/ResourcesTab.svelte";
   import WorkflowsTab from "./features/workflows/WorkflowsTab.svelte";
 
