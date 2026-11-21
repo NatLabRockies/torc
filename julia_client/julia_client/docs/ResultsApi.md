@@ -125,8 +125,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_results**
-> list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing) -> ListResultsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing) -> Channel{ ListResultsResponse }, OpenAPI.Clients.ApiResponse
+> list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, _mediaType=nothing) -> ListResultsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, _mediaType=nothing) -> Channel{ ListResultsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -144,13 +144,14 @@ Name | Type | Description  | Notes
  **job_id** | **Int64** |  | [default to nothing]
  **run_id** | **Int64** |  | [default to nothing]
  **return_code** | **Int64** |  | [default to nothing]
- **status** | [**JobStatus**](.md) |  | [default to nothing]
+ **status** | [**Vector{JobStatus}**](JobStatus.md) | One status, or several comma-separated (&#x60;status&#x3D;failed,terminated&#x60;). | [default to nothing]
  **compute_node_id** | **Int64** |  | [default to nothing]
  **offset** | **Int64** |  | [default to nothing]
  **limit** | **Int64** |  | [default to nothing]
  **sort_by** | **String** |  | [default to nothing]
  **reverse_sort** | **Bool** |  | [default to nothing]
  **all_runs** | **Bool** |  | [default to nothing]
+ **ids** | [**Vector{Int64}**](Int64.md) | Comma-separated job IDs: restrict to results of these jobs, scoped to &#x60;workflow_id&#x60;. At most &#x60;MAX_RECORD_TRANSFER_COUNT&#x60; IDs; more returns 422. | [default to nothing]
 
 ### Return type
 

@@ -100,6 +100,14 @@ impl SqlQueryBuilder {
     }
 }
 
+/// `column IN (v1,v2,...)` for integer values. The values are inlined rather than
+/// bound: they are typed integers (no injection risk), and an id list can be far
+/// longer than SQLite's bound-parameter limit. An empty list matches nothing.
+pub fn int_in_clause(column: &str, values: impl IntoIterator<Item = i64>) -> String {
+    let list: Vec<String> = values.into_iter().map(|v| v.to_string()).collect();
+    format!("{} IN ({})", column, list.join(","))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,6 +169,12 @@ mod tests {
             .with_pagination_and_sorting(5, 10, None, None, "id", ALLOWED)
             .build();
         assert!(q.contains("OFFSET 5"));
+    }
+
+    #[test]
+    fn test_int_in_clause() {
+        assert_eq!(int_in_clause("id", [3, 1, 2]), "id IN (3,1,2)");
+        assert_eq!(int_in_clause("r.job_id", []), "r.job_id IN ()");
     }
 
     #[test]

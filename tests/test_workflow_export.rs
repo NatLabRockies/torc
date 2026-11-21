@@ -190,6 +190,7 @@ fn test_export_import_basic(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list imported jobs");
     let imported_jobs = jobs_response.items;
@@ -365,6 +366,7 @@ fn test_export_with_results(start_server: &ServerProcess) {
         None, // status
         None, // all_runs
         None, // compute_node_id
+        None, // ids
     )
     .expect("Failed to list imported results");
 
@@ -474,6 +476,7 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
     let results_response = apis::results_api::list_results(
         config,
         new_workflow_id,
+        None,
         None,
         None,
         None,
@@ -627,6 +630,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs 1")
     .items;
@@ -647,6 +651,7 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs 2")
     .items;
@@ -801,6 +806,7 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list imported jobs");
     let imported_jobs = jobs_response.items;
@@ -895,6 +901,7 @@ fn list_jobs_by_id(
         None,
         None,
         Some(true), // include_relationships
+        None,
         None,
         None,
         None,

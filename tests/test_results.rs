@@ -1053,3 +1053,142 @@ fn test_results_list_run_id_column_with_all_runs(start_server: &ServerProcess) {
         "--all-runs should include the Run ID column, got:\n{all_runs_table}"
     );
 }
+
+/// `ids` (job ids) and comma-separated `status` filters on `GET /results`.
+#[rstest]
+fn test_list_results_ids_and_multi_status_filters(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_list_results_filters");
+    let workflow_id = workflow.id.unwrap();
+    let node = common::create_test_compute_node(config, workflow_id);
+    let mut job_ids = Vec::new();
+    for (name, status) in [
+        ("ok", JobStatus::Completed),
+        ("failed", JobStatus::Failed),
+        ("terminated", JobStatus::Terminated),
+    ] {
+        let job_id = create_test_job(config, workflow_id, name).id.unwrap();
+        let result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            1,
+            1,
+            node.id.unwrap(),
+            if status == JobStatus::Completed { 0 } else { 1 },
+            1.0,
+            "2024-01-01T12:00:00.000Z".to_string(),
+            status,
+        );
+        apis::results_api::create_result(config, result).unwrap();
+        job_ids.push(job_id);
+    }
+    let list = |status: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
+        let mut ids: Vec<i64> = apis::results_api::list_results(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            status,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            ids,
+        )
+        .expect("list_results failed")
+        .items
+        .into_iter()
+        .map(|r| r.job_id)
+        .collect();
+        ids.sort();
+        ids
+    };
+
+    assert_eq!(list(Some(vec![JobStatus::Failed]), None), vec![job_ids[1]]);
+    assert_eq!(
+        list(Some(vec![JobStatus::Failed, JobStatus::Terminated]), None),
+        vec![job_ids[1], job_ids[2]]
+    );
+    assert_eq!(
+        list(None, Some(vec![job_ids[0], job_ids[2]])),
+        vec![job_ids[0], job_ids[2]]
+    );
+
+    // Scoped to workflow_id.
+    let other = create_test_workflow(config, "test_list_results_filters_other");
+    let other_job = create_test_job(config, other.id.unwrap(), "other_job");
+    assert!(list(None, Some(vec![other_job.id.unwrap()])).is_empty());
+}
+
+/// The results report resolves each result's compute node from one listing of the
+/// workflow's compute nodes.
+#[rstest]
+fn test_results_report_resolves_compute_nodes(start_server: &ServerProcess) {
+    use torc::client::commands::reports::build_results_report;
+
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "test_results_report_nodes");
+    let workflow_id = workflow.id.unwrap();
+    let mut node = models::ComputeNodeModel::new(
+        workflow_id,
+        "report-host-b".to_string(),
+        1234,
+        chrono::Utc::now().to_rfc3339(),
+        1,
+        1.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    node = apis::compute_nodes_api::create_compute_node(config, node).unwrap();
+    let default_node = apis::compute_nodes_api::list_compute_nodes(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        Some("test-host"),
+        None,
+        None,
+    )
+    .unwrap()
+    .items
+    .remove(0);
+
+    let job_a = create_test_job(config, workflow_id, "a").id.unwrap();
+    let job_b = create_test_job(config, workflow_id, "b").id.unwrap();
+    for (job_id, node_id) in [(job_a, default_node.id.unwrap()), (job_b, node.id.unwrap())] {
+        let result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            1,
+            1,
+            node_id,
+            0,
+            1.0,
+            "2024-01-01T12:00:00.000Z".to_string(),
+            JobStatus::Completed,
+        );
+        apis::results_api::create_result(config, result).unwrap();
+    }
+
+    let out = tempfile::tempdir().unwrap();
+    let report =
+        build_results_report(config, Some(workflow_id), out.path(), true, false, &[]).unwrap();
+    assert_eq!(report.results.len(), 2);
+    for record in &report.results {
+        assert_eq!(record.compute_node_type.as_deref(), Some("local"));
+        let host = if record.job_id == job_a {
+            "test-host"
+        } else {
+            "report-host-b"
+        };
+        let log = record.job_runner_log.as_deref().unwrap();
+        assert!(log.contains(host), "log={} should name host={}", log, host);
+    }
+}

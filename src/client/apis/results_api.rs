@@ -60,6 +60,7 @@ pub enum GetResultError {
 pub enum ListResultsError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
@@ -296,13 +297,14 @@ pub fn list_results(
     job_id: Option<i64>,
     run_id: Option<i64>,
     return_code: Option<i64>,
-    status: Option<models::JobStatus>,
+    status: Option<Vec<models::JobStatus>>,
     compute_node_id: Option<i64>,
     offset: Option<i64>,
     limit: Option<i64>,
     sort_by: Option<&str>,
     reverse_sort: Option<bool>,
     all_runs: Option<bool>,
+    ids: Option<Vec<i64>>,
 ) -> Result<models::ListResultsResponse, Error<ListResultsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
@@ -316,6 +318,7 @@ pub fn list_results(
     let p_query_sort_by = sort_by;
     let p_query_reverse_sort = reverse_sort;
     let p_query_all_runs = all_runs;
+    let p_query_ids = ids;
 
     let uri_str = format!("{}/results", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -331,7 +334,23 @@ pub fn list_results(
         req_builder = req_builder.query(&[("return_code", &param_value.to_string())]);
     }
     if let Some(ref param_value) = p_query_status {
-        req_builder = req_builder.query(&[("status", &param_value.to_string())]);
+        req_builder = match "csv" {
+            "multi" => req_builder.query(
+                &param_value
+                    .iter()
+                    .map(|p| ("status".to_owned(), p.to_string()))
+                    .collect::<Vec<(std::string::String, std::string::String)>>(),
+            ),
+            _ => req_builder.query(&[(
+                "status",
+                &param_value
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+                    .to_string(),
+            )]),
+        };
     }
     if let Some(ref param_value) = p_query_compute_node_id {
         req_builder = req_builder.query(&[("compute_node_id", &param_value.to_string())]);
@@ -350,6 +369,25 @@ pub fn list_results(
     }
     if let Some(ref param_value) = p_query_all_runs {
         req_builder = req_builder.query(&[("all_runs", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_ids {
+        req_builder = match "csv" {
+            "multi" => req_builder.query(
+                &param_value
+                    .iter()
+                    .map(|p| ("ids".to_owned(), p.to_string()))
+                    .collect::<Vec<(std::string::String, std::string::String)>>(),
+            ),
+            _ => req_builder.query(&[(
+                "ids",
+                &param_value
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+                    .to_string(),
+            )]),
+        };
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

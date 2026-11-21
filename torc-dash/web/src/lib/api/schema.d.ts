@@ -4246,7 +4246,8 @@ export interface operations {
         parameters: {
             query: {
                 workflow_id: number;
-                status?: components["schemas"]["JobStatus"];
+                /** @description One status, or several comma-separated (`status=failed,terminated`). */
+                status?: components["schemas"]["JobStatus"][] | null;
                 needs_file_id?: number | null;
                 upstream_job_id?: number | null;
                 offset?: number | null;
@@ -4279,6 +4280,11 @@ export interface operations {
                  *     these labels would claim. An empty value returns only unlabeled jobs.
                  */
                 labels?: string | null;
+                /**
+                 * @description Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+                 *     `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+                 */
+                ids?: number[] | null;
             };
             header?: never;
             path?: never;
@@ -4306,6 +4312,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (too many ids) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5557,13 +5572,19 @@ export interface operations {
                 job_id?: number | null;
                 run_id?: number | null;
                 return_code?: number | null;
-                status?: components["schemas"]["JobStatus"];
+                /** @description One status, or several comma-separated (`status=failed,terminated`). */
+                status?: components["schemas"]["JobStatus"][] | null;
                 compute_node_id?: number | null;
                 offset?: number | null;
                 limit?: number | null;
                 sort_by?: string | null;
                 reverse_sort?: boolean | null;
                 all_runs?: boolean | null;
+                /**
+                 * @description Comma-separated job IDs: restrict to results of these jobs, scoped to
+                 *     `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+                 */
+                ids?: number[] | null;
             };
             header?: never;
             path?: never;
@@ -5591,6 +5612,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (too many ids) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

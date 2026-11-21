@@ -96,6 +96,7 @@ fn verify_diamond_workflow_completion(
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -123,6 +124,7 @@ fn verify_diamond_workflow_completion(
         None, // status filter
         None, // all_runs
         None, // compute_node_id
+        None, // ids
     )
     .expect("Failed to list results");
 
@@ -421,6 +423,7 @@ fn verify_many_jobs_completion(
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -457,6 +460,7 @@ fn verify_many_jobs_completion(
         None, // status filter
         None, // all_runs
         None, // compute_node_id
+        None, // ids
     )
     .expect("Failed to list results");
 
@@ -611,6 +615,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -665,6 +670,7 @@ resource_requirements:
         None,
         None,
         None, // compute_node_id
+        None, // ids
     )
     .expect("Failed to list results");
 
@@ -742,6 +748,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs after reset");
 
@@ -819,6 +826,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs after second run");
 
@@ -848,6 +856,7 @@ resource_requirements:
         None,
         Some(true), // all_runs=true
         None,       // compute_node_id
+        None,       // ids
     )
     .expect("Failed to list all results");
 
@@ -1016,6 +1025,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -1090,6 +1100,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs after reinitialize");
 
@@ -1163,6 +1174,7 @@ resource_requirements:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs after second run");
 
@@ -1192,6 +1204,7 @@ resource_requirements:
         None,
         Some(true), // all_runs=true
         None,       // compute_node_id
+        None,       // ids
     )
     .expect("Failed to list all results");
 
@@ -1353,6 +1366,7 @@ resource_requirements:
     let results = apis::results_api::list_results(
         config,
         workflow_id,
+        None,
         None,
         None,
         None,
@@ -1528,6 +1542,7 @@ resource_requirements:
     let results = apis::results_api::list_results(
         config,
         workflow_id,
+        None,
         None,
         None,
         None,
@@ -1718,6 +1733,7 @@ resource_requirements:
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list results");
     assert_eq!(
@@ -1752,6 +1768,7 @@ fn get_job_statuses(
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 

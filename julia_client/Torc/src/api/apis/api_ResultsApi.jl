@@ -134,22 +134,24 @@ const _returntypes_list_results_ResultsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ListResultsResponse,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing)
+function _oacinternal_list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_results_ResultsApi, "/results", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "job_id", job_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "run_id", run_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "return_code", return_code; style="form", is_explode=true)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=true)  # type JobStatus
+    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=false)  # type Vector{JobStatus}
     OpenAPI.Clients.set_param(_ctx.query, "compute_node_id", compute_node_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "limit", limit; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "sort_by", sort_by; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "reverse_sort", reverse_sort; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_param(_ctx.query, "all_runs", all_runs; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "ids", ids; style="form", is_explode=false)  # type Vector{Int64}
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -160,23 +162,24 @@ end
 - job_id::Int64
 - run_id::Int64
 - return_code::Int64
-- status::JobStatus
+- status::Vector{JobStatus}
 - compute_node_id::Int64
 - offset::Int64
 - limit::Int64
 - sort_by::String
 - reverse_sort::Bool
 - all_runs::Bool
+- ids::Vector{Int64}
 
 Return: ListResultsResponse, OpenAPI.Clients.ApiResponse
 """
-function list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_results(_api, workflow_id; job_id=job_id, run_id=run_id, return_code=return_code, status=status, compute_node_id=compute_node_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, all_runs=all_runs, _mediaType=_mediaType)
+function list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_results(_api, workflow_id; job_id=job_id, run_id=run_id, return_code=return_code, status=status, compute_node_id=compute_node_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, all_runs=all_runs, ids=ids, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_results(_api, workflow_id; job_id=job_id, run_id=run_id, return_code=return_code, status=status, compute_node_id=compute_node_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, all_runs=all_runs, _mediaType=_mediaType)
+function list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_results(_api, workflow_id; job_id=job_id, run_id=run_id, return_code=return_code, status=status, compute_node_id=compute_node_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, all_runs=all_runs, ids=ids, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

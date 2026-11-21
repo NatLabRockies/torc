@@ -1851,6 +1851,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -1879,6 +1880,7 @@ fn test_slurm_run_jobs(start_server: &ServerProcess) {
         None, // status filter
         None, // all_runs
         None, // compute_node_id
+        None, // ids
     )
     .expect("Failed to list results");
 
@@ -2272,6 +2274,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
         None,      // name
         None,      // command
         None,      // labels
+        None,      // ids
     )
     .expect("Failed to list jobs");
 

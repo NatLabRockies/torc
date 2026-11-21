@@ -166,7 +166,7 @@ fn count_ready_unplanned_jobs(
     let total_ready = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(JobStatus::Ready),
+        Some(vec![JobStatus::Ready]),
         None,
         None,
         Some(0),
@@ -179,6 +179,7 @@ fn count_ready_unplanned_jobs(
         None,     // name
         None,     // command
         Some(""), // label: unlabeled jobs only
+        None,     // ids
     )
     .map_err(|e| format!("Failed to count ready jobs: {}", e))?
     .total_count;
@@ -186,7 +187,7 @@ fn count_ready_unplanned_jobs(
     let unplanned_count = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(JobStatus::Ready),
+        Some(vec![JobStatus::Ready]),
         None,
         None,
         Some(0),
@@ -199,6 +200,7 @@ fn count_ready_unplanned_jobs(
         None,     // name
         None,     // command
         Some(""), // label: unlabeled jobs only
+        None,     // ids
     )
     .map_err(|e| format!("Failed to count unplanned ready jobs: {}", e))?
     .total_count;

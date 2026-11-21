@@ -1109,7 +1109,7 @@ fn test_concurrent_claim_and_complete(start_server: &ServerProcess) {
     let final_completed = apis::jobs_api::list_jobs(
         &config.clone(),
         workflow_id,
-        Some(models::JobStatus::Completed),
+        Some(vec![models::JobStatus::Completed]),
         None,
         None,
         None,
@@ -1122,6 +1122,7 @@ fn test_concurrent_claim_and_complete(start_server: &ServerProcess) {
         None,
         None,
         None, // labels
+        None, // ids
     )
     .expect("list_jobs failed");
     assert_eq!(
@@ -1169,6 +1170,7 @@ fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
         None,
         None,
         None, // labels
+        None, // ids
     )
     .expect("list_jobs")
     .items
@@ -1223,6 +1225,7 @@ fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
         config,
         workflow_id,
         Some(job_id),
+        None,
         None,
         None,
         None,
@@ -1303,11 +1306,12 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
     let ready = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(models::JobStatus::Ready),
+        Some(vec![models::JobStatus::Ready]),
         None,
         None,
         None,
         Some(100),
+        None,
         None,
         None,
         None,
@@ -1370,6 +1374,7 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
         None,
         None,
         Some(compute_node_id),
+        None,
         None,
         None,
         None,

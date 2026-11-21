@@ -1392,9 +1392,16 @@ paths:
           format: int64
       - name: status
         in: query
+        description: One status, or several comma-separated (`status=failed,terminated`).
         required: false
         schema:
-          $ref: '#/components/schemas/JobStatus'
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        style: form
+        explode: false
       - name: needs_file_id
         in: query
         required: false
@@ -1500,6 +1507,21 @@ paths:
           type:
           - string
           - 'null'
+      - name: ids
+        in: query
+        description: |-
+          Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+          `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+        style: form
+        explode: false
       responses:
         '200':
           description: Successful response
@@ -1515,6 +1537,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (too many ids)
           content:
             application/json:
               schema:
@@ -2638,9 +2666,16 @@ paths:
           format: int64
       - name: status
         in: query
+        description: One status, or several comma-separated (`status=failed,terminated`).
         required: false
         schema:
-          $ref: '#/components/schemas/JobStatus'
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        style: form
+        explode: false
       - name: compute_node_id
         in: query
         required: false
@@ -2686,6 +2721,21 @@ paths:
           type:
           - boolean
           - 'null'
+      - name: ids
+        in: query
+        description: |-
+          Comma-separated job IDs: restrict to results of these jobs, scoped to
+          `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+        style: form
+        explode: false
       responses:
         '200':
           description: Successful response
@@ -2701,6 +2751,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (too many ids)
           content:
             application/json:
               schema:

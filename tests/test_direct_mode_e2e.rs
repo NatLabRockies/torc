@@ -55,6 +55,7 @@ fn verify_all_jobs_completed(server: &ServerProcess, workflow_id: i64) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -73,6 +74,7 @@ fn verify_all_jobs_return_code(server: &ServerProcess, workflow_id: i64, expecte
     let results = apis::results_api::list_results(
         &server.config,
         workflow_id,
+        None,
         None,
         None,
         None,
@@ -112,6 +114,7 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -121,6 +124,7 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
         &server.config,
         workflow_id,
         job.id,
+        None,
         None,
         None,
         None,
@@ -1255,6 +1259,7 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -1359,6 +1364,7 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 
@@ -1462,6 +1468,7 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs");
 

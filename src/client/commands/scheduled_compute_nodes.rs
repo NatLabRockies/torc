@@ -229,6 +229,7 @@ pub fn handle_scheduled_compute_node_commands(
                         None,                  // sort_by
                         None,                  // reverse_sort
                         Some(true),            // all_runs - include all historical results
+                        None,                  // ids
                     ) {
                         Ok(response) => {
                             for result in response.items {

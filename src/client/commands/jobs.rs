@@ -1011,6 +1011,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None,    // name
                 None,    // command
                 None,    // label
+                None,    // ids
             ) {
                 Ok(response) => {
                     let job_count = response.total_count;
@@ -1563,6 +1564,7 @@ pub fn get_current_job_count(
         None,    // name
         None,    // command
         None,    // label
+        None,    // ids
     )
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
@@ -1617,25 +1619,47 @@ fn resolve_reset_targets_by_ids(
     config: &Configuration,
     job_ids: &[i64],
 ) -> (i64, Vec<models::JobModel>) {
-    let mut fetched: Vec<models::JobModel> = Vec::with_capacity(job_ids.len());
-    for &id in job_ids {
-        match apis::jobs_api::get_job(config, id) {
-            Ok(job) => fetched.push(job),
-            Err(e) => {
-                eprintln!("Error: job {} not found: {}", id, e);
-                std::process::exit(1);
-            }
+    // The first job names the workflow; the rest are fetched in bulk from it.
+    let first = match apis::jobs_api::get_job(config, job_ids[0]) {
+        Ok(job) => job,
+        Err(e) => {
+            eprintln!("Error: job {} not found: {}", job_ids[0], e);
+            std::process::exit(1);
         }
-    }
+    };
+    let workflow_id = first.workflow_id;
+    let mut by_id: HashMap<i64, models::JobModel> = match pagination::paginate_jobs_by_ids(
+        config,
+        workflow_id,
+        job_ids,
+        JobListParams::new(),
+    ) {
+        Ok(jobs) => jobs.into_iter().map(|j| (require_job_id(&j), j)).collect(),
+        Err(e) => {
+            eprintln!("Error: failed to fetch jobs: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    // De-duplicate by ID while preserving first-occurrence order
+    // De-duplicate by ID while preserving first-occurrence order. An ID missing from
+    // the bulk fetch is either absent or in another workflow; fetch it to tell which.
     let mut seen_ids: HashSet<i64> = HashSet::new();
     let mut unique_jobs: Vec<models::JobModel> = Vec::new();
-    for job in fetched {
-        let id = require_job_id(&job);
-        if seen_ids.insert(id) {
-            unique_jobs.push(job);
+    for &id in job_ids {
+        if !seen_ids.insert(id) {
+            continue;
         }
+        let job = match by_id.remove(&id) {
+            Some(job) => job,
+            None => match apis::jobs_api::get_job(config, id) {
+                Ok(job) => job,
+                Err(e) => {
+                    eprintln!("Error: job {} not found: {}", id, e);
+                    std::process::exit(1);
+                }
+            },
+        };
+        unique_jobs.push(job);
     }
 
     // Determine workflow from first job; reject if any job belongs elsewhere
@@ -1694,25 +1718,14 @@ fn resolve_reset_targets_by_status(
         }
     }
 
-    let mut seen_ids: HashSet<i64> = HashSet::new();
-    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
-    for status in statuses {
-        let params = JobListParams::new().with_status(status);
-        let jobs = match pagination::paginate_jobs(config, workflow_id, params) {
-            Ok(jobs) => jobs,
-            Err(e) => {
-                eprintln!("Error: failed to list {} jobs: {}", status, e);
-                std::process::exit(1);
-            }
-        };
-        for job in jobs {
-            let id = require_job_id(&job);
-            if seen_ids.insert(id) {
-                unique_jobs.push(job);
-            }
+    let params = JobListParams::new().with_statuses(statuses);
+    match pagination::paginate_jobs(config, workflow_id, params) {
+        Ok(jobs) => jobs,
+        Err(e) => {
+            eprintln!("Error: failed to list jobs: {}", e);
+            std::process::exit(1);
         }
     }
-    unique_jobs
 }
 
 /// Resolve all jobs in `workflow_id` whose latest result has the given
@@ -1738,20 +1751,30 @@ fn resolve_reset_targets_by_return_code(
     // Fetch the current JobModel for each matched job (results carry job_id but
     // not the live job state the rest of the reset flow needs).
     let mut seen_ids: HashSet<i64> = HashSet::new();
-    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
-    for result in results {
-        if !seen_ids.insert(result.job_id) {
-            continue;
-        }
-        match apis::jobs_api::get_job(config, result.job_id) {
-            Ok(job) => unique_jobs.push(job),
+    let job_ids: Vec<i64> = results
+        .iter()
+        .map(|r| r.job_id)
+        .filter(|id| seen_ids.insert(*id))
+        .collect();
+    let jobs =
+        match pagination::paginate_jobs_by_ids(config, workflow_id, &job_ids, JobListParams::new())
+        {
+            Ok(jobs) => jobs,
             Err(e) => {
-                eprintln!("Error: job {} not found: {}", result.job_id, e);
+                eprintln!("Error: failed to fetch jobs: {}", e);
                 std::process::exit(1);
             }
-        }
+        };
+    if jobs.len() != job_ids.len() {
+        let found: HashSet<i64> = jobs.iter().filter_map(|j| j.id).collect();
+        let missing: Vec<i64> = job_ids
+            .into_iter()
+            .filter(|id| !found.contains(id))
+            .collect();
+        eprintln!("Error: jobs not found: {:?}", missing);
+        std::process::exit(1);
     }
-    unique_jobs
+    jobs
 }
 
 /// `torc jobs reset-status` resets the selected jobs whatever their status.
@@ -1895,9 +1918,19 @@ fn handle_reset_job_status(
             }
             match cleanup_orphaned_jobs(config, workflow_id, false) {
                 Ok(r) if r.total_jobs_failed() > 0 => {
-                    for job in unique_jobs.iter_mut() {
-                        if let Ok(fresh) = apis::jobs_api::get_job(config, require_job_id(job)) {
-                            *job = fresh;
+                    let ids: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+                    if let Ok(fresh) = pagination::paginate_jobs_by_ids(
+                        config,
+                        workflow_id,
+                        &ids,
+                        JobListParams::new(),
+                    ) {
+                        let mut fresh: HashMap<i64, models::JobModel> =
+                            fresh.into_iter().map(|j| (require_job_id(&j), j)).collect();
+                        for job in unique_jobs.iter_mut() {
+                            if let Some(f) = fresh.remove(&require_job_id(job)) {
+                                *job = f;
+                            }
                         }
                     }
                 }
@@ -2267,6 +2300,7 @@ pub fn get_existing_job_names(
             None, // name
             None, // command
             None, // label
+            None, // ids
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 

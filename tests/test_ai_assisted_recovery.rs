@@ -168,7 +168,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
     let pending_failed_jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(JobStatus::PendingFailed),
+        Some(vec![JobStatus::PendingFailed]),
         None,
         None,
         None,
@@ -181,6 +181,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list pending_failed jobs");
 
@@ -578,7 +579,8 @@ fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &
         Some(job_id),
         None,
         None,
-        Some(JobStatus::Failed),
+        Some(vec![JobStatus::Failed]),
+        None,
         None,
         None,
         None,
@@ -657,6 +659,7 @@ fn test_resolving_pending_failed_only_updates_current_attempt_result(start_serve
         None,
         None,
         Some(true),
+        None,
     )
     .expect("Failed to list results")
     .items;

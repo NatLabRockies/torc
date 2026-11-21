@@ -300,6 +300,7 @@ fn test_jobs_list_name_command_filter(start_server: &ServerProcess) {
             name,
             command,
             None, // labels
+            None, // ids
         )
         .expect("list_jobs failed")
     };
@@ -1087,6 +1088,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs before deletion");
     assert_eq!(
@@ -1122,6 +1124,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
     )
     .expect("Failed to list jobs after deletion");
     assert_eq!(
@@ -1585,4 +1588,72 @@ fn test_bulk_create_jobs_rejects_invalid_env_name(start_server: &ServerProcess) 
         err_str.contains("BAD-NAME"),
         "Error should mention invalid env key"
     );
+}
+
+/// `ids` and comma-separated `status` filters on `GET /jobs`.
+#[rstest]
+fn test_list_jobs_ids_and_multi_status_filters(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let work_dir = tempfile::tempdir().unwrap();
+    let jobs = common::create_diamond_workflow(config, true, work_dir.path());
+    let workflow_id = jobs["preprocess"].workflow_id;
+    let id = |name: &str| jobs[name].id.unwrap();
+    let list = |status: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
+        let mut names: Vec<String> = apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            status,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            ids,
+        )
+        .expect("list_jobs failed")
+        .items
+        .into_iter()
+        .map(|j| j.name)
+        .collect();
+        names.sort();
+        names
+    };
+
+    // After initialization: preprocess is ready, the rest are blocked.
+    assert_eq!(list(Some(vec![JobStatus::Ready]), None), vec!["preprocess"]);
+    assert_eq!(
+        list(Some(vec![JobStatus::Blocked]), None),
+        vec!["postprocess", "work1", "work2"]
+    );
+    assert_eq!(
+        list(Some(vec![JobStatus::Ready, JobStatus::Blocked]), None).len(),
+        4
+    );
+    assert!(list(Some(vec![]), None).is_empty());
+
+    assert_eq!(
+        list(None, Some(vec![id("work1"), id("postprocess")])),
+        vec!["postprocess", "work1"]
+    );
+    // Filters combine.
+    assert_eq!(
+        list(
+            Some(vec![JobStatus::Blocked]),
+            Some(vec![id("preprocess"), id("work2")])
+        ),
+        vec!["work2"]
+    );
+
+    // Scoped to workflow_id: a job of another workflow is not returned.
+    let other = create_test_workflow(config, "test_list_jobs_ids_other");
+    let other_job = create_test_job(config, other.id.unwrap(), "other_job");
+    assert!(list(None, Some(vec![other_job.id.unwrap()])).is_empty());
+    // Over-cap ids (422) is tested in live_router_tests: such a list can't fit in a URL.
 }

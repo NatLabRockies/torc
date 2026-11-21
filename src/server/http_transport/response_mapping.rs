@@ -255,7 +255,8 @@ map_response!(
 map_response!(
     list_results_response,
     ListResultsResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     list_user_data_response,
@@ -447,7 +448,12 @@ map_response!(
     UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(create_job_response, CreateJobResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
-map_response!(list_jobs_response, ListJobsResponse, SuccessfulResponse);
+map_response!(
+    list_jobs_response,
+    ListJobsResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
 map_response!(delete_jobs_response, DeleteJobsResponse, SuccessfulResponse);
 map_response!(get_job_response, GetJobResponse, SuccessfulResponse);
 map_response!(update_job_response, UpdateJobResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);

@@ -1573,6 +1573,7 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
         None,       // name
         None,       // command
         None,       // labels
+        None,       // ids
     )
     .expect("Failed to list jobs");
 
@@ -1670,6 +1671,7 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
         None,       // name
         None,       // command
         None,       // labels
+        None,       // ids
     )
     .expect("Failed to list jobs");
 
@@ -1760,6 +1762,7 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
         None,       // name
         None,       // command
         None,       // labels
+        None,       // ids
     )
     .expect("Failed to list jobs");
 
@@ -1853,6 +1856,7 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
         None,       // name
         None,       // command
         None,       // labels
+        None,       // ids
     )
     .expect("Failed to list jobs");
 
@@ -4124,6 +4128,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
             None, // name
             None, // command
             None, // labels
+            None, // ids
         )
         .expect("Failed to list jobs");
 
@@ -4286,6 +4291,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,       // name
         None,       // command
         None,       // labels
+        None,       // ids
     )
     .expect("Failed to list jobs")
     .items;
@@ -4324,9 +4330,13 @@ fn test_subgraph_workflow_execution_plan_from_database() {
     .unwrap_or_default();
 
     // Build execution plan from database models
+    let dependencies =
+        torc::client::execution_plan::fetch_dependency_edges(&start_server.config, workflow_id)
+            .expect("Failed to fetch dependency edges");
     let plan = ExecutionPlan::from_database_models(
         &workflow,
         &jobs,
+        &dependencies,
         &actions,
         &slurm_schedulers,
         &resource_requirements,
@@ -4457,6 +4467,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,       // name
         None,       // command
         None,       // labels
+        None,       // ids
     )
     .expect("Failed to list jobs")
     .items;
@@ -4495,9 +4506,13 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
     .unwrap_or_default();
 
     // Build execution plan from database models
+    let dependencies =
+        torc::client::execution_plan::fetch_dependency_edges(&start_server.config, workflow_id)
+            .expect("Failed to fetch dependency edges");
     let db_plan = ExecutionPlan::from_database_models(
         &workflow,
         &jobs,
+        &dependencies,
         &actions,
         &slurm_schedulers,
         &resource_requirements,
@@ -4636,4 +4651,71 @@ fn test_chained_allocations_example_parses() {
     assert_eq!(schedulers.len(), 1);
     assert_eq!(schedulers[0].serialize_allocations, Some(true));
     assert_eq!(spec.jobs.len(), 4);
+}
+
+/// An uninitialized workflow that mixes explicit, file, and user-data dependencies:
+/// the execution plan from the database must include all three kinds of edges.
+#[test]
+fn test_execution_plan_from_database_mixed_edges_uninitialized() {
+    use torc::client::commands::pagination::{JobListParams, paginate_jobs};
+    use torc::client::execution_plan::{ExecutionPlan, fetch_dependency_edges};
+
+    let start_server = common::start_server();
+    let config = &start_server.config;
+    let spec = r#"
+name: mixed_edges
+jobs:
+  - name: produce
+    command: echo produce
+    output_files: [f1]
+    output_user_data: [u1]
+  - name: from_file
+    command: echo from_file
+    input_files: [f1]
+  - name: from_user_data
+    command: echo from_user_data
+    input_user_data: [u1]
+  - name: explicit
+    command: echo explicit
+    depends_on: [from_file]
+files:
+  - name: f1
+    path: /tmp/mixed_edges_f1.txt
+user_data:
+  - name: u1
+"#;
+    let temp_file = tempfile::Builder::new()
+        .suffix(".yaml")
+        .tempfile()
+        .expect("Failed to create temp file");
+    fs::write(temp_file.path(), spec).expect("Failed to write temp file");
+    let workflow_id =
+        WorkflowSpec::create_workflow_from_spec(config, temp_file.path(), "test_user", false)
+            .expect("Failed to create workflow");
+
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    let jobs = paginate_jobs(config, workflow_id, JobListParams::new()).unwrap();
+    assert!(
+        jobs.iter()
+            .all(|j| j.status == Some(torc::models::JobStatus::Uninitialized)),
+        "workflow should be uninitialized"
+    );
+    let dependencies = fetch_dependency_edges(config, workflow_id).unwrap();
+    let plan = ExecutionPlan::from_database_models(&workflow, &jobs, &dependencies, &[], &[], &[])
+        .unwrap();
+    let graph = plan.graph.as_ref().unwrap();
+    let deps = |name: &str| {
+        let mut d: Vec<String> = graph
+            .dependencies_of(name)
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect();
+        d.sort();
+        d
+    };
+    assert_eq!(deps("produce"), Vec::<String>::new());
+    assert_eq!(deps("from_file"), vec!["produce"]);
+    assert_eq!(deps("from_user_data"), vec!["produce"]);
+    assert_eq!(deps("explicit"), vec!["from_file"]);
 }

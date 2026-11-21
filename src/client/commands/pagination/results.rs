@@ -129,13 +129,14 @@ impl Paginatable for ResultModel {
             params.job_id,
             params.run_id,
             params.return_code,
-            params.status,
+            params.status.map(|s| vec![s]),
             params.compute_node_id,
             Some(params.offset),
             Some(limit),
             params.sort_by.as_deref(),
             params.reverse_sort,
             params.all_runs,
+            None,
         )?;
 
         Ok(PaginatedResponse {

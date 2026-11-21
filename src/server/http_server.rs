@@ -1688,7 +1688,7 @@ where
     async fn list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: Option<i64>,
@@ -1701,6 +1701,7 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1718,6 +1719,7 @@ where
             name,
             command,
             labels,
+            ids,
             context,
         )
         .await
@@ -1848,13 +1850,14 @@ where
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError> {
         self.transport_list_results(
@@ -1869,6 +1872,7 @@ where
             sort_by,
             reverse_sort,
             all_runs,
+            ids,
             context,
         )
         .await

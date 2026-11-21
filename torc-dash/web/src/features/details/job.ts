@@ -82,11 +82,15 @@ export async function loadJobDetails(id: number): Promise<JobDetails> {
     listAll((o, l) =>
       unwrap(api.GET("/user_data", { params: { query: { ...page(o, l), producer_job_id: id } } })),
     ),
-    byIds(
-      job.depends_on_job_ids,
-      (jid) => unwrap(api.GET("/jobs/{id}", { params: { path: { id: jid } } })),
-      () => listAll((o, l) => unwrap(api.GET("/jobs", { params: { query: page(o, l) } }))),
-    ),
+    job.depends_on_job_ids?.length
+      ? listAll((o, l) =>
+          unwrap(
+            api.GET("/jobs", {
+              params: { query: { ...page(o, l), ids: job.depends_on_job_ids! } },
+            }),
+          ),
+        )
+      : [],
     listAll((o, l) =>
       unwrap(api.GET("/jobs", { params: { query: { ...page(o, l), upstream_job_id: id } } })),
     ),

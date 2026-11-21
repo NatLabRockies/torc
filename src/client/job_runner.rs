@@ -904,11 +904,11 @@ impl JobRunner {
         // every status below Completed is unfinished. PendingFailed sorts above
         // the finished statuses, so it gets its own count, but only workflows
         // with `use_pending_failed` can have such jobs.
-        let list = |status, sort_by| {
+        let list = |status: Option<JobStatus>, sort_by| {
             apis::jobs_api::list_jobs(
                 &self.config,
                 self.workflow_id,
-                status,
+                status.map(|s| vec![s]),
                 None,
                 None,
                 Some(0),
@@ -921,6 +921,7 @@ impl JobRunner {
                 None, // name
                 None, // command
                 Some(&labels),
+                None,
             )
             .map_err(|e| {
                 warn!(

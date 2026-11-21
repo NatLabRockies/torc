@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr
-from typing import Optional
+from typing import List, Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.create_jobs_response import CreateJobsResponse
 from torc.openapi_client.models.delete_count_response import DeleteCountResponse
@@ -1739,7 +1739,7 @@ class JobsApi:
     def list_jobs(
         self,
         workflow_id: StrictInt,
-        status: Optional[JobStatus] = None,
+        status: Annotated[Optional[List[JobStatus]], Field(description="One status, or several comma-separated (`status=failed,terminated`).")] = None,
         needs_file_id: Optional[StrictInt] = None,
         upstream_job_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
@@ -1752,6 +1752,7 @@ class JobsApi:
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
+        ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1770,8 +1771,8 @@ class JobsApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param status:
-        :type status: JobStatus
+        :param status: One status, or several comma-separated (`status=failed,terminated`).
+        :type status: List[JobStatus]
         :param needs_file_id:
         :type needs_file_id: int
         :param upstream_job_id:
@@ -1796,6 +1797,8 @@ class JobsApi:
         :type command: str
         :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
         :type labels: str
+        :param ids: Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        :type ids: List[int]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1833,6 +1836,7 @@ class JobsApi:
             name=name,
             command=command,
             labels=labels,
+            ids=ids,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1843,6 +1847,7 @@ class JobsApi:
             '200': "ListJobsResponse",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1860,7 +1865,7 @@ class JobsApi:
     def list_jobs_with_http_info(
         self,
         workflow_id: StrictInt,
-        status: Optional[JobStatus] = None,
+        status: Annotated[Optional[List[JobStatus]], Field(description="One status, or several comma-separated (`status=failed,terminated`).")] = None,
         needs_file_id: Optional[StrictInt] = None,
         upstream_job_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
@@ -1873,6 +1878,7 @@ class JobsApi:
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
+        ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1891,8 +1897,8 @@ class JobsApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param status:
-        :type status: JobStatus
+        :param status: One status, or several comma-separated (`status=failed,terminated`).
+        :type status: List[JobStatus]
         :param needs_file_id:
         :type needs_file_id: int
         :param upstream_job_id:
@@ -1917,6 +1923,8 @@ class JobsApi:
         :type command: str
         :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
         :type labels: str
+        :param ids: Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        :type ids: List[int]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1954,6 +1962,7 @@ class JobsApi:
             name=name,
             command=command,
             labels=labels,
+            ids=ids,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1964,6 +1973,7 @@ class JobsApi:
             '200': "ListJobsResponse",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1981,7 +1991,7 @@ class JobsApi:
     def list_jobs_without_preload_content(
         self,
         workflow_id: StrictInt,
-        status: Optional[JobStatus] = None,
+        status: Annotated[Optional[List[JobStatus]], Field(description="One status, or several comma-separated (`status=failed,terminated`).")] = None,
         needs_file_id: Optional[StrictInt] = None,
         upstream_job_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
@@ -1994,6 +2004,7 @@ class JobsApi:
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
+        ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2012,8 +2023,8 @@ class JobsApi:
 
         :param workflow_id: (required)
         :type workflow_id: int
-        :param status:
-        :type status: JobStatus
+        :param status: One status, or several comma-separated (`status=failed,terminated`).
+        :type status: List[JobStatus]
         :param needs_file_id:
         :type needs_file_id: int
         :param upstream_job_id:
@@ -2038,6 +2049,8 @@ class JobsApi:
         :type command: str
         :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
         :type labels: str
+        :param ids: Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        :type ids: List[int]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2075,6 +2088,7 @@ class JobsApi:
             name=name,
             command=command,
             labels=labels,
+            ids=ids,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2085,6 +2099,7 @@ class JobsApi:
             '200': "ListJobsResponse",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -2110,6 +2125,7 @@ class JobsApi:
         name,
         command,
         labels,
+        ids,
         _request_auth,
         _content_type,
         _headers,
@@ -2119,6 +2135,8 @@ class JobsApi:
         _host = None
 
         _collection_formats: Dict[str, str] = {
+            'status': 'csv',
+            'ids': 'csv',
         }
 
         _path_params: Dict[str, str] = {}
@@ -2138,7 +2156,7 @@ class JobsApi:
             
         if status is not None:
             
-            _query_params.append(('status', status.value))
+            _query_params.append(('status', status))
             
         if needs_file_id is not None:
             
@@ -2187,6 +2205,10 @@ class JobsApi:
         if labels is not None:
             
             _query_params.append(('labels', labels))
+            
+        if ids is not None:
+            
+            _query_params.append(('ids', ids))
             
         # process the header parameters
         # process the form parameters
