@@ -322,3 +322,83 @@ exit 0
     // The test should succeed with our mock
     assert!(result.is_ok(), "invoke_ai_agent failed: {:?}", result);
 }
+
+/// MCP classify_and_resolve_failures must apply both decisions through the API:
+/// "retry" -> Ready with attempt_id bumped, "fail" -> Failed.
+#[cfg(feature = "mcp-server")]
+#[rstest]
+fn test_classify_and_resolve_failures_applies(start_server: &ServerProcess) {
+    use torc::mcp_server::tools::{FailureClassification, classify_and_resolve_failures};
+
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_classify_apply");
+
+    let mut workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    workflow.use_pending_failed = Some(true);
+    apis::workflows_api::update_workflow(config, workflow_id, workflow)
+        .expect("Failed to enable use_pending_failed");
+
+    let retry_id = create_test_job(config, workflow_id, "retry_job")
+        .id
+        .unwrap();
+    let fail_id = create_test_job(config, workflow_id, "fail_job").id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
+    let claimed = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to claim jobs");
+    assert_eq!(claimed.jobs.expect("Should return jobs").len(), 2);
+
+    for job_id in [retry_id, fail_id] {
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+            .expect("Failed to set job running");
+        let result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            1,
+            compute_node_id,
+            1,
+            0.1,
+            chrono::Utc::now().to_rfc3339(),
+            JobStatus::PendingFailed,
+        );
+        apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+            .expect("Failed to complete job");
+    }
+
+    let classification = |job_id, action: &str| FailureClassification {
+        job_id,
+        action: action.to_string(),
+        memory: None,
+        runtime: None,
+        reason: None,
+    };
+    classify_and_resolve_failures(
+        config,
+        workflow_id,
+        vec![
+            classification(retry_id, "retry"),
+            classification(fail_id, "fail"),
+        ],
+        false,
+    )
+    .expect("classify_and_resolve_failures failed");
+
+    let retried = apis::jobs_api::get_job(config, retry_id).unwrap();
+    assert_eq!(retried.status, Some(JobStatus::Ready));
+    assert_eq!(retried.attempt_id, Some(2));
+
+    let failed = apis::jobs_api::get_job(config, fail_id).unwrap();
+    assert_eq!(failed.status, Some(JobStatus::Failed));
+}

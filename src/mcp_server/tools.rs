@@ -1649,7 +1649,7 @@ pub fn classify_and_resolve_failures(
             };
 
             if action == "retry" {
-                jobs_to_retry.push(job_id);
+                jobs_to_retry.push((job_id, job.attempt_id.unwrap_or(1)));
             } else {
                 jobs_to_fail.push(job_id);
             }
@@ -1668,83 +1668,38 @@ pub fn classify_and_resolve_failures(
         }
     }
 
-    // Apply the status changes using CLI commands (they handle the complex state transitions)
+    // Apply the status changes through the API.
     if !dry_run && (!jobs_to_retry.is_empty() || !jobs_to_fail.is_empty()) {
-        // For jobs to retry: reset to ready and bump attempt_id
-        for job_id in &jobs_to_retry {
-            // Use torc jobs update to reset to ready
-            let output = torc_command()
-                .args(["jobs", "update", &job_id.to_string(), "--status", "ready"])
-                .output();
+        let run_id = workflow.run_id.unwrap_or(1);
+        let mut outcomes: Vec<(i64, Result<(), String>)> = Vec::new();
 
-            match output {
-                Ok(out) if out.status.success() => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("applied");
-                        }
-                    }
-                }
-                Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to reset job: {}",
-                                stderr.trim()
-                            ));
-                        }
-                    }
-                }
-                Err(e) => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to spawn 'torc' command: {}. Is torc in PATH?",
-                                e
-                            ));
-                        }
-                    }
-                }
-            }
+        // Retry: reset to ready and bump attempt_id. Allow exactly one more attempt, since the
+        // classifier (not a failure handler rule) decided this retry.
+        for &(job_id, attempt_id) in &jobs_to_retry {
+            let max_retries = i32::try_from(attempt_id + 1).unwrap_or(i32::MAX);
+            let outcome = apis::jobs_api::retry_job(config, job_id, run_id, max_retries)
+                .map(|_| ())
+                .map_err(|e| format!("Failed to retry job: {}", e));
+            outcomes.push((job_id, outcome));
         }
 
-        // For jobs to fail: set to failed status
-        for job_id in &jobs_to_fail {
-            let output = torc_command()
-                .args(["jobs", "update", &job_id.to_string(), "--status", "failed"])
-                .output();
+        // Fail: move to failed so downstream cancellation fires.
+        for &job_id in &jobs_to_fail {
+            let outcome =
+                apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
+                    .map(|_| ())
+                    .map_err(|e| format!("Failed to mark as failed: {}", e));
+            outcomes.push((job_id, outcome));
+        }
 
-            match output {
-                Ok(out) if out.status.success() => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("applied");
-                        }
-                    }
-                }
-                Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
+        for (job_id, outcome) in outcomes {
+            for r in &mut results {
+                if r.get("job_id").and_then(|v| v.as_i64()) == Some(job_id) {
+                    match &outcome {
+                        Ok(()) => r["status"] = serde_json::json!("applied"),
+                        Err(msg) => {
                             r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to mark as failed: {}",
-                                stderr.trim()
-                            ));
-                        }
-                    }
-                }
-                Err(e) => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to spawn 'torc' command: {}. Is torc in PATH?",
-                                e
-                            ));
+                            r["message"] = serde_json::json!(msg);
                         }
                     }
                 }
@@ -2034,6 +1989,43 @@ pub fn regroup_job_resources(
             }
             if !all_job_ids.insert(job_id) {
                 errors.push(format!("job_id={} appears in multiple groups", job_id));
+            }
+        }
+
+        // A group gets one new resource requirements record, so a value it omits is taken
+        // from the jobs' current records. That only works if those jobs agree.
+        let current = |job_id: &i64| {
+            job_map
+                .get(job_id)
+                .and_then(|j| j.resource_requirements_id)
+                .and_then(|id| rr_map.get(&id))
+        };
+        if group.num_gpus.is_none() {
+            let values: std::collections::BTreeSet<i64> = group
+                .job_ids
+                .iter()
+                .map(|id| current(id).map(|rr| rr.num_gpus).unwrap_or(0))
+                .collect();
+            if values.len() > 1 {
+                errors.push(format!(
+                    "Group index={} omits num_gpus but its jobs currently use different values \
+                     {:?}; specify num_gpus",
+                    i, values
+                ));
+            }
+        }
+        if group.num_nodes.is_none() {
+            let values: std::collections::BTreeSet<i64> = group
+                .job_ids
+                .iter()
+                .map(|id| current(id).map(|rr| rr.num_nodes).unwrap_or(1))
+                .collect();
+            if values.len() > 1 {
+                errors.push(format!(
+                    "Group index={} omits num_nodes but its jobs currently use different values \
+                     {:?}; specify num_nodes",
+                    i, values
+                ));
             }
         }
     }

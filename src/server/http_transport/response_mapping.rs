@@ -571,7 +571,8 @@ map_response!(
     InitializeJobsResponse,
     SuccessfulResponse,
     AcceptedResponse => StatusCode::ACCEPTED,
-    ConflictErrorResponse => StatusCode::CONFLICT
+    ConflictErrorResponse => StatusCode::CONFLICT,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     is_workflow_complete_response,
