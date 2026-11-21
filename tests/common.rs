@@ -597,6 +597,30 @@ pub fn create_test_event(
     apis::events_api::create_event(config, event).expect("Failed to create test event")
 }
 
+/// Create a minimal Slurm scheduler in `workflow_id` and return its id.
+pub fn create_test_slurm_scheduler(config: &Configuration, workflow_id: i64) -> i64 {
+    let scheduler = models::SlurmSchedulerModel {
+        id: None,
+        workflow_id,
+        name: Some("test_scheduler".to_string()),
+        account: "test_account".to_string(),
+        partition: None,
+        mem: None,
+        walltime: "01:00:00".to_string(),
+        nodes: 1,
+        gres: None,
+        ntasks_per_node: None,
+        qos: None,
+        tmp: None,
+        extra: None,
+        serialize_allocations: None,
+    };
+    apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("Failed to create test slurm scheduler")
+        .id
+        .unwrap()
+}
+
 /// Helper function to create test files directly via API
 pub fn create_test_file(
     config: &Configuration,

@@ -2,7 +2,7 @@ mod common;
 
 use common::{
     ServerProcess, create_minimal_resources_workflow, create_test_resource_requirements,
-    start_server,
+    create_test_slurm_scheduler, start_server,
 };
 use rstest::rstest;
 use torc::client::apis;
@@ -392,6 +392,7 @@ fn test_claim_jobs_based_on_resources_backfill_uses_relaxed_scheduler_fallback(
     let created_workflow =
         apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
+    let scheduler_id = create_test_slurm_scheduler(config, workflow_id);
 
     let gpu_rr = create_test_resource_requirements(
         config,
@@ -421,7 +422,7 @@ fn test_claim_jobs_based_on_resources_backfill_uses_relaxed_scheduler_fallback(
             format!("echo gpu {i}"),
         );
         job.priority = Some(100);
-        job.scheduler_id = Some(7);
+        job.scheduler_id = Some(scheduler_id);
         job.resource_requirements_id = Some(gpu_rr.id.unwrap());
         apis::jobs_api::create_job(config, job).expect("Failed to create GPU job");
     }
@@ -433,7 +434,7 @@ fn test_claim_jobs_based_on_resources_backfill_uses_relaxed_scheduler_fallback(
             format!("echo cpu {i}"),
         );
         job.priority = Some(10);
-        job.scheduler_id = Some(7);
+        job.scheduler_id = Some(scheduler_id);
         job.resource_requirements_id = Some(cpu_rr.id.unwrap());
         apis::jobs_api::create_job(config, job).expect("Failed to create CPU job");
     }
@@ -442,7 +443,8 @@ fn test_claim_jobs_based_on_resources_backfill_uses_relaxed_scheduler_fallback(
         .expect("Failed to initialize jobs");
 
     let mut resources = models::ComputeNodesResources::new(4, 4.0, 1, 1);
-    resources.scheduler_config_id = Some(99);
+    // Any id other than the jobs' scheduler.
+    resources.scheduler_config_id = Some(scheduler_id + 1);
     let result = apis::workflows_api::claim_jobs_based_on_resources(
         config,
         workflow_id,
@@ -658,6 +660,7 @@ fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
     let created_workflow =
         apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
     let workflow_id = created_workflow.id.unwrap();
+    let scheduler_id = create_test_slurm_scheduler(config, workflow_id);
 
     let rr = create_test_resource_requirements(
         config,
@@ -676,14 +679,15 @@ fn test_claim_jobs_based_on_resources_strict_scheduler_match_controls_fallback(
         "echo scheduler".to_string(),
     );
     job.resource_requirements_id = Some(rr.id.unwrap());
-    job.scheduler_id = Some(7);
+    job.scheduler_id = Some(scheduler_id);
     apis::jobs_api::create_job(config, job).expect("Failed to create job");
 
     apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("Failed to initialize jobs");
 
     let mut resources = models::ComputeNodesResources::new(1, 1.0, 0, 1);
-    resources.scheduler_config_id = Some(99);
+    // Any id other than the jobs' scheduler.
+    resources.scheduler_config_id = Some(scheduler_id + 1);
 
     let strict = apis::workflows_api::claim_jobs_based_on_resources(
         config,
