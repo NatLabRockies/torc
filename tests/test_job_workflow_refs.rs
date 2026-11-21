@@ -179,3 +179,20 @@ fn test_update_job_rejects_cross_workflow_refs(start_server: &ServerProcess) {
     assert_eq!(updated.resource_requirements_id, Some(a.rr));
     assert_eq!(updated.scheduler_id, Some(a.scheduler));
 }
+
+#[rstest]
+fn test_create_job_accepts_local_scheduler(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "refs_local_sched").id.unwrap();
+    let mut local = models::LocalSchedulerModel::new(workflow_id);
+    local.memory = Some("1g".into());
+    local.num_cpus = Some(1);
+    let local = apis::local_schedulers_api::create_local_scheduler(config, local)
+        .unwrap()
+        .id
+        .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "local".into(), "true".into());
+    job.scheduler_id = Some(local);
+    let created = apis::jobs_api::create_job(config, job).unwrap();
+    assert_eq!(created.scheduler_id, Some(local));
+}

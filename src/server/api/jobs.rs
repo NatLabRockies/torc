@@ -257,33 +257,42 @@ async fn bulk_insert_job_2col(
     Ok(())
 }
 
-/// Each id-valued reference on a job: field name, target table, and an extractor.
-type JobRefField = (&'static str, &'static str, fn(&models::JobModel) -> &[i64]);
+/// Each id-valued reference on a job: field name, target tables (the id must be in one of
+/// them), and an extractor.
+type JobRefField = (
+    &'static str,
+    &'static [&'static str],
+    fn(&models::JobModel) -> &[i64],
+);
 const JOB_REF_FIELDS: [JobRefField; 8] = [
-    ("depends_on_job_ids", "job", |j| {
+    ("depends_on_job_ids", &["job"], |j| {
         j.depends_on_job_ids.as_deref().unwrap_or_default()
     }),
-    ("input_file_ids", "file", |j| {
+    ("input_file_ids", &["file"], |j| {
         j.input_file_ids.as_deref().unwrap_or_default()
     }),
-    ("output_file_ids", "file", |j| {
+    ("output_file_ids", &["file"], |j| {
         j.output_file_ids.as_deref().unwrap_or_default()
     }),
-    ("input_user_data_ids", "user_data", |j| {
+    ("input_user_data_ids", &["user_data"], |j| {
         j.input_user_data_ids.as_deref().unwrap_or_default()
     }),
-    ("output_user_data_ids", "user_data", |j| {
+    ("output_user_data_ids", &["user_data"], |j| {
         j.output_user_data_ids.as_deref().unwrap_or_default()
     }),
-    ("resource_requirements_id", "resource_requirements", |j| {
-        j.resource_requirements_id.as_slice()
-    }),
-    // Jobs are only ever bound to Slurm schedulers (see `slurm_scheduler_to_id` in
-    // workflow_spec.rs and the `scheduler_config_id` filter in claim queries).
-    ("scheduler_id", "slurm_scheduler", |j| {
-        j.scheduler_id.as_slice()
-    }),
-    ("failure_handler_id", "failure_handler", |j| {
+    (
+        "resource_requirements_id",
+        &["resource_requirements"],
+        |j| j.resource_requirements_id.as_slice(),
+    ),
+    // Specs bind jobs to Slurm schedulers, but `torc workflows import` remaps a job's
+    // scheduler_id through local schedulers too (`IdMappings::remap_scheduler_id`).
+    (
+        "scheduler_id",
+        &["slurm_scheduler", "local_scheduler"],
+        |j| j.scheduler_id.as_slice(),
+    ),
+    ("failure_handler_id", &["failure_handler"], |j| {
         j.failure_handler_id.as_slice()
     }),
 ];
@@ -300,7 +309,7 @@ pub(crate) async fn job_refs_outside_workflow(
 ) -> Result<Option<String>, ApiError> {
     const MAX_IDS_IN_MESSAGE: usize = 20;
     let mut problems = Vec::new();
-    for (field, table, extract) in JOB_REF_FIELDS {
+    for (field, tables, extract) in JOB_REF_FIELDS {
         let ids: std::collections::BTreeSet<i64> =
             jobs.iter().flat_map(|j| extract(j)).copied().collect();
         if ids.is_empty() {
@@ -310,11 +319,17 @@ pub(crate) async fn job_refs_outside_workflow(
         // instead of chunked IN lists.
         let ids_json = serde_json::to_string(&ids)
             .map_err(|e| ApiError(format!("Failed to serialize {}: {}", field, e)))?;
-        let sql = format!(
-            "SELECT j.value FROM json_each(?) j \
-             LEFT JOIN {table} t ON t.id = j.value AND t.workflow_id = ? \
-             WHERE t.id IS NULL ORDER BY j.value"
-        );
+        let not_in_tables = tables
+            .iter()
+            .map(|t| {
+                format!(
+                    "NOT EXISTS (SELECT 1 FROM {t} t WHERE t.id = j.value AND t.workflow_id = ?2)"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        let sql =
+            format!("SELECT j.value FROM json_each(?1) j WHERE {not_in_tables} ORDER BY j.value");
         let bad: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
             .bind(ids_json)
             .bind(workflow_id)
