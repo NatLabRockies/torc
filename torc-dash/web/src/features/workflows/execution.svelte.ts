@@ -99,15 +99,19 @@ class Execution {
     }
     this.#stopping = true;
     this.#append("Stopping the run and terminating its jobs…", "warning");
+    // Ignore the reply if another execution started meanwhile.
+    const es = this.#source;
     try {
       const res = await dashPost<{ stopped: boolean }>("/api/cli/stop-run", {
         workflow_id: String(this.workflowId),
       });
+      if (this.#source !== es) return;
       if (!res.stopped) {
         this.#append("The run is no longer active.", "warning");
         this.#finish("stopped");
       }
     } catch (e) {
+      if (this.#source !== es) return;
       this.#stopping = false;
       this.#append(`Stop failed: ${errorText(e)}`, "error");
     }

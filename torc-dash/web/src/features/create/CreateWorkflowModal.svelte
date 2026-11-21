@@ -78,7 +78,9 @@
 
   const detectedProfile = $derived(profiles?.detected_profile ?? null);
   const slurmAvailable = $derived(!!profiles?.success && (profiles.profiles?.length ?? 0) > 0);
-  const slurmActive = $derived(useSlurm && !!profile);
+  // Slurm generation needs resource requirements, which the Commands source doesn't define.
+  const slurmAllowed = $derived(slurmAvailable && source !== "commands");
+  const slurmActive = $derived(slurmAllowed && useSlurm && !!profile);
   const planKey = $derived(JSON.stringify([specBody(), slurmAccount.trim(), profile]));
   const shownPlan = $derived(plan?.key === planKey ? plan.plan : null);
   const onLastWizardStep = $derived(source === "wizard" && wizard.step === STEPS.length);
@@ -504,7 +506,7 @@
         <input type="checkbox" bind:checked={initialize} />
         Initialize workflow after creation
       </label>
-      {#if slurmAvailable}
+      {#if slurmAllowed}
         <div class="slurm">
           <div class="row">
             <label class="check" class:disabled={!profile}>

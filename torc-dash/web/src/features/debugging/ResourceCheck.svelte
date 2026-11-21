@@ -67,15 +67,18 @@
     const id = workflowId;
     const params = { workflow_id: id, include_failed: includeFailed, all: showAll };
     void app.refreshTick;
+    // Only the latest request may update the table.
+    let current = true;
     op<Check>("check-resources", params)
       .then((c) => {
-        if (id !== workflowId) return;
+        if (!current) return;
         check = c;
         checkError = "";
       })
       .catch((e) => {
-        if (id === workflowId) checkError = errorText(e);
+        if (current) checkError = errorText(e);
       });
+    return () => (current = false);
   });
 
   // A preview belongs to one workflow and one set of options.

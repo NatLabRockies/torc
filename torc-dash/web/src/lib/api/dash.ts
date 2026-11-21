@@ -60,7 +60,8 @@ export function download(path: string, params: Record<string, string | number | 
     Object.entries(params).map(([k, v]) => [k, String(v)]),
   );
   // A unique URL per download: the desktop app tracks downloads by URL, and macOS reports nothing else.
-  query.set("_", crypto.randomUUID());
+  // (Not crypto.randomUUID(): browsers allow it only over HTTPS or on localhost.)
+  query.set("_", Math.random().toString(36).slice(2));
   const a = document.createElement("a");
   a.href = withToken(`${path}?${query}`);
   a.download = "";

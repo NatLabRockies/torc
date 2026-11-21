@@ -43,8 +43,13 @@ const followed = new Set<number>();
 /** Last seen is_complete per workflow; a false → true change notifies. */
 const complete = new Map<number, boolean>();
 
-export function follow(workflowId: number) {
+/**
+ * Watch a workflow for completion. `started`: the dashboard just ran or submitted it, so it counts
+ * as not complete even if it finishes before the next poll.
+ */
+export function follow(workflowId: number, started = false) {
   followed.add(workflowId);
+  if (started) complete.set(workflowId, false);
 }
 
 let checking = false;
@@ -96,7 +101,8 @@ function show(title: string, body: string) {
 $effect.root(() => {
   $effect(() => {
     const id = execution.workflowId;
-    if (id !== null) follow(id);
+    // Reruns when a run starts, including a second run of the same workflow.
+    if (id !== null) follow(id, execution.running && execution.mode === "run");
   });
 
   $effect(() => {

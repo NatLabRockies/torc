@@ -160,7 +160,8 @@ Click **Create workflow** (or press `N`) and choose a source:
 1. **Upload file**: drag and drop or click to select a YAML, JSON, JSON5, or KDL specification
 2. **File path**: a path on the machine running `torc-dash`
 3. **Paste spec**: paste a specification; the format is detected automatically
-4. **Commands**: one command per line; each becomes an independent job with default resources
+4. **Commands**: one command per line; each becomes an independent job with default resources (Slurm
+   options are not offered, since Slurm generation needs resource requirements)
 5. **Wizard**: build a workflow step by step (jobs, parameters, resources, Slurm schedulers,
    actions, monitoring) with a live preview of the generated spec
 

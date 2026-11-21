@@ -28,7 +28,7 @@ export async function submitWorkflow(id: number) {
     confirmLabel: "Submit",
   });
   if (!ok) return;
-  follow(id);
+  follow(id, true);
   toast.info(`Submitting workflow ${id}…`);
   await act("Submit", () => cli("submit", wid(id)), `Workflow ${id} submitted`);
 }
