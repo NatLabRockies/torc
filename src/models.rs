@@ -378,11 +378,13 @@ pub struct JobCompletionEntry {
     pub result: ResultModel,
     /// Modification times of the job's output files, recorded when the job finished.
     /// Applied in the same transaction as the completion, and only if it is accepted.
-    /// Each `file_id` must be an output file of this job.
+    /// A `file_id` that is not an output file of this job is skipped; the completion is
+    /// still applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_files: Option<Vec<OutputFileStat>>,
-    /// Slurm accounting stats for the job step. Stored only if the completion is accepted;
-    /// `workflow_id`, `job_id`, and `run_id` must match the completion.
+    /// Slurm accounting stats for the job step. Stored only if the completion is accepted.
+    /// Stats whose `workflow_id`, `job_id`, `run_id`, or `attempt_id` do not match the
+    /// completion are skipped; the completion is still applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slurm_stats: Option<SlurmStatsModel>,
 }

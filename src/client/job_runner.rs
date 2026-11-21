@@ -604,6 +604,10 @@ pub struct JobRunner {
     /// Journal of job completions recorded while offline. Opened lazily when the
     /// runner first enters drain mode; cleared and dropped on resume.
     offline_journal: Option<OfflineJournal>,
+    /// True if the server stores the output mtimes and Slurm stats sent in a completion
+    /// entry. Older servers ignore those fields, so the runner writes them separately.
+    /// Set from the server's API version at startup.
+    server_stores_completion_metadata: bool,
     /// Monotonic timestamp of the last drain-mode resume ping.
     last_drain_ping: Option<Instant>,
     /// Probe used by `maybe_try_resume` to ask whether the server is reachable.
@@ -894,6 +898,7 @@ impl JobRunner {
             drain_ping_interval,
             offline: false,
             offline_journal: None,
+            server_stores_completion_metadata: true,
             last_drain_ping: None,
             server_reachable_probe: default_server_reachable_probe,
         }
@@ -1166,6 +1171,14 @@ impl JobRunner {
             .server_api_version
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
+        self.server_stores_completion_metadata = version_result.server_stores_completion_metadata();
+        if !self.server_stores_completion_metadata {
+            warn!(
+                "Server API version {} predates completion metadata; writing output mtimes and \
+                 Slurm stats with separate requests workflow_id={}",
+                server_api_version, self.workflow_id
+            );
+        }
 
         let exec_mode = self.execution_config.effective_mode();
         info!(
@@ -1772,6 +1785,7 @@ impl JobRunner {
                     self.workflow_id,
                     &completed,
                     None,
+                    self.server_stores_completion_metadata,
                 );
         }
         if metadata_failures > 0 {
@@ -2454,6 +2468,51 @@ impl JobRunner {
             .collect())
     }
 
+    /// Write an accepted completion's output mtimes and Slurm stats with separate requests,
+    /// for servers that ignore those fields in the completion entry. Failures are logged,
+    /// not fatal: the completion itself is already recorded.
+    fn store_completion_metadata_separately(
+        &mut self,
+        job_id: i64,
+        output_files: &[OutputFileStat],
+        slurm_stats: Option<SlurmStatsModel>,
+    ) {
+        for stat in output_files {
+            let mut file_model = match self.get_file_model_cached(stat.file_id) {
+                Ok(file) => file,
+                Err(e) => {
+                    error!(
+                        "Failed to fetch file model for file_id={}: {}",
+                        stat.file_id, e
+                    );
+                    continue;
+                }
+            };
+            file_model.st_mtime = Some(stat.st_mtime);
+            match self.send_with_retries(|| {
+                Self::box_retry_error(apis::files_api::update_file(
+                    &self.config,
+                    stat.file_id,
+                    file_model.clone(),
+                ))
+            }) {
+                Ok(_) => self.cache_file_model(stat.file_id, file_model),
+                Err(e) => error!(
+                    "Failed to update st_mtime for file_id={}: {}",
+                    stat.file_id, e
+                ),
+            }
+        }
+        if let Some(stats) = slurm_stats
+            && let Err(e) = apis::slurm_stats_api::create_slurm_stats(&self.config, stats)
+        {
+            warn!(
+                "Failed to store slurm_stats workflow_id={} job_id={}: {}",
+                self.workflow_id, job_id, e
+            );
+        }
+    }
+
     /// Mirror the output mtimes the server accepted into the file model cache, then create
     /// RO-Crate entities for them (which read local file contents, so stay client-side).
     fn apply_accepted_output_files(&mut self, job_id: i64, output_files: &[OutputFileStat]) {
@@ -2755,7 +2814,7 @@ impl JobRunner {
                 job_id,
                 final_result,
                 output_files,
-                ..
+                slurm_stats,
             } = prep;
 
             if !completed.contains(&job_id) {
@@ -2774,7 +2833,14 @@ impl JobRunner {
 
             // The completion itself is logged in check_job_status(), where the
             // process exit is detected; this path only reports it to the server.
-            // The server stored the output mtimes and Slurm stats with the completion.
+            // A current server stored the output mtimes and Slurm stats with the completion.
+            if !self.server_stores_completion_metadata {
+                self.store_completion_metadata_separately(
+                    job_id,
+                    output_files.as_deref().unwrap_or_default(),
+                    slurm_stats,
+                );
+            }
             if let Some(output_files) = output_files {
                 self.apply_accepted_output_files(job_id, &output_files);
             }

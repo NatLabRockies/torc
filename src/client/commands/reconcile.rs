@@ -70,6 +70,8 @@ pub fn reconcile(
         .clone()
         .map(std::path::PathBuf::from);
     let current_run_id = workflow.run_id.unwrap_or(0);
+    let server_stores_mtimes =
+        crate::client::version_check::check_version(config).server_stores_completion_metadata();
     let mut metadata_failures = 0usize;
 
     for path in &files {
@@ -109,6 +111,7 @@ pub fn reconcile(
                         workflow_id,
                         &completed,
                         submission_dir.as_deref(),
+                        server_stores_mtimes,
                     );
                     for err in &response.errors {
                         summary.rejected += 1;
@@ -171,8 +174,9 @@ pub fn reconcile(
 /// the on-disk mtime of output files missing from `entry.output_files` (journals written by
 /// older runners, or files an offline runner could not check) and, for RO-Crate workflows,
 /// the CreateAction and output File provenance entities. Mtimes present in
-/// `entry.output_files` were applied by the server with the completion and are not restatted.
-/// Call it with journal entries the server accepted as Completed.
+/// `entry.output_files` were applied by the server with the completion and are not restatted;
+/// if `server_stores_mtimes` is false (a server that ignores `output_files`), they are written
+/// here instead. Call it with journal entries the server accepted as Completed.
 ///
 /// Relative output paths resolve against `base_dir` when given, else the current directory.
 /// Returns the number of jobs whose metadata could not be fully restored.
@@ -181,6 +185,7 @@ pub(crate) fn restore_offline_output_metadata(
     workflow_id: i64,
     entries: &[&JobCompletionEntry],
     base_dir: Option<&std::path::Path>,
+    server_stores_mtimes: bool,
 ) -> usize {
     if entries.is_empty() {
         return 0;
@@ -214,12 +219,12 @@ pub(crate) fn restore_offline_output_metadata(
         let mut job_failed = false;
         for mut file in files {
             let Some(file_id) = file.id else { continue };
-            if entry
+            let journaled = entry
                 .output_files
                 .iter()
                 .flatten()
-                .any(|f| f.file_id == file_id)
-            {
+                .find(|f| f.file_id == file_id);
+            if journaled.is_some() && server_stores_mtimes {
                 updated.push(file);
                 continue;
             }
@@ -229,11 +234,18 @@ pub(crate) fn restore_offline_output_metadata(
                 }
                 _ => std::path::PathBuf::from(&file.path),
             };
-            let st_mtime = match std::fs::metadata(&path).and_then(|m| m.modified()) {
-                Ok(t) => t
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs_f64())
-                    .unwrap_or(0.0),
+            let stat = match journaled {
+                Some(f) => Ok(f.st_mtime),
+                None => std::fs::metadata(&path)
+                    .and_then(|m| m.modified())
+                    .map(|t| {
+                        t.duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs_f64())
+                            .unwrap_or(0.0)
+                    }),
+            };
+            let st_mtime = match stat {
+                Ok(t) => t,
                 Err(e) => {
                     warn!(
                         "Cannot stat output file {} (file_id={}) for job_id={}: {}",

@@ -191,3 +191,22 @@ fn test_version_check_result_fields() {
     );
     assert_eq!(result.client_api_version, HTTP_API_VERSION);
 }
+
+#[test]
+fn test_server_stores_completion_metadata() {
+    // Servers before API 1.1.0 ignore completion-entry output_files/slurm_stats, so the
+    // runner must write them separately; unknown versions are treated as old.
+    let stores = |api_version: Option<&str>| {
+        VersionCheckResult::from_server_info(&ServerInfo {
+            version: "1.2.1".to_string(),
+            api_version: api_version.map(str::to_string),
+        })
+        .server_stores_completion_metadata()
+    };
+    assert!(stores(Some(HTTP_API_VERSION)));
+    assert!(stores(Some("1.1.0")));
+    assert!(stores(Some("2.0.0")));
+    assert!(!stores(Some("1.0.0")));
+    assert!(!stores(None));
+    assert!(!VersionCheckResult::server_unreachable().server_stores_completion_metadata());
+}

@@ -788,54 +788,6 @@ fn validate_result_matches_target(
     Ok(())
 }
 
-/// Check the optional `output_files` and `slurm_stats` of a completion entry. Every
-/// `file_id` must be an output of the job and belong to its workflow, and the stats must
-/// identify the same job and run. Returns a rejection message, or `None` when valid.
-async fn validate_completion_payload(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    job_id: i64,
-    workflow_id: i64,
-    run_id: i64,
-    output_files: &[models::OutputFileStat],
-    slurm_stats: Option<&models::SlurmStatsModel>,
-) -> Result<Option<String>, sqlx::Error> {
-    if let Some(stats) = slurm_stats
-        && (stats.job_id != job_id || stats.workflow_id != workflow_id || stats.run_id != run_id)
-    {
-        return Ok(Some(format!(
-            "slurm_stats (workflow_id={} job_id={} run_id={}) do not match completion \
-             (workflow_id={} job_id={} run_id={})",
-            stats.workflow_id, stats.job_id, stats.run_id, workflow_id, job_id, run_id
-        )));
-    }
-    if output_files.is_empty() {
-        return Ok(None);
-    }
-    let outputs: std::collections::HashSet<i64> = sqlx::query_scalar!(
-        r#"
-        SELECT jof.file_id
-        FROM job_output_file jof
-        JOIN file f ON f.id = jof.file_id
-        WHERE jof.job_id = ? AND f.workflow_id = ?
-        "#,
-        job_id,
-        workflow_id
-    )
-    .fetch_all(&mut **tx)
-    .await?
-    .into_iter()
-    .collect();
-    Ok(output_files
-        .iter()
-        .find(|f| !outputs.contains(&f.file_id))
-        .map(|f| {
-            format!(
-                "file_id={} is not an output file of job_id={} in workflow_id={}",
-                f.file_id, job_id, workflow_id
-            )
-        }))
-}
-
 struct BackfillClaimParams {
     workflow_id: i64,
     ready_status: i32,
@@ -2037,29 +1989,6 @@ where
             )));
         }
 
-        // Validate the optional payload before any write so a rejected entry leaves
-        // nothing behind in the shared batch transaction.
-        let output_files = output_files.unwrap_or_default();
-        if let Some(msg) = validate_completion_payload(
-            tx,
-            id,
-            job_workflow_id,
-            run_id,
-            &output_files,
-            slurm_stats.as_ref(),
-        )
-        .await
-        .map_err(|e| {
-            CompletionMutationError::Transport(database_lock_aware_error(
-                e,
-                "Failed to validate completion output files",
-            ))
-        })? {
-            return Err(CompletionMutationError::Response(Box::new(
-                CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(msg)),
-            )));
-        }
-
         if let Err(e) = sqlx::query!(
             "UPDATE job SET start_time = NULL, compute_node_id = NULL WHERE id = ?",
             id
@@ -2201,11 +2130,20 @@ where
         }
 
         // The completion is accepted: record what the runner observed in the same transaction.
-        for file in &output_files {
-            sqlx::query!(
-                "UPDATE file SET st_mtime = ? WHERE id = ?",
+        // Invalid metadata is skipped, never written, and never costs the completion: a
+        // file_id must be an output of this job in its workflow (enforced by the WHERE
+        // clause), and the stats must identify this job, run, and attempt.
+        for file in output_files.iter().flatten() {
+            let updated = sqlx::query!(
+                r#"
+                UPDATE file SET st_mtime = ?
+                WHERE id = ? AND workflow_id = ?
+                  AND EXISTS (SELECT 1 FROM job_output_file WHERE job_id = ? AND file_id = file.id)
+                "#,
                 file.st_mtime,
-                file.file_id
+                file.file_id,
+                job_workflow_id,
+                id
             )
             .execute(&mut **tx)
             .await
@@ -2215,7 +2153,38 @@ where
                     "Failed to update output file st_mtime",
                 ))
             })?;
+            if updated.rows_affected() == 0 {
+                log::warn!(
+                    "Skipping st_mtime for file_id={}: not an output file of the job \
+                     workflow_id={} job_id={}",
+                    file.file_id,
+                    job_workflow_id,
+                    id
+                );
+            }
         }
+        let slurm_stats = slurm_stats.filter(|stats| {
+            let valid = stats.workflow_id == job_workflow_id
+                && stats.job_id == id
+                && stats.run_id == run_id
+                && stats.attempt_id == attempt_id;
+            if !valid {
+                log::warn!(
+                    "Skipping slurm_stats (workflow_id={} job_id={} run_id={} attempt_id={}) \
+                     that do not match the completion workflow_id={} job_id={} run_id={} \
+                     attempt_id={}",
+                    stats.workflow_id,
+                    stats.job_id,
+                    stats.run_id,
+                    stats.attempt_id,
+                    job_workflow_id,
+                    id,
+                    run_id,
+                    attempt_id
+                );
+            }
+            valid
+        });
         if let Some(stats) = slurm_stats {
             // REPLACE: a stale row for the same (job, run, attempt) must not abort the batch.
             sqlx::query!(

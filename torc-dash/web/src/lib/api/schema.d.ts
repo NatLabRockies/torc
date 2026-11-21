@@ -1658,15 +1658,17 @@ export interface components {
             /**
              * @description Modification times of the job's output files, recorded when the job finished.
              *     Applied in the same transaction as the completion, and only if it is accepted.
-             *     Each `file_id` must be an output file of this job.
+             *     A `file_id` that is not an output file of this job is skipped; the completion is
+             *     still applied.
              */
             output_files?: components["schemas"]["OutputFileStat"][] | null;
             result: components["schemas"]["ResultModel"];
             /** Format: int64 */
             run_id: number;
             /**
-             * @description Slurm accounting stats for the job step. Stored only if the completion is accepted;
-             *     `workflow_id`, `job_id`, and `run_id` must match the completion.
+             * @description Slurm accounting stats for the job step. Stored only if the completion is accepted.
+             *     Stats whose `workflow_id`, `job_id`, `run_id`, or `attempt_id` do not match the
+             *     completion are skipped; the completion is still applied.
              */
             slurm_stats?: components["schemas"]["SlurmStatsModel"];
             status: components["schemas"]["JobStatus"];

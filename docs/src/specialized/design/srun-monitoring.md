@@ -390,8 +390,10 @@ The API provides:
 - `POST /workflows/{id}/batch_complete_jobs` -- the job runner sends the stats in the completion
   entry's `slurm_stats` field. The server stores them in the same transaction as the completion, and
   only if it accepts the completion. Offline-journaled completions carry them too, so replay
-  restores them.
-- `POST /slurm_stats` -- store accounting data directly
+  restores them. Stats whose workflow, job, run, or attempt do not match the completion are skipped,
+  and the completion is still recorded.
+- `POST /slurm_stats` -- store accounting data directly. The job runner falls back to this after
+  each accepted completion when the server's API version predates 1.1.0.
 - `GET /slurm_stats?workflow_id=N` -- list stats with optional `job_id`, `run_id`, `attempt_id`
   filters
 
