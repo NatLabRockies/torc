@@ -646,39 +646,13 @@ pub fn recover_workflow(
     Ok(result)
 }
 
-/// Check that the workflow is quiesced (safe to modify job statuses):
-/// - Workflow must be complete or canceled (all jobs in terminal state)
-/// - No active compute node workers
-/// - No pending or active scheduled compute nodes (Slurm allocations)
-///
-/// Returns `Err(message)` with a neutral description of what is wrong. Callers can
-/// prepend their own action-specific prefix when surfacing the error to the user.
-pub(crate) fn check_workflow_quiesced(
-    config: &Configuration,
-    workflow_id: i64,
-) -> Result<(), String> {
-    // Check if workflow is complete
-    let is_complete = apis::workflows_api::is_workflow_complete(config, workflow_id)
-        .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
-
-    if !is_complete.is_complete && !is_complete.is_canceled {
-        return Err(
-            "workflow is not complete; wait for all jobs to finish or use \
-             'torc workflows cancel' first"
-                .to_string(),
-        );
-    }
-
-    check_no_active_workers(config, workflow_id)
-}
-
 /// Check that no workers are active on the workflow:
 /// - No active compute node workers
 /// - No pending or active scheduled compute nodes (Slurm allocations)
 ///
-/// Unlike [`check_workflow_quiesced`], this does NOT require the workflow to be
-/// complete — non-terminal job statuses (uninitialized, blocked, ready) are fine
-/// as long as nothing is executing or about to execute.
+/// This does NOT require the workflow to be complete — non-terminal job statuses
+/// (uninitialized, blocked, ready) are fine as long as nothing is executing or about
+/// to execute.
 pub(crate) fn check_no_active_workers(
     config: &Configuration,
     workflow_id: i64,
@@ -749,52 +723,26 @@ pub(crate) fn check_no_active_workers(
 }
 
 /// Check that the workflow is in a valid state for recovery:
-/// - Workflow must be complete (all jobs in terminal state)
-/// - No active workers (compute nodes or scheduled compute nodes)
-/// - There must be at least one recoverable job
+/// - Workflow must be complete or canceled (all jobs in terminal state)
+/// - The workflow must be quiet and have at least one recoverable job. Both come from a
+///   dry-run selective reset, which applies the same quiet check the real reset does
+///   (no active compute nodes, no pending or active Slurm allocations, no running or
+///   pending jobs).
 fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
-    // Delegate quiescence checks (1–4) to the shared helper
-    check_workflow_quiesced(config, workflow_id)
-        .map_err(|msg| format!("Cannot recover: {}", msg))?;
-
-    // Check that there are actually recoverable jobs. The reset path
-    // (`reset_failed_jobs_only`) resets failed, terminated, canceled, and pending_failed jobs, so
-    // accept any of those here — otherwise a workflow whose jobs are only canceled or pending_failed
-    // (which passes the completeness/cancellation gate above) would be rejected even though recovery
-    // can act on it.
-    let recoverable_statuses = [
-        crate::models::JobStatus::Failed,
-        crate::models::JobStatus::Terminated,
-        crate::models::JobStatus::Canceled,
-        crate::models::JobStatus::PendingFailed,
-    ];
-    let mut has_recoverable_jobs = false;
-    for status in recoverable_statuses {
-        let jobs = apis::jobs_api::list_jobs(
-            config,
-            workflow_id,
-            Some(status), // status
-            None,         // needs_file_id
-            None,         // upstream_job_id
-            None,         // offset
-            Some(1),      // limit - just need to know if any exist
-            None,         // sort_by
-            None,         // reverse_sort
-            None,         // include_relationships
-            None,         // active_compute_node_id
-            None,         // origin_is_set
-            None,         // name
-            None,         // command
-            None,         // label
-        )
-        .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
-        if jobs.total_count > 0 {
-            has_recoverable_jobs = true;
-            break;
-        }
+    let is_complete = apis::workflows_api::is_workflow_complete(config, workflow_id)
+        .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
+    if !is_complete.is_complete && !is_complete.is_canceled {
+        return Err(
+            "Cannot recover: workflow is not complete; wait for all jobs to finish or use \
+             'torc workflows cancel' first"
+                .to_string(),
+        );
     }
 
-    if !has_recoverable_jobs {
+    // No job_ids and default statuses: every failed, terminated, canceled, or pending_failed job.
+    let preview = reset_jobs(config, workflow_id, None, None, true, false)
+        .map_err(|msg| format!("Cannot recover: {}", msg))?;
+    if preview.reset.unwrap_or_default().is_empty() {
         return Err(
             "No failed, terminated, canceled, or pending_failed jobs to recover. \
              Workflow may have completed successfully."
@@ -803,6 +751,34 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     }
 
     Ok(())
+}
+
+/// Call the selective form of `reset_job_status` (one transaction on the server). `statuses`
+/// defaults on the server to failed, terminated, canceled, and pending_failed. Returns the
+/// server's message on a refusal (e.g. the workflow is not quiet and `force` is false).
+pub(crate) fn reset_jobs(
+    config: &Configuration,
+    workflow_id: i64,
+    job_ids: Option<Vec<i64>>,
+    statuses: Option<Vec<JobStatus>>,
+    dry_run: bool,
+    force: bool,
+) -> Result<crate::models::ResetJobStatusResponse, String> {
+    let body = crate::models::ResetJobStatusRequest {
+        job_ids,
+        statuses,
+        dry_run: Some(dry_run),
+    };
+    apis::workflows_api::reset_job_status(config, workflow_id, None, Some(force), Some(body))
+        .map_err(|e| {
+            if let apis::Error::ResponseError(ref r) = e
+                && let Ok(v) = serde_json::from_str::<serde_json::Value>(&r.content)
+                && let Some(msg) = v.get("message").and_then(|m| m.as_str())
+            {
+                return msg.to_string();
+            }
+            format!("reset failed: {}", e)
+        })
 }
 
 /// Invoke an AI agent CLI to classify pending_failed jobs
@@ -1126,9 +1102,7 @@ pub fn apply_recovery_heuristics(
         jobs_to_retry.extend(&adj.job_ids);
     }
     jobs_to_retry.extend(&unknown_job_ids);
-    // A job must be reset only once even if it shows up in more than one source
-    // list (a duplicate would be skipped by reset_failed_jobs with a spurious
-    // "not recoverable" warning after the first reset succeeds).
+    // A job shows up once even if it is in more than one source list.
     jobs_to_retry.sort_unstable();
     jobs_to_retry.dedup();
 
@@ -1167,11 +1141,17 @@ fn summarize_not_reset(total: usize, reset_count: usize, not_reset: &[String]) -
 
 /// Reset specific failed jobs for retry (without reinitializing).
 ///
-/// Best-effort: every job ID is attempted, accumulating a per-job reason for any
-/// that is skipped (wrong workflow / non-recoverable status) or fails (fetch or
-/// reset error). Returns `Ok(reset_count)` as long as at least one job was reset
-/// -- partial success is not an error -- and `Err` only when nothing could be
-/// reset. Skips and failures are always logged.
+/// One server call resets every recoverable job (failed, terminated, canceled, or
+/// pending_failed) in one transaction, after checking that the workflow is quiet.
+/// Jobs from another workflow or in another status are skipped with a reason.
+/// Returns `Ok(reset_count)` as long as at least one job was reset -- partial
+/// success is not an error -- and `Err` when nothing could be reset. Skips are
+/// always logged.
+///
+/// This does not reset workflow status. `reset_workflow_status` bumps run_id, and
+/// every caller of this function follows it with `reinitialize_workflow`, which
+/// already resets workflow status (and bumps run_id) exactly once. The server-side
+/// reset leaves run_id alone.
 pub fn reset_failed_jobs(
     config: &Configuration,
     workflow_id: i64,
@@ -1181,81 +1161,23 @@ pub fn reset_failed_jobs(
         return Ok(0);
     }
 
-    // Reset the selected jobs.
-    // NOTE: do not reset workflow status here. `reset_workflow_status` bumps
-    // run_id, and every caller of this function follows it with
-    // `reinitialize_workflow`, which already resets workflow status (and bumps
-    // run_id) exactly once. Resetting here too bumps run_id twice per recovery,
-    // leaving a gap (e.g. a recovered job jumping from run 1 to run 3). We pass
-    // the current run_id (no bump) so the single bump stays with reinitialize.
-    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
-        .map_err(|e| format!("Failed to fetch workflow for reset: {}", e))?
-        .run_id
-        .unwrap_or(1);
-
-    // Statuses that recovery is allowed to reset. Mirrors
-    // `check_recovery_preconditions`; resetting a job in any other state (e.g. a
-    // still-running or already-completed job) would be unexpected, so we skip it
-    // and report rather than silently clobber it.
-    let recoverable_statuses = [
-        JobStatus::Failed,
-        JobStatus::Terminated,
-        JobStatus::Canceled,
-        JobStatus::PendingFailed,
-    ];
-
-    // Deduplicate defensively: a repeated ID would reset once and then burn an
-    // extra get_job/manage_status_change round-trip to report a misleading
-    // "status Uninitialized is not recoverable" skip for its duplicate.
-    let mut job_ids = job_ids.to_vec();
-    job_ids.sort_unstable();
-    job_ids.dedup();
-
-    // Attempt every reset, accumulating the reason any job was not reset instead
-    // of bailing on the first problem. There is no server-side bulk/atomic reset
-    // endpoint, so a mid-loop early return would leave the workflow partially
-    // reset with no report of what succeeded.
-    // PERF: make a new API endpoint to do this in one command.
-    let mut reset_count = 0;
-    let mut not_reset: Vec<String> = Vec::new();
-    for &job_id in &job_ids {
-        // Validate the job before touching it. `manage_status_change` is not
-        // workflow-scoped, so without this check a stray job_id could reset a
-        // job in a different workflow.
-        let job = match apis::jobs_api::get_job(config, job_id) {
-            Ok(job) => job,
-            Err(e) => {
-                not_reset.push(format!("job {}: failed to fetch ({})", job_id, e));
-                continue;
-            }
-        };
-        if job.workflow_id != workflow_id {
-            not_reset.push(format!(
-                "job {}: belongs to workflow {}, not {}; refusing to reset",
-                job_id, job.workflow_id, workflow_id
-            ));
-            continue;
-        }
-        match job.status {
-            Some(status) if recoverable_statuses.contains(&status) => {}
-            other => {
-                not_reset.push(format!(
-                    "job {}: status {} is not recoverable; skipped",
-                    job_id,
-                    other.map(|s| s.to_string()).unwrap_or_default()
-                ));
-                continue;
-            }
-        }
-
-        match apis::jobs_api::manage_status_change(config, job_id, JobStatus::Uninitialized, run_id)
-        {
-            Ok(_) => reset_count += 1,
-            Err(e) => not_reset.push(format!("job {}: reset failed ({})", job_id, e)),
-        }
-    }
-    // Not "failed job(s)": the recoverable allow-list above also admits
-    // terminated, canceled, and pending_failed jobs.
+    let response = reset_jobs(
+        config,
+        workflow_id,
+        Some(job_ids.to_vec()),
+        None,
+        false,
+        false,
+    )?;
+    let reset_count = response.reset.map(|r| r.len()).unwrap_or(0);
+    let not_reset: Vec<String> = response
+        .skipped
+        .unwrap_or_default()
+        .into_iter()
+        .map(|s| format!("job {}: {}", s.job_id, s.reason))
+        .collect();
+    // Not "failed job(s)": the recoverable statuses also include terminated,
+    // canceled, and pending_failed jobs.
     info!(
         "  Reset {} job(s) for workflow {}",
         reset_count, workflow_id
@@ -1263,20 +1185,20 @@ pub fn reset_failed_jobs(
 
     if !not_reset.is_empty() {
         // Log the full list for diagnosis regardless of outcome; the returned
-        // message is capped so a large `job_ids` (or verbose API errors) can't
-        // produce an oversized CLI error.
+        // message is capped so a large `job_ids` can't produce an oversized CLI error.
         for reason in &not_reset {
             warn!("Job not reset (workflow {}): {}", workflow_id, reason);
         }
 
-        // Only a hard error when *nothing* was reset -- a total failure the
-        // caller should abort on. Partial success returns Ok(reset_count): the
-        // callers propagate with `?` and go on to reinitialize, so turning a
-        // partial reset into an Err would abort recovery and strand the workflow
-        // in a partially-reset state. The skips/failures are surfaced via the
-        // warnings above.
+        // Only a hard error when *nothing* was reset. Partial success returns
+        // Ok(reset_count): the callers go on to reinitialize, so turning a partial
+        // reset into an Err would abort recovery and strand the reset jobs.
         if reset_count == 0 {
-            return Err(summarize_not_reset(job_ids.len(), reset_count, &not_reset));
+            return Err(summarize_not_reset(
+                reset_count + not_reset.len(),
+                reset_count,
+                &not_reset,
+            ));
         }
     }
 

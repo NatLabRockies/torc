@@ -24,9 +24,9 @@ use crate::models::{self as models, JobStatus};
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate, claimable_labels_sql,
-    database_error_with_msg, deserialize_env_map, escape_like_pattern, labels_column,
-    message_error_response, normalize_env_map, parse_job_status, resource_not_found_response,
-    serialize_env_map, validate_env_map,
+    database_error_with_msg, database_lock_aware_error, deserialize_env_map, escape_like_pattern,
+    labels_column, message_error_response, normalize_env_map, parse_job_status,
+    resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
 /// Run and compute node a job runner passes with a claim. When present, the claim marks
@@ -475,12 +475,12 @@ pub trait JobsApi<C> {
     /// Prerequisites:
     /// - Job must be in Failed or Terminated status
     /// - run_id must match the workflow's current run_id
-    /// - attempt_id must be less than max_retries
+    /// - if the job has a failure handler, attempt_id must be less than the largest
+    ///   max_retries among its rules
     async fn retry_job(
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError>;
 }
@@ -489,6 +489,21 @@ pub trait JobsApi<C> {
 #[derive(Clone)]
 pub struct JobsApiImpl {
     pub context: ApiContext,
+}
+
+/// Largest `max_retries` among a failure handler's rules (JSON array), or None if it has no
+/// rules. A rule without `max_retries` defaults to 3, as in the workflow spec.
+fn max_retries_from_rules(rules: &str) -> Result<Option<i64>, serde_json::Error> {
+    #[derive(serde::Deserialize)]
+    struct Rule {
+        #[serde(default = "default_max_retries")]
+        max_retries: i64,
+    }
+    fn default_max_retries() -> i64 {
+        3
+    }
+    let rules: Vec<Rule> = serde_json::from_str(rules)?;
+    Ok(rules.iter().map(|r| r.max_retries).max())
 }
 
 const JOB_COLUMNS: &[&str] = &[
@@ -945,6 +960,173 @@ impl JobsApiImpl {
             )
             .with_reset_type("failed_only".to_string()),
         ))
+    }
+
+    /// Selective reset (`reset_job_status` with a body). Everything runs in one
+    /// `BEGIN IMMEDIATE` transaction so no runner can claim jobs or register a compute node
+    /// between the quiet check and the reset. Does not bump the workflow's run_id: callers follow
+    /// up with a reinitialize, which bumps it exactly once.
+    pub async fn reset_selected_jobs(
+        &self,
+        workflow_id: i64,
+        body: models::ResetJobStatusRequest,
+        force: bool,
+    ) -> Result<ResetJobStatusResponse, ApiError> {
+        let statuses = body.statuses.unwrap_or_else(|| {
+            vec![
+                JobStatus::Failed,
+                JobStatus::Terminated,
+                JobStatus::Canceled,
+                JobStatus::PendingFailed,
+            ]
+        });
+        let dry_run = body.dry_run.unwrap_or(false);
+
+        let mut tx = begin_immediate(&self.context.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+
+        if !force && let Some(reason) = Self::workflow_busy_reason(&mut tx, workflow_id).await? {
+            return Ok(ResetJobStatusResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "Cannot reset jobs in workflow {}: {}. Pass force=true to override.",
+                    workflow_id, reason
+                )),
+            ));
+        }
+
+        // Current status of every job in the workflow that the request could touch.
+        let rows: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT id, status FROM job WHERE workflow_id = ?")
+                .bind(workflow_id)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to fetch jobs for reset"))?;
+        let current: BTreeMap<i64, i64> = rows.into_iter().collect();
+
+        let mut reset = Vec::new();
+        let mut skipped = Vec::new();
+        let mut reset_complete = Vec::new();
+        let explicit = body.job_ids.is_some();
+        let candidates: Vec<i64> = match body.job_ids {
+            Some(mut ids) => {
+                ids.sort_unstable();
+                ids.dedup();
+                ids
+            }
+            None => current.keys().copied().collect(),
+        };
+        for job_id in candidates {
+            let Some(&status_int) = current.get(&job_id) else {
+                skipped.push(models::ResetJobStatusSkipped {
+                    job_id,
+                    reason: format!("job is not in workflow {}", workflow_id),
+                });
+                continue;
+            };
+            let status = parse_job_status(status_int as i32, job_id)?;
+            if !statuses.contains(&status) {
+                // Listing every non-matching job of a whole-workflow selection would be noise.
+                if explicit {
+                    skipped.push(models::ResetJobStatusSkipped {
+                        job_id,
+                        reason: format!("status {} is not eligible for reset", status),
+                    });
+                }
+                continue;
+            }
+            if status.is_complete() {
+                reset_complete.push(job_id);
+            }
+            reset.push(job_id);
+        }
+
+        if !dry_run && !reset.is_empty() {
+            let uninitialized_status = JobStatus::Uninitialized.to_int();
+            // One statement per job (not an IN list) so a large selection cannot exceed
+            // SQLite's bound-parameter limit.
+            for &job_id in &reset {
+                sqlx::query(
+                    "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL \
+                     WHERE id = ?",
+                )
+                .bind(uninitialized_status)
+                .bind(job_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to reset job status"))?;
+            }
+            // Same side effect as manage_status_change (reinitialize_downstream_jobs): resetting
+            // a terminal job also resets its direct completed or failed dependents. Deeper
+            // dependents are reset by the following reinitialize.
+            for &job_id in &reset_complete {
+                sqlx::query(
+                    "UPDATE job SET status = ? WHERE workflow_id = ? AND id IN ( \
+                     SELECT jbb.job_id FROM job_depends_on jbb JOIN job j ON jbb.job_id = j.id \
+                     WHERE jbb.depends_on_job_id = ? AND j.status IN (?, ?))",
+                )
+                .bind(uninitialized_status)
+                .bind(workflow_id)
+                .bind(job_id)
+                .bind(JobStatus::Completed.to_int())
+                .bind(JobStatus::Failed.to_int())
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to reset downstream jobs"))?;
+            }
+            tx.commit()
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
+            info!(
+                "Jobs status reset workflow_id={} count={} skipped={} new_status=uninitialized",
+                workflow_id,
+                reset.len(),
+                skipped.len()
+            );
+        }
+
+        let updated_count = if dry_run { 0 } else { reset.len() as i64 };
+        let mut response = models::ResetJobStatusResponse::new(
+            workflow_id,
+            updated_count,
+            JobStatus::Uninitialized.to_string(),
+        )
+        .with_reset_type("selected".to_string());
+        response.reset = Some(reset);
+        response.skipped = Some(skipped);
+        Ok(ResetJobStatusResponse::SuccessfulResponse(response))
+    }
+
+    /// Why the workflow is not quiet enough for a selective reset, or None if it is. Same rules
+    /// as the client's `check_no_active_workers`, plus no running or pending jobs.
+    async fn workflow_busy_reason(
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        workflow_id: i64,
+    ) -> Result<Option<&'static str>, ApiError> {
+        let (jobs_active, nodes_active, allocations_active): (bool, bool, bool) = sqlx::query_as(
+            "SELECT \
+                 EXISTS(SELECT 1 FROM job WHERE workflow_id = ? AND status IN (?, ?)), \
+                 EXISTS(SELECT 1 FROM compute_node WHERE workflow_id = ? AND is_active = 1), \
+                 EXISTS(SELECT 1 FROM scheduled_compute_node WHERE workflow_id = ? \
+                        AND status IN ('pending', 'active'))",
+        )
+        .bind(workflow_id)
+        .bind(JobStatus::Pending.to_int())
+        .bind(JobStatus::Running.to_int())
+        .bind(workflow_id)
+        .bind(workflow_id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to check workflow activity"))?;
+        Ok(if jobs_active {
+            Some("jobs are running or pending")
+        } else if nodes_active {
+            Some("there are active compute nodes")
+        } else if allocations_active {
+            Some("there are pending or active scheduled compute nodes")
+        } else {
+            None
+        })
     }
 
     /// Reset all jobs downstream of the given job to Uninitialized status
@@ -3249,14 +3431,12 @@ where
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError> {
         debug!(
-            "retry_job({}, {}, {}) - X-Span-ID: {:?}",
+            "retry_job({}, {}) - X-Span-ID: {:?}",
             id,
             run_id,
-            max_retries,
             context.get().0.clone()
         );
 
@@ -3290,9 +3470,10 @@ where
             SELECT j.id, j.workflow_id, j.name, j.command, j.status, j.failure_handler_id, j.attempt_id,
                    j.invocation_script, j.env, j.cancel_on_blocking_job_failure, j.supports_termination,
                    j.resource_requirements_id, j.scheduler_id, j.priority, j.origin, j.labels,
-                   w.run_id as workflow_run_id
+                   w.run_id as workflow_run_id, fh.rules as failure_handler_rules
             FROM job j
             JOIN workflow w ON j.workflow_id = w.id
+            LEFT JOIN failure_handler fh ON j.failure_handler_id = fh.id
             WHERE j.id = ?
             "#,
         )
@@ -3372,12 +3553,30 @@ where
             ));
         }
 
-        // Validate max_retries (server-side enforcement)
-        if attempt_id >= max_retries as i64 {
+        // Enforce the failure handler's retry limit. The job runner matches a rule by exit code
+        // before calling this endpoint, but the server does not know the exit code yet (the
+        // runner retries before complete_job), so it enforces the largest max_retries among the
+        // handler's rules. attempt_id counts every attempt, so retries decided by the AI
+        // classifier or requested from the TUI consume the same budget. A job without a failure
+        // handler has no configured limit.
+        let rules: Option<String> = job_record.get("failure_handler_rules");
+        let max_retries = match rules.as_deref().map(max_retries_from_rules).transpose() {
+            Ok(limit) => limit.flatten(),
+            Err(e) => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Err(ApiError(format!(
+                    "Failed to parse failure handler rules for job_id={}: {}",
+                    job_id, e
+                )));
+            }
+        };
+        if let Some(max_retries) = max_retries
+            && attempt_id >= max_retries
+        {
             let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
             return Ok(RetryJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(format!(
-                    "Job cannot be retried: attempt_id={} >= max_retries={}",
+                    "Job cannot be retried: attempt_id={} >= max_retries={} (failure handler limit)",
                     attempt_id, max_retries
                 )),
             ));

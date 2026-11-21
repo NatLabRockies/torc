@@ -1561,7 +1561,7 @@ pub fn classify_and_resolve_failures(
     // The per-job validation ensures we only act on jobs genuinely in pending_failed status.
 
     let mut results: Vec<serde_json::Value> = Vec::new();
-    let mut jobs_to_retry: Vec<(i64, i64)> = Vec::new();
+    let mut jobs_to_retry: Vec<i64> = Vec::new();
     let mut jobs_to_fail: Vec<i64> = Vec::new();
 
     for classification in &classifications {
@@ -1666,7 +1666,7 @@ pub fn classify_and_resolve_failures(
             };
 
             if action == "retry" {
-                jobs_to_retry.push((job_id, job.attempt_id.unwrap_or(1)));
+                jobs_to_retry.push(job_id);
             } else {
                 jobs_to_fail.push(job_id);
             }
@@ -1690,11 +1690,10 @@ pub fn classify_and_resolve_failures(
         let run_id = workflow.run_id.unwrap_or(1);
         let mut outcomes: Vec<(i64, Result<(), String>)> = Vec::new();
 
-        // Retry: reset to ready and bump attempt_id. Allow exactly one more attempt, since the
-        // classifier (not a failure handler rule) decided this retry.
-        for &(job_id, attempt_id) in &jobs_to_retry {
-            let max_retries = i32::try_from(attempt_id + 1).unwrap_or(i32::MAX);
-            let outcome = apis::jobs_api::retry_job(config, job_id, run_id, max_retries)
+        // Retry: reset to ready and bump attempt_id. The server counts this attempt against the
+        // job's failure handler limit, if it has one.
+        for &job_id in &jobs_to_retry {
+            let outcome = apis::jobs_api::retry_job(config, job_id, run_id, None)
                 .map(|_| ())
                 .map_err(|e| format!("Failed to retry job: {}", e));
             outcomes.push((job_id, outcome));

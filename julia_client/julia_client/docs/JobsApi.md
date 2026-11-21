@@ -266,8 +266,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **retry_job**
-> retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
-> retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
+> retry_job(_api::JobsApi, id::Int64, run_id::Int64; max_retries=nothing, _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>
+> retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64; max_retries=nothing, _mediaType=nothing) -> Channel{ JobModel }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -278,7 +278,12 @@ Name | Type | Description  | Notes
  **_api** | **JobsApi** | API context | 
 **id** | **Int64** | Job ID |
 **run_id** | **Int64** | Current workflow run ID |
-**max_retries** | **Int64** |  |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **max_retries** | **Int64** | Deprecated and ignored: the server enforces the job&#39;s failure handler limit. | [default to nothing]
 
 ### Return type
 

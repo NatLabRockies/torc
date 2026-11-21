@@ -1031,6 +1031,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         failed_only: Option<bool>,
+        force: Option<bool>,
+        body: Option<models::ResetJobStatusRequest>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError>;
 
@@ -1098,7 +1100,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError>;
 

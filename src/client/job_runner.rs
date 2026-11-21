@@ -2958,13 +2958,13 @@ impl JobRunner {
 
         // Call retry_job API first to reserve the retry slot.
         // This ensures we don't run recovery scripts for retries that won't happen.
-        // Pass max_retries for server-side validation.
+        // The server enforces the failure handler's limit itself.
         match self.send_with_retries(|| {
             Self::box_retry_error(apis::jobs_api::retry_job(
                 &self.config,
                 job_id,
                 self.run_id,
-                rule.max_retries,
+                None,
             ))
         }) {
             Ok(_) => {

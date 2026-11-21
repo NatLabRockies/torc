@@ -1505,6 +1505,8 @@ pub enum DeleteWorkflowResponse {
 pub enum ResetJobStatusResponse {
     /// Successful response
     SuccessfulResponse(models::ResetJobStatusResponse),
+    /// The workflow is not quiet (selective reset without force)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Forbidden - user does not have access
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response

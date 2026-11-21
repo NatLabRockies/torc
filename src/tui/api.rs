@@ -419,15 +419,14 @@ impl TorcClient {
     }
 
     /// Retry via the server's retry endpoint, which sets Ready and bumps attempt_id.
-    /// (update_job cannot change status.) Allows exactly one more attempt.
+    /// (update_job cannot change status.) The server enforces the job's failure handler limit.
     pub fn retry_job(&self, job_id: i64) -> Result<()> {
         let job = self.get_job(job_id)?;
         let workflow = apis::workflows_api::get_workflow(&self.config, job.workflow_id)
             .context("Failed to get workflow")?;
         let run_id = workflow.run_id.unwrap_or(1);
-        let max_retries = i32::try_from(job.attempt_id.unwrap_or(1) + 1).unwrap_or(i32::MAX);
 
-        apis::jobs_api::retry_job(&self.config, job_id, run_id, max_retries)
+        apis::jobs_api::retry_job(&self.config, job_id, run_id, None)
             .context("Failed to retry job")?;
 
         Ok(())

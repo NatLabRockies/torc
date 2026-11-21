@@ -1993,7 +1993,7 @@ fn test_lifecycle_actions_record_user_action_events(start_server: &ServerProcess
     );
 
     // A reset_job_status that changes nothing (fresh workflow) must NOT record an event.
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(false))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(false), None, None)
         .expect("reset_job_status failed");
     assert!(
         list_events_in_category(config, workflow_id, Some("user_action"))

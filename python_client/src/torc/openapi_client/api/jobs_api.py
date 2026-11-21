@@ -2525,7 +2525,7 @@ class JobsApi:
         self,
         id: Annotated[StrictInt, Field(description="Job ID")],
         run_id: Annotated[StrictInt, Field(description="Current workflow run ID")],
-        max_retries: StrictInt,
+        max_retries: Annotated[Optional[StrictInt], Field(description="Deprecated and ignored: the server enforces the job's failure handler limit.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2546,7 +2546,7 @@ class JobsApi:
         :type id: int
         :param run_id: Current workflow run ID (required)
         :type run_id: int
-        :param max_retries: (required)
+        :param max_retries: Deprecated and ignored: the server enforces the job's failure handler limit.
         :type max_retries: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -2603,7 +2603,7 @@ class JobsApi:
         self,
         id: Annotated[StrictInt, Field(description="Job ID")],
         run_id: Annotated[StrictInt, Field(description="Current workflow run ID")],
-        max_retries: StrictInt,
+        max_retries: Annotated[Optional[StrictInt], Field(description="Deprecated and ignored: the server enforces the job's failure handler limit.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2624,7 +2624,7 @@ class JobsApi:
         :type id: int
         :param run_id: Current workflow run ID (required)
         :type run_id: int
-        :param max_retries: (required)
+        :param max_retries: Deprecated and ignored: the server enforces the job's failure handler limit.
         :type max_retries: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -2681,7 +2681,7 @@ class JobsApi:
         self,
         id: Annotated[StrictInt, Field(description="Job ID")],
         run_id: Annotated[StrictInt, Field(description="Current workflow run ID")],
-        max_retries: StrictInt,
+        max_retries: Annotated[Optional[StrictInt], Field(description="Deprecated and ignored: the server enforces the job's failure handler limit.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2702,7 +2702,7 @@ class JobsApi:
         :type id: int
         :param run_id: Current workflow run ID (required)
         :type run_id: int
-        :param max_retries: (required)
+        :param max_retries: Deprecated and ignored: the server enforces the job's failure handler limit.
         :type max_retries: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request

@@ -24,12 +24,13 @@ use crate::models::{
     ListRoCrateEntitiesResponse, ListScheduledComputeNodesResponse, ListSlurmSchedulersResponse,
     ListSlurmStatsResponse, ListUserDataResponse, ListUserGroupMembershipsResponse,
     ListWorkflowsResponse, LocalSchedulerModel, MessageResponse, ProcessChangedJobInputsResponse,
-    ReloadAuthResponse, RemoteWorkerModel, ResetJobStatusResponse, ResourceRequirementsModel,
-    ResultModel, RoCrateEntityModel, RunningJobModel, RunningJobsResponse,
-    ScheduledComputeNodesModel, SlurmJobCorrelationModel, SlurmJobCorrelationsResponse,
-    SlurmSchedulerModel, SlurmStatsModel, SpawnJobModel, SpawnJobsRequest, SpawnJobsResponse,
-    UserDataListModel, UserDataModel, UserGroupMembershipModel, WorkflowAccessGroupModel,
-    WorkflowActionModel, WorkflowModel, WorkflowStatusResponse,
+    ReloadAuthResponse, RemoteWorkerModel, ResetJobStatusRequest, ResetJobStatusResponse,
+    ResetJobStatusSkipped, ResourceRequirementsModel, ResultModel, RoCrateEntityModel,
+    RunningJobModel, RunningJobsResponse, ScheduledComputeNodesModel, SlurmJobCorrelationModel,
+    SlurmJobCorrelationsResponse, SlurmSchedulerModel, SlurmStatsModel, SpawnJobModel,
+    SpawnJobsRequest, SpawnJobsResponse, UserDataListModel, UserDataModel,
+    UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel, WorkflowModel,
+    WorkflowStatusResponse,
 };
 
 #[allow(unused_imports)]
@@ -669,7 +670,9 @@ fn resolve_schema_properties<'a>(
         SlurmJobCorrelationsResponse,
         RunningJobModel,
         RunningJobsResponse,
+        ResetJobStatusRequest,
         ResetJobStatusResponse,
+        ResetJobStatusSkipped,
         UserDataModel,
         ListUserDataResponse
     )),
@@ -2409,7 +2412,14 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_component_properties(
         &emitted,
         "ResetJobStatusResponse",
-        &["workflow_id", "updated_count", "status", "reset_type"],
+        &[
+            "workflow_id",
+            "updated_count",
+            "status",
+            "reset_type",
+            "reset",
+            "skipped",
+        ],
         &mut issues,
     );
     check_component_properties(

@@ -184,7 +184,8 @@ In non-interactive mode, the command:
 3. Diagnoses failure causes (OOM, timeout, etc.)
 4. Adjusts resource requirements based on heuristics
 5. Runs optional recovery hook for custom logic
-6. Resets failed jobs and regenerates Slurm schedulers
+6. Resets failed jobs in one server transaction, which repeats the no-active-workers check so a
+   runner cannot start in between, and regenerates Slurm schedulers
 7. Submits new allocations
 
 > **Note:** Orphan cleanup handles the case where Slurm terminated an allocation unexpectedly,

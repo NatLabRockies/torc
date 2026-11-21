@@ -1856,9 +1856,12 @@ paths:
           format: int64
       - name: max_retries
         in: query
-        required: true
+        description: 'Deprecated and ignored: the server enforces the job''s failure handler limit.'
+        required: false
         schema:
-          type: integer
+          type:
+          - integer
+          - 'null'
           format: int32
       responses:
         '200':
@@ -5463,6 +5466,7 @@ paths:
     post:
       tags:
       - workflows
+      description: 'Reset job statuses to uninitialized. Without a body, resets every job (or, with failed_only, every failed, terminated, canceled, and pending_failed job). With a body, resets only the selected jobs in one transaction: jobs from other workflows or not in an eligible status are skipped with a reason, and the request is refused with 422 while the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs, unless force=true. As with manage_status_change, resetting a terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id.'
       operationId: reset_job_status
       parameters:
       - name: id
@@ -5474,11 +5478,30 @@ paths:
           format: int64
       - name: failed_only
         in: query
+        description: |-
+          Without a body: reset only failed, terminated, canceled, and pending_failed jobs.
+          Ignored when a body is sent.
         required: false
         schema:
           type:
           - boolean
           - 'null'
+      - name: force
+        in: query
+        description: |-
+          With a body: reset even if the workflow has active compute nodes, pending or active
+          scheduled compute nodes, or running or pending jobs.
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      requestBody:
+        description: Optional selective reset
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetJobStatusRequest'
       responses:
         '200':
           description: Successful response
@@ -5486,6 +5509,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResetJobStatusResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Workflow is not quiet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/reset_status:
     post:
       tags:
@@ -7518,6 +7565,35 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ResetJobStatusRequest:
+      type: object
+      description: |-
+        Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
+        only the listed jobs in the listed statuses are reset, in one transaction that first checks
+        that the workflow is quiet (see the endpoint description).
+      properties:
+        dry_run:
+          type:
+          - boolean
+          - 'null'
+          description: Report what would be reset without changing anything.
+        job_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+          description: Jobs to reset. Omit to select every job in the workflow whose status is in `statuses`.
+        statuses:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+          description: |-
+            Statuses a job must be in to be reset. Defaults to the recoverable statuses: failed,
+            terminated, canceled, and pending_failed.
     ResetJobStatusResponse:
       type: object
       required:
@@ -7525,10 +7601,29 @@ components:
       - updated_count
       - status
       properties:
+        reset:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+          description: |-
+            IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
+            request has a body.
         reset_type:
           type:
           - string
           - 'null'
+        skipped:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ResetJobStatusSkipped'
+          description: |-
+            Requested jobs that were not reset, with the reason. Set only when the request has a
+            body.
         status:
           type: string
         updated_count:
@@ -7537,6 +7632,17 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ResetJobStatusSkipped:
+      type: object
+      required:
+      - job_id
+      - reason
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        reason:
+          type: string
     ResourceMonitorConfig:
       type: object
       description: |-

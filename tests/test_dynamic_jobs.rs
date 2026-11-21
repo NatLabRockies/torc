@@ -549,7 +549,7 @@ fn test_retried_jobs_have_origin_retry(start_server: &ServerProcess) {
         JobStatus::Failed,
     );
     apis::jobs_api::complete_job(config, job, JobStatus::Failed, run_id, fail).unwrap();
-    apis::jobs_api::retry_job(config, job, run_id, 3).unwrap();
+    apis::jobs_api::retry_job(config, job, run_id, None).unwrap();
 
     let retried = apis::jobs_api::get_job(config, job).unwrap();
     assert_eq!(
@@ -603,7 +603,7 @@ fn test_retry_preserves_spawn_origin(start_server: &ServerProcess) {
         JobStatus::Failed,
     );
     apis::jobs_api::complete_job(config, worker_id, JobStatus::Failed, run_id, fail).unwrap();
-    apis::jobs_api::retry_job(config, worker_id, run_id, 3).unwrap();
+    apis::jobs_api::retry_job(config, worker_id, run_id, None).unwrap();
 
     let retried = apis::jobs_api::get_job(config, worker_id).unwrap();
     assert_eq!(
