@@ -545,7 +545,7 @@ where
         );
 
         // First get the existing result to ensure it exists
-        match self.get_result(id, context).await? {
+        let existing = match self.get_result(id, context).await? {
             GetResultResponse::SuccessfulResponse(result) => result,
             GetResultResponse::ForbiddenErrorResponse(err) => {
                 return Ok(UpdateResultResponse::ForbiddenErrorResponse(err));
@@ -557,6 +557,19 @@ where
                 return Err(ApiError("Failed to get result".to_string()));
             }
         };
+
+        if let Some(err) = super::ref_outside_workflow(
+            self.context.pool.as_ref(),
+            "job",
+            "job_id",
+            body.job_id,
+            // The stored workflow_id, so a changed one gets the immutability 422 below.
+            existing.workflow_id,
+        )
+        .await?
+        {
+            return Ok(UpdateResultResponse::UnprocessableContentErrorResponse(err));
+        }
 
         let status_int = body.status.to_int();
 

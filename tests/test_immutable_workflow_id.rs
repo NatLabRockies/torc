@@ -243,3 +243,63 @@ fn test_update_missing_record_is_404(start_server: &ServerProcess) {
         other => panic!("expected 404, got {other:?}"),
     }
 }
+
+/// Assert `update` is a 422 mentioning `needle` and `get` is unchanged afterwards.
+fn assert_rejected<M: Debug + PartialEq, E1: Debug, E2: Debug>(
+    needle: &str,
+    get: impl Fn() -> Result<M, apis::Error<E1>>,
+    update: impl FnOnce() -> Result<M, apis::Error<E2>>,
+) {
+    let before = get().expect("get before update");
+    match update() {
+        Err(apis::Error::ResponseError(r)) => {
+            assert_eq!(r.status.as_u16(), 422, "{}", r.content);
+            assert!(r.content.contains(needle), "{}", r.content);
+        }
+        other => panic!("expected 422, got {other:?}"),
+    }
+    assert_eq!(get().expect("get after rejected update"), before);
+}
+
+#[rstest]
+fn test_result_job_id_in_other_workflow_rejected(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (wf, other) = workflows(config, "result_job_ref");
+    let job_id = create_test_job(config, wf, "job").id.unwrap();
+    let other_job_id = create_test_job(config, other, "job").id.unwrap();
+    let result = create_test_result(config, wf, job_id);
+    let id = result.id.unwrap();
+    let mut moved = result.clone();
+    moved.job_id = other_job_id;
+    assert_rejected(
+        "job_id",
+        || apis::results_api::get_result(config, id),
+        || apis::results_api::update_result(config, id, moved),
+    );
+}
+
+#[rstest]
+fn test_ro_crate_file_id_in_other_workflow_rejected(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (wf, other) = workflows(config, "ro_crate_file_ref");
+    let file_id = create_test_file(config, wf, "f", "/tmp/f").id.unwrap();
+    let other_file_id = create_test_file(config, other, "f", "/tmp/f").id.unwrap();
+    let mut entity = models::RoCrateEntityModel::new(
+        wf,
+        "#entity".to_string(),
+        "Dataset".to_string(),
+        HashMap::new(),
+    );
+    entity.file_id = Some(file_id);
+    let entity = apis::ro_crate_entities_api::create_ro_crate_entity(config, entity).unwrap();
+    let id = entity.id.unwrap();
+    let mut moved = entity.clone();
+    moved.file_id = Some(other_file_id);
+    assert_rejected(
+        "file_id",
+        || apis::ro_crate_entities_api::get_ro_crate_entity(config, id),
+        || apis::ro_crate_entities_api::update_ro_crate_entity(config, id, moved),
+    );
+    // A file in the entity's own workflow is still accepted.
+    apis::ro_crate_entities_api::update_ro_crate_entity(config, id, entity).unwrap();
+}

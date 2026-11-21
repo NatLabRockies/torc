@@ -656,6 +656,19 @@ where
             context.get().0.clone()
         );
 
+        if let Some(file_id) = body.file_id
+            && let Some(err) = super::ref_outside_workflow(
+                self.context.pool.as_ref(),
+                "file",
+                "file_id",
+                file_id,
+                body.workflow_id,
+            )
+            .await?
+        {
+            return Ok(UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(err));
+        }
+
         let metadata_str = serialize_metadata(&body.metadata)?;
         let result = match sqlx::query!(
             r#"

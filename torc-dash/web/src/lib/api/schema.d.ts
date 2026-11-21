@@ -4563,7 +4563,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            /** @description Unprocessable content (invalid label, a reference outside the job's workflow, or workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5867,7 +5867,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            /** @description Unprocessable content (job_id not in the result's workflow, or workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6090,7 +6090,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            /** @description Unprocessable content (duplicate entity, file_id not in the entity's workflow, or workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
