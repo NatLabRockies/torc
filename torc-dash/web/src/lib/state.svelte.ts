@@ -110,6 +110,7 @@ class AppState {
   /** Increments on every auto-refresh and manual refresh. Read it in an $effect to reload. */
   refreshTick = $state(0);
   showAllUsers = $state(load("torc-show-all-users") === "true");
+  showArchived = $state(load("torc-show-archived") === "true");
   theme = $state<ThemeMode>((load("torc-theme-mode") as ThemeMode) ?? "system");
   darkPalette = $state<DarkPalette>((load("torc-dark-palette") as DarkPalette) ?? "default");
 
@@ -165,11 +166,13 @@ class AppState {
    * Query for the workflow lists (Workflows tab and picker), or null while /api/user is pending.
    * An access group spans all owners; if the user lookup failed, list everything as main did.
    */
-  workflowQuery(): { user?: string; access_group?: string } | null {
+  workflowQuery(): { user?: string; access_group?: string; is_archived?: boolean } | null {
     const group = this.accessGroup || undefined;
-    if (this.showAllUsers || group) return { access_group: group };
-    if (this.user) return { user: this.user };
-    return this.userChecked ? {} : null;
+    // Archived workflows are hidden unless asked for.
+    const archived = this.showArchived ? {} : { is_archived: false };
+    if (this.showAllUsers || group) return { access_group: group, ...archived };
+    if (this.user) return { user: this.user, ...archived };
+    return this.userChecked ? archived : null;
   }
 
   /** Ping torc-server (through torc-dash) and record the result. */
@@ -215,6 +218,11 @@ class AppState {
   setShowAllUsers(value: boolean) {
     this.showAllUsers = value;
     save("torc-show-all-users", String(value));
+  }
+
+  setShowArchived(value: boolean) {
+    this.showArchived = value;
+    save("torc-show-archived", String(value));
   }
 }
 

@@ -131,13 +131,27 @@ Keyboard shortcuts (press `?` in the dashboard for the list):
 ### Workflows Tab
 
 - **Workflow list** with ID, name, user, description, and creation time. Filter by text or access
-  group, or show workflows from all users. Click a row to open its details.
+  group, or show workflows from all users. Archived workflows are hidden unless **Archived** is
+  checked. Click a row to open its details.
 - **Actions** per workflow: run locally, submit to the scheduler, initialize, reinitialize, reset
-  status, cancel, recover, sync status, execution plan, export, and delete. Select several workflows
-  to delete them together.
+  status, watch (optionally with auto-recovery), stop a local run, schedule Slurm nodes, recover,
+  sync Slurm status, execution plan, edit and share, export, download logs, archive, cancel, and
+  delete. Select several workflows to archive or delete them together.
+- **Schedule Slurm nodes** submits more allocations for one of the workflow's Slurm schedulers
+  (`torc slurm schedule-nodes`), for example to add capacity or to rerun reset jobs. By default it
+  skips the workflow's pending `schedule_nodes` actions so they don't submit extra allocations.
+- **Recover** previews the recovery plan (`torc recover --dry-run`) before applying it. You can set
+  the memory and runtime multipliers, the log output directory, and whether to also retry jobs that
+  failed for unknown reasons.
+- **Edit & share** changes the workflow's name, description, and project, and shares it with access
+  groups (`torc access-groups add-workflow`).
+- **Export** downloads the workflow as JSON to your computer; **Download logs** downloads a
+  `.tar.gz` of its logs (`torc logs bundle`), which is handy for sharing with support.
 - **Import** a workflow from a file on the server or an uploaded file.
 - **Run output** streams into a panel at the bottom of the window while you keep using the
-  dashboard. Stopping the panel stops the output, not the run; use **Cancel** to stop the run.
+  dashboard. **Stop** terminates a local run and its jobs (they get SIGTERM, then SIGKILL after the
+  grace period). Closing the panel or the browser leaves the run going; **Stop local run** in the
+  actions menu stops it later.
 
 #### Creating Workflows
 
@@ -146,11 +160,16 @@ Click **Create workflow** (or press `N`) and choose a source:
 1. **Upload file**: drag and drop or click to select a YAML, JSON, JSON5, or KDL specification
 2. **File path**: a path on the machine running `torc-dash`
 3. **Paste spec**: paste a specification; the format is detected automatically
-4. **Wizard**: build a workflow step by step (jobs, parameters, resources, Slurm schedulers,
+4. **Commands**: one command per line; each becomes an independent job with default resources
+5. **Wizard**: build a workflow step by step (jobs, parameters, resources, Slurm schedulers,
    actions, monitoring) with a live preview of the generated spec
 
 **Validate** checks the spec on the server without creating anything. By default the new workflow is
 initialized after creation; if output files already exist you are asked before they are removed.
+
+When HPC profiles are available, **Generate Slurm schedulers** creates schedulers from the jobs'
+resource requirements for the chosen profile (the detected system by default). **Preview allocation
+plan** shows the allocations `torc slurm plan-allocations` recommends before you create anything.
 
 From an uploaded YAML or JSON file, **Open in spec editor** moves it to the Spec Editor tab; on the
 wizard's last step, **Edit as YAML** does the same with the generated spec.
@@ -197,7 +216,14 @@ scheduled compute nodes, and Slurm stats.
   `>`, `<`, `>=`, `<=`, `~` (contains), and `:` (e.g. `status=failed`, `exec_time>10`, `name:work`).
   Quick-filter buttons cover common job statuses.
 - **Job details**: click a job to see its command, results, logs (stdout/stderr), files, user data,
-  resources, and dependencies. Other tabs open the same view.
+  resources, and dependencies. Other tabs open the same view. **Edit** changes the job's priority
+  and resources (not while it is running). If its resource requirement is shared with other jobs,
+  the job gets its own copy, named `<name>_job<id>`, so the others keep their values. **Reset for
+  rerun** resets the job and its dependents.
+- **Editing resource requirements and Slurm schedulers**: click a row in the Resources or Schedulers
+  sub-tab to edit it. The change applies to every job (or future allocation) that uses it, so
+  editing is allowed only when no jobs are running or pending and no Slurm allocations are queued or
+  active.
 
 Tables render only the visible rows, so workflows with very large job counts stay responsive.
 
@@ -219,7 +245,19 @@ Investigate jobs in the selected workflow:
 2. Keep **Failed only** checked to focus on failures, or uncheck it to see all jobs
 3. Select a job to read its stdout and stderr side by side (copy, or open in the file viewer)
 
-Sub-tabs analyze Slurm logs for errors and collect `sacct` accounting data for Slurm allocations.
+Other views:
+
+- **Live tail** follows the logs of running jobs.
+- **Scheduling** explains why ready jobs aren't running. It shows ready jobs that need more time
+  than any active allocation has left (`torc workflows diagnose`), and the workflow's actions with
+  their trigger progress (`torc workflows list-actions`).
+- **Resource check** lists jobs that used more than they requested
+  (`torc workflows
+  check-resources`). It can also right-size the requirements from measured usage
+  (`torc workflows
+  correct-resources`), with a preview first; jobs are not rerun.
+- **Slurm log analysis** finds errors in Slurm logs. **Slurm accounting** collects `sacct` data and
+  total node and CPU time for the workflow's allocations.
 
 ### Events Tab
 
@@ -467,8 +505,13 @@ Models, `GITHUB_TOKEN` is required. Ollama requires no credentials (runs locally
 ### Settings Tab
 
 - **Appearance and behavior**: theme (system, light, dark), dark palette (Warm Gray, Nord, Dracula,
-  Monokai, and others), auto-refresh interval, and whether to show workflows from all users by
-  default. Preferences are stored in the browser.
+  Monokai, and others), auto-refresh interval, whether to show workflows from all users by default,
+  and desktop notifications. Preferences are stored in the browser.
+- **Notifications**: when on, the browser (or [Torc Desktop](./desktop.md)) shows a notification
+  when a followed workflow finishes, saying whether any jobs failed. Followed workflows are the one
+  selected in the top bar and any run, watched, or submitted from this dashboard since it was
+  opened. Notifications appear only while the dashboard is in the background; the browser asks for
+  permission when you turn them on.
 - **Version**: dashboard and server versions, with a warning if they don't match, the server URL,
   and a **Test connection** button that shows why a connection fails
 - **Server management**: start and stop `torc-server` from the dashboard (port, database path, log

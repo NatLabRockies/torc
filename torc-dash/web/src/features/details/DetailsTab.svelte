@@ -8,6 +8,8 @@
   import { matchesOperator, parseOperatorFilter } from "./filter";
   import { SvelteSet } from "svelte/reactivity";
   import { rerunJobs } from "./jobActions";
+  import type { ComponentProps } from "svelte";
+  import EditDefinitionModal from "./EditDefinitionModal.svelte";
   import SlurmLogsModal from "./SlurmLogsModal.svelte";
   import { loadCounts, loadRows, QUICK_FILTERS, SUBTABS, type SubTab } from "./subtabs";
   import SubTabTable from "./SubTabTable.svelte";
@@ -38,6 +40,7 @@
   const AUTO_REFRESH_MAX_ROWS = 10_000;
 
   let slurmLogsId = $state<number | null>(null);
+  let editTarget = $state<ComponentProps<typeof EditDefinitionModal>["target"] | null>(null);
   const selectedJobs = new SvelteSet<string | number>();
   let filterInput = $state<HTMLInputElement>();
 
@@ -192,6 +195,7 @@
         loading={loading}
         bind:sort={sorts[sub]}
         onSlurmLogs={(id) => (slurmLogsId = id)}
+        onEdit={(t) => (editTarget = t)}
         {selectedJobs}
         onCellFilter={filterTo}
       />
@@ -202,6 +206,9 @@
       workflowId={app.workflowId}
       submissionDir={workflow?.submission_directory}
     />
+    {#if editTarget}
+      <EditDefinitionModal target={editTarget} onclose={() => (editTarget = null)} />
+    {/if}
   {/if}
 </div>
 

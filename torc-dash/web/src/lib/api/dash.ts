@@ -11,7 +11,7 @@ export type CliResponse = {
   exit_code: number | null;
 };
 
-import { tokenHeaders } from "./token";
+import { tokenHeaders, withToken } from "./token";
 
 export async function dashFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -33,4 +33,36 @@ export async function cli(endpoint: string, body: unknown): Promise<CliResponse>
   const res = await dashPost<CliResponse>(`/api/cli/${endpoint}`, body);
   if (!res.success) throw new Error(res.stderr.trim() || res.stdout.trim() || "Command failed");
   return res;
+}
+
+/** Envelope returned by /api/cli/op and the JSON CLI wrappers (recover, sync-status). */
+export type OpResponse<T> = {
+  success: boolean;
+  data: T | null;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+};
+
+/**
+ * Run a whitelisted torc command via POST /api/cli/op (see `build_op` in torc-dash.rs) and
+ * return its parsed JSON output. Throws with the command's error on failure.
+ */
+export async function op<T>(name: string, params: Record<string, unknown> = {}): Promise<T> {
+  const res = await dashPost<OpResponse<T>>("/api/cli/op", { op: name, ...params });
+  if (!res.success) throw new Error(res.error || "Command failed");
+  return res.data as T;
+}
+
+/** Start a browser download of a torc-dash /api/download/* URL. */
+export function download(path: string, params: Record<string, string | number | boolean>) {
+  const query = new URLSearchParams(
+    Object.entries(params).map(([k, v]) => [k, String(v)]),
+  ).toString();
+  const a = document.createElement("a");
+  a.href = withToken(`${path}?${query}`);
+  a.download = "";
+  document.body.append(a);
+  a.click();
+  a.remove();
 }

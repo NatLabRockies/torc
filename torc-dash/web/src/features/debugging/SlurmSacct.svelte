@@ -1,6 +1,6 @@
 <!-- Collect Slurm accounting data for the workflow's allocations (torc slurm sacct). -->
 <script lang="ts">
-  import { dashPost } from "../../lib/api/dash";
+  import { dashPost, op } from "../../lib/api/dash";
   import { errorText, type Tone } from "../../lib/format";
   import Badge from "../../lib/ui/Badge.svelte";
   import DataTable, { type Column } from "../../lib/ui/DataTable.svelte";
@@ -20,12 +20,16 @@
   type Data = { total_slurm_jobs?: number; summary?: Row[]; errors?: string[]; message?: string };
 
   let running = $state(false);
+  type Usage = { total_nodes: number; total_node_time: string; total_cpu_time: string };
+
   let data = $state<Data | null>(null);
+  let usage = $state<Usage | null>(null);
   let error = $state<string | null>(null);
 
   $effect(() => {
     void workflowId;
     data = null;
+    usage = null;
     error = null;
   });
 
@@ -62,6 +66,8 @@
       if (requested !== workflowId) return; // the user switched workflows meanwhile
       if (!r.success) throw new Error(r.error || "Unknown error");
       data = r.data ?? {};
+      // Totals are a convenience; the table above is the main result.
+      usage = await op<Usage>("slurm-usage", { workflow_id: requested }).catch(() => null);
     } catch (e) {
       if (requested === workflowId) error = errorText(e);
     } finally {
@@ -94,6 +100,10 @@
     <p>
       <strong>{data.total_slurm_jobs}</strong> Slurm job(s),
       <strong>{data.summary?.length ?? 0}</strong> job step(s)
+      {#if usage}
+        · <strong>{usage.total_nodes}</strong> node(s), <strong>{usage.total_node_time}</strong> node
+        time, <strong>{usage.total_cpu_time}</strong> CPU time
+      {/if}
     </p>
     {#if data.summary?.length}
       <div class="table">

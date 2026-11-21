@@ -9,22 +9,31 @@
   import { app } from "../../lib/state.svelte";
   import Icon, { type IconName } from "../../lib/ui/Icon.svelte";
   import {
+    archiveWorkflows,
     cancelWorkflow,
     deleteWorkflows,
+    downloadLogs,
     initializeWorkflow,
     reinitializeWorkflow,
     resetWorkflow,
+    stopLocalRun,
     submitWorkflow,
   } from "./actions";
+  import EditWorkflowModal from "./EditWorkflowModal.svelte";
   import { execution } from "./execution.svelte";
   import ExecutionPlanModal from "./ExecutionPlanModal.svelte";
   import ExportModal from "./ExportModal.svelte";
   import RecoverModal from "./RecoverModal.svelte";
+  import ScheduleNodesModal from "./ScheduleNodesModal.svelte";
   import SyncStatusModal from "./SyncStatusModal.svelte";
 
-  let { workflowId, compact = false }: { workflowId: number; compact?: boolean } = $props();
+  let {
+    workflowId,
+    compact = false,
+    archived = false,
+  }: { workflowId: number; compact?: boolean; archived?: boolean } = $props();
 
-  type Dialog = "plan" | "recover" | "sync" | "export";
+  type Dialog = "plan" | "recover" | "sync" | "export" | "schedule" | "edit";
   type Action = { id: string; label: string; icon?: IconName; danger?: boolean; run: () => void };
 
   let dialog = $state<Dialog | null>(null);
@@ -69,6 +78,18 @@
     recover: { id: "recover", label: "Recover failed jobs…", run: () => (dialog = "recover") },
     sync: { id: "sync", label: "Sync Slurm status…", run: () => (dialog = "sync") },
     export: { id: "export", label: "Export…", icon: "download", run: () => (dialog = "export") },
+    logs: { id: "logs", label: "Download logs", icon: "download", run: () => downloadLogs(id()) },
+    schedule: { id: "schedule", label: "Schedule Slurm nodes…", run: () => (dialog = "schedule") },
+    edit: { id: "edit", label: "Edit & share…", run: () => (dialog = "edit") },
+    archive: {
+      id: "archive",
+      // A getter so the label follows the prop.
+      get label() {
+        return archived ? "Unarchive" : "Archive";
+      },
+      run: () => archiveWorkflows([id()], !archived),
+    },
+    stopRun: { id: "stop-run", label: "Stop local run", icon: "stop", run: () => stopLocalRun(id()) },
     cancel: {
       id: "cancel",
       label: "Cancel workflow",
@@ -90,15 +111,17 @@
     compact
       ? [
           [ACTIONS.init, ACTIONS.reinit, ACTIONS.reset],
-          [ACTIONS.watch, ACTIONS.watchRecover],
+          [ACTIONS.watch, ACTIONS.watchRecover, ACTIONS.stopRun],
           [ACTIONS.graph, ACTIONS.plan],
-          [ACTIONS.recover, ACTIONS.sync, ACTIONS.export],
+          [ACTIONS.schedule, ACTIONS.recover, ACTIONS.sync],
+          [ACTIONS.edit, ACTIONS.export, ACTIONS.logs, ACTIONS.archive],
           [ACTIONS.cancel, ACTIONS.delete],
         ]
       : [
-          [ACTIONS.watch, ACTIONS.watchRecover],
+          [ACTIONS.watch, ACTIONS.watchRecover, ACTIONS.stopRun],
           [ACTIONS.reset],
-          [ACTIONS.recover, ACTIONS.sync, ACTIONS.export],
+          [ACTIONS.schedule, ACTIONS.recover, ACTIONS.sync],
+          [ACTIONS.edit, ACTIONS.export, ACTIONS.logs, ACTIONS.archive],
           [ACTIONS.cancel, ACTIONS.delete],
         ],
   );
@@ -186,6 +209,10 @@
     />
   {:else if dialog === "export"}
     <ExportModal {workflowId} onclose={() => (dialog = null)} />
+  {:else if dialog === "schedule"}
+    <ScheduleNodesModal {workflowId} onclose={() => (dialog = null)} />
+  {:else if dialog === "edit"}
+    <EditWorkflowModal {workflowId} onclose={() => (dialog = null)} />
   {/if}
 </div>
 
