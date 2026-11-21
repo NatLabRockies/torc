@@ -330,9 +330,16 @@ and that heartbeat is older than the threshold. A node without a `last_heartbeat
 This covers runners that predate heartbeats.
 
 The server computes staleness when it reads a node. It runs no background task and changes no node
-or job. `ComputeNodeModel.is_stale` reports the result. `GET /compute_nodes?stale=true` (or
+state or job. `ComputeNodeModel.is_stale` reports the result. `GET /compute_nodes?stale=true` (or
 `stale=false`) filters on it, and `torc compute-nodes list --stale` does the same and shows a Stale
 column.
+
+**Heartbeat storage.** The server keeps the last heartbeat of each node in memory, so heartbeats do
+not compete with job claims for the SQLite write lock. It writes `last_heartbeat` to the database at
+two times only: on the first heartbeat that a server process gets from a node, and when a read finds
+the node stale. After a server restart, the stored value is the fallback until the node sends a new
+heartbeat. A node that died during the outage therefore becomes stale after the restart guard
+(below). Sorting a node list by `last_heartbeat` uses the stored value.
 
 Communication goes one way only: the runner calls the server, and the server records the call. The
 server never contacts a runner, so the server and its runners can be on different networks (for

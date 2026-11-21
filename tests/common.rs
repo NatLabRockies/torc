@@ -357,6 +357,18 @@ pub fn start_server_with_env(extra_env: &[(&str, &str)]) -> ServerProcess {
     start_process_with_env(&url, db_file, extra_env)
 }
 
+/// Stop `server` and start a new server process on the same database file.
+pub fn restart_server_with_env(server: &mut ServerProcess, extra_env: &[(&str, &str)]) {
+    let _ = server.child.kill();
+    let _ = server.child.wait();
+    let url = format!("sqlite:{}", server.db_file.path().display());
+    let placeholder = NamedTempFile::new().expect("Failed to create temporary file");
+    let mut fresh = start_process_with_env(&url, placeholder, extra_env);
+    std::mem::swap(&mut server.child, &mut fresh.child);
+    server.port = fresh.port;
+    server.config = fresh.config.clone();
+}
+
 pub fn create_test_workflow(config: &Configuration, workflow_name: &str) -> models::WorkflowModel {
     let user = "test_user".to_string();
     let workflow = models::WorkflowModel::new(workflow_name.to_string(), user);

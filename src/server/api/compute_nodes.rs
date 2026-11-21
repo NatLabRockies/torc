@@ -4,7 +4,7 @@
 
 use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
-use log::{debug, info};
+use log::{debug, info, warn};
 use sqlx::Row;
 
 use crate::server::api_responses::{
@@ -13,6 +13,9 @@ use crate::server::api_responses::{
 };
 
 use crate::models;
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use super::{
     ApiContext, SqlQueryBuilder, database_error_with_msg, labels_column,
@@ -87,10 +90,17 @@ pub struct ComputeNodesApiImpl {
     pub context: ApiContext,
     stale_after: Option<std::time::Duration>,
     started: std::time::Instant,
+    /// Last heartbeat of each node. The column is written only on the first heartbeat of a node in
+    /// this process and when a read finds the node stale, so heartbeats do not take the write lock.
+    // ponytail: entries of inactive nodes stay until restart, about 32 bytes per node.
+    heartbeats: Arc<Mutex<HashMap<i64, DateTime<Utc>>>>,
 }
 
+/// The stored heartbeat is never newer than the in-memory heartbeat, so a node is stale when the
+/// stored time is old and the node has no recent in-memory heartbeat. Binds the cutoff, then a
+/// JSON array of the IDs with a recent in-memory heartbeat.
 const STALE_CONDITION: &str = "(is_active IS NULL OR is_active = 1) AND last_heartbeat IS NOT NULL AND \
-     julianday(last_heartbeat) < julianday(?)";
+     julianday(last_heartbeat) < julianday(?) AND id NOT IN (SELECT value FROM json_each(?))";
 
 const COMPUTE_NODE_COLUMNS: &[&str] = &[
     "id",
@@ -144,6 +154,49 @@ impl ComputeNodesApiImpl {
             stale_after: (stale_after_secs > 0)
                 .then(|| std::time::Duration::from_secs(stale_after_secs)),
             started: std::time::Instant::now(),
+            heartbeats: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn heartbeats(&self) -> std::sync::MutexGuard<'_, HashMap<i64, DateTime<Utc>>> {
+        self.heartbeats
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// JSON array of the node IDs whose in-memory heartbeat is at or after the cutoff.
+    fn fresh_node_ids(&self, cutoff: DateTime<Utc>) -> String {
+        let ids: Vec<i64> = self
+            .heartbeats()
+            .iter()
+            .filter(|(_, seen)| **seen >= cutoff)
+            .map(|(id, _)| *id)
+            .collect();
+        serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_string())
+    }
+
+    /// Write the in-memory heartbeat of each stale node whose stored heartbeat is older.
+    async fn persist_stale_heartbeats(
+        &self,
+        records: &[sqlx::sqlite::SqliteRow],
+        nodes: &[models::ComputeNodeModel],
+    ) {
+        for (record, node) in records.iter().zip(nodes) {
+            let stored: Option<String> = record.get("last_heartbeat");
+            if node.is_stale != Some(true) || node.last_heartbeat == stored {
+                continue;
+            }
+            if let Err(e) = sqlx::query("UPDATE compute_node SET last_heartbeat = $1 WHERE id = $2")
+                .bind(&node.last_heartbeat)
+                .bind(node.id)
+                .execute(self.context.pool.as_ref())
+                .await
+            {
+                warn!(
+                    "Failed to store the heartbeat of stale compute_node_id={:?}: {}",
+                    node.id, e
+                );
+            }
         }
     }
 
@@ -170,17 +223,23 @@ impl ComputeNodesApiImpl {
     }
 
     fn row_to_model(
+        &self,
         record: &sqlx::sqlite::SqliteRow,
         cutoff: Option<chrono::DateTime<chrono::Utc>>,
     ) -> models::ComputeNodeModel {
         let is_active_val: Option<i64> = record.get("is_active");
         let scheduler_str: Option<String> = record.get("scheduler");
         let scheduler = scheduler_str.and_then(|s| serde_json::from_str(&s).ok());
-        let last_heartbeat: Option<String> = record.get("last_heartbeat");
+        let id: i64 = record.get("id");
+        let last_heartbeat = self
+            .heartbeats()
+            .get(&id)
+            .map(|seen| seen.to_rfc3339())
+            .or_else(|| record.get("last_heartbeat"));
         let is_stale = Self::is_stale(cutoff, is_active_val != Some(0), last_heartbeat.as_deref());
 
         models::ComputeNodeModel {
-            id: Some(record.get("id")),
+            id: Some(id),
             workflow_id: record.get("workflow_id"),
             hostname: record.get("hostname"),
             pid: record.get("pid"),
@@ -371,7 +430,12 @@ where
             }
         };
 
-        let compute_node_model = Self::row_to_model(&record, self.stale_cutoff());
+        let compute_node_model = self.row_to_model(&record, self.stale_cutoff());
+        self.persist_stale_heartbeats(
+            std::slice::from_ref(&record),
+            std::slice::from_ref(&compute_node_model),
+        )
+        .await;
 
         Ok(GetComputeNodeResponse::SuccessfulResponse(
             compute_node_model,
@@ -452,8 +516,8 @@ where
         }
         let stale_cutoff_bind = match (stale, cutoff) {
             (Some(true), Some(cutoff)) => {
-                where_conditions.push(STALE_CONDITION.to_string());
-                Some(cutoff.to_rfc3339())
+                where_conditions.push(format!("({STALE_CONDITION})"));
+                Some((cutoff.to_rfc3339(), self.fresh_node_ids(cutoff)))
             }
             (Some(true), None) => {
                 where_conditions.push("0 = 1".to_string());
@@ -461,7 +525,7 @@ where
             }
             (Some(false), Some(cutoff)) => {
                 where_conditions.push(format!("NOT COALESCE(({STALE_CONDITION}), 0)"));
-                Some(cutoff.to_rfc3339())
+                Some((cutoff.to_rfc3339(), self.fresh_node_ids(cutoff)))
             }
             (Some(false), None) | (None, _) => None,
         };
@@ -503,8 +567,8 @@ where
         if let Some(scn_id) = scheduled_compute_node_id {
             sqlx_query = sqlx_query.bind(scn_id);
         }
-        if let Some(ref bound) = stale_cutoff_bind {
-            sqlx_query = sqlx_query.bind(bound.clone());
+        if let Some((ref cutoff, ref fresh_ids)) = stale_cutoff_bind {
+            sqlx_query = sqlx_query.bind(cutoff.clone()).bind(fresh_ids.clone());
         }
 
         let records = match sqlx_query.fetch_all(self.context.pool.as_ref()).await {
@@ -516,8 +580,9 @@ where
 
         let items: Vec<models::ComputeNodeModel> = records
             .iter()
-            .map(|record| Self::row_to_model(record, cutoff))
+            .map(|record| self.row_to_model(record, cutoff))
             .collect();
+        self.persist_stale_heartbeats(&records, &items).await;
 
         // For proper pagination, we should get the total count without LIMIT/OFFSET
         let count_query =
@@ -541,8 +606,10 @@ where
         if let Some(scn_id) = scheduled_compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(scn_id);
         }
-        if let Some(ref bound) = stale_cutoff_bind {
-            count_sqlx_query = count_sqlx_query.bind(bound.clone());
+        if let Some((ref cutoff, ref fresh_ids)) = stale_cutoff_bind {
+            count_sqlx_query = count_sqlx_query
+                .bind(cutoff.clone())
+                .bind(fresh_ids.clone());
         }
 
         let total_count = match count_sqlx_query.fetch_one(self.context.pool.as_ref()).await {
@@ -683,9 +750,11 @@ where
 
     /// Record a liveness signal for an active compute node.
     ///
-    /// The server stamps its own clock, so runner clock skew does not matter. Only an active
-    /// node is touched: a node that was failed stays inactive, and the returned
-    /// model shows that to the caller.
+    /// The server stamps its own clock, so runner clock skew does not matter. The heartbeat goes
+    /// to memory. Only the first heartbeat of a node in this process is written to the database,
+    /// so that the node can become stale after a server restart. Only an active node is
+    /// touched: a node that was failed stays inactive, and the returned model shows that to
+    /// the caller.
     async fn heartbeat_compute_node(
         &self,
         id: i64,
@@ -697,38 +766,33 @@ where
             context.get().0.clone()
         );
 
-        let updated = match sqlx::query(
-            r#"
-            UPDATE compute_node SET last_heartbeat = $1
-            WHERE id = $2 AND (is_active IS NULL OR is_active = 1)
-            RETURNING id, workflow_id, hostname, pid, start_time, duration_seconds, is_active,
-                   num_cpus, memory_gb, num_gpus, num_nodes, time_limit, scheduler_config_id,
-                   compute_node_type, scheduler, sample_count,
-                   peak_cpu_percent, avg_cpu_percent,
-                   peak_memory_bytes, avg_memory_bytes, end_time, labels, last_heartbeat
-            "#,
-        )
-        .bind(chrono::Utc::now().to_rfc3339())
-        .bind(id)
-        .fetch_optional(self.context.pool.as_ref())
-        .await
-        {
-            Ok(updated) => updated,
-            Err(e) => {
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to record compute node heartbeat",
-                ));
-            }
+        let mut node = match self.get_compute_node(id, context).await? {
+            GetComputeNodeResponse::SuccessfulResponse(node) => node,
+            other => return update_response_from_get(other),
         };
+        if node.is_active == Some(false) {
+            return Ok(UpdateComputeNodeResponse::SuccessfulResponse(node));
+        }
 
-        if let Some(record) = updated {
-            return Ok(UpdateComputeNodeResponse::SuccessfulResponse(
-                Self::row_to_model(&record, self.stale_cutoff()),
+        let now = Utc::now();
+        let first = self.heartbeats().insert(id, now).is_none();
+        if first
+            && let Err(e) = sqlx::query("UPDATE compute_node SET last_heartbeat = $1 WHERE id = $2")
+                .bind(now.to_rfc3339())
+                .bind(id)
+                .execute(self.context.pool.as_ref())
+                .await
+        {
+            self.heartbeats().remove(&id);
+            return Err(database_error_with_msg(
+                e,
+                "Failed to record compute node heartbeat",
             ));
         }
 
-        update_response_from_get(self.get_compute_node(id, context).await?)
+        node.last_heartbeat = Some(now.to_rfc3339());
+        node.is_stale = Some(false);
+        Ok(UpdateComputeNodeResponse::SuccessfulResponse(node))
     }
 
     /// Delete a compute node.

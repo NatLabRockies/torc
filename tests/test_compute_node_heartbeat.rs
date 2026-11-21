@@ -3,8 +3,8 @@
 mod common;
 
 use common::{
-    ServerProcess, create_test_workflow, ensure_test_binaries_built, start_server,
-    start_server_with_env, torc_binary_path,
+    ServerProcess, create_test_workflow, ensure_test_binaries_built, restart_server_with_env,
+    start_server, start_server_with_env, torc_binary_path,
 };
 use rstest::rstest;
 use std::time::{Duration, Instant};
@@ -288,6 +288,84 @@ fn test_list_filters_stale_nodes() {
     let not_stale = ids(list_stale(config, workflow_id, false).items);
     assert!(not_stale.contains(&fresh));
     assert!(!not_stale.contains(&old));
+}
+
+/// The `last_heartbeat` column as stored in the database, read past the server.
+fn stored_heartbeat(server: &ServerProcess, id: i64) -> Option<String> {
+    let url = format!("sqlite:{}", server.db_file.path().display());
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let stored = sqlx::query_scalar("SELECT last_heartbeat FROM compute_node WHERE id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        stored
+    })
+}
+
+/// Only the first heartbeat is stored. The stale filter uses the in-memory heartbeat, and the
+/// server stores the last heartbeat when a read finds the node stale.
+#[test]
+fn test_heartbeats_stay_in_memory_until_the_node_is_stale() {
+    let server = start_stale_server("2");
+    let config = &server.config;
+    let workflow_id = create_test_workflow(config, "test_heartbeats_in_memory")
+        .id
+        .unwrap();
+    let node = create_node(config, workflow_id, "live-host", None);
+    let first = apis::compute_nodes_api::heartbeat_compute_node(config, node)
+        .unwrap()
+        .last_heartbeat;
+    assert!(first.is_some());
+    assert_eq!(stored_heartbeat(&server, node), first);
+
+    // Beat for longer than the threshold. The stored time becomes older than the cutoff.
+    let heartbeater = Heartbeater::start(config, node);
+    std::thread::sleep(Duration::from_secs(4));
+    assert_eq!(stored_heartbeat(&server, node), first);
+    assert!(!is_stale(config, node));
+    assert!(!ids(list_stale(config, workflow_id, true).items).contains(&node));
+    assert!(ids(list_stale(config, workflow_id, false).items).contains(&node));
+
+    drop(heartbeater);
+    let last = apis::compute_nodes_api::get_compute_node(config, node)
+        .unwrap()
+        .last_heartbeat;
+    assert!(last > first);
+    assert!(
+        wait_until(Duration::from_secs(20), || is_stale(config, node)),
+        "node did not become stale"
+    );
+    assert_eq!(ids(list_stale(config, workflow_id, true).items), vec![node]);
+    assert_eq!(stored_heartbeat(&server, node), last);
+}
+
+/// After a restart the in-memory heartbeats are gone. A node that does not come back becomes
+/// stale from its stored heartbeat. A node that sends a heartbeat again does not.
+#[test]
+fn test_node_that_dies_during_a_server_outage_becomes_stale() {
+    let mut server = start_stale_server("5");
+    let workflow_id = create_test_workflow(&server.config, "test_outage")
+        .id
+        .unwrap();
+    let dead = create_node(&server.config, workflow_id, "dead-host", None);
+    let live = create_node(&server.config, workflow_id, "live-host", None);
+    for node in [dead, live] {
+        apis::compute_nodes_api::heartbeat_compute_node(&server.config, node).unwrap();
+    }
+
+    restart_server_with_env(&mut server, &[(STALE_ENV, "5")]);
+    let config = &server.config;
+    let _heartbeater = Heartbeater::start(config, live);
+    assert!(!is_stale(config, dead));
+    assert!(
+        wait_until(Duration::from_secs(20), || is_stale(config, dead)),
+        "node did not become stale after the restart"
+    );
+    assert!(!is_stale(config, live));
+    assert_eq!(ids(list_stale(config, workflow_id, true).items), vec![dead]);
 }
 
 #[test]
