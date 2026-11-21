@@ -99,29 +99,38 @@ impl<C> Server<C> {
             let mut tx = begin_immediate(&self.pool)
                 .await
                 .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+            // Re-check the run inside the transaction: the earlier run_id validation ran
+            // before the write lock, so a workflow reset could have committed since.
             let result = sqlx::query(
-                "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL WHERE id = ? AND status = ?",
+                "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL \
+                 WHERE id = ? AND status = ? \
+                 AND workflow_id IN (SELECT id FROM workflow WHERE run_id = ?)",
             )
             .bind(new_status_int)
             .bind(job_id)
             .bind(pending_failed_int)
+            .bind(run_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to update job status"))?;
             if result.rows_affected() == 0 {
                 let _ = tx.rollback().await;
                 return Err(ApiError(format!(
-                    "job_id={} changed status during transition from pending_failed",
-                    job_id
+                    "job_id={} is no longer pending_failed in run_id={}",
+                    job_id, run_id
                 )));
             }
+            // Only the attempt being classified: an earlier attempt classified as retry keeps
+            // its own result row.
             sqlx::query(
-                "UPDATE result SET status = ? WHERE job_id = ? AND run_id = ? AND status = ?",
+                "UPDATE result SET status = ? WHERE job_id = ? AND run_id = ? AND status = ? \
+                 AND attempt_id = (SELECT attempt_id FROM job WHERE id = ?)",
             )
             .bind(new_status_int)
             .bind(job_id)
             .bind(run_id)
             .bind(pending_failed_int)
+            .bind(job_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to update result status"))?;

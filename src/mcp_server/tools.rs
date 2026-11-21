@@ -1581,6 +1581,18 @@ pub fn classify_and_resolve_failures(
             }
         };
 
+        if job.workflow_id != workflow_id {
+            results.push(serde_json::json!({
+                "job_id": job_id,
+                "status": "error",
+                "message": format!(
+                    "Job belongs to workflow {}, not workflow {}",
+                    job.workflow_id, workflow_id
+                ),
+            }));
+            continue;
+        }
+
         if job.status != Some(JobStatus::PendingFailed) {
             results.push(serde_json::json!({
                 "job_id": job_id,

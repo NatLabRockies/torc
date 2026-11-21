@@ -593,3 +593,79 @@ fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &
         "result status should be failed"
     );
 }
+
+/// Resolving attempt 2 of a pending_failed job to Failed must leave attempt 1's result row
+/// (classified as retry earlier) unchanged.
+#[rstest]
+fn test_resolving_pending_failed_only_updates_current_attempt_result(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) =
+        create_and_initialize_workflow(config, "test_pending_failed_attempts");
+    let job_id = create_test_job(config, workflow_id, "flaky").id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    let run_attempt_to_pending_failed = |attempt_id: i64| {
+        let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
+        let claimed = apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            10,
+            resources,
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to claim jobs");
+        assert_eq!(claimed.jobs.expect("Should return jobs").len(), 1);
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+            .expect("Failed to set job running");
+        let result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            attempt_id,
+            compute_node_id,
+            1,
+            0.1,
+            chrono::Utc::now().to_rfc3339(),
+            JobStatus::PendingFailed,
+        );
+        apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+            .expect("Failed to complete job");
+    };
+
+    run_attempt_to_pending_failed(1);
+    // Classified as retry: Ready with attempt_id 2.
+    apis::jobs_api::retry_job(config, job_id, run_id, 2).expect("Failed to retry");
+    run_attempt_to_pending_failed(2);
+    // Classified as fail.
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
+        .expect("Failed to resolve pending_failed job");
+
+    let results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        Some(job_id),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(true),
+    )
+    .expect("Failed to list results")
+    .items;
+    let status_of = |attempt: i64| {
+        results
+            .iter()
+            .find(|r| r.attempt_id == Some(attempt))
+            .map(|r| r.status)
+    };
+    assert_eq!(status_of(1), Some(JobStatus::PendingFailed));
+    assert_eq!(status_of(2), Some(JobStatus::Failed));
+}

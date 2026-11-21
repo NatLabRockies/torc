@@ -1727,11 +1727,18 @@ impl JobRunner {
             }
             // Output mtimes and RO-Crate provenance were skipped while offline; restore them
             // before the journal (the only record of these completions) is cleared.
+            // Include completions an earlier flush already delivered (now rejected as
+            // duplicates): if that flush failed partway, their metadata may still be missing.
             let completed: Vec<&JobCompletionEntry> = chunk
                 .iter()
+                .filter(|entry| entry.status == JobStatus::Completed)
                 .filter(|entry| {
-                    entry.status == JobStatus::Completed
-                        && response.completed.contains(&entry.job_id)
+                    response.completed.contains(&entry.job_id)
+                        || crate::client::commands::reconcile::already_completed_in_run(
+                            &self.config,
+                            entry,
+                            Some(self.run_id),
+                        )
                 })
                 .collect();
             metadata_failures +=

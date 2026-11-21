@@ -260,14 +260,16 @@ pub(crate) fn restore_offline_output_metadata(
 /// True if the server already has this journaled completion: the job is Completed in the
 /// current run. Used to retry metadata restoration for completions an earlier reconcile
 /// replayed.
-fn already_completed_in_run(
+pub(crate) fn already_completed_in_run(
     config: &Configuration,
     entry: &JobCompletionEntry,
     current_run_id: Option<i64>,
 ) -> bool {
+    // If the lookup fails, assume it may be completed: the restore attempt then fails too
+    // and is counted, so the caller keeps what it needs to retry.
     current_run_id == Some(entry.run_id)
         && apis::jobs_api::get_job(config, entry.job_id)
-            .is_ok_and(|job| job.status == Some(JobStatus::Completed))
+            .map_or(true, |job| job.status == Some(JobStatus::Completed))
 }
 
 /// Create the RO-Crate entities the runner would have created at completion, using the
