@@ -339,8 +339,8 @@ server never contacts a runner, so the server and its runners can be on differen
 example a server in the cloud and runners on an HPC system or on cloud VMs). Stale marking needs no
 shared host, process namespace, or file system.
 
-Choose a threshold of at least four heartbeat intervals (120 seconds with the default interval) so
-that a few lost heartbeats do not mark a healthy node stale.
+The default threshold is 600 seconds. It was 120 seconds before; the longer value lets a healthy
+node survive a short network outage without being marked stale.
 
 **Server crash and restart.** When the server stops or crashes, no runner can send a heartbeat.
 Runners keep their jobs alive. Each API call retries for
