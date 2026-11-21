@@ -262,6 +262,9 @@ EXAMPLES:
 
     # Hide multiple columns
     torc jobs list 123 -x command -x name
+
+    # Jobs that use resource requirements record 7
+    torc jobs list 123 --resource-requirements-id 7
 ")]
     List {
         /// List jobs for this workflow (optional - will prompt if not provided)
@@ -273,6 +276,9 @@ EXAMPLES:
         /// Filter by upstream job ID (jobs that depend on this job)
         #[arg(long)]
         upstream_job_id: Option<i64>,
+        /// Filter by resource requirements ID (jobs that use this record)
+        #[arg(long)]
+        resource_requirements_id: Option<i64>,
         /// Maximum number of jobs to return (default: all)
         #[arg(short, long)]
         limit: Option<i64>,
@@ -616,6 +622,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             workflow_id,
             status,
             upstream_job_id,
+            resource_requirements_id,
             limit,
             offset,
             sort_by,
@@ -663,6 +670,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             if let Some(upstream_id) = upstream_job_id {
                 params = params.with_upstream_job_id(*upstream_id);
             }
+            params.resource_requirements_id = *resource_requirements_id;
 
             match pagination::paginate_jobs(config, selected_workflow_id, params) {
                 Ok(jobs) => {

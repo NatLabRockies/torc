@@ -1393,6 +1393,14 @@ fn test_list_jobs_filters_by_resource_requirements_id(start_server: &ServerProce
     assert_eq!(names(small.id), ["a", "b"]);
     assert_eq!(names(large.id), ["c"]);
     assert_eq!(names(None).len(), 3);
+
+    let rr_id = large.id.unwrap().to_string();
+    let wf_id = workflow_id.to_string();
+    let args = ["jobs", "list", &wf_id, "--resource-requirements-id", &rr_id];
+    let out = run_cli_with_json(&args, start_server, None).expect("jobs list failed");
+    let jobs = out["items"].as_array().expect("jobs array");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["name"], "c");
 }
 
 #[rstest]

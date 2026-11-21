@@ -36,6 +36,8 @@ pub struct JobListParams {
     /// `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
     /// children); `Some(false)` returns only originally-declared jobs.
     pub origin_is_set: Option<bool>,
+    /// Filter by resource requirements ID
+    pub resource_requirements_id: Option<i64>,
 }
 
 impl JobListParams {
@@ -141,7 +143,7 @@ impl Paginatable for JobModel {
             None, // name
             None, // command
             None, // label
-            None, // resource_requirements_id
+            params.resource_requirements_id,
         )?;
 
         Ok(PaginatedResponse {
