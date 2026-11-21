@@ -247,7 +247,7 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     assert_eq!(job_before.status, Some(JobStatus::PendingFailed));
 
     // Reset failed jobs only (should include pending_failed)
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("Failed to reset job status");
 
     // Verify job is now uninitialized
@@ -639,7 +639,7 @@ fn test_resolving_pending_failed_only_updates_current_attempt_result(start_serve
 
     run_attempt_to_pending_failed(1);
     // Classified as retry: Ready with attempt_id 2.
-    apis::jobs_api::retry_job(config, job_id, run_id, 2).expect("Failed to retry");
+    apis::jobs_api::retry_job(config, job_id, run_id, None).expect("Failed to retry");
     run_attempt_to_pending_failed(2);
     // Classified as fail.
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)

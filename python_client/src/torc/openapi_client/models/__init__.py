@@ -86,7 +86,9 @@ from torc.openapi_client.models.ping_response import PingResponse
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse
 from torc.openapi_client.models.reload_auth_response import ReloadAuthResponse
 from torc.openapi_client.models.remote_worker_model import RemoteWorkerModel
+from torc.openapi_client.models.reset_job_status_request import ResetJobStatusRequest
 from torc.openapi_client.models.reset_job_status_response import ResetJobStatusResponse
+from torc.openapi_client.models.reset_job_status_skipped import ResetJobStatusSkipped
 from torc.openapi_client.models.resource_monitor_config import ResourceMonitorConfig
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel
 from torc.openapi_client.models.result_model import ResultModel

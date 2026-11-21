@@ -1128,7 +1128,7 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
     assert_eq!(before_reset.items.len(), 1);
 
     // Reset job status
-    apis::workflows_api::reset_job_status(config, workflow_id, None)
+    apis::workflows_api::reset_job_status(config, workflow_id, None, None, None)
         .expect("Failed to reset job status");
 
     // Verify active_compute_node_id is cleared

@@ -267,20 +267,29 @@ Fetches a failure handler by ID.
 }
 ```
 
-### POST /jobs/{id}/retry/{run_id}?max_retries=N
+### POST /jobs/{id}/retry/{run_id}
 
 Retries a failed job by resetting its status to Ready.
 
 **Query Parameters:**
 
-- `max_retries` (required): Maximum retries allowed by the matching rule
+- `max_retries` (deprecated, ignored): The server reads the limit from the job's failure handler
 
 **Validations:**
 
 1. Job must exist
 2. `run_id` must match workflow's current run
 3. Job status must be Running, Failed, Terminated, or PendingFailed
-4. `attempt_id` must be less than `max_retries`
+4. If the job has a failure handler, `attempt_id` must be less than the largest `max_retries` among
+   its rules
+
+The server enforces the largest limit among the rules, not the limit of the rule that matched,
+because the job runner calls `retry_job` before `complete_job`, so the server does not know the exit
+code yet. The job runner still checks the matching rule's limit before it calls the endpoint.
+
+`attempt_id` counts every attempt, whoever asked for the retry. Retries decided by AI classification
+(`classify_and_resolve_failures`) and retries requested from the TUI go through the same endpoint,
+so they count against the failure handler's limit. A job without a failure handler has no limit.
 
 **Transaction Safety:**
 

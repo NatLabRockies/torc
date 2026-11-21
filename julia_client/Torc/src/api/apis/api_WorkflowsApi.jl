@@ -769,30 +769,39 @@ end
 
 const _returntypes_reset_job_status_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ResetJobStatusResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, _mediaType=nothing)
-    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_reset_job_status_WorkflowsApi, "/workflows/{id}/reset_job_status", [])
+function _oacinternal_reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, force=nothing, reset_job_status_request=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_reset_job_status_WorkflowsApi, "/workflows/{id}/reset_job_status", [], reset_job_status_request)
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "failed_only", failed_only; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_param(_ctx.query, "force", force; style="form", is_explode=true)  # type Bool
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
-    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
     return _ctx
 end
 
-@doc raw"""Params:
+@doc raw"""Reset job statuses to uninitialized. Without a body, resets every job (or, with failed_only, every failed, terminated, canceled, and pending_failed job). With a body, resets only the selected jobs in one transaction: jobs from other workflows or not in an eligible status are skipped with a reason, and the request is refused with 422 while the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs, unless force=true. As with manage_status_change, resetting a terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id.
+
+Params:
 - id::Int64 (required)
 - failed_only::Bool
+- force::Bool
+- reset_job_status_request::ResetJobStatusRequest
 
 Return: ResetJobStatusResponse, OpenAPI.Clients.ApiResponse
 """
-function reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_reset_job_status(_api, id; failed_only=failed_only, _mediaType=_mediaType)
+function reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, force=nothing, reset_job_status_request=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_reset_job_status(_api, id; failed_only=failed_only, force=force, reset_job_status_request=reset_job_status_request, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function reset_job_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; failed_only=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_reset_job_status(_api, id; failed_only=failed_only, _mediaType=_mediaType)
+function reset_job_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; failed_only=nothing, force=nothing, reset_job_status_request=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_reset_job_status(_api, id; failed_only=failed_only, force=force, reset_job_status_request=reset_job_status_request, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

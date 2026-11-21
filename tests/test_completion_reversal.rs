@@ -160,6 +160,8 @@ fn test_completion_reversal_resets_downstream_jobs(start_server: &ServerProcess)
         config,
         workflow_id,
         Some(true), // failed_only = true
+        None,
+        None,
     )
     .expect("Failed to reset job status");
 
@@ -296,7 +298,7 @@ fn test_completion_reversal_complex_dependencies(start_server: &ServerProcess) {
     }
 
     // Reset failed jobs only
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("Failed to reset job status");
 
     // Verify that ALL jobs are now Uninitialized
@@ -402,7 +404,7 @@ fn test_completion_reversal_selective_reset(start_server: &ServerProcess) {
     }
 
     // Reset failed jobs only
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("Failed to reset job status");
 
     // Verify that only Chain 1 jobs are reset to Uninitialized

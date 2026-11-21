@@ -1188,7 +1188,7 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     // This simulates the job runner detecting a failure and wanting to retry
     // before it has called complete_job
     let retried_job =
-        apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
+        apis::jobs_api::retry_job(config, job_id, run_id, None).expect("retry_job should succeed");
 
     // Verify job is now Ready with incremented attempt_id
     assert_eq!(retried_job.status.unwrap(), JobStatus::Ready);
@@ -1243,7 +1243,7 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
 
     // Call retry_job
     let retried_job =
-        apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
+        apis::jobs_api::retry_job(config, job_id, run_id, None).expect("retry_job should succeed");
 
     // Verify job is now Ready with incremented attempt_id
     assert_eq!(retried_job.status.unwrap(), JobStatus::Ready);
@@ -1275,7 +1275,7 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
     assert_eq!(job_before.status.unwrap(), JobStatus::Ready);
 
     // Try to retry a Ready job - should fail
-    let result = apis::jobs_api::retry_job(config, job_id, run_id, 3);
+    let result = apis::jobs_api::retry_job(config, job_id, run_id, None);
     assert!(
         result.is_err(),
         "retry_job should fail for job in Ready status"

@@ -526,7 +526,7 @@ fn test_results_list_all_runs_default_behavior(start_server: &ServerProcess) {
     )
     .expect("Failed to complete job2 for run 1");
 
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("Failed to reset job status");
 
     // Reinitialize workflow for run 2 (should trigger workflow_result cleanup and increment run_id)
@@ -988,7 +988,7 @@ fn test_results_workflow_result_table_cleanup_on_reinitialize(start_server: &Ser
     );
 
     // Reset job status before reinitializing (required to reset completed jobs)
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(false))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(false), None, None)
         .expect("Failed to reset job status");
 
     // Reinitialize workflow (should clean up workflow_result table for incomplete jobs)

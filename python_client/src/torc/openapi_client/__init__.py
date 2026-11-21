@@ -119,7 +119,9 @@ __all__ = [
     "ProcessChangedJobInputsResponse",
     "ReloadAuthResponse",
     "RemoteWorkerModel",
+    "ResetJobStatusRequest",
     "ResetJobStatusResponse",
+    "ResetJobStatusSkipped",
     "ResourceMonitorConfig",
     "ResourceRequirementsModel",
     "ResultModel",
@@ -254,7 +256,9 @@ from torc.openapi_client.models.ping_response import PingResponse as PingRespons
 from torc.openapi_client.models.process_changed_job_inputs_response import ProcessChangedJobInputsResponse as ProcessChangedJobInputsResponse
 from torc.openapi_client.models.reload_auth_response import ReloadAuthResponse as ReloadAuthResponse
 from torc.openapi_client.models.remote_worker_model import RemoteWorkerModel as RemoteWorkerModel
+from torc.openapi_client.models.reset_job_status_request import ResetJobStatusRequest as ResetJobStatusRequest
 from torc.openapi_client.models.reset_job_status_response import ResetJobStatusResponse as ResetJobStatusResponse
+from torc.openapi_client.models.reset_job_status_skipped import ResetJobStatusSkipped as ResetJobStatusSkipped
 from torc.openapi_client.models.resource_monitor_config import ResourceMonitorConfig as ResourceMonitorConfig
 from torc.openapi_client.models.resource_requirements_model import ResourceRequirementsModel as ResourceRequirementsModel
 from torc.openapi_client.models.result_model import ResultModel as ResultModel

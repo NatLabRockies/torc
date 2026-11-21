@@ -1955,7 +1955,13 @@ fn handle_reset_status(
     }
 
     // Reset job status
-    match apis::workflows_api::reset_job_status(config, selected_workflow_id, Some(failed_only)) {
+    match apis::workflows_api::reset_job_status(
+        config,
+        selected_workflow_id,
+        Some(failed_only),
+        None,
+        None,
+    ) {
         Ok(_) => {
             job_reset_success = true;
             if format != "json" {

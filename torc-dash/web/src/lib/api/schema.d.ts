@@ -1181,6 +1181,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Reset job statuses to uninitialized. Without a body, resets every job (or, with failed_only, every failed, terminated, canceled, and pending_failed job). With a body, resets only the selected jobs in one transaction: jobs from other workflows or not in an eligible status are skipped with a reason, and the request is refused with 422 while the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs, unless force=true. As with manage_status_change, resetting a terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id. */
         post: operations["reset_job_status"];
         delete?: never;
         options?: never;
@@ -2096,13 +2097,44 @@ export interface components {
             /** Format: int64 */
             workflow_id: number;
         };
+        /**
+         * @description Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
+         *     only the listed jobs in the listed statuses are reset, in one transaction that first checks
+         *     that the workflow is quiet (see the endpoint description).
+         */
+        ResetJobStatusRequest: {
+            /** @description Report what would be reset without changing anything. */
+            dry_run?: boolean | null;
+            /** @description Jobs to reset. Omit to select every job in the workflow whose status is in `statuses`. */
+            job_ids?: number[] | null;
+            /**
+             * @description Statuses a job must be in to be reset. Defaults to the recoverable statuses: failed,
+             *     terminated, canceled, and pending_failed.
+             */
+            statuses?: components["schemas"]["JobStatus"][] | null;
+        };
         ResetJobStatusResponse: {
+            /**
+             * @description IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
+             *     request has a body.
+             */
+            reset?: number[] | null;
             reset_type?: string | null;
+            /**
+             * @description Requested jobs that were not reset, with the reason. Set only when the request has a
+             *     body.
+             */
+            skipped?: components["schemas"]["ResetJobStatusSkipped"][] | null;
             status: string;
             /** Format: int64 */
             updated_count: number;
             /** Format: int64 */
             workflow_id: number;
+        };
+        ResetJobStatusSkipped: {
+            /** Format: int64 */
+            job_id: number;
+            reason: string;
         };
         /**
          * @description Configuration for resource monitoring.
@@ -4680,8 +4712,9 @@ export interface operations {
     };
     retry_job: {
         parameters: {
-            query: {
-                max_retries: number;
+            query?: {
+                /** @description Deprecated and ignored: the server enforces the job's failure handler limit. */
+                max_retries?: number | null;
             };
             header?: never;
             path: {
@@ -8522,7 +8555,16 @@ export interface operations {
     reset_job_status: {
         parameters: {
             query?: {
+                /**
+                 * @description Without a body: reset only failed, terminated, canceled, and pending_failed jobs.
+                 *     Ignored when a body is sent.
+                 */
                 failed_only?: boolean | null;
+                /**
+                 * @description With a body: reset even if the workflow has active compute nodes, pending or active
+                 *     scheduled compute nodes, or running or pending jobs.
+                 */
+                force?: boolean | null;
             };
             header?: never;
             path: {
@@ -8531,7 +8573,12 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description Optional selective reset */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ResetJobStatusRequest"];
+            };
+        };
         responses: {
             /** @description Successful response */
             200: {
@@ -8540,6 +8587,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResetJobStatusResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Workflow is not quiet */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

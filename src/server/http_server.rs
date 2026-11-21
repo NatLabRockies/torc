@@ -2480,15 +2480,18 @@ where
     }
 
     /// Reset status for jobs to uninitialized.
-    /// If failed_only is true, only jobs with a failed result will be reset.
-    /// If failed_only is false, all jobs will be reset.
+    /// With a body, only the selected jobs are reset (see `ResetJobStatusRequest`).
+    /// Otherwise, if failed_only is true, only jobs with a failed result will be reset,
+    /// and if it is false, all jobs will be reset.
     async fn reset_job_status(
         &self,
         id: i64,
         failed_only: Option<bool>,
+        force: Option<bool>,
+        body: Option<models::ResetJobStatusRequest>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError> {
-        self.transport_reset_job_status(id, failed_only, context)
+        self.transport_reset_job_status(id, failed_only, force, body, context)
             .await
     }
 
@@ -2575,11 +2578,9 @@ where
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError> {
-        self.transport_retry_job(id, run_id, max_retries, context)
-            .await
+        self.transport_retry_job(id, run_id, context).await
     }
 
     /// Get ready jobs that fit within the specified resource constraints.

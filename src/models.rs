@@ -2187,6 +2187,8 @@ impl ResetJobStatusResponse {
             updated_count,
             status,
             reset_type: None,
+            reset: None,
+            skipped: None,
         }
     }
 
@@ -2662,6 +2664,39 @@ pub struct ResetJobStatusResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reset_type: Option<String>,
+    /// IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
+    /// request has a body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset: Option<Vec<i64>>,
+    /// Requested jobs that were not reset, with the reason. Set only when the request has a
+    /// body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<Vec<ResetJobStatusSkipped>>,
+}
+
+/// Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
+/// only the listed jobs in the listed statuses are reset, in one transaction that first checks
+/// that the workflow is quiet (see the endpoint description).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ResetJobStatusRequest {
+    /// Jobs to reset. Omit to select every job in the workflow whose status is in `statuses`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_ids: Option<Vec<i64>>,
+    /// Statuses a job must be in to be reset. Defaults to the recoverable statuses: failed,
+    /// terminated, canceled, and pending_failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub statuses: Option<Vec<JobStatus>>,
+    /// Report what would be reset without changing anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResetJobStatusSkipped {
+    pub job_id: i64,
+    pub reason: String,
 }
 
 #[cfg(test)]
