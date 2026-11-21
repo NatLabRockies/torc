@@ -919,7 +919,7 @@ fn count_jobs_with_status(
     let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(vec![status]),
+        Some(status),
         None,    // needs_file_id
         None,    // upstream_job_id
         None,    // offset
@@ -933,6 +933,7 @@ fn count_jobs_with_status(
         None,    // command
         None,    // label
         None,    // ids
+        None,    // statuses
     )
     .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
 

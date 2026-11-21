@@ -14,8 +14,10 @@ use crate::models::{JobModel, JobStatus};
 pub struct JobListParams {
     /// Workflow ID to list jobs from
     pub workflow_id: i64,
-    /// Filter by job status (any of these)
-    pub status: Option<Vec<JobStatus>>,
+    /// Filter by job status
+    pub status: Option<JobStatus>,
+    /// Filter by any of these job statuses (mutually exclusive with `status`)
+    pub statuses: Option<Vec<JobStatus>>,
     /// Filter by file ID that the job needs
     pub needs_file_id: Option<i64>,
     /// Filter by upstream job ID
@@ -46,12 +48,12 @@ impl JobListParams {
     }
 
     pub fn with_status(mut self, status: JobStatus) -> Self {
-        self.status = Some(vec![status]);
+        self.status = Some(status);
         self
     }
 
     pub fn with_statuses(mut self, statuses: Vec<JobStatus>) -> Self {
-        self.status = Some(statuses);
+        self.statuses = Some(statuses);
         self
     }
 
@@ -135,7 +137,7 @@ impl Paginatable for JobModel {
         let response = apis::jobs_api::list_jobs(
             config,
             params.workflow_id,
-            params.status.clone(),
+            params.status,
             params.needs_file_id,
             params.upstream_job_id,
             Some(params.offset),
@@ -149,6 +151,7 @@ impl Paginatable for JobModel {
             None, // command
             None, // label
             params.ids.clone(),
+            params.statuses.clone(),
         )?;
 
         Ok(PaginatedResponse {

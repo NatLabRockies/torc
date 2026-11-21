@@ -1012,6 +1012,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None,    // command
                 None,    // label
                 None,    // ids
+                None,    // statuses
             ) {
                 Ok(response) => {
                     let job_count = response.total_count;
@@ -1565,6 +1566,7 @@ pub fn get_current_job_count(
         None,    // command
         None,    // label
         None,    // ids
+        None,    // statuses
     )
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
@@ -2301,6 +2303,7 @@ pub fn get_existing_job_names(
             None, // command
             None, // label
             None, // ids
+            None, // statuses
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 

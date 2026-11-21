@@ -129,7 +129,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
     let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(vec![models::JobStatus::Ready]),
+        Some(models::JobStatus::Ready),
         None,
         None,
         None,
@@ -143,6 +143,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs");
 
@@ -188,7 +189,7 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
     let jobs = apis::jobs_api::list_jobs(
         config,
         workflow_id,
-        Some(vec![models::JobStatus::Ready]),
+        Some(models::JobStatus::Ready),
         None,
         None,
         None,
@@ -202,6 +203,7 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs");
 

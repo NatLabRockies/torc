@@ -145,20 +145,21 @@ impl TorcClient {
         let response = apis::jobs_api::list_jobs(
             &self.config,
             workflow_id,
-            status.map(|s| vec![s]), // status
-            None,                    // needs_file_id
-            None,                    // upstream_job_id
-            offset,                  // offset
-            limit,                   // limit
-            None,                    // sort_by
-            None,                    // reverse_sort
-            None,                    // include_relationships
-            None,                    // active_compute_node_id
-            None,                    // origin_is_set
-            name,                    // name
-            command,                 // command
-            None,                    // label
-            None,                    // ids
+            status,  // status
+            None,    // needs_file_id
+            None,    // upstream_job_id
+            offset,  // offset
+            limit,   // limit
+            None,    // sort_by
+            None,    // reverse_sort
+            None,    // include_relationships
+            None,    // active_compute_node_id
+            None,    // origin_is_set
+            name,    // name
+            command, // command
+            None,    // label
+            None,    // ids
+            None,    // statuses
         )
         .context("Failed to list jobs")?;
 
@@ -203,17 +204,18 @@ impl TorcClient {
         let response = apis::results_api::list_results(
             &self.config,
             workflow_id,
-            None,                    // job_id
-            None,                    // run_id
-            return_code,             // return_code
-            status.map(|s| vec![s]), // status
-            None,                    // compute_node_id
-            offset,                  // offset
-            limit,                   // limit
-            None,                    // sort_by
-            None,                    // reverse_sort
-            None,                    // all_runs
-            None,                    // ids
+            None,        // job_id
+            None,        // run_id
+            return_code, // return_code
+            status,      // status
+            None,        // compute_node_id
+            offset,      // offset
+            limit,       // limit
+            None,        // sort_by
+            None,        // reverse_sort
+            None,        // all_runs
+            None,        // ids
+            None,        // statuses
         )
         .context("Failed to list results")?;
 

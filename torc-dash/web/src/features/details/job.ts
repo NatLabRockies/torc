@@ -37,6 +37,21 @@ async function byIds<T extends { id?: number | null }>(
   return (await all()).filter((x) => wanted.has(x.id!));
 }
 
+/** Ids per `/jobs?ids=` request: keeps the URL well under server limits on large fan-ins. */
+const IDS_PER_REQUEST = 1000;
+
+async function jobsByIds(workflow_id: number, ids: number[] | null | undefined): Promise<Job[]> {
+  const jobs: Job[] = [];
+  for (let i = 0; i < (ids?.length ?? 0); i += IDS_PER_REQUEST) {
+    const chunk = ids!.slice(i, i + IDS_PER_REQUEST);
+    const query = (o: number, l: number) => ({ workflow_id, offset: o, limit: l, ids: chunk });
+    jobs.push(
+      ...(await listAll((o, l) => unwrap(api.GET("/jobs", { params: { query: query(o, l) } })))),
+    );
+  }
+  return jobs;
+}
+
 /**
  * Load one job and everything the details modal shows, using per-job queries so this stays fast
  * on workflows with 100k jobs. Only needs the job id; the workflow comes from the job.
@@ -82,15 +97,7 @@ export async function loadJobDetails(id: number): Promise<JobDetails> {
     listAll((o, l) =>
       unwrap(api.GET("/user_data", { params: { query: { ...page(o, l), producer_job_id: id } } })),
     ),
-    job.depends_on_job_ids?.length
-      ? listAll((o, l) =>
-          unwrap(
-            api.GET("/jobs", {
-              params: { query: { ...page(o, l), ids: job.depends_on_job_ids! } },
-            }),
-          ),
-        )
-      : [],
+    jobsByIds(wf, job.depends_on_job_ids),
     listAll((o, l) =>
       unwrap(api.GET("/jobs", { params: { query: { ...page(o, l), upstream_job_id: id } } })),
     ),

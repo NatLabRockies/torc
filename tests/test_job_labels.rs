@@ -252,6 +252,7 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
             None, // command
             None, // labels
             None, // ids
+            None, // statuses
         )
         .expect("Failed to list jobs")
         .items,
@@ -339,7 +340,7 @@ fn test_list_jobs_filters_by_label(start_server: &ServerProcess) {
         let response = apis::jobs_api::list_jobs(
             config,
             workflow_id,
-            Some(vec![models::JobStatus::Ready]),
+            Some(models::JobStatus::Ready),
             None,
             None,
             None,
@@ -352,6 +353,7 @@ fn test_list_jobs_filters_by_label(start_server: &ServerProcess) {
             None, // name
             None, // command
             labels,
+            None,
             None,
         )
         .expect("list_jobs should succeed");

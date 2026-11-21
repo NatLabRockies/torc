@@ -1632,6 +1632,7 @@ fn test_comprehensive_access_control_workflow_execution(
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs");
 

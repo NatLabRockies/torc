@@ -1127,7 +1127,7 @@ class ResultsApi:
         job_id: Optional[StrictInt] = None,
         run_id: Optional[StrictInt] = None,
         return_code: Optional[StrictInt] = None,
-        status: Annotated[Optional[List[JobStatus]], Field(description="One status, or several comma-separated (`status=failed,terminated`).")] = None,
+        status: Optional[JobStatus] = None,
         compute_node_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
@@ -1135,6 +1135,7 @@ class ResultsApi:
         reverse_sort: Optional[StrictBool] = None,
         all_runs: Optional[StrictBool] = None,
         ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
+        statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1159,8 +1160,8 @@ class ResultsApi:
         :type run_id: int
         :param return_code:
         :type return_code: int
-        :param status: One status, or several comma-separated (`status=failed,terminated`).
-        :type status: List[JobStatus]
+        :param status:
+        :type status: JobStatus
         :param compute_node_id:
         :type compute_node_id: int
         :param offset:
@@ -1175,6 +1176,8 @@ class ResultsApi:
         :type all_runs: bool
         :param ids: Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
         :type ids: List[int]
+        :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
+        :type statuses: List[JobStatus]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1210,6 +1213,7 @@ class ResultsApi:
             reverse_sort=reverse_sort,
             all_runs=all_runs,
             ids=ids,
+            statuses=statuses,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1241,7 +1245,7 @@ class ResultsApi:
         job_id: Optional[StrictInt] = None,
         run_id: Optional[StrictInt] = None,
         return_code: Optional[StrictInt] = None,
-        status: Annotated[Optional[List[JobStatus]], Field(description="One status, or several comma-separated (`status=failed,terminated`).")] = None,
+        status: Optional[JobStatus] = None,
         compute_node_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
@@ -1249,6 +1253,7 @@ class ResultsApi:
         reverse_sort: Optional[StrictBool] = None,
         all_runs: Optional[StrictBool] = None,
         ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
+        statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1273,8 +1278,8 @@ class ResultsApi:
         :type run_id: int
         :param return_code:
         :type return_code: int
-        :param status: One status, or several comma-separated (`status=failed,terminated`).
-        :type status: List[JobStatus]
+        :param status:
+        :type status: JobStatus
         :param compute_node_id:
         :type compute_node_id: int
         :param offset:
@@ -1289,6 +1294,8 @@ class ResultsApi:
         :type all_runs: bool
         :param ids: Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
         :type ids: List[int]
+        :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
+        :type statuses: List[JobStatus]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1324,6 +1331,7 @@ class ResultsApi:
             reverse_sort=reverse_sort,
             all_runs=all_runs,
             ids=ids,
+            statuses=statuses,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1355,7 +1363,7 @@ class ResultsApi:
         job_id: Optional[StrictInt] = None,
         run_id: Optional[StrictInt] = None,
         return_code: Optional[StrictInt] = None,
-        status: Annotated[Optional[List[JobStatus]], Field(description="One status, or several comma-separated (`status=failed,terminated`).")] = None,
+        status: Optional[JobStatus] = None,
         compute_node_id: Optional[StrictInt] = None,
         offset: Optional[StrictInt] = None,
         limit: Optional[StrictInt] = None,
@@ -1363,6 +1371,7 @@ class ResultsApi:
         reverse_sort: Optional[StrictBool] = None,
         all_runs: Optional[StrictBool] = None,
         ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
+        statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1387,8 +1396,8 @@ class ResultsApi:
         :type run_id: int
         :param return_code:
         :type return_code: int
-        :param status: One status, or several comma-separated (`status=failed,terminated`).
-        :type status: List[JobStatus]
+        :param status:
+        :type status: JobStatus
         :param compute_node_id:
         :type compute_node_id: int
         :param offset:
@@ -1403,6 +1412,8 @@ class ResultsApi:
         :type all_runs: bool
         :param ids: Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
         :type ids: List[int]
+        :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
+        :type statuses: List[JobStatus]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1438,6 +1449,7 @@ class ResultsApi:
             reverse_sort=reverse_sort,
             all_runs=all_runs,
             ids=ids,
+            statuses=statuses,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1472,6 +1484,7 @@ class ResultsApi:
         reverse_sort,
         all_runs,
         ids,
+        statuses,
         _request_auth,
         _content_type,
         _headers,
@@ -1481,8 +1494,8 @@ class ResultsApi:
         _host = None
 
         _collection_formats: Dict[str, str] = {
-            'status': 'csv',
             'ids': 'csv',
+            'statuses': 'csv',
         }
 
         _path_params: Dict[str, str] = {}
@@ -1514,7 +1527,7 @@ class ResultsApi:
             
         if status is not None:
             
-            _query_params.append(('status', status))
+            _query_params.append(('status', status.value))
             
         if compute_node_id is not None:
             
@@ -1543,6 +1556,10 @@ class ResultsApi:
         if ids is not None:
             
             _query_params.append(('ids', ids))
+            
+        if statuses is not None:
+            
+            _query_params.append(('statuses', statuses))
             
         # process the header parameters
         # process the form parameters

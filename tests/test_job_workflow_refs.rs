@@ -124,6 +124,7 @@ fn test_create_job_rejects_cross_workflow_refs(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None,
     )
     .unwrap();
     assert_eq!(jobs.items.len(), 1, "only the upstream job should exist");

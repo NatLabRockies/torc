@@ -301,6 +301,7 @@ fn test_jobs_list_name_command_filter(start_server: &ServerProcess) {
             command,
             None, // labels
             None, // ids
+            None, // statuses
         )
         .expect("list_jobs failed")
     };
@@ -1089,6 +1090,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs before deletion");
     assert_eq!(
@@ -1125,6 +1127,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs after deletion");
     assert_eq!(
@@ -1590,7 +1593,7 @@ fn test_bulk_create_jobs_rejects_invalid_env_name(start_server: &ServerProcess) 
     );
 }
 
-/// `ids` and comma-separated `status` filters on `GET /jobs`.
+/// `ids` and comma-separated `statuses` filters on `GET /jobs`.
 #[rstest]
 fn test_list_jobs_ids_and_multi_status_filters(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -1598,11 +1601,11 @@ fn test_list_jobs_ids_and_multi_status_filters(start_server: &ServerProcess) {
     let jobs = common::create_diamond_workflow(config, true, work_dir.path());
     let workflow_id = jobs["preprocess"].workflow_id;
     let id = |name: &str| jobs[name].id.unwrap();
-    let list = |status: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
+    let list = |statuses: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
         let mut names: Vec<String> = apis::jobs_api::list_jobs(
             config,
             workflow_id,
-            status,
+            None,
             None,
             None,
             None,
@@ -1616,6 +1619,7 @@ fn test_list_jobs_ids_and_multi_status_filters(start_server: &ServerProcess) {
             None,
             None,
             ids,
+            statuses,
         )
         .expect("list_jobs failed")
         .items

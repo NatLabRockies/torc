@@ -4246,8 +4246,7 @@ export interface operations {
         parameters: {
             query: {
                 workflow_id: number;
-                /** @description One status, or several comma-separated (`status=failed,terminated`). */
-                status?: components["schemas"]["JobStatus"][] | null;
+                status?: components["schemas"]["JobStatus"];
                 needs_file_id?: number | null;
                 upstream_job_id?: number | null;
                 offset?: number | null;
@@ -4285,6 +4284,11 @@ export interface operations {
                  *     `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
                  */
                 ids?: number[] | null;
+                /**
+                 * @description Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+                 *     Mutually exclusive with `status` (both given returns 422).
+                 */
+                statuses?: components["schemas"]["JobStatus"][] | null;
             };
             header?: never;
             path?: never;
@@ -4319,7 +4323,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (too many ids) */
+            /** @description Unprocessable content (too many ids, or both status and statuses) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5572,8 +5576,7 @@ export interface operations {
                 job_id?: number | null;
                 run_id?: number | null;
                 return_code?: number | null;
-                /** @description One status, or several comma-separated (`status=failed,terminated`). */
-                status?: components["schemas"]["JobStatus"][] | null;
+                status?: components["schemas"]["JobStatus"];
                 compute_node_id?: number | null;
                 offset?: number | null;
                 limit?: number | null;
@@ -5585,6 +5588,11 @@ export interface operations {
                  *     `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
                  */
                 ids?: number[] | null;
+                /**
+                 * @description Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+                 *     Mutually exclusive with `status` (both given returns 422).
+                 */
+                statuses?: components["schemas"]["JobStatus"][] | null;
             };
             header?: never;
             path?: never;
@@ -5619,7 +5627,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (too many ids) */
+            /** @description Unprocessable content (too many ids, or both status and statuses) */
             422: {
                 headers: {
                     [name: string]: unknown;

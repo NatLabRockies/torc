@@ -33,6 +33,7 @@ fn job_statuses(
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs");
 
@@ -199,6 +200,7 @@ fn test_failure_cancellation_is_transitive(start_server: &ServerProcess) {
         None, // reverse_sort
         None, // all_runs
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list results");
     assert_eq!(

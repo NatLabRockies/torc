@@ -1574,6 +1574,7 @@ fn test_create_workflow_with_regex_job_dependencies(start_server: &ServerProcess
         None,       // command
         None,       // labels
         None,       // ids
+        None,       // statuses
     )
     .expect("Failed to list jobs");
 
@@ -1672,6 +1673,7 @@ fn test_create_workflow_with_regex_file_dependencies(start_server: &ServerProces
         None,       // command
         None,       // labels
         None,       // ids
+        None,       // statuses
     )
     .expect("Failed to list jobs");
 
@@ -1763,6 +1765,7 @@ fn test_create_workflow_with_regex_user_data_dependencies(start_server: &ServerP
         None,       // command
         None,       // labels
         None,       // ids
+        None,       // statuses
     )
     .expect("Failed to list jobs");
 
@@ -1857,6 +1860,7 @@ fn test_create_workflow_with_mixed_exact_and_regex_dependencies(start_server: &S
         None,       // command
         None,       // labels
         None,       // ids
+        None,       // statuses
     )
     .expect("Failed to list jobs");
 
@@ -4129,6 +4133,7 @@ fn test_create_subgraph_workflows_from_examples(start_server: &ServerProcess) {
             None, // command
             None, // labels
             None, // ids
+            None, // statuses
         )
         .expect("Failed to list jobs");
 
@@ -4292,6 +4297,7 @@ fn test_subgraph_workflow_execution_plan_from_database() {
         None,       // command
         None,       // labels
         None,       // ids
+        None,       // statuses
     )
     .expect("Failed to list jobs")
     .items;
@@ -4468,6 +4474,7 @@ fn test_subgraph_workflow_execution_plan_spec_vs_database() {
         None,       // command
         None,       // labels
         None,       // ids
+        None,       // statuses
     )
     .expect("Failed to list jobs")
     .items;

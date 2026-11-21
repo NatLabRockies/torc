@@ -204,10 +204,10 @@ const _returntypes_list_jobs_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, _mediaType=nothing)
+function _oacinternal_list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, statuses=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "GET", _returntypes_list_jobs_JobsApi, "/jobs", [])
     OpenAPI.Clients.set_param(_ctx.query, "workflow_id", workflow_id; style="form", is_explode=true)  # type Int64
-    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=false)  # type Vector{JobStatus}
+    OpenAPI.Clients.set_param(_ctx.query, "status", status; style="form", is_explode=true)  # type JobStatus
     OpenAPI.Clients.set_param(_ctx.query, "needs_file_id", needs_file_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "upstream_job_id", upstream_job_id; style="form", is_explode=true)  # type Int64
     OpenAPI.Clients.set_param(_ctx.query, "offset", offset; style="form", is_explode=true)  # type Int64
@@ -221,6 +221,7 @@ function _oacinternal_list_jobs(_api::JobsApi, workflow_id::Int64; status=nothin
     OpenAPI.Clients.set_param(_ctx.query, "command", command; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "labels", labels; style="form", is_explode=true)  # type String
     OpenAPI.Clients.set_param(_ctx.query, "ids", ids; style="form", is_explode=false)  # type Vector{Int64}
+    OpenAPI.Clients.set_param(_ctx.query, "statuses", statuses; style="form", is_explode=false)  # type Vector{JobStatus}
     OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
     OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
     return _ctx
@@ -228,7 +229,7 @@ end
 
 @doc raw"""Params:
 - workflow_id::Int64 (required)
-- status::Vector{JobStatus}
+- status::JobStatus
 - needs_file_id::Int64
 - upstream_job_id::Int64
 - offset::Int64
@@ -242,16 +243,17 @@ end
 - command::String
 - labels::String
 - ids::Vector{Int64}
+- statuses::Vector{JobStatus}
 
 Return: ListJobsResponse, OpenAPI.Clients.ApiResponse
 """
-function list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_jobs(_api, workflow_id; status=status, needs_file_id=needs_file_id, upstream_job_id=upstream_job_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, include_relationships=include_relationships, active_compute_node_id=active_compute_node_id, origin_is_set=origin_is_set, name=name, command=command, labels=labels, ids=ids, _mediaType=_mediaType)
+function list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, statuses=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_jobs(_api, workflow_id; status=status, needs_file_id=needs_file_id, upstream_job_id=upstream_job_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, include_relationships=include_relationships, active_compute_node_id=active_compute_node_id, origin_is_set=origin_is_set, name=name, command=command, labels=labels, ids=ids, statuses=statuses, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, _mediaType=nothing)
-    _ctx = _oacinternal_list_jobs(_api, workflow_id; status=status, needs_file_id=needs_file_id, upstream_job_id=upstream_job_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, include_relationships=include_relationships, active_compute_node_id=active_compute_node_id, origin_is_set=origin_is_set, name=name, command=command, labels=labels, ids=ids, _mediaType=_mediaType)
+function list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, statuses=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_list_jobs(_api, workflow_id; status=status, needs_file_id=needs_file_id, upstream_job_id=upstream_job_id, offset=offset, limit=limit, sort_by=sort_by, reverse_sort=reverse_sort, include_relationships=include_relationships, active_compute_node_id=active_compute_node_id, origin_is_set=origin_is_set, name=name, command=command, labels=labels, ids=ids, statuses=statuses, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

@@ -116,6 +116,7 @@ fn test_correct_resources_memory_violation_dry_run(start_server: &ServerProcess)
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list results");
 
@@ -216,6 +217,7 @@ fn test_correct_resources_cpu_violation_dry_run(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list results");
 
@@ -303,6 +305,7 @@ fn test_correct_resources_runtime_violation_dry_run(start_server: &ServerProcess
     let violations = apis::results_api::list_results(
         config,
         workflow_id,
+        None,
         None,
         None,
         None,
@@ -462,6 +465,7 @@ fn test_correct_resources_multiple_violations(start_server: &ServerProcess) {
     let results = apis::results_api::list_results(
         config,
         workflow_id,
+        None,
         None,
         None,
         None,
@@ -718,6 +722,7 @@ fn test_correct_resources_dry_run_mode(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list results");
 
@@ -835,6 +840,7 @@ fn test_correct_resources_memory_violation_successful_job(start_server: &ServerP
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list results");
 
@@ -882,6 +888,7 @@ fn fetch_results(
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list results")
     .items
@@ -906,6 +913,7 @@ fn fetch_jobs(config: &torc::client::Configuration, workflow_id: i64) -> Vec<mod
         None, // command
         None, // labels
         None, // ids
+        None, // statuses
     )
     .expect("Failed to list jobs")
     .items

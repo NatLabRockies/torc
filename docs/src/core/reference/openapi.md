@@ -129,7 +129,7 @@ curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&status=ready" \
   | jq '.items[] | {name, status, id}'
 
 # curl - several statuses, or specific job IDs (comma-separated)
-curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&status=failed,terminated" \
+curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&statuses=failed,terminated" \
   | jq '.items[] | {name, status, id}'
 curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&ids=1,2,3" \
   | jq '.items[] | {name, status, id}'

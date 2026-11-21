@@ -190,8 +190,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_jobs**
-> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
+> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, statuses=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, ids=nothing, statuses=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -206,7 +206,7 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **status** | [**Vector{JobStatus}**](JobStatus.md) | One status, or several comma-separated (&#x60;status&#x3D;failed,terminated&#x60;). | [default to nothing]
+ **status** | [**JobStatus**](.md) |  | [default to nothing]
  **needs_file_id** | **Int64** |  | [default to nothing]
  **upstream_job_id** | **Int64** |  | [default to nothing]
  **offset** | **Int64** |  | [default to nothing]
@@ -220,6 +220,7 @@ Name | Type | Description  | Notes
  **command** | **String** | Substring filter on the job command (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
  **labels** | **String** | Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs. | [default to nothing]
  **ids** | [**Vector{Int64}**](Int64.md) | Comma-separated job IDs to restrict to, scoped to &#x60;workflow_id&#x60;. At most &#x60;MAX_RECORD_TRANSFER_COUNT&#x60; IDs; more returns 422. | [default to nothing]
+ **statuses** | [**Vector{JobStatus}**](JobStatus.md) | Comma-separated statuses (&#x60;statuses&#x3D;failed,terminated&#x60;): match any of them. Mutually exclusive with &#x60;status&#x60; (both given returns 422). | [default to nothing]
 
 ### Return type
 

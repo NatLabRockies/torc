@@ -1392,16 +1392,9 @@ paths:
           format: int64
       - name: status
         in: query
-        description: One status, or several comma-separated (`status=failed,terminated`).
         required: false
         schema:
-          type:
-          - array
-          - 'null'
-          items:
-            $ref: '#/components/schemas/JobStatus'
-        style: form
-        explode: false
+          $ref: '#/components/schemas/JobStatus'
       - name: needs_file_id
         in: query
         required: false
@@ -1522,6 +1515,20 @@ paths:
             format: int64
         style: form
         explode: false
+      - name: statuses
+        in: query
+        description: |-
+          Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+          Mutually exclusive with `status` (both given returns 422).
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        style: form
+        explode: false
       responses:
         '200':
           description: Successful response
@@ -1542,7 +1549,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable content (too many ids)
+          description: Unprocessable content (too many ids, or both status and statuses)
           content:
             application/json:
               schema:
@@ -2666,16 +2673,9 @@ paths:
           format: int64
       - name: status
         in: query
-        description: One status, or several comma-separated (`status=failed,terminated`).
         required: false
         schema:
-          type:
-          - array
-          - 'null'
-          items:
-            $ref: '#/components/schemas/JobStatus'
-        style: form
-        explode: false
+          $ref: '#/components/schemas/JobStatus'
       - name: compute_node_id
         in: query
         required: false
@@ -2736,6 +2736,20 @@ paths:
             format: int64
         style: form
         explode: false
+      - name: statuses
+        in: query
+        description: |-
+          Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+          Mutually exclusive with `status` (both given returns 422).
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        style: form
+        explode: false
       responses:
         '200':
           description: Successful response
@@ -2756,7 +2770,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable content (too many ids)
+          description: Unprocessable content (too many ids, or both status and statuses)
           content:
             application/json:
               schema:

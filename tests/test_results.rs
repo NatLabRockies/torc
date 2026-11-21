@@ -1054,7 +1054,7 @@ fn test_results_list_run_id_column_with_all_runs(start_server: &ServerProcess) {
     );
 }
 
-/// `ids` (job ids) and comma-separated `status` filters on `GET /results`.
+/// `ids` (job ids) and comma-separated `statuses` filters on `GET /results`.
 #[rstest]
 fn test_list_results_ids_and_multi_status_filters(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -1082,14 +1082,14 @@ fn test_list_results_ids_and_multi_status_filters(start_server: &ServerProcess) 
         apis::results_api::create_result(config, result).unwrap();
         job_ids.push(job_id);
     }
-    let list = |status: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
+    let list = |statuses: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
         let mut ids: Vec<i64> = apis::results_api::list_results(
             config,
             workflow_id,
             None,
             None,
             None,
-            status,
+            None,
             None,
             None,
             None,
@@ -1097,6 +1097,7 @@ fn test_list_results_ids_and_multi_status_filters(start_server: &ServerProcess) 
             None,
             Some(true),
             ids,
+            statuses,
         )
         .expect("list_results failed")
         .items

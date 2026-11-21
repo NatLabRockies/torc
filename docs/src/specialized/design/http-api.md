@@ -278,8 +278,9 @@ Common filter parameters:
 - `workflow_id`: Filter by parent workflow (required for nested resources)
 - `name`: Filter by name (often substring match)
 - `user`: Filter by owner
-- `status`: Filter by status value. On `/jobs` and `/results`, pass several comma-separated values
-  to match any of them (`status=failed,terminated`).
+- `status`: Filter by status value
+- `statuses`: On `/jobs` and `/results`, several comma-separated status values; matches any of them
+  (`statuses=failed,terminated`). Passing both `status` and `statuses` returns 422.
 - `ids`: On `/jobs` and `/results`, restrict to these comma-separated job IDs (`ids=4,8,15`), scoped
   to `workflow_id`. More than `MAX_RECORD_TRANSFER_COUNT` IDs returns 422; in practice, split long
   lists across requests to stay within URL length limits.

@@ -73,6 +73,16 @@ impl SqlQueryBuilder {
         self
     }
 
+    /// Append columns to the ORDER BY so rows that tie on the sort column keep a
+    /// stable order across pages. Call after `with_pagination_and_sorting`.
+    pub fn with_tie_breaker(mut self, columns: &str) -> Self {
+        if let Some(order_by) = self.order_by_clause.as_mut() {
+            order_by.push_str(", ");
+            order_by.push_str(columns);
+        }
+        self
+    }
+
     pub fn build(self) -> String {
         let mut query = self.base_query;
 
@@ -169,6 +179,15 @@ mod tests {
             .with_pagination_and_sorting(5, 10, None, None, "id", ALLOWED)
             .build();
         assert!(q.contains("OFFSET 5"));
+    }
+
+    #[test]
+    fn test_tie_breaker_follows_sort_column() {
+        let q = SqlQueryBuilder::new("SELECT * FROM t".to_string())
+            .with_pagination_and_sorting(0, 10, None, Some(true), "a", &[])
+            .with_tie_breaker("a, b")
+            .build();
+        assert!(q.contains("ORDER BY a DESC, a, b LIMIT 10"), "{q}");
     }
 
     #[test]
