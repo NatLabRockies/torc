@@ -67,7 +67,8 @@
       if (!r.success) throw new Error(r.error || "Unknown error");
       data = r.data ?? {};
       // Totals are a convenience; the table above is the main result.
-      usage = await op<Usage>("slurm-usage", { workflow_id: requested }).catch(() => null);
+      const u = await op<Usage>("slurm-usage", { workflow_id: requested }).catch(() => null);
+      if (requested === workflowId) usage = u;
     } catch (e) {
       if (requested === workflowId) error = errorText(e);
     } finally {

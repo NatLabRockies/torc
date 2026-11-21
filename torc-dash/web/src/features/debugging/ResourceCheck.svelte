@@ -19,7 +19,12 @@
     peak_used: string;
     over_utilization: string;
   };
-  type Check = { total_results: number; over_utilization_count: number; violations: Violation[] };
+  type Check = {
+    total_results: number;
+    over_utilization_count: number;
+    violations: Violation[];
+    within_limits?: Violation[]; // only with `all`
+  };
   type Adjustment = {
     resource_requirements_id: number;
     direction: string;
@@ -52,7 +57,9 @@
   let cpuMultiplier = $state(1.2);
   let runtimeMultiplier = $state(1.2);
   let noDownsize = $state(false);
-  let preview = $state<Correction | null>(null);
+  type Params = ReturnType<typeof correctionParams>;
+  // The preview and the options it was computed with; Apply reuses exactly those options.
+  let preview = $state<(Correction & { params: Params }) | null>(null);
   let busy = $state(false);
   let correctError = $state("");
 
@@ -77,22 +84,24 @@
     preview = null;
   });
 
-  function correctionParams(dry_run: boolean) {
+  function correctionParams() {
     return {
       workflow_id: workflowId,
       memory_multiplier: memoryMultiplier,
       cpu_multiplier: cpuMultiplier,
       runtime_multiplier: runtimeMultiplier,
       no_downsize: noDownsize,
-      dry_run,
     };
   }
 
   async function runPreview() {
     busy = true;
     correctError = "";
+    const params = correctionParams();
     try {
-      preview = await op<Correction>("correct-resources", correctionParams(true));
+      const result = await op<Correction>("correct-resources", { ...params, dry_run: true });
+      // Drop the result if the workflow or options changed while it was computed.
+      if (JSON.stringify(params) === JSON.stringify(correctionParams())) preview = { ...result, params };
     } catch (e) {
       correctError = errorText(e);
     } finally {
@@ -101,7 +110,8 @@
   }
 
   async function apply() {
-    const n = preview?.resource_requirements_updated ?? 0;
+    if (!preview) return;
+    const { params, resource_requirements_updated: n } = preview;
     const ok = await confirm({
       title: "Update resource requirements?",
       message:
@@ -112,7 +122,7 @@
     if (!ok) return;
     busy = true;
     try {
-      const res = await op<Correction>("correct-resources", correctionParams(false));
+      const res = await op<Correction>("correct-resources", { ...params, dry_run: false });
       toast.success(`Updated ${res?.resource_requirements_updated ?? n} resource requirement(s)`);
       preview = null;
       app.refresh();
@@ -122,6 +132,8 @@
       busy = false;
     }
   }
+
+  let rows = $derived(check ? [...check.violations, ...(check.within_limits ?? [])] : []);
 
   const change = (from?: string | number | null, to?: string | number | null) =>
     from == null && to == null ? "—" : `${from ?? "?"} → ${to ?? "?"}`;
@@ -150,10 +162,10 @@
     <p class="muted">
       {check.over_utilization_count} violation(s) across {check.total_results} result(s).
     </p>
-    {#if check.violations.length}
+    {#if rows.length}
       <div class="table">
         <DataTable
-          rows={check.violations}
+          {rows}
           {columns}
           rowKey={(v) => `${v.job_id}/${v.resource_type}`}
           onRowClick={(v) => app.openJob(v.job_id)}

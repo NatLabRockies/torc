@@ -108,6 +108,7 @@ class Execution {
         this.#finish("stopped");
       }
     } catch (e) {
+      this.#stopping = false;
       this.#append(`Stop failed: ${errorText(e)}`, "error");
     }
   }

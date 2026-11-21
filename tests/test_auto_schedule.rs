@@ -255,6 +255,19 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
     // what get/list return.
     assert_eq!(created.serialize_allocations, Some(false));
 
+    // Updates: a null optional field keeps its value, an empty one clears it.
+    let id = created.id.unwrap();
+    let update = models::SlurmSchedulerModel {
+        partition: None,
+        mem: Some(String::new()),
+        ..created.clone()
+    };
+    apis::slurm_schedulers_api::update_slurm_scheduler(config, id, update)
+        .expect("Failed to update scheduler");
+    let updated = apis::slurm_schedulers_api::get_slurm_scheduler(config, id).unwrap();
+    assert_eq!(updated.partition.as_deref(), Some("standard"));
+    assert_eq!(updated.mem, None);
+
     // Verify we can list the scheduler
     let response = apis::slurm_schedulers_api::list_slurm_schedulers(
         config,

@@ -104,9 +104,9 @@ struct AppState {
     /// Secret that API and proxy requests must carry (header or `token` query parameter). None
     /// on a UNIX socket, whose file permissions already restrict access, or with --no-token.
     token: Option<String>,
-    /// PIDs of `torc run` processes started from the dashboard, by workflow id, so they can be
-    /// stopped after the browser stops following them.
-    local_runs: Mutex<std::collections::HashMap<String, u32>>,
+    /// PIDs of the live `torc run` processes started from the dashboard, by workflow id, so they
+    /// can be stopped after the browser stops following them. A workflow can have several.
+    local_runs: Mutex<std::collections::HashMap<String, Vec<u32>>>,
 }
 
 /// Header carrying the dashboard token. Not `Authorization`, which the proxy passes through to
@@ -1945,7 +1945,13 @@ async fn cli_run_stream_handler(
         // leave) and stays stoppable through `local_runs` until it exits.
         let pid = child.id();
         if let (false, Some(pid)) = (kill_on_drop, pid) {
-            state.local_runs.lock().await.insert(workflow_id.clone(), pid);
+            state
+                .local_runs
+                .lock()
+                .await
+                .entry(workflow_id.clone())
+                .or_default()
+                .push(pid);
         }
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
         {
@@ -1954,8 +1960,11 @@ async fn cli_run_stream_handler(
             tokio::spawn(async move {
                 let status = child.wait().await;
                 let mut runs = state.local_runs.lock().await;
-                if pid.is_some() && runs.get(&workflow_id) == pid.as_ref() {
-                    runs.remove(&workflow_id);
+                if let (Some(pid), Some(pids)) = (pid, runs.get_mut(&workflow_id)) {
+                    pids.retain(|&p| p != pid);
+                    if pids.is_empty() {
+                        runs.remove(&workflow_id);
+                    }
                 }
                 drop(runs);
                 let _ = exit_tx.send(status);
@@ -2580,15 +2589,21 @@ async fn cli_stop_run_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<StopRunRequest>,
 ) -> impl IntoResponse {
-    let pid = state.local_runs.lock().await.get(&req.workflow_id).copied();
-    if let Some(pid) = pid {
+    let pids = state
+        .local_runs
+        .lock()
+        .await
+        .get(&req.workflow_id)
+        .cloned()
+        .unwrap_or_default();
+    for &pid in &pids {
         info!(
             "Stopping local run workflow_id={} pid={}",
             req.workflow_id, pid
         );
         stop_process(pid);
     }
-    Json(serde_json::json!({ "success": true, "stopped": pid.is_some() }))
+    Json(serde_json::json!({ "success": true, "stopped": !pids.is_empty() }))
 }
 
 /// Read file contents from filesystem

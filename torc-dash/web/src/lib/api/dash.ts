@@ -58,7 +58,9 @@ export async function op<T>(name: string, params: Record<string, unknown> = {}):
 export function download(path: string, params: Record<string, string | number | boolean>) {
   const query = new URLSearchParams(
     Object.entries(params).map(([k, v]) => [k, String(v)]),
-  ).toString();
+  );
+  // A unique URL per download: the desktop app tracks downloads by URL, and macOS reports nothing else.
+  query.set("_", crypto.randomUUID());
   const a = document.createElement("a");
   a.href = withToken(`${path}?${query}`);
   a.download = "";

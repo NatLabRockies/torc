@@ -224,7 +224,7 @@ fn on_download(webview: Webview, event: DownloadEvent) -> bool {
                 .file_name()
                 .map_or_else(|| "download".into(), |n| n.to_owned());
             let dir = std::env::temp_dir().join(format!("torc-desktop-{}", random_hex()));
-            if let Err(e) = std::fs::create_dir_all(&dir) {
+            if let Err(e) = create_private_dir(&dir) {
                 show_error(app, &format!("Download failed: {}: {e}", dir.display()));
                 return false;
             }
@@ -249,6 +249,14 @@ fn on_download(webview: Webview, event: DownloadEvent) -> bool {
         _ => {}
     }
     true
+}
+
+/// Creates a directory only the current user can read, for staging downloads in the shared temp dir.
+fn create_private_dir(dir: &Path) -> io::Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(dir)
 }
 
 /// Asks where to save the finished download `tmp` and moves it there.

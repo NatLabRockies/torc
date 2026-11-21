@@ -61,7 +61,8 @@
   /** HPC profile for Slurm generation: the detected one by default, or any known profile. */
   let profile = $state<string | null>(null);
   let slurmAccount = $state("");
-  let plan = $state<Plan | null>(null);
+  // A plan is shown only while the spec, account, and profile it was computed for are unchanged.
+  let plan = $state<{ plan: Plan; key: string } | null>(null);
   let planning = $state(false);
   let planError = $state<string | null>(null);
   let accountError = $state(false);
@@ -78,6 +79,8 @@
   const detectedProfile = $derived(profiles?.detected_profile ?? null);
   const slurmAvailable = $derived(!!profiles?.success && (profiles.profiles?.length ?? 0) > 0);
   const slurmActive = $derived(useSlurm && !!profile);
+  const planKey = $derived(JSON.stringify([specBody(), slurmAccount.trim(), profile]));
+  const shownPlan = $derived(plan?.key === planKey ? plan.plan : null);
   const onLastWizardStep = $derived(source === "wizard" && wizard.step === STEPS.length);
 
   // On open: check HPC profiles (as the legacy showModal did) and focus the first control.
@@ -100,12 +103,7 @@
     void [source, upload, path, inline, inlineFormat, commands, commandsName];
     report = null;
     createError = null;
-    plan = null;
     planError = null;
-  });
-  $effect(() => {
-    void [profile, slurmAccount];
-    plan = null;
   });
 
   function onClose() {
@@ -197,18 +195,20 @@
     if (source === "wizard" && !wizardRef?.ensureValid()) return;
     const body = specBody();
     if (typeof body === "string") return toast.info(body);
+    const key = planKey;
     planning = true;
     planError = null;
     try {
-      plan = await op<Plan>("plan-allocations", {
+      const result = await op<Plan>("plan-allocations", {
         ...(body.is_file ? { spec_path: body.spec } : { spec: body.spec, file_extension: body.file_extension }),
         account: slurmAccount.trim() || undefined,
         profile,
         // Live sinfo/squeue only make sense on the cluster the profile describes.
         offline: profile !== detectedProfile,
       });
+      plan = { plan: result, key };
     } catch (e) {
-      planError = errorText(e);
+      if (key === planKey) planError = errorText(e);
     } finally {
       planning = false;
     }
@@ -544,7 +544,7 @@
               </button>
               {#if planError}<span class="error-text small">{planError}</span>{/if}
             </div>
-            {#if plan}<AllocationPlan {plan} />{/if}
+            {#if shownPlan}<AllocationPlan plan={shownPlan} />{/if}
           {/if}
         </div>
       {/if}

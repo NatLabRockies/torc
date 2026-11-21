@@ -44,15 +44,19 @@
     saving = true;
     error = "";
     try {
+      // Work may have started since the dialog opened.
+      // ponytail: check-then-update is not atomic; enforce on the server if that window matters.
+      blocked = await editBlockedReason(target.record.workflow_id);
+      if (blocked) return;
       if (rr) {
         await unwrap(
           api.PUT("/resource_requirements/{id}", { params: { path: { id: rr.id! } }, body: rr }),
         );
       } else if (sched) {
-        // Optional text fields: send null rather than "" so Slurm options are omitted.
+        // Optional text fields: the server keeps a null value and clears an empty one.
         const body = { ...sched };
         for (const k of ["partition", "qos", "mem", "gres", "tmp", "extra"] as const) {
-          if (!body[k]?.trim()) body[k] = null;
+          body[k] = body[k]?.trim() ?? "";
         }
         await unwrap(api.PUT("/slurm_schedulers/{id}", { params: { path: { id: sched.id! } }, body }));
       }
