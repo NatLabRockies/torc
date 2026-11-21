@@ -63,12 +63,13 @@ pub fn reconcile(
     // Relative output paths resolve against the workflow's submission directory (falling
     // back to the current directory), and the current run_id identifies already-accepted
     // completions whose output metadata may still need restoring.
-    let workflow = apis::workflows_api::get_workflow(config, workflow_id).ok();
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id)
+        .map_err(|e| format!("Failed to fetch workflow {}: {}", workflow_id, e))?;
     let submission_dir = workflow
-        .as_ref()
-        .and_then(|w| w.submission_directory.clone())
+        .submission_directory
+        .clone()
         .map(std::path::PathBuf::from);
-    let current_run_id = workflow.as_ref().and_then(|w| w.run_id);
+    let current_run_id = workflow.run_id.unwrap_or(0);
     let mut metadata_failures = 0usize;
 
     for path in &files {
@@ -100,14 +101,9 @@ pub fn reconcile(
                     // it per batch so a later failed request cannot skip it. Also restore it
                     // for completions an earlier reconcile already replayed (now rejected as
                     // duplicates) so a failed restore can be retried by re-running reconcile.
-                    let completed: Vec<&JobCompletionEntry> = chunk
-                        .iter()
-                        .filter(|entry| entry.status == JobStatus::Completed)
-                        .filter(|entry| {
-                            response.completed.contains(&entry.job_id)
-                                || already_completed_in_run(config, entry, current_run_id)
-                        })
-                        .collect();
+                    let (completed, lookup_failures) =
+                        completions_to_restore(config, chunk, &response.completed, current_run_id);
+                    metadata_failures += lookup_failures;
                     metadata_failures += restore_offline_output_metadata(
                         config,
                         workflow_id,
@@ -260,16 +256,35 @@ pub(crate) fn restore_offline_output_metadata(
 /// True if the server already has this journaled completion: the job is Completed in the
 /// current run. Used to retry metadata restoration for completions an earlier reconcile
 /// replayed.
-pub(crate) fn already_completed_in_run(
+/// Select the Completed entries in `chunk` whose output metadata should be restored: those
+/// the server just accepted, plus those an earlier replay already delivered in the current
+/// run (now rejected as duplicates). `current_run_id` must come from the server, not a cached
+/// value, so a stale completion from before a reset is never treated as a duplicate.
+/// Returns the entries and the number whose status could not be looked up; callers count
+/// those as metadata failures so the journal is kept for a retry.
+pub(crate) fn completions_to_restore<'a>(
     config: &Configuration,
-    entry: &JobCompletionEntry,
-    current_run_id: Option<i64>,
-) -> bool {
-    // If the lookup fails, assume it may be completed: the restore attempt then fails too
-    // and is counted, so the caller keeps what it needs to retry.
-    current_run_id == Some(entry.run_id)
-        && apis::jobs_api::get_job(config, entry.job_id)
-            .map_or(true, |job| job.status == Some(JobStatus::Completed))
+    chunk: &'a [JobCompletionEntry],
+    accepted: &[i64],
+    current_run_id: i64,
+) -> (Vec<&'a JobCompletionEntry>, usize) {
+    let mut entries = Vec::new();
+    let mut lookup_failures = 0;
+    for entry in chunk.iter().filter(|e| e.status == JobStatus::Completed) {
+        if accepted.contains(&entry.job_id) {
+            entries.push(entry);
+        } else if entry.run_id == current_run_id {
+            match apis::jobs_api::get_job(config, entry.job_id) {
+                Ok(job) if job.status == Some(JobStatus::Completed) => entries.push(entry),
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("Could not look up job_id={}: {}", entry.job_id, e);
+                    lookup_failures += 1;
+                }
+            }
+        }
+    }
+    (entries, lookup_failures)
 }
 
 /// Create the RO-Crate entities the runner would have created at completion, using the

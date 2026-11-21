@@ -1707,6 +1707,17 @@ impl JobRunner {
             return Ok(0);
         }
         let count = entries.len();
+        // Use the server's current run, not the cached `self.run_id`: after a reset while
+        // offline, a stale completion must not be mistaken for an already-delivered one.
+        let current_run_id = self
+            .send_with_retries(|| {
+                Self::box_retry_error(apis::workflows_api::get_workflow(
+                    &self.config,
+                    self.workflow_id,
+                ))
+            })?
+            .run_id
+            .unwrap_or(0);
         let mut metadata_failures = 0usize;
         for chunk in entries.chunks(FLUSH_BATCH_SIZE) {
             let request = BatchCompleteJobsRequest {
@@ -1729,18 +1740,14 @@ impl JobRunner {
             // before the journal (the only record of these completions) is cleared.
             // Include completions an earlier flush already delivered (now rejected as
             // duplicates): if that flush failed partway, their metadata may still be missing.
-            let completed: Vec<&JobCompletionEntry> = chunk
-                .iter()
-                .filter(|entry| entry.status == JobStatus::Completed)
-                .filter(|entry| {
-                    response.completed.contains(&entry.job_id)
-                        || crate::client::commands::reconcile::already_completed_in_run(
-                            &self.config,
-                            entry,
-                            Some(self.run_id),
-                        )
-                })
-                .collect();
+            let (completed, lookup_failures) =
+                crate::client::commands::reconcile::completions_to_restore(
+                    &self.config,
+                    chunk,
+                    &response.completed,
+                    current_run_id,
+                );
+            metadata_failures += lookup_failures;
             metadata_failures +=
                 crate::client::commands::reconcile::restore_offline_output_metadata(
                     &self.config,
