@@ -990,7 +990,7 @@ impl JobsApiImpl {
         if !force && let Some(reason) = Self::workflow_busy_reason(&mut tx, workflow_id).await? {
             return Ok(ResetJobStatusResponse::UnprocessableContentErrorResponse(
                 message_error_response(format!(
-                    "Cannot reset jobs in workflow {}: {}. Pass force=true to override.",
+                    "Cannot reset jobs in workflow {}: {}",
                     workflow_id, reason
                 )),
             ));
