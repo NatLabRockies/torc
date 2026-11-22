@@ -277,13 +277,11 @@ pub(crate) fn restore_offline_output_metadata(
     failures
 }
 
-/// True if the server already has this journaled completion: the job is Completed in the
-/// current run. Used to retry metadata restoration for completions an earlier reconcile
-/// replayed.
 /// Select the Completed entries in `chunk` whose output metadata should be restored: those
 /// the server just accepted, plus those an earlier replay already delivered in the current
-/// run (now rejected as duplicates). `current_run_id` must come from the server, not a cached
-/// value, so a stale completion from before a reset is never treated as a duplicate.
+/// run and attempt (now rejected as duplicates). `current_run_id` must come from the server,
+/// not a cached value, so a stale completion from before a reset is never treated as a
+/// duplicate.
 /// Returns the entries and the number whose status could not be looked up; callers count
 /// those as metadata failures so the journal is kept for a retry.
 pub(crate) fn completions_to_restore<'a>(
@@ -299,7 +297,17 @@ pub(crate) fn completions_to_restore<'a>(
             entries.push(entry);
         } else if entry.run_id == current_run_id {
             match apis::jobs_api::get_job(config, entry.job_id) {
-                Ok(job) if job.status == Some(JobStatus::Completed) => entries.push(entry),
+                // Match the attempt too, so a stale attempt never overwrites the metadata of
+                // a later attempt that completed in the same run.
+                Ok(job)
+                    if job.status == Some(JobStatus::Completed)
+                        && entry
+                            .result
+                            .attempt_id
+                            .is_none_or(|a| job.attempt_id == Some(a)) =>
+                {
+                    entries.push(entry)
+                }
                 Ok(_) => {}
                 Err(e) => {
                     warn!("Could not look up job_id={}: {}", entry.job_id, e);

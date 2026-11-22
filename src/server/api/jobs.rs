@@ -492,19 +492,8 @@ pub struct JobsApiImpl {
     pub context: ApiContext,
 }
 
-/// Largest `max_retries` among a failure handler's rules (JSON array), or None if it has no
-/// rules. A rule without `max_retries` defaults to 3, as in the workflow spec.
-fn max_retries_from_rules(rules: &str) -> Result<Option<i64>, serde_json::Error> {
-    #[derive(serde::Deserialize)]
-    struct Rule {
-        #[serde(default = "default_max_retries")]
-        max_retries: i64,
-    }
-    fn default_max_retries() -> i64 {
-        3
-    }
-    let rules: Vec<Rule> = serde_json::from_str(rules)?;
-    Ok(rules.iter().map(|r| r.max_retries).max())
+fn ids_to_json(ids: &[i64]) -> Result<String, ApiError> {
+    serde_json::to_string(ids).map_err(|e| ApiError(format!("Failed to serialize job ids: {}", e)))
 }
 
 const JOB_COLUMNS: &[&str] = &[
@@ -996,27 +985,34 @@ impl JobsApiImpl {
             ));
         }
 
-        // Current status of every job in the workflow that the request could touch.
-        let rows: Vec<(i64, i64)> =
-            sqlx::query_as("SELECT id, status FROM job WHERE workflow_id = ?")
-                .bind(workflow_id)
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to fetch jobs for reset"))?;
+        // Current status of every job the request could touch: the requested jobs, or the
+        // whole workflow when none are listed.
+        let explicit = body.job_ids.is_some();
+        let candidates: Option<Vec<i64>> = body.job_ids.map(|mut ids| {
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        });
+        let rows: Vec<(i64, i64)> = match &candidates {
+            Some(ids) => sqlx::query_as(
+                "SELECT id, status FROM job WHERE workflow_id = ? \
+                 AND id IN (SELECT value FROM json_each(?))",
+            )
+            .bind(workflow_id)
+            .bind(ids_to_json(ids)?),
+            None => {
+                sqlx::query_as("SELECT id, status FROM job WHERE workflow_id = ?").bind(workflow_id)
+            }
+        }
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch jobs for reset"))?;
         let current: BTreeMap<i64, i64> = rows.into_iter().collect();
+        let candidates = candidates.unwrap_or_else(|| current.keys().copied().collect());
 
         let mut reset = Vec::new();
         let mut skipped = Vec::new();
         let mut reset_complete = Vec::new();
-        let explicit = body.job_ids.is_some();
-        let candidates: Vec<i64> = match body.job_ids {
-            Some(mut ids) => {
-                ids.sort_unstable();
-                ids.dedup();
-                ids
-            }
-            None => current.keys().copied().collect(),
-        };
         for job_id in candidates {
             let Some(&status_int) = current.get(&job_id) else {
                 skipped.push(models::ResetJobStatusSkipped {
@@ -1042,35 +1038,53 @@ impl JobsApiImpl {
             reset.push(job_id);
         }
 
+        // Same side effect as manage_status_change (reinitialize_downstream_jobs): resetting a
+        // terminal job also resets its direct completed or failed dependents. Deeper dependents
+        // are reset by the following reinitialize. Computed before any change so a dry run
+        // reports it and no changed job is reported as skipped.
+        let reset_json = ids_to_json(&reset)?;
+        let downstream_reset: Vec<i64> = if reset_complete.is_empty() {
+            Vec::new()
+        } else {
+            sqlx::query_scalar(
+                "SELECT DISTINCT j.id FROM job_depends_on jbb JOIN job j ON jbb.job_id = j.id \
+                 WHERE j.workflow_id = ? AND j.status IN (?, ?) \
+                 AND jbb.depends_on_job_id IN (SELECT value FROM json_each(?)) \
+                 AND j.id NOT IN (SELECT value FROM json_each(?)) ORDER BY j.id",
+            )
+            .bind(workflow_id)
+            .bind(JobStatus::Completed.to_int())
+            .bind(JobStatus::Failed.to_int())
+            .bind(ids_to_json(&reset_complete)?)
+            .bind(&reset_json)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to find downstream jobs"))?
+        };
+        skipped.retain(|s| downstream_reset.binary_search(&s.job_id).is_err());
+
         if !dry_run && !reset.is_empty() {
             let uninitialized_status = JobStatus::Uninitialized.to_int();
-            // One statement per job (not an IN list) so a large selection cannot exceed
-            // SQLite's bound-parameter limit.
-            for &job_id in &reset {
+            // IDs go in as one JSON array so a large selection cannot exceed SQLite's
+            // bound-parameter limit.
+            sqlx::query(
+                "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL \
+                 WHERE workflow_id = ? AND id IN (SELECT value FROM json_each(?))",
+            )
+            .bind(uninitialized_status)
+            .bind(workflow_id)
+            .bind(&reset_json)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to reset job status"))?;
+            if !downstream_reset.is_empty() {
                 sqlx::query(
-                    "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL \
-                     WHERE id = ?",
-                )
-                .bind(uninitialized_status)
-                .bind(job_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to reset job status"))?;
-            }
-            // Same side effect as manage_status_change (reinitialize_downstream_jobs): resetting
-            // a terminal job also resets its direct completed or failed dependents. Deeper
-            // dependents are reset by the following reinitialize.
-            for &job_id in &reset_complete {
-                sqlx::query(
-                    "UPDATE job SET status = ? WHERE workflow_id = ? AND id IN ( \
-                     SELECT jbb.job_id FROM job_depends_on jbb JOIN job j ON jbb.job_id = j.id \
-                     WHERE jbb.depends_on_job_id = ? AND j.status IN (?, ?))",
+                    "UPDATE job SET status = ? \
+                     WHERE workflow_id = ? AND id IN (SELECT value FROM json_each(?))",
                 )
                 .bind(uninitialized_status)
                 .bind(workflow_id)
-                .bind(job_id)
-                .bind(JobStatus::Completed.to_int())
-                .bind(JobStatus::Failed.to_int())
+                .bind(ids_to_json(&downstream_reset)?)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| database_error_with_msg(e, "Failed to reset downstream jobs"))?;
@@ -1079,14 +1093,20 @@ impl JobsApiImpl {
                 .await
                 .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
             info!(
-                "Jobs status reset workflow_id={} count={} skipped={} new_status=uninitialized",
+                "Jobs status reset workflow_id={} count={} downstream={} skipped={} \
+                 new_status=uninitialized",
                 workflow_id,
                 reset.len(),
+                downstream_reset.len(),
                 skipped.len()
             );
         }
 
-        let updated_count = if dry_run { 0 } else { reset.len() as i64 };
+        let updated_count = if dry_run {
+            0
+        } else {
+            (reset.len() + downstream_reset.len()) as i64
+        };
         let mut response = models::ResetJobStatusResponse::new(
             workflow_id,
             updated_count,
@@ -1094,6 +1114,7 @@ impl JobsApiImpl {
         )
         .with_reset_type("selected".to_string());
         response.reset = Some(reset);
+        response.downstream_reset = Some(downstream_reset);
         response.skipped = Some(skipped);
         Ok(ResetJobStatusResponse::SuccessfulResponse(response))
     }
@@ -3578,7 +3599,11 @@ where
         // classifier or requested from the TUI consume the same budget. A job without a failure
         // handler has no configured limit.
         let rules: Option<String> = job_record.get("failure_handler_rules");
-        let max_retries = match rules.as_deref().map(max_retries_from_rules).transpose() {
+        let max_retries = match rules
+            .as_deref()
+            .map(models::max_retries_from_rules)
+            .transpose()
+        {
             Ok(limit) => limit.flatten(),
             Err(e) => {
                 let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;

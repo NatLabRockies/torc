@@ -303,3 +303,33 @@ fn test_ro_crate_file_id_in_other_workflow_rejected(start_server: &ServerProcess
     // A file in the entity's own workflow is still accepted.
     apis::ro_crate_entities_api::update_ro_crate_entity(config, id, entity).unwrap();
 }
+
+/// Moving an entity to another workflow is rejected the same way whether or not `file_id`
+/// belongs to that workflow, so the update path cannot probe another workflow's files.
+#[rstest]
+fn test_ro_crate_workflow_change_does_not_leak_file_membership(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (wf, other) = workflows(config, "ro_crate_probe");
+    let other_file_id = create_test_file(config, other, "f", "/tmp/f").id.unwrap();
+    let entity = apis::ro_crate_entities_api::create_ro_crate_entity(
+        config,
+        models::RoCrateEntityModel::new(
+            wf,
+            "#entity".to_string(),
+            "Dataset".to_string(),
+            HashMap::new(),
+        ),
+    )
+    .unwrap();
+    let id = entity.id.unwrap();
+    for file_id in [Some(other_file_id), Some(i64::MAX), None] {
+        let mut moved = entity.clone();
+        moved.workflow_id = other;
+        moved.file_id = file_id;
+        assert_rejected(
+            "workflow_id cannot be changed",
+            || apis::ro_crate_entities_api::get_ro_crate_entity(config, id),
+            || apis::ro_crate_entities_api::update_ro_crate_entity(config, id, moved),
+        );
+    }
+}
