@@ -94,6 +94,11 @@ pub fn app_router(state: LiveRouterState) -> Router {
                     "/torc-service/v1/workflows/{id}/batch_complete_jobs",
                     post(batch_complete_jobs),
                 )
+                // Selective resets carry every selected job ID in one request.
+                .route(
+                    "/torc-service/v1/workflows/{id}/reset_job_status",
+                    post(reset_job_status),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -362,10 +367,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
         .route(
             "/torc-service/v1/workflows/{id}/reset_status",
             post(reset_workflow_status),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/reset_job_status",
-            post(reset_job_status),
         )
         .route(
             "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
@@ -2364,6 +2365,9 @@ pub struct JobsListQuery {
     #[param(nullable = true, value_type = Option<Vec<models::JobStatus>>, style = Form, explode = false)]
     #[serde(default, deserialize_with = "deserialize_csv")]
     pub statuses: Option<Vec<models::JobStatus>>,
+    /// Returns only the jobs that use this resource requirements record.
+    #[param(nullable = true)]
+    pub resource_requirements_id: Option<i64>,
 }
 
 /// Combine the single `status` and list `statuses` query filters; both given is a 422.
@@ -2455,6 +2459,7 @@ pub async fn list_jobs(
             query.command,
             query.labels,
             query.ids,
+            query.resource_requirements_id,
             &context,
         )
         .await
@@ -4151,14 +4156,22 @@ pub async fn reset_workflow_status(
         in an eligible status are skipped with a reason, and the request is refused with 422 \
         while the workflow has active compute nodes, pending or active scheduled compute nodes, \
         or running or pending jobs, unless force=true. As with manage_status_change, resetting a \
-        terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id.",
+        terminal job also resets its direct completed or failed dependents. Does not bump the \
+        workflow run_id.",
     params(("id" = i64, Path, description = "Workflow ID"), ResetJobStatusQuery),
-    request_body(content = Option<models::ResetJobStatusRequest>, description = "Optional selective reset"),
+    request_body(
+        content = Option<models::ResetJobStatusRequest>,
+        description = "Optional selective reset"
+    ),
     responses(
         (status = 200, description = "Successful response", body = models::ResetJobStatusResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Workflow is not quiet", body = models::ErrorResponse),
+        (
+            status = 422,
+            description = "Invalid request body, or the workflow is not quiet",
+            body = models::ErrorResponse
+        ),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -4179,7 +4192,7 @@ pub async fn reset_job_status(
             Ok(body) => body,
             Err(e) => {
                 return error_response(
-                    StatusCode::BAD_REQUEST,
+                    StatusCode::UNPROCESSABLE_ENTITY,
                     format!("Invalid request body: {}", e),
                 );
             }
@@ -5822,6 +5835,7 @@ mod live_router_tests {
                 None,
                 None,
                 Some(ids.clone()),
+                None,
                 &ctx,
             )
             .await

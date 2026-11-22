@@ -1985,6 +1985,7 @@ pub fn review_submit_pending_actions(
         None, // label
         None, // ids
         None, // statuses
+        None, // resource_requirements_id
     ) {
         Ok(resp) => resp
             .items

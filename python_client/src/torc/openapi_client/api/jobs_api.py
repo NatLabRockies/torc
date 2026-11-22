@@ -1754,6 +1754,7 @@ class JobsApi:
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
         ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
         statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
+        resource_requirements_id: Annotated[Optional[StrictInt], Field(description="Returns only the jobs that use this resource requirements record.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1802,6 +1803,8 @@ class JobsApi:
         :type ids: List[int]
         :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
         :type statuses: List[JobStatus]
+        :param resource_requirements_id: Returns only the jobs that use this resource requirements record.
+        :type resource_requirements_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1841,6 +1844,7 @@ class JobsApi:
             labels=labels,
             ids=ids,
             statuses=statuses,
+            resource_requirements_id=resource_requirements_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1884,6 +1888,7 @@ class JobsApi:
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
         ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
         statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
+        resource_requirements_id: Annotated[Optional[StrictInt], Field(description="Returns only the jobs that use this resource requirements record.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1932,6 +1937,8 @@ class JobsApi:
         :type ids: List[int]
         :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
         :type statuses: List[JobStatus]
+        :param resource_requirements_id: Returns only the jobs that use this resource requirements record.
+        :type resource_requirements_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1971,6 +1978,7 @@ class JobsApi:
             labels=labels,
             ids=ids,
             statuses=statuses,
+            resource_requirements_id=resource_requirements_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2014,6 +2022,7 @@ class JobsApi:
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
         ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
         statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
+        resource_requirements_id: Annotated[Optional[StrictInt], Field(description="Returns only the jobs that use this resource requirements record.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2062,6 +2071,8 @@ class JobsApi:
         :type ids: List[int]
         :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
         :type statuses: List[JobStatus]
+        :param resource_requirements_id: Returns only the jobs that use this resource requirements record.
+        :type resource_requirements_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2101,6 +2112,7 @@ class JobsApi:
             labels=labels,
             ids=ids,
             statuses=statuses,
+            resource_requirements_id=resource_requirements_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2139,6 +2151,7 @@ class JobsApi:
         labels,
         ids,
         statuses,
+        resource_requirements_id,
         _request_auth,
         _content_type,
         _headers,
@@ -2226,6 +2239,10 @@ class JobsApi:
         if statuses is not None:
             
             _query_params.append(('statuses', statuses))
+            
+        if resource_requirements_id is not None:
+            
+            _query_params.append(('resource_requirements_id', resource_requirements_id))
             
         # process the header parameters
         # process the form parameters

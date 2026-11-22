@@ -914,6 +914,7 @@ fn fetch_jobs(config: &torc::client::Configuration, workflow_id: i64) -> Vec<mod
         None, // labels
         None, // ids
         None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs")
     .items
