@@ -201,6 +201,8 @@
 <li><code>POST /workflows/{id}/claim_next_jobs</code> - Thread-safe job allocation to workers</li>
 <li><code>POST /jobs/{id}/manage_status_change</code> - Update job status with cascade effects</li>
 <li><code>POST /workflows/{id}/process_changed_job_inputs</code> - Detect changed inputs and reset jobs</li>
+<li><code>POST /workflows/{id}/file_stats</code> - Compare a client's file stat snapshot with stored mtimes and
+reset jobs with changed inputs or missing outputs, plus their downstream jobs</li>
 </ul>
 <h2 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h2>
 <p>The <code>claim_next_jobs</code> endpoint uses database-level write locks to prevent multiple workers from

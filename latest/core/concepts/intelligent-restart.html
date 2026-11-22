@@ -248,9 +248,12 @@ torc workflows reinit &lt;workflow_id&gt; --force
 <h2 id="how-change-detection-works"><a class="header" href="#how-change-detection-works">How Change Detection Works</a></h2>
 <p>Reinitialization detects changes through three mechanisms:</p>
 <h3 id="1-file-modification-times"><a class="header" href="#1-file-modification-times">1. File Modification Times</a></h3>
-<p>For files tracked in the workflow, Torc compares the current <code>st_mtime</code> (modification time) against
-the stored value. If a file was modified since the last run, jobs that use it as input are marked
-for re-execution.</p>
+<p>For files tracked in the workflow, the client checks each file on disk and sends the server a
+snapshot of whether it exists and its <code>st_mtime</code> (modification time), in batches of up to 100,000
+files. The server compares the snapshot with the stored values (with a 10 ms tolerance) and stores
+the new values. A file counts as changed if its modification time differs, if it appeared, or if it
+disappeared. Completed, failed, or canceled jobs that use a changed file as input are marked for
+re-execution.</p>
 <pre><code class="language-bash"># Modify an input file
 echo "new data" &gt; input.json
 
@@ -263,19 +266,25 @@ torc workflows reinit &lt;workflow_id&gt;
 values. If any hash differs from the stored value, the job is marked for re-execution. This detects
 changes like modified commands, updated scripts, or changed configuration parameters.</p>
 <h3 id="3-missing-output-files"><a class="header" href="#3-missing-output-files">3. Missing Output Files</a></h3>
-<p>If a job's output file no longer exists on disk, the job is marked for re-execution regardless of
-whether inputs changed.</p>
+<p>If an output file of a completed job no longer exists on disk, the job is marked for re-execution
+regardless of whether inputs changed.</p>
+<h3 id="missing-required-inputs"><a class="header" href="#missing-required-inputs">Missing Required Inputs</a></h3>
+<p>An input file that no job produces must exist. If one is missing, <code>reinit</code> (and <code>init</code>) fails unless
+you pass <code>--force</code>. Missing outputs of completed jobs are not an error; those jobs are rerun.</p>
 <h2 id="the-reinitialization-process"><a class="header" href="#the-reinitialization-process">The Reinitialization Process</a></h2>
 <p>When you run <code>reinit</code>, Torc performs these steps:</p>
 <ol>
+<li><strong>Check required inputs</strong> — Stats every file and, unless <code>--force</code>, fails before changing
+anything if a required input file is missing</li>
 <li><strong>Bump run_id</strong> — Increments the workflow's run counter for tracking</li>
 <li><strong>Reset workflow status</strong> — Clears the previous run's completion state</li>
-<li><strong>Check file modifications</strong> — Compares current <code>st_mtime</code> values to stored values</li>
-<li><strong>Check missing outputs</strong> — Identifies jobs whose output files no longer exist</li>
+<li><strong>Check files</strong> — Sends the file snapshot; the server stores changed <code>st_mtime</code> values and marks
+jobs with changed inputs or missing outputs, and every job downstream of them, <code>uninitialized</code></li>
 <li><strong>Check user_data changes</strong> — Computes and compares input hashes</li>
-<li><strong>Mark affected jobs</strong> — Sets jobs needing re-execution to <code>uninitialized</code></li>
 <li><strong>Re-evaluate dependencies</strong> — Runs <code>initialize_jobs</code> to set jobs to <code>ready</code> or <code>blocked</code></li>
 </ol>
+<p>Each file batch is applied in its own transaction. If <code>reinit</code> stops partway, run it again: it
+reaches the same end state.</p>
 <h2 id="dependency-propagation"><a class="header" href="#dependency-propagation">Dependency Propagation</a></h2>
 <p>When a job is marked for re-execution, all downstream jobs that depend on its outputs are also
 marked. This ensures the entire dependency chain is re-executed:</p>
