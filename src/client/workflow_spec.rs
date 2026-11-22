@@ -50,9 +50,6 @@ enum ParameterValueSchema {
     Number(f64),
 }
 
-static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
-
 /// Build the set of parameter combinations for a parameterized spec.
 ///
 /// The combinations come from exactly one source:
@@ -152,22 +149,7 @@ static WORKFLOW_VARIABLE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         .expect("hardcoded regex must compile")
 });
 
-pub(crate) fn validate_srun_mpi_value(value: &str) -> Result<(), String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err("srun_mpi must not be empty when provided. \
-             Set a non-empty Slurm MPI mode such as 'pmix' or omit the field."
-            .to_string());
-    }
-    if trimmed != value || !SRUN_MPI_MODE_REGEX.is_match(trimmed) {
-        return Err(
-            "srun_mpi must be a single safe token matching [A-Za-z0-9+_.-]+ \
-             (for example 'none' or 'pmix')."
-                .to_string(),
-        );
-    }
-    Ok(())
-}
+pub(crate) use crate::workflow_validation::validate_srun_mpi_value;
 
 fn validate_env_var_name(name: &str) -> Result<(), String> {
     if models::is_valid_env_var_name(name) {
@@ -2425,109 +2407,7 @@ impl WorkflowSpec {
     /// The validation rejects the case where jobs request a different multi-node count
     /// than the scheduler provides (e.g., scheduler allocates 4 nodes but jobs request 2).
     pub fn validate_scheduler_node_requirements(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Build lookup maps for resource requirements and schedulers
-        let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
-            .resource_requirements
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| (r.name.as_str(), r)).collect())
-            .unwrap_or_default();
-
-        let scheduler_map: HashMap<&str, &SlurmSchedulerSpec> = self
-            .slurm_schedulers
-            .as_ref()
-            .map(|schedulers| {
-                schedulers
-                    .iter()
-                    .filter_map(|s| s.name.as_ref().map(|n| (n.as_str(), s)))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        // If no schedulers or no actions, skip validation
-        if scheduler_map.is_empty() {
-            return Ok(());
-        }
-
-        let actions = match &self.actions {
-            Some(actions) => actions,
-            None => return Ok(()),
-        };
-
-        let mut errors: Vec<String> = Vec::new();
-
-        // Check each schedule_nodes action
-        for action in actions {
-            if action.action_type != "schedule_nodes" {
-                continue;
-            }
-
-            // Get scheduler name from action
-            let scheduler_name = match &action.scheduler {
-                Some(name) => name,
-                None => continue, // Validation of required fields is done elsewhere
-            };
-
-            // Only validate slurm schedulers
-            let scheduler_type = action.scheduler_type.as_deref().unwrap_or("");
-            if scheduler_type != "slurm" {
-                continue;
-            }
-
-            // Get the scheduler spec
-            let scheduler = match scheduler_map.get(scheduler_name.as_str()) {
-                Some(s) => s,
-                None => continue, // Missing scheduler is validated elsewhere
-            };
-
-            // If scheduler only allocates 1 node, no special validation needed
-            if scheduler.nodes <= 1 {
-                continue;
-            }
-
-            // Find jobs that reference this scheduler
-            let jobs_using_scheduler: Vec<&JobSpec> = self
-                .jobs
-                .iter()
-                .filter(|job| job.scheduler.as_ref() == Some(scheduler_name))
-                .collect();
-
-            // If no jobs explicitly reference this scheduler, skip
-            if jobs_using_scheduler.is_empty() {
-                continue;
-            }
-
-            // Check for mismatched multi-node requirements: reject jobs that request
-            // a different multi-node count than the scheduler provides.
-            // Single-node jobs (num_nodes=1 or unset) are always valid in any allocation.
-            let mismatched_jobs: Vec<&str> = jobs_using_scheduler
-                .iter()
-                .filter(|job| {
-                    let job_num_nodes = job
-                        .resource_requirements
-                        .as_ref()
-                        .and_then(|name| resource_req_map.get(name.as_str()))
-                        .map(|req| req.num_nodes)
-                        .unwrap_or(1);
-                    // Mismatch: job wants >1 node but not the same count as scheduler
-                    job_num_nodes > 1 && job_num_nodes != scheduler.nodes
-                })
-                .map(|j| j.name.as_str())
-                .collect();
-
-            if !mismatched_jobs.is_empty() {
-                errors.push(format!(
-                    "Scheduler '{}' allocates {} nodes but jobs ({}) request a different \
-                     multi-node count in their resource requirements. Set num_nodes={} \
-                     on job resource requirements to match the scheduler, or use \
-                     num_nodes=1 for single-node jobs.",
-                    scheduler_name,
-                    scheduler.nodes,
-                    mismatched_jobs.join(", "),
-                    scheduler.nodes,
-                ));
-            }
-        }
-
+        let errors = crate::workflow_validation::scheduler_node_errors(&self.check_input());
         if errors.is_empty() {
             Ok(())
         } else {
@@ -2549,226 +2429,102 @@ impl WorkflowSpec {
     /// Scheduler fields that are not set (e.g., `mem: None`, `gres: None`) are skipped
     /// for that dimension.
     pub fn validate_scheduler_resources(&self) -> Vec<String> {
-        let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
-            .resource_requirements
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| (r.name.as_str(), r)).collect())
-            .unwrap_or_default();
+        crate::workflow_validation::scheduler_resource_warnings(&self.check_input())
+    }
 
-        let schedulers: Vec<&SlurmSchedulerSpec> = self
+    /// Errors from the execution_config rules shared with the server's `finalize_workflow`.
+    fn execution_config_errors(&self) -> Vec<String> {
+        crate::workflow_validation::execution_config_errors(
+            self.execution_config.as_ref(),
+            self.slurm_schedulers
+                .as_ref()
+                .is_some_and(|s| s.iter().any(|s| s.name.is_some())),
+            self.actions.as_ref().is_some_and(|actions| {
+                actions.iter().any(|a| {
+                    a.action_type == "schedule_nodes" && a.start_one_worker_per_node == Some(true)
+                })
+            }),
+        )
+    }
+
+    /// Build the input for the checks in [`crate::workflow_validation`]. Only named Slurm
+    /// schedulers are included, since those are the ones creation stores. References that
+    /// don't resolve are left out; reference validation reports them.
+    pub fn check_input(&self) -> crate::workflow_validation::WorkflowCheckInput {
+        use crate::workflow_validation::{
+            ActionInfo, JobInfo, ResourceInfo, SchedulerInfo, WorkflowCheckInput,
+        };
+        let schedulers: Vec<SchedulerInfo> = self
             .slurm_schedulers
-            .as_ref()
-            .map(|s| s.iter().collect())
-            .unwrap_or_default();
-
-        if resource_req_map.is_empty() || schedulers.is_empty() {
-            return Vec::new();
+            .iter()
+            .flatten()
+            .filter_map(|s| {
+                Some(SchedulerInfo {
+                    name: s.name.clone()?,
+                    nodes: s.nodes,
+                    walltime: s.walltime.clone(),
+                    mem: s.mem.clone(),
+                    gres: s.gres.clone(),
+                })
+            })
+            .collect();
+        let resource_requirements: Vec<ResourceInfo> = self
+            .resource_requirements
+            .iter()
+            .flatten()
+            .map(|r| ResourceInfo {
+                name: r.name.clone(),
+                num_nodes: r.num_nodes,
+                num_gpus: r.num_gpus,
+                memory: r.memory.clone(),
+                runtime: r.runtime.clone(),
+            })
+            .collect();
+        // First occurrence wins; duplicate names are reported elsewhere.
+        let mut sched_idx: HashMap<&str, usize> = HashMap::new();
+        for (i, s) in schedulers.iter().enumerate() {
+            sched_idx.entry(s.name.as_str()).or_insert(i);
         }
-
-        // Pre-parse scheduler resources into a structured form
-        struct ParsedScheduler<'a> {
-            name: &'a str,
-            sched: &'a SlurmSchedulerSpec,
-            walltime_secs: Option<u64>,
-            memory_bytes: Option<i64>,
-            gpu_count: Option<u32>,
+        let mut rr_idx: HashMap<&str, usize> = HashMap::new();
+        for (i, r) in resource_requirements.iter().enumerate() {
+            rr_idx.entry(r.name.as_str()).or_insert(i);
         }
-
-        let mut warnings: Vec<String> = Vec::new();
-
-        let mut parsed_schedulers: Vec<ParsedScheduler> = Vec::new();
-        for sched in &schedulers {
-            let Some(name) = sched.name.as_deref() else {
-                continue;
-            };
-            let walltime_secs =
-                match crate::client::commands::slurm::parse_walltime_secs(&sched.walltime) {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        warnings.push(format!(
-                            "Scheduler '{}': invalid walltime '{}': {}",
-                            name, sched.walltime, e,
-                        ));
-                        None
-                    }
-                };
-            let memory_bytes = match sched.mem.as_ref() {
-                Some(m) => match crate::memory_utils::memory_string_to_bytes(m) {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        warnings.push(format!(
-                            "Scheduler '{}': invalid memory '{}': {}",
-                            name, m, e,
-                        ));
-                        None
-                    }
-                },
-                None => None,
-            };
-            let gpu_count = if sched.gres.as_ref().is_some_and(|g| !g.trim().is_empty()) {
-                let (parsed, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
-                // Non-empty but unparseable gres → treat as 0 GPUs so validation
-                // isn't silently bypassed
-                Some(parsed.unwrap_or(0))
-            } else {
-                None
-            };
-            parsed_schedulers.push(ParsedScheduler {
-                name,
-                sched,
-                walltime_secs,
-                memory_bytes,
-                gpu_count,
-            });
+        let jobs = self
+            .jobs
+            .iter()
+            .map(|j| JobInfo {
+                name: j.name.clone(),
+                resource_requirements: j
+                    .resource_requirements
+                    .as_deref()
+                    .and_then(|n| rr_idx.get(n).copied()),
+                scheduler: j
+                    .scheduler
+                    .as_deref()
+                    .and_then(|n| sched_idx.get(n).copied()),
+            })
+            .collect();
+        let actions = self
+            .actions
+            .iter()
+            .flatten()
+            .map(|a| ActionInfo {
+                action_type: a.action_type.clone(),
+                scheduler_type: a.scheduler_type.clone(),
+                scheduler: a
+                    .scheduler
+                    .as_deref()
+                    .and_then(|n| sched_idx.get(n).copied()),
+                start_one_worker_per_node: a.start_one_worker_per_node == Some(true),
+            })
+            .collect();
+        WorkflowCheckInput {
+            execution_config: self.execution_config.clone(),
+            schedulers,
+            resource_requirements,
+            jobs,
+            actions,
         }
-
-        if parsed_schedulers.is_empty() {
-            return warnings;
-        }
-
-        for job in &self.jobs {
-            let rr_name = match &job.resource_requirements {
-                Some(name) => name,
-                None => continue,
-            };
-            let rr = match resource_req_map.get(rr_name.as_str()) {
-                Some(r) => r,
-                None => continue,
-            };
-
-            // Parse job resource values
-            let job_runtime_secs = match crate::time_utils::duration_string_to_seconds(&rr.runtime)
-            {
-                Ok(secs) => Some(secs as u64),
-                Err(e) => {
-                    warnings.push(format!(
-                        "Job '{}': invalid runtime '{}': {}",
-                        job.name, rr.runtime, e,
-                    ));
-                    None
-                }
-            };
-            let job_memory_bytes = match crate::memory_utils::memory_string_to_bytes(&rr.memory) {
-                Ok(bytes) => Some(bytes),
-                Err(e) => {
-                    warnings.push(format!(
-                        "Job '{}': invalid memory '{}': {}",
-                        job.name, rr.memory, e,
-                    ));
-                    None
-                }
-            };
-            let job_gpus = rr.num_gpus;
-
-            if job_gpus < 0 {
-                warnings.push(format!(
-                    "Job '{}': invalid negative num_gpus {}",
-                    job.name, job_gpus,
-                ));
-                continue;
-            }
-
-            if let Some(ref scheduler_name) = job.scheduler {
-                // Job has an explicit scheduler — check each dimension against it
-                let Some(ps) = parsed_schedulers
-                    .iter()
-                    .find(|ps| ps.name == scheduler_name.as_str())
-                else {
-                    continue; // Missing scheduler validated elsewhere
-                };
-
-                if let (Some(rt), Some(wt)) = (job_runtime_secs, ps.walltime_secs)
-                    && rt > wt
-                {
-                    warnings.push(format!(
-                        "Job '{}': runtime '{}' ({} s) exceeds scheduler '{}' \
-                         walltime '{}' ({} s)",
-                        job.name, rr.runtime, rt, scheduler_name, ps.sched.walltime, wt,
-                    ));
-                }
-                if let (Some(jm), Some(sm)) = (job_memory_bytes, ps.memory_bytes)
-                    && jm > sm
-                {
-                    warnings.push(format!(
-                        "Job '{}': memory '{}' exceeds scheduler '{}' mem '{}'",
-                        job.name,
-                        rr.memory,
-                        scheduler_name,
-                        ps.sched.mem.as_deref().unwrap_or("?"),
-                    ));
-                }
-                if let Some(sg) = ps.gpu_count
-                    && job_gpus > sg as i64
-                {
-                    warnings.push(format!(
-                        "Job '{}': num_gpus {} exceeds scheduler '{}' gres '{}'",
-                        job.name,
-                        job_gpus,
-                        scheduler_name,
-                        ps.sched.gres.as_deref().unwrap_or("?"),
-                    ));
-                }
-            } else {
-                // Job has no explicit scheduler — at least one must be suitable
-                // across ALL dimensions simultaneously
-                let suitable = parsed_schedulers.iter().any(|ps| {
-                    let runtime_ok = match (job_runtime_secs, ps.walltime_secs) {
-                        (Some(rt), Some(wt)) => rt <= wt,
-                        _ => true, // Can't check, assume ok
-                    };
-                    let memory_ok = match (job_memory_bytes, ps.memory_bytes) {
-                        (Some(jm), Some(sm)) => jm <= sm,
-                        _ => true,
-                    };
-                    let gpu_ok = match ps.gpu_count {
-                        Some(sg) => job_gpus <= sg as i64,
-                        None => true,
-                    };
-                    runtime_ok && memory_ok && gpu_ok
-                });
-
-                if !suitable {
-                    let mut reasons: Vec<String> = Vec::new();
-                    for ps in &parsed_schedulers {
-                        let mut mismatches: Vec<String> = Vec::new();
-                        if let (Some(rt), Some(wt)) = (job_runtime_secs, ps.walltime_secs)
-                            && rt > wt
-                        {
-                            mismatches.push(format!("runtime {} s > walltime {} s", rt, wt));
-                        }
-                        if let (Some(jm), Some(sm)) = (job_memory_bytes, ps.memory_bytes)
-                            && jm > sm
-                        {
-                            mismatches.push(format!(
-                                "memory '{}' > mem '{}'",
-                                rr.memory,
-                                ps.sched.mem.as_deref().unwrap_or("?"),
-                            ));
-                        }
-                        if let Some(sg) = ps.gpu_count
-                            && job_gpus > sg as i64
-                        {
-                            mismatches.push(format!(
-                                "num_gpus {} > gres '{}'",
-                                job_gpus,
-                                ps.sched.gres.as_deref().unwrap_or("?"),
-                            ));
-                        }
-                        if !mismatches.is_empty() {
-                            reasons.push(format!("'{}': {}", ps.name, mismatches.join(", ")));
-                        }
-                    }
-                    warnings.push(format!(
-                        "Job '{}' has no explicit scheduler and no scheduler can \
-                         accommodate its resource requirements. Mismatches: [{}]",
-                        job.name,
-                        reasons.join("; "),
-                    ));
-                }
-            }
-        }
-
-        warnings
     }
 
     /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
@@ -3001,7 +2757,9 @@ impl WorkflowSpec {
             errors.push(format!("Validation error: {}", e));
         }
 
-        // Step 4: Validate scheduler node requirements
+        // Step 4: Validate execution_config and scheduler node requirements. These are the
+        // rules the server's finalize_workflow applies too.
+        errors.extend(spec.execution_config_errors());
         if let Err(e) = spec.validate_scheduler_node_requirements() {
             errors.push(format!("{}", e));
         }
@@ -3680,116 +3438,9 @@ impl WorkflowSpec {
             workflow_model.execution_config = Some(execution_config.clone());
         }
 
-        // Validate that execution_config fields match the effective mode.
-        // For mode=auto, infer from slurm_schedulers presence.
-        if let Some(ref ec) = spec.execution_config {
-            let will_use_slurm = match ec.mode {
-                ExecutionMode::Slurm => true,
-                ExecutionMode::Auto => spec
-                    .slurm_schedulers
-                    .as_ref()
-                    .is_some_and(|s| !s.is_empty()),
-                ExecutionMode::Direct => false,
-            };
-            let will_use_direct = match ec.mode {
-                ExecutionMode::Direct => true,
-                ExecutionMode::Auto => !will_use_slurm,
-                ExecutionMode::Slurm => false,
-            };
-
-            let mut errors = Vec::new();
-            let has_worker_per_node_schedule_action =
-                spec.actions.as_ref().is_some_and(|actions| {
-                    actions.iter().any(|action| {
-                        action.action_type == "schedule_nodes"
-                            && action.start_one_worker_per_node == Some(true)
-                    })
-                });
-
-            if let Some(value) = ec.srun_mpi.as_deref() {
-                if let Err(err) = validate_srun_mpi_value(value) {
-                    errors.push(err);
-                }
-                if !has_worker_per_node_schedule_action {
-                    errors.push(
-                        "srun_mpi requires schedule_nodes.start_one_worker_per_node = true. \
-                        It only applies to the outer srun that launches one job runner per node."
-                            .to_string(),
-                    );
-                }
-            }
-
-            if will_use_slurm {
-                if ec.limit_resources == Some(false) {
-                    errors.push(
-                        "limit_resources: false is only supported in direct mode. \
-                        Slurm mode requires resource limits for correct srun behavior."
-                            .to_string(),
-                    );
-                }
-                if ec.termination_signal.is_some() {
-                    errors.push(
-                        "termination_signal is only supported in direct mode. \
-                        In slurm mode, use srun_termination_signal instead."
-                            .to_string(),
-                    );
-                }
-                if ec.sigterm_lead_seconds.is_some() {
-                    errors.push(
-                        "sigterm_lead_seconds is only supported in direct mode. \
-                        In slurm mode, termination timing is controlled by \
-                        srun_termination_signal."
-                            .to_string(),
-                    );
-                }
-                if ec.oom_exit_code.is_some() {
-                    errors.push(
-                        "oom_exit_code is only supported in direct mode. \
-                        In slurm mode, Slurm manages OOM detection."
-                            .to_string(),
-                    );
-                }
-            }
-
-            if will_use_direct {
-                if ec.srun_termination_signal.is_some() {
-                    errors.push(
-                        "srun_termination_signal is only supported in slurm mode. \
-                        In direct mode, use termination_signal instead."
-                            .to_string(),
-                    );
-                }
-                if ec.enable_cpu_bind == Some(true) {
-                    errors.push(
-                        "enable_cpu_bind is only supported in slurm mode. \
-                        It has no effect in direct mode."
-                            .to_string(),
-                    );
-                }
-            }
-
-            if !errors.is_empty() {
-                return Err(errors.join(" ").into());
-            }
-        }
-
-        if spec.actions.as_ref().is_some_and(|actions| {
-            actions.iter().any(|action| {
-                action.action_type == "schedule_nodes"
-                    && action.start_one_worker_per_node == Some(true)
-            })
-        }) {
-            let mode = spec
-                .execution_config
-                .as_ref()
-                .map(|config| &config.mode)
-                .unwrap_or(&ExecutionMode::Direct);
-            if *mode != ExecutionMode::Direct {
-                return Err(
-                    "start_one_worker_per_node requires execution_config.mode to be 'direct'"
-                        .into(),
-                );
-            }
+        let ec_errors = spec.execution_config_errors();
+        if !ec_errors.is_empty() {
+            return Err(ec_errors.join(" ").into());
         }
 
         // Set enable_ro_crate if present

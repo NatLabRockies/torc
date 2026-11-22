@@ -1022,65 +1022,7 @@ pub fn parse_memory_mb(s: &str) -> Result<u64, String> {
     }
 }
 
-/// Parse walltime string in Slurm format into seconds.
-///
-/// Supported formats:
-/// - `MM` (minutes only, e.g., "30")
-/// - `MM:SS` (e.g., "30:00")
-/// - `HH:MM:SS` (e.g., "04:00:00")
-/// - `D-HH:MM:SS` (e.g., "1-00:00:00")
-pub fn parse_walltime_secs(s: &str) -> Result<u64, String> {
-    let s = s.trim();
-
-    // Check for day format: D-HH:MM:SS
-    if let Some((days_str, rest)) = s.split_once('-') {
-        let days: u64 = days_str
-            .parse()
-            .map_err(|_| format!("Invalid days: {}", days_str))?;
-        let hms_secs = parse_hms(rest)?;
-        return Ok(days * 24 * 3600 + hms_secs);
-    }
-
-    // Check for hours format: H, HH:MM, or HH:MM:SS
-    parse_hms(s)
-}
-
-fn parse_hms(s: &str) -> Result<u64, String> {
-    let parts: Vec<&str> = s.split(':').collect();
-    match parts.len() {
-        1 => {
-            // Just minutes (Slurm convention)
-            let mins: u64 = parts[0]
-                .parse()
-                .map_err(|_| format!("Invalid minutes: {}", parts[0]))?;
-            Ok(mins * 60)
-        }
-        2 => {
-            // MM:SS (Slurm convention)
-            let mins: u64 = parts[0]
-                .parse()
-                .map_err(|_| format!("Invalid minutes: {}", parts[0]))?;
-            let secs: u64 = parts[1]
-                .parse()
-                .map_err(|_| format!("Invalid seconds: {}", parts[1]))?;
-            Ok(mins * 60 + secs)
-        }
-        3 => {
-            // HH:MM:SS
-            let hours: u64 = parts[0]
-                .parse()
-                .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-            let mins: u64 = parts[1]
-                .parse()
-                .map_err(|_| format!("Invalid minutes: {}", parts[1]))?;
-            let secs: u64 = parts[2]
-                .parse()
-                .map_err(|_| format!("Invalid seconds: {}", parts[2]))?;
-            Ok(hours * 3600 + mins * 60 + secs)
-        }
-        _ => Err(format!("Invalid time format: {}", s)),
-    }
-}
+pub use crate::workflow_validation::parse_walltime_secs;
 
 pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, format: &str) {
     match command {
