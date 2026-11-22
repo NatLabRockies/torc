@@ -2311,6 +2311,7 @@ where
                 workflow_id,
                 "on_jobs_complete",
                 Some(completed_job_ids.clone()),
+                None,
             )
             .await
         {
@@ -3063,7 +3064,7 @@ impl<C> Server<C> {
                     );
                     if let Err(e) = self
                         .workflow_actions_api
-                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None)
+                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None, None)
                         .await
                     {
                         error!(

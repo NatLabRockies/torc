@@ -5441,19 +5441,48 @@ fn handle_regenerate(
             .collect(),
         suppress_existing_schedule_actions: true,
     };
-    let applied = match utils::send_with_retries(
-        config,
-        || {
-            apis::slurm_schedulers_api::apply_scheduler_plan(
-                config,
-                workflow_id,
-                request.clone(),
-                None,
-            )
-        },
-        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-    ) {
+    // Not idempotent: retrying after the server committed would create the schedulers and
+    // recovery actions twice, and each would start its own allocations. Retry only failures that
+    // cannot have committed: the connection was never made, or the server reported lock
+    // contention (its transaction rolled back).
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(WAIT_FOR_HEALTHY_DATABASE_MINUTES * 60);
+    let result = loop {
+        let result = apis::slurm_schedulers_api::apply_scheduler_plan(
+            config,
+            workflow_id,
+            request.clone(),
+            None,
+        );
+        let retry = match &result {
+            Err(apis::Error::Reqwest(e)) => e.is_connect(),
+            Err(apis::Error::ResponseError(c)) => c.content.contains("database is locked"),
+            _ => false,
+        };
+        if !retry || std::time::Instant::now() >= deadline {
+            break result;
+        }
+        if let Err(e) = &result {
+            warn!("Retrying apply_scheduler_plan: {}", e);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    };
+    let applied = match result {
         Ok(applied) => applied,
+        // Sent but no definitive answer (timeout, dropped connection, unreadable response).
+        Err(e)
+            if !matches!(&e, apis::Error::ResponseError(_))
+                && !matches!(&e, apis::Error::Reqwest(r) if r.is_connect()) =>
+        {
+            print_error("applying scheduler plan", &e);
+            eprintln!(
+                "The request was sent, so the server may have applied the plan. Before rerunning, \
+                 check for new schedulers and recovery actions with \
+                 `torc slurm list {id}` and `torc workflows list-actions {id}`.",
+                id = workflow_id
+            );
+            std::process::exit(1);
+        }
         Err(e) => {
             if let apis::Error::ResponseError(ref content) = e
                 && content.status == reqwest::StatusCode::NOT_FOUND
@@ -5490,7 +5519,13 @@ fn handle_regenerate(
             nodes: planned.nodes,
             num_allocations: planned.num_allocations,
             job_count: planned.job_count,
-            has_dependencies: planned.has_dependencies,
+            // The server armed the actions from current job statuses, which may differ from the
+            // plan (e.g., a gate job completed after planning).
+            has_dependencies: applied
+                .actions
+                .iter()
+                .find(|a| a.scheduler_id == *id)
+                .map_or(planned.has_dependencies, |a| !a.pending),
         })
         .collect();
     let total_allocations: i64 = plan.schedulers.iter().map(|p| p.num_allocations).sum();

@@ -978,7 +978,7 @@ impl<C> Server<C> {
         // Activate on_workflow_start actions (workflow has started with initialization)
         if let Err(e) = self
             .workflow_actions_api
-            .check_and_trigger_actions(id, "on_workflow_start", None)
+            .check_and_trigger_actions(id, "on_workflow_start", None, None)
             .await
         {
             error!(
@@ -1015,7 +1015,7 @@ impl<C> Server<C> {
         // Check if any on_jobs_ready actions should be triggered based on job states
         if let Err(e) = self
             .workflow_actions_api
-            .check_and_trigger_actions(id, "on_jobs_ready", None)
+            .check_and_trigger_actions(id, "on_jobs_ready", None, None)
             .await
         {
             error!(

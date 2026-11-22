@@ -191,9 +191,13 @@ request, `POST /workflows/{id}/apply_scheduler_plan`, and the server applies it 
    others wait for their jobs to become ready. A gate job that completes between planning and
    applying is therefore counted.
 
-Any error from the endpoint fails the command. With `?dry_run=true` the server reports the same
-result and rolls back. `torc slurm regenerate --dry-run` does not call the endpoint; the plan alone
-answers it.
+Any error from the endpoint fails the command. The request is not idempotent, so the client retries
+it only when it cannot have been applied: the connection was refused, or the server reported lock
+contention. If the request was sent but no response arrived, the command fails without retrying and
+asks you to check `torc slurm list` and `torc workflows list-actions` before rerunning, since a
+second apply would create duplicate schedulers and allocations. With `?dry_run=true` the server
+reports the same result and rolls back. `torc slurm regenerate --dry-run` does not call the
+endpoint; the plan alone answers it.
 
 ### Step 3: Recovery Actions
 
