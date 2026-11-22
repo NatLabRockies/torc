@@ -617,17 +617,16 @@ where
             r#"
             UPDATE file
             SET
-                workflow_id = COALESCE($1, workflow_id),
-                name = COALESCE($2, name),
-                path = COALESCE($3, path),
-                st_mtime = $4
-            WHERE id = $5
+                name = COALESCE($1, name),
+                path = COALESCE($2, path),
+                st_mtime = $3
+            WHERE id = $4 AND workflow_id = $5
             "#,
-            body.workflow_id,
             body.name,
             body.path,
             body.st_mtime,
             id,
+            body.workflow_id,
         )
         .execute(self.context.pool.as_ref())
         .await
@@ -639,9 +638,14 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateFileResponse::NotFoundErrorResponse(
-                resource_not_found_response("File", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(if super::workflow_id_mismatch(pool, "file", id).await? {
+                UpdateFileResponse::UnprocessableContentErrorResponse(
+                    super::workflow_id_immutable_response(),
+                )
+            } else {
+                UpdateFileResponse::NotFoundErrorResponse(resource_not_found_response("File", id))
+            });
         }
 
         // Return the updated file by fetching it again

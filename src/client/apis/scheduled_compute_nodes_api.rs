@@ -70,6 +70,7 @@ pub enum ListScheduledComputeNodesError {
 pub enum UpdateScheduledComputeNodeError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }

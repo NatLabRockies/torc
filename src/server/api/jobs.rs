@@ -2668,6 +2668,13 @@ where
             Err(e) => return Err(e),
         };
 
+        // No endpoint writes job.workflow_id, so comparing to the stored value is race-free.
+        if body.workflow_id != existing_job.workflow_id {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                super::workflow_id_immutable_response(),
+            ));
+        }
+
         // Check if job has a status
         let existing_status = match existing_job.status {
             Some(status) => status,

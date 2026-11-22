@@ -140,6 +140,9 @@ Task `status` progresses through `queued → running → succeeded | failed`.
 
 - `PUT` expects the complete resource representation
 - `PATCH` accepts partial updates (only fields to change)
+- `workflow_id` is immutable on records that belong to a workflow. A `PUT` whose `workflow_id`
+  differs from the stored value returns 422 (`"workflow_id cannot be changed"`) and changes nothing;
+  re-sending the stored value is fine.
 - `DELETE` on non-existent resources returns 404 (not 204)
 
 ## Request Format
