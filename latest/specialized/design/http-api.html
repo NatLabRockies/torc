@@ -395,6 +395,11 @@ GET /compute_nodes?workflow_id=1&amp;is_active=true
 <li><code>name</code>: Filter by name (often substring match)</li>
 <li><code>user</code>: Filter by owner</li>
 <li><code>status</code>: Filter by status value</li>
+<li><code>statuses</code>: On <code>/jobs</code> and <code>/results</code>, several comma-separated status values; matches any of them
+(<code>statuses=failed,terminated</code>). Passing both <code>status</code> and <code>statuses</code> returns 422.</li>
+<li><code>ids</code>: On <code>/jobs</code> and <code>/results</code>, restrict to these comma-separated job IDs (<code>ids=4,8,15</code>), scoped
+to <code>workflow_id</code>. More than <code>MAX_RECORD_TRANSFER_COUNT</code> IDs returns 422; in practice, split long
+lists across requests to stay within URL length limits.</li>
 </ul>
 <h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
 <pre><code>GET /workflows?sort_by=created_at&amp;reverse_sort=true
