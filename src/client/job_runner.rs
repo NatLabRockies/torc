@@ -47,7 +47,8 @@ use crate::config::TorcConfig;
 use crate::memory_utils::memory_string_to_gb;
 use crate::models::{
     BatchCompleteJobsRequest, ComputeNodesResources, FileModel, JobCompletionEntry, JobModel,
-    JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel, WorkflowModel,
+    JobStatus, OutputFileStat, ResourceRequirementsModel, ResultModel, SlurmStatsModel,
+    WorkflowModel,
 };
 
 /// Local-side result of preparing a job completion: the data to send to the
@@ -57,6 +58,20 @@ struct PreparedCompletion {
     job_id: i64,
     final_result: ResultModel,
     slurm_stats: Option<SlurmStatsModel>,
+    output_files: Option<Vec<OutputFileStat>>,
+}
+
+impl PreparedCompletion {
+    fn entry(&self) -> JobCompletionEntry {
+        JobCompletionEntry {
+            job_id: self.job_id,
+            status: self.final_result.status,
+            run_id: self.final_result.run_id,
+            result: self.final_result.clone(),
+            output_files: self.output_files.clone(),
+            slurm_stats: self.slurm_stats.clone(),
+        }
+    }
 }
 
 /// Condvar-backed wakeup primitive used by the runner's main loop.
@@ -589,6 +604,10 @@ pub struct JobRunner {
     /// Journal of job completions recorded while offline. Opened lazily when the
     /// runner first enters drain mode; cleared and dropped on resume.
     offline_journal: Option<OfflineJournal>,
+    /// True if the server stores the output mtimes and Slurm stats sent in a completion
+    /// entry. Older servers ignore those fields, so the runner writes them separately.
+    /// Set from the server's API version at startup.
+    server_stores_completion_metadata: bool,
     /// Monotonic timestamp of the last drain-mode resume ping.
     last_drain_ping: Option<Instant>,
     /// Probe used by `maybe_try_resume` to ask whether the server is reachable.
@@ -879,6 +898,7 @@ impl JobRunner {
             drain_ping_interval,
             offline: false,
             offline_journal: None,
+            server_stores_completion_metadata: true,
             last_drain_ping: None,
             server_reachable_probe: default_server_reachable_probe,
         }
@@ -1152,6 +1172,14 @@ impl JobRunner {
             .server_api_version
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
+        self.server_stores_completion_metadata = version_result.server_stores_completion_metadata();
+        if !self.server_stores_completion_metadata {
+            warn!(
+                "Server API version {} predates completion metadata; writing output mtimes and \
+                 Slurm stats with separate requests workflow_id={}",
+                server_api_version, self.workflow_id
+            );
+        }
 
         let exec_mode = self.execution_config.effective_mode();
         info!(
@@ -1739,8 +1767,9 @@ impl JobRunner {
                     self.workflow_id, err.job_id, err.message
                 );
             }
-            // Output mtimes and RO-Crate provenance were skipped while offline; restore them
-            // before the journal (the only record of these completions) is cleared.
+            // The server applied the journaled output mtimes and Slurm stats with each
+            // completion. RO-Crate provenance (and mtimes of files the runner could not check
+            // offline) still need restoring before the journal is cleared.
             // Include completions an earlier flush already delivered (now rejected as
             // duplicates): if that flush failed partway, their metadata may still be missing.
             let (completed, lookup_failures) =
@@ -1757,6 +1786,7 @@ impl JobRunner {
                     self.workflow_id,
                     &completed,
                     None,
+                    self.server_stores_completion_metadata,
                 );
         }
         if metadata_failures > 0 {
@@ -1784,12 +1814,13 @@ impl JobRunner {
         completions: Vec<(i64, ResultModel)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         for (job_id, result) in completions {
-            // Take sacct stats so resource fields are backfilled in the journaled
-            // result; the stats themselves are not uploaded while offline.
-            let slurm_stats = self
+            // Take sacct stats and output mtimes so they are journaled with the completion
+            // and applied by the server when the journal is replayed.
+            let (slurm_stats, output_files) = self
                 .running_jobs
                 .get_mut(&job_id)
-                .and_then(|j| j.take_slurm_stats());
+                .map(|j| (j.take_slurm_stats(), j.output_files.take()))
+                .unwrap_or_default();
             let mut final_result = result;
             if let Some(ref stats) = slurm_stats {
                 backfill_sacct_into_result(&mut final_result, stats);
@@ -1806,6 +1837,8 @@ impl JobRunner {
                 status: final_result.status,
                 run_id: final_result.run_id,
                 result: final_result,
+                output_files,
+                slurm_stats,
             };
             self.journal_entry(&entry);
         }
@@ -2203,12 +2236,20 @@ impl JobRunner {
         // Second pass: validate output files, then report all completions in one batch.
         let mut to_report = Vec::with_capacity(completion_count);
         for (job_id, mut result, output_file_ids) in job_results {
-            if result.return_code == 0
-                && let Err(e) = self.validate_and_update_output_files(job_id, &output_file_ids)
-            {
-                error!("Output file validation failed for job {}: {}", job_id, e);
-                result.return_code = 1;
-                result.status = JobStatus::Failed;
+            if result.return_code == 0 {
+                match self.validate_output_files(job_id, &output_file_ids) {
+                    Ok(stats) if !stats.is_empty() => {
+                        if let Some(cmd) = self.running_jobs.get_mut(&job_id) {
+                            cmd.output_files = Some(stats);
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Output file validation failed for job {}: {}", job_id, e);
+                        result.return_code = 1;
+                        result.status = JobStatus::Failed;
+                    }
+                }
             }
             // Log after validation so the line carries the status Torc actually
             // records, not the raw process exit, and before the batch report so
@@ -2324,16 +2365,18 @@ impl JobRunner {
         Ok(())
     }
 
-    /// Validate that all expected output files exist and update their st_mtime
-    fn validate_and_update_output_files(
+    /// Validate that all expected output files exist and return their mtimes. The mtimes
+    /// are sent with the completion entry; the server records them only if it accepts the
+    /// completion.
+    fn validate_output_files(
         &mut self,
         job_id: i64,
         output_file_ids: &Option<Vec<i64>>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<OutputFileStat>, String> {
         // Get output file IDs
         let output_file_ids = match output_file_ids {
             Some(ids) if !ids.is_empty() => ids,
-            _ => return Ok(()), // No output files to validate
+            _ => return Ok(Vec::new()), // No output files to validate
         };
 
         debug!(
@@ -2343,7 +2386,7 @@ impl JobRunner {
         );
 
         let mut missing_files = Vec::new();
-        let mut files_to_update = Vec::new();
+        let mut observed_mtimes = Vec::new();
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
@@ -2385,7 +2428,7 @@ impl JobRunner {
                                 "Output file '{}' exists with mtime {}",
                                 file_model.path, st_mtime
                             );
-                            files_to_update.push((*file_id, st_mtime));
+                            observed_mtimes.push((*file_id, st_mtime));
                         }
                         Err(e) => {
                             error!(
@@ -2394,7 +2437,7 @@ impl JobRunner {
                             );
                             // Use current time as fallback
                             let st_mtime = Utc::now().timestamp() as f64;
-                            files_to_update.push((*file_id, st_mtime));
+                            observed_mtimes.push((*file_id, st_mtime));
                         }
                     }
                 }
@@ -2414,57 +2457,74 @@ impl JobRunner {
             ));
         }
 
-        // Offline: skip the server-side st_mtime and RO-Crate updates. Journal replay
-        // (automatic on reconnect, or `torc workflows reconcile`) restores them.
-        if self.offline {
-            return Ok(());
-        }
-
-        // Update st_mtime for all files and collect file models for RO-Crate
-        let mut updated_file_models: Vec<FileModel> = Vec::new();
-
-        for (file_id, st_mtime) in files_to_update {
-            let mut file_model = match self.get_file_model_cached(file_id) {
-                Ok(file) => file,
-                Err(e) => {
-                    error!(
-                        "Failed to re-fetch file model for file_id {}: {}",
-                        file_id, e
-                    );
-                    continue;
-                }
-            };
-
-            file_model.st_mtime = Some(st_mtime);
-            match self.send_with_retries(|| {
-                Self::box_retry_error(apis::files_api::update_file(
-                    &self.config,
-                    file_id,
-                    file_model.clone(),
-                ))
-            }) {
-                Ok(_) => {
-                    debug!("Updated st_mtime for file_id {} to {}", file_id, st_mtime);
-                    self.cache_file_model(file_id, file_model.clone());
-                    updated_file_models.push(file_model);
-                }
-                Err(e) => {
-                    error!("Failed to update st_mtime for file_id {}: {}", file_id, e);
-                    // Don't fail the job for this, just log the error
-                }
-            }
-        }
-
         info!(
             "Successfully validated {} output files for job {}",
             output_file_ids.len(),
             job_id
         );
 
-        // Create RO-Crate entities for output files if enabled
-        self.create_ro_crate_entities_for_output_files(job_id, &updated_file_models);
+        Ok(observed_mtimes
+            .into_iter()
+            .map(|(file_id, st_mtime)| OutputFileStat { file_id, st_mtime })
+            .collect())
+    }
 
-        Ok(())
+    /// Write an accepted completion's output mtimes and Slurm stats with separate requests,
+    /// for servers that ignore those fields in the completion entry. Failures are logged,
+    /// not fatal: the completion itself is already recorded.
+    fn store_completion_metadata_separately(
+        &mut self,
+        job_id: i64,
+        output_files: &[OutputFileStat],
+        slurm_stats: Option<SlurmStatsModel>,
+    ) {
+        for stat in output_files {
+            let mut file_model = match self.get_file_model_cached(stat.file_id) {
+                Ok(file) => file,
+                Err(e) => {
+                    error!(
+                        "Failed to fetch file model for file_id={}: {}",
+                        stat.file_id, e
+                    );
+                    continue;
+                }
+            };
+            file_model.st_mtime = Some(stat.st_mtime);
+            match self.send_with_retries(|| {
+                Self::box_retry_error(apis::files_api::update_file(
+                    &self.config,
+                    stat.file_id,
+                    file_model.clone(),
+                ))
+            }) {
+                Ok(_) => self.cache_file_model(stat.file_id, file_model),
+                Err(e) => error!(
+                    "Failed to update st_mtime for file_id={}: {}",
+                    stat.file_id, e
+                ),
+            }
+        }
+        if let Some(stats) = slurm_stats
+            && let Err(e) = apis::slurm_stats_api::create_slurm_stats(&self.config, stats)
+        {
+            warn!(
+                "Failed to store slurm_stats workflow_id={} job_id={}: {}",
+                self.workflow_id, job_id, e
+            );
+        }
+    }
+
+    /// Mirror the output mtimes the server accepted into the file model cache, then create
+    /// RO-Crate entities for them (which read local file contents, so stay client-side).
+    fn apply_accepted_output_files(&mut self, job_id: i64, output_files: &[OutputFileStat]) {
+        let mut updated_file_models = Vec::with_capacity(output_files.len());
+        for stat in output_files {
+            if let Some(file_model) = self.file_model_cache.get_mut(&stat.file_id) {
+                file_model.st_mtime = Some(stat.st_mtime);
+                updated_file_models.push(file_model.clone());
+            }
+        }
+        self.create_ro_crate_entities_for_output_files(job_id, &updated_file_models);
     }
 
     /// Create RO-Crate entities for output files if `enable_ro_crate` is enabled on the workflow.
@@ -2589,10 +2649,11 @@ impl JobRunner {
         // Take sacct stats now, before the result is sent to the server, so we can backfill
         // resource fields.  For srun-wrapped jobs the sysinfo monitor only sees the srun process
         // (negligible overhead), so sacct provides the authoritative peak memory and CPU data.
-        let slurm_stats = self
+        let (slurm_stats, output_files) = self
             .running_jobs
             .get_mut(&job_id)
-            .and_then(|j| j.take_slurm_stats());
+            .map(|j| (j.take_slurm_stats(), j.output_files.take()))
+            .unwrap_or_default();
 
         let mut final_result = result;
         if let Some(ref stats) = slurm_stats {
@@ -2669,6 +2730,7 @@ impl JobRunner {
             job_id,
             final_result,
             slurm_stats,
+            output_files,
         })
     }
 
@@ -2686,15 +2748,7 @@ impl JobRunner {
         }
 
         let request = BatchCompleteJobsRequest {
-            completions: prepared
-                .iter()
-                .map(|p| JobCompletionEntry {
-                    job_id: p.job_id,
-                    status: p.final_result.status,
-                    run_id: p.final_result.run_id,
-                    result: p.final_result.clone(),
-                })
-                .collect(),
+            completions: prepared.iter().map(PreparedCompletion::entry).collect(),
         };
 
         let response = match self.send_with_retries(|| {
@@ -2719,13 +2773,7 @@ impl JobRunner {
                     );
                     self.enter_drain_mode();
                     for p in prepared {
-                        let entry = JobCompletionEntry {
-                            job_id: p.job_id,
-                            status: p.final_result.status,
-                            run_id: p.final_result.run_id,
-                            result: p.final_result,
-                        };
-                        self.journal_entry(&entry);
+                        self.journal_entry(&p.entry());
                     }
                     return Ok(());
                 }
@@ -2766,6 +2814,7 @@ impl JobRunner {
             let PreparedCompletion {
                 job_id,
                 final_result,
+                output_files,
                 slurm_stats,
             } = prep;
 
@@ -2785,21 +2834,16 @@ impl JobRunner {
 
             // The completion itself is logged in check_job_status(), where the
             // process exit is detected; this path only reports it to the server.
-            if let Some(stats) = slurm_stats {
-                match apis::slurm_stats_api::create_slurm_stats(&self.config, stats) {
-                    Ok(_) => {
-                        info!(
-                            "Stored slurm_stats workflow_id={} job_id={}",
-                            self.workflow_id, job_id
-                        );
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to store slurm_stats workflow_id={} job_id={}: {}",
-                            self.workflow_id, job_id, e
-                        );
-                    }
-                }
+            // A current server stored the output mtimes and Slurm stats with the completion.
+            if !self.server_stores_completion_metadata {
+                self.store_completion_metadata_separately(
+                    job_id,
+                    output_files.as_deref().unwrap_or_default(),
+                    slurm_stats,
+                );
+            }
+            if let Some(output_files) = output_files {
+                self.apply_accepted_output_files(job_id, &output_files);
             }
 
             if let Some(job_rr) = self.job_resources.get(&job_id).cloned() {

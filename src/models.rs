@@ -376,6 +376,25 @@ pub struct JobCompletionEntry {
     pub status: JobStatus,
     pub run_id: i64,
     pub result: ResultModel,
+    /// Modification times of the job's output files, recorded when the job finished.
+    /// Applied in the same transaction as the completion, and only if it is accepted.
+    /// A `file_id` that is not an output file of this job is skipped; the completion is
+    /// still applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_files: Option<Vec<OutputFileStat>>,
+    /// Slurm accounting stats for the job step. Stored only if the completion is accepted.
+    /// Stats whose `workflow_id`, `job_id`, `run_id`, or `attempt_id` do not match the
+    /// completion are skipped; the completion is still applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slurm_stats: Option<SlurmStatsModel>,
+}
+
+/// An output file's modification time, as observed by the job runner at completion.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OutputFileStat {
+    pub file_id: i64,
+    pub st_mtime: f64,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]

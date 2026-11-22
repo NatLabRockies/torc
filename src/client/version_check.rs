@@ -133,6 +133,23 @@ impl VersionCheckResult {
     }
 }
 
+/// First HTTP API version whose `batch_complete_jobs` stores the `output_files` and
+/// `slurm_stats` of a completion entry.
+const COMPLETION_METADATA_API_VERSION: (u32, u32, u32) = (1, 1, 0);
+
+impl VersionCheckResult {
+    /// True if the server stores the output mtimes and Slurm stats sent with a completion.
+    /// Older servers silently ignore them, so callers must write them separately. False when
+    /// the server's API version is unknown: a separate write to a current server is harmless,
+    /// while a dropped mtime makes a later reinitialize rerun downstream jobs.
+    pub fn server_stores_completion_metadata(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= COMPLETION_METADATA_API_VERSION)
+    }
+}
+
 /// Parses a version string into (major, minor, patch) components.
 /// Returns None if parsing fails.
 /// Handles formats like "0.8.0", "v0.8.0", "0.8.0-beta", "0.8.0 (abc1234)"

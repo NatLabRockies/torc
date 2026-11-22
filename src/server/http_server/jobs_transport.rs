@@ -1887,11 +1887,16 @@ where
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         expected_workflow_id: Option<i64>,
-        id: i64,
-        status: models::JobStatus,
-        run_id: i64,
-        result: models::ResultModel,
+        entry: models::JobCompletionEntry,
     ) -> Result<CompletedJobRecord, CompletionMutationError> {
+        let models::JobCompletionEntry {
+            job_id: id,
+            status,
+            run_id,
+            result,
+            output_files,
+            slurm_stats,
+        } = entry;
         if !status.is_terminal() {
             return Err(CompletionMutationError::Transport(ApiError(format!(
                 "Status '{}' is not a terminal status for job completion",
@@ -2126,6 +2131,96 @@ where
             }
         }
 
+        // The completion is accepted: record what the runner observed in the same transaction.
+        // Invalid metadata is skipped, never written, and never costs the completion: a
+        // file_id must be an output of this job in its workflow (enforced by the WHERE
+        // clause), and the stats must identify this job, run, and attempt.
+        for file in output_files.iter().flatten() {
+            let updated = sqlx::query!(
+                r#"
+                UPDATE file SET st_mtime = ?
+                WHERE id = ? AND workflow_id = ?
+                  AND EXISTS (SELECT 1 FROM job_output_file WHERE job_id = ? AND file_id = file.id)
+                "#,
+                file.st_mtime,
+                file.file_id,
+                job_workflow_id,
+                id
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to update output file st_mtime",
+                ))
+            })?;
+            if updated.rows_affected() == 0 {
+                log::warn!(
+                    "Skipping st_mtime for file_id={}: not an output file of the job \
+                     workflow_id={} job_id={}",
+                    file.file_id,
+                    job_workflow_id,
+                    id
+                );
+            }
+        }
+        let slurm_stats = slurm_stats.filter(|stats| {
+            let valid = stats.workflow_id == job_workflow_id
+                && stats.job_id == id
+                && stats.run_id == run_id
+                && stats.attempt_id == attempt_id;
+            if !valid {
+                log::warn!(
+                    "Skipping slurm_stats (workflow_id={} job_id={} run_id={} attempt_id={}) \
+                     that do not match the completion workflow_id={} job_id={} run_id={} \
+                     attempt_id={}",
+                    stats.workflow_id,
+                    stats.job_id,
+                    stats.run_id,
+                    stats.attempt_id,
+                    job_workflow_id,
+                    id,
+                    run_id,
+                    attempt_id
+                );
+            }
+            valid
+        });
+        if let Some(stats) = slurm_stats {
+            // REPLACE: a stale row for the same (job, run, attempt) must not abort the batch.
+            sqlx::query!(
+                r#"
+                INSERT OR REPLACE INTO slurm_stats
+                (workflow_id, job_id, run_id, attempt_id,
+                 slurm_job_id,
+                 max_rss_bytes, max_vm_size_bytes,
+                 max_disk_read_bytes, max_disk_write_bytes,
+                 ave_cpu_seconds, node_list)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                "#,
+                stats.workflow_id,
+                stats.job_id,
+                stats.run_id,
+                stats.attempt_id,
+                stats.slurm_job_id,
+                stats.max_rss_bytes,
+                stats.max_vm_size_bytes,
+                stats.max_disk_read_bytes,
+                stats.max_disk_write_bytes,
+                stats.ave_cpu_seconds,
+                stats.node_list,
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to store slurm_stats",
+                ))
+            })?;
+        }
+
         // Construct a JobModel for the completion record from the row we already fetched
         // through `tx`. Relationships and optional metadata are not needed by downstream
         // consumers on the batch path (finalize_completed_jobs only reads `name`); leaving
@@ -2261,14 +2356,7 @@ where
         for entry in body.completions {
             let job_id = entry.job_id;
             match self
-                .apply_job_completion_state_tx(
-                    &mut tx,
-                    Some(workflow_id),
-                    job_id,
-                    entry.status,
-                    entry.run_id,
-                    entry.result,
-                )
+                .apply_job_completion_state_tx(&mut tx, Some(workflow_id), entry)
                 .await
             {
                 Ok(completion) => {
