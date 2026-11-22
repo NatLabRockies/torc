@@ -56,7 +56,8 @@ use crate::client::commands::pagination::{
 };
 use crate::client::commands::reports::check_resource_utilization;
 use crate::client::commands::workflow_export::{
-    EXPORT_VERSION, ExportImportStats, IdMappings, WorkflowExport,
+    EXPORT_VERSION, ExportImportStats, IdMappings, MAX_IMPORT_BATCH_BYTES, WorkflowExport,
+    job_levels, map_positionally, unique_name_chunks,
 };
 use crate::client::commands::{
     get_env_user_name,
@@ -3889,6 +3890,15 @@ fn handle_export(
     }
 }
 
+/// Delete the partially imported workflow and exit.
+fn abort_import(config: &Configuration, workflow_id: i64, message: Option<String>) -> ! {
+    if let Some(message) = message {
+        eprintln!("Error {}", message);
+    }
+    let _ = apis::workflows_api::delete_workflow(config, workflow_id);
+    std::process::exit(1);
+}
+
 fn handle_import(
     config: &Configuration,
     file: &str,
@@ -3933,6 +3943,15 @@ fn handle_import(
         );
     }
 
+    // Group jobs into dependency levels before creating anything, so a cycle fails fast.
+    let levels = match job_levels(&export.jobs) {
+        Ok(levels) => levels,
+        Err(e) => {
+            eprintln!("Error importing jobs: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     let mut mappings = IdMappings::new();
 
     // Create workflow with optional name override
@@ -3953,44 +3972,79 @@ fn handle_import(
     let new_workflow_id = created_workflow.id.unwrap();
     let workflow_name = created_workflow.name.clone();
 
-    // Create files and build mapping
-    for file_model in &export.files {
-        let mut new_file = file_model.clone();
-        let old_id = new_file.id.unwrap();
-        new_file.id = None;
-        new_file.workflow_id = new_workflow_id;
+    let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
 
-        match apis::files_api::create_file(config, new_file) {
-            Ok(created) => {
-                mappings.files.insert(old_id, created.id.unwrap());
-            }
+    // Create files in bulk. The server returns them in request order, so map old to new
+    // IDs by position: names are not unique in exported workflows.
+    for chunk in unique_name_chunks(&export.files, batch_size, MAX_IMPORT_BATCH_BYTES, |f| {
+        &f.name
+    }) {
+        let body = models::FilesModel::new(
+            chunk
+                .iter()
+                .map(|f| models::FileModel {
+                    id: None,
+                    workflow_id: new_workflow_id,
+                    ..f.clone()
+                })
+                .collect(),
+        );
+        let created = match apis::files_api::create_files(config, body) {
+            Ok(response) => response.files.unwrap_or_default(),
             Err(e) => {
-                print_error("creating file", &e);
-                // Clean up: delete the workflow we just created
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
-                std::process::exit(1);
+                print_error("creating files", &e);
+                abort_import(config, new_workflow_id, None);
             }
+        };
+        if let Err(e) = map_positionally(
+            &mut mappings.files,
+            chunk.iter().map(|f| f.id.unwrap()),
+            created.iter().map(|f| f.id),
+        ) {
+            abort_import(
+                config,
+                new_workflow_id,
+                Some(format!("creating files: {}", e)),
+            );
         }
     }
 
-    // Create user_data and build mapping
+    // Create user_data in bulk, mapped by position like files.
     // Note: consumer_job_id and producer_job_id relationships are established
     // via job's input_user_data_ids and output_user_data_ids, not here
-    for ud_model in &export.user_data {
-        let mut new_ud = ud_model.clone();
-        let old_id = new_ud.id.unwrap();
-        new_ud.id = None;
-        new_ud.workflow_id = new_workflow_id;
-
-        match apis::user_data_api::create_user_data(config, new_ud, None, None) {
-            Ok(created) => {
-                mappings.user_data.insert(old_id, created.id.unwrap());
-            }
+    for chunk in unique_name_chunks(
+        &export.user_data,
+        batch_size,
+        MAX_IMPORT_BATCH_BYTES,
+        |ud| &ud.name,
+    ) {
+        let body = models::UserDataListModel::new(
+            chunk
+                .iter()
+                .map(|ud| models::UserDataModel {
+                    id: None,
+                    workflow_id: new_workflow_id,
+                    ..ud.clone()
+                })
+                .collect(),
+        );
+        let created = match apis::user_data_api::create_user_data_list(config, body) {
+            Ok(response) => response.user_data.unwrap_or_default(),
             Err(e) => {
                 print_error("creating user_data", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
-                std::process::exit(1);
+                abort_import(config, new_workflow_id, None);
             }
+        };
+        if let Err(e) = map_positionally(
+            &mut mappings.user_data,
+            chunk.iter().map(|ud| ud.id.unwrap()),
+            created.iter().map(|ud| ud.id),
+        ) {
+            abort_import(
+                config,
+                new_workflow_id,
+                Some(format!("creating user_data: {}", e)),
+            );
         }
     }
 
@@ -4117,88 +4171,65 @@ fn handle_import(
         }
     }
 
-    // Create jobs with remapped IDs (but without depends_on_job_ids yet)
-    for job_model in &export.jobs {
-        let mut new_job = job_model.clone();
-        let old_id = new_job.id.unwrap();
-        new_job.id = None;
-        new_job.workflow_id = new_workflow_id;
-
-        // Remap file IDs
-        if let Some(ref ids) = new_job.input_file_ids {
-            new_job.input_file_ids = Some(mappings.remap_file_ids(ids));
-        }
-        if let Some(ref ids) = new_job.output_file_ids {
-            new_job.output_file_ids = Some(mappings.remap_file_ids(ids));
-        }
-
-        // Remap user_data IDs
-        if let Some(ref ids) = new_job.input_user_data_ids {
-            new_job.input_user_data_ids = Some(mappings.remap_user_data_ids(ids));
-        }
-        if let Some(ref ids) = new_job.output_user_data_ids {
-            new_job.output_user_data_ids = Some(mappings.remap_user_data_ids(ids));
-        }
-
-        // Remap resource_requirements_id
-        if let Some(rr_id) = new_job.resource_requirements_id {
-            new_job.resource_requirements_id = mappings.remap_resource_requirements_id(rr_id);
-        }
-
-        // Remap scheduler_id
-        if let Some(sched_id) = new_job.scheduler_id {
-            new_job.scheduler_id = mappings.remap_scheduler_id(sched_id);
-        }
-
-        // Remap failure_handler_id
-        if let Some(fh_id) = new_job.failure_handler_id {
-            new_job.failure_handler_id = mappings.remap_failure_handler_id(fh_id);
-        }
-
-        // Clear depends_on_job_ids - we'll set these after all jobs are created
-        new_job.depends_on_job_ids = None;
-
-        // Always reset status to uninitialized - status is computed by server
-        // based on dependencies and cannot be preserved through update_job API
-        new_job.status = Some(JobStatus::Uninitialized);
-
-        match apis::jobs_api::create_job(config, new_job) {
-            Ok(created) => {
-                mappings.jobs.insert(old_id, created.id.unwrap());
-            }
-            Err(e) => {
-                print_error("creating job", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    // Now update jobs with their depends_on_job_ids
-    // This must be done while jobs are in Uninitialized status (server constraint)
-    for job_model in &export.jobs {
-        if let Some(ref depends_on) = job_model.depends_on_job_ids
-            && !depends_on.is_empty()
-        {
-            let old_job_id = job_model.id.unwrap();
-            let new_job_id = mappings.jobs.get(&old_job_id).unwrap();
-            let new_depends_on = mappings.remap_job_ids(depends_on);
-
-            // Create update request preserving the job's name/command
-            // Keep status as Uninitialized so depends_on can be modified
-            let mut update_job = models::JobModel::new(
-                new_workflow_id,
-                job_model.name.clone(),
-                job_model.command.clone(),
-            );
-            update_job.depends_on_job_ids = Some(new_depends_on);
-            // Keep Uninitialized so we can modify depends_on_job_ids
-            update_job.status = Some(JobStatus::Uninitialized);
-
-            if let Err(e) = apis::jobs_api::update_job(config, *new_job_id, update_job) {
-                print_error("updating job dependencies", &e);
-                let _ = apis::workflows_api::delete_workflow(config, new_workflow_id);
-                std::process::exit(1);
+    // Create jobs in bulk, one dependency level at a time, so that every job's
+    // depends_on_job_ids already exist on the server when it is created.
+    for level in levels {
+        for chunk in unique_name_chunks(&level, batch_size, MAX_IMPORT_BATCH_BYTES, |j| &j.name) {
+            let new_jobs = chunk
+                .iter()
+                .map(|job_model| {
+                    let mut new_job = (*job_model).clone();
+                    new_job.id = None;
+                    new_job.workflow_id = new_workflow_id;
+                    if let Some(ref ids) = new_job.input_file_ids {
+                        new_job.input_file_ids = Some(mappings.remap_file_ids(ids));
+                    }
+                    if let Some(ref ids) = new_job.output_file_ids {
+                        new_job.output_file_ids = Some(mappings.remap_file_ids(ids));
+                    }
+                    if let Some(ref ids) = new_job.input_user_data_ids {
+                        new_job.input_user_data_ids = Some(mappings.remap_user_data_ids(ids));
+                    }
+                    if let Some(ref ids) = new_job.output_user_data_ids {
+                        new_job.output_user_data_ids = Some(mappings.remap_user_data_ids(ids));
+                    }
+                    if let Some(ref ids) = new_job.depends_on_job_ids {
+                        new_job.depends_on_job_ids = Some(mappings.remap_job_ids(ids));
+                    }
+                    if let Some(rr_id) = new_job.resource_requirements_id {
+                        new_job.resource_requirements_id =
+                            mappings.remap_resource_requirements_id(rr_id);
+                    }
+                    if let Some(sched_id) = new_job.scheduler_id {
+                        new_job.scheduler_id = mappings.remap_scheduler_id(sched_id);
+                    }
+                    if let Some(fh_id) = new_job.failure_handler_id {
+                        new_job.failure_handler_id = mappings.remap_failure_handler_id(fh_id);
+                    }
+                    // Always reset status to uninitialized - status is computed by server
+                    // based on dependencies
+                    new_job.status = Some(JobStatus::Uninitialized);
+                    new_job
+                })
+                .collect();
+            let created =
+                match apis::jobs_api::create_jobs(config, models::JobsModel::new(new_jobs)) {
+                    Ok(response) => response.jobs.unwrap_or_default(),
+                    Err(e) => {
+                        print_error("creating jobs", &e);
+                        abort_import(config, new_workflow_id, None);
+                    }
+                };
+            if let Err(e) = map_positionally(
+                &mut mappings.jobs,
+                chunk.iter().map(|j| j.id.unwrap()),
+                created.iter().map(|j| j.id),
+            ) {
+                abort_import(
+                    config,
+                    new_workflow_id,
+                    Some(format!("creating jobs: {}", e)),
+                );
             }
         }
     }
