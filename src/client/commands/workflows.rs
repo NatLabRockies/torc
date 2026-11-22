@@ -1159,7 +1159,7 @@ fn handle_list_actions(
                 let rows: Vec<WorkflowActionTableRow> = actions
                     .iter()
                     .map(|action| {
-                        // The recorded outcome (API 1.4.0+) wins; otherwise derive the status from
+                        // The recorded outcome (API 1.1.0+) wins; otherwise derive the status from
                         // trigger_count, required_triggers, and executed.
                         let status = if let Some(state) = &action.state {
                             let mut chars = state.chars();
@@ -2728,6 +2728,7 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             None,    // label
             None,    // ids
             None,    // statuses
+            None,    // resource_requirements_id
         ) {
             Ok(response) => response.total_count,
             Err(e) => {

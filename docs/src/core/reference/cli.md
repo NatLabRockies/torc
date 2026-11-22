@@ -1078,6 +1078,8 @@ List jobs
 
 - `-s`, `--status <STATUS>` — Filter by job status
 - `--upstream-job-id <UPSTREAM_JOB_ID>` — Filter by upstream job ID (jobs that depend on this job)
+- `--resource-requirements-id <RESOURCE_REQUIREMENTS_ID>` — Filter by resource requirements ID (jobs
+  that use this record)
 - `-l`, `--limit <LIMIT>` — Maximum number of jobs to return. Default: `100000`
 - `--offset <OFFSET>` — Offset for pagination (0-based). Default: `0`
 - `--sort-by <SORT_BY>` — Field to sort by

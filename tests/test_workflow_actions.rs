@@ -927,7 +927,7 @@ fn test_suppress_satisfied_schedule_actions(start_server: &ServerProcess) {
     let recovery_id = recovery.id.unwrap();
 
     // Persistent on_workflow_start + schedule_nodes — satisfied. A claim cannot stop a persistent
-    // action, but the suppress endpoint (API 1.4.0) can, so it is suppressed too.
+    // action, but the suppress endpoint (API 1.1.0) can, so it is suppressed too.
     let mut persistent_body = workflow_action(
         workflow_id,
         "on_workflow_start",

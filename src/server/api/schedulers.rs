@@ -1241,21 +1241,22 @@ where
             }
         };
 
+        // Optional text fields: null keeps the current value, "" clears it.
         let result = match sqlx::query(
             r#"
             UPDATE slurm_scheduler
             SET
                 name = COALESCE($1, name)
                 ,account = COALESCE($2, account)
-                ,gres = COALESCE($3, gres)
-                ,mem = COALESCE($4, mem)
+                ,gres = NULLIF(COALESCE($3, gres), '')
+                ,mem = NULLIF(COALESCE($4, mem), '')
                 ,nodes = COALESCE($5, nodes)
                 ,ntasks_per_node = COALESCE($6, ntasks_per_node)
-                ,partition = COALESCE($7, partition)
-                ,qos = COALESCE($8, qos)
-                ,tmp = COALESCE($9, tmp)
+                ,partition = NULLIF(COALESCE($7, partition), '')
+                ,qos = NULLIF(COALESCE($8, qos), '')
+                ,tmp = NULLIF(COALESCE($9, tmp), '')
                 ,walltime = COALESCE($10, walltime)
-                ,extra = COALESCE($11, extra)
+                ,extra = NULLIF(COALESCE($11, extra), '')
                 ,serialize_allocations = COALESCE($12, serialize_allocations)
             WHERE id = $13 AND workflow_id = $14
             "#,
@@ -1591,6 +1592,7 @@ where
         }
 
         let mut response = models::ApplySchedulerPlanResponse::default();
+        let now = chrono::Utc::now().to_rfc3339();
 
         // Suppress: the old schedule_nodes actions would otherwise start their own allocations.
         // Persistent ones too: they would keep firing the old schedulers from every new worker.
@@ -1598,10 +1600,11 @@ where
         // executed = 0 across claims, so it is suppressed even after one has run).
         if body.suppress_existing_schedule_actions {
             response.suppressed_action_ids = sqlx::query_scalar::<_, i64>(
-                "UPDATE workflow_action SET executed = 1, state = 'suppressed', error = NULL \
-                 WHERE workflow_id = ?1 AND action_type = 'schedule_nodes' AND is_recovery = 0 \
-                 AND executed = 0 RETURNING id",
+                "UPDATE workflow_action SET executed = 1, executed_at = ?1, state = 'suppressed', \
+                 error = NULL WHERE workflow_id = ?2 AND action_type = 'schedule_nodes' \
+                 AND is_recovery = 0 AND executed = 0 RETURNING id",
             )
+            .bind(&now)
             .bind(workflow_id)
             .fetch_all(&mut *tx)
             .await

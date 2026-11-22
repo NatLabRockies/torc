@@ -8,6 +8,8 @@
   import { matchesOperator, parseOperatorFilter } from "./filter";
   import { SvelteSet } from "svelte/reactivity";
   import { rerunJobs } from "./jobActions";
+  import type { ComponentProps } from "svelte";
+  import EditDefinitionModal from "./EditDefinitionModal.svelte";
   import SlurmLogsModal from "./SlurmLogsModal.svelte";
   import { loadCounts, loadRows, QUICK_FILTERS, SUBTABS, type SubTab } from "./subtabs";
   import SubTabTable from "./SubTabTable.svelte";
@@ -38,6 +40,7 @@
   const AUTO_REFRESH_MAX_ROWS = 10_000;
 
   let slurmLogsId = $state<number | null>(null);
+  let editTarget = $state<ComponentProps<typeof EditDefinitionModal>["target"] | null>(null);
   const selectedJobs = new SvelteSet<string | number>();
   let filterInput = $state<HTMLInputElement>();
 
@@ -174,6 +177,27 @@
           onclick={() => (filters[sub] = filterText === q.filter ? "" : q.filter)}>{q.label}</button
         >
       {/each}
+      {#if sub === "resources" && app.workflowId !== null}
+        {@const workflow_id = app.workflowId}
+        <button
+          class="btn btn-sm"
+          onclick={() =>
+            (editTarget = {
+              kind: "resources",
+              record: { workflow_id, name: "", num_cpus: 1, memory: "1g", num_gpus: 0, num_nodes: 1, runtime: "PT1H" },
+            })}>Add resource requirements…</button
+        >
+      {:else if sub === "schedulers" && app.workflowId !== null}
+        {@const workflow_id = app.workflowId}
+        <button
+          class="btn btn-sm"
+          onclick={() =>
+            (editTarget = {
+              kind: "scheduler",
+              record: { workflow_id, name: "", account: "", nodes: 1, walltime: "04:00:00" },
+            })}>Add Slurm scheduler…</button
+        >
+      {/if}
       {#if sub === "jobs" && selectedJobs.size}
         <span class="selection">
           {selectedJobs.size.toLocaleString()} selected
@@ -192,6 +216,7 @@
         loading={loading}
         bind:sort={sorts[sub]}
         onSlurmLogs={(id) => (slurmLogsId = id)}
+        onEdit={(t) => (editTarget = t)}
         {selectedJobs}
         onCellFilter={filterTo}
       />
@@ -202,6 +227,9 @@
       workflowId={app.workflowId}
       submissionDir={workflow?.submission_directory}
     />
+    {#if editTarget}
+      <EditDefinitionModal target={editTarget} onclose={() => (editTarget = null)} />
+    {/if}
   {/if}
 </div>
 

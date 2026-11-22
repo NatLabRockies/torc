@@ -302,7 +302,7 @@ Refer to this
 
 ### Action Outcomes
 
-The server records what happened to each action in its `state` and `error` fields (API 1.4.0):
+The server records what happened to each action in its `state` and `error` fields (API 1.1.0):
 
 | `state`      | Meaning                                                                   |
 | ------------ | ------------------------------------------------------------------------- |
@@ -342,10 +342,10 @@ Three places suppress actions instead of running them: disabling an action in th
 re-submission review, `suppress_satisfied_schedule_actions` (used by `torc recover` and
 `torc slurm schedule-nodes --suppress-actions`), and the `apply_scheduler_plan` transaction behind
 `torc slurm regenerate`. All three suppress persistent `schedule_nodes` actions too. Against a
-server older than API 1.4.0 the client falls back to claiming, which cannot stop a persistent
+server older than API 1.1.0 the client falls back to claiming, which cannot stop a persistent
 action, and skips outcome reporting.
 
-A client older than API 1.4.0 claims actions but never reports a result, so its claims stay
+A client older than API 1.1.0 claims actions but never reports a result, so its claims stay
 `claimed`, and `torc status` reports them as stuck after 30 minutes.
 
 ### Action Lifecycle

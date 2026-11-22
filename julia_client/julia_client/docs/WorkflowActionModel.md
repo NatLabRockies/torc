@@ -15,7 +15,7 @@ Name | Type | Description | Notes
 **job_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
 **persistent** | **Bool** |  | [optional] [default to false]
 **required_triggers** | **Int64** |  | [optional] [default to 1]
-**state** | **String** | Outcome of the action: &#x60;claimed&#x60;, &#x60;succeeded&#x60;, &#x60;failed&#x60;, or &#x60;suppressed&#x60;. Null if it was never claimed (or was claimed through a server older than API 1.4.0). Set by the server; ignored on create. | [optional] [default to nothing]
+**state** | **String** | Outcome of the action: &#x60;claimed&#x60;, &#x60;succeeded&#x60;, &#x60;failed&#x60;, or &#x60;suppressed&#x60;. Null if it was never claimed (or was claimed through a server older than API 1.1.0). Set by the server; ignored on create. | [optional] [default to nothing]
 **trigger_count** | **Int64** |  | [optional] [default to 0]
 **trigger_type** | **String** |  | [default to nothing]
 **workflow_id** | **Int64** |  | [default to nothing]

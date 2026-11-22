@@ -608,7 +608,7 @@ pub struct JobRunner {
     /// entry. Older servers ignore those fields, so the runner writes them separately.
     /// Set from the server's API version at startup.
     server_stores_completion_metadata: bool,
-    /// True if the server records action outcomes (API 1.4.0). Older servers have no `result`
+    /// True if the server records action outcomes (API 1.1.0). Older servers have no `result`
     /// endpoint, so the runner skips reporting. Set from the server's API version at startup.
     server_supports_action_outcomes: bool,
     /// Monotonic timestamp of the last drain-mode resume ping.
@@ -947,6 +947,7 @@ impl JobRunner {
                 Some(&labels),
                 None, // ids
                 None, // statuses
+                None,
             )
             .map_err(|e| {
                 warn!(

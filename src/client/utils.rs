@@ -402,7 +402,7 @@ pub fn claim_action(
 
 /// Report the outcome of an action this process claimed and executed. Failures to report are
 /// logged and otherwise ignored: the action already ran, and the report is bookkeeping. Callers
-/// skip this for servers older than API 1.4.0
+/// skip this for servers older than API 1.1.0
 /// (see [`crate::client::version_check::VersionCheckResult::server_supports_action_outcomes`]).
 pub fn report_action_result(
     config: &Configuration,
@@ -434,7 +434,7 @@ pub fn report_action_result(
     }
 }
 
-/// Suppress an action so it never fires. With `use_suppress` (server API >= 1.4.0) this calls the
+/// Suppress an action so it never fires. With `use_suppress` (server API >= 1.1.0) this calls the
 /// `suppress` endpoint, which also works for persistent actions; otherwise it falls back to
 /// claiming the action, which marks a non-persistent action executed (a persistent one stays
 /// armed).

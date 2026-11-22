@@ -1767,7 +1767,7 @@ pub fn handle_pending_schedule_actions(
         );
         if persistent_skipped > 0 {
             eprintln!(
-                "  Note: {} persistent action(s) cannot be suppressed by this server (API < 1.4.0) \
+                "  Note: {} persistent action(s) cannot be suppressed by this server (API < 1.1.0) \
                  and will still re-fire, submitting their own allocations. Remove or disable them \
                  to avoid duplicates.",
                 persistent_skipped
@@ -1982,6 +1982,7 @@ pub fn review_submit_pending_actions(
         None, // label
         None, // ids
         None, // statuses
+        None, // resource_requirements_id
     ) {
         Ok(resp) => resp
             .items
@@ -2101,7 +2102,7 @@ pub fn review_submit_pending_actions(
 
     // Apply disables now (only on proceed, so a cancel leaves the workflow untouched). Suppressing
     // marks the action executed so the workers started by this submission do not fire it either.
-    // Servers older than API 1.4.0 have no suppress endpoint; there a claim stands in for it, which
+    // Servers older than API 1.1.0 have no suppress endpoint; there a claim stands in for it, which
     // cannot stop a persistent action.
     let use_suppress = disabled.is_empty()
         || crate::client::version_check::check_version(config).server_supports_action_outcomes();
@@ -2109,7 +2110,7 @@ pub fn review_submit_pending_actions(
         let action = now_by_id.get(id);
         if !use_suppress && action.is_some_and(|a| a.persistent) {
             eprintln!(
-                "  Note: action {} is persistent and this server (API < 1.4.0) cannot suppress \
+                "  Note: action {} is persistent and this server (API < 1.1.0) cannot suppress \
                  it; it will still re-fire from a worker. Remove or disable it in the spec to \
                  avoid that.",
                 id
@@ -5492,7 +5493,7 @@ fn handle_regenerate(
             {
                 eprintln!(
                     "The torc server is too old for this client: it has no apply_scheduler_plan \
-                     endpoint (HTTP API 1.3.0). Upgrade torc-server."
+                     endpoint (HTTP API 1.1.0). Upgrade torc-server."
                 );
                 std::process::exit(1);
             }

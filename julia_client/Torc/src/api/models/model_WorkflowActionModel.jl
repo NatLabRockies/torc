@@ -33,7 +33,7 @@
     - job_ids::Vector{Int64}
     - persistent::Bool
     - required_triggers::Int64
-    - state::String : Outcome of the action: &#x60;claimed&#x60;, &#x60;succeeded&#x60;, &#x60;failed&#x60;, or &#x60;suppressed&#x60;. Null if it was never claimed (or was claimed through a server older than API 1.4.0). Set by the server; ignored on create.
+    - state::String : Outcome of the action: &#x60;claimed&#x60;, &#x60;succeeded&#x60;, &#x60;failed&#x60;, or &#x60;suppressed&#x60;. Null if it was never claimed (or was claimed through a server older than API 1.1.0). Set by the server; ignored on create.
     - trigger_count::Int64
     - trigger_type::String
     - workflow_id::Int64

@@ -990,7 +990,7 @@ impl WorkflowManager {
         {
             return TorcError::OperationNotAllowed(
                 "The torc server is too old for this client: it has no file_stats endpoint \
-                 (HTTP API 1.2.0). Upgrade torc-server."
+                 (HTTP API 1.1.0). Upgrade torc-server."
                     .to_string(),
             );
         }

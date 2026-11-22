@@ -2728,7 +2728,7 @@ export interface components {
             required_triggers: number;
             /**
              * @description Outcome of the action: `claimed`, `succeeded`, `failed`, or `suppressed`. Null if it was
-             *     never claimed (or was claimed through a server older than API 1.4.0). Set by the server;
+             *     never claimed (or was claimed through a server older than API 1.1.0). Set by the server;
              *     ignored on create.
              */
             state?: string | null;
@@ -4530,6 +4530,8 @@ export interface operations {
                  *     Mutually exclusive with `status` (both given returns 422).
                  */
                 statuses?: components["schemas"]["JobStatus"][] | null;
+                /** @description Returns only the jobs that use this resource requirements record. */
+                resource_requirements_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -9255,7 +9257,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Workflow is not quiet */
+            /** @description Invalid request body, or the workflow is not quiet */
             422: {
                 headers: {
                     [name: string]: unknown;

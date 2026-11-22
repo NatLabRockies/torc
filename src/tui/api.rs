@@ -160,6 +160,7 @@ impl TorcClient {
             None,    // label
             None,    // ids
             None,    // statuses
+            None,    // resource_requirements_id
         )
         .context("Failed to list jobs")?;
 

@@ -1096,7 +1096,7 @@ pub fn build_workflow_summary_report(
     }
 
     // Actions whose execution failed, or that were claimed long ago with no outcome. Servers older
-    // than API 1.4.0 record no state, so both lists are empty there. Best-effort: a failure here
+    // than API 1.1.0 record no state, so both lists are empty there. Best-effort: a failure here
     // must not break the rest of the summary.
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .unwrap_or_else(|e| {
