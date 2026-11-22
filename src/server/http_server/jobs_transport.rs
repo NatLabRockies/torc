@@ -1327,6 +1327,145 @@ where
         self.jobs_api.retry_job(id, run_id, context).await
     }
 
+    /// Cancel a job that is not running. The background unblock task only processes terminal
+    /// jobs that have a result row, which a job that never ran lacks, so this runs the same
+    /// dependency processing (`batch_unblock_jobs_tx`) in its own transaction instead.
+    pub(super) async fn transport_cancel_job(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<CancelJobResponse, ApiError> {
+        log_call!(info, context, "cancel_job(job_id={})", id);
+        authorize_job!(self, id, context, CancelJobResponse);
+        let canceled = models::JobStatus::Canceled.to_int();
+
+        let mut tx = begin_immediate(&self.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+        let row: Option<(i64, i64)> =
+            sqlx::query_as("SELECT workflow_id, status FROM job WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to fetch job"))?;
+        let Some((workflow_id, status_int)) = row else {
+            return Ok(CancelJobResponse::NotFoundErrorResponse(
+                resource_not_found_response("Job", id),
+            ));
+        };
+        let status = parse_job_status(status_int as i32, id)?;
+        match status {
+            models::JobStatus::Uninitialized
+            | models::JobStatus::Blocked
+            | models::JobStatus::Ready
+            | models::JobStatus::Disabled => {}
+            models::JobStatus::Running | models::JobStatus::Pending => {
+                return Ok(CancelJobResponse::ConflictResponse(message_error_response(
+                    format!(
+                        "job_id={} is {}; running jobs cannot be canceled individually yet. \
+                         Cancel the workflow instead.",
+                        id, status
+                    ),
+                )));
+            }
+            _ => {
+                return Ok(CancelJobResponse::ConflictResponse(message_error_response(
+                    format!("job_id={} is already {}", id, status),
+                )));
+            }
+        }
+
+        let canceled_before: std::collections::HashSet<i64> =
+            sqlx::query_scalar("SELECT id FROM job WHERE workflow_id = ? AND status = ?")
+                .bind(workflow_id)
+                .bind(canceled)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to fetch canceled jobs"))?
+                .into_iter()
+                .collect();
+
+        // unblocking_processed = 1: its dependents are processed below, not by the background
+        // task (which would skip it anyway for lack of a result row).
+        sqlx::query("UPDATE job SET status = ?, unblocking_processed = 1 WHERE id = ?")
+            .bind(canceled)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to cancel job"))?;
+
+        // Like a failure, the cancellation must keep propagating to dependents that are still
+        // waiting on other jobs, so later background passes must run the cancel cascade. Set
+        // before commit so a pass that starts right after cannot miss it.
+        if let Ok(mut set) = self.workflows_with_failures.write() {
+            set.insert(workflow_id);
+        }
+        let ready_job_ids = Self::batch_unblock_jobs_tx(&mut tx, workflow_id, true).await?;
+        // Same reason as in process_workflow_unblocks_inner: actions created after this commit
+        // arm themselves from the committed statuses.
+        let max_action_id: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(id) FROM workflow_action WHERE workflow_id = ?")
+                .bind(workflow_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to read max action id"))?;
+
+        let mut canceled_job_ids: Vec<i64> =
+            sqlx::query_scalar("SELECT id FROM job WHERE workflow_id = ? AND status = ?")
+                .bind(workflow_id)
+                .bind(canceled)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to fetch canceled jobs"))?;
+        canceled_job_ids.retain(|job_id| !canceled_before.contains(job_id));
+        canceled_job_ids.sort_unstable();
+
+        tx.commit()
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
+        info!(
+            "Job canceled workflow_id={} job_id={} canceled_count={} ready_count={}",
+            workflow_id,
+            id,
+            canceled_job_ids.len(),
+            ready_job_ids.len()
+        );
+
+        self.record_user_action_event(
+            workflow_id,
+            "cancel_job",
+            serde_json::json!({
+                "workflow_id": workflow_id,
+                "job_id": id,
+                "canceled_job_ids": canceled_job_ids,
+            }),
+            context,
+        )
+        .await;
+        if !ready_job_ids.is_empty()
+            && let Err(e) = self
+                .workflow_actions_api
+                .check_and_trigger_actions(
+                    workflow_id,
+                    "on_jobs_ready",
+                    Some(ready_job_ids),
+                    max_action_id.or(Some(0)),
+                )
+                .await
+        {
+            error!(
+                "Failed to check_and_trigger_actions for on_jobs_ready: {}",
+                e
+            );
+        }
+        self.trigger_workflow_complete_if_done(workflow_id, context)
+            .await;
+
+        Ok(CancelJobResponse::SuccessfulResponse(
+            models::CancelJobResponse { canceled_job_ids },
+        ))
+    }
+
     pub(super) async fn transport_delete_job(
         &self,
         id: i64,

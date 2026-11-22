@@ -251,6 +251,7 @@ pub fn app_router(state: LiveRouterState) -> Router {
             put(start_job),
         )
         .route("/torc-service/v1/jobs/{id}/retry/{run_id}", post(retry_job))
+        .route("/torc-service/v1/jobs/{id}/cancel", post(cancel_job))
         .route(
             "/torc-service/v1/user_data",
             get(list_user_data)
@@ -2876,6 +2877,41 @@ pub async fn retry_job(
 ) -> Response<Body> {
     match state.server.retry_job(id, run_id, &context).await {
         Ok(response) => retry_job_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "jobs",
+    path = "/jobs/{id}/cancel",
+    operation_id = "cancel_job",
+    description = "Cancel a job that is not running (uninitialized, blocked, ready, or disabled). \
+        The job becomes canceled and the server immediately runs the same dependency processing \
+        as for any other terminal status: downstream jobs with cancel_on_blocking_job_failure \
+        whose dependencies are all terminal are canceled, and other dependents whose \
+        dependencies are all terminal become ready. Downstream jobs that still wait on other \
+        dependencies are canceled when those finish. The response lists every job canceled by \
+        the request. 409 if the job is running or pending (running jobs cannot be canceled \
+        individually; cancel the workflow instead) or already terminal.",
+    params(
+        ("id" = i64, Path, description = "Job ID")
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::CancelJobResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Job is running, pending, or already terminal", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn cancel_job(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state.server.cancel_job(id, &context).await {
+        Ok(response) => cancel_job_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

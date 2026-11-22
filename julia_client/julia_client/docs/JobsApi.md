@@ -4,6 +4,7 @@ All URIs are relative to *http://localhost/torc-service/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**cancel_job**](JobsApi.md#cancel_job) | **POST** /jobs/{id}/cancel | 
 [**complete_job**](JobsApi.md#complete_job) | **POST** /jobs/{id}/complete_job/{status}/{run_id} | 
 [**create_job**](JobsApi.md#create_job) | **POST** /jobs | 
 [**create_jobs**](JobsApi.md#create_jobs) | **POST** /bulk_jobs | 
@@ -17,6 +18,36 @@ Method | HTTP request | Description
 [**start_job**](JobsApi.md#start_job) | **PUT** /jobs/{id}/start_job/{run_id}/{compute_node_id} | 
 [**update_job**](JobsApi.md#update_job) | **PUT** /jobs/{id} | 
 
+
+# **cancel_job**
+> cancel_job(_api::JobsApi, id::Int64; _mediaType=nothing) -> CancelJobResponse, OpenAPI.Clients.ApiResponse <br/>
+> cancel_job(_api::JobsApi, response_stream::Channel, id::Int64; _mediaType=nothing) -> Channel{ CancelJobResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+Cancel a job that is not running (uninitialized, blocked, ready, or disabled). The job becomes canceled and the server immediately runs the same dependency processing as for any other terminal status: downstream jobs with cancel_on_blocking_job_failure whose dependencies are all terminal are canceled, and other dependents whose dependencies are all terminal become ready. Downstream jobs that still wait on other dependencies are canceled when those finish. The response lists every job canceled by the request. 409 if the job is running or pending (running jobs cannot be canceled individually; cancel the workflow instead) or already terminal.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **JobsApi** | API context | 
+**id** | **Int64** | Job ID |
+
+### Return type
+
+[**CancelJobResponse**](CancelJobResponse.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **complete_job**
 > complete_job(_api::JobsApi, id::Int64, status::JobStatus, run_id::Int64, result_model::ResultModel; _mediaType=nothing) -> JobModel, OpenAPI.Clients.ApiResponse <br/>

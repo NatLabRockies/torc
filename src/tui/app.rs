@@ -148,7 +148,6 @@ impl WorkflowAction {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum JobAction {
     Cancel,
-    Terminate,
     Retry,
     ResetStatus,
 }
@@ -157,7 +156,6 @@ impl JobAction {
     pub fn confirmation_message(&self, job_name: &str) -> String {
         match self {
             Self::Cancel => format!("Cancel job '{}'?", job_name),
-            Self::Terminate => format!("Terminate job '{}'?", job_name),
             Self::Retry => format!("Retry job '{}'?", job_name),
             Self::ResetStatus => format!(
                 "Reset job '{}' to uninitialized for rerun?\n\
@@ -4300,7 +4298,6 @@ impl App {
                 let dialog = ConfirmationDialog::new(
                     match action {
                         JobAction::Cancel => "Cancel Job",
-                        JobAction::Terminate => "Terminate Job",
                         JobAction::Retry => "Retry Job",
                         JobAction::ResetStatus => "Reset Job Status",
                     },
@@ -4325,20 +4322,23 @@ impl App {
         }
 
         let result = match action {
-            JobAction::Cancel => self.client.cancel_job(job_id),
-            JobAction::Terminate => self.client.terminate_job(job_id),
-            JobAction::Retry => self.client.retry_job(job_id),
+            JobAction::Cancel => self.client.cancel_job(job_id).map(|ids| match ids.len() {
+                0 | 1 => format!("Job '{}' canceled", job_name),
+                n => format!(
+                    "Job '{}' canceled, with {} downstream job(s)",
+                    job_name,
+                    n - 1
+                ),
+            }),
+            JobAction::Retry => self
+                .client
+                .retry_job(job_id)
+                .map(|_| format!("Job '{}' queued for retry", job_name)),
             JobAction::ResetStatus => unreachable!("handled above"),
         };
 
         match result {
-            Ok(_) => {
-                let msg = match action {
-                    JobAction::Cancel => format!("Job '{}' canceled", job_name),
-                    JobAction::Terminate => format!("Job '{}' terminated", job_name),
-                    JobAction::Retry => format!("Job '{}' queued for retry", job_name),
-                    JobAction::ResetStatus => unreachable!("handled above"),
-                };
+            Ok(msg) => {
                 self.set_status(StatusMessage::success(&msg));
 
                 // Reload jobs to show updated status

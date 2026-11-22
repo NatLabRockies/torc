@@ -1148,6 +1148,9 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<RetryJobResponse, ApiError>;
 
+    /// Cancel a job that is not running, plus the downstream jobs that cancellation triggers.
+    async fn cancel_job(&self, id: i64, context: &C) -> Result<CancelJobResponse, ApiError>;
+
     /// Get ready jobs that fit within the specified resource constraints.
     async fn prepare_ready_jobs(
         &self,

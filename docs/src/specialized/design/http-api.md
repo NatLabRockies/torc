@@ -76,6 +76,7 @@ POST   /workflows/{id}/actions/{action_id}/suppress # Disable an action without 
 POST   /workflows/{id}/actions/{action_id}/reset    # Re-arm a failed/suppressed/stuck action
 POST   /jobs/{id}/complete                       # Mark job completed
 POST   /jobs/{id}/manage_status_change           # Transition job status
+POST   /jobs/{id}/cancel                         # Cancel a non-running job and its dependents
 GET    /tasks/{id}                               # Poll async task status
 ```
 

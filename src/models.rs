@@ -2713,6 +2713,15 @@ pub struct ResetJobStatusResponse {
     pub skipped: Option<Vec<ResetJobStatusSkipped>>,
 }
 
+/// Response of `cancel_job`.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CancelJobResponse {
+    /// IDs of every job this request canceled: the job itself plus the downstream jobs whose
+    /// cancellation it triggered.
+    pub canceled_job_ids: Vec<i64>,
+}
+
 /// Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
 /// only the listed jobs in the listed statuses are reset, in one transaction that first checks
 /// that the workflow is quiet (see the endpoint description).

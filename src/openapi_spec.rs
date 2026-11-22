@@ -9,7 +9,7 @@ use crate::api_version::HTTP_API_VERSION;
 use crate::models::{
     AccessCheckResponse, AccessGroupModel, AdminAuditLogEntry, AdminSqlRequest, AdminSqlResponse,
     AppliedSchedulerAction, ApplySchedulerPlanRequest, ApplySchedulerPlanResponse,
-    ArchiveWorkflowRequest, BatchCompleteJobsRequest, BatchCompleteJobsResponse,
+    ArchiveWorkflowRequest, BatchCompleteJobsRequest, BatchCompleteJobsResponse, CancelJobResponse,
     ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
     ComputeNodeModel, ComputeNodesResources, CreateFilesResponse, CreateJobsResponse,
     CreateUserDataListResponse, DeleteCountResponse, DeleteRoCrateEntitiesResponse,
@@ -45,11 +45,11 @@ use crate::models::{
 #[allow(unused_imports)]
 mod openapi_job_paths {
     pub use crate::server::live_router::{
-        __path_complete_job, __path_create_job, __path_delete_job, __path_delete_jobs,
-        __path_get_job, __path_list_jobs, __path_manage_status_change, __path_retry_job,
-        __path_spawn_jobs, __path_start_job, __path_update_job, complete_job, create_job,
-        delete_job, delete_jobs, get_job, list_jobs, manage_status_change, retry_job, spawn_jobs,
-        start_job, update_job,
+        __path_cancel_job, __path_complete_job, __path_create_job, __path_delete_job,
+        __path_delete_jobs, __path_get_job, __path_list_jobs, __path_manage_status_change,
+        __path_retry_job, __path_spawn_jobs, __path_start_job, __path_update_job, cancel_job,
+        complete_job, create_job, delete_job, delete_jobs, get_job, list_jobs,
+        manage_status_change, retry_job, spawn_jobs, start_job, update_job,
     };
 }
 
@@ -493,6 +493,7 @@ fn resolve_schema_properties<'a>(
         openapi_job_paths::manage_status_change,
         openapi_job_paths::start_job,
         openapi_job_paths::retry_job,
+        openapi_job_paths::cancel_job,
         openapi_local_scheduler_paths::create_local_scheduler,
         openapi_local_scheduler_paths::delete_local_schedulers,
         openapi_local_scheduler_paths::list_local_schedulers,
@@ -683,6 +684,7 @@ fn resolve_schema_properties<'a>(
         RunningJobsResponse,
         ResetJobStatusRequest,
         ResetJobStatusResponse,
+        CancelJobResponse,
         ResetJobStatusSkipped,
         FileStatEntry,
         FileStatsRequest,
@@ -1367,6 +1369,14 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
         "/jobs/{id}/retry/{run_id}",
         "post",
         "retry_job",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
+        "/jobs/{id}/cancel",
+        "post",
+        "cancel_job",
         &mut issues,
     );
     check_component_properties(

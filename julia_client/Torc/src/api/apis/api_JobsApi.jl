@@ -11,6 +11,39 @@ This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
 basepath(::Type{ JobsApi }) = "http://localhost/torc-service/v1"
 
+const _returntypes_cancel_job_JobsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => CancelJobResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("409", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_cancel_job(_api::JobsApi, id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_cancel_job_JobsApi, "/jobs/{id}/cancel", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Cancel a job that is not running (uninitialized, blocked, ready, or disabled). The job becomes canceled and the server immediately runs the same dependency processing as for any other terminal status: downstream jobs with cancel_on_blocking_job_failure whose dependencies are all terminal are canceled, and other dependents whose dependencies are all terminal become ready. Downstream jobs that still wait on other dependencies are canceled when those finish. The response lists every job canceled by the request. 409 if the job is running or pending (running jobs cannot be canceled individually; cancel the workflow instead) or already terminal.
+
+Params:
+- id::Int64 (required)
+
+Return: CancelJobResponse, OpenAPI.Clients.ApiResponse
+"""
+function cancel_job(_api::JobsApi, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_cancel_job(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function cancel_job(_api::JobsApi, response_stream::Channel, id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_cancel_job(_api, id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_complete_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => JobModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -424,6 +457,7 @@ function update_job(_api::JobsApi, response_stream::Channel, id::Int64, job_mode
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+export cancel_job
 export complete_job
 export create_job
 export create_jobs

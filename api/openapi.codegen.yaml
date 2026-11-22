@@ -7,7 +7,7 @@ info:
   license:
     name: BSD-3-Clause
     identifier: BSD-3-Clause
-  version: 1.4.0
+  version: 1.5.0
 servers:
 - url: /torc-service/v1
   description: Versioned Torc API base path
@@ -1763,6 +1763,51 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /jobs/{id}/cancel:
+    post:
+      tags:
+      - jobs
+      description: 'Cancel a job that is not running (uninitialized, blocked, ready, or disabled). The job becomes canceled and the server immediately runs the same dependency processing as for any other terminal status: downstream jobs with cancel_on_blocking_job_failure whose dependencies are all terminal are canceled, and other dependents whose dependencies are all terminal become ready. Downstream jobs that still wait on other dependencies are canceled when those finish. The response lists every job canceled by the request. 409 if the job is running or pending (running jobs cannot be canceled individually; cancel the workflow instead) or already terminal.'
+      operationId: cancel_job
+      parameters:
+      - name: id
+        in: path
+        description: Job ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelJobResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Job is running, pending, or already terminal
           content:
             application/json:
               schema:
@@ -6489,6 +6534,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/JobCompletionError'
+    CancelJobResponse:
+      type: object
+      description: Response of `cancel_job`.
+      required:
+      - canceled_job_ids
+      properties:
+        canceled_job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: |-
+            IDs of every job this request canceled: the job itself plus the downstream jobs whose
+            cancellation it triggered.
     ClaimActionRequest:
       type: object
       properties:

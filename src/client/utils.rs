@@ -474,6 +474,33 @@ pub fn suppress_action(
     )
 }
 
+/// Cancel a job that is not running (`POST /jobs/{id}/cancel`, API 1.5.0) and return the IDs of
+/// every job canceled, including downstream jobs. On failure returns a user-facing message: the
+/// server's reason (e.g. the job is running), or an upgrade hint for a server without the
+/// endpoint.
+pub fn cancel_job(config: &Configuration, job_id: i64) -> Result<Vec<i64>, String> {
+    match apis::jobs_api::cancel_job(config, job_id) {
+        Ok(response) => Ok(response.canceled_job_ids),
+        Err(apis::Error::ResponseError(r)) => {
+            if r.status == reqwest::StatusCode::NOT_FOUND
+                && !crate::client::version_check::check_version(config).server_supports_cancel_job()
+            {
+                return Err(
+                    "The torc server is too old for this client: it has no cancel_job \
+                     endpoint (HTTP API 1.5.0). Upgrade torc-server."
+                        .to_string(),
+                );
+            }
+            let message = serde_json::from_str::<serde_json::Value>(&r.content)
+                .ok()
+                .and_then(|v| v["error"]["message"].as_str().map(str::to_string))
+                .unwrap_or(r.content);
+            Err(format!("{} (HTTP {})", message, r.status))
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Detect the number of NVIDIA GPUs available on the system.
 ///
 /// Uses NVML (NVIDIA Management Library) to query the number of GPU devices.

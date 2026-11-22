@@ -38,9 +38,9 @@ pub mod events {
 
 pub mod jobs {
     pub use crate::server::api_responses::{
-        BatchCompleteJobsResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
-        CompleteJobResponse, CreateJobResponse, CreateJobsResponse, DeleteJobResponse,
-        DeleteJobsResponse, GetJobResponse, GetReadyJobRequirementsResponse,
+        BatchCompleteJobsResponse, CancelJobResponse, ClaimJobsBasedOnResources,
+        ClaimNextJobsResponse, CompleteJobResponse, CreateJobResponse, CreateJobsResponse,
+        DeleteJobResponse, DeleteJobsResponse, GetJobResponse, GetReadyJobRequirementsResponse,
         InitializeJobsResponse, ListJobDependenciesResponse, ListJobFileRelationshipsResponse,
         ListJobIdsResponse, ListJobUserDataRelationshipsResponse, ListJobsResponse,
         ManageStatusChangeResponse, ProcessChangedJobInputsResponse, ResetJobStatusResponse,

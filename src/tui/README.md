@@ -217,8 +217,7 @@ From the Jobs tab, select a job and use:
 
 | Key     | Action     | When to use                                                                                            |
 | ------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `c`     | Cancel     | Stop a pending or running job gracefully                                                               |
-| `t`     | Terminate  | Force-stop a running job                                                                               |
+| `C`     | Cancel     | Cancel a job that is not running, plus its downstream jobs (running jobs: cancel the workflow)         |
 | `y`     | Retry      | Re-queue a failed job                                                                                  |
 | `Space` | Select     | Toggle the current job in the multi-reset selection (and move down)                                    |
 | `*`     | Select all | Select every listed job; press again to clear the selection                                            |
@@ -358,8 +357,7 @@ Switch to the DAG tab to see job dependencies:
 | ------- | ------------------------- |
 | `Enter` | View job details          |
 | `l`     | View job logs             |
-| `c`     | Cancel job                |
-| `t`     | Terminate job             |
+| `C`     | Cancel job                |
 | `y`     | Retry failed job          |
 | `Space` | Toggle job selection      |
 | `*`     | Select all / clear        |

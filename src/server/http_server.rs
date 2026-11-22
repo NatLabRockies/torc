@@ -2642,6 +2642,10 @@ where
         self.transport_retry_job(id, run_id, context).await
     }
 
+    async fn cancel_job(&self, id: i64, context: &C) -> Result<CancelJobResponse, ApiError> {
+        self.transport_cancel_job(id, context).await
+    }
+
     /// Get ready jobs that fit within the specified resource constraints.
     ///
     /// This function performs the following operations:

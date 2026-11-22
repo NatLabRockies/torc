@@ -1011,6 +1011,7 @@ Job management commands
 - `get` — Get a specific job by ID
 - `update` — Update an existing job
 - `delete` — Delete one or more jobs
+- `cancel` — Cancel a job that is not running, plus the downstream jobs that cancellation triggers
 - `delete-all` — Delete all jobs for a workflow
 - `list-resource-requirements` — List jobs with their resource requirements
 
@@ -1119,6 +1120,20 @@ Delete one or more jobs
 ###### **Arguments:**
 
 - `<IDS>` — IDs of the jobs to remove
+
+## `torc jobs cancel`
+
+Cancel a job that is not running, plus the downstream jobs that cancellation triggers
+
+Cancels an uninitialized, blocked, ready, or disabled job. Downstream jobs are canceled as for any
+other canceled dependency. Running or pending jobs cannot be canceled individually; use
+`torc cancel <workflow_id>` instead.
+
+**Usage:** `torc jobs cancel <ID>`
+
+###### **Arguments:**
+
+- `<ID>` — ID of the job to cancel
 
 ## `torc jobs delete-all`
 

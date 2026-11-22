@@ -340,6 +340,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Cancel a job that is not running (uninitialized, blocked, ready, or disabled). The job becomes canceled and the server immediately runs the same dependency processing as for any other terminal status: downstream jobs with cancel_on_blocking_job_failure whose dependencies are all terminal are canceled, and other dependents whose dependencies are all terminal become ready. Downstream jobs that still wait on other dependencies are canceled when those finish. The response lists every job canceled by the request. 409 if the job is running or pending (running jobs cannot be canceled individually; cancel the workflow instead) or already terminal. */
+        post: operations["cancel_job"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/{id}/complete_job/{status}/{run_id}": {
         parameters: {
             query?: never;
@@ -1509,6 +1526,14 @@ export interface components {
         BatchCompleteJobsResponse: {
             completed: number[];
             errors: components["schemas"]["JobCompletionError"][];
+        };
+        /** @description Response of `cancel_job`. */
+        CancelJobResponse: {
+            /**
+             * @description IDs of every job this request canceled: the job itself plus the downstream jobs whose
+             *     cancellation it triggered.
+             */
+            canceled_job_ids: number[];
         };
         ClaimActionRequest: {
             /** Format: int64 */
@@ -4832,6 +4857,65 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_job: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Job ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelJobResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Job is running, pending, or already terminal */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

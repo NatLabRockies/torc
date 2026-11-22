@@ -374,6 +374,19 @@ EXAMPLES:
         #[arg(num_args = 1..)]
         ids: Vec<i64>,
     },
+    /// Cancel a job that is not running, plus the downstream jobs that cancellation triggers
+    #[command(after_long_help = "\
+Cancels an uninitialized, blocked, ready, or disabled job. Downstream jobs are canceled as for any
+other canceled dependency. Running or pending jobs cannot be canceled individually; use
+'torc cancel <workflow_id>' instead.
+
+EXAMPLES:
+    torc jobs cancel 456
+")]
+    Cancel {
+        /// ID of the job to cancel
+        id: i64,
+    },
     /// Delete all jobs for a workflow
     #[command(
         name = "delete-all",
@@ -981,6 +994,27 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 }
             }
         }
+        JobCommands::Cancel { id } => match crate::client::utils::cancel_job(config, *id) {
+            Ok(canceled_job_ids) => {
+                if format == "json" {
+                    print_json(
+                        &serde_json::json!({ "canceled_job_ids": canceled_job_ids }),
+                        "canceled jobs",
+                    );
+                } else {
+                    println!(
+                        "Canceled job {} and {} downstream job(s): {:?}",
+                        id,
+                        canceled_job_ids.len().saturating_sub(1),
+                        canceled_job_ids
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("Error canceling job {}: {}", id, e);
+                std::process::exit(1);
+            }
+        },
         JobCommands::DeleteAll {
             workflow_id,
             no_prompts,

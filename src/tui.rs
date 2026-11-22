@@ -673,12 +673,6 @@ where
                         }
                         _ => {}
                     },
-                    KeyCode::Char('t')
-                        if app.focus == Focus::Details
-                            && app.detail_view == DetailViewType::Jobs =>
-                    {
-                        app.request_job_action(JobAction::Terminate);
-                    }
                     KeyCode::Char('y')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::Jobs =>

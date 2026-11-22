@@ -405,23 +405,10 @@ impl TorcClient {
         apis::jobs_api::get_job(&self.config, job_id).context("Failed to get job")
     }
 
-    pub fn cancel_job(&self, job_id: i64) -> Result<()> {
-        // Get the existing job, update status, and PUT back
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Canceled);
-
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to cancel job")?;
-
-        Ok(())
-    }
-
-    pub fn terminate_job(&self, job_id: i64) -> Result<()> {
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Terminated);
-
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to terminate job")?;
-
-        Ok(())
+    /// Cancel a job that is not running; returns the IDs of all jobs canceled (it plus
+    /// downstream jobs).
+    pub fn cancel_job(&self, job_id: i64) -> Result<Vec<i64>> {
+        crate::client::utils::cancel_job(&self.config, job_id).map_err(anyhow::Error::msg)
     }
 
     /// Retry via the server's retry endpoint, which sets Ready and bumps attempt_id.

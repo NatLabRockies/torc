@@ -493,6 +493,12 @@ map_response!(
     UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(start_job_response, StartJobResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
+map_response!(
+    cancel_job_response,
+    CancelJobResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT
+);
 map_response!(retry_job_response, RetryJobResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
 map_response!(
     create_workflow_response,

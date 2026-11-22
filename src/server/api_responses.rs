@@ -274,6 +274,21 @@ pub enum RetryJobResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum CancelJobResponse {
+    /// Successful response
+    SuccessfulResponse(models::CancelJobResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Conflict - the job is running, pending, or already in a terminal status
+    ConflictResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum CreateResourceRequirementsResponse {
     /// Successful response
     SuccessfulResponse(models::ResourceRequirementsModel),
