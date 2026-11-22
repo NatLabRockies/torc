@@ -4285,6 +4285,16 @@ export interface operations {
                  *     these labels would claim. An empty value returns only unlabeled jobs.
                  */
                 labels?: string | null;
+                /**
+                 * @description Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+                 *     `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+                 */
+                ids?: number[] | null;
+                /**
+                 * @description Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+                 *     Mutually exclusive with `status` (both given returns 422).
+                 */
+                statuses?: components["schemas"]["JobStatus"][] | null;
                 /** @description Returns only the jobs that use this resource requirements record. */
                 resource_requirements_id?: number | null;
             };
@@ -4314,6 +4324,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (too many ids, or both status and statuses) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5572,6 +5591,16 @@ export interface operations {
                 sort_by?: string | null;
                 reverse_sort?: boolean | null;
                 all_runs?: boolean | null;
+                /**
+                 * @description Comma-separated job IDs: restrict to results of these jobs, scoped to
+                 *     `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+                 */
+                ids?: number[] | null;
+                /**
+                 * @description Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+                 *     Mutually exclusive with `status` (both given returns 422).
+                 */
+                statuses?: components["schemas"]["JobStatus"][] | null;
             };
             header?: never;
             path?: never;
@@ -5599,6 +5628,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (too many ids, or both status and statuses) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -640,6 +640,8 @@ pub enum ListJobsResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (e.g., too many ids)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }
@@ -718,6 +720,8 @@ pub enum ListResultsResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content (e.g., too many ids)
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

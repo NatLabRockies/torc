@@ -73,6 +73,16 @@ impl SqlQueryBuilder {
         self
     }
 
+    /// Append columns to the ORDER BY so rows that tie on the sort column keep a
+    /// stable order across pages. Call after `with_pagination_and_sorting`.
+    pub fn with_tie_breaker(mut self, columns: &str) -> Self {
+        if let Some(order_by) = self.order_by_clause.as_mut() {
+            order_by.push_str(", ");
+            order_by.push_str(columns);
+        }
+        self
+    }
+
     pub fn build(self) -> String {
         let mut query = self.base_query;
 
@@ -98,6 +108,14 @@ impl SqlQueryBuilder {
 
         query
     }
+}
+
+/// `column IN (v1,v2,...)` for integer values. The values are inlined rather than
+/// bound: they are typed integers (no injection risk), and an id list can be far
+/// longer than SQLite's bound-parameter limit. An empty list matches nothing.
+pub fn int_in_clause(column: &str, values: impl IntoIterator<Item = i64>) -> String {
+    let list: Vec<String> = values.into_iter().map(|v| v.to_string()).collect();
+    format!("{} IN ({})", column, list.join(","))
 }
 
 #[cfg(test)]
@@ -161,6 +179,21 @@ mod tests {
             .with_pagination_and_sorting(5, 10, None, None, "id", ALLOWED)
             .build();
         assert!(q.contains("OFFSET 5"));
+    }
+
+    #[test]
+    fn test_tie_breaker_follows_sort_column() {
+        let q = SqlQueryBuilder::new("SELECT * FROM t".to_string())
+            .with_pagination_and_sorting(0, 10, None, Some(true), "a", &[])
+            .with_tie_breaker("a, b")
+            .build();
+        assert!(q.contains("ORDER BY a DESC, a, b LIMIT 10"), "{q}");
+    }
+
+    #[test]
+    fn test_int_in_clause() {
+        assert_eq!(int_in_clause("id", [3, 1, 2]), "id IN (3,1,2)");
+        assert_eq!(int_in_clause("r.job_id", []), "r.job_id IN ()");
     }
 
     #[test]

@@ -1161,7 +1161,7 @@ where
     pub(super) async fn transport_list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: Option<i64>,
@@ -1174,6 +1174,7 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
         resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
@@ -1201,6 +1202,7 @@ where
                 name,
                 command,
                 labels,
+                ids,
                 resource_requirements_id,
                 context,
             )

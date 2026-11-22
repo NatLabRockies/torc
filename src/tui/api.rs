@@ -158,6 +158,8 @@ impl TorcClient {
             name,    // name
             command, // command
             None,    // label
+            None,    // ids
+            None,    // statuses
             None,    // resource_requirements_id
         )
         .context("Failed to list jobs")?;
@@ -213,6 +215,8 @@ impl TorcClient {
             None,        // sort_by
             None,        // reverse_sort
             None,        // all_runs
+            None,        // ids
+            None,        // statuses
         )
         .context("Failed to list results")?;
 

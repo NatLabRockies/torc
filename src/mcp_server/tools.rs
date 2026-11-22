@@ -4,13 +4,16 @@ use rmcp::{
     ErrorData as McpError,
     model::{CallToolResult, Resource, ResourceContents},
 };
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::commands::pagination::jobs::{JobListParams, paginate_jobs};
+use crate::client::commands::pagination::jobs::{
+    JobListParams, paginate_jobs, paginate_jobs_by_ids,
+};
 use crate::client::commands::pagination::resource_requirements::{
     ResourceRequirementsListParams, paginate_resource_requirements,
 };
@@ -20,7 +23,7 @@ use crate::client::commands::reports::{
 };
 use crate::client::log_paths;
 use crate::client::resource_correction::format_memory_bytes_short;
-use crate::models::{JobStatus, ResourceRequirementsModel};
+use crate::models::{JobModel, JobStatus, ResourceRequirementsModel};
 
 /// Helper to create an internal error
 fn internal_error(msg: String) -> McpError {
@@ -746,12 +749,11 @@ pub fn get_execution_plan(
         let workflow = apis::workflows_api::get_workflow(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
 
-        let jobs = paginate_jobs(
-            config,
-            workflow_id,
-            JobListParams::new().with_include_relationships(true),
-        )
-        .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
+        let jobs = paginate_jobs(config, workflow_id, JobListParams::new())
+            .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
+        let dependencies =
+            crate::client::execution_plan::fetch_dependency_edges(config, workflow_id)
+                .map_err(|e| internal_error(format!("Failed to list job dependencies: {}", e)))?;
 
         let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow actions: {}", e)))?;
@@ -770,6 +772,7 @@ pub fn get_execution_plan(
         let plan = ExecutionPlan::from_database_models(
             &workflow,
             &jobs,
+            &dependencies,
             &actions,
             &slurm_schedulers,
             &resource_requirements,
@@ -1564,34 +1567,28 @@ pub fn classify_and_resolve_failures(
     let mut jobs_to_retry: Vec<i64> = Vec::new();
     let mut jobs_to_fail: Vec<i64> = Vec::new();
 
+    // Fetch all classified jobs in one batch; the filter is scoped to this workflow.
+    let job_ids: Vec<i64> = classifications.iter().map(|c| c.job_id).collect();
+    let jobs: HashMap<i64, JobModel> =
+        paginate_jobs_by_ids(config, workflow_id, &job_ids, JobListParams::new())
+            .map_err(|e| internal_error(format!("Failed to get jobs: {}", e)))?
+            .into_iter()
+            .filter_map(|j| j.id.map(|id| (id, j)))
+            .collect();
+
     for classification in &classifications {
         let job_id = classification.job_id;
         let action = classification.action.to_lowercase();
 
-        // Validate the job exists and is in pending_failed status
-        let job = match apis::jobs_api::get_job(config, job_id) {
-            Ok(j) => j,
-            Err(e) => {
-                results.push(serde_json::json!({
-                    "job_id": job_id,
-                    "status": "error",
-                    "message": format!("Failed to get job: {}", e),
-                }));
-                continue;
-            }
-        };
-
-        if job.workflow_id != workflow_id {
+        // Validate the job exists in this workflow and is in pending_failed status
+        let Some(job) = jobs.get(&job_id) else {
             results.push(serde_json::json!({
                 "job_id": job_id,
                 "status": "error",
-                "message": format!(
-                    "Job belongs to workflow {}, not workflow {}",
-                    job.workflow_id, workflow_id
-                ),
+                "message": format!("Job not found in workflow {}", workflow_id),
             }));
             continue;
-        }
+        };
 
         if job.status != Some(JobStatus::PendingFailed) {
             results.push(serde_json::json!({

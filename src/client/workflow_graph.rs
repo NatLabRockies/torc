@@ -285,11 +285,25 @@ impl WorkflowGraph {
 
     /// Build a workflow graph from database models (jobs fetched from server)
     ///
-    /// This is used for recovery scenarios and execution plan visualization
-    /// when we don't have access to the original workflow specification.
+    /// Edges come from the jobs' relationship fields (fetch them with
+    /// `include_relationships`): explicit `depends_on_job_ids` plus the edges implied
+    /// by files and user data, so the graph is complete before initialization too.
     pub fn from_jobs(
         jobs: &[JobModel],
         resource_requirements: &[ResourceRequirementsModel],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_jobs_and_edges(jobs, resource_requirements, &edges_from_job_models(jobs))
+    }
+
+    /// Build a workflow graph from database models and `(job_id, depends_on_job_id)`
+    /// edges. Edges that reference jobs not in `jobs` are ignored.
+    ///
+    /// This is used for recovery scenarios and execution plan visualization
+    /// when we don't have access to the original workflow specification.
+    pub fn from_jobs_and_edges(
+        jobs: &[JobModel],
+        resource_requirements: &[ResourceRequirementsModel],
+        edges: &[(i64, i64)],
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut graph = Self::new();
 
@@ -328,71 +342,26 @@ impl WorkflowGraph {
             graph.depended_by.insert(job.name.clone(), HashSet::new());
         }
 
-        // Second pass: build dependency edges
-        // First try explicit depends_on_job_ids
-        let mut has_any_deps = false;
-        for job in jobs {
-            let dep_ids = job.depends_on_job_ids.clone().unwrap_or_default();
-            if !dep_ids.is_empty() {
-                has_any_deps = true;
+        // Second pass: dependency edges
+        for (job_id, dep_id) in edges {
+            if job_id == dep_id {
+                continue;
             }
-
-            for dep_id in &dep_ids {
-                if let Some(dep_name) = job_id_to_name.get(dep_id)
-                    && graph.nodes.contains_key(dep_name)
-                {
-                    graph
-                        .depends_on
-                        .get_mut(&job.name)
-                        .unwrap()
-                        .insert(dep_name.clone());
-                    graph
-                        .depended_by
-                        .get_mut(dep_name)
-                        .unwrap()
-                        .insert(job.name.clone());
-                }
-            }
-        }
-
-        // If no explicit dependencies found, compute from file relationships
-        // This handles cases where workflow hasn't been initialized yet
-        if !has_any_deps {
-            // Build file_id -> producing job_id map
-            let mut file_producers: HashMap<i64, i64> = HashMap::new();
-            for job in jobs {
-                if let Some(output_ids) = &job.output_file_ids
-                    && let Some(job_id) = job.id
-                {
-                    for file_id in output_ids {
-                        file_producers.insert(*file_id, job_id);
-                    }
-                }
-            }
-
-            // Compute dependencies from input files
-            for job in jobs {
-                if let Some(input_ids) = &job.input_file_ids {
-                    for file_id in input_ids {
-                        if let Some(producer_id) = file_producers.get(file_id)
-                            && job.id != Some(*producer_id)
-                            && let Some(producer_name) = job_id_to_name.get(producer_id)
-                            && graph.nodes.contains_key(producer_name)
-                        {
-                            graph
-                                .depends_on
-                                .get_mut(&job.name)
-                                .unwrap()
-                                .insert(producer_name.clone());
-                            graph
-                                .depended_by
-                                .get_mut(producer_name)
-                                .unwrap()
-                                .insert(job.name.clone());
-                        }
-                    }
-                }
-            }
+            let (Some(job_name), Some(dep_name)) =
+                (job_id_to_name.get(job_id), job_id_to_name.get(dep_id))
+            else {
+                continue;
+            };
+            graph
+                .depends_on
+                .get_mut(job_name)
+                .unwrap()
+                .insert(dep_name.clone());
+            graph
+                .depended_by
+                .get_mut(dep_name)
+                .unwrap()
+                .insert(job_name.clone());
         }
 
         Ok(graph)
@@ -829,6 +798,40 @@ fn build_job_name_pattern(name: &str, is_parameterized: bool, instance_count: us
     }
 }
 
+/// `(job_id, depends_on_job_id)` edges from job models' relationship fields: explicit
+/// `depends_on_job_ids`, plus consumer-on-producer edges for files and user data.
+fn edges_from_job_models(jobs: &[JobModel]) -> Vec<(i64, i64)> {
+    let mut edges = Vec::new();
+    let mut file_producers: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut user_data_producers: HashMap<i64, Vec<i64>> = HashMap::new();
+    for job in jobs {
+        let Some(id) = job.id else { continue };
+        for dep in job.depends_on_job_ids.iter().flatten() {
+            edges.push((id, *dep));
+        }
+        for f in job.output_file_ids.iter().flatten() {
+            file_producers.entry(*f).or_default().push(id);
+        }
+        for ud in job.output_user_data_ids.iter().flatten() {
+            user_data_producers.entry(*ud).or_default().push(id);
+        }
+    }
+    for job in jobs {
+        let Some(id) = job.id else { continue };
+        for f in job.input_file_ids.iter().flatten() {
+            for producer in file_producers.get(f).into_iter().flatten() {
+                edges.push((id, *producer));
+            }
+        }
+        for ud in job.input_user_data_ids.iter().flatten() {
+            for producer in user_data_producers.get(ud).into_iter().flatten() {
+                edges.push((id, *producer));
+            }
+        }
+    }
+    edges
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -986,6 +989,32 @@ mod tests {
         .unwrap();
 
         assert!(!graph.has_dependencies("consumer"));
+    }
+
+    #[test]
+    fn test_from_jobs_combines_explicit_file_and_user_data_edges() {
+        let job = |id: i64, name: &str| {
+            let mut j = JobModel::new(1, name.to_string(), "true".to_string());
+            j.id = Some(id);
+            j
+        };
+        let mut produce = job(1, "produce");
+        produce.output_file_ids = Some(vec![10]);
+        produce.output_user_data_ids = Some(vec![20]);
+        let mut from_file = job(2, "from_file");
+        from_file.input_file_ids = Some(vec![10]);
+        let mut from_ud = job(3, "from_ud");
+        from_ud.input_user_data_ids = Some(vec![20]);
+        let mut explicit = job(4, "explicit");
+        explicit.depends_on_job_ids = Some(vec![2]);
+
+        let graph =
+            WorkflowGraph::from_jobs(&[produce, from_file, from_ud, explicit], &[]).unwrap();
+        let deps = |n: &str| graph.dependencies_of(n).unwrap().clone();
+        assert!(deps("produce").is_empty());
+        assert_eq!(deps("from_file"), HashSet::from(["produce".to_string()]));
+        assert_eq!(deps("from_ud"), HashSet::from(["produce".to_string()]));
+        assert_eq!(deps("explicit"), HashSet::from(["from_file".to_string()]));
     }
 
     #[test]

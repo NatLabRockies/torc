@@ -310,6 +310,8 @@ fn test_two_node_allocation_one_worker_per_node_parallel_jobs(start_server: &Ser
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list jobs")

@@ -525,7 +525,7 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: Option<i64>,
@@ -538,6 +538,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
         resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
@@ -613,13 +614,14 @@ pub trait TransportApiCore<C: Send + Sync> {
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError>;
 

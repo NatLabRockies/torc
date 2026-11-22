@@ -157,6 +157,8 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
         None,                  // name
         None,                  // command
         None,                  // labels
+        None,                  // ids
+        None,                  // statuses
         None,                  // resource_requirements_id
     )
     .expect("Failed to list jobs");
@@ -236,6 +238,8 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list jobs before completion");
@@ -273,6 +277,8 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list jobs after completion");
@@ -371,6 +377,8 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list orphaned jobs");
@@ -415,6 +423,8 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list failed jobs");
@@ -437,6 +447,8 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list active jobs");
@@ -851,6 +863,8 @@ fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {
         None,        // name
         None,        // command
         None,        // labels
+        None,        // ids
+        None,        // statuses
         None,        // resource_requirements_id
     )
     .expect("Failed to list jobs");
@@ -956,6 +970,8 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list cn1 jobs");
@@ -982,6 +998,8 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list cn2 jobs");
@@ -1026,6 +1044,8 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list cn1 jobs after");
@@ -1048,6 +1068,8 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list cn2 jobs after");
@@ -1122,6 +1144,8 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list before reset");
@@ -1148,6 +1172,8 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list after reset");

@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
 from pydantic import Field, StrictBool, StrictInt, StrictStr
-from typing import Any, Optional
+from typing import Any, List, Optional
 from typing_extensions import Annotated
 from torc.openapi_client.models.job_status import JobStatus
 from torc.openapi_client.models.list_results_response import ListResultsResponse
@@ -1134,6 +1134,8 @@ class ResultsApi:
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
         all_runs: Optional[StrictBool] = None,
+        ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
+        statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1172,6 +1174,10 @@ class ResultsApi:
         :type reverse_sort: bool
         :param all_runs:
         :type all_runs: bool
+        :param ids: Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        :type ids: List[int]
+        :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
+        :type statuses: List[JobStatus]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1206,6 +1212,8 @@ class ResultsApi:
             sort_by=sort_by,
             reverse_sort=reverse_sort,
             all_runs=all_runs,
+            ids=ids,
+            statuses=statuses,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1216,6 +1224,7 @@ class ResultsApi:
             '200': "ListResultsResponse",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1243,6 +1252,8 @@ class ResultsApi:
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
         all_runs: Optional[StrictBool] = None,
+        ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
+        statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1281,6 +1292,10 @@ class ResultsApi:
         :type reverse_sort: bool
         :param all_runs:
         :type all_runs: bool
+        :param ids: Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        :type ids: List[int]
+        :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
+        :type statuses: List[JobStatus]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1315,6 +1330,8 @@ class ResultsApi:
             sort_by=sort_by,
             reverse_sort=reverse_sort,
             all_runs=all_runs,
+            ids=ids,
+            statuses=statuses,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1325,6 +1342,7 @@ class ResultsApi:
             '200': "ListResultsResponse",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1352,6 +1370,8 @@ class ResultsApi:
         sort_by: Optional[StrictStr] = None,
         reverse_sort: Optional[StrictBool] = None,
         all_runs: Optional[StrictBool] = None,
+        ids: Annotated[Optional[List[StrictInt]], Field(description="Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.")] = None,
+        statuses: Annotated[Optional[List[JobStatus]], Field(description="Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1390,6 +1410,10 @@ class ResultsApi:
         :type reverse_sort: bool
         :param all_runs:
         :type all_runs: bool
+        :param ids: Comma-separated job IDs: restrict to results of these jobs, scoped to `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        :type ids: List[int]
+        :param statuses: Comma-separated statuses (`statuses=failed,terminated`): match any of them. Mutually exclusive with `status` (both given returns 422).
+        :type statuses: List[JobStatus]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1424,6 +1448,8 @@ class ResultsApi:
             sort_by=sort_by,
             reverse_sort=reverse_sort,
             all_runs=all_runs,
+            ids=ids,
+            statuses=statuses,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1434,6 +1460,7 @@ class ResultsApi:
             '200': "ListResultsResponse",
             '403': "ErrorResponse",
             '404': "ErrorResponse",
+            '422': "ErrorResponse",
             '500': "ErrorResponse",
         }
         response_data = self.api_client.call_api(
@@ -1456,6 +1483,8 @@ class ResultsApi:
         sort_by,
         reverse_sort,
         all_runs,
+        ids,
+        statuses,
         _request_auth,
         _content_type,
         _headers,
@@ -1465,6 +1494,8 @@ class ResultsApi:
         _host = None
 
         _collection_formats: Dict[str, str] = {
+            'ids': 'csv',
+            'statuses': 'csv',
         }
 
         _path_params: Dict[str, str] = {}
@@ -1521,6 +1552,14 @@ class ResultsApi:
         if all_runs is not None:
             
             _query_params.append(('all_runs', all_runs))
+            
+        if ids is not None:
+            
+            _query_params.append(('ids', ids))
+            
+        if statuses is not None:
+            
+            _query_params.append(('statuses', statuses))
             
         # process the header parameters
         # process the form parameters

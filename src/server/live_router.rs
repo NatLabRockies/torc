@@ -2351,9 +2351,54 @@ pub struct JobsListQuery {
     /// these labels would claim. An empty value returns only unlabeled jobs.
     #[param(nullable = true)]
     pub labels: Option<String>,
+    /// Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+    /// `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+    #[param(nullable = true, value_type = Option<Vec<i64>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub ids: Option<Vec<i64>>,
+    /// Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+    /// Mutually exclusive with `status` (both given returns 422).
+    #[param(nullable = true, value_type = Option<Vec<models::JobStatus>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub statuses: Option<Vec<models::JobStatus>>,
     /// Returns only the jobs that use this resource requirements record.
     #[param(nullable = true)]
     pub resource_requirements_id: Option<i64>,
+}
+
+/// Combine the single `status` and list `statuses` query filters; both given is a 422.
+#[allow(clippy::result_large_err)]
+fn status_filter(
+    status: Option<models::JobStatus>,
+    statuses: Option<Vec<models::JobStatus>>,
+) -> Result<Option<Vec<models::JobStatus>>, Response<Body>> {
+    match (status, statuses) {
+        (Some(_), Some(_)) => Err(error_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "status and statuses are mutually exclusive".to_string(),
+        )),
+        (Some(s), None) => Ok(Some(vec![s])),
+        (None, statuses) => Ok(statuses),
+    }
+}
+
+/// Deserialize a comma-separated query value (`a,b,c`) into a list. An empty
+/// value is an empty list (which matches nothing).
+fn deserialize_csv<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    raw.split(',')
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| v.parse().map_err(serde::de::Error::custom))
+        .collect::<Result<Vec<T>, _>>()
+        .map(Some)
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2379,6 +2424,7 @@ pub struct RetryJobQuery {
         (status = 200, description = "Successful response", body = models::ListJobsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (too many ids, or both status and statuses)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2387,11 +2433,15 @@ pub async fn list_jobs(
     Query(query): Query<JobsListQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
+    let status = match status_filter(query.status, query.statuses) {
+        Ok(status) => status,
+        Err(response) => return response,
+    };
     match state
         .server
         .list_jobs(
             query.workflow_id,
-            query.status,
+            status,
             query.needs_file_id,
             query.upstream_job_id,
             query.offset,
@@ -2404,6 +2454,7 @@ pub async fn list_jobs(
             query.name,
             query.command,
             query.labels,
+            query.ids,
             query.resource_requirements_id,
             &context,
         )
@@ -2942,6 +2993,16 @@ pub struct ResultsQuery {
     pub reverse_sort: Option<bool>,
     #[param(nullable = true)]
     pub all_runs: Option<bool>,
+    /// Comma-separated job IDs: restrict to results of these jobs, scoped to
+    /// `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+    #[param(nullable = true, value_type = Option<Vec<i64>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub ids: Option<Vec<i64>>,
+    /// Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+    /// Mutually exclusive with `status` (both given returns 422).
+    #[param(nullable = true, value_type = Option<Vec<models::JobStatus>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub statuses: Option<Vec<models::JobStatus>>,
 }
 
 #[utoipa::path(
@@ -2954,6 +3015,7 @@ pub struct ResultsQuery {
         (status = 200, description = "Successful response", body = models::ListResultsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (too many ids, or both status and statuses)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2962,6 +3024,10 @@ pub async fn list_results(
     Query(query): Query<ResultsQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
+    let status = match status_filter(query.status, query.statuses) {
+        Ok(status) => status,
+        Err(response) => return response,
+    };
     match state
         .server
         .list_results(
@@ -2969,13 +3035,14 @@ pub async fn list_results(
             query.job_id,
             query.run_id,
             query.return_code,
-            query.status,
+            status,
             query.compute_node_id,
             query.offset,
             query.limit,
             query.sort_by,
             query.reverse_sort,
             query.all_runs,
+            query.ids,
             &context,
         )
         .await
@@ -5708,6 +5775,119 @@ mod live_router_tests {
         assert_eq!(get_response.status(), StatusCode::OK);
         let job: JobModel = read_json_body(get_response).await;
         assert_eq!(job.status, Some(JobStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn list_jobs_and_results_reject_too_many_ids() {
+        // Over-cap id lists can't travel in a real URL (the http crate caps a URI at
+        // 64 KiB), so call the transport directly to exercise the server-side check.
+        let server = test_server_with_schema().await;
+        let workflow_id = create_workflow_record(&server).await;
+        let ids = vec![1; crate::MAX_RECORD_TRANSFER_COUNT as usize + 1];
+        let ctx = EmptyContext::default();
+
+        let jobs = server
+            .list_jobs(
+                workflow_id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(ids.clone()),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("list_jobs");
+        assert_eq!(
+            list_jobs_response(jobs).status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let results = server
+            .list_results(
+                workflow_id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(ids),
+                &ctx,
+            )
+            .await
+            .expect("list_results");
+        assert_eq!(
+            list_results_response(results).status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[tokio::test]
+    async fn list_jobs_parses_comma_separated_query_values() {
+        let server = test_server_with_schema().await;
+        let workflow_id = create_workflow_record(&server).await;
+        let job_id = create_job_record(&server, workflow_id).await;
+        let router = test_router(server);
+        for (query, expected) in [
+            (format!("statuses=uninitialized,ready&ids={job_id}"), 1),
+            (format!("statuses=ready%2Cblocked&ids={job_id}"), 0),
+            ("status=uninitialized".to_string(), 1),
+            ("ids=".to_string(), 0),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri(format!(
+                            "/torc-service/v1/jobs?workflow_id={workflow_id}&{query}"
+                        ))
+                        .body(Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("router response");
+            assert_eq!(response.status(), StatusCode::OK, "query={query}");
+            let body: models::ListJobsResponse = read_json_body(response).await;
+            assert_eq!(body.total_count, expected, "query={query}");
+        }
+
+        for path in ["jobs", "results"] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri(format!(
+                            "/torc-service/v1/{path}?workflow_id={workflow_id}\
+                             &status=ready&statuses=ready,blocked"
+                        ))
+                        .body(Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("router response");
+            assert_eq!(
+                response.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "path={path}"
+            );
+        }
     }
 
     fn test_router(server: Server<EmptyContext>) -> Router {

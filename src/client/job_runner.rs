@@ -921,6 +921,8 @@ impl JobRunner {
                 None, // name
                 None, // command
                 Some(&labels),
+                None, // ids
+                None, // statuses
                 None,
             )
             .map_err(|e| {

@@ -676,6 +676,14 @@ pub fn build_results_report(
         results
     };
 
+    // A workflow has few compute nodes but may have many results: list them once.
+    let compute_nodes: std::collections::HashMap<i64, models::ComputeNodeModel> =
+        pagination::paginate_compute_nodes(config, wf_id, pagination::ComputeNodeListParams::new())
+            .map_err(|e| format!("Error fetching compute nodes: {}", e))?
+            .into_iter()
+            .filter_map(|n| n.id.map(|id| (id, n)))
+            .collect();
+
     let mut result_records: Vec<JobResultRecord> = Vec::new();
 
     for result in &results {
@@ -706,8 +714,8 @@ pub fn build_results_report(
 
         // Get compute node and determine log file paths
         let compute_node_id = result.compute_node_id;
-        match apis::compute_nodes_api::get_compute_node(config, compute_node_id) {
-            Ok(compute_node) => {
+        match compute_nodes.get(&compute_node_id) {
+            Some(compute_node) => {
                 compute_node_type = Some(compute_node.compute_node_type.clone());
 
                 match compute_node.compute_node_type.as_str() {
@@ -778,11 +786,8 @@ pub fn build_results_report(
                     }
                 }
             }
-            Err(e) => {
-                eprintln!(
-                    "Warning: Could not fetch compute node {}: {}",
-                    compute_node_id, e
-                );
+            None => {
+                eprintln!("Warning: Compute node {} not found", compute_node_id);
                 // compute_node_type and job_runner_log stay None
             }
         }

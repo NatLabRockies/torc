@@ -881,6 +881,8 @@ fn count_jobs_with_status(
         None,    // name
         None,    // command
         None,    // label
+        None,    // ids
+        None,    // statuses
         None,    // resource_requirements_id
     )
     .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;

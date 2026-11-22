@@ -25,7 +25,7 @@ use crate::models::{self as models, JobStatus};
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate, claimable_labels_sql,
     database_error_with_msg, database_lock_aware_error, deserialize_env_map, escape_like_pattern,
-    labels_column, message_error_response, normalize_env_map, parse_job_status,
+    int_in_clause, labels_column, message_error_response, normalize_env_map, parse_job_status,
     resource_not_found_response, serialize_env_map, validate_env_map,
 };
 
@@ -400,7 +400,7 @@ pub trait JobsApi<C> {
     async fn list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<JobStatus>,
+        status: Option<Vec<JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: i64,
@@ -413,6 +413,7 @@ pub trait JobsApi<C> {
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
         resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
@@ -2350,7 +2351,7 @@ where
     async fn list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<JobStatus>,
+        status: Option<Vec<JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: i64,
@@ -2363,6 +2364,7 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
         resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
@@ -2394,9 +2396,24 @@ where
         let mut bind_values: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send>> =
             vec![Box::new(workflow_id)];
 
-        if let Some(job_status) = &status {
-            where_conditions.push("status = ?".to_string());
-            bind_values.push(Box::new(job_status.to_int()));
+        if let Some(statuses) = &status {
+            where_conditions.push(int_in_clause(
+                "status",
+                statuses.iter().map(|s| s.to_int() as i64),
+            ));
+        }
+
+        if let Some(ids) = &ids {
+            if ids.len() as i64 > MAX_RECORD_TRANSFER_COUNT {
+                return Ok(ListJobsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "ids has {} values; at most {} are allowed",
+                        ids.len(),
+                        MAX_RECORD_TRANSFER_COUNT
+                    )),
+                ));
+            }
+            where_conditions.push(int_in_clause("id", ids.iter().copied()));
         }
 
         if let Some(file_id) = needs_file_id {
@@ -2474,9 +2491,6 @@ where
         sqlx_query = sqlx_query.bind(workflow_id);
 
         // Bind optional parameters in order
-        if let Some(ref s) = status {
-            sqlx_query = sqlx_query.bind(s.to_int());
-        }
         if let Some(file_id) = needs_file_id {
             sqlx_query = sqlx_query.bind(file_id);
         }
@@ -2575,9 +2589,6 @@ where
 
         let mut count_sqlx_query = sqlx::query(sqlx::AssertSqlSafe(&*count_query));
         count_sqlx_query = count_sqlx_query.bind(workflow_id);
-        if let Some(ref s) = status {
-            count_sqlx_query = count_sqlx_query.bind(s.to_int());
-        }
         if let Some(file_id) = needs_file_id {
             count_sqlx_query = count_sqlx_query.bind(file_id);
         }

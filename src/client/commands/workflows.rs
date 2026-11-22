@@ -964,18 +964,25 @@ fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, f
         }
     };
 
-    // Fetch all jobs for this workflow
-    let jobs = match paginate_jobs(
-        config,
-        workflow_id,
-        JobListParams::new().with_include_relationships(true),
-    ) {
+    // Fetch all jobs for this workflow; edges come from the relationship endpoints.
+    let jobs = match paginate_jobs(config, workflow_id, JobListParams::new()) {
         Ok(jobs) => jobs,
         Err(e) => {
             eprintln!("Error fetching jobs for workflow {}: {}", workflow_id, e);
             std::process::exit(1);
         }
     };
+    let dependencies =
+        match crate::client::execution_plan::fetch_dependency_edges(config, workflow_id) {
+            Ok(edges) => edges,
+            Err(e) => {
+                eprintln!(
+                    "Error fetching job dependencies for workflow {}: {}",
+                    workflow_id, e
+                );
+                std::process::exit(1);
+            }
+        };
 
     // Fetch workflow actions
     let actions = match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
@@ -1019,6 +1026,7 @@ fn show_execution_plan_from_database(config: &Configuration, workflow_id: i64, f
     match crate::client::execution_plan::ExecutionPlan::from_database_models(
         &workflow,
         &jobs,
+        &dependencies,
         &actions,
         &slurm_schedulers,
         &resource_requirements,
@@ -2647,6 +2655,8 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             None,    // name
             None,    // command
             None,    // label
+            None,    // ids
+            None,    // statuses
             None,    // resource_requirements_id
         ) {
             Ok(response) => response.total_count,

@@ -382,6 +382,8 @@ fn test_start_workflow_basic(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
@@ -1548,6 +1550,8 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
@@ -1567,8 +1571,8 @@ fn test_workflow_manager_end_to_end(start_server: &ServerProcess) {
         None,
         None,
         None,
-        None,
         None, // is_output filter
+        None, // ids
     )
     .expect("Failed to list files");
     let file_items = &files.items;

@@ -25,7 +25,12 @@ export type ScheduledComputeNode = Schemas["ScheduledComputeNodesModel"];
 export type SlurmScheduler = Schemas["SlurmSchedulerModel"];
 
 export const API_BASE = "/torc-service/v1";
-export const api = createClient<paths>({ baseUrl: API_BASE, headers: tokenHeaders });
+// Array query params (`ids`, multi-value `status`) are comma-separated (`explode: false`).
+export const api = createClient<paths>({
+  baseUrl: API_BASE,
+  headers: tokenHeaders,
+  querySerializer: { array: { style: "form", explode: false } },
+});
 
 export class ApiError extends Error {
   constructor(

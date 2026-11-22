@@ -15,8 +15,8 @@ use crate::server::api_responses::{
 use crate::models;
 
 use super::{
-    ApiContext, SqlQueryBuilder, database_error_with_msg, parse_job_status,
-    resource_not_found_response,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg, int_in_clause,
+    message_error_response, parse_job_status, resource_not_found_response,
 };
 
 /// Trait defining result-related API operations
@@ -46,13 +46,14 @@ pub trait ResultsApi<C> {
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: i64,
         limit: i64,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError>;
 
@@ -303,13 +304,14 @@ where
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: i64,
         limit: i64,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError> {
         // all_runs defaults to false - only show current results in workflow_result table
@@ -368,9 +370,27 @@ where
             bind_values.push(Box::new(ret_code));
         }
 
-        if let Some(result_status) = &status {
-            where_conditions.push(format!("{}status = ?", col_prefix));
-            bind_values.push(Box::new(result_status.to_int()));
+        if let Some(statuses) = &status {
+            where_conditions.push(int_in_clause(
+                &format!("{}status", col_prefix),
+                statuses.iter().map(|s| s.to_int() as i64),
+            ));
+        }
+
+        if let Some(ids) = &ids {
+            if ids.len() as i64 > MAX_RECORD_TRANSFER_COUNT {
+                return Ok(ListResultsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "ids has {} values; at most {} are allowed",
+                        ids.len(),
+                        MAX_RECORD_TRANSFER_COUNT
+                    )),
+                ));
+            }
+            where_conditions.push(int_in_clause(
+                &format!("{}job_id", col_prefix),
+                ids.iter().copied(),
+            ));
         }
 
         if let Some(cn_id) = compute_node_id {
@@ -423,9 +443,6 @@ where
         }
         if let Some(ret_code) = return_code {
             sqlx_query = sqlx_query.bind(ret_code);
-        }
-        if let Some(ref s) = status {
-            sqlx_query = sqlx_query.bind(s.to_int());
         }
         if let Some(cn_id) = compute_node_id {
             sqlx_query = sqlx_query.bind(cn_id);
@@ -484,9 +501,6 @@ where
         }
         if let Some(ret_code) = return_code {
             count_sqlx_query = count_sqlx_query.bind(ret_code);
-        }
-        if let Some(ref s) = status {
-            count_sqlx_query = count_sqlx_query.bind(s.to_int());
         }
         if let Some(cn_id) = compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(cn_id);

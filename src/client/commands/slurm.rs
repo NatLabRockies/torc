@@ -48,7 +48,7 @@ use crate::client::commands::get_env_user_name;
 use crate::client::commands::hpc::create_registry_with_config_public;
 use crate::client::commands::pagination::{
     JobListParams, ResourceRequirementsListParams, ResultListParams,
-    ScheduledComputeNodeListParams, SlurmSchedulersListParams, paginate_jobs,
+    ScheduledComputeNodeListParams, SlurmSchedulersListParams, paginate_jobs, paginate_jobs_by_ids,
     paginate_resource_requirements, paginate_results, paginate_scheduled_compute_nodes,
     paginate_slurm_schedulers,
 };
@@ -1983,6 +1983,8 @@ pub fn review_submit_pending_actions(
         None,
         None,
         None, // label
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     ) {
         Ok(resp) => resp
@@ -5084,46 +5086,39 @@ fn handle_regenerate(
     };
 
     // Fetch pending jobs (uninitialized, ready, blocked)
-    let pending_statuses = [
-        models::JobStatus::Uninitialized,
-        models::JobStatus::Ready,
-        models::JobStatus::Blocked,
-    ];
-    let mut pending_jobs: Vec<models::JobModel> = Vec::new();
-
-    for status in &pending_statuses {
-        match paginate_jobs(
-            config,
-            workflow_id,
-            JobListParams::new()
-                .with_status(*status)
-                .with_include_relationships(true),
-        ) {
-            Ok(jobs) => {
-                pending_jobs.extend(jobs);
-            }
-            Err(e) => {
-                print_error(&format!("listing {} jobs", status), &e);
-                std::process::exit(1);
-            }
+    let pending_params = JobListParams::new()
+        .with_statuses(vec![
+            models::JobStatus::Uninitialized,
+            models::JobStatus::Ready,
+            models::JobStatus::Blocked,
+        ])
+        .with_include_relationships(true);
+    let mut pending_jobs = match paginate_jobs(config, workflow_id, pending_params) {
+        Ok(jobs) => jobs,
+        Err(e) => {
+            print_error("listing pending jobs", &e);
+            std::process::exit(1);
         }
-    }
+    };
 
     // Include additional job IDs (e.g., failed jobs for recovery dry-run)
     if let Some(job_ids) = include_job_ids {
         let existing_ids: std::collections::HashSet<i64> =
             pending_jobs.iter().filter_map(|j| j.id).collect();
-
-        for &job_id in job_ids {
-            if !existing_ids.contains(&job_id) {
-                match apis::jobs_api::get_job(config, job_id) {
-                    Ok(job) => {
-                        pending_jobs.push(job);
-                    }
-                    Err(e) => {
-                        debug!("Could not fetch job {}: {:?}", job_id, e);
-                    }
-                }
+        let extra_ids: Vec<i64> = job_ids
+            .iter()
+            .copied()
+            .filter(|id| !existing_ids.contains(id))
+            .collect();
+        if !extra_ids.is_empty() {
+            match paginate_jobs_by_ids(
+                config,
+                workflow_id,
+                &extra_ids,
+                JobListParams::new().with_include_relationships(true),
+            ) {
+                Ok(jobs) => pending_jobs.extend(jobs),
+                Err(e) => debug!("Could not fetch jobs {:?}: {:?}", extra_ids, e),
             }
         }
     }

@@ -82,6 +82,7 @@ pub enum GetJobError {
 pub enum ListJobsError {
     Status403(models::ErrorResponse),
     Status404(models::ErrorResponse),
+    Status422(models::ErrorResponse),
     Status500(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
@@ -493,6 +494,8 @@ pub fn list_jobs(
     name: Option<&str>,
     command: Option<&str>,
     labels: Option<&str>,
+    ids: Option<Vec<i64>>,
+    statuses: Option<Vec<models::JobStatus>>,
     resource_requirements_id: Option<i64>,
 ) -> Result<models::ListJobsResponse, Error<ListJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
@@ -510,6 +513,8 @@ pub fn list_jobs(
     let p_query_name = name;
     let p_query_command = command;
     let p_query_labels = labels;
+    let p_query_ids = ids;
+    let p_query_statuses = statuses;
     let p_query_resource_requirements_id = resource_requirements_id;
 
     let uri_str = format!("{}/jobs", configuration.base_path);
@@ -554,6 +559,44 @@ pub fn list_jobs(
     }
     if let Some(ref param_value) = p_query_labels {
         req_builder = req_builder.query(&[("labels", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_ids {
+        req_builder = match "csv" {
+            "multi" => req_builder.query(
+                &param_value
+                    .iter()
+                    .map(|p| ("ids".to_owned(), p.to_string()))
+                    .collect::<Vec<(std::string::String, std::string::String)>>(),
+            ),
+            _ => req_builder.query(&[(
+                "ids",
+                &param_value
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+                    .to_string(),
+            )]),
+        };
+    }
+    if let Some(ref param_value) = p_query_statuses {
+        req_builder = match "csv" {
+            "multi" => req_builder.query(
+                &param_value
+                    .iter()
+                    .map(|p| ("statuses".to_owned(), p.to_string()))
+                    .collect::<Vec<(std::string::String, std::string::String)>>(),
+            ),
+            _ => req_builder.query(&[(
+                "statuses",
+                &param_value
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+                    .to_string(),
+            )]),
+        };
     }
     if let Some(ref param_value) = p_query_resource_requirements_id {
         req_builder = req_builder.query(&[("resource_requirements_id", &param_value.to_string())]);

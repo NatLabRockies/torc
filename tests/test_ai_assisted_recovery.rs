@@ -181,6 +181,8 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("Failed to list pending_failed jobs");
@@ -671,6 +673,8 @@ fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &
         None,
         None,
         None,
+        None,
+        None,
     )
     .expect("Failed to list results");
     assert_eq!(
@@ -743,6 +747,8 @@ fn test_resolving_pending_failed_only_updates_current_attempt_result(start_serve
         None,
         None,
         Some(true),
+        None,
+        None,
     )
     .expect("Failed to list results")
     .items;

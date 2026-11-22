@@ -1122,6 +1122,8 @@ fn test_concurrent_claim_and_complete(start_server: &ServerProcess) {
         None,
         None,
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("list_jobs failed");
@@ -1170,6 +1172,8 @@ fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
         None,
         None,
         None, // labels
+        None, // ids
+        None, // statuses
         None, // resource_requirements_id
     )
     .expect("list_jobs")
@@ -1225,6 +1229,8 @@ fn test_two_runners_complete_same_job_rejected(start_server: &ServerProcess) {
         config,
         workflow_id,
         Some(job_id),
+        None,
+        None,
         None,
         None,
         None,
@@ -1319,6 +1325,8 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
         None,
         None,
         None,
+        None,
+        None,
     )
     .unwrap()
     .items;
@@ -1373,6 +1381,8 @@ fn test_claim_with_start_marks_jobs_running(start_server: &ServerProcess) {
         None,
         None,
         Some(compute_node_id),
+        None,
+        None,
         None,
         None,
         None,
