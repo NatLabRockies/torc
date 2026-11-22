@@ -143,6 +143,9 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 - `TORC_LOG_DIR`: Default log directory
 - `RUST_LOG`: Default log level
 - `TORC_MAX_REQUEST_BODY_MB`: Override the bulk job upload request-body limit in MiB
+- `TORC_DRAFT_WORKFLOW_TIMEOUT_SECS`: Age in seconds at which the server deletes a draft workflow
+  that was never finalized, such as one left by an interrupted `torc create` (default `86400`; `0`
+  disables the cleanup). Same as `--draft-workflow-timeout-secs`.
 - `TORC_SERVER_SNAPSHOT_PATH`: Snapshot output path for in-memory mode (default
   `./torc-server-snapshot.db`). See
   [In-Memory Database with Snapshots](#in-memory-database-with-snapshots-advanced).

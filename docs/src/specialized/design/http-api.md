@@ -64,6 +64,7 @@ Operations that don't map to CRUD use verb-based paths under the resource:
 
 ```
 POST   /workflows/{id}/initialize_jobs           # Build dependency graph
+POST   /workflows/{id}/finalize                  # Validate a draft workflow and make it visible
 POST   /workflows/{id}/claim_next_jobs           # Atomically claim ready jobs
 POST   /workflows/{id}/cancel                    # Cancel workflow execution
 POST   /workflows/{id}/reset_status              # Reset workflow state
@@ -180,6 +181,55 @@ POST /bulk_jobs
   ]
 }
 ```
+
+A job in a `bulk_jobs` request can reference other records by name instead of id through
+`name_refs`. The fields mirror the workflow spec: `depends_on`, `input_files`, `output_files`,
+`input_user_data`, and `output_user_data` (each with a `*_regexes` variant), plus
+`resource_requirements`, `scheduler` (a Slurm scheduler), and `failure_handler`:
+
+```json
+POST /bulk_jobs
+{
+  "jobs": [
+    {"name": "postprocess", "workflow_id": 1, "command": "post.sh",
+     "name_refs": {"depends_on": ["simulate"], "input_files": ["raw"]}},
+    {"name": "simulate", "workflow_id": 1, "command": "sim.sh",
+     "name_refs": {"output_files": ["raw"], "resource_requirements": "large"}}
+  ]
+}
+```
+
+The server resolves the names in the request's transaction and adds the ids to the job's id fields.
+Names match records already in the workflow; `depends_on` and `depends_on_regexes` also match the
+other jobs in the same request, in any order. A name that matches nothing, matches more than one
+record, or a regex that matches nothing is a 422, as is a dependency cycle within the request. A
+request cannot refer to jobs in a later request, so send jobs in dependency order when a workflow
+needs more than one request (`MAX_RECORD_TRANSFER_COUNT`, 100,000 jobs, per request). The single-job
+`POST /jobs` endpoint rejects `name_refs`.
+
+### Draft Workflows
+
+To build a large workflow without exposing a partial one, create it as a draft, fill it with bulk
+requests, and finalize it:
+
+1. `POST /workflows` with `"is_draft": true`. Drafts are left out of `GET /workflows`, and
+   `initialize_jobs` rejects them with 422. `GET /workflows/{id}` returns them with
+   `is_draft: true`.
+2. Create files, user data, resource requirements, schedulers, failure handlers, jobs, and actions
+   as usual, in as many requests as needed.
+3. `POST /workflows/{id}/finalize`. The server checks the whole workflow: dependency cycles
+   (explicit and through files and user data), actions that reference schedulers outside the
+   workflow, `execution_config` rules, and Slurm scheduler node counts are errors; job resource
+   requirements that exceed the Slurm schedulers are warnings. The response is
+   `{"finalized": bool, "errors": [...], "warnings": [...]}` with status 200. Warnings block
+   finalization unless the request has `?force=true`; errors always do. On success the workflow is
+   no longer a draft. Finalizing a workflow that is not a draft does nothing and reports
+   `finalized: true`.
+
+The server deletes drafts that are not finalized within `--draft-workflow-timeout-secs` (default one
+day) of their creation, so an interrupted client leaves nothing behind. `torc create` uses this flow
+against servers with HTTP API 1.6.0 or later, and the old one (jobs created one dependency level at
+a time) against older servers.
 
 ## Response Format
 

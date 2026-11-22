@@ -23,6 +23,13 @@ torc create workflow.kdl
 
 Torc detects the format from the file extension.
 
+`torc create` builds the workflow as a hidden draft and makes it visible only after the server has
+validated the whole workflow, so other users and tools never see a partly created workflow, and an
+interrupted `torc create` leaves nothing behind (the server deletes the abandoned draft later).
+`torc create --dry-run workflow.yaml` checks the spec without creating anything, using the same
+execution and scheduler rules as the server. Dependency cycles that run through files or user data
+are reported only when the workflow is created.
+
 ### Create from stdin
 
 Pass `-` instead of a path to read the spec from stdin. This is handy for shell pipelines and for

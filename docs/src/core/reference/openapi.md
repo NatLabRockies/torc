@@ -330,3 +330,26 @@ curl -X POST http://localhost:8080/torc-service/v1/jobs/5/cancel | jq '.canceled
 
 The response lists the job and every downstream job the cancellation canceled. A running, pending,
 uninitialized, or already terminal job returns 409.
+
+**Build a Workflow as a Draft and Finalize It**
+
+```bash
+# Create a hidden draft; it does not appear in `torc workflows list`
+curl -X POST http://localhost:8080/torc-service/v1/workflows \
+  -H "Content-Type: application/json" \
+  -d '{"name": "pipeline", "user": "alice", "is_draft": true}' | jq '.id'
+
+# Add jobs that reference each other by name (here workflow 7)
+curl -X POST http://localhost:8080/torc-service/v1/bulk_jobs \
+  -H "Content-Type: application/json" \
+  -d '{"jobs": [
+        {"workflow_id": 7, "name": "b", "command": "echo b", "name_refs": {"depends_on": ["a"]}},
+        {"workflow_id": 7, "name": "a", "command": "echo a"}
+      ]}' | jq '[.jobs[] | {name, depends_on_job_ids}]'
+
+# Validate and publish the workflow
+curl -X POST http://localhost:8080/torc-service/v1/workflows/7/finalize | jq
+```
+
+`finalize` returns `finalized`, `errors`, and `warnings`. Add `?force=true` to finalize despite
+warnings.
