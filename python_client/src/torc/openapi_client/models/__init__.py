@@ -42,6 +42,11 @@ from torc.openapi_client.models.execution_config import ExecutionConfig
 from torc.openapi_client.models.execution_mode import ExecutionMode
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel
+from torc.openapi_client.models.file_stat_change import FileStatChange
+from torc.openapi_client.models.file_stat_entry import FileStatEntry
+from torc.openapi_client.models.file_stats_request import FileStatsRequest
+from torc.openapi_client.models.file_stats_reset_job import FileStatsResetJob
+from torc.openapi_client.models.file_stats_response import FileStatsResponse
 from torc.openapi_client.models.files_model import FilesModel
 from torc.openapi_client.models.get_ready_job_requirements_response import GetReadyJobRequirementsResponse
 from torc.openapi_client.models.is_complete_response import IsCompleteResponse

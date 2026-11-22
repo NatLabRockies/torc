@@ -11,6 +11,7 @@ Method | HTTP request | Description
 [**get_file**](FilesApi.md#get_file) | **GET** /files/{id} | 
 [**list_files**](FilesApi.md#list_files) | **GET** /files | 
 [**update_file**](FilesApi.md#update_file) | **PUT** /files/{id} | 
+[**update_file_stats**](FilesApi.md#update_file_stats) | **POST** /workflows/{id}/file_stats | 
 
 
 # **create_file**
@@ -211,6 +212,43 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**FileModel**](FileModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **update_file_stats**
+> update_file_stats(_api::FilesApi, id::Int64, file_stats_request::FileStatsRequest; dry_run=nothing, _mediaType=nothing) -> FileStatsResponse, OpenAPI.Clients.ApiResponse <br/>
+> update_file_stats(_api::FilesApi, response_stream::Channel, id::Int64, file_stats_request::FileStatsRequest; dry_run=nothing, _mediaType=nothing) -> Channel{ FileStatsResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+Compare a client's stat snapshot of workflow files with the stored modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared for files that no longer exist. Jobs that need a changed file and are completed, failed, or canceled are reset to uninitialized, as are completed jobs with a missing output file, and every job downstream of a reset job. Each request runs in one transaction and is idempotent. With dry_run=true, reports the same result without changing anything. At most MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **FilesApi** | API context | 
+**id** | **Int64** | Workflow ID |
+**file_stats_request** | [**FileStatsRequest**](FileStatsRequest.md) |  |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **dry_run** | **Bool** |  | [default to nothing]
+
+### Return type
+
+[**FileStatsResponse**](FileStatsResponse.md)
 
 ### Authorization
 

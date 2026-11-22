@@ -12,7 +12,8 @@ use crate::models::{
     ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
     ComputeNodeModel, ComputeNodesResources, CreateFilesResponse, CreateJobsResponse,
     CreateUserDataListResponse, DeleteCountResponse, DeleteRoCrateEntitiesResponse,
-    DynamicJobsConfig, EventModel, FailureHandlerModel, FileModel, FilesModel,
+    DynamicJobsConfig, EventModel, FailureHandlerModel, FileModel, FileStatChange, FileStatEntry,
+    FileStatsRequest, FileStatsResetJob, FileStatsResponse, FilesModel,
     GetReadyJobRequirementsResponse, IsCompleteResponse, IsUninitializedResponse,
     JobCompletionEntry, JobCompletionError, JobDependencyModel, JobFileRelationshipModel, JobModel,
     JobStatus, JobStatusCounts, JobUserDataRelationshipModel, JobsModel, ListAccessGroupsResponse,
@@ -99,8 +100,8 @@ mod openapi_compute_node_paths {
 mod openapi_file_paths {
     pub use crate::server::live_router::{
         __path_create_file, __path_delete_file, __path_delete_files, __path_get_file,
-        __path_list_files, __path_update_file, create_file, delete_file, delete_files, get_file,
-        list_files, update_file,
+        __path_list_files, __path_update_file, __path_update_file_stats, create_file, delete_file,
+        delete_files, get_file, list_files, update_file, update_file_stats,
     };
 }
 
@@ -477,6 +478,7 @@ fn resolve_schema_properties<'a>(
         openapi_file_paths::delete_file,
         openapi_file_paths::get_file,
         openapi_file_paths::update_file,
+        openapi_file_paths::update_file_stats,
         openapi_job_paths::create_job,
         openapi_job_paths::delete_jobs,
         openapi_job_paths::list_jobs,
@@ -674,6 +676,11 @@ fn resolve_schema_properties<'a>(
         ResetJobStatusRequest,
         ResetJobStatusResponse,
         ResetJobStatusSkipped,
+        FileStatEntry,
+        FileStatsRequest,
+        FileStatChange,
+        FileStatsResetJob,
+        FileStatsResponse,
         UserDataModel,
         ListUserDataResponse
     )),

@@ -148,6 +148,14 @@ impl VersionCheckResult {
             .and_then(parse_version)
             .is_some_and(|v| v >= COMPLETION_METADATA_API_VERSION)
     }
+
+    /// True if the server has the `update_file_stats` endpoint (API 1.1.0).
+    pub fn server_supports_file_stats(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 1, 0))
+    }
 }
 
 /// Parses a version string into (major, minor, patch) components.

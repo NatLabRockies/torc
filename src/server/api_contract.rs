@@ -871,6 +871,15 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<UpdateFileResponse, ApiError>;
 
+    /// Compare a client's file stat snapshot with stored mtimes and reset affected jobs.
+    async fn update_file_stats(
+        &self,
+        id: i64,
+        body: models::FileStatsRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError>;
+
     /// Update a job.
     async fn update_job(
         &self,

@@ -238,6 +238,42 @@ function update_file(_api::FilesApi, response_stream::Channel, id::Int64, file_m
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_update_file_stats_FilesApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => FileStatsResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_update_file_stats(_api::FilesApi, id::Int64, file_stats_request::FileStatsRequest; dry_run=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_update_file_stats_FilesApi, "/workflows/{id}/file_stats", [], file_stats_request)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "dry_run", dry_run; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Compare a client's stat snapshot of workflow files with the stored modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared for files that no longer exist. Jobs that need a changed file and are completed, failed, or canceled are reset to uninitialized, as are completed jobs with a missing output file, and every job downstream of a reset job. Each request runs in one transaction and is idempotent. With dry_run=true, reports the same result without changing anything. At most MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow.
+
+Params:
+- id::Int64 (required)
+- file_stats_request::FileStatsRequest (required)
+- dry_run::Bool
+
+Return: FileStatsResponse, OpenAPI.Clients.ApiResponse
+"""
+function update_file_stats(_api::FilesApi, id::Int64, file_stats_request::FileStatsRequest; dry_run=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_update_file_stats(_api, id, file_stats_request; dry_run=dry_run, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function update_file_stats(_api::FilesApi, response_stream::Channel, id::Int64, file_stats_request::FileStatsRequest; dry_run=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_update_file_stats(_api, id, file_stats_request; dry_run=dry_run, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 export create_file
 export create_files
 export delete_file
@@ -245,3 +281,4 @@ export delete_files
 export get_file
 export list_files
 export update_file
+export update_file_stats

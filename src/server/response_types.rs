@@ -22,7 +22,8 @@ pub mod artifacts {
         GetFileResponse, GetResultResponse, GetRoCrateEntityResponse, GetUserDataResponse,
         ListFilesResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
         ListResultsResponse, ListRoCrateEntitiesResponse, ListUserDataResponse, UpdateFileResponse,
-        UpdateResultResponse, UpdateRoCrateEntityResponse, UpdateUserDataResponse,
+        UpdateFileStatsResponse, UpdateResultResponse, UpdateRoCrateEntityResponse,
+        UpdateUserDataResponse,
     };
 }
 

@@ -75,6 +75,11 @@ __all__ = [
     "ExecutionMode",
     "FailureHandlerModel",
     "FileModel",
+    "FileStatChange",
+    "FileStatEntry",
+    "FileStatsRequest",
+    "FileStatsResetJob",
+    "FileStatsResponse",
     "FilesModel",
     "GetReadyJobRequirementsResponse",
     "IsCompleteResponse",
@@ -213,6 +218,11 @@ from torc.openapi_client.models.execution_config import ExecutionConfig as Execu
 from torc.openapi_client.models.execution_mode import ExecutionMode as ExecutionMode
 from torc.openapi_client.models.failure_handler_model import FailureHandlerModel as FailureHandlerModel
 from torc.openapi_client.models.file_model import FileModel as FileModel
+from torc.openapi_client.models.file_stat_change import FileStatChange as FileStatChange
+from torc.openapi_client.models.file_stat_entry import FileStatEntry as FileStatEntry
+from torc.openapi_client.models.file_stats_request import FileStatsRequest as FileStatsRequest
+from torc.openapi_client.models.file_stats_reset_job import FileStatsResetJob as FileStatsResetJob
+from torc.openapi_client.models.file_stats_response import FileStatsResponse as FileStatsResponse
 from torc.openapi_client.models.files_model import FilesModel as FilesModel
 from torc.openapi_client.models.get_ready_job_requirements_response import GetReadyJobRequirementsResponse as GetReadyJobRequirementsResponse
 from torc.openapi_client.models.is_complete_response import IsCompleteResponse as IsCompleteResponse

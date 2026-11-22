@@ -5065,6 +5065,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/file_stats:
+    post:
+      tags:
+      - files
+      description: Compare a client's stat snapshot of workflow files with the stored modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared for files that no longer exist. Jobs that need a changed file and are completed, failed, or canceled are reset to uninitialized, as are completed jobs with a missing output file, and every job downstream of a reset job. Each request runs in one transaction and is idempotent. With dry_run=true, reports the same result without changing anything. At most MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow.
+      operationId: update_file_stats
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: dry_run
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileStatsRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileStatsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/initialize_jobs:
     post:
       tags:
@@ -6617,6 +6675,92 @@ components:
         workflow_id:
           type: integer
           format: int64
+    FileStatChange:
+      type: object
+      description: A file whose stored modification time differs from the observation.
+      required:
+      - file_id
+      - reason
+      properties:
+        file_id:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          description: '`modified`, `appeared`, or `disappeared`.'
+    FileStatEntry:
+      type: object
+      description: A client's observation of one file on disk, sent to `update_file_stats`.
+      required:
+      - id
+      - exists
+      properties:
+        exists:
+          type: boolean
+          description: Whether the file exists.
+        id:
+          type: integer
+          format: int64
+          description: File ID. Must belong to the workflow in the request path.
+        st_mtime:
+          type:
+          - number
+          - 'null'
+          format: double
+          description: Modification time in seconds since the Unix epoch. Required when `exists` is true.
+    FileStatsRequest:
+      type: object
+      description: A batch of file observations (at most `MAX_RECORD_TRANSFER_COUNT` entries).
+      required:
+      - files
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileStatEntry'
+    FileStatsResetJob:
+      type: object
+      description: A job reset to uninitialized because of a file change.
+      required:
+      - job_id
+      - name
+      - status
+      - reason
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        reason:
+          type: string
+          description: |-
+            `input_changed` (an input file changed), `output_missing` (an output file of a completed
+            job is missing), or `downstream` (depends, directly or transitively, on a reset job).
+        status:
+          $ref: '#/components/schemas/JobStatus'
+          description: Status before the reset.
+    FileStatsResponse:
+      type: object
+      required:
+      - changed_files
+      - reset_jobs
+      - missing_required_file_ids
+      properties:
+        changed_files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileStatChange'
+        missing_required_file_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Files in the batch that some job needs, no job produces, and that do not exist.
+        reset_jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileStatsResetJob'
     FilesModel:
       type: object
       required:

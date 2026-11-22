@@ -59,6 +59,7 @@ Class | Method
 *FilesApi* | [**get_file**](docs/FilesApi.md#get_file)<br/>**GET** /files/{id}<br/>
 *FilesApi* | [**list_files**](docs/FilesApi.md#list_files)<br/>**GET** /files<br/>
 *FilesApi* | [**update_file**](docs/FilesApi.md#update_file)<br/>**PUT** /files/{id}<br/>
+*FilesApi* | [**update_file_stats**](docs/FilesApi.md#update_file_stats)<br/>**POST** /workflows/{id}/file_stats<br/>
 *JobsApi* | [**complete_job**](docs/JobsApi.md#complete_job)<br/>**POST** /jobs/{id}/complete_job/{status}/{run_id}<br/>
 *JobsApi* | [**create_job**](docs/JobsApi.md#create_job)<br/>**POST** /jobs<br/>
 *JobsApi* | [**create_jobs**](docs/JobsApi.md#create_jobs)<br/>**POST** /bulk_jobs<br/>
@@ -188,6 +189,11 @@ Class | Method
  - [ExecutionMode](docs/ExecutionMode.md)
  - [FailureHandlerModel](docs/FailureHandlerModel.md)
  - [FileModel](docs/FileModel.md)
+ - [FileStatChange](docs/FileStatChange.md)
+ - [FileStatEntry](docs/FileStatEntry.md)
+ - [FileStatsRequest](docs/FileStatsRequest.md)
+ - [FileStatsResetJob](docs/FileStatsResetJob.md)
+ - [FileStatsResponse](docs/FileStatsResponse.md)
  - [FilesModel](docs/FilesModel.md)
  - [GetReadyJobRequirementsResponse](docs/GetReadyJobRequirementsResponse.md)
  - [IsCompleteResponse](docs/IsCompleteResponse.md)

@@ -10,13 +10,15 @@ use sqlx::Row;
 use crate::server::api_responses::{
     CreateFileResponse, CreateFilesResponse, DeleteFileResponse, DeleteFilesResponse,
     GetFileResponse, ListFilesResponse, ListRequiredExistingFilesResponse, UpdateFileResponse,
+    UpdateFileStatsResponse,
 };
 
 use crate::models;
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, begin_immediate,
-    database_error_with_msg, message_error_response, resource_not_found_response,
+    database_error_with_msg, database_lock_aware_error, message_error_response,
+    resource_not_found_response,
 };
 
 /// Trait defining file-related API operations
@@ -78,6 +80,16 @@ pub trait FilesApi<C> {
 
     /// Delete a file.
     async fn delete_file(&self, id: i64, context: &C) -> Result<DeleteFileResponse, ApiError>;
+
+    /// Compare a client's file stat snapshot with stored mtimes, store the changes, and reset
+    /// affected jobs and their downstream jobs.
+    async fn update_file_stats(
+        &self,
+        workflow_id: i64,
+        body: models::FileStatsRequest,
+        dry_run: bool,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError>;
 }
 
 /// Implementation of files API for the server
@@ -582,6 +594,242 @@ where
         Ok(ListRequiredExistingFilesResponse::SuccessfulResponse(
             response,
         ))
+    }
+
+    async fn update_file_stats(
+        &self,
+        workflow_id: i64,
+        body: models::FileStatsRequest,
+        dry_run: bool,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError> {
+        debug!(
+            "update_file_stats(workflow_id={}, count={}, dry_run={}) - X-Span-ID: {:?}",
+            workflow_id,
+            body.files.len(),
+            dry_run,
+            context.get().0.clone()
+        );
+        let unprocessable = |msg: String| {
+            Ok(UpdateFileStatsResponse::UnprocessableContentErrorResponse(
+                message_error_response(msg),
+            ))
+        };
+        if body.files.len() > MAX_RECORD_TRANSFER_COUNT as usize {
+            return unprocessable(format!(
+                "Too many files in batch: {}. Maximum is {}",
+                body.files.len(),
+                MAX_RECORD_TRANSFER_COUNT
+            ));
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for f in &body.files {
+            if !ids.insert(f.id) {
+                return unprocessable(format!("Duplicate file id {} in request", f.id));
+            }
+            if f.exists && !f.st_mtime.is_some_and(f64::is_finite) {
+                return unprocessable(format!("file_id={} exists but has no valid st_mtime", f.id));
+            }
+        }
+        let mut response = models::FileStatsResponse::default();
+        if ids.is_empty() {
+            return Ok(UpdateFileStatsResponse::SuccessfulResponse(response));
+        }
+        // Id sets are bound as one JSON array and expanded with json_each, so a 100k-entry
+        // batch needs one query per step instead of chunked IN lists. CROSS JOIN keeps
+        // json_each outermost (SQLite never reorders it), so each id is an index lookup rather
+        // than a rescan of the batch per row.
+        let to_json = |ids: &[i64]| serde_json::to_string(ids).expect("serialize ids");
+        let ids: Vec<i64> = ids.into_iter().collect();
+
+        // A dry run only reads; a real run takes the write lock up front so the comparison and
+        // the writes see the same state.
+        let mut tx = if dry_run {
+            self.context.pool.begin().await
+        } else {
+            begin_immediate(&self.context.pool).await
+        }
+        .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+
+        let stored: std::collections::HashMap<i64, Option<f64>> =
+            sqlx::query_as::<_, (i64, Option<f64>)>(
+                "SELECT f.id, f.st_mtime FROM json_each(?1) j \
+                 CROSS JOIN file f ON f.id = j.value AND f.workflow_id = ?2",
+            )
+            .bind(to_json(&ids))
+            .bind(workflow_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to read file mtimes"))?
+            .into_iter()
+            .collect();
+        if stored.len() != ids.len() {
+            let bad: Vec<String> = ids
+                .iter()
+                .filter(|id| !stored.contains_key(id))
+                .take(20)
+                .map(i64::to_string)
+                .collect();
+            return unprocessable(format!(
+                "Files do not exist in workflow_id={}: [{}]",
+                workflow_id,
+                bad.join(", ")
+            ));
+        }
+
+        // Same rules and 10 ms tolerance (filesystem timestamp precision) the client used.
+        let mut updates: Vec<(i64, Option<f64>)> = Vec::new();
+        let mut missing_ids: Vec<i64> = Vec::new();
+        for f in &body.files {
+            let reason = match (f.exists, stored[&f.id], f.st_mtime) {
+                (true, Some(old), Some(new)) if (old - new).abs() > 0.01 => Some("modified"),
+                (true, None, _) => Some("appeared"),
+                (false, Some(_), _) => Some("disappeared"),
+                _ => None,
+            };
+            if let Some(reason) = reason {
+                updates.push((f.id, if f.exists { f.st_mtime } else { None }));
+                response.changed_files.push(models::FileStatChange {
+                    file_id: f.id,
+                    reason: reason.to_string(),
+                });
+            }
+            if !f.exists {
+                missing_ids.push(f.id);
+            }
+        }
+        let changed_ids: Vec<i64> = updates.iter().map(|(id, _)| *id).collect();
+
+        // Jobs to reset, in the order of precedence of their reason.
+        let mut seeds: std::collections::BTreeMap<i64, (String, i64, &'static str)> =
+            std::collections::BTreeMap::new();
+        let completed = models::JobStatus::Completed.to_int();
+        if !changed_ids.is_empty() {
+            let rows = sqlx::query_as::<_, (i64, String, i64)>(
+                "SELECT DISTINCT j.id, j.name, j.status FROM json_each(?1) c \
+                 CROSS JOIN job_input_file jif ON jif.file_id = c.value \
+                 CROSS JOIN job j ON j.id = jif.job_id \
+                 WHERE j.workflow_id = ?2 AND j.status IN (?3, ?4, ?5)",
+            )
+            .bind(to_json(&changed_ids))
+            .bind(workflow_id)
+            .bind(completed)
+            .bind(models::JobStatus::Failed.to_int())
+            .bind(models::JobStatus::Canceled.to_int())
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to find jobs with changed inputs"))?;
+            for (id, name, status) in rows {
+                seeds.insert(id, (name, status, "input_changed"));
+            }
+        }
+        if !missing_ids.is_empty() {
+            let missing_json = to_json(&missing_ids);
+            let rows = sqlx::query_as::<_, (i64, String, i64)>(
+                "SELECT DISTINCT j.id, j.name, j.status FROM json_each(?1) m \
+                 CROSS JOIN job_output_file jof ON jof.file_id = m.value \
+                 CROSS JOIN job j ON j.id = jof.job_id \
+                 WHERE j.workflow_id = ?2 AND j.status = ?3",
+            )
+            .bind(&missing_json)
+            .bind(workflow_id)
+            .bind(completed)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to find jobs with missing outputs"))?;
+            for (id, name, status) in rows {
+                seeds.entry(id).or_insert((name, status, "output_missing"));
+            }
+            response.missing_required_file_ids = sqlx::query_scalar::<_, i64>(
+                "SELECT m.value FROM json_each(?1) m \
+                 WHERE EXISTS (SELECT 1 FROM job_input_file jif WHERE jif.file_id = m.value) \
+                 AND NOT EXISTS (SELECT 1 FROM job_output_file jof WHERE jof.file_id = m.value) \
+                 ORDER BY m.value",
+            )
+            .bind(&missing_json)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to find missing required files"))?;
+        }
+
+        let mut downstream = Vec::new();
+        if !seeds.is_empty() {
+            // Every job that depends on a reset job, directly or transitively, whatever its
+            // status. This is the set the following initialize_jobs(only_uninitialized) would
+            // reset (uninitialize_blocked_jobs); resetting it here makes the response complete
+            // and leaves the same state if the client stops before initialize_jobs.
+            let seed_ids: Vec<i64> = seeds.keys().copied().collect();
+            downstream = sqlx::query_as::<_, (i64, String, i64)>(
+                "WITH RECURSIVE downstream(job_id) AS ( \
+                     SELECT value FROM json_each(?1) \
+                     UNION \
+                     SELECT d.job_id FROM job_depends_on d \
+                     JOIN downstream ds ON d.depends_on_job_id = ds.job_id \
+                     WHERE d.workflow_id = ?2 \
+                 ) \
+                 SELECT j.id, j.name, j.status FROM job j \
+                 JOIN downstream ds ON ds.job_id = j.id \
+                 WHERE j.workflow_id = ?2 AND j.status != ?3 ORDER BY j.id",
+            )
+            .bind(to_json(&seed_ids))
+            .bind(workflow_id)
+            .bind(models::JobStatus::Uninitialized.to_int())
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to find downstream jobs"))?;
+            downstream.retain(|(id, _, _)| !seeds.contains_key(id));
+        }
+        let reset = seeds
+            .into_iter()
+            .map(|(id, (name, status, reason))| (id, name, status, reason))
+            .chain(
+                downstream
+                    .into_iter()
+                    .map(|(id, name, status)| (id, name, status, "downstream")),
+            );
+        for (job_id, name, status, reason) in reset {
+            response.reset_jobs.push(models::FileStatsResetJob {
+                job_id,
+                name,
+                status: super::parse_job_status(status as i32, job_id)?,
+                reason: reason.to_string(),
+            });
+        }
+
+        if dry_run {
+            return Ok(UpdateFileStatsResponse::SuccessfulResponse(response));
+        }
+        for (id, st_mtime) in &updates {
+            sqlx::query("UPDATE file SET st_mtime = ? WHERE id = ?")
+                .bind(st_mtime)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to update file mtime"))?;
+        }
+        for job in &response.reset_jobs {
+            sqlx::query(
+                "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL \
+                 WHERE id = ?",
+            )
+            .bind(models::JobStatus::Uninitialized.to_int())
+            .bind(job.job_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to reset job status"))?;
+        }
+        tx.commit()
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
+        if !updates.is_empty() || !response.reset_jobs.is_empty() {
+            info!(
+                "File stats applied workflow_id={} changed_files={} reset_jobs={}",
+                workflow_id,
+                updates.len(),
+                response.reset_jobs.len()
+            );
+        }
+        Ok(UpdateFileStatsResponse::SuccessfulResponse(response))
     }
 
     /// Update a file.

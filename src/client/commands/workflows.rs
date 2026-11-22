@@ -2009,8 +2009,8 @@ fn handle_reset_status(
                 let torc_config = TorcConfig::load().unwrap_or_default();
                 let workflow_manager = WorkflowManager::new(config.clone(), torc_config, workflow);
                 match workflow_manager
-                    .check_workflow(false)
-                    .and_then(|()| workflow_manager.reinitialize_jobs(false))
+                    .check_workflow()
+                    .and_then(|()| workflow_manager.reinitialize_jobs(false, false))
                 {
                     Ok(()) => {
                         reinitialize_success = true;

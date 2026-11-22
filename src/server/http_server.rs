@@ -2265,6 +2265,19 @@ where
         self.transport_update_file(id, body, context).await
     }
 
+    /// Compare a client's file stat snapshot with stored mtimes and reset affected jobs.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, dry_run = ?dry_run))]
+    async fn update_file_stats(
+        &self,
+        id: i64,
+        body: models::FileStatsRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError> {
+        self.transport_update_file_stats(id, body, dry_run, context)
+            .await
+    }
+
     /// Update a job.
     async fn update_job(
         &self,

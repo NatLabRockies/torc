@@ -3966,7 +3966,7 @@ impl WorkflowSpec {
         // Gate on "declared as a job input OR has st_mtime" rather than just
         // `st_mtime.is_some()`. An input file that doesn't yet exist on disk has
         // st_mtime=None here; if we skipped it, the identifier would be silently
-        // dropped because `initialize_files` later refreshes st_mtime but the
+        // dropped because initialization later refreshes st_mtime but the
         // FileSpec (and its identifier) is no longer in scope at that point. The
         // server-side filter on st_mtime still applies for *whether* init touches
         // the entity at all -- but the pre-created row carries the identifier

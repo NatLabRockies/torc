@@ -303,10 +303,10 @@ cargo install cargo-nextest
 cargo nextest run --all-features
 
 # Run specific test
-cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
+cargo nextest run -E 'test(test_file_stats_init_with_updated_files)'
 
 # Run with debug logging
-RUST_LOG=debug cargo nextest run -E 'test(test_initialize_files_with_updated_files)'
+RUST_LOG=debug cargo nextest run -E 'test(test_file_stats_init_with_updated_files)'
 ```
 
 ### Setting Up the Server
