@@ -646,82 +646,6 @@ pub fn recover_workflow(
     Ok(result)
 }
 
-/// Check that no workers are active on the workflow:
-/// - No active compute node workers
-/// - No pending or active scheduled compute nodes (Slurm allocations)
-///
-/// This does NOT require the workflow to be complete — non-terminal job statuses
-/// (uninitialized, blocked, ready) are fine as long as nothing is executing or about
-/// to execute.
-pub(crate) fn check_no_active_workers(
-    config: &Configuration,
-    workflow_id: i64,
-) -> Result<(), String> {
-    // Check for active compute nodes
-    let active_nodes = apis::compute_nodes_api::list_compute_nodes(
-        config,
-        workflow_id,
-        None,       // offset
-        Some(1),    // limit - just need to know if any exist
-        None,       // sort_by
-        None,       // reverse_sort
-        None,       // hostname
-        Some(true), // is_active = true
-        None,       // scheduled_compute_node_id
-    )
-    .map_err(|e| format!("Failed to check for active compute nodes: {}", e))?;
-
-    if !active_nodes.items.is_empty() {
-        return Err(
-            "there are still active compute nodes; wait for all workers to exit".to_string(),
-        );
-    }
-
-    // Check for pending/active scheduled compute nodes
-    let pending_scn = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,            // offset
-        Some(1),         // limit
-        None,            // sort_by
-        None,            // reverse_sort
-        None,            // scheduler_id
-        None,            // scheduler_config_id
-        Some("pending"), // status
-    )
-    .map_err(|e| format!("Failed to check for pending scheduled compute nodes: {}", e))?;
-
-    if pending_scn.total_count > 0 {
-        return Err(
-            "there are pending Slurm allocations; wait for them to start or cancel them with \
-             'torc slurm cancel'"
-                .to_string(),
-        );
-    }
-
-    let active_scn = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,           // offset
-        Some(1),        // limit
-        None,           // sort_by
-        None,           // reverse_sort
-        None,           // scheduler_id
-        None,           // scheduler_config_id
-        Some("active"), // status
-    )
-    .map_err(|e| format!("Failed to check for active scheduled compute nodes: {}", e))?;
-
-    if active_scn.total_count > 0 {
-        return Err(
-            "there are active Slurm allocations still running; wait for all workers to exit"
-                .to_string(),
-        );
-    }
-
-    Ok(())
-}
-
 /// Check that the workflow is in a valid state for recovery:
 /// - Workflow must be complete or canceled (all jobs in terminal state)
 /// - The workflow must be quiet and have at least one recoverable job. Both come from a
@@ -740,7 +664,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
     }
 
     // No job_ids and default statuses: every failed, terminated, canceled, or pending_failed job.
-    let preview = reset_jobs(config, workflow_id, None, None, true, false)
+    let preview = preview_reset(config, workflow_id, None, None)
         .map_err(|msg| format!("Cannot recover: {}", msg))?;
     if preview.reset.unwrap_or_default().is_empty() {
         return Err(
@@ -757,6 +681,28 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
 /// defaults on the server to failed, terminated, canceled, and pending_failed. Returns the
 /// server's message on a refusal (e.g. the workflow is not quiet and `force` is false).
 pub(crate) fn reset_jobs(
+    config: &Configuration,
+    workflow_id: i64,
+    job_ids: Option<Vec<i64>>,
+    statuses: Option<Vec<JobStatus>>,
+    force: bool,
+) -> Result<crate::models::ResetJobStatusResponse, String> {
+    post_reset(config, workflow_id, job_ids, statuses, false, force)
+}
+
+/// Dry run of [`reset_jobs`] without `force`: reports what would be reset, or returns the
+/// server's refusal (e.g. the workflow is not quiet). Changes nothing, so it doubles as the
+/// up-front precondition check before prompting.
+pub(crate) fn preview_reset(
+    config: &Configuration,
+    workflow_id: i64,
+    job_ids: Option<Vec<i64>>,
+    statuses: Option<Vec<JobStatus>>,
+) -> Result<crate::models::ResetJobStatusResponse, String> {
+    post_reset(config, workflow_id, job_ids, statuses, true, false)
+}
+
+fn post_reset(
     config: &Configuration,
     workflow_id: i64,
     job_ids: Option<Vec<i64>>,
@@ -937,6 +883,7 @@ fn count_jobs_with_status(
         None,    // label
         None,    // ids
         None,    // statuses
+        None,    // resource_requirements_id
     )
     .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
 
@@ -1166,14 +1113,7 @@ pub fn reset_failed_jobs(
         return Ok(0);
     }
 
-    let response = reset_jobs(
-        config,
-        workflow_id,
-        Some(job_ids.to_vec()),
-        None,
-        false,
-        false,
-    )?;
+    let response = reset_jobs(config, workflow_id, Some(job_ids.to_vec()), None, false)?;
     let reset_count = response.reset.map(|r| r.len()).unwrap_or(0);
     let not_reset: Vec<String> = response
         .skipped

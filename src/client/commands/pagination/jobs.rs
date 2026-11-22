@@ -40,6 +40,8 @@ pub struct JobListParams {
     pub origin_is_set: Option<bool>,
     /// Restrict to these job IDs. Prefer [`paginate_jobs_by_ids`], which batches them.
     pub ids: Option<Vec<i64>>,
+    /// Filter by resource requirements ID
+    pub resource_requirements_id: Option<i64>,
 }
 
 impl JobListParams {
@@ -152,6 +154,7 @@ impl Paginatable for JobModel {
             None, // label
             params.ids.clone(),
             params.statuses.clone(),
+            params.resource_requirements_id,
         )?;
 
         Ok(PaginatedResponse {

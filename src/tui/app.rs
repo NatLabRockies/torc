@@ -5179,23 +5179,10 @@ fn resolve_job_status_filter(value: &str) -> StatusFilterResolution {
     if v.is_empty() {
         return StatusFilterResolution::Unknown;
     }
-    const ALL: [JobStatus; 11] = [
-        JobStatus::Uninitialized,
-        JobStatus::Blocked,
-        JobStatus::Ready,
-        JobStatus::Pending,
-        JobStatus::Running,
-        JobStatus::Completed,
-        JobStatus::Failed,
-        JobStatus::Canceled,
-        JobStatus::Terminated,
-        JobStatus::Disabled,
-        JobStatus::PendingFailed,
-    ];
-    if let Some(s) = ALL.iter().find(|s| s.to_string() == v) {
+    if let Some(s) = JobStatus::ALL.iter().find(|s| s.to_string() == v) {
         return StatusFilterResolution::Matched(*s);
     }
-    let matches: Vec<JobStatus> = ALL
+    let matches: Vec<JobStatus> = JobStatus::ALL
         .iter()
         .filter(|s| s.to_string().contains(&v))
         .copied()

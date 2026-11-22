@@ -50,7 +50,7 @@
       <button class="btn btn-sm" onclick={() => app.go("dag")} title="Show the job graph">
         <Icon name="graph" size={14} /> Graph
       </button>
-      <WorkflowActions workflowId={workflow.id!} />
+      <WorkflowActions workflowId={workflow.id!} archived={!!workflow.is_archived} />
     </div>
   </div>
 

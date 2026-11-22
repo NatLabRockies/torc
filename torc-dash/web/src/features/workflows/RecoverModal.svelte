@@ -1,10 +1,12 @@
-<!-- `torc recover`: dry-run preview, then apply. -->
+<!-- `torc recover`: dry-run preview with adjustable options, then apply. -->
 <script lang="ts">
+  import { api, unwrap } from "../../lib/api/client";
   import { dashPost } from "../../lib/api/dash";
   import { errorText } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import Modal from "../../lib/ui/Modal.svelte";
   import { toast } from "../../lib/ui/toast.svelte";
+  import { loadOutputDir, resolveLogBaseDir } from "../debugging/logs";
   import { wid } from "./actions";
   import Stats from "./Stats.svelte";
 
@@ -58,21 +60,60 @@
   let r = $derived(data?.result);
   let retryCount = $derived(r?.jobs_to_retry?.length ?? 0);
 
-  async function call(dry_run: boolean): Promise<RecoverData> {
-    const res = await dashPost<Response>("/api/cli/recover", { ...wid(workflowId), dry_run });
+  // Options, applied by re-running the preview. The output dir is where the jobs' logs are,
+  // relative to the workflow's submission directory (as in the Debugging tab).
+  let memoryMultiplier = $state(1.5);
+  let runtimeMultiplier = $state(1.5);
+  let retryUnknown = $state(false);
+  let outputDir = $state(loadOutputDir());
+  let submissionDir = $state<string | null>(null);
+  /** Options as of the shown preview; Apply uses these so it does what the preview showed. */
+  let previewed = $state<Record<string, unknown> | null>(null);
+
+  function options() {
+    return {
+      memory_multiplier: memoryMultiplier,
+      runtime_multiplier: runtimeMultiplier,
+      retry_unknown: retryUnknown,
+      output_dir: resolveLogBaseDir(outputDir.trim() || "torc_output", submissionDir),
+    };
+  }
+
+  async function call(dry_run: boolean, opts: Record<string, unknown>): Promise<RecoverData> {
+    const res = await dashPost<Response>("/api/cli/recover", { ...wid(workflowId), ...opts, dry_run });
     if (!res.success) throw new Error(res.error || "Recovery check failed");
     if (!res.data?.result) throw new Error("No recovery data available.");
     return res.data;
   }
 
-  call(true)
-    .then((d) => ((data = d), (phase = "preview")))
-    .catch((e) => ((error = errorText(e)), (phase = "error")));
+  async function preview() {
+    phase = "loading";
+    const opts = options();
+    try {
+      data = await call(true, opts);
+      previewed = opts;
+      phase = "preview";
+    } catch (e) {
+      error = errorText(e);
+      phase = "error";
+    }
+  }
+
+  async function start() {
+    try {
+      const wf = await unwrap(api.GET("/workflows/{id}", { params: { path: { id: workflowId } } }));
+      submissionDir = wf.submission_directory ?? null;
+    } catch {
+      // Fall back to torc-dash's working directory for a relative output dir.
+    }
+    preview();
+  }
+  start();
 
   async function apply() {
     phase = "applying";
     try {
-      data = await call(false);
+      data = await call(false, previewed ?? options());
       phase = "done";
       toast.success("Recovery complete");
       app.refresh();
@@ -98,6 +139,36 @@
 </script>
 
 <Modal bind:open title="Recover workflow {workflowId}" size="lg" {onclose}>
+  {#if phase !== "applying" && phase !== "done"}
+    <form
+      class="options"
+      onsubmit={(e) => {
+        e.preventDefault();
+        preview();
+      }}
+    >
+      <label class="field">
+        Memory multiplier
+        <input class="input" type="number" min="1" step="0.1" bind:value={memoryMultiplier} />
+        <span class="hint">For jobs that ran out of memory</span>
+      </label>
+      <label class="field">
+        Runtime multiplier
+        <input class="input" type="number" min="1" step="0.1" bind:value={runtimeMultiplier} />
+        <span class="hint">For jobs that timed out</span>
+      </label>
+      <label class="field">
+        Output dir
+        <input class="input mono" bind:value={outputDir} placeholder="torc_output" spellcheck="false" />
+        <span class="hint">Relative to the submission directory</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" bind:checked={retryUnknown} /> Also retry jobs that failed for unknown
+        reasons
+      </label>
+      <button class="btn btn-sm" type="submit" disabled={phase === "loading"}>Update preview</button>
+    </form>
+  {/if}
   {#if phase === "loading" || phase === "applying"}
     <div class="empty">
       <span class="spinner"></span>
@@ -207,8 +278,8 @@
     {#if !retryCount}
       <p class="note">
         {#if r.other_failures}
-          {r.other_failures} job(s) failed with unknown causes. Use the CLI with
-          <code>--retry-unknown</code> to retry these jobs.
+          {r.other_failures} job(s) failed with unknown causes. Check “Also retry jobs that failed
+          for unknown reasons” and update the preview to retry them.
         {:else}
           No recoverable jobs found. The workflow may have completed successfully or all failures
           require manual intervention.
@@ -228,6 +299,21 @@
 </Modal>
 
 <style>
+  .options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px 14px;
+    align-items: end;
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .options .check {
+    grid-column: 1 / 3;
+  }
+  .options button {
+    justify-self: end;
+  }
   section + section,
   section + .note {
     margin-top: 20px;

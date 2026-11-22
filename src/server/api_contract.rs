@@ -539,6 +539,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         command: Option<String>,
         labels: Option<String>,
         ids: Option<Vec<i64>>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 

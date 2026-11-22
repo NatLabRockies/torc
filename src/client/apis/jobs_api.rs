@@ -496,6 +496,7 @@ pub fn list_jobs(
     labels: Option<&str>,
     ids: Option<Vec<i64>>,
     statuses: Option<Vec<models::JobStatus>>,
+    resource_requirements_id: Option<i64>,
 ) -> Result<models::ListJobsResponse, Error<ListJobsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_workflow_id = workflow_id;
@@ -514,6 +515,7 @@ pub fn list_jobs(
     let p_query_labels = labels;
     let p_query_ids = ids;
     let p_query_statuses = statuses;
+    let p_query_resource_requirements_id = resource_requirements_id;
 
     let uri_str = format!("{}/jobs", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -595,6 +597,9 @@ pub fn list_jobs(
                     .to_string(),
             )]),
         };
+    }
+    if let Some(ref param_value) = p_query_resource_requirements_id {
+        req_builder = req_builder.query(&[("resource_requirements_id", &param_value.to_string())]);
     }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
