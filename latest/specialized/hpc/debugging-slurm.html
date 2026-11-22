@@ -445,6 +445,23 @@ jq -r '.results[] | select(.return_code != 0) | .job_stderr' report.json | xargs
 </code></pre>
 </li>
 </ol>
+<h2 id="failed-allocation-submissions"><a class="header" href="#failed-allocation-submissions">Failed Allocation Submissions</a></h2>
+<p>If <code>sbatch</code> rejects a <code>schedule_nodes</code> action's allocation (a bad account, a partition that is down,
+a QOS limit), the action is recorded as <code>failed</code> with sbatch's error, and its jobs wait for
+allocations that never arrive. Torc does not retry it, because a partly-submitted action could
+duplicate allocations. <code>torc status</code> lists failed actions:</p>
+<pre><code class="language-console">$ torc status 1
+...
+✗ 1 workflow action(s) failed:
+  action 2 (on_jobs_ready schedule_nodes): Job submission failed: sbatch: error: Batch job submission failed: Invalid account
+  Torc does not retry actions. Fix the cause, then run 'torc workflows reset-action 1 &lt;action_id&gt;'.
+</code></pre>
+<p>Fix the cause (for example, <code>torc slurm update 1 --account my_account</code>), then re-arm the action:</p>
+<pre><code class="language-bash">torc workflows reset-action 1 2
+torc submit 1   # or let a running worker pick it up
+</code></pre>
+<p><code>torc recover 1</code> also lists failed <code>schedule_nodes</code> actions and, in the interactive wizard, offers
+to reset them and submit their allocations.</p>
 <h2 id="orphaned-jobs-and-status-synchronization"><a class="header" href="#orphaned-jobs-and-status-synchronization">Orphaned Jobs and Status Synchronization</a></h2>
 <p>When a Slurm allocation terminates unexpectedly (e.g., due to timeout, node failure, or admin
 intervention), jobs may become "orphaned" - stuck in "running" status in Torc's database even though
