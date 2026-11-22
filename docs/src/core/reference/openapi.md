@@ -285,3 +285,12 @@ curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/process_changed_
   -H "Content-Type: application/json" \
   -d '{}' | jq '.reinitialized_jobs'
 ```
+
+**Apply File Stats** (Initialization and Reinitialization)
+
+```bash
+curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/file_stats?dry_run=true" \
+  -H "Content-Type: application/json" \
+  -d '{"files": [{"id": 1, "exists": true, "st_mtime": 1700000000.123}, {"id": 2, "exists": false}]}' \
+  | jq '.reset_jobs'
+```

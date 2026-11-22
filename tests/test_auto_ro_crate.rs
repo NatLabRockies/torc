@@ -1018,6 +1018,8 @@ fn test_auto_ro_crate_initialize_skips_output_files_with_mtime(start_server: &Se
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
     let (workflow_id, input_file_id, output_file_id, _job_id) =
         create_ro_crate_enabled_workflow(config, temp_dir.path());
+    // Initialization clears st_mtime for files that do not exist, so the input must be on disk.
+    std::fs::write(temp_dir.path().join("input.json"), r#"{"data": "input"}"#).unwrap();
 
     // Simulate a previous run: the runner recorded the output's mtime.
     let mut output = apis::files_api::get_file(config, output_file_id).unwrap();

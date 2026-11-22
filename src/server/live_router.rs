@@ -89,6 +89,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
                     "/torc-service/v1/bulk_user_data",
                     post(create_user_data_list),
                 )
+                .route(
+                    "/torc-service/v1/workflows/{id}/file_stats",
+                    post(update_file_stats),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -561,6 +565,12 @@ pub struct ProcessChangedJobInputsQuery {
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct UpdateFileStatsQuery {
+    #[param(nullable = true)]
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ReadyJobRequirementsQuery {
     #[param(nullable = true)]
     pub scheduler_config_id: Option<i64>,
@@ -897,6 +907,45 @@ pub async fn create_user_data_list(
 ) -> Response<Body> {
     match state.server.create_user_data_list(body, &context).await {
         Ok(response) => create_user_data_list_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "files",
+    path = "/workflows/{id}/file_stats",
+    operation_id = "update_file_stats",
+    description = "Compare a client's stat snapshot of workflow files with the stored \
+        modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared \
+        for files that no longer exist. Jobs that need a changed file and are completed, failed, \
+        or canceled are reset to uninitialized, as are completed jobs with a missing output file, \
+        and every job downstream of a reset job. Each request runs in one transaction and is \
+        idempotent. With dry_run=true, reports the same result without changing anything. At most \
+        MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow.",
+    params(("id" = i64, Path, description = "Workflow ID"), UpdateFileStatsQuery),
+    request_body = models::FileStatsRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::FileStatsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn update_file_stats(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Query(query): Query<UpdateFileStatsQuery>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::FileStatsRequest>,
+) -> Response<Body> {
+    match state
+        .server
+        .update_file_stats(id, body, query.dry_run, &context)
+        .await
+    {
+        Ok(response) => update_file_stats_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

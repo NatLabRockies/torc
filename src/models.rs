@@ -2718,6 +2718,57 @@ pub struct ResetJobStatusSkipped {
     pub reason: String,
 }
 
+/// A client's observation of one file on disk, sent to `update_file_stats`.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FileStatEntry {
+    /// File ID. Must belong to the workflow in the request path.
+    pub id: i64,
+    /// Whether the file exists.
+    pub exists: bool,
+    /// Modification time in seconds since the Unix epoch. Required when `exists` is true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub st_mtime: Option<f64>,
+}
+
+/// A batch of file observations (at most `MAX_RECORD_TRANSFER_COUNT` entries).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FileStatsRequest {
+    pub files: Vec<FileStatEntry>,
+}
+
+/// A file whose stored modification time differs from the observation.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FileStatChange {
+    pub file_id: i64,
+    /// `modified`, `appeared`, or `disappeared`.
+    pub reason: String,
+}
+
+/// A job reset to uninitialized because of a file change.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FileStatsResetJob {
+    pub job_id: i64,
+    pub name: String,
+    /// Status before the reset.
+    pub status: JobStatus,
+    /// `input_changed` (an input file changed), `output_missing` (an output file of a completed
+    /// job is missing), or `downstream` (depends, directly or transitively, on a reset job).
+    pub reason: String,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FileStatsResponse {
+    pub changed_files: Vec<FileStatChange>,
+    pub reset_jobs: Vec<FileStatsResetJob>,
+    /// Files in the batch that some job needs, no job produces, and that do not exist.
+    pub missing_required_file_ids: Vec<i64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

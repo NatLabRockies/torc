@@ -964,6 +964,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/{id}/file_stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Compare a client's stat snapshot of workflow files with the stored modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared for files that no longer exist. Jobs that need a changed file and are completed, failed, or canceled are reset to uninitialized, as are completed jobs with a missing output file, and every job downstream of a reset job. Each request runs in one transaction and is idempotent. With dry_run=true, reports the same result without changing anything. At most MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow. */
+        post: operations["update_file_stats"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows/{id}/initialize_jobs": {
         parameters: {
             query?: never;
@@ -1628,6 +1645,51 @@ export interface components {
             st_mtime?: number | null;
             /** Format: int64 */
             workflow_id: number;
+        };
+        /** @description A file whose stored modification time differs from the observation. */
+        FileStatChange: {
+            /** Format: int64 */
+            file_id: number;
+            /** @description `modified`, `appeared`, or `disappeared`. */
+            reason: string;
+        };
+        /** @description A client's observation of one file on disk, sent to `update_file_stats`. */
+        FileStatEntry: {
+            /** @description Whether the file exists. */
+            exists: boolean;
+            /**
+             * Format: int64
+             * @description File ID. Must belong to the workflow in the request path.
+             */
+            id: number;
+            /**
+             * Format: double
+             * @description Modification time in seconds since the Unix epoch. Required when `exists` is true.
+             */
+            st_mtime?: number | null;
+        };
+        /** @description A batch of file observations (at most `MAX_RECORD_TRANSFER_COUNT` entries). */
+        FileStatsRequest: {
+            files: components["schemas"]["FileStatEntry"][];
+        };
+        /** @description A job reset to uninitialized because of a file change. */
+        FileStatsResetJob: {
+            /** Format: int64 */
+            job_id: number;
+            name: string;
+            /**
+             * @description `input_changed` (an input file changed), `output_missing` (an output file of a completed
+             *     job is missing), or `downstream` (depends, directly or transitively, on a reset job).
+             */
+            reason: string;
+            /** @description Status before the reset. */
+            status: components["schemas"]["JobStatus"];
+        };
+        FileStatsResponse: {
+            changed_files: components["schemas"]["FileStatChange"][];
+            /** @description Files in the batch that some job needs, no job produces, and that do not exist. */
+            missing_required_file_ids: number[];
+            reset_jobs: components["schemas"]["FileStatsResetJob"][];
         };
         FilesModel: {
             files: components["schemas"]["FileModel"][];
@@ -8158,6 +8220,71 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_file_stats: {
+        parameters: {
+            query?: {
+                dry_run?: boolean | null;
+            };
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileStatsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileStatsResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

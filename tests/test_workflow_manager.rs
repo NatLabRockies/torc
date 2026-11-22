@@ -63,6 +63,16 @@ fn wait_for_task_completion(
     );
 }
 
+/// Move a file's mtime well past the 10 ms change-detection tolerance.
+fn bump_mtime(path: &str) {
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .expect("open file")
+        .set_modified(std::time::SystemTime::now() + Duration::from_secs(5))
+        .expect("set mtime");
+}
+
 /// Helper function to create a WorkflowManager with a test workflow
 fn create_test_workflow_manager(
     config: Configuration,
@@ -129,7 +139,7 @@ fn create_test_files_with_disk_files(
     files
 }
 
-/// Helper function that follows the pattern of test_process_changed_files_end_to_end
+/// Helper function that follows the pattern of test_file_stats_change_end_to_end
 /// Creates a job with resources, starts workflow, calls claim_jobs_based_on_resources, and completes the job
 fn execute_workflow_with_job(
     config: &Configuration,
@@ -220,17 +230,17 @@ fn test_workflow_manager_new_panics_without_id() {
 }
 
 #[rstest]
-fn test_initialize_files_empty_workflow(start_server: &ServerProcess) {
+fn test_file_stats_init_empty_workflow(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, _workflow) = create_test_workflow_manager(config, "test_empty_files");
 
     // Should succeed even with no files
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 }
 
 #[rstest]
-fn test_initialize_files_with_valid_files(start_server: &ServerProcess) {
+fn test_file_stats_init_with_valid_files(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_valid_files");
     let workflow_id = workflow.id.unwrap();
@@ -244,7 +254,7 @@ fn test_initialize_files_with_valid_files(start_server: &ServerProcess) {
     }
 
     // Initialize files - should update all mtime values
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Check that files were updated with mtime
@@ -257,7 +267,7 @@ fn test_initialize_files_with_valid_files(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_initialize_files_with_missing_files(start_server: &ServerProcess) {
+fn test_file_stats_init_with_missing_files(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_missing_files");
     let workflow_id = workflow.id.unwrap();
@@ -277,12 +287,12 @@ fn test_initialize_files_with_missing_files(start_server: &ServerProcess) {
     );
 
     // Should complete but log warnings for missing files
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 }
 
 #[rstest]
-fn test_initialize_files_mtime_unchanged(start_server: &ServerProcess) {
+fn test_file_stats_init_mtime_unchanged(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_unchanged_files");
     let workflow_id = workflow.id.unwrap();
@@ -291,7 +301,7 @@ fn test_initialize_files_mtime_unchanged(start_server: &ServerProcess) {
     let files = create_test_files_with_disk_files(&config, workflow_id, &temp_dir);
 
     // Initialize files first time
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Get the updated mtime
@@ -300,7 +310,7 @@ fn test_initialize_files_mtime_unchanged(start_server: &ServerProcess) {
     let original_mtime = file.st_mtime.unwrap();
 
     // Initialize again without changing the file - should not update
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Mtime should be unchanged
@@ -310,7 +320,7 @@ fn test_initialize_files_mtime_unchanged(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_initialize_files_with_updated_files(start_server: &ServerProcess) {
+fn test_file_stats_init_with_updated_files(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_updated_files");
     let workflow_id = workflow.id.unwrap();
@@ -319,7 +329,7 @@ fn test_initialize_files_with_updated_files(start_server: &ServerProcess) {
     let files = create_test_files_with_disk_files(&config, workflow_id, &temp_dir);
 
     // Initialize files first time
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Get the original mtime
@@ -333,7 +343,7 @@ fn test_initialize_files_with_updated_files(start_server: &ServerProcess) {
     fs::write(file_path, "updated content").expect("Failed to update file");
 
     // Initialize again - should detect change
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Mtime should be updated
@@ -812,7 +822,7 @@ fn test_check_workflow_normal(start_server: &ServerProcess) {
     let (manager, _workflow) = create_test_workflow_manager(config, "test_check_normal");
 
     // Should succeed for normal workflow
-    let result = manager.check_workflow(false);
+    let result = manager.check_workflow();
     assert!(result.is_ok());
 }
 
@@ -831,7 +841,7 @@ fn test_check_workflow_archived(start_server: &ServerProcess) {
     .expect("Failed to archive workflow");
 
     // Check should fail for archived workflow
-    let result = manager.check_workflow(false);
+    let result = manager.check_workflow();
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -894,28 +904,16 @@ fn test_reinitialize_jobs(start_server: &ServerProcess) {
     assert!(result.is_ok());
 
     // Reinitialize should succeed
-    let result = manager.reinitialize_jobs(false);
+    let result = manager.reinitialize_jobs(false, false);
     assert!(result.is_ok());
 
     // Dry run should also succeed
-    let result_dry = manager.reinitialize_jobs(true);
+    let result_dry = manager.reinitialize_jobs(false, true);
     assert!(result_dry.is_ok());
 }
 
 #[rstest]
-fn test_initialize_files_file_without_id_panics(start_server: &ServerProcess) {
-    // This test would be difficult to create naturally since files from the API
-    // should always have IDs, but we test the panic behavior conceptually
-    let config = start_server.config.clone();
-    let (manager, _workflow) = create_test_workflow_manager(config, "test_panic_no_id");
-
-    // With no files, initialize_files should succeed
-    let result = manager.initialize_files();
-    assert!(result.is_ok());
-}
-
-#[rstest]
-fn test_process_changed_files_no_changes(start_server: &ServerProcess) {
+fn test_file_stats_change_no_changes(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_no_changes");
     let workflow_id = workflow.id.unwrap();
@@ -924,11 +922,11 @@ fn test_process_changed_files_no_changes(start_server: &ServerProcess) {
     let files = create_test_files_with_disk_files(&config, workflow_id, &temp_dir);
 
     // Initialize files first
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Process changed files - should find no changes
-    let result = manager.process_changed_files(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Files should remain unchanged
@@ -940,7 +938,7 @@ fn test_process_changed_files_no_changes(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_process_changed_files_with_modified_file(start_server: &ServerProcess) {
+fn test_file_stats_change_with_modified_file(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_modified_file");
     let workflow_id = workflow.id.unwrap();
@@ -949,7 +947,7 @@ fn test_process_changed_files_with_modified_file(start_server: &ServerProcess) {
     let files = create_test_files_with_disk_files(&config, workflow_id, &temp_dir);
 
     // Initialize files first
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Get the original mtime
@@ -963,7 +961,7 @@ fn test_process_changed_files_with_modified_file(start_server: &ServerProcess) {
     fs::write(file_path, "updated content for change detection").expect("Failed to update file");
 
     // Process changed files - should detect change
-    let result = manager.process_changed_files(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // File should have updated mtime
@@ -974,7 +972,7 @@ fn test_process_changed_files_with_modified_file(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_process_changed_files_with_deleted_file(start_server: &ServerProcess) {
+fn test_file_stats_change_with_deleted_file(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_deleted_file");
     let workflow_id = workflow.id.unwrap();
@@ -983,7 +981,7 @@ fn test_process_changed_files_with_deleted_file(start_server: &ServerProcess) {
     let files = create_test_files_with_disk_files(&config, workflow_id, &temp_dir);
 
     // Initialize files first
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Delete one of the files
@@ -1003,7 +1001,7 @@ fn test_process_changed_files_with_deleted_file(start_server: &ServerProcess) {
     );
 
     // Process changed files - should detect deletion
-    let result = manager.process_changed_files(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Add small delay to handle potential timing/caching issues
@@ -1016,7 +1014,7 @@ fn test_process_changed_files_with_deleted_file(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_process_changed_files_dry_run(start_server: &ServerProcess) {
+fn test_file_stats_change_dry_run(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_dry_run");
     let workflow_id = workflow.id.unwrap();
@@ -1025,7 +1023,7 @@ fn test_process_changed_files_dry_run(start_server: &ServerProcess) {
     let files = create_test_files_with_disk_files(&config, workflow_id, &temp_dir);
 
     // Initialize files first
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Get the original mtime
@@ -1039,7 +1037,7 @@ fn test_process_changed_files_dry_run(start_server: &ServerProcess) {
     fs::write(file_path, "updated content for dry run test").expect("Failed to update file");
 
     // Process changed files in dry run mode - should not actually update
-    let result = manager.process_changed_files(true);
+    let result = manager.update_file_stats(true);
     assert!(result.is_ok());
 
     // File should still have original mtime (not updated due to dry run)
@@ -1049,7 +1047,7 @@ fn test_process_changed_files_dry_run(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_update_jobs_on_file_change_no_dependent_jobs(start_server: &ServerProcess) {
+fn test_file_stats_input_change_no_dependent_jobs(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_no_dependent");
     let workflow_id = workflow.id.unwrap();
@@ -1069,12 +1067,13 @@ fn test_update_jobs_on_file_change_no_dependent_jobs(start_server: &ServerProces
     assert!(result.is_ok());
 
     // Update jobs on file change - should succeed with no dependent jobs
-    let result = manager.update_jobs_on_file_change(files[0].clone(), false);
+    bump_mtime(&files[0].path);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 }
 
 #[rstest]
-fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProcess) {
+fn test_file_stats_input_change_with_dependent_jobs(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_dependent_jobs");
     let workflow_id = workflow.id.unwrap();
@@ -1175,7 +1174,8 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
         .expect("Failed to complete job2");
 
     // Update jobs on file change - should reset both jobs
-    let result = manager.update_jobs_on_file_change(files[0].clone(), false);
+    bump_mtime(&files[0].path);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Jobs should now be reset to Uninitialized
@@ -1195,7 +1195,7 @@ fn test_update_jobs_on_file_change_with_dependent_jobs(start_server: &ServerProc
 }
 
 #[rstest]
-fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &ServerProcess) {
+fn test_file_stats_input_change_only_completed_jobs_reset(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_only_done_reset");
     let workflow_id = workflow.id.unwrap();
@@ -1255,7 +1255,8 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
         .expect("Failed to set job to running");
 
     // Update jobs on file change
-    let result = manager.update_jobs_on_file_change(files[0].clone(), false);
+    bump_mtime(&files[0].path);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Only Done job should be reset
@@ -1275,7 +1276,7 @@ fn test_update_jobs_on_file_change_only_completed_jobs_reset(start_server: &Serv
 }
 
 #[rstest]
-fn test_update_jobs_on_file_change_dry_run(start_server: &ServerProcess) {
+fn test_file_stats_input_change_dry_run(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_job_dry_run");
     let workflow_id = workflow.id.unwrap();
@@ -1296,7 +1297,8 @@ fn test_update_jobs_on_file_change_dry_run(start_server: &ServerProcess) {
     .expect("Failed to execute job");
 
     // Update jobs on file change in dry run mode
-    let result = manager.update_jobs_on_file_change(files[0].clone(), true);
+    bump_mtime(&files[0].path);
+    let result = manager.update_file_stats(true);
     assert!(result.is_ok());
 
     // Job should still be Completed (not reset due to dry run)
@@ -1305,7 +1307,7 @@ fn test_update_jobs_on_file_change_dry_run(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProcess) {
+fn test_file_stats_input_change_with_canceled_jobs(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_canceled_jobs");
     let workflow_id = workflow.id.unwrap();
@@ -1375,7 +1377,8 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
         .expect("Failed to cancel job");
 
     // Update jobs on file change - should reset Canceled job too
-    let result = manager.update_jobs_on_file_change(files[0].clone(), false);
+    bump_mtime(&files[0].path);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Job should be reset to Uninitialized
@@ -1387,28 +1390,7 @@ fn test_update_jobs_on_file_change_with_canceled_jobs(start_server: &ServerProce
 }
 
 #[rstest]
-fn test_update_jobs_on_file_change_file_without_id_fails(start_server: &ServerProcess) {
-    let config = start_server.config.clone();
-    let (manager, _workflow) = create_test_workflow_manager(config, "test_no_file_id");
-
-    // Create a file model without ID
-    let mut file = models::FileModel::new(1, "test_file".to_string(), "/path/to/file".to_string());
-    file.id = None;
-
-    // Should fail with OperationNotAllowed error
-    let result = manager.update_jobs_on_file_change(file, false);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        torc::client::errors::TorcError::OperationNotAllowed(_) => {
-            // Expected error type
-        }
-        _ => panic!("Expected OperationNotAllowed error"),
-    }
-}
-
-#[rstest]
-fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
+fn test_file_stats_change_end_to_end(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_full_integration");
     let workflow_id = workflow.id.unwrap();
@@ -1490,7 +1472,7 @@ fn test_process_changed_files_end_to_end(start_server: &ServerProcess) {
     fs::write(file_path, "modified content for integration test").expect("Failed to modify file");
 
     // Process changed files - should update file and reset job
-    let result = manager.process_changed_files(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Verify file was updated
@@ -1591,7 +1573,7 @@ fn test_update_file_with_none_st_mtime(start_server: &ServerProcess) {
     let file_id = files[0].id.unwrap();
 
     // Initialize files first to set st_mtime
-    let result = manager.initialize_files();
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Verify file has st_mtime set
@@ -1702,7 +1684,7 @@ fn complete_job_and_create_files(
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_no_missing_files(start_server: &ServerProcess) {
+fn test_file_stats_missing_output_no_missing_files(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) =
         create_test_workflow_manager(config.clone(), "test_no_missing_output_files");
@@ -1738,7 +1720,7 @@ fn test_update_jobs_if_output_files_are_missing_no_missing_files(start_server: &
     );
 
     // All output files exist, so no jobs should be reset
-    let result = manager.update_jobs_if_output_files_are_missing(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Job should still be Completed
@@ -1747,7 +1729,7 @@ fn test_update_jobs_if_output_files_are_missing_no_missing_files(start_server: &
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_with_missing_files(start_server: &ServerProcess) {
+fn test_file_stats_missing_output_with_missing_files(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) =
         create_test_workflow_manager(config.clone(), "test_missing_output_files");
@@ -1788,7 +1770,7 @@ fn test_update_jobs_if_output_files_are_missing_with_missing_files(start_server:
     assert!(!file_path.exists(), "Output file should be deleted");
 
     // Function should detect missing file and reset job
-    let result = manager.update_jobs_if_output_files_are_missing(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Job should be reset to Uninitialized
@@ -1800,7 +1782,7 @@ fn test_update_jobs_if_output_files_are_missing_with_missing_files(start_server:
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_dry_run_true(start_server: &ServerProcess) {
+fn test_file_stats_missing_output_dry_run_true(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) =
         create_test_workflow_manager(config.clone(), "test_missing_output_files_dry_run");
@@ -1841,7 +1823,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_true(start_server: &Serv
     assert!(!file_path.exists(), "Output file should be deleted");
 
     // Dry run should detect missing file but not reset job
-    let result = manager.update_jobs_if_output_files_are_missing(true);
+    let result = manager.update_file_stats(true);
     assert!(result.is_ok());
 
     // Job should still be Completed (not reset due to dry run)
@@ -1850,7 +1832,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_true(start_server: &Serv
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_dry_run_false(start_server: &ServerProcess) {
+fn test_file_stats_missing_output_dry_run_false(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) =
         create_test_workflow_manager(config.clone(), "test_missing_output_files_no_dry_run");
@@ -1891,7 +1873,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_false(start_server: &Ser
     assert!(!file_path.exists(), "Output file should be deleted");
 
     // Function should detect missing file and reset job (dry_run = false)
-    let result = manager.update_jobs_if_output_files_are_missing(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Job should be reset to Uninitialized
@@ -1903,7 +1885,7 @@ fn test_update_jobs_if_output_files_are_missing_dry_run_false(start_server: &Ser
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_multiple_jobs(start_server: &ServerProcess) {
+fn test_file_stats_missing_output_multiple_jobs(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) =
         create_test_workflow_manager(config.clone(), "test_multiple_jobs_missing_files");
@@ -1960,7 +1942,7 @@ fn test_update_jobs_if_output_files_are_missing_multiple_jobs(start_server: &Ser
     assert!(!file2_path.exists(), "Job2 output file should be deleted");
 
     // Function should reset job1 and job2, but not job3
-    let result = manager.update_jobs_if_output_files_are_missing(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Check job statuses
@@ -1983,7 +1965,7 @@ fn test_update_jobs_if_output_files_are_missing_multiple_jobs(start_server: &Ser
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_no_done_jobs(start_server: &ServerProcess) {
+fn test_file_stats_missing_output_no_done_jobs(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) = create_test_workflow_manager(config.clone(), "test_no_done_jobs");
     let workflow_id = workflow.id.unwrap();
@@ -2000,7 +1982,7 @@ fn test_update_jobs_if_output_files_are_missing_no_done_jobs(start_server: &Serv
 
     // Output files don't exist (job was never completed)
     // Function should not affect non-Completed jobs
-    let result = manager.update_jobs_if_output_files_are_missing(false);
+    let result = manager.update_file_stats(false);
     assert!(result.is_ok());
 
     // Job should still be Ready (not affected since it wasn't Completed)
@@ -2009,9 +1991,7 @@ fn test_update_jobs_if_output_files_are_missing_no_done_jobs(start_server: &Serv
 }
 
 #[rstest]
-fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
-    start_server: &ServerProcess,
-) {
+fn test_file_stats_missing_output_with_upstream_jobs_dry_run(start_server: &ServerProcess) {
     let config = start_server.config.clone();
     let (manager, workflow) =
         create_test_workflow_manager(config.clone(), "test_upstream_jobs_dry_run");
@@ -2103,9 +2083,17 @@ fn test_update_jobs_if_output_files_are_missing_with_upstream_jobs_dry_run(
     fs::remove_file(file_path).expect("Failed to delete job1 output file");
     assert!(!file_path.exists(), "Job1 output file should be deleted");
 
-    // Dry run should log what would be changed including upstream jobs
-    let result = manager.update_jobs_if_output_files_are_missing(true);
-    assert!(result.is_ok());
+    // Dry run reports the job with the missing output and its downstream job
+    let (response, _) = manager.update_file_stats(true).expect("dry run");
+    let resets: Vec<(i64, &str)> = response
+        .reset_jobs
+        .iter()
+        .map(|j| (j.job_id, j.reason.as_str()))
+        .collect();
+    assert_eq!(
+        resets,
+        vec![(job1_id, "output_missing"), (upstream_job_id, "downstream")]
+    );
 
     // Both jobs should still be Completed (not reset due to dry run)
     let updated_job1 =
@@ -2231,11 +2219,15 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
         "File should not exist on disk"
     );
 
-    // Initialize workflow with ignore_missing_data = false - should complete but log warnings
-    let result = manager.initialize(true);
+    // Without force, a missing required input is an error
+    let err = manager
+        .initialize(false)
+        .expect_err("Initialize without force must fail on a missing required input");
     assert!(
-        result.is_ok(),
-        "Initialize should still succeed but with warnings for missing files"
+        err.to_string().contains("Missing required files")
+            && err.to_string().contains(&missing_file.path),
+        "unexpected error: {}",
+        err
     );
 }
 
@@ -2496,29 +2488,23 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
     apis::jobs_api::complete_job(&config, job_id, job_result.status, run_id, job_result)
         .expect("Failed to complete job");
 
-    // Get original run_id before reinitialize
-    let original_run_id = manager.get_run_id().expect("Failed to get original run_id");
-
     // Verify file doesn't exist on disk
     assert!(
         !std::path::Path::new(&missing_file.path).exists(),
         "File should not exist on disk"
     );
 
-    // Reinitialize workflow with ignore_missing_data = false, dry_run = false
-    let result = manager.reinitialize(true, false);
-    assert!(
-        result.is_ok(),
-        "Reinitialize should still succeed but with warnings for missing files"
-    );
-
-    // Verify run_id was incremented
-    let new_run_id = manager.get_run_id().expect("Failed to get new run_id");
-    assert_eq!(
-        new_run_id,
-        original_run_id + 1,
-        "Run ID should be incremented after reinitialize"
-    );
+    // Without force, a missing required input is an error, in a dry run too
+    for dry_run in [true, false] {
+        let err = manager
+            .reinitialize(false, dry_run)
+            .expect_err("Reinitialize without force must fail on a missing required input");
+        assert!(
+            err.to_string().contains("Missing required files"),
+            "unexpected error: {}",
+            err
+        );
+    }
 }
 
 /// Helper function to create a workflow with a chain of jobs connected by user_data dependencies
@@ -3054,11 +3040,8 @@ fn test_reinitialize_with_file_change_depends_on_complete_job(start_server: &Ser
     )
     .expect("Failed to complete postprocess");
 
-    // Update all file mtimes in database by calling initialize_files
-    // This properly records all current file mtimes
-    manager
-        .initialize_files()
-        .expect("Failed to initialize file mtimes");
+    // Record output mtimes as the job runner does on completion
+    record_mtimes(&config, workflow_id);
 
     // Verify all jobs are Completed
     let preprocess_done =
@@ -3292,9 +3275,8 @@ fn test_reinitialize_async_with_file_change_runs_task_and_updates_statuses(
     )
     .expect("Failed to complete postprocess");
 
-    manager
-        .initialize_files()
-        .expect("Failed to initialize file mtimes");
+    // Record output mtimes as the job runner does on completion
+    record_mtimes(&config, workflow_id);
 
     thread::sleep(Duration::from_millis(100));
     fs::write(&f2_path, r#"{"preprocess": "modified_output"}"#).expect("Failed to modify f2");
@@ -3471,6 +3453,297 @@ fn test_initialize_async_with_dependencies_completes_task_and_readies_jobs(
             "downstream job {} should be Blocked, got {:?}",
             id,
             job.status
+        );
+    }
+}
+
+/// Store every file's current on-disk mtime directly, without resetting jobs, as the job runner
+/// does for output files when a job completes.
+fn record_mtimes(config: &Configuration, workflow_id: i64) {
+    let files = apis::files_api::list_files(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    for mut file in files.items {
+        file.st_mtime = stat_entry(&file).st_mtime;
+        apis::files_api::update_file(config, file.id.unwrap(), file).unwrap();
+    }
+}
+
+/// Snapshot entry for `file` as the client would send it.
+fn stat_entry(file: &models::FileModel) -> models::FileStatEntry {
+    let st_mtime = fs::metadata(&file.path).ok().map(|m| {
+        m.modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64()
+    });
+    models::FileStatEntry {
+        id: file.id.unwrap(),
+        exists: st_mtime.is_some(),
+        st_mtime,
+    }
+}
+
+fn job_status(config: &Configuration, job_id: i64) -> models::JobStatus {
+    apis::jobs_api::get_job(config, job_id)
+        .unwrap()
+        .status
+        .unwrap()
+}
+
+fn run_and_complete(config: &Configuration, workflow_id: i64, run_id: i64, job_id: i64) {
+    assert!(
+        wait_for_job_status(config, job_id, models::JobStatus::Ready, 10),
+        "job_id={} did not become ready",
+        job_id
+    );
+    let compute_node = create_test_compute_node(config, workflow_id);
+    apis::jobs_api::manage_status_change(config, job_id, models::JobStatus::Running, run_id)
+        .unwrap();
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node.id.unwrap(),
+        0,
+        1.0,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(config, job_id, result.status, run_id, result).unwrap();
+}
+
+/// Chain a -> b -> c, where a needs `inputs[0]` and c needs `inputs[1]` (if given). Initializes
+/// the workflow and completes every job. Returns the manager and job ids [a, b, c].
+fn completed_chain(
+    config: &Configuration,
+    name: &str,
+    temp_dir: &TempDir,
+    extra_files: &[&str],
+) -> (WorkflowManager, Vec<i64>, Vec<models::FileModel>) {
+    let (manager, workflow) = create_test_workflow_manager(config.clone(), name);
+    let workflow_id = workflow.id.unwrap();
+    let mut files = Vec::new();
+    for file_name in ["in_a", "in_c"].iter().chain(extra_files) {
+        let path = temp_dir.path().join(file_name);
+        fs::write(&path, file_name).unwrap();
+        files.push(create_test_file(
+            config,
+            workflow_id,
+            file_name,
+            path.to_str().unwrap(),
+        ));
+    }
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        models::ResourceRequirementsModel::new(workflow_id, "small".to_string()),
+    )
+    .unwrap();
+    let mut ids = Vec::new();
+    for (i, job_name) in ["a", "b", "c"].iter().enumerate() {
+        let mut job = models::JobModel::new(workflow_id, job_name.to_string(), "true".to_string());
+        job.resource_requirements_id = rr.id;
+        match i {
+            0 => job.input_file_ids = Some(vec![files[0].id.unwrap()]),
+            2 => job.input_file_ids = Some(vec![files[1].id.unwrap()]),
+            _ => {}
+        }
+        if i > 0 {
+            job.depends_on_job_ids = Some(vec![ids[i - 1]]);
+        }
+        ids.push(apis::jobs_api::create_job(config, job).unwrap().id.unwrap());
+    }
+    manager.initialize(false).expect("initialize");
+    let run_id = manager.get_run_id().unwrap();
+    for &id in &ids {
+        run_and_complete(config, workflow_id, run_id, id);
+    }
+    (manager, ids, files)
+}
+
+#[rstest]
+fn test_file_stats_endpoint_reports_and_resets_full_downstream(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+    let temp_dir = TempDir::new().unwrap();
+    let (manager, ids, files) = completed_chain(
+        &config,
+        "test_file_stats_endpoint",
+        &temp_dir,
+        &["new_file", "gone_file"],
+    );
+    let workflow_id = manager.workflow_id;
+    let (in_a, new_file, gone_file) = (&files[0], &files[2], &files[3]);
+    // new_file existed at init; make the database forget it so it "appears".
+    let mut forgotten = apis::files_api::get_file(&config, new_file.id.unwrap()).unwrap();
+    forgotten.st_mtime = None;
+    apis::files_api::update_file(&config, new_file.id.unwrap(), forgotten).unwrap();
+
+    bump_mtime(&in_a.path);
+    fs::remove_file(&gone_file.path).unwrap();
+    let request = models::FileStatsRequest {
+        files: files.iter().map(stat_entry).collect(),
+    };
+
+    let expected_changes = vec![
+        (in_a.id.unwrap(), "modified"),
+        (new_file.id.unwrap(), "appeared"),
+        (gone_file.id.unwrap(), "disappeared"),
+    ];
+    let expected_resets = vec![
+        (ids[0], "input_changed"),
+        (ids[1], "downstream"),
+        (ids[2], "downstream"),
+    ];
+    let check = |response: &models::FileStatsResponse| {
+        let mut changes: Vec<(i64, &str)> = response
+            .changed_files
+            .iter()
+            .map(|c| (c.file_id, c.reason.as_str()))
+            .collect();
+        changes.sort();
+        assert_eq!(changes, expected_changes);
+        let resets: Vec<(i64, &str)> = response
+            .reset_jobs
+            .iter()
+            .map(|j| (j.job_id, j.reason.as_str()))
+            .collect();
+        assert_eq!(resets, expected_resets);
+        assert!(
+            response
+                .reset_jobs
+                .iter()
+                .all(|j| j.status == models::JobStatus::Completed)
+        );
+        // gone_file is not needed by any job, so it is not a missing required file.
+        assert!(response.missing_required_file_ids.is_empty());
+    };
+
+    // Dry run reports everything and changes nothing.
+    let before: Vec<Option<f64>> = files
+        .iter()
+        .map(|f| {
+            apis::files_api::get_file(&config, f.id.unwrap())
+                .unwrap()
+                .st_mtime
+        })
+        .collect();
+    let dry = apis::files_api::update_file_stats(&config, workflow_id, request.clone(), Some(true))
+        .unwrap();
+    check(&dry);
+    for (f, old) in files.iter().zip(&before) {
+        assert_eq!(
+            apis::files_api::get_file(&config, f.id.unwrap())
+                .unwrap()
+                .st_mtime,
+            *old
+        );
+    }
+    for &id in &ids {
+        assert_eq!(job_status(&config, id), models::JobStatus::Completed);
+    }
+
+    // A real run applies the same result, resetting the whole downstream chain.
+    let real =
+        apis::files_api::update_file_stats(&config, workflow_id, request.clone(), Some(false))
+            .unwrap();
+    check(&real);
+    for &id in &ids {
+        assert_eq!(job_status(&config, id), models::JobStatus::Uninitialized);
+    }
+    let stored = |f: &models::FileModel| {
+        apis::files_api::get_file(&config, f.id.unwrap())
+            .unwrap()
+            .st_mtime
+    };
+    assert_eq!(stored(in_a), request.files[0].st_mtime);
+    assert_eq!(stored(new_file), request.files[2].st_mtime);
+    assert_eq!(stored(gone_file), None);
+
+    // The same batch again is a no-op.
+    let again =
+        apis::files_api::update_file_stats(&config, workflow_id, request, Some(false)).unwrap();
+    assert!(again.changed_files.is_empty() && again.reset_jobs.is_empty());
+}
+
+#[rstest]
+fn test_file_stats_endpoint_rejects_invalid_batches(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+    let workflow = create_test_workflow(&config, "test_file_stats_422");
+    let workflow_id = workflow.id.unwrap();
+    let file = create_test_file(&config, workflow_id, "f", "/nonexistent/f");
+    let other = create_test_workflow(&config, "test_file_stats_422_other");
+    let other_file = create_test_file(&config, other.id.unwrap(), "g", "/nonexistent/g");
+    let entry = |id, exists, st_mtime| models::FileStatEntry {
+        id,
+        exists,
+        st_mtime,
+    };
+    let fid = file.id.unwrap();
+    for files in [
+        vec![entry(other_file.id.unwrap(), false, None)],
+        vec![entry(fid, true, None)],
+        vec![entry(fid, false, None), entry(fid, false, None)],
+    ] {
+        let err = apis::files_api::update_file_stats(
+            &config,
+            workflow_id,
+            models::FileStatsRequest { files },
+            None,
+        )
+        .expect_err("invalid batch must be rejected");
+        match err {
+            apis::Error::ResponseError(content) => assert_eq!(content.status.as_u16(), 422),
+            other => panic!("unexpected error: {}", other),
+        }
+    }
+}
+
+#[rstest]
+fn test_reinitialize_after_partial_file_stats_failure(start_server: &ServerProcess) {
+    let config = start_server.config.clone();
+    let temp_dir = TempDir::new().unwrap();
+    let (manager, ids, files) = completed_chain(&config, "test_file_stats_partial", &temp_dir, &[]);
+    let (in_a, in_c) = (&files[0], &files[1]);
+    bump_mtime(&in_a.path);
+    bump_mtime(&in_c.path);
+
+    // A reinitialize that applied only the batch with in_a and then failed.
+    apis::files_api::update_file_stats(
+        &config,
+        manager.workflow_id,
+        models::FileStatsRequest {
+            files: vec![stat_entry(in_a)],
+        },
+        None,
+    )
+    .unwrap();
+    for &id in &ids {
+        assert_eq!(job_status(&config, id), models::JobStatus::Uninitialized);
+    }
+
+    // Running reinitialize again picks up the rest and reaches the normal end state.
+    manager.reinitialize(false, false).expect("reinitialize");
+    assert_eq!(job_status(&config, ids[0]), models::JobStatus::Ready);
+    assert_eq!(job_status(&config, ids[1]), models::JobStatus::Blocked);
+    assert_eq!(job_status(&config, ids[2]), models::JobStatus::Blocked);
+    for f in [in_a, in_c] {
+        assert_eq!(
+            apis::files_api::get_file(&config, f.id.unwrap())
+                .unwrap()
+                .st_mtime,
+            stat_entry(f).st_mtime
         );
     }
 }
