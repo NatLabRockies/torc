@@ -786,6 +786,7 @@ fn check_recovery_preconditions(config: &Configuration, workflow_id: i64) -> Res
             None,         // name
             None,         // command
             None,         // label
+            None,         // resource_requirements_id
         )
         .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
         if jobs.total_count > 0 {
@@ -956,6 +957,7 @@ fn count_jobs_with_status(
         None,    // name
         None,    // command
         None,    // label
+        None,    // resource_requirements_id
     )
     .map_err(|e| format!("Failed to list {} jobs: {}", status, e))?;
 

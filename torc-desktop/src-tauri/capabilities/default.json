@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "IPC for the local connect page only; the remote dashboard gets none.",
+  "description": "IPC for the local connect page; the dashboard gets only notifications (dashboard.json).",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

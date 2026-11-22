@@ -55,6 +55,7 @@ fn verify_all_jobs_completed(server: &ServerProcess, workflow_id: i64) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -112,6 +113,7 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1255,6 +1257,7 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1359,6 +1362,7 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1462,6 +1466,7 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1593,7 +1598,7 @@ execution_config:
 //     assert_eq!(oom_code, Some(137));
 //
 //     // 3. oom_job status is Failed (OOM is a job error, not termination)
-//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ...).unwrap();
+//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ..., None).unwrap();
 //     let oom_job = jobs.items.unwrap().into_iter()
 //         .find(|j| j.name == "oom_job").unwrap();
 //     assert_eq!(oom_job.status, Some(JobStatus::Failed));
@@ -2113,7 +2118,7 @@ execution_config:
 //     assert_eq!(slow_code, Some(152));
 //
 //     // 3. job_slow status is Terminated (timeout is termination, not failure)
-//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ...).unwrap();
+//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ..., None).unwrap();
 //     let slow_job = jobs.items.unwrap().into_iter()
 //         .find(|j| j.name == "job_slow").unwrap();
 //     assert_eq!(slow_job.status, Some(JobStatus::Terminated));

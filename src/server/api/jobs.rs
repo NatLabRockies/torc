@@ -413,6 +413,7 @@ pub trait JobsApi<C> {
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -2171,10 +2172,11 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         debug!(
-            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "list_jobs({}, {:?}, {:?}, {:?}, {}, {}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             workflow_id,
             status,
             needs_file_id,
@@ -2189,6 +2191,7 @@ where
             name,
             command,
             labels,
+            resource_requirements_id,
             context.get().0.clone()
         );
 
@@ -2220,6 +2223,9 @@ where
 
         if active_compute_node_id.is_some() {
             where_conditions.push("compute_node_id = ?".to_string());
+        }
+        if resource_requirements_id.is_some() {
+            where_conditions.push("resource_requirements_id = ?".to_string());
         }
 
         // Filter by provenance: `true` matches `'retry'`/`'spawn'`; `false`
@@ -2288,6 +2294,9 @@ where
         }
         if let Some(cn_id) = active_compute_node_id {
             sqlx_query = sqlx_query.bind(cn_id);
+        }
+        if let Some(rr_id) = resource_requirements_id {
+            sqlx_query = sqlx_query.bind(rr_id);
         }
         if let Some(ref n) = name {
             sqlx_query = sqlx_query.bind(format!("%{}%", escape_like_pattern(n)));
@@ -2386,6 +2395,9 @@ where
         }
         if let Some(cn_id) = active_compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(cn_id);
+        }
+        if let Some(rr_id) = resource_requirements_id {
+            count_sqlx_query = count_sqlx_query.bind(rr_id);
         }
         if let Some(ref n) = name {
             count_sqlx_query = count_sqlx_query.bind(format!("%{}%", escape_like_pattern(n)));

@@ -4247,6 +4247,8 @@ export interface operations {
                  *     these labels would claim. An empty value returns only unlabeled jobs.
                  */
                 labels?: string | null;
+                /** @description Returns only the jobs that use this resource requirements record. */
+                resource_requirements_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -8076,6 +8078,15 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Job dependency graph contains a cycle */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

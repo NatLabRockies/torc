@@ -2344,6 +2344,9 @@ pub struct JobsListQuery {
     /// these labels would claim. An empty value returns only unlabeled jobs.
     #[param(nullable = true)]
     pub labels: Option<String>,
+    /// Returns only the jobs that use this resource requirements record.
+    #[param(nullable = true)]
+    pub resource_requirements_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2391,6 +2394,7 @@ pub async fn list_jobs(
             query.name,
             query.command,
             query.labels,
+            query.resource_requirements_id,
             &context,
         )
         .await

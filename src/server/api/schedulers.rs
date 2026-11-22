@@ -1212,6 +1212,7 @@ where
             }
         };
 
+        // Optional text fields: null keeps the current value, "" clears it.
         let result = match sqlx::query(
             r#"
             UPDATE slurm_scheduler
@@ -1219,15 +1220,15 @@ where
                 workflow_id = COALESCE($1, workflow_id)
                 ,name = COALESCE($2, name)
                 ,account = COALESCE($3, account)
-                ,gres = COALESCE($4, gres)
-                ,mem = COALESCE($5, mem)
+                ,gres = NULLIF(COALESCE($4, gres), '')
+                ,mem = NULLIF(COALESCE($5, mem), '')
                 ,nodes = COALESCE($6, nodes)
                 ,ntasks_per_node = COALESCE($7, ntasks_per_node)
-                ,partition = COALESCE($8, partition)
-                ,qos = COALESCE($9, qos)
-                ,tmp = COALESCE($10, tmp)
+                ,partition = NULLIF(COALESCE($8, partition), '')
+                ,qos = NULLIF(COALESCE($9, qos), '')
+                ,tmp = NULLIF(COALESCE($10, tmp), '')
                 ,walltime = COALESCE($11, walltime)
-                ,extra = COALESCE($12, extra)
+                ,extra = NULLIF(COALESCE($12, extra), '')
                 ,serialize_allocations = COALESCE($13, serialize_allocations)
             WHERE id = $14
             "#,

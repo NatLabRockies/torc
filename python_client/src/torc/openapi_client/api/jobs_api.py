@@ -1752,6 +1752,7 @@ class JobsApi:
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
+        resource_requirements_id: Annotated[Optional[StrictInt], Field(description="Returns only the jobs that use this resource requirements record.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1796,6 +1797,8 @@ class JobsApi:
         :type command: str
         :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
         :type labels: str
+        :param resource_requirements_id: Returns only the jobs that use this resource requirements record.
+        :type resource_requirements_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1833,6 +1836,7 @@ class JobsApi:
             name=name,
             command=command,
             labels=labels,
+            resource_requirements_id=resource_requirements_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1873,6 +1877,7 @@ class JobsApi:
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
+        resource_requirements_id: Annotated[Optional[StrictInt], Field(description="Returns only the jobs that use this resource requirements record.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1917,6 +1922,8 @@ class JobsApi:
         :type command: str
         :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
         :type labels: str
+        :param resource_requirements_id: Returns only the jobs that use this resource requirements record.
+        :type resource_requirements_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1954,6 +1961,7 @@ class JobsApi:
             name=name,
             command=command,
             labels=labels,
+            resource_requirements_id=resource_requirements_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1994,6 +2002,7 @@ class JobsApi:
         name: Annotated[Optional[StrictStr], Field(description="Substring filter on the job name (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         command: Annotated[Optional[StrictStr], Field(description="Substring filter on the job command (SQL `LIKE %value%`, case-insensitive for ASCII).")] = None,
         labels: Annotated[Optional[StrictStr], Field(description="Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.")] = None,
+        resource_requirements_id: Annotated[Optional[StrictInt], Field(description="Returns only the jobs that use this resource requirements record.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2038,6 +2047,8 @@ class JobsApi:
         :type command: str
         :param labels: Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs.
         :type labels: str
+        :param resource_requirements_id: Returns only the jobs that use this resource requirements record.
+        :type resource_requirements_id: int
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2075,6 +2086,7 @@ class JobsApi:
             name=name,
             command=command,
             labels=labels,
+            resource_requirements_id=resource_requirements_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2110,6 +2122,7 @@ class JobsApi:
         name,
         command,
         labels,
+        resource_requirements_id,
         _request_auth,
         _content_type,
         _headers,
@@ -2187,6 +2200,10 @@ class JobsApi:
         if labels is not None:
             
             _query_params.append(('labels', labels))
+            
+        if resource_requirements_id is not None:
+            
+            _query_params.append(('resource_requirements_id', resource_requirements_id))
             
         # process the header parameters
         # process the form parameters
