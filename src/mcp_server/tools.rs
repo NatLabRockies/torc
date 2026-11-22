@@ -1609,6 +1609,29 @@ pub fn classify_and_resolve_failures(
             continue;
         }
 
+        // Refuse a retry the server would reject (failure handler limit) before touching
+        // resource requirements (so a refused retry leaves them unchanged) and in dry runs too.
+        if action == "retry"
+            // get_job may report a missing handler as id 0.
+            && let Some(handler_id) = job.failure_handler_id.filter(|&id| id > 0)
+        {
+            let refusal = apis::failure_handlers_api::get_failure_handler(config, handler_id)
+                .map_err(|e| e.to_string())
+                .and_then(|h| {
+                    crate::models::retry_limit_refusal(&h.rules, job.attempt_id.unwrap_or(1))
+                        .map_err(|e| e.to_string())
+                })
+                .unwrap_or_else(|e| Some(format!("Failed to check failure handler limit: {}", e)));
+            if let Some(message) = refusal {
+                results.push(serde_json::json!({
+                    "job_id": job_id,
+                    "status": "error",
+                    "message": message,
+                }));
+                continue;
+            }
+        }
+
         if dry_run {
             results.push(serde_json::json!({
                 "job_id": job_id,
@@ -1620,37 +1643,6 @@ pub fn classify_and_resolve_failures(
                 "status": "would_apply",
             }));
         } else {
-            // Refuse a retry the server would reject (failure handler limit) before touching
-            // resource requirements, so a refused retry leaves them unchanged.
-            if action == "retry"
-                // get_job may report a missing handler as id 0.
-                && let Some(handler_id) = job.failure_handler_id.filter(|&id| id > 0)
-            {
-                let limit = apis::failure_handlers_api::get_failure_handler(config, handler_id)
-                    .map_err(|e| e.to_string())
-                    .and_then(|h| {
-                        crate::models::max_retries_from_rules(&h.rules).map_err(|e| e.to_string())
-                    });
-                let refusal = match limit {
-                    Ok(Some(max)) if job.attempt_id.unwrap_or(1) >= max => Some(format!(
-                        "Job cannot be retried: attempt_id={} >= max_retries={} \
-                         (failure handler limit)",
-                        job.attempt_id.unwrap_or(1),
-                        max
-                    )),
-                    Ok(_) => None,
-                    Err(e) => Some(format!("Failed to check failure handler limit: {}", e)),
-                };
-                if let Some(message) = refusal {
-                    results.push(serde_json::json!({
-                        "job_id": job_id,
-                        "status": "error",
-                        "message": message,
-                    }));
-                    continue;
-                }
-            }
-
             // Apply resource adjustments if specified
             let resource_adjustment_warning = if (classification.memory.is_some()
                 || classification.runtime.is_some())

@@ -114,7 +114,9 @@
   .body {
     padding: 20px;
     overflow: auto;
-    flex: 1;
+    /* Basis auto, not 0%: WebKit collapses a 0% basis to nothing when the dialog has only a
+       max-height (sm/md/lg), clipping the body. */
+    flex: 1 1 auto;
     min-height: 0;
   }
   footer {

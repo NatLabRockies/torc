@@ -538,11 +538,11 @@ fn test_reset_status_unknown_id(start_server: &ServerProcess) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: Active-job guard — Running job rejected without --force,
-//         proceeds with --force
+// Test 5: Running job with no active compute node — without --force, the orphan
+//         cleanup fails it and the reset proceeds; --force resets it directly
 // ---------------------------------------------------------------------------
 #[rstest]
-fn test_reset_status_active_job_guard(start_server: &ServerProcess) {
+fn test_reset_status_orphaned_running_job(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow = create_test_workflow(config, "reset_active_guard");
     let workflow_id = workflow.id.unwrap();
@@ -564,27 +564,29 @@ fn test_reset_status_active_job_guard(start_server: &ServerProcess) {
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("set running");
 
-    // Without --force: should be rejected because of Running status
-    let result_no_force = run_cli_with_json(
+    // Without --force: the server refuses (a job is running), so the CLI runs the orphan
+    // cleanup, which fails the job because no active compute node owns it; the reset then
+    // proceeds.
+    let json = run_cli_with_json(
         &["jobs", "reset-status", "--no-prompts", &job_id.to_string()],
         start_server,
         None,
-    );
-    assert!(
-        result_no_force.is_err(),
-        "Should fail for Running job without --force"
-    );
-    // Job must still be Running
+    )
+    .expect("reset-status should clean up the orphaned Running job and succeed");
+    assert_eq!(json["status"], "success");
     assert_eq!(
         apis::jobs_api::get_job(config, job_id)
-            .unwrap()
+            .expect("get job")
             .status
-            .unwrap(),
-        JobStatus::Running,
-        "Job should still be Running after rejected reset"
+            .expect("job status"),
+        JobStatus::Uninitialized,
+        "Job should be Uninitialized after orphan cleanup and reset"
     );
 
-    // With --force: should succeed
+    // With --force: no precheck or cleanup; the Running job is reset directly.
+    let run_id = initialize_workflow(config, &workflow);
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("set running again");
     let json = run_cli_with_json(
         &[
             "jobs",
