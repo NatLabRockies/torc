@@ -3271,123 +3271,134 @@ impl WorkflowSpec {
 
     /// Create a workflow from a spec that has already been prepared (user set,
     /// parameters expanded, actions validated, variables substituted).
+    ///
+    /// Against a server with draft workflows (API 1.6.0), the workflow is built as a hidden
+    /// draft, its jobs are sent by name in `MAX_RECORD_TRANSFER_COUNT`-sized `create_jobs`
+    /// requests, and `finalize_workflow` makes it visible. If the client dies partway, no
+    /// partial workflow is visible and the server deletes the draft later. Against an older
+    /// server, jobs are created one dependency level at a time with resolved ids.
     fn create_from_prepared_spec(
         config: &Configuration,
-        mut spec: WorkflowSpec,
+        spec: WorkflowSpec,
     ) -> Result<i64, Box<dyn std::error::Error>> {
-        // Step 1.6: Collect per-job stdio overrides into execution_config
-        {
-            let overrides: HashMap<String, StdioConfig> = spec
-                .jobs
-                .iter()
-                .filter_map(|job| {
-                    job.stdio
-                        .as_ref()
-                        .map(|stdio| (job.name.clone(), stdio.clone()))
-                })
-                .collect();
-            if !overrides.is_empty() {
-                let ec = spec
-                    .execution_config
-                    .get_or_insert_with(ExecutionConfig::default);
-                ec.job_stdio_overrides = Some(overrides);
-            }
+        let use_draft =
+            crate::client::version_check::check_version(config).server_supports_draft_workflows();
+        Self::create_prepared(config, spec, use_draft)
+    }
+
+    /// [`create_workflow_from_spec`] for servers older than API 1.6.0: no draft, jobs created
+    /// level by level. Exposed so tests can exercise the fallback against a current server.
+    #[doc(hidden)]
+    pub fn create_workflow_from_spec_without_draft<P: AsRef<Path>>(
+        config: &Configuration,
+        path: P,
+        user: &str,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        let mut spec = Self::from_spec_file(path)?;
+        Self::prepare_spec_for_creation(&mut spec, user, false)?;
+        Self::create_prepared(config, spec, false)
+    }
+
+    fn create_prepared(
+        config: &Configuration,
+        mut spec: WorkflowSpec,
+        use_draft: bool,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        // Collect per-job stdio overrides into execution_config
+        let overrides: HashMap<String, StdioConfig> = spec
+            .jobs
+            .iter()
+            .filter_map(|job| {
+                job.stdio
+                    .as_ref()
+                    .map(|stdio| (job.name.clone(), stdio.clone()))
+            })
+            .collect();
+        if !overrides.is_empty() {
+            let ec = spec
+                .execution_config
+                .get_or_insert_with(ExecutionConfig::default);
+            ec.job_stdio_overrides = Some(overrides);
         }
-        // Step 2: Create WorkflowModel
-        let workflow_id = Self::create_workflow(config, &spec)?;
 
-        // If any step fails, delete the workflow (which cascades to all other objects)
-        let rollback = |workflow_id: i64| {
+        let workflow_id = Self::create_workflow(config, &spec, use_draft)?;
+        // If any step fails, delete the workflow (which cascades to all other objects).
+        if let Err(e) = Self::populate_workflow(config, workflow_id, &spec, use_draft) {
             let _ = apis::workflows_api::delete_workflow(config, workflow_id);
-        };
+            return Err(e);
+        }
+        Ok(workflow_id)
+    }
 
-        // Step 3: Create supporting models and build name-to-id mappings
-        let file_name_to_id = match Self::create_files(config, workflow_id, &spec) {
-            Ok(mapping) => mapping,
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
-        };
-
-        let user_data_name_to_id = match Self::create_user_data(config, workflow_id, &spec) {
-            Ok(mapping) => mapping,
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
-        };
-
+    /// Create everything in the spec inside an existing workflow, then finalize it if it is a
+    /// draft.
+    fn populate_workflow(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+        use_draft: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let file_name_to_id = Self::create_files(config, workflow_id, spec)?;
+        let user_data_name_to_id = Self::create_user_data(config, workflow_id, spec)?;
         let resource_req_name_to_id =
-            match Self::create_resource_requirements(config, workflow_id, &spec) {
-                Ok(mapping) => mapping,
-                Err(e) => {
-                    rollback(workflow_id);
-                    return Err(e);
-                }
-            };
+            Self::create_resource_requirements(config, workflow_id, spec)?;
+        let slurm_scheduler_to_id = Self::create_slurm_schedulers(config, workflow_id, spec)?;
+        let failure_handler_name_to_id = Self::create_failure_handlers(config, workflow_id, spec)?;
 
-        let slurm_scheduler_to_id = match Self::create_slurm_schedulers(config, workflow_id, &spec)
-        {
-            Ok(mapping) => mapping,
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
+        let job_name_to_id = if use_draft {
+            Self::create_jobs_by_name(config, workflow_id, spec)?
+        } else {
+            Self::create_jobs(
+                config,
+                workflow_id,
+                spec,
+                &file_name_to_id,
+                &user_data_name_to_id,
+                &resource_req_name_to_id,
+                &slurm_scheduler_to_id,
+                &failure_handler_name_to_id,
+            )?
+            .0
         };
 
-        let failure_handler_name_to_id =
-            match Self::create_failure_handlers(config, workflow_id, &spec) {
-                Ok(mapping) => mapping,
-                Err(e) => {
-                    rollback(workflow_id);
-                    return Err(e);
-                }
-            };
-
-        // Step 4: Create JobModels (with dependencies set during creation)
-        let (job_name_to_id, _created_jobs) = match Self::create_jobs(
+        Self::create_actions(
             config,
             workflow_id,
-            &spec,
-            &file_name_to_id,
-            &user_data_name_to_id,
-            &resource_req_name_to_id,
-            &slurm_scheduler_to_id,
-            &failure_handler_name_to_id,
-        ) {
-            Ok((mapping, jobs)) => (mapping, jobs),
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
-        };
-
-        // Step 5: Create workflow actions
-        match Self::create_actions(
-            config,
-            workflow_id,
-            &spec,
+            spec,
             &slurm_scheduler_to_id,
             &job_name_to_id,
-        ) {
-            Ok(_) => {}
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
+        )?;
+
+        if use_draft {
+            // Test hook: die like an interrupted `torc create`, without cleanup, to check that
+            // the unfinalized draft stays hidden.
+            if std::env::var_os("TORC_TEST_CREATE_EXIT_BEFORE_FINALIZE").is_some() {
+                std::process::exit(3);
+            }
+            // Interactive resource warnings were already shown (or skipped with
+            // --skip-checks) before creation, so only errors stop finalization here.
+            let result = apis::workflows_api::finalize_workflow(config, workflow_id, Some(true))
+                .map_err(|e| format!("Failed to finalize workflow: {:?}", e))?;
+            if !result.finalized {
+                return Err(format!(
+                    "Workflow validation failed:\n  - {}",
+                    result.errors.join("\n  - ")
+                )
+                .into());
             }
         }
-
-        Ok(workflow_id)
+        Ok(())
     }
 
     /// Create the workflow on the server
     fn create_workflow(
         config: &Configuration,
         spec: &WorkflowSpec,
+        is_draft: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         let user = spec.user.clone().unwrap_or_else(|| "unknown".to_string());
         let mut workflow_model = models::WorkflowModel::new(spec.name.clone(), user);
+        workflow_model.is_draft = is_draft.then_some(true);
         workflow_model.description = spec.description.clone();
         workflow_model.env = spec.env.clone().filter(|env| !env.is_empty());
 
@@ -4145,32 +4156,20 @@ impl WorkflowSpec {
         Ok(levels)
     }
 
-    /// Create JobModels with proper ID mapping using bulk API in batches
-    /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
-    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
-    fn create_jobs(
-        config: &Configuration,
-        workflow_id: i64,
+    /// Each job's dependencies by name: `depends_on` plus every job matched by
+    /// `depends_on_regexes`. Errors on unknown names, bad regexes, and regexes that match
+    /// nothing.
+    fn job_dependencies(
         spec: &WorkflowSpec,
-        file_name_to_id: &HashMap<String, i64>,
-        user_data_name_to_id: &HashMap<String, i64>,
-        resource_req_name_to_id: &HashMap<String, i64>,
-        slurm_scheduler_to_id: &HashMap<String, i64>,
-        failure_handler_name_to_id: &HashMap<String, i64>,
-    ) -> Result<(HashMap<String, i64>, HashMap<String, models::JobModel>), Box<dyn std::error::Error>>
-    {
-        let mut job_name_to_id = HashMap::new();
-        let mut created_jobs = HashMap::new();
-
-        // Step 1: Build a set of all job names for validation
+    ) -> Result<HashMap<String, Vec<String>>, Box<dyn std::error::Error>> {
         let all_job_names: std::collections::HashSet<String> =
             spec.jobs.iter().map(|j| j.name.clone()).collect();
 
-        // Step 2: Build dependency graph (job_name -> Vec<dependency_job_names>)
         let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
 
         for job_spec in &spec.jobs {
             let mut deps = Vec::new();
+            let mut seen: HashSet<&str> = HashSet::new();
 
             // Add explicit dependencies
             if let Some(ref names) = job_spec.depends_on {
@@ -4183,6 +4182,7 @@ impl WorkflowSpec {
                         )
                         .into());
                     }
+                    seen.insert(dep_name);
                     deps.push(dep_name.clone());
                 }
             }
@@ -4198,7 +4198,7 @@ impl WorkflowSpec {
                     })?;
                     let mut found_match = false;
                     for other_job in &spec.jobs {
-                        if re.is_match(&other_job.name) && !deps.contains(&other_job.name) {
+                        if re.is_match(&other_job.name) && seen.insert(&other_job.name) {
                             deps.push(other_job.name.clone());
                             found_match = true;
                         }
@@ -4217,6 +4217,161 @@ impl WorkflowSpec {
             dependencies.insert(job_spec.name.clone(), deps);
         }
 
+        Ok(dependencies)
+    }
+
+    /// A job's own fields from its spec; references are filled in by the caller.
+    fn base_job_model(
+        workflow_id: i64,
+        job_spec: &JobSpec,
+    ) -> Result<models::JobModel, Box<dyn std::error::Error>> {
+        let mut job_model =
+            models::JobModel::new(workflow_id, job_spec.name.clone(), job_spec.command.clone());
+        job_model.invocation_script = job_spec.invocation_script.clone();
+        job_model.env = job_spec.env.clone().filter(|env| !env.is_empty());
+        // Only override cancel_on_blocking_job_failure if explicitly set in spec
+        // (JobModel::new() defaults to Some(true))
+        if job_spec.cancel_on_blocking_job_failure.is_some() {
+            job_model.cancel_on_blocking_job_failure = job_spec.cancel_on_blocking_job_failure;
+        }
+        // supports_termination is deprecated — Slurm manages termination signals via srun
+        // --time and KillWait. Accept the field silently to avoid breaking existing specs.
+        if let Some(p) = job_spec.priority {
+            if p < 0 {
+                return Err(format!(
+                    "priority must be >= 0, got {} for job '{}'",
+                    p, job_spec.name
+                )
+                .into());
+            }
+            job_model.priority = Some(p);
+        }
+        job_model.labels.clone_from(&job_spec.labels);
+        Ok(job_model)
+    }
+
+    /// Create the jobs with references by name (`name_refs`), in dependency order and in
+    /// requests of up to `MAX_RECORD_TRANSFER_COUNT` jobs, so a job's dependencies are in an
+    /// earlier request or the same one. Dependency regexes are expanded here, over all of the
+    /// spec's jobs, because the server would match them only against jobs created so far.
+    /// Returns job name -> id.
+    fn create_jobs_by_name(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+    ) -> Result<HashMap<String, i64>, Box<dyn std::error::Error>> {
+        let dependencies = Self::job_dependencies(spec)?;
+        let mut job_models = Vec::with_capacity(spec.jobs.len());
+        for job_spec in Self::topological_order(&spec.jobs, &dependencies)? {
+            let mut job_model = Self::base_job_model(workflow_id, job_spec)?;
+            let deps = &dependencies[&job_spec.name];
+            job_model.name_refs = Some(models::JobNameRefs {
+                depends_on: (!deps.is_empty()).then(|| deps.clone()),
+                depends_on_regexes: None,
+                input_files: job_spec.input_files.clone(),
+                input_file_regexes: job_spec.input_file_regexes.clone(),
+                output_files: job_spec.output_files.clone(),
+                output_file_regexes: job_spec.output_file_regexes.clone(),
+                input_user_data: job_spec.input_user_data.clone(),
+                input_user_data_regexes: job_spec.input_user_data_regexes.clone(),
+                output_user_data: job_spec.output_user_data.clone(),
+                output_user_data_regexes: job_spec.output_user_data_regexes.clone(),
+                resource_requirements: job_spec.resource_requirements.clone(),
+                scheduler: job_spec.scheduler.clone(),
+                failure_handler: job_spec.failure_handler.clone(),
+            });
+            job_models.push(job_model);
+        }
+
+        let mut job_name_to_id = HashMap::with_capacity(job_models.len());
+        let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
+        for (batch_index, batch) in job_models.chunks(batch_size).enumerate() {
+            let response =
+                apis::jobs_api::create_jobs(config, models::JobsModel::new(batch.to_vec()))
+                    .map_err(|e| match e {
+                        apis::Error::ResponseError(r) => format!(
+                            "Failed to create batch {} of jobs: {}",
+                            batch_index + 1,
+                            r.content
+                        ),
+                        e => format!(
+                            "Failed to create batch {} of jobs: {:?}",
+                            batch_index + 1,
+                            e
+                        ),
+                    })?;
+            for created in response.jobs.ok_or("Create jobs response missing items")? {
+                let id = created.id.ok_or("Created job missing ID")?;
+                job_name_to_id.insert(created.name, id);
+            }
+        }
+        if job_name_to_id.len() != spec.jobs.len() {
+            return Err(format!(
+                "create_jobs returned {} jobs, expected {}",
+                job_name_to_id.len(),
+                spec.jobs.len()
+            )
+            .into());
+        }
+        Ok(job_name_to_id)
+    }
+
+    /// Jobs ordered so that each comes after its dependencies (Kahn's algorithm, linear in
+    /// jobs plus edges; `topological_sort_jobs` is quadratic on long chains).
+    fn topological_order<'a>(
+        jobs: &'a [JobSpec],
+        dependencies: &HashMap<String, Vec<String>>,
+    ) -> Result<Vec<&'a JobSpec>, Box<dyn std::error::Error>> {
+        let index: HashMap<&str, usize> = jobs
+            .iter()
+            .enumerate()
+            .map(|(i, j)| (j.name.as_str(), i))
+            .collect();
+        let mut remaining_deps = vec![0usize; jobs.len()];
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); jobs.len()];
+        for (i, job) in jobs.iter().enumerate() {
+            for dep in &dependencies[&job.name] {
+                remaining_deps[i] += 1;
+                dependents[index[dep.as_str()]].push(i);
+            }
+        }
+        let mut queue: std::collections::VecDeque<usize> = (0..jobs.len())
+            .filter(|i| remaining_deps[*i] == 0)
+            .collect();
+        let mut order = Vec::with_capacity(jobs.len());
+        while let Some(i) = queue.pop_front() {
+            order.push(&jobs[i]);
+            for &d in &dependents[i] {
+                remaining_deps[d] -= 1;
+                if remaining_deps[d] == 0 {
+                    queue.push_back(d);
+                }
+            }
+        }
+        if order.len() != jobs.len() {
+            return Err("Circular dependency detected in job graph".into());
+        }
+        Ok(order)
+    }
+
+    /// Create JobModels with proper ID mapping using bulk API in batches
+    /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    fn create_jobs(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+        file_name_to_id: &HashMap<String, i64>,
+        user_data_name_to_id: &HashMap<String, i64>,
+        resource_req_name_to_id: &HashMap<String, i64>,
+        slurm_scheduler_to_id: &HashMap<String, i64>,
+        failure_handler_name_to_id: &HashMap<String, i64>,
+    ) -> Result<(HashMap<String, i64>, HashMap<String, models::JobModel>), Box<dyn std::error::Error>>
+    {
+        let mut job_name_to_id = HashMap::new();
+        let mut created_jobs = HashMap::new();
+        let dependencies = Self::job_dependencies(spec)?;
+
         // Step 3: Topologically sort jobs into levels
         let levels = Self::topological_sort_jobs(&spec.jobs, &dependencies)?;
 
@@ -4229,24 +4384,7 @@ impl WorkflowSpec {
             let mut job_spec_mapping = Vec::new();
 
             for job_spec in level {
-                let mut job_model = models::JobModel::new(
-                    workflow_id,
-                    job_spec.name.clone(),
-                    job_spec.command.clone(),
-                );
-
-                // Set optional fields
-                job_model.invocation_script = job_spec.invocation_script.clone();
-                job_model.env = job_spec.env.clone().filter(|env| !env.is_empty());
-                // Only override cancel_on_blocking_job_failure if explicitly set in spec
-                // (JobModel::new() defaults to Some(true))
-                if job_spec.cancel_on_blocking_job_failure.is_some() {
-                    job_model.cancel_on_blocking_job_failure =
-                        job_spec.cancel_on_blocking_job_failure;
-                }
-                // supports_termination is deprecated — Slurm manages termination
-                // signals via srun --time and KillWait. Accept the field silently
-                // to avoid breaking existing specs.
+                let mut job_model = Self::base_job_model(workflow_id, job_spec)?;
 
                 // Map file names and regexes to IDs
                 let input_file_ids = Self::resolve_names_and_regexes(
@@ -4353,18 +4491,6 @@ impl WorkflowSpec {
                     }
                     job_model.depends_on_job_ids = Some(depends_on_ids);
                 }
-
-                if let Some(p) = job_spec.priority {
-                    if p < 0 {
-                        return Err(format!(
-                            "priority must be >= 0, got {} for job '{}'",
-                            p, job_spec.name
-                        )
-                        .into());
-                    }
-                    job_model.priority = Some(p);
-                }
-                job_model.labels.clone_from(&job_spec.labels);
 
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);

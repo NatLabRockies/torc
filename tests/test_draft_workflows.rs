@@ -514,3 +514,276 @@ fn test_abandoned_drafts_are_deleted() {
     apis::workflows_api::get_workflow(config, finalized).expect("finalized workflow kept");
     apis::workflows_api::get_workflow(config, regular).expect("regular workflow kept");
 }
+
+// ---------------------------------------------------------------------------
+// `torc create` through draft + name_refs + finalize
+// ---------------------------------------------------------------------------
+
+use std::collections::{BTreeMap, BTreeSet};
+use torc::client::workflow_spec::WorkflowSpec;
+
+/// Per job: dependency names, input/output file names, input/output user_data names, and
+/// resource requirements name.
+type JobGraph = BTreeMap<String, [BTreeSet<String>; 6]>;
+
+fn job_graph(config: &Configuration, wf: i64) -> JobGraph {
+    let jobs = apis::jobs_api::list_jobs(
+        config,
+        wf,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(true),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    let files: HashMap<i64, String> =
+        apis::files_api::list_files(config, wf, None, None, None, None, None, None, None, None)
+            .unwrap()
+            .items
+            .into_iter()
+            .map(|f| (f.id.unwrap(), f.name))
+            .collect();
+    let user_data: HashMap<i64, String> = apis::user_data_api::list_user_data(
+        config, wf, None, None, None, None, None, None, None, None,
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .map(|u| (u.id.unwrap(), u.name))
+    .collect();
+    let rrs: HashMap<i64, String> = apis::resource_requirements_api::list_resource_requirements(
+        config, wf, None, None, None, None, None, None, None, None, None, None, None,
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .map(|r| (r.id.unwrap(), r.name))
+    .collect();
+    let job_names: HashMap<i64, String> = jobs
+        .iter()
+        .map(|j| (j.id.unwrap(), j.name.clone()))
+        .collect();
+    let named = |ids: &Option<Vec<i64>>, names: &HashMap<i64, String>| -> BTreeSet<String> {
+        ids.iter().flatten().map(|id| names[id].clone()).collect()
+    };
+    jobs.iter()
+        .map(|j| {
+            (
+                j.name.clone(),
+                [
+                    named(&j.depends_on_job_ids, &job_names),
+                    named(&j.input_file_ids, &files),
+                    named(&j.output_file_ids, &files),
+                    named(&j.input_user_data_ids, &user_data),
+                    named(&j.output_user_data_ids, &user_data),
+                    j.resource_requirements_id
+                        .map(|id| rrs[&id].clone())
+                        .into_iter()
+                        .collect(),
+                ],
+            )
+        })
+        .collect()
+}
+
+fn workflow_ids_named(config: &Configuration, name: &str) -> Vec<i64> {
+    apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        Some(name),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items
+    .iter()
+    .filter_map(|w| w.id)
+    .collect()
+}
+
+#[rstest]
+#[case("examples/yaml/diamond_workflow.yaml")]
+#[case("examples/yaml/fan_in_with_regexes.yaml")]
+#[case("examples/yaml/data_pipeline_parameterized.yaml")]
+#[case("examples/yaml/parameterized_user_data.yaml")]
+#[case("examples/yaml/workflow_actions_simple.yaml")]
+#[case("examples/yaml/failure_handler_demo.yaml")]
+fn test_create_matches_old_server_path(start_server: &ServerProcess, #[case] spec: &str) {
+    let config = &start_server.config;
+    let new = WorkflowSpec::create_workflow_from_spec(config, spec, "test_user", false)
+        .expect("create through draft");
+    let old = WorkflowSpec::create_workflow_from_spec_without_draft(config, spec, "test_user")
+        .expect("create without draft");
+    let wf = apis::workflows_api::get_workflow(config, new).unwrap();
+    assert_eq!(wf.is_draft, Some(false));
+    assert!(listed(config, new));
+    let graph = job_graph(config, new);
+    assert!(!graph.is_empty());
+    assert_eq!(graph, job_graph(config, old));
+    let actions = |wf| {
+        apis::workflow_actions_api::get_workflow_actions(config, wf)
+            .unwrap()
+            .len()
+    };
+    assert_eq!(actions(new), actions(old));
+}
+
+#[rstest]
+fn test_create_long_chain_in_one_request(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let n = 3000;
+    // Jobs listed in reverse so each depends on a job declared after it.
+    let jobs: Vec<String> = (0..n)
+        .rev()
+        .map(|i| {
+            if i == 0 {
+                "  - name: j0\n    command: \"true\"\n".to_string()
+            } else {
+                format!(
+                    "  - name: j{i}\n    command: \"true\"\n    depends_on: [j{}]\n",
+                    i - 1
+                )
+            }
+        })
+        .collect();
+    let yaml = format!(
+        "name: long_chain\njobs:\n{}  - name: fan_in\n    command: \"true\"\n    \
+         depends_on_regexes: [\"^j[0-9]+$\"]\n",
+        jobs.concat()
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("chain.yaml");
+    std::fs::write(&path, yaml).unwrap();
+
+    let start = Instant::now();
+    let wf = WorkflowSpec::create_workflow_from_spec(config, &path, "test_user", false)
+        .expect("create chain");
+    eprintln!("created {}-job chain in {:?}", n + 1, start.elapsed());
+    let graph = job_graph(config, wf);
+    assert_eq!(graph.len(), n + 1);
+    for i in 1..n {
+        assert_eq!(
+            graph[&format!("j{i}")][0],
+            BTreeSet::from([format!("j{}", i - 1)])
+        );
+    }
+    assert_eq!(graph["fan_in"][0].len(), n);
+}
+
+#[rstest]
+fn test_create_rejected_by_finalize_leaves_nothing(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    // A cycle through files only: each job is valid on its own and the spec has no
+    // depends_on cycle, so only finalize catches it.
+    let yaml = r#"
+name: finalize_rejects_file_cycle
+files:
+  - name: f1
+    path: /tmp/torc_f1
+  - name: f2
+    path: /tmp/torc_f2
+jobs:
+  - name: x
+    command: "true"
+    input_files: [f2]
+    output_files: [f1]
+  - name: y
+    command: "true"
+    input_files: [f1]
+    output_files: [f2]
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cycle.yaml");
+    std::fs::write(&path, yaml).unwrap();
+    let before = create_workflow(config, "bracket_before", false);
+    let err = WorkflowSpec::create_workflow_from_spec(config, &path, "test_user", false)
+        .expect_err("finalize must reject the cycle")
+        .to_string();
+    assert!(err.contains("Workflow validation failed"), "{}", err);
+    assert!(err.contains("cycle") && err.contains("'x'"), "{}", err);
+    assert!(workflow_ids_named(config, "finalize_rejects_file_cycle").is_empty());
+    // The rejected draft was deleted, not just hidden.
+    match apis::workflows_api::get_workflow(config, before + 1) {
+        Err(apis::Error::ResponseError(r)) => assert_eq!(r.status.as_u16(), 404),
+        Ok(w) => assert_ne!(w.name, "finalize_rejects_file_cycle"),
+        Err(e) => panic!("{:?}", e),
+    }
+}
+
+#[test]
+fn test_interrupted_create_leaves_no_visible_workflow() {
+    let server = start_server_with_env(&[("TORC_DRAFT_WORKFLOW_TIMEOUT_SECS", "3")]);
+    let config = &server.config;
+    let before = create_workflow(config, "bracket", false);
+
+    let output = std::process::Command::new(common::get_exe_path("./target/debug/torc"))
+        .args(["--url", &config.base_path, "create"])
+        .arg("examples/yaml/diamond_workflow.yaml")
+        .env("TORC_TEST_CREATE_EXIT_BEFORE_FINALIZE", "1")
+        .output()
+        .expect("run torc create");
+    assert_eq!(output.status.code(), Some(3), "{:?}", output);
+
+    // Everything but the finalize call happened, yet nothing is listed.
+    let draft = before + 1;
+    let wf = apis::workflows_api::get_workflow(config, draft).expect("draft exists");
+    assert_eq!(wf.name, "diamond_workflow");
+    assert_eq!(wf.is_draft, Some(true));
+    assert!(!listed(config, draft));
+    assert!(workflow_ids_named(config, "diamond_workflow").is_empty());
+
+    // The server removes it after the timeout.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        match apis::workflows_api::get_workflow(config, draft) {
+            Err(apis::Error::ResponseError(r)) if r.status.as_u16() == 404 => break,
+            Ok(_) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(200)),
+            other => panic!("draft was not deleted: {:?}", other.map(|w| w.id)),
+        }
+    }
+}
+
+#[test]
+fn test_dry_run_reports_finalize_errors() {
+    // validate_spec (torc create --dry-run) runs the execution_config rules that
+    // finalize_workflow applies.
+    let yaml = r#"
+name: dry_run_ec
+execution_config:
+  mode: slurm
+  termination_signal: SIGTERM
+jobs:
+  - name: a
+    command: "true"
+"#;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ec.yaml");
+    std::fs::write(&path, yaml).unwrap();
+    let result = WorkflowSpec::validate_spec(&path);
+    assert!(!result.valid);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.contains("termination_signal is only supported in direct mode")),
+        "{:?}",
+        result.errors
+    );
+}
