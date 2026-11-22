@@ -236,6 +236,28 @@ fn test_cancel_uninitialized_job_conflicts(start_server: &ServerProcess) {
 }
 
 #[rstest]
+fn test_cancel_disabled_job_before_initialize_conflicts(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cancel_disabled_uninitialized")
+        .id
+        .unwrap();
+    let a = create_job(config, workflow_id, "a", vec![], true);
+    let b = create_job(config, workflow_id, "b", vec![a], true);
+    let mut job = apis::jobs_api::get_job(config, a).expect("get job");
+    job.status = Some(JobStatus::Disabled);
+    apis::jobs_api::update_job(config, a, job).expect("disable job");
+
+    // Canceling a would leave b uninitialized, and initialize_jobs would then make it ready.
+    assert_eq!(response_status(apis::jobs_api::cancel_job(config, a)), 409);
+    assert_eq!(status(config, a), JobStatus::Disabled);
+
+    initialize(config, workflow_id);
+    assert_ne!(status(config, b), JobStatus::Ready);
+    let response = apis::jobs_api::cancel_job(config, a).expect("cancel job");
+    assert_eq!(response.canceled_job_ids, vec![a, b]);
+}
+
+#[rstest]
 fn test_cancel_response_excludes_unrelated_cascade(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_test_workflow(config, "cancel_unrelated").id.unwrap();
