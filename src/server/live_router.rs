@@ -89,6 +89,11 @@ pub fn app_router(state: LiveRouterState) -> Router {
                     "/torc-service/v1/bulk_user_data",
                     post(create_user_data_list),
                 )
+                // Selective resets carry every selected job ID in one request.
+                .route(
+                    "/torc-service/v1/workflows/{id}/reset_job_status",
+                    post(reset_job_status),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -357,10 +362,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
         .route(
             "/torc-service/v1/workflows/{id}/reset_status",
             post(reset_workflow_status),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/reset_job_status",
-            post(reset_job_status),
         )
         .route(
             "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
