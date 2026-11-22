@@ -222,8 +222,8 @@ correction, and reporting.</p>
     JR --&gt;|calls after exit| SACCT
     SACCT --&gt;|MaxRSS, AveCPU| SS
     SS --&gt;|backfill peaks| RES
-    RES --&gt;|POST /results| API
-    SS --&gt;|POST /slurm_stats| API
+    RES --&gt;|batch_complete_jobs| API
+    SS --&gt;|batch_complete_jobs| API
 </pre>
 <h2 id="srun-wrapping"><a class="header" href="#srun-wrapping">srun Wrapping</a></h2>
 <p><strong>Module:</strong> <code>src/client/async_cli_command.rs</code></p>
@@ -506,7 +506,13 @@ never flushed (very short or failed steps), not that the job used no resources.<
 </pre>
 <p>The API provides:</p>
 <ul>
-<li><code>POST /slurm_stats</code> -- store accounting data after step completion</li>
+<li><code>POST /workflows/{id}/batch_complete_jobs</code> -- the job runner sends the stats in the completion
+entry's <code>slurm_stats</code> field. The server stores them in the same transaction as the completion, and
+only if it accepts the completion. Offline-journaled completions carry them too, so replay
+restores them. Stats whose workflow, job, run, or attempt do not match the completion are skipped,
+and the completion is still recorded.</li>
+<li><code>POST /slurm_stats</code> -- store accounting data directly. The job runner falls back to this after
+each accepted completion when the server's API version predates 1.1.0.</li>
 <li><code>GET /slurm_stats?workflow_id=N</code> -- list stats with optional <code>job_id</code>, <code>run_id</code>, <code>attempt_id</code>
 filters</li>
 </ul>

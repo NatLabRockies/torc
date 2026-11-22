@@ -452,7 +452,10 @@ after that window, the runner enters <strong>offline-drain mode</strong> instead
 from grabbing the same job, so no new work can start while the server is down.</li>
 <li><strong>Let running jobs finish.</strong> The runner keeps monitoring its subprocesses to completion.</li>
 <li><strong>Journal results locally.</strong> Each completion is written to a per-node SQLite file under
-<code>&lt;output_dir&gt;/offline_journal/</code>, named <code>offline_results_wf&lt;workflow_id&gt;_r&lt;run_id&gt;_&lt;label&gt;.db</code>.</li>
+<code>&lt;output_dir&gt;/offline_journal/</code>, named <code>offline_results_wf&lt;workflow_id&gt;_r&lt;run_id&gt;_&lt;label&gt;.db</code>.
+The journal entry is the same payload an online completion sends: the result, the output-file
+modification times observed when the job finished, and any Slurm accounting stats. Replay applies
+all of them, so they match what the job produced rather than the state at replay time.</li>
 <li><strong>Watch for recovery.</strong> The runner pings the server every <code>drain_ping_interval_secs</code> (default
 120). If the server comes back <strong>while jobs are still running</strong>, the runner flushes the journal,
 brings the server's view up to date, and resumes normal operation — claiming new work again with
