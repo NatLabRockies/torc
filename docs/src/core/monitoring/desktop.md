@@ -79,6 +79,13 @@ locally (`~/.zprofile` for zsh; `~/.zshrc` is not read). See
 
 The app remembers the form between launches.
 
+### Saved connections
+
+To switch between several clusters or servers, name the current form under **Save as** and click
+**Save**. Connecting with a name entered also saves it, along with any changes. Saved connections
+appear in a list at the top of the connect page; picking one fills in the form, and **Delete**
+removes it. They are stored on this computer only.
+
 ## While connected
 
 The **Connection** menu has:
@@ -90,7 +97,15 @@ Disconnecting or quitting stops torc-dash and any server it started. If an SSH s
 (network change, sleep), the app notices within about 90 seconds and returns to the connect page
 with a **Reconnect** button. Reconnecting signs in again, so MFA users are prompted again.
 
-Downloads and links that open new windows may not behave as they do in a browser.
+Downloads from the dashboard (such as a workflow export or a log bundle) open a save dialog when
+they finish; the app then confirms with a notification, or shows an error. File pickers for uploads
+work as in a browser.
+
+To be notified when a workflow finishes, turn on **Notify me when a workflow finishes** in the
+dashboard's **Settings** tab. Notifications appear while the app window is in the background. On
+macOS, allow them for Torc Desktop in **System Settings → Notifications** if none appear.
+
+Links that open new windows may not behave as they do in a browser.
 
 ## Troubleshooting
 

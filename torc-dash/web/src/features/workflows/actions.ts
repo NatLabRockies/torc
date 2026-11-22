@@ -1,9 +1,12 @@
 /** Workflow operations that need no dedicated dialog (they use confirm() and toasts). */
-import { cli, dashPost, type CliResponse } from "../../lib/api/dash";
+import { api, unwrap } from "../../lib/api/client";
+import { cli, dashPost, download, op, type CliResponse } from "../../lib/api/dash";
 import { errorText } from "../../lib/format";
 import { app } from "../../lib/state.svelte";
+import { follow } from "../notify/notify.svelte";
 import { confirm } from "../../lib/ui/confirm.svelte";
 import { toast } from "../../lib/ui/toast.svelte";
+import { loadOutputDir, resolveLogBaseDir } from "../debugging/logs";
 
 export const wid = (id: number) => ({ workflow_id: String(id) });
 
@@ -25,6 +28,7 @@ export async function submitWorkflow(id: number) {
     confirmLabel: "Submit",
   });
   if (!ok) return;
+  follow(id, true);
   toast.info(`Submitting workflow ${id}…`);
   await act("Submit", () => cli("submit", wid(id)), `Workflow ${id} submitted`);
 }
@@ -146,4 +150,44 @@ export async function deleteWorkflows(ids: number[]): Promise<number[]> {
   if (app.workflowId !== null && deleted.includes(app.workflowId)) app.selectWorkflow(null);
   app.refresh();
   return deleted;
+}
+
+/** Archive or unarchive workflows. Archived workflows are hidden unless "Show archived" is on. */
+export async function archiveWorkflows(ids: number[], archived: boolean) {
+  if (ids.length === 0) return;
+  const noun = ids.length === 1 ? `Workflow ${ids[0]}` : `${ids.length} workflows`;
+  await act(
+    archived ? "Archive" : "Unarchive",
+    () => op("archive", { workflow_ids: ids, archived }),
+    `${noun} ${archived ? "archived" : "unarchived"}`,
+  );
+}
+
+/**
+ * Download a .tar.gz of the workflow's logs (torc logs bundle), from the output dir the
+ * Debugging tab uses, resolved against the workflow's submission directory.
+ */
+export async function downloadLogs(id: number) {
+  let submissionDir: string | null = null;
+  try {
+    const wf = await unwrap(api.GET("/workflows/{id}", { params: { path: { id } } }));
+    submissionDir = wf.submission_directory ?? null;
+  } catch {
+    // Fall back to torc-dash's working directory, like the Debugging tab.
+  }
+  const outputDir = resolveLogBaseDir(loadOutputDir(), submissionDir);
+  toast.info(`Bundling logs from ${outputDir}…`);
+  download("/api/download/logs", { workflow_id: id, output_dir: outputDir });
+}
+
+/** Stop a `torc run` that the dashboard started, even if its output panel was closed. */
+export async function stopLocalRun(id: number) {
+  try {
+    const res = await dashPost<{ stopped: boolean }>("/api/cli/stop-run", wid(id));
+    if (res.stopped) toast.success(`Stopping the local run of workflow ${id}`);
+    else toast.info(`No local run of workflow ${id} started from this dashboard is active`);
+    app.refresh();
+  } catch (e) {
+    toast.error(`Stop failed: ${errorText(e)}`);
+  }
 }

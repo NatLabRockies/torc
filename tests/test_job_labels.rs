@@ -253,6 +253,7 @@ fn test_invalid_labels_are_rejected(start_server: &ServerProcess) {
             None, // labels
             None, // ids
             None, // statuses
+            None, // resource_requirements_id
         )
         .expect("Failed to list jobs")
         .items,
@@ -353,6 +354,7 @@ fn test_list_jobs_filters_by_label(start_server: &ServerProcess) {
             None, // name
             None, // command
             labels,
+            None,
             None,
             None,
         )

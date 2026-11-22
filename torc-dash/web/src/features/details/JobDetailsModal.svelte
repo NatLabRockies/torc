@@ -9,6 +9,7 @@
   import Modal from "../../lib/ui/Modal.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import { loadOutputDir, resolveLogBaseDir, saveOutputDir } from "../debugging/logs";
+  import EditJobModal from "./EditJobModal.svelte";
   import { loadJobDetails, type JobDetails } from "./job";
   import { rerunJobs } from "./jobActions";
   import LogPane from "./LogPane.svelte";
@@ -20,6 +21,7 @@
   let details = $state.raw<JobDetails | null>(null);
   let error = $state<string | null>(null);
   let tab = $state<Tab>("results");
+  let editing = $state(false);
 
   $effect(() => {
     const id = app.jobDetailsId;
@@ -241,11 +243,16 @@
   {/if}
   {#snippet footer()}
     {#if job}
+      <button class="btn" onclick={() => (editing = true)}>Edit…</button>
       <button class="btn" onclick={() => rerunJobs([job!.id!])}>Reset for rerun</button>
     {/if}
     <button class="btn" onclick={() => (open = false)}>Close</button>
   {/snippet}
 </Modal>
+
+{#if editing && details}
+  <EditJobModal job={details.job} resources={details.resourceReq} onclose={() => (editing = false)} />
+{/if}
 
 <style>
   .wrap {

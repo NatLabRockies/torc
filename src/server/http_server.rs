@@ -1702,6 +1702,7 @@ where
         command: Option<String>,
         labels: Option<String>,
         ids: Option<Vec<i64>>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1720,6 +1721,7 @@ where
             command,
             labels,
             ids,
+            resource_requirements_id,
             context,
         )
         .await

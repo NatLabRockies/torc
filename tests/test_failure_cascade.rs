@@ -34,6 +34,7 @@ fn job_statuses(
         None, // labels
         None, // ids
         None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 

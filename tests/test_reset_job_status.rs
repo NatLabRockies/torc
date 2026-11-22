@@ -328,4 +328,23 @@ fn test_reset_reports_downstream_side_effects(start_server: &ServerProcess) {
     assert_eq!(response.updated_count, 2);
     assert_eq!(status(config, upstream), JobStatus::Uninitialized);
     assert_eq!(status(config, downstream), JobStatus::Uninitialized);
+    let downstream_job = apis::jobs_api::get_job(config, downstream).expect("get downstream");
+    assert_eq!(downstream_job.start_time, None);
+    assert_eq!(downstream_job.compute_node_id, None);
+}
+
+#[rstest]
+fn test_reset_rejects_malformed_body_with_422(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let wf = create_test_workflow(config, "reset_malformed_body")
+        .id
+        .expect("workflow id");
+    let url = format!("{}/workflows/{}/reset_job_status", config.base_path, wf);
+    let req = config
+        .client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body(r#"{"job_ids": "not-a-list"}"#);
+    let resp = config.apply_auth(req).send().expect("request sent");
+    assert_eq!(resp.status().as_u16(), 422);
 }

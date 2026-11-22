@@ -10,6 +10,8 @@
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import LiveTail from "./LiveTail.svelte";
   import LogViewer from "./LogViewer.svelte";
+  import ResourceCheck from "./ResourceCheck.svelte";
+  import Scheduling from "./Scheduling.svelte";
   import SlurmLogs from "./SlurmLogs.svelte";
   import SlurmSacct from "./SlurmSacct.svelte";
   import { loadOutputDir, resolveLogBaseDir, saveOutputDir, stdioPaths } from "./logs";
@@ -22,7 +24,7 @@
     stderr: string | null;
   };
 
-  let view = $state<"jobs" | "tail" | "slurm-logs" | "sacct">("jobs");
+  let view = $state<"jobs" | "tail" | "scheduling" | "resources" | "slurm-logs" | "sacct">("jobs");
   /** Jobs followed in Live tail; kept here so switching views doesn't drop them. */
   const tailed = new SvelteSet<string | number>();
   let outputDir = $state(loadOutputDir());
@@ -219,6 +221,8 @@
         tabs={[
           { id: "jobs", label: "Job logs", count: jobs ? rows.length : null },
           { id: "tail", label: "Live tail", count: tailed.size || null },
+          { id: "scheduling", label: "Scheduling" },
+          { id: "resources", label: "Resource check" },
           { id: "slurm-logs", label: "Slurm log analysis" },
           { id: "sacct", label: "Slurm accounting" },
         ]}
@@ -278,6 +282,10 @@
       {/if}
     {:else if view === "tail"}
       <LiveTail {jobs} {wf} {baseDir} {filter} selected={tailed} />
+    {:else if view === "scheduling"}
+      <Scheduling workflowId={app.workflowId} />
+    {:else if view === "resources"}
+      <ResourceCheck workflowId={app.workflowId} />
     {:else if wf?.id !== app.workflowId && !loadError}
       <!-- Slurm paths depend on this workflow's submission directory; wait until it's loaded. -->
       <div class="empty"><span class="spinner"></span> Loading workflow…</div>
