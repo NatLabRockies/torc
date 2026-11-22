@@ -229,6 +229,18 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(claim_action),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}/suppress",
+            post(suppress_action),
+        )
+        .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}/result",
+            post(report_action_result),
+        )
+        .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}/reset",
+            post(reset_action),
+        )
+        .route(
             "/torc-service/v1/jobs",
             get(list_jobs).post(create_job).delete(delete_jobs),
         )
@@ -625,8 +637,8 @@ pub async fn version(State(state): State<LiveRouterState>) -> Response<Body> {
     description = "Apply a client-computed Slurm scheduler plan in one transaction. Every job \
         must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in \
         at most one scheduler; otherwise the plan is rejected and nothing changes. When \
-        suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, \
-        unexecuted schedule_nodes actions are marked executed. The schedulers are created, their \
+        suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted \
+        schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their \
         jobs are assigned, and an on_jobs_ready recovery action is created for each \
         recovery_actions entry, armed from the gating jobs' current statuses. The response lists \
         the created IDs and which actions are pending (ready to submit now). With dry_run=true, \
@@ -3763,6 +3775,115 @@ pub async fn claim_action(
         .await
     {
         Ok(response) => claim_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}/suppress",
+    operation_id = "suppress_action",
+    description = "Mark an action suppressed (executed = true, state = suppressed) so it is never \
+        claimed, without executing it. Idempotent. A persistent action can be suppressed in any \
+        state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or \
+        failed).",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Action is already claimed, succeeded, or failed", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn suppress_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .suppress_action(workflow_id, action_id, &context)
+        .await
+    {
+        Ok(response) => suppress_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}/result",
+    operation_id = "report_action_result",
+    description = "Record the outcome of a claimed action: state becomes succeeded, or failed \
+        with the given error. For a persistent action this is the latest outcome. 409 if the \
+        action has not been claimed (or was suppressed); 422 if error is set with success = true.",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    request_body = models::WorkflowActionResultRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Action has no claim to report a result for", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn report_action_result(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::WorkflowActionResultRequest>,
+) -> Response<Body> {
+    match state
+        .server
+        .report_action_result(workflow_id, action_id, body, &context)
+        .await
+    {
+        Ok(response) => report_action_result_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}/reset",
+    operation_id = "reset_action",
+    description = "Re-arm an action that is failed, suppressed, or stuck in claimed: clears \
+        executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op \
+        for an action that was never claimed; 409 for a succeeded action.",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Action already succeeded", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn reset_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .reset_action(workflow_id, action_id, &context)
+        .await
+    {
+        Ok(response) => reset_action_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

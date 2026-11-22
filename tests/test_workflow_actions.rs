@@ -72,6 +72,8 @@ fn workflow_action(
         executed_by: None,
         persistent: false,
         is_recovery: false,
+        state: None,
+        error: None,
     }
 }
 
@@ -814,7 +816,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
 /// Regression test for the recover wizard re-submitting the action-defined allocation count.
 ///
 /// After reinitialization re-arms the workflow's `schedule_nodes` actions, the recover wizard's
-/// "reuse existing scheduler" path calls `mark_satisfied_schedule_actions_executed` before
+/// "reuse existing scheduler" path calls `suppress_satisfied_schedule_actions` before
 /// submitting the user's chosen number of allocations. This prevents any *already-satisfied*
 /// re-armed action — the `on_workflow_start` action, plus job-gated actions (e.g.
 /// `on_jobs_complete`) whose gating jobs already completed in a prior run — from firing again on
@@ -822,7 +824,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
 /// exactly the satisfied `schedule_nodes` actions executed and leave everything else (including
 /// job-gated actions still waiting on their jobs) untouched.
 #[rstest]
-fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
+fn test_suppress_satisfied_schedule_actions(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow = create_test_workflow(config, "mark_satisfied_schedule_workflow");
     let workflow_id = workflow.id.unwrap();
@@ -924,9 +926,8 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
             .expect("Failed to create recovery action");
     let recovery_id = recovery.id.unwrap();
 
-    // Decoy 4: persistent on_workflow_start + schedule_nodes — satisfied, but claiming a persistent
-    // action does not clear its armed state (the server keeps executed=0 for persistent actions),
-    // so the helper must leave it untouched (and warn) rather than falsely mark it executed.
+    // Persistent on_workflow_start + schedule_nodes — satisfied. A claim cannot stop a persistent
+    // action, but the suppress endpoint (API 1.1.0) can, so it is suppressed too.
     let mut persistent_body = workflow_action(
         workflow_id,
         "on_workflow_start",
@@ -941,8 +942,8 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
     let persistent_id = persistent.id.unwrap();
 
     // Run the fix under test.
-    torc::client::commands::recover::mark_satisfied_schedule_actions_executed(config, workflow_id)
-        .expect("mark_satisfied_schedule_actions_executed failed");
+    torc::client::commands::recover::suppress_satisfied_schedule_actions(config, workflow_id)
+        .expect("suppress_satisfied_schedule_actions failed");
 
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .expect("Failed to get workflow actions");
@@ -961,9 +962,12 @@ fn test_mark_satisfied_schedule_actions_executed(start_server: &ServerProcess) {
         "on_worker_start schedule_nodes action should be marked executed"
     );
     assert!(
-        !find(persistent_id).executed,
-        "persistent schedule_nodes action should be left untouched (claim cannot suppress it)"
+        find(persistent_id).executed,
+        "persistent schedule_nodes action should be suppressed"
     );
+    for id in [target_id, satisfied_id, worker_start_id, persistent_id] {
+        assert_eq!(find(id).state.as_deref(), Some("suppressed"));
+    }
     assert!(
         !find(run_cmd_id).executed,
         "run_commands action should be left untouched"
@@ -2926,7 +2930,7 @@ fn test_four_stage_reset_status_reinit_cli_keeps_prior_schedule_actions(
 }
 
 /// Same matrix via `torc recover`'s action-handling steps: `reset_failed_jobs` + `reinitialize_workflow`
-/// + `mark_satisfied_schedule_actions_executed`. Recover only resets FAILED jobs, so here stages
+/// + `suppress_satisfied_schedule_actions`. Recover only resets FAILED jobs, so here stages
 /// 1..K-1 complete (and fire), stage K fails (Failed is terminal, so its action also fires), and
 /// stages K+1..4 never run. After recover, stages 1..K-1 stay executed and stage K..4 are
 /// executed=false — and crucially `mark_satisfied` must NOT re-suppress the re-armed stage-K action.
@@ -3007,8 +3011,8 @@ fn test_four_stage_recover_keeps_prior_schedule_actions(
         .expect("reset_failed_jobs");
     torc::client::commands::recover::reinitialize_workflow(config, workflow_id)
         .expect("reinitialize_workflow");
-    torc::client::commands::recover::mark_satisfied_schedule_actions_executed(config, workflow_id)
-        .expect("mark_satisfied_schedule_actions_executed");
+    torc::client::commands::recover::suppress_satisfied_schedule_actions(config, workflow_id)
+        .expect("suppress_satisfied_schedule_actions");
 
     assert_stage_action_states(config, workflow_id, &action_ids, reset_stage);
     assert_eq!(
@@ -3099,11 +3103,11 @@ fn reset_and_reinit_via(
             .expect("reset_failed_jobs");
             torc::client::commands::recover::reinitialize_workflow(config, workflow_id)
                 .expect("reinitialize_workflow");
-            torc::client::commands::recover::mark_satisfied_schedule_actions_executed(
+            torc::client::commands::recover::suppress_satisfied_schedule_actions(
                 config,
                 workflow_id,
             )
-            .expect("mark_satisfied_schedule_actions_executed");
+            .expect("suppress_satisfied_schedule_actions");
         }
     }
 }
@@ -4315,4 +4319,302 @@ fn test_on_workflow_complete_fires_after_dependents_cancelled(start_server: &Ser
         triggered,
         "on_workflow_complete should fire once the downstream job is cancelled"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Action outcomes (#529): claimed / succeeded / failed / suppressed, and reset.
+// ---------------------------------------------------------------------------------------------
+
+fn create_pending_action(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    persistent: bool,
+) -> i64 {
+    let mut body = workflow_action(
+        workflow_id,
+        "on_workflow_start",
+        "run_commands",
+        json!({"commands": ["true"]}),
+        None,
+    );
+    body.persistent = persistent;
+    body.trigger_count = 1;
+    apis::workflow_actions_api::create_workflow_action(config, workflow_id, body)
+        .expect("Failed to create action")
+        .id
+        .unwrap()
+}
+
+fn claim(config: &torc::client::Configuration, workflow_id: i64, action_id: i64) -> bool {
+    torc::client::utils::claim_action(config, workflow_id, action_id, None, 0)
+        .expect("claim_action failed")
+}
+
+fn report(
+    config: &torc::client::Configuration,
+    workflow_id: i64,
+    action_id: i64,
+    error: Option<&str>,
+) -> Result<WorkflowActionModel, u16> {
+    http(apis::workflow_actions_api::report_action_result(
+        config,
+        workflow_id,
+        action_id,
+        torc::models::WorkflowActionResultRequest {
+            success: error.is_none(),
+            error: error.map(str::to_string),
+        },
+    ))
+}
+
+/// Reduce an API error to its HTTP status; panic on transport errors.
+fn http<T>(
+    result: Result<WorkflowActionModel, apis::Error<T>>,
+) -> Result<WorkflowActionModel, u16> {
+    result.map_err(|e| match e {
+        apis::Error::ResponseError(r) => r.status.as_u16(),
+        e => panic!("unexpected error: {e}"),
+    })
+}
+
+fn status_of(result: Result<WorkflowActionModel, u16>) -> u16 {
+    result.err().unwrap_or(200)
+}
+
+/// The claimer's reported failure is stored with its error, and the action is not pending, so it
+/// is not retried. Reports require a claim; `error` with success is rejected.
+#[rstest]
+fn test_action_result_recorded(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "action_result_workflow")
+        .id
+        .unwrap();
+    let action_id = create_pending_action(config, workflow_id, false);
+
+    // No claim yet: nothing to report on.
+    assert_eq!(
+        status_of(report(config, workflow_id, action_id, Some("x"))),
+        409
+    );
+    assert!(claim(config, workflow_id, action_id));
+    assert_eq!(
+        fetch_action(config, workflow_id, action_id)
+            .state
+            .as_deref(),
+        Some("claimed")
+    );
+
+    let bad = apis::workflow_actions_api::report_action_result(
+        config,
+        workflow_id,
+        action_id,
+        torc::models::WorkflowActionResultRequest {
+            success: true,
+            error: Some("x".to_string()),
+        },
+    );
+    assert_eq!(status_of(http(bad)), 422);
+
+    let failed = report(
+        config,
+        workflow_id,
+        action_id,
+        Some("sbatch: Invalid account"),
+    )
+    .unwrap();
+    assert_eq!(failed.state.as_deref(), Some("failed"));
+    assert_eq!(failed.error.as_deref(), Some("sbatch: Invalid account"));
+    assert!(failed.executed);
+    assert!(!action_is_pending(config, workflow_id, action_id));
+
+    // 404 for an unknown action and for an action of another workflow.
+    let other = create_test_workflow(config, "action_result_other")
+        .id
+        .unwrap();
+    assert_eq!(status_of(report(config, workflow_id, 999_999, None)), 404);
+    assert_eq!(status_of(report(config, other, action_id, None)), 404);
+}
+
+/// Suppress marks a non-persistent action and a persistent one (which a claim never consumes)
+/// executed + suppressed, is idempotent, and makes a later claim fail with state "suppressed".
+/// A non-persistent action that was already claimed cannot be suppressed.
+#[rstest]
+fn test_suppress_action(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "suppress_action_workflow")
+        .id
+        .unwrap();
+    let suppress = |id| {
+        http(apis::workflow_actions_api::suppress_action(
+            config,
+            workflow_id,
+            id,
+        ))
+    };
+
+    let plain = create_pending_action(config, workflow_id, false);
+    let persistent = create_pending_action(config, workflow_id, true);
+    // A worker has already claimed the persistent action once; it stays claimable.
+    assert!(claim(config, workflow_id, persistent));
+    assert!(action_is_pending(config, workflow_id, persistent));
+
+    for id in [plain, persistent] {
+        let action = suppress(id).expect("suppress failed");
+        assert!(action.executed);
+        assert_eq!(action.state.as_deref(), Some("suppressed"));
+        assert_eq!(status_of(suppress(id)), 200, "suppress is idempotent");
+        assert!(!action_is_pending(config, workflow_id, id));
+        match apis::workflow_actions_api::claim_action(
+            config,
+            workflow_id,
+            id,
+            ClaimActionRequest {
+                compute_node_id: None,
+            },
+        ) {
+            Err(apis::Error::ResponseError(r)) => {
+                assert_eq!(r.status.as_u16(), 409);
+                let body: serde_json::Value = serde_json::from_str(&r.content).unwrap();
+                assert_eq!(body["error"]["state"], "suppressed", "{body}");
+            }
+            other => panic!("expected 409, got {other:?}"),
+        }
+        // A suppressed action has no claim to report on.
+        assert_eq!(status_of(report(config, workflow_id, id, None)), 409);
+    }
+
+    let claimed = create_pending_action(config, workflow_id, false);
+    assert!(claim(config, workflow_id, claimed));
+    assert_eq!(status_of(suppress(claimed)), 409);
+    assert_eq!(
+        fetch_action(config, workflow_id, claimed).state.as_deref(),
+        Some("claimed")
+    );
+    assert_eq!(status_of(suppress(999_999)), 404);
+}
+
+/// Suppress and claim race on the same action: exactly one side wins, and the stored state
+/// matches the winner.
+#[rstest]
+fn test_suppress_vs_concurrent_claim(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "suppress_claim_race_workflow")
+        .id
+        .unwrap();
+    for _ in 0..5 {
+        let action_id = create_pending_action(config, workflow_id, false);
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let config = config.clone();
+                thread::spawn(move || {
+                    if i % 2 == 0 {
+                        ("claim", claim(&config, workflow_id, action_id))
+                    } else {
+                        let won = torc::client::utils::suppress_action(
+                            &config,
+                            workflow_id,
+                            action_id,
+                            true,
+                            0,
+                        )
+                        .expect("suppress failed");
+                        ("suppress", won)
+                    }
+                })
+            })
+            .collect();
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let claims = results.iter().filter(|(k, w)| *k == "claim" && *w).count();
+        let suppresses = results
+            .iter()
+            .filter(|(k, w)| *k == "suppress" && *w)
+            .count();
+        let state = fetch_action(config, workflow_id, action_id).state;
+        if claims == 1 {
+            assert_eq!(suppresses, 0, "{results:?}");
+            assert_eq!(state.as_deref(), Some("claimed"));
+        } else {
+            // Suppress is idempotent, so every suppress call succeeds once it wins.
+            assert_eq!(claims, 0, "{results:?}");
+            assert_eq!(suppresses, 4, "{results:?}");
+            assert_eq!(state.as_deref(), Some("suppressed"));
+        }
+    }
+}
+
+/// Reset re-arms a failed, suppressed, or stuck (claimed) action so it is pending and claimable
+/// again; a succeeded action cannot be reset.
+#[rstest]
+fn test_reset_action_rearms(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "reset_action_workflow")
+        .id
+        .unwrap();
+    let reset = |id| {
+        http(apis::workflow_actions_api::reset_action(
+            config,
+            workflow_id,
+            id,
+        ))
+    };
+
+    let action_id = create_pending_action(config, workflow_id, false);
+    assert!(claim(config, workflow_id, action_id));
+    // Stuck in claimed (claimer died).
+    let rearmed = reset(action_id).expect("reset failed");
+    assert!(!rearmed.executed);
+    assert_eq!(rearmed.state, None);
+    assert_eq!(rearmed.executed_at, None);
+    assert!(action_is_pending(config, workflow_id, action_id));
+
+    // Failed.
+    assert!(claim(config, workflow_id, action_id));
+    report(config, workflow_id, action_id, Some("boom")).unwrap();
+    let rearmed = reset(action_id).expect("reset failed");
+    assert_eq!((rearmed.state, rearmed.error), (None, None));
+    assert!(action_is_pending(config, workflow_id, action_id));
+
+    // Suppressed.
+    apis::workflow_actions_api::suppress_action(config, workflow_id, action_id).unwrap();
+    reset(action_id).expect("reset failed");
+    assert!(action_is_pending(config, workflow_id, action_id));
+
+    // Succeeded: not resettable.
+    assert!(claim(config, workflow_id, action_id));
+    report(config, workflow_id, action_id, None).unwrap();
+    assert_eq!(status_of(reset(action_id)), 409);
+    assert_eq!(status_of(reset(999_999)), 404);
+}
+
+/// An older client claims without reporting a result: the server still marks the action
+/// executed, it leaves the pending set, and it shows as claimed (stuck once the claim is old).
+#[rstest]
+fn test_older_client_without_result_reporting(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "older_client_workflow")
+        .id
+        .unwrap();
+    let action_id = create_pending_action(config, workflow_id, false);
+    assert!(action_is_pending(config, workflow_id, action_id));
+    assert!(claim(config, workflow_id, action_id));
+    assert!(!action_is_pending(config, workflow_id, action_id));
+    assert!(
+        !claim(config, workflow_id, action_id),
+        "second claim must lose"
+    );
+
+    let action = fetch_action(config, workflow_id, action_id);
+    assert!(action.executed);
+    assert_eq!(action.state.as_deref(), Some("claimed"));
+
+    use torc::client::commands::reports::{STUCK_ACTION_CLAIM_MINUTES, problem_actions};
+    let now = chrono::Utc::now();
+    let (failed, stuck) = problem_actions(std::slice::from_ref(&action), now);
+    assert!(
+        failed.is_empty() && stuck.is_empty(),
+        "a fresh claim is not stuck"
+    );
+    let later = now + chrono::Duration::minutes(STUCK_ACTION_CLAIM_MINUTES + 1);
+    let (_, stuck) = problem_actions(std::slice::from_ref(&action), later);
+    assert_eq!(stuck.len(), 1);
 }

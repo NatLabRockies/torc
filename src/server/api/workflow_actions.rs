@@ -2,12 +2,13 @@
 
 use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString};
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use sqlx::Row;
 
 use crate::server::api_responses::{
     ClaimActionResponse, CreateWorkflowActionResponse, DeleteWorkflowActionResponse,
-    GetPendingActionsResponse, GetWorkflowActionsResponse, UpdateWorkflowActionResponse,
+    GetPendingActionsResponse, GetWorkflowActionsResponse, ReportActionResultResponse,
+    ResetActionResponse, SuppressActionResponse, UpdateWorkflowActionResponse,
 };
 
 use crate::models;
@@ -16,6 +17,33 @@ use crate::models::JobStatus;
 use super::{
     ApiContext, database_error_with_msg, message_error_response, resource_not_found_response,
 };
+
+/// Build a [`models::WorkflowActionModel`] from a `workflow_action` row that selected every column.
+fn action_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<models::WorkflowActionModel, String> {
+    let action_config_str: String = row.get("action_config");
+    let action_config: serde_json::Value = serde_json::from_str(&action_config_str)
+        .map_err(|e| format!("Failed to parse action_config: {}", e))?;
+    // Deserialize job_ids from JSON string to Vec<i64>
+    let job_ids_str: Option<String> = row.get("job_ids");
+    let job_ids: Option<Vec<i64>> = job_ids_str.and_then(|s| serde_json::from_str(&s).ok());
+    Ok(models::WorkflowActionModel {
+        id: Some(row.get("id")),
+        workflow_id: row.get("workflow_id"),
+        trigger_type: row.get("trigger_type"),
+        action_type: row.get("action_type"),
+        action_config,
+        job_ids,
+        trigger_count: row.get("trigger_count"),
+        required_triggers: row.get("required_triggers"),
+        executed: row.get::<i32, _>("executed") != 0,
+        executed_at: row.get("executed_at"),
+        executed_by: row.get("executed_by"),
+        persistent: row.get::<i32, _>("persistent") != 0,
+        is_recovery: row.get::<i32, _>("is_recovery") != 0,
+        state: row.get("state"),
+        error: row.get("error"),
+    })
+}
 
 /// Validate action_config based on action_type
 fn validate_action_config(
@@ -154,6 +182,31 @@ pub trait WorkflowActionsApi<C> {
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError>;
 
+    /// Mark an action suppressed so it is never claimed, without executing it.
+    async fn suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError>;
+
+    /// Record the outcome of a claimed action.
+    async fn report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError>;
+
+    /// Re-arm a failed, suppressed, or claimed action so it can be claimed again.
+    async fn reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError>;
+
     /// Update action_config for an existing workflow action (partial update)
     async fn update_workflow_action(
         &self,
@@ -288,7 +341,7 @@ where
         );
 
         let rows = sqlx::query(
-            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery
+            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery, state, error
              FROM workflow_action
              WHERE workflow_id = ?
              ORDER BY id"
@@ -299,36 +352,8 @@ where
 
         match rows {
             Ok(rows) => {
-                let actions: Result<Vec<models::WorkflowActionModel>, String> = rows
-                    .into_iter()
-                    .map(|row| {
-                        let action_config_str: String = row.get("action_config");
-                        let action_config: serde_json::Value =
-                            serde_json::from_str(&action_config_str)
-                                .map_err(|e| format!("Failed to parse action_config: {}", e))?;
-
-                        // Deserialize job_ids from JSON string to Vec<i64>
-                        let job_ids_str: Option<String> = row.get("job_ids");
-                        let job_ids: Option<Vec<i64>> =
-                            job_ids_str.and_then(|s| serde_json::from_str(&s).ok());
-
-                        Ok(models::WorkflowActionModel {
-                            id: Some(row.get("id")),
-                            workflow_id: row.get("workflow_id"),
-                            trigger_type: row.get("trigger_type"),
-                            action_type: row.get("action_type"),
-                            action_config,
-                            job_ids,
-                            trigger_count: row.get("trigger_count"),
-                            required_triggers: row.get("required_triggers"),
-                            executed: row.get::<i32, _>("executed") != 0,
-                            executed_at: row.get("executed_at"),
-                            executed_by: row.get("executed_by"),
-                            persistent: row.get::<i32, _>("persistent") != 0,
-                            is_recovery: row.get::<i32, _>("is_recovery") != 0,
-                        })
-                    })
-                    .collect();
+                let actions: Result<Vec<models::WorkflowActionModel>, String> =
+                    rows.into_iter().map(|row| action_from_row(&row)).collect();
 
                 match actions {
                     Ok(actions) => Ok(GetWorkflowActionsResponse::SuccessfulResponse(actions)),
@@ -375,7 +400,7 @@ where
                 // Build IN clause with placeholders
                 let placeholders = types.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
                 let query_str = format!(
-                    "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery
+                    "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery, state, error
                      FROM workflow_action
                      WHERE workflow_id = ? AND trigger_count >= required_triggers AND executed = 0 AND trigger_type IN ({})
                      ORDER BY id",
@@ -394,7 +419,7 @@ where
             }
         } else {
             // No filter - get all pending actions
-            let query_str = "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery
+            let query_str = "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery, state, error
                  FROM workflow_action
                  WHERE workflow_id = ? AND trigger_count >= required_triggers AND executed = 0
                  ORDER BY id".to_string();
@@ -411,36 +436,8 @@ where
 
         match rows {
             Ok(rows) => {
-                let actions: Result<Vec<models::WorkflowActionModel>, String> = rows
-                    .into_iter()
-                    .map(|row| {
-                        let action_config_str: String = row.get("action_config");
-                        let action_config: serde_json::Value =
-                            serde_json::from_str(&action_config_str)
-                                .map_err(|e| format!("Failed to parse action_config: {}", e))?;
-
-                        // Deserialize job_ids from JSON string to Vec<i64>
-                        let job_ids_str: Option<String> = row.get("job_ids");
-                        let job_ids: Option<Vec<i64>> =
-                            job_ids_str.and_then(|s| serde_json::from_str(&s).ok());
-
-                        Ok(models::WorkflowActionModel {
-                            id: Some(row.get("id")),
-                            workflow_id: row.get("workflow_id"),
-                            trigger_type: row.get("trigger_type"),
-                            action_type: row.get("action_type"),
-                            action_config,
-                            job_ids,
-                            trigger_count: row.get("trigger_count"),
-                            required_triggers: row.get("required_triggers"),
-                            executed: row.get::<i32, _>("executed") != 0,
-                            executed_at: row.get("executed_at"),
-                            executed_by: row.get("executed_by"),
-                            persistent: row.get::<i32, _>("persistent") != 0,
-                            is_recovery: row.get::<i32, _>("is_recovery") != 0,
-                        })
-                    })
-                    .collect();
+                let actions: Result<Vec<models::WorkflowActionModel>, String> =
+                    rows.into_iter().map(|row| action_from_row(&row)).collect();
 
                 match actions {
                     Ok(actions) => Ok(GetPendingActionsResponse::SuccessfulResponse(actions)),
@@ -482,7 +479,7 @@ where
 
         // Verify action exists and belongs to this workflow
         let action_check = sqlx::query(
-            "SELECT workflow_id, executed, persistent FROM workflow_action WHERE id = ?",
+            "SELECT workflow_id, executed, persistent, state FROM workflow_action WHERE id = ?",
         )
         .bind(action_id)
         .fetch_optional(self.context.pool.as_ref())
@@ -493,6 +490,7 @@ where
                 let workflow_id_col: i64 = record.get("workflow_id");
                 let executed_col: i32 = record.get("executed");
                 let persistent_col: i32 = record.get("persistent");
+                let state_col: Option<String> = record.get("state");
 
                 if workflow_id_col != workflow_id {
                     return Ok(ClaimActionResponse::NotFoundErrorResponse(
@@ -502,17 +500,15 @@ where
                         )),
                     ));
                 }
-                // For non-persistent actions, check if already executed
-                let is_persistent = persistent_col != 0;
-                if !is_persistent && executed_col != 0 {
-                    // Action already executed
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": format!("Action {} already claimed", action_id),
-                        "claimed": false
-                    }));
-                    return Ok(ClaimActionResponse::ConflictResponse(error_response));
+                // A persistent action keeps executed = 0 across claims, so executed = 1 means it
+                // was suppressed; a non-persistent one was claimed or suppressed.
+                if executed_col != 0 {
+                    return Ok(ClaimActionResponse::ConflictResponse(claim_conflict(
+                        action_id,
+                        state_col.as_deref(),
+                    )));
                 }
-                is_persistent
+                persistent_col != 0
             }
             Ok(None) => {
                 return Ok(ClaimActionResponse::NotFoundErrorResponse(
@@ -532,15 +528,16 @@ where
 
         // For persistent actions, don't mark as executed so other workers can claim it
         // For non-persistent actions, mark as executed
+        // Both statements require executed = 0, so a concurrent suppress wins or loses atomically.
         let result = if is_persistent {
-            // For persistent actions, just record the execution timestamp
-            // Keep executed=0 so other workers can claim it
+            // For persistent actions, record the claim but keep executed=0 so other workers can
+            // claim it. state/error hold the latest claim's outcome.
             // Note: This simple implementation doesn't track which compute nodes have claimed it
             // A more robust implementation would use a separate workflow_action_claims table
             sqlx::query(
                 "UPDATE workflow_action
-                 SET executed_at = ?
-                 WHERE id = ?",
+                 SET executed_at = ?, state = 'claimed', error = NULL
+                 WHERE id = ? AND executed = 0",
             )
             .bind(&now)
             .bind(action_id)
@@ -549,7 +546,8 @@ where
         } else {
             sqlx::query(
                 "UPDATE workflow_action
-                 SET executed = 1, executed_at = ?, executed_by = ?
+                 SET executed = 1, executed_at = ?, executed_by = ?, state = 'claimed',
+                     error = NULL
                  WHERE id = ? AND executed = 0",
             )
             .bind(&now)
@@ -570,12 +568,15 @@ where
                     let response = serde_json::json!({"claimed": true, "action_id": action_id});
                     Ok(ClaimActionResponse::SuccessfulResponse(response))
                 } else {
-                    // Race condition: action was claimed by another node between check and update
-                    let error_response = models::ErrorResponse::new(serde_json::json!({
-                        "message": format!("Action {} already claimed", action_id),
-                        "claimed": false
-                    }));
-                    Ok(ClaimActionResponse::ConflictResponse(error_response))
+                    // Race condition: action was claimed or suppressed between check and update
+                    let state = self
+                        .fetch_action(workflow_id, action_id)
+                        .await?
+                        .and_then(|a| a.state);
+                    Ok(ClaimActionResponse::ConflictResponse(claim_conflict(
+                        action_id,
+                        state.as_deref(),
+                    )))
                 }
             }
             Err(e) => {
@@ -585,6 +586,163 @@ where
                 ))
             }
         }
+    }
+
+    /// Mark an action suppressed (`executed = 1, state = suppressed`). Idempotent. A persistent
+    /// action can be suppressed in any state, since a claim never consumes it; a non-persistent one
+    /// only while unclaimed.
+    async fn suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError> {
+        debug!(
+            "suppress_action(workflow_id={}, action_id={}) - X-Span-ID: {:?}",
+            workflow_id,
+            action_id,
+            context.get().0.clone()
+        );
+        let result = sqlx::query(
+            "UPDATE workflow_action SET executed = 1, state = 'suppressed', error = NULL
+             WHERE id = ? AND workflow_id = ?
+             AND (persistent = 1 OR executed = 0 OR state = 'suppressed')",
+        )
+        .bind(action_id)
+        .bind(workflow_id)
+        .execute(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to suppress workflow action"))?;
+        let Some(action) = self.fetch_action(workflow_id, action_id).await? else {
+            return Ok(SuppressActionResponse::NotFoundErrorResponse(
+                resource_not_found_response("Action", action_id),
+            ));
+        };
+        if result.rows_affected() == 0 {
+            return Ok(SuppressActionResponse::ConflictResponse(
+                message_error_response(format!(
+                    "Action {} cannot be suppressed: it is already {}",
+                    action_id,
+                    action.state.as_deref().unwrap_or("claimed")
+                )),
+            ));
+        }
+        info!(
+            "Suppressed workflow action workflow_id={} action_id={}",
+            workflow_id, action_id
+        );
+        Ok(SuppressActionResponse::SuccessfulResponse(action))
+    }
+
+    /// Record a claimed action's outcome: `succeeded`, or `failed` with an error. For persistent
+    /// actions this is the latest outcome. Rejected unless the action has been claimed.
+    async fn report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError> {
+        debug!(
+            "report_action_result(workflow_id={}, action_id={}, success={}) - X-Span-ID: {:?}",
+            workflow_id,
+            action_id,
+            body.success,
+            context.get().0.clone()
+        );
+        if body.success && body.error.is_some() {
+            return Ok(
+                ReportActionResultResponse::UnprocessableContentErrorResponse(
+                    message_error_response(
+                        "error is only allowed when success is false".to_string(),
+                    ),
+                ),
+            );
+        }
+        let state = if body.success { "succeeded" } else { "failed" };
+        let result = sqlx::query(
+            "UPDATE workflow_action SET state = ?, error = ?
+             WHERE id = ? AND workflow_id = ? AND state IN ('claimed', 'succeeded', 'failed')",
+        )
+        .bind(state)
+        .bind(&body.error)
+        .bind(action_id)
+        .bind(workflow_id)
+        .execute(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to record workflow action result"))?;
+        let Some(action) = self.fetch_action(workflow_id, action_id).await? else {
+            return Ok(ReportActionResultResponse::NotFoundErrorResponse(
+                resource_not_found_response("Action", action_id),
+            ));
+        };
+        if result.rows_affected() == 0 {
+            return Ok(ReportActionResultResponse::ConflictResponse(
+                message_error_response(format!(
+                    "Action {} has no claim to report a result for (state: {})",
+                    action_id,
+                    action.state.as_deref().unwrap_or("none")
+                )),
+            ));
+        }
+        if body.success {
+            info!(
+                "Action succeeded workflow_id={} action_id={}",
+                workflow_id, action_id
+            );
+        } else {
+            warn!(
+                "Action failed workflow_id={} action_id={} error={}",
+                workflow_id,
+                action_id,
+                body.error.as_deref().unwrap_or("")
+            );
+        }
+        Ok(ReportActionResultResponse::SuccessfulResponse(action))
+    }
+
+    /// Re-arm an action: clear `executed`, `state`, `error`, and the claim record so it can be
+    /// claimed again. Rejected for a succeeded action; a no-op for one that was never claimed.
+    async fn reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError> {
+        debug!(
+            "reset_action(workflow_id={}, action_id={}) - X-Span-ID: {:?}",
+            workflow_id,
+            action_id,
+            context.get().0.clone()
+        );
+        let result = sqlx::query(
+            "UPDATE workflow_action
+             SET executed = 0, executed_at = NULL, executed_by = NULL, state = NULL, error = NULL
+             WHERE id = ? AND workflow_id = ? AND (state IS NULL OR state != 'succeeded')",
+        )
+        .bind(action_id)
+        .bind(workflow_id)
+        .execute(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to reset workflow action"))?;
+        let Some(action) = self.fetch_action(workflow_id, action_id).await? else {
+            return Ok(ResetActionResponse::NotFoundErrorResponse(
+                resource_not_found_response("Action", action_id),
+            ));
+        };
+        if result.rows_affected() == 0 {
+            return Ok(ResetActionResponse::ConflictResponse(
+                message_error_response(format!(
+                    "Action {} already succeeded and cannot be reset",
+                    action_id
+                )),
+            ));
+        }
+        info!(
+            "Reset workflow action workflow_id={} action_id={}",
+            workflow_id, action_id
+        );
+        Ok(ResetActionResponse::SuccessfulResponse(action))
     }
 
     /// Update action_config for an existing workflow action (partial update)
@@ -627,7 +785,7 @@ where
         let existing = sqlx::query(
             "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, \
              trigger_count, required_triggers, executed, executed_at, executed_by, \
-             persistent, is_recovery \
+             persistent, is_recovery, state, error \
              FROM workflow_action WHERE id = ? AND workflow_id = ?",
         )
         .bind(action_id)
@@ -709,24 +867,15 @@ where
         }
 
         // Build the updated model from the row we already have plus the merged config.
-        let job_ids_str: Option<String> = row.get("job_ids");
-        let job_ids: Option<Vec<i64>> = job_ids_str.and_then(|s| serde_json::from_str(&s).ok());
-
-        let updated = models::WorkflowActionModel {
-            id: Some(row.get("id")),
-            workflow_id: row.get("workflow_id"),
-            trigger_type: row.get("trigger_type"),
-            action_type,
-            action_config: merged,
-            job_ids,
-            trigger_count: row.get("trigger_count"),
-            required_triggers: row.get("required_triggers"),
-            executed: row.get::<i32, _>("executed") != 0,
-            executed_at: row.get("executed_at"),
-            executed_by: row.get("executed_by"),
-            persistent: row.get::<i32, _>("persistent") != 0,
-            is_recovery: row.get::<i32, _>("is_recovery") != 0,
+        let mut updated = match action_from_row(&row) {
+            Ok(action) => action,
+            Err(e) => {
+                return Ok(UpdateWorkflowActionResponse::DefaultErrorResponse(
+                    message_error_response(e),
+                ));
+            }
         };
+        updated.action_config = merged;
 
         Ok(UpdateWorkflowActionResponse::SuccessfulResponse(updated))
     }
@@ -779,8 +928,40 @@ where
     }
 }
 
+/// 409 body for a claim that lost: the action is already claimed, finished, or suppressed.
+fn claim_conflict(action_id: i64, state: Option<&str>) -> models::ErrorResponse {
+    let state = state.unwrap_or("claimed");
+    models::ErrorResponse::new(serde_json::json!({
+        "message": format!("Action {} already {}", action_id, state),
+        "claimed": false,
+        "state": state,
+    }))
+}
+
 /// Helper methods for workflow actions (not part of the trait)
 impl WorkflowActionsApiImpl {
+    /// Fetch one action of a workflow, or None if it does not exist in that workflow.
+    async fn fetch_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+    ) -> Result<Option<models::WorkflowActionModel>, ApiError> {
+        let row = sqlx::query(
+            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, \
+             trigger_count, required_triggers, executed, executed_at, executed_by, \
+             persistent, is_recovery, state, error \
+             FROM workflow_action WHERE id = ? AND workflow_id = ?",
+        )
+        .bind(action_id)
+        .bind(workflow_id)
+        .fetch_optional(self.context.pool.as_ref())
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow action"))?;
+        row.map(|r| action_from_row(&r))
+            .transpose()
+            .map_err(ApiError)
+    }
+
     /// Check and trigger workflow actions based on trigger type and job state changes
     /// This is called by other API endpoints when state changes occur
     ///
@@ -1166,7 +1347,8 @@ impl WorkflowActionsApiImpl {
                     .await
             } else {
                 sqlx::query(
-                    "UPDATE workflow_action SET executed = 0, executed_by = NULL, trigger_count = ? WHERE id = ?",
+                    "UPDATE workflow_action SET executed = 0, executed_by = NULL, state = NULL, error = NULL, \
+                     trigger_count = ? WHERE id = ?",
                 )
                 .bind(trigger_count)
                 .bind(action_id)

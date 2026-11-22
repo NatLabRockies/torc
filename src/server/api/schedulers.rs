@@ -1595,12 +1595,14 @@ where
         let now = chrono::Utc::now().to_rfc3339();
 
         // Suppress: the old schedule_nodes actions would otherwise start their own allocations.
-        // ponytail: marked executed like a claim; a distinct suppressed state is #529.
+        // Persistent ones too: they would keep firing the old schedulers from every new worker.
+        // `executed = 0` skips actions already claimed or suppressed (a persistent action keeps
+        // executed = 0 across claims, so it is suppressed even after one has run).
         if body.suppress_existing_schedule_actions {
             response.suppressed_action_ids = sqlx::query_scalar::<_, i64>(
-                "UPDATE workflow_action SET executed = 1, executed_at = ?1 \
-                 WHERE workflow_id = ?2 AND action_type = 'schedule_nodes' AND is_recovery = 0 \
-                 AND executed = 0 AND persistent = 0 RETURNING id",
+                "UPDATE workflow_action SET executed = 1, executed_at = ?1, state = 'suppressed', \
+                 error = NULL WHERE workflow_id = ?2 AND action_type = 'schedule_nodes' \
+                 AND is_recovery = 0 AND executed = 0 RETURNING id",
             )
             .bind(&now)
             .bind(workflow_id)

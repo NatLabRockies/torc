@@ -157,6 +157,7 @@ __all__ = [
     "VersionResponse",
     "WorkflowAccessGroupModel",
     "WorkflowActionModel",
+    "WorkflowActionResultRequest",
     "WorkflowModel",
     "WorkflowStatusResponse",
 ]
@@ -305,6 +306,7 @@ from torc.openapi_client.models.user_group_membership_model import UserGroupMemb
 from torc.openapi_client.models.version_response import VersionResponse as VersionResponse
 from torc.openapi_client.models.workflow_access_group_model import WorkflowAccessGroupModel as WorkflowAccessGroupModel
 from torc.openapi_client.models.workflow_action_model import WorkflowActionModel as WorkflowActionModel
+from torc.openapi_client.models.workflow_action_result_request import WorkflowActionResultRequest as WorkflowActionResultRequest
 from torc.openapi_client.models.workflow_model import WorkflowModel as WorkflowModel
 from torc.openapi_client.models.workflow_status_response import WorkflowStatusResponse as WorkflowStatusResponse
 

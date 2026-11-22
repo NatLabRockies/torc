@@ -30,7 +30,7 @@ class ApplySchedulerPlanRequest(BaseModel):
     """ # noqa: E501
     recovery_actions: Optional[List[SchedulerPlanAction]] = None
     schedulers: List[SchedulerPlanEntry]
-    suppress_existing_schedule_actions: Optional[StrictBool] = Field(default=None, description="Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as executed so they cannot start allocations alongside the new schedulers.")
+    suppress_existing_schedule_actions: Optional[StrictBool] = Field(default=None, description="Suppress the workflow's non-recovery, unexecuted `schedule_nodes` actions (persistent ones included) so they cannot start allocations alongside the new schedulers.")
     __properties: ClassVar[List[str]] = ["recovery_actions", "schedulers", "suppress_existing_schedule_actions"]
 
     model_config = ConfigDict(

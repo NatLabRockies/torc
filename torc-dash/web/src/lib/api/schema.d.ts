@@ -852,6 +852,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/{id}/actions/{action_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Re-arm an action that is failed, suppressed, or stuck in claimed: clears executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op for an action that was never claimed; 409 for a succeeded action. */
+        post: operations["reset_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{id}/actions/{action_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Record the outcome of a claimed action: state becomes succeeded, or failed with the given error. For a persistent action this is the latest outcome. 409 if the action has not been claimed (or was suppressed); 422 if error is set with success = true. */
+        post: operations["report_action_result"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{id}/actions/{action_id}/suppress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mark an action suppressed (executed = true, state = suppressed) so it is never claimed, without executing it. Idempotent. A persistent action can be suppressed in any state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or failed). */
+        post: operations["suppress_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows/{id}/active_task": {
         parameters: {
             query?: never;
@@ -877,7 +928,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, unexecuted schedule_nodes actions are marked executed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored. */
+        /** @description Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored. */
         post: operations["apply_scheduler_plan"];
         delete?: never;
         options?: never;
@@ -1429,8 +1480,8 @@ export interface components {
             recovery_actions?: components["schemas"]["SchedulerPlanAction"][];
             schedulers: components["schemas"]["SchedulerPlanEntry"][];
             /**
-             * @description Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as
-             *     executed so they cannot start allocations alongside the new schedulers.
+             * @description Suppress the workflow's non-recovery, unexecuted `schedule_nodes` actions (persistent ones
+             *     included) so they cannot start allocations alongside the new schedulers.
              */
             suppress_existing_schedule_actions?: boolean;
         };
@@ -2656,6 +2707,8 @@ export interface components {
         WorkflowActionModel: {
             action_config: unknown;
             action_type: string;
+            /** @description Error reported by the claimer when `state` is `failed`. */
+            error?: string | null;
             /** @default false */
             executed: boolean;
             executed_at?: string | null;
@@ -2674,6 +2727,12 @@ export interface components {
              */
             required_triggers: number;
             /**
+             * @description Outcome of the action: `claimed`, `succeeded`, `failed`, or `suppressed`. Null if it was
+             *     never claimed (or was claimed through a server older than API 1.1.0). Set by the server;
+             *     ignored on create.
+             */
+            state?: string | null;
+            /**
              * Format: int64
              * @default 0
              */
@@ -2681,6 +2740,12 @@ export interface components {
             trigger_type: string;
             /** Format: int64 */
             workflow_id: number;
+        };
+        /** @description Outcome of a claimed workflow action, reported by the claimer after executing it. */
+        WorkflowActionResultRequest: {
+            /** @description Why the action failed. Only allowed when `success` is false. */
+            error?: string | null;
+            success: boolean;
         };
         WorkflowModel: {
             /**
@@ -7963,6 +8028,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClaimActionResponse"];
+                };
+            };
+        };
+    };
+    reset_action: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+                /** @description Action ID */
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowActionModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action already succeeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    report_action_result: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+                /** @description Action ID */
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowActionResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowActionModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action has no claim to report a result for */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    suppress_action: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+                /** @description Action ID */
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowActionModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is already claimed, succeeded, or failed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

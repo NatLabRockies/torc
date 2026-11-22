@@ -183,8 +183,9 @@ request, `POST /workflows/{id}/apply_scheduler_plan`, and the server applies it 
 1. **Validate.** Every job must belong to the workflow, be pending (uninitialized, blocked, or
    ready), and appear in at most one scheduler. Otherwise the server returns 422 and changes
    nothing, so the existing actions stay in place.
-2. **Suppress.** The workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions
-   are marked executed, so they cannot fire again and create duplicate allocations.
+2. **Suppress.** The workflow's non-recovery, unexecuted `schedule_nodes` actions, persistent ones
+   included, are set to `suppressed` (and `executed`), so they cannot fire again and create
+   duplicate allocations.
 3. **Create.** The schedulers are created and their jobs are assigned with one bulk update.
 4. **Arm.** Each recovery action's `trigger_count` is set from its gating jobs' statuses inside the
    transaction. An action whose jobs are all ready is Pending and is submitted by `--submit`. The

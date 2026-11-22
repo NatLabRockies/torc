@@ -306,3 +306,18 @@ curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/apply_scheduler_
        "suppress_existing_schedule_actions": true}' \
   | jq '.actions'
 ```
+
+**Record a Workflow Action's Outcome** (job runners and `torc submit`)
+
+```bash
+curl -X POST http://localhost:8080/torc-service/v1/workflows/1/actions/2/result \
+  -H "Content-Type: application/json" \
+  -d '{"success": false, "error": "sbatch: error: Invalid account"}' \
+  | jq '{state, error}'
+```
+
+**Re-arm a Failed Workflow Action** (`torc workflows reset-action 1 2`)
+
+```bash
+curl -X POST http://localhost:8080/torc-service/v1/workflows/1/actions/2/reset | jq '.state'
+```

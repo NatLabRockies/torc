@@ -1422,6 +1422,37 @@ where
             .await
     }
 
+    async fn suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError> {
+        self.transport_suppress_action(workflow_id, action_id, context)
+            .await
+    }
+
+    async fn report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError> {
+        self.transport_report_action_result(workflow_id, action_id, body, context)
+            .await
+    }
+
+    async fn reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError> {
+        self.transport_reset_action(workflow_id, action_id, context)
+            .await
+    }
+
     async fn update_workflow_action(
         &self,
         workflow_id: i64,

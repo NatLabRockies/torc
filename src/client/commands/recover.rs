@@ -333,6 +333,19 @@ pub fn recover_workflow(
         }
     }
 
+    // A failed schedule_nodes action stalls the workflow: its allocations never arrive.
+    if handle_failed_schedule_actions(config, args)? {
+        return Ok(RecoveryResult {
+            oom_fixed: 0,
+            timeout_fixed: 0,
+            unknown_retried: 0,
+            other_failures: 0,
+            jobs_to_retry: vec![],
+            adjustments: vec![],
+            slurm_dry_run: None,
+        });
+    }
+
     // Check for pending_failed jobs (requires AI classification)
     let pending_failed_count = count_pending_failed_jobs(config, args.workflow_id).unwrap_or(0);
     if pending_failed_count > 0 {
@@ -644,6 +657,111 @@ pub fn recover_workflow(
     );
 
     Ok(result)
+}
+
+/// Report `schedule_nodes` actions whose execution failed (e.g. `sbatch` rejected the account or
+/// partition). Torc does not retry them, so a workflow waiting on their allocations stalls. In the
+/// interactive wizard, on a workflow that is not complete, offer to reset them and submit their
+/// allocations now. Returns true if it did; recovery then stops because the workflow is running
+/// again.
+fn handle_failed_schedule_actions(
+    config: &Configuration,
+    args: &RecoverArgs,
+) -> Result<bool, String> {
+    // Best-effort: this check must not block the rest of recovery (e.g. auto-recovery in watch).
+    let actions = match apis::workflow_actions_api::get_workflow_actions(config, args.workflow_id) {
+        Ok(actions) => actions,
+        Err(e) => {
+            warn!(
+                "Failed to list workflow actions workflow_id={}: {}",
+                args.workflow_id, e
+            );
+            return Ok(false);
+        }
+    };
+    let failed: Vec<_> = actions
+        .into_iter()
+        .filter(|a| a.action_type == "schedule_nodes" && a.state.as_deref() == Some("failed"))
+        .collect();
+    if failed.is_empty() {
+        return Ok(false);
+    }
+
+    eprintln!(
+        "{} schedule_nodes action(s) failed; some of their allocations may have been submitted \
+         before the failure (check 'squeue --me' before resetting):",
+        failed.len()
+    );
+    for a in &failed {
+        eprintln!(
+            "  action {} ({}): {}",
+            a.id.unwrap_or(-1),
+            a.trigger_type,
+            a.error.as_deref().unwrap_or("(no error recorded)")
+        );
+    }
+
+    let status = apis::workflows_api::is_workflow_complete(config, args.workflow_id)
+        .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
+    // Only these triggers are fired by `fire_pending_schedule_nodes_actions` (via
+    // `WorkflowManager::start`); a reset worker-lifecycle action would submit nothing here.
+    let (offerable, other): (Vec<_>, Vec<_>) = failed.into_iter().partition(|a| {
+        matches!(
+            a.trigger_type.as_str(),
+            "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+        )
+    });
+    if args.dry_run
+        || !args.interactive
+        || status.is_complete
+        || status.is_canceled
+        || offerable.is_empty()
+    {
+        eprintln!(
+            "  Fix the cause, then re-arm each with 'torc workflows reset-action {} <action_id>'.",
+            args.workflow_id
+        );
+        return Ok(false);
+    }
+    if !other.is_empty() {
+        eprintln!(
+            "  Actions with worker triggers ({}) must be re-armed with \
+             'torc workflows reset-action {} <action_id>'; they fire when a worker starts or exits.",
+            other
+                .iter()
+                .map(|a| a.id.unwrap_or(-1).to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            args.workflow_id
+        );
+    }
+
+    let answer = prompt_choice(
+        "Fixed the cause and cancelled any partial allocations? Reset these actions and \
+         submit their allocations now? [y/N]: ",
+        &["y", "n"],
+        "n",
+    )?;
+    if answer != "y" {
+        return Ok(false);
+    }
+    for a in &offerable {
+        let id = a.id.unwrap_or(-1);
+        apis::workflow_actions_api::reset_action(config, args.workflow_id, id)
+            .map_err(|e| format!("Failed to reset action {}: {}", id, e))?;
+    }
+    let submitted = crate::client::commands::slurm::fire_pending_schedule_nodes_actions(
+        config,
+        args.workflow_id,
+        &args.output_dir,
+        None,
+    )?;
+    eprintln!(
+        "Reset {} action(s) and submitted {} Slurm allocation(s).",
+        offerable.len(),
+        submitted
+    );
+    Ok(true)
 }
 
 /// Check that the workflow is in a valid state for recovery:
@@ -2053,13 +2171,13 @@ fn recover_workflow_interactive(
             let (scheduler_id, _scheduler_name) =
                 resolve_existing_scheduler_source(config, source)?;
 
-            // Reinitialization above re-armed the workflow's schedule_nodes actions. Mark the
+            // Reinitialization above re-armed the workflow's schedule_nodes actions. Suppress the
             // already-satisfied ones (the on_workflow_start action plus any job-gated action whose
-            // gating jobs already completed in a prior run) executed before submitting, so they
-            // don't re-fire on the first compute node and submit their original allocation count
-            // instead of the user's choice. (The Regenerate path does the equivalent inside
-            // handle_regenerate.)
-            mark_satisfied_schedule_actions_executed(config, args.workflow_id)?;
+            // gating jobs already completed in a prior run) before submitting, so they don't
+            // re-fire on the first compute node and submit their original allocation count instead
+            // of the user's choice. (The Regenerate path does the equivalent inside
+            // apply_scheduler_plan.)
+            suppress_satisfied_schedule_actions(config, args.workflow_id)?;
             info!(
                 "Submitting {} allocation(s) with scheduler ID {}...",
                 num_allocations, scheduler_id
@@ -2372,7 +2490,7 @@ fn schedule_action_already_satisfied(action: &crate::models::WorkflowActionModel
     }
 }
 
-/// Mark already-satisfied `schedule_nodes` actions as executed before a recovery submission.
+/// Suppress already-satisfied `schedule_nodes` actions before a recovery submission.
 ///
 /// When recovery reuses an existing scheduler and submits a user-chosen number of allocations
 /// directly via `torc slurm schedule-nodes`, any action re-armed by `reinitialize_workflow` that
@@ -2380,57 +2498,58 @@ fn schedule_action_already_satisfied(action: &crate::models::WorkflowActionModel
 /// the first compute node that starts and submit the action's own `num_allocations`, ignoring the
 /// user's entry. The originally reported case was the `on_workflow_start` action, but the same
 /// re-arm re-fires job-gated actions (e.g. `on_jobs_complete`) whose gating jobs already completed
-/// in a prior run. Claiming those actions here marks them executed and prevents the duplicate,
-/// action-defined submission. The `regenerate` path performs the equivalent step inside
-/// `handle_regenerate`. Recovery actions (`is_recovery`) are left untouched.
+/// in a prior run. Suppressing those actions here prevents the duplicate, action-defined
+/// submission. The `regenerate` path does the equivalent inside `apply_scheduler_plan`. Recovery
+/// actions (`is_recovery`) are left untouched.
 ///
-/// Persistent actions cannot be suppressed this way: the server's claim logic deliberately leaves
-/// their `executed` flag at 0 so multiple workers can each claim them, so claiming would not stop
-/// them re-firing. Those are surfaced as a warning instead.
-pub fn mark_satisfied_schedule_actions_executed(
+/// Servers older than API 1.1.0 have no suppress endpoint, so the action is claimed instead. A
+/// claim leaves a persistent action armed, so those are skipped with a warning. Returns the number
+/// of persistent actions skipped that way.
+pub fn suppress_satisfied_schedule_actions(
     config: &Configuration,
     workflow_id: i64,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .map_err(|e| format!("Failed to list workflow actions: {}", e))?;
+    let satisfied: Vec<_> = actions
+        .into_iter()
+        .filter(schedule_action_already_satisfied)
+        .collect();
+    if satisfied.is_empty() {
+        return Ok(0);
+    }
+    let use_suppress =
+        crate::client::version_check::check_version(config).server_supports_action_outcomes();
 
-    for action in actions {
-        if !schedule_action_already_satisfied(&action) {
-            continue;
-        }
+    let mut persistent_skipped = 0;
+    for action in satisfied {
         let Some(action_id) = action.id else {
             continue;
         };
-
-        // Claiming a persistent action does NOT clear its armed state — the server keeps
-        // `executed = 0` for persistent actions so multiple workers can claim them. Claiming here
-        // would log a misleading "marked executed" while the action stays armed and re-fires. We
-        // can't suppress it automatically, so warn the user to remove/disable it instead.
-        if action.persistent {
+        if !use_suppress && action.persistent {
             warn!(
                 "Persistent {} schedule_nodes action {} is already satisfied and will re-fire \
-                 after recovery, submitting its own allocations; it cannot be suppressed \
-                 automatically. Remove or disable it if you do not want those allocations.",
+                 after recovery, submitting its own allocations; this server (API < 1.1.0) cannot \
+                 suppress it. Remove or disable it if you do not want those allocations.",
                 action.trigger_type, action_id
             );
+            persistent_skipped += 1;
             continue;
         }
 
-        // Delegate to the shared helper, which treats a 409 Conflict (already claimed by another
-        // process) as `Ok(false)` and surfaces any other failure as an error. We propagate that
-        // error rather than logging and continuing: if the claim genuinely fails, the action stays
-        // armed and would re-fire on a compute node, reintroducing the duplicate-allocation bug —
-        // better to stop and report it.
-        match crate::client::utils::claim_action(
+        // A 409 (already claimed by another process) is `Ok(false)`. Any other failure is
+        // propagated rather than logged: the action would stay armed and re-fire on a compute
+        // node, reintroducing the duplicate-allocation bug.
+        match crate::client::utils::suppress_action(
             config,
             workflow_id,
             action_id,
-            None, // login-node submission, no compute node
+            use_suppress,
             WAIT_FOR_HEALTHY_DATABASE_MINUTES,
         ) {
             Ok(true) => {
                 info!(
-                    "Marked already-satisfied {} schedule_nodes action {} as executed to avoid duplicate allocations",
+                    "Suppressed already-satisfied {} schedule_nodes action {} to avoid duplicate allocations",
                     action.trigger_type, action_id
                 );
             }
@@ -2439,14 +2558,14 @@ pub fn mark_satisfied_schedule_actions_executed(
             }
             Err(e) => {
                 return Err(format!(
-                    "Failed to mark {} schedule_nodes action {} as executed: {}",
+                    "Failed to suppress {} schedule_nodes action {}: {}",
                     action.trigger_type, action_id, e
                 ));
             }
         }
     }
 
-    Ok(())
+    Ok(persistent_skipped)
 }
 
 /// Submit allocations using an existing scheduler config via `torc slurm schedule-nodes`.

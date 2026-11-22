@@ -4354,6 +4354,8 @@ impl WorkflowSpec {
                     executed_by: None,
                     persistent: action_spec.persistent.unwrap_or(false),
                     is_recovery: false,
+                    state: None,
+                    error: None,
                 };
 
                 apis::workflow_actions_api::create_workflow_action(

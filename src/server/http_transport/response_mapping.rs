@@ -544,6 +544,25 @@ map_response!(
     ConflictResponse => StatusCode::CONFLICT
 );
 map_response!(
+    suppress_action_response,
+    SuppressActionResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT
+);
+map_response!(
+    report_action_result_response,
+    ReportActionResultResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
+    reset_action_response,
+    ResetActionResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT
+);
+map_response!(
     update_workflow_action_response,
     UpdateWorkflowActionResponse,
     SuccessfulResponse,

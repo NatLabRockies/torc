@@ -70,6 +70,10 @@ POST   /workflows/{id}/reset_status              # Reset workflow state
 POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
 POST   /workflows/{id}/file_stats                # Apply a file stat snapshot, reset affected jobs
 POST   /workflows/{id}/apply_scheduler_plan      # Apply a Slurm scheduler plan atomically
+POST   /workflows/{id}/actions/{action_id}/claim    # Claim a workflow action for execution
+POST   /workflows/{id}/actions/{action_id}/result   # Record a claimed action's outcome
+POST   /workflows/{id}/actions/{action_id}/suppress # Disable an action without running it
+POST   /workflows/{id}/actions/{action_id}/reset    # Re-arm a failed/suppressed/stuck action
 POST   /jobs/{id}/complete                       # Mark job completed
 POST   /jobs/{id}/manage_status_change           # Transition job status
 GET    /tasks/{id}                               # Poll async task status

@@ -124,6 +124,7 @@ from torc.openapi_client.models.user_group_membership_model import UserGroupMemb
 from torc.openapi_client.models.version_response import VersionResponse
 from torc.openapi_client.models.workflow_access_group_model import WorkflowAccessGroupModel
 from torc.openapi_client.models.workflow_action_model import WorkflowActionModel
+from torc.openapi_client.models.workflow_action_result_request import WorkflowActionResultRequest
 from torc.openapi_client.models.workflow_model import WorkflowModel
 from torc.openapi_client.models.workflow_status_response import WorkflowStatusResponse
 

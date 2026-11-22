@@ -29,6 +29,7 @@ const WORKFLOWS_HELP_TEMPLATE: &str = "\
   \x1b[1;36mlist-actions\x1b[0m     List workflow actions
   \x1b[1;36mupdate-action\x1b[0m    Edit a workflow action's configuration
   \x1b[1;36mdelete-action\x1b[0m    Delete a workflow action
+  \x1b[1;36mreset-action\x1b[0m     Re-arm a failed, suppressed, or stuck workflow action
 
 \x1b[1;32mWorkflow Maintenance:\x1b[0m
   \x1b[1;36mupdate\x1b[0m              Update workflow properties
@@ -61,7 +62,7 @@ use crate::client::commands::workflow_export::{
 };
 use crate::client::commands::{
     get_env_user_name,
-    output::print_json_wrapped,
+    output::{print_json, print_json_wrapped},
     print_error, select_workflow_interactively,
     table_format::{display_csv, display_table_with_count},
 };
@@ -154,6 +155,8 @@ struct WorkflowActionTableRow {
     executed_at: String,
     #[tabled(rename = "Job IDs")]
     job_ids: String,
+    #[tabled(rename = "Error")]
+    error: String,
 }
 
 #[derive(Subcommand)]
@@ -660,6 +663,29 @@ EXAMPLES:
         #[arg(long)]
         no_prompts: bool,
     },
+    /// Re-arm a failed, suppressed, or stuck workflow action
+    ///
+    /// Clears the action's executed flag and recorded outcome so it can be claimed
+    /// again. Torc does not retry a failed action automatically (a partly-submitted
+    /// schedule_nodes action could duplicate allocations); fix the cause, then reset
+    /// it. The action fires the next time a runner or 'torc submit' looks for pending
+    /// actions. Run 'torc workflows list-actions <workflow_id>' to find action IDs.
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+    # Re-arm action 45 of workflow 123 after fixing its Slurm account
+    torc workflows reset-action 123 45
+"
+    )]
+    ResetAction {
+        /// ID of the workflow that owns the action
+        #[arg()]
+        workflow_id: i64,
+        /// ID of the action to reset (see 'workflows list-actions')
+        #[arg()]
+        action_id: i64,
+    },
     /// Check if a workflow is complete
     #[command(
         hide = true,
@@ -1133,8 +1159,15 @@ fn handle_list_actions(
                 let rows: Vec<WorkflowActionTableRow> = actions
                     .iter()
                     .map(|action| {
-                        // Determine status based on trigger_count, required_triggers, and executed
-                        let status = if action.executed {
+                        // The recorded outcome (API 1.1.0+) wins; otherwise derive the status from
+                        // trigger_count, required_triggers, and executed.
+                        let status = if let Some(state) = &action.state {
+                            let mut chars = state.chars();
+                            chars
+                                .next()
+                                .map(|c| c.to_uppercase().chain(chars).collect())
+                                .unwrap_or_default()
+                        } else if action.executed {
                             "Executed".to_string()
                         } else if action.trigger_count >= action.required_triggers {
                             "Pending (ready to claim)".to_string()
@@ -1193,6 +1226,15 @@ fn handle_list_actions(
                             status,
                             executed_at: action.executed_at.as_deref().unwrap_or("-").to_string(),
                             job_ids,
+                            error: action
+                                .error
+                                .as_deref()
+                                // One line in the table: sbatch errors span several.
+                                .map(|e| {
+                                    let e = e.split_whitespace().collect::<Vec<_>>().join(" ");
+                                    crate::client::commands::truncate_string(&e, 60)
+                                })
+                                .unwrap_or_else(|| "-".to_string()),
                         }
                     })
                     .collect();
@@ -1213,7 +1255,17 @@ fn handle_list_actions(
                     eprintln!(
                         "  Pending  - trigger_count >= required_triggers (ready to be claimed and executed)"
                     );
-                    eprintln!("  Executed - action has been claimed and executed");
+                    eprintln!("  Claimed    - claimed for execution; no outcome reported yet");
+                    eprintln!("  Succeeded  - executed successfully");
+                    eprintln!(
+                        "  Failed     - execution failed (see Error); fix the cause, then run \
+                         'torc workflows reset-action {} <action_id>'",
+                        selected_workflow_id
+                    );
+                    eprintln!("  Suppressed - disabled without executing");
+                    eprintln!(
+                        "  Executed   - claimed by a client or server that does not record outcomes"
+                    );
                 }
             }
         }
@@ -1421,6 +1473,25 @@ fn handle_delete_action(
         }
         Err(e) => {
             print_error("deleting workflow action", &e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_reset_action(config: &Configuration, workflow_id: i64, action_id: i64, format: &str) {
+    match apis::workflow_actions_api::reset_action(config, workflow_id, action_id) {
+        Ok(action) => {
+            if format == "json" {
+                print_json(&action, "workflow action");
+            } else {
+                println!(
+                    "Reset action {} of workflow {}; it can fire again.",
+                    action_id, workflow_id
+                );
+            }
+        }
+        Err(e) => {
+            print_error("resetting workflow action", &e);
             std::process::exit(1);
         }
     }
@@ -3588,6 +3659,12 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
             no_prompts,
         } => {
             handle_delete_action(config, *workflow_id, *action_id, *no_prompts, format);
+        }
+        WorkflowCommands::ResetAction {
+            workflow_id,
+            action_id,
+        } => {
+            handle_reset_action(config, *workflow_id, *action_id, format);
         }
         WorkflowCommands::IsComplete { id } => {
             handle_is_complete(config, *id, format);

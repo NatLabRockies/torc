@@ -4720,6 +4720,174 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimActionResponse'
+  /workflows/{id}/actions/{action_id}/reset:
+    post:
+      tags:
+      - workflow_actions
+      description: 'Re-arm an action that is failed, suppressed, or stuck in claimed: clears executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op for an action that was never claimed; 409 for a succeeded action.'
+      operationId: reset_action
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action already succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/actions/{action_id}/result:
+    post:
+      tags:
+      - workflow_actions
+      description: 'Record the outcome of a claimed action: state becomes succeeded, or failed with the given error. For a persistent action this is the latest outcome. 409 if the action has not been claimed (or was suppressed); 422 if error is set with success = true.'
+      operationId: report_action_result
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowActionResultRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action has no claim to report a result for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/actions/{action_id}/suppress:
+    post:
+      tags:
+      - workflow_actions
+      description: Mark an action suppressed (executed = true, state = suppressed) so it is never claimed, without executing it. Idempotent. A persistent action can be suppressed in any state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or failed).
+      operationId: suppress_action
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action is already claimed, succeeded, or failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/active_task:
     get:
       tags:
@@ -4756,7 +4924,7 @@ paths:
     post:
       tags:
       - slurm_schedulers
-      description: Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, unexecuted schedule_nodes actions are marked executed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
+      description: Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
       operationId: apply_scheduler_plan
       parameters:
       - name: id
@@ -6268,8 +6436,8 @@ components:
         suppress_existing_schedule_actions:
           type: boolean
           description: |-
-            Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as
-            executed so they cannot start allocations alongside the new schedulers.
+            Suppress the workflow's non-recovery, unexecuted `schedule_nodes` actions (persistent ones
+            included) so they cannot start allocations alongside the new schedulers.
     ApplySchedulerPlanResponse:
       type: object
       description: |-
@@ -8808,6 +8976,11 @@ components:
         action_config: {}
         action_type:
           type: string
+        error:
+          type:
+          - string
+          - 'null'
+          description: Error reported by the claimer when `state` is `failed`.
         executed:
           type: boolean
           default: false
@@ -8842,6 +9015,14 @@ components:
           type: integer
           format: int64
           default: 1
+        state:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Outcome of the action: `claimed`, `succeeded`, `failed`, or `suppressed`. Null if it was
+            never claimed (or was claimed through a server older than API 1.1.0). Set by the server;
+            ignored on create.
         trigger_count:
           type: integer
           format: int64
@@ -8851,6 +9032,19 @@ components:
         workflow_id:
           type: integer
           format: int64
+    WorkflowActionResultRequest:
+      type: object
+      description: Outcome of a claimed workflow action, reported by the claimer after executing it.
+      required:
+      - success
+      properties:
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why the action failed. Only allowed when `success` is false.
+        success:
+          type: boolean
     WorkflowModel:
       type: object
       required:

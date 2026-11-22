@@ -388,6 +388,31 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError>;
 
+    /// Mark a workflow action suppressed without executing it.
+    async fn suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError>;
+
+    /// Record the outcome of a claimed workflow action.
+    async fn report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError>;
+
+    /// Re-arm a failed, suppressed, or claimed workflow action.
+    async fn reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError>;
+
     /// Update action_config for an existing workflow action (partial update).
     async fn update_workflow_action(
         &self,

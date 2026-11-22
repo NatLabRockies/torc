@@ -362,6 +362,8 @@ impl TorcClient {
             executed_by: None,
             persistent: false,
             is_recovery: false,
+            state: None,
+            error: None,
         };
 
         apis::workflow_actions_api::create_workflow_action(&self.config, workflow_id, action)

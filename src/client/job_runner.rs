@@ -608,6 +608,9 @@ pub struct JobRunner {
     /// entry. Older servers ignore those fields, so the runner writes them separately.
     /// Set from the server's API version at startup.
     server_stores_completion_metadata: bool,
+    /// True if the server records action outcomes (API 1.1.0). Older servers have no `result`
+    /// endpoint, so the runner skips reporting. Set from the server's API version at startup.
+    server_supports_action_outcomes: bool,
     /// Monotonic timestamp of the last drain-mode resume ping.
     last_drain_ping: Option<Instant>,
     /// Probe used by `maybe_try_resume` to ask whether the server is reachable.
@@ -899,6 +902,7 @@ impl JobRunner {
             offline: false,
             offline_journal: None,
             server_stores_completion_metadata: true,
+            server_supports_action_outcomes: true,
             last_drain_ping: None,
             server_reachable_probe: default_server_reachable_probe,
         }
@@ -1173,6 +1177,7 @@ impl JobRunner {
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
         self.server_stores_completion_metadata = version_result.server_stores_completion_metadata();
+        self.server_supports_action_outcomes = version_result.server_supports_action_outcomes();
         if !self.server_stores_completion_metadata {
             warn!(
                 "Server API version {} predates completion metadata; writing output mtimes and \
@@ -3606,13 +3611,31 @@ impl JobRunner {
                 "Executing {} workflow_id={} action_id={}",
                 trigger_type, self.workflow_id, action_id
             );
-            if let Err(e) = self.execute_action(&action) {
-                // Not fatal - just log and continue
-                error!(
-                    "Failed to execute {} workflow_id={} action_id={}: {}",
-                    trigger_type, self.workflow_id, action_id, e
-                );
-            }
+            self.execute_claimed_action(&action, action_id);
+        }
+    }
+
+    /// Execute an action this runner claimed and report the outcome to the server. A failure is
+    /// not fatal and is not retried: the server records it as `failed` for the user to fix and
+    /// reset (a retry of a partly-submitted `schedule_nodes` could duplicate allocations).
+    fn execute_claimed_action(&self, action: &crate::models::WorkflowActionModel, action_id: i64) {
+        let outcome = self.execute_action(action).map_err(|e| e.to_string());
+        if let Err(e) = &outcome {
+            error!(
+                "Failed to execute {} workflow_id={} action_id={}: {}",
+                action.trigger_type, self.workflow_id, action_id, e
+            );
+        }
+        if self.server_supports_action_outcomes {
+            utils::report_action_result(
+                &self.config,
+                self.workflow_id,
+                action_id,
+                &outcome,
+                // Bookkeeping on the worker loop: keep the fast lock retries but skip the long
+                // health wait, which would stall job reaping. A lost report leaves it `claimed`.
+                0,
+            );
         }
     }
 
@@ -3722,9 +3745,7 @@ impl JobRunner {
             // without this a persistent action would hold every runner open
             // for its full walltime.
             self.executed_action_ids.insert(action_id);
-            if let Err(e) = self.execute_action(&action) {
-                error!("Failed to execute action {}: {}", action_id, e);
-            }
+            self.execute_claimed_action(&action, action_id);
         }
     }
 
@@ -4137,6 +4158,8 @@ mod tests {
             executed_by: None,
             persistent: false,
             is_recovery: false,
+            state: None,
+            error: None,
         }
     }
 

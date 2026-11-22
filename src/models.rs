@@ -2225,6 +2225,8 @@ impl WorkflowActionModel {
             executed_by: None,
             persistent: false,
             is_recovery: false,
+            state: None,
+            error: None,
         }
     }
 }
@@ -2440,6 +2442,24 @@ pub struct WorkflowActionModel {
     #[serde(default = "default_false")]
     #[cfg_attr(feature = "openapi-codegen", schema(required = false, default = false))]
     pub is_recovery: bool,
+    /// Outcome of the action: `claimed`, `succeeded`, `failed`, or `suppressed`. Null if it was
+    /// never claimed (or was claimed through a server older than API 1.1.0). Set by the server;
+    /// ignored on create.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Error reported by the claimer when `state` is `failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Outcome of a claimed workflow action, reported by the claimer after executing it.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowActionResultRequest {
+    pub success: bool,
+    /// Why the action failed. Only allowed when `success` is false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -2841,8 +2861,8 @@ pub struct ApplySchedulerPlanRequest {
     pub schedulers: Vec<SchedulerPlanEntry>,
     #[serde(default)]
     pub recovery_actions: Vec<SchedulerPlanAction>,
-    /// Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as
-    /// executed so they cannot start allocations alongside the new schedulers.
+    /// Suppress the workflow's non-recovery, unexecuted `schedule_nodes` actions (persistent ones
+    /// included) so they cannot start allocations alongside the new schedulers.
     #[serde(default)]
     pub suppress_existing_schedule_actions: bool,
 }

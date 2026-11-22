@@ -1756,24 +1756,21 @@ pub fn handle_pending_schedule_actions(
     };
 
     if do_suppress {
-        crate::client::commands::recover::mark_satisfied_schedule_actions_executed(
-            config,
-            workflow_id,
-        )?;
-        // Persistent actions intentionally cannot be suppressed (mark_satisfied_... leaves them
-        // armed so multiple workers can claim them); don't count them as suppressed, and tell the
-        // user they will still re-fire.
-        let persistent_count = firable.iter().filter(|a| a.persistent).count();
-        let suppressed = count - persistent_count;
+        let persistent_skipped =
+            crate::client::commands::recover::suppress_satisfied_schedule_actions(
+                config,
+                workflow_id,
+            )?;
         eprintln!(
             "Suppressed {} pending schedule_nodes action(s) so the worker(s) started here will not re-fire them.",
-            suppressed
+            count - persistent_skipped
         );
-        if persistent_count > 0 {
+        if persistent_skipped > 0 {
             eprintln!(
-                "  Note: {} persistent action(s) cannot be suppressed and will still re-fire, \
-                 submitting their own allocations. Remove or disable them to avoid duplicates.",
-                persistent_count
+                "  Note: {} persistent action(s) cannot be suppressed by this server (API < 1.1.0) \
+                 and will still re-fire, submitting their own allocations. Remove or disable them \
+                 to avoid duplicates.",
+                persistent_skipped
             );
         }
     }
@@ -1894,13 +1891,13 @@ fn render_now_group(
 /// prints two groups:
 ///
 /// - **Will submit now**: pending (`trigger_count >= required_triggers`) actions submit fires
-///   immediately. The user can disable one (suppressed via claim, so it submits nothing) or override
+///   immediately. The user can disable one (suppressed, so it submits nothing) or override
 ///   its allocation count for this submission only.
 /// - **Will submit later**: deferred actions (gates not yet satisfied) that running workers fire as
 ///   later stages complete. Listed for visibility; not adjustable here.
 ///
 /// Returns a map of action id -> allocation count to apply for this submission (empty unless the
-/// user changed something; never persisted to `action_config`). Disabled actions are claimed in here
+/// user changed something; never persisted to `action_config`). Disabled actions are suppressed here
 /// so they are absent from the pending set `start()` later reads. `--no-prompts` or a non-TTY stdin
 /// prints the summary and proceeds with the configured counts. Returns `Err` on API failure;
 /// cancellation exits the process.
@@ -2103,24 +2100,28 @@ pub fn review_submit_pending_actions(
         }
     }
 
-    // Apply disables now (only on proceed, so a cancel leaves the workflow untouched). Claiming
+    // Apply disables now (only on proceed, so a cancel leaves the workflow untouched). Suppressing
     // marks the action executed so the workers started by this submission do not fire it either.
+    // Servers older than API 1.1.0 have no suppress endpoint; there a claim stands in for it, which
+    // cannot stop a persistent action.
+    let use_suppress = disabled.is_empty()
+        || crate::client::version_check::check_version(config).server_supports_action_outcomes();
     for id in &disabled {
         let action = now_by_id.get(id);
-        if action.is_some_and(|a| a.persistent) {
+        if !use_suppress && action.is_some_and(|a| a.persistent) {
             eprintln!(
-                "  Note: action {} is persistent and cannot be disabled by suppression; it will \
-                 still re-fire from a worker. Remove or disable it in the spec to avoid that.",
+                "  Note: action {} is persistent and this server (API < 1.1.0) cannot suppress \
+                 it; it will still re-fire from a worker. Remove or disable it in the spec to \
+                 avoid that.",
                 id
             );
             continue;
         }
-        match crate::client::utils::claim_action(config, workflow_id, *id, None, 20) {
-            // Claimed by us -> suppressed as intended.
+        match crate::client::utils::suppress_action(config, workflow_id, *id, use_suppress, 20) {
             Ok(true) => {}
-            // claim_action returns Ok(false) on a 409: the action was already claimed by a
-            // concurrent submitter or a worker, who will fire it. We could not disable it, so warn
-            // instead of silently reporting it disabled.
+            // Ok(false) is a 409: the action was already claimed by a concurrent submitter or a
+            // worker, who will fire it. We could not disable it, so warn instead of silently
+            // reporting it disabled.
             Ok(false) => {
                 eprintln!(
                     "  Warning: could not disable action {} -- it was already claimed by another \
@@ -2130,7 +2131,7 @@ pub fn review_submit_pending_actions(
             }
             Err(e) => {
                 return Err(format!(
-                    "failed to disable (claim) action {}: {}; aborting so it does not fire unexpectedly",
+                    "failed to disable (suppress) action {}: {}; aborting so it does not fire unexpectedly",
                     id, e
                 ));
             }
@@ -5011,7 +5012,7 @@ pub struct SchedulerInfo {
 /// schedules nodes exclusively through actions. The workflow is already initialized at this point,
 /// so `start` skips initialization and only claims/executes the pending (ready-now) recovery
 /// actions; deferred recovery actions remain Waiting for a worker to fire later.
-fn fire_pending_schedule_nodes_actions(
+pub(crate) fn fire_pending_schedule_nodes_actions(
     config: &Configuration,
     workflow_id: i64,
     output_dir: &Path,

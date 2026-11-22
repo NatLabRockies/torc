@@ -383,6 +383,8 @@ fn test_regenerate_command_dry_run(start_server: &ServerProcess) {
             executed_by: None,
             persistent: false,
             is_recovery: false,
+            state: None,
+            error: None,
         },
     )
     .expect("Failed to create schedule_nodes action");
