@@ -1764,21 +1764,6 @@ fn resolve_reset_targets_by_return_code(
     unique_jobs
 }
 
-/// `torc jobs reset-status` resets the selected jobs whatever their status.
-const ALL_JOB_STATUSES: [models::JobStatus; 11] = [
-    models::JobStatus::Uninitialized,
-    models::JobStatus::Blocked,
-    models::JobStatus::Ready,
-    models::JobStatus::Pending,
-    models::JobStatus::Running,
-    models::JobStatus::Completed,
-    models::JobStatus::Failed,
-    models::JobStatus::Canceled,
-    models::JobStatus::Terminated,
-    models::JobStatus::Disabled,
-    models::JobStatus::PendingFailed,
-];
-
 #[allow(clippy::too_many_arguments)]
 fn handle_reset_job_status(
     config: &Configuration,
@@ -1870,15 +1855,25 @@ fn handle_reset_job_status(
     // leaves jobs uninitialized, so the workflow is no longer "complete".
     let mut unique_jobs = unique_jobs;
     if !force {
-        // If workers look active, they may be dead runners that never deactivated
-        // (e.g. a killed `torc run`). Run the `torc recover` orphan cleanup to
-        // deactivate them and fail their stuck Running jobs before checking. The
-        // cleanup is workflow-wide, so preview it and confirm before applying.
+        // The server's quiet check (no active workers or allocations, no running or pending
+        // jobs), run up front so the user sees the problem before the tables and prompt.
+        let job_ids: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+        let precheck = || {
+            crate::client::commands::recover::preview_reset(
+                config,
+                workflow_id,
+                Some(job_ids.clone()),
+                Some(models::JobStatus::ALL.to_vec()),
+            )
+            .err()
+        };
+        let mut refusal = precheck();
+        // A busy workflow may only have dead runners that never deactivated (e.g. a killed
+        // `torc run`). Run the `torc recover` orphan cleanup to deactivate them and fail their
+        // stuck Running jobs, then check again. The cleanup is workflow-wide, so preview it
+        // and confirm before applying.
         use crate::client::commands::orphan_detection::cleanup_orphaned_jobs;
-        let preview = if !dry_run
-            && crate::client::commands::recover::check_no_active_workers(config, workflow_id)
-                .is_err()
-        {
+        let preview = if refusal.is_some() && !dry_run {
             cleanup_orphaned_jobs(config, workflow_id, true)
                 .ok()
                 .filter(|p| p.any_cleaned())
@@ -1914,18 +1909,9 @@ fn handle_reset_job_status(
                 Ok(_) => {}
                 Err(e) => log::warn!("Orphan cleanup failed workflow_id={}: {}", workflow_id, e),
             }
+            refusal = precheck();
         }
-        // Same quiet check the reset itself applies on the server (no active workers or
-        // allocations, no running or pending jobs), run up front so the user sees the
-        // problem before the tables and prompt.
-        if let Err(msg) = crate::client::commands::recover::reset_jobs(
-            config,
-            workflow_id,
-            Some(unique_jobs.iter().map(require_job_id).collect()),
-            Some(ALL_JOB_STATUSES.to_vec()),
-            true,
-            false,
-        ) {
+        if let Some(msg) = refusal {
             eprintln!("Error: {}", msg);
             eprintln!("Use --force to skip this check.");
             std::process::exit(1);
@@ -2123,8 +2109,7 @@ fn handle_reset_job_status(
             config,
             workflow_id,
             Some(requested.clone()),
-            Some(ALL_JOB_STATUSES.to_vec()),
-            false,
+            Some(models::JobStatus::ALL.to_vec()),
             force,
         ) {
             Ok(response) => (

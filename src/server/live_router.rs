@@ -4081,14 +4081,22 @@ pub async fn reset_workflow_status(
         in an eligible status are skipped with a reason, and the request is refused with 422 \
         while the workflow has active compute nodes, pending or active scheduled compute nodes, \
         or running or pending jobs, unless force=true. As with manage_status_change, resetting a \
-        terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id.",
+        terminal job also resets its direct completed or failed dependents. Does not bump the \
+        workflow run_id.",
     params(("id" = i64, Path, description = "Workflow ID"), ResetJobStatusQuery),
-    request_body(content = Option<models::ResetJobStatusRequest>, description = "Optional selective reset"),
+    request_body(
+        content = Option<models::ResetJobStatusRequest>,
+        description = "Optional selective reset"
+    ),
     responses(
         (status = 200, description = "Successful response", body = models::ResetJobStatusResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Workflow is not quiet", body = models::ErrorResponse),
+        (
+            status = 422,
+            description = "Invalid request body, or the workflow is not quiet",
+            body = models::ErrorResponse
+        ),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -4109,7 +4117,7 @@ pub async fn reset_job_status(
             Ok(body) => body,
             Err(e) => {
                 return error_response(
-                    StatusCode::BAD_REQUEST,
+                    StatusCode::UNPROCESSABLE_ENTITY,
                     format!("Invalid request body: {}", e),
                 );
             }

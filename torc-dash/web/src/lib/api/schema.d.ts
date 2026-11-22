@@ -8613,7 +8613,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Workflow is not quiet */
+            /** @description Invalid request body, or the workflow is not quiet */
             422: {
                 headers: {
                     [name: string]: unknown;

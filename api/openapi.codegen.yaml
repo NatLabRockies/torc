@@ -5531,7 +5531,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Workflow is not quiet
+          description: Invalid request body, or the workflow is not quiet
           content:
             application/json:
               schema:
