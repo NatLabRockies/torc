@@ -406,25 +406,6 @@ impl TorcClient {
         apis::jobs_api::get_job(&self.config, job_id).context("Failed to get job")
     }
 
-    pub fn cancel_job(&self, job_id: i64) -> Result<()> {
-        // Get the existing job, update status, and PUT back
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Canceled);
-
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to cancel job")?;
-
-        Ok(())
-    }
-
-    pub fn terminate_job(&self, job_id: i64) -> Result<()> {
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Terminated);
-
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to terminate job")?;
-
-        Ok(())
-    }
-
     /// Retry via the server's retry endpoint, which sets Ready and bumps attempt_id.
     /// (update_job cannot change status.) The server enforces the job's failure handler limit.
     pub fn retry_job(&self, job_id: i64) -> Result<()> {

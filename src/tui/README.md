@@ -27,7 +27,7 @@ torc tui
 
 - **View job details** including full command and status
 - **View job logs** (stdout/stderr) with search and navigation
-- **Cancel**, **terminate**, **retry**, or **reset** individual jobs
+- **Retry** or **reset** individual jobs
 - Color-coded job status for quick visual scanning
 
 ### Real-time Monitoring
@@ -217,8 +217,6 @@ From the Jobs tab, select a job and use:
 
 | Key     | Action     | When to use                                                                                            |
 | ------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `c`     | Cancel     | Stop a pending or running job gracefully                                                               |
-| `t`     | Terminate  | Force-stop a running job                                                                               |
 | `y`     | Retry      | Re-queue a failed job                                                                                  |
 | `Space` | Select     | Toggle the current job in the multi-reset selection (and move down)                                    |
 | `*`     | Select all | Select every listed job; press again to clear the selection                                            |
@@ -358,8 +356,6 @@ Switch to the DAG tab to see job dependencies:
 | ------- | ------------------------- |
 | `Enter` | View job details          |
 | `l`     | View job logs             |
-| `c`     | Cancel job                |
-| `t`     | Terminate job             |
 | `y`     | Retry failed job          |
 | `Space` | Toggle job selection      |
 | `*`     | Select all / clear        |
