@@ -24179,6 +24179,9 @@ clients never see it stuck in <code>running</code>.</p>
 <ul>
 <li><code>PUT</code> expects the complete resource representation</li>
 <li><code>PATCH</code> accepts partial updates (only fields to change)</li>
+<li><code>workflow_id</code> is immutable on records that belong to a workflow. A <code>PUT</code> whose <code>workflow_id</code>
+differs from the stored value returns 422 (<code>"workflow_id cannot be changed"</code>) and changes nothing;
+re-sending the stored value is fine.</li>
 <li><code>DELETE</code> on non-existent resources returns 404 (not 204)</li>
 </ul>
 <h2 id="request-format"><a class="header" href="#request-format">Request Format</a></h2>
