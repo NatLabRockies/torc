@@ -1075,7 +1075,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, execution_config rules, and Slurm scheduler node counts are errors; job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true. */
+        /** @description Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true. */
         post: operations["finalize_workflow"];
         delete?: never;
         options?: never;
@@ -1843,14 +1843,14 @@ export interface components {
         FinalizeWorkflowResponse: {
             /**
              * @description Problems that block finalization: dependency cycles, dangling references, and
-             *     execution_config or scheduler node-count rule violations.
+             *     execution_config rule violations.
              */
             errors: string[];
             /** @description True if the workflow is no longer a draft (also true if it never was one). */
             finalized: boolean;
             /**
-             * @description Job resource requirements that don't fit the Slurm schedulers. They block finalization
-             *     unless `force=true`.
+             * @description Slurm scheduler node-count mismatches and job resource requirements that don't fit the
+             *     Slurm schedulers. They block finalization unless `force=true`.
              */
             warnings: string[];
         };

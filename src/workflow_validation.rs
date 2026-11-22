@@ -54,7 +54,8 @@ pub struct WorkflowCheckInput {
     pub actions: Vec<ActionInfo>,
 }
 
-/// Errors block creation; warnings block it unless the caller forces it.
+/// Errors block creation; warnings block it unless the caller forces it (`torc create
+/// --skip-checks` skips the client-side equivalents).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorkflowCheckFindings {
     pub errors: Vec<String>,
@@ -67,16 +68,16 @@ pub fn check_workflow(input: &WorkflowCheckInput) -> WorkflowCheckFindings {
         .actions
         .iter()
         .any(|a| a.action_type == "schedule_nodes" && a.start_one_worker_per_node);
-    let mut errors = execution_config_errors(
+    let errors = execution_config_errors(
         input.execution_config.as_ref(),
         !input.schedulers.is_empty(),
         has_worker_per_node_action,
     );
-    errors.extend(scheduler_node_errors(input));
-    WorkflowCheckFindings {
-        errors,
-        warnings: scheduler_resource_warnings(input),
-    }
+    // Node-count mismatches and resource misfits are what `torc create --skip-checks`
+    // bypasses, so they are warnings here.
+    let mut warnings = scheduler_node_errors(input);
+    warnings.extend(scheduler_resource_warnings(input));
+    WorkflowCheckFindings { errors, warnings }
 }
 
 /// Check that `execution_config` fields match the effective execution mode, and that

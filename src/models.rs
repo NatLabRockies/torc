@@ -2782,10 +2782,10 @@ pub struct FinalizeWorkflowResponse {
     /// True if the workflow is no longer a draft (also true if it never was one).
     pub finalized: bool,
     /// Problems that block finalization: dependency cycles, dangling references, and
-    /// execution_config or scheduler node-count rule violations.
+    /// execution_config rule violations.
     pub errors: Vec<String>,
-    /// Job resource requirements that don't fit the Slurm schedulers. They block finalization
-    /// unless `force=true`.
+    /// Slurm scheduler node-count mismatches and job resource requirements that don't fit the
+    /// Slurm schedulers. They block finalization unless `force=true`.
     pub warnings: Vec<String>,
 }
 

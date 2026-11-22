@@ -219,8 +219,8 @@ requests, and finalize it:
    as usual, in as many requests as needed.
 3. `POST /workflows/{id}/finalize`. The server checks the whole workflow: dependency cycles
    (explicit and through files and user data), actions that reference schedulers outside the
-   workflow, `execution_config` rules, and Slurm scheduler node counts are errors; job resource
-   requirements that exceed the Slurm schedulers are warnings. The response is
+   workflow, and `execution_config` rules are errors; Slurm scheduler node-count mismatches and job
+   resource requirements that exceed the Slurm schedulers are warnings. The response is
    `{"finalized": bool, "errors": [...], "warnings": [...]}` with status 200. Warnings block
    finalization unless the request has `?force=true`; errors always do. On success the workflow is
    no longer a draft. Finalizing a workflow that is not a draft does nothing and reports

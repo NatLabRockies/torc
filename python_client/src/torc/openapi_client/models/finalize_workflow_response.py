@@ -26,9 +26,9 @@ class FinalizeWorkflowResponse(BaseModel):
     """
     Response of `finalize_workflow`.
     """ # noqa: E501
-    errors: List[StrictStr] = Field(description="Problems that block finalization: dependency cycles, dangling references, and execution_config or scheduler node-count rule violations.")
+    errors: List[StrictStr] = Field(description="Problems that block finalization: dependency cycles, dangling references, and execution_config rule violations.")
     finalized: StrictBool = Field(description="True if the workflow is no longer a draft (also true if it never was one).")
-    warnings: List[StrictStr] = Field(description="Job resource requirements that don't fit the Slurm schedulers. They block finalization unless `force=true`.")
+    warnings: List[StrictStr] = Field(description="Slurm scheduler node-count mismatches and job resource requirements that don't fit the Slurm schedulers. They block finalization unless `force=true`.")
     __properties: ClassVar[List[str]] = ["errors", "finalized", "warnings"]
 
     model_config = ConfigDict(

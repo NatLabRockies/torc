@@ -249,7 +249,7 @@ function _oacinternal_finalize_workflow(_api::WorkflowsApi, id::Int64; force=not
     return _ctx
 end
 
-@doc raw"""Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, execution_config rules, and Slurm scheduler node counts are errors; job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
+@doc raw"""Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
 
 Params:
 - id::Int64 (required)

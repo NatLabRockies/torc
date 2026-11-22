@@ -491,6 +491,50 @@ fn test_finalize_warnings_need_force(start_server: &ServerProcess) {
     assert!(result.finalized);
     assert_eq!(result.warnings.len(), 1);
     assert!(listed(config, wf));
+
+    // A multi-node job on a scheduler with a different node count is a warning too: it is
+    // what `torc create --skip-checks` bypasses.
+    let wf = create_workflow(config, "finalize_node_warning", true);
+    let mut rr = models::ResourceRequirementsModel::new(wf, "three_nodes".into());
+    rr.num_nodes = 3;
+    apis::resource_requirements_api::create_resource_requirements(config, rr).unwrap();
+    let mut sched = models::SlurmSchedulerModel::new(wf, "acct".into(), 2, "01:00:00".into());
+    sched.name = Some("two_nodes".into());
+    let sched_id = apis::slurm_schedulers_api::create_slurm_scheduler(config, sched)
+        .unwrap()
+        .id
+        .unwrap();
+    create_jobs(
+        config,
+        vec![job(
+            wf,
+            "wide",
+            JobNameRefs {
+                resource_requirements: Some("three_nodes".into()),
+                scheduler: Some("two_nodes".into()),
+                ..Default::default()
+            },
+        )],
+    );
+    let action = models::WorkflowActionModel::new(
+        wf,
+        "on_workflow_start".into(),
+        "schedule_nodes".into(),
+        serde_json::json!({"scheduler_type": "slurm", "scheduler_id": sched_id}),
+    );
+    apis::workflow_actions_api::create_workflow_action(config, wf, action).unwrap();
+    let result = finalize(config, wf, false);
+    assert!(!result.finalized);
+    assert!(result.errors.is_empty(), "{:?}", result.errors);
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|w| w.contains("allocates 2 nodes")),
+        "{:?}",
+        result.warnings
+    );
+    assert!(finalize(config, wf, true).finalized);
 }
 
 #[test]

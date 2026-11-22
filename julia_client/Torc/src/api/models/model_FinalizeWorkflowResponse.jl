@@ -11,9 +11,9 @@ Response of &#x60;finalize_workflow&#x60;.
         warnings=nothing,
     )
 
-    - errors::Vector{String} : Problems that block finalization: dependency cycles, dangling references, and execution_config or scheduler node-count rule violations.
+    - errors::Vector{String} : Problems that block finalization: dependency cycles, dangling references, and execution_config rule violations.
     - finalized::Bool : True if the workflow is no longer a draft (also true if it never was one).
-    - warnings::Vector{String} : Job resource requirements that don&#39;t fit the Slurm schedulers. They block finalization unless &#x60;force&#x3D;true&#x60;.
+    - warnings::Vector{String} : Slurm scheduler node-count mismatches and job resource requirements that don&#39;t fit the Slurm schedulers. They block finalization unless &#x60;force&#x3D;true&#x60;.
 """
 Base.@kwdef mutable struct FinalizeWorkflowResponse <: OpenAPI.APIModel
     errors::Union{Nothing, Vector{String}} = nothing
