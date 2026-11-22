@@ -130,7 +130,7 @@
   }
 </script>
 
-<Modal bind:open title="Edit job {job.name}" size="md" {onclose}>
+<Modal bind:open title="Edit job {job.name}" size="lg" {onclose}>
   <form id="edit-job" class="form" onsubmit={save}>
     {#if busy}
       <p class="note">This job is {job.status}. Edit it after it finishes.</p>

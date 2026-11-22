@@ -78,7 +78,7 @@
   let disabled = $derived(blocked !== null);
 </script>
 
-<Modal bind:open {title} size="md" {onclose}>
+<Modal bind:open {title} size="lg" {onclose}>
   <form id="edit-definition" class="form" onsubmit={save}>
     {#if blocked === undefined}
       <p class="muted"><span class="spinner small"></span> Checking for running jobs…</p>
