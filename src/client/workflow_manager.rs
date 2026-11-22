@@ -38,6 +38,19 @@ pub struct StartOutcome {
     pub slurm_actions_seen: usize,
 }
 
+/// The workflow's files and what the client observed on disk for each.
+struct FileSnapshot {
+    entries: Vec<models::FileStatEntry>,
+    files: HashMap<i64, FileModel>,
+}
+
+fn describe_file(files: &HashMap<i64, FileModel>, id: i64) -> String {
+    match files.get(&id) {
+        Some(f) => format!("'{}' (id: {}, path: {})", f.name, id, f.path),
+        None => format!("id {}", id),
+    }
+}
+
 pub struct WorkflowManager {
     config: Configuration,
     torc_config: TorcConfig,
@@ -114,6 +127,7 @@ impl WorkflowManager {
     ///   - Ignore missing input files.
     pub fn initialize(&self, force: bool) -> Result<(), TorcError> {
         self.check_workflow()?;
+        let snapshot = self.snapshot_files(force)?;
         self.cleanup_output_files(false)?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
@@ -142,7 +156,7 @@ impl WorkflowManager {
             }
         }
         // reset_workflow_status above bumps run_id — no separate bump call needed.
-        self.sync_file_stats(force, false)?;
+        self.sync_file_stats(&snapshot, force, false)?;
         self.initialize_jobs(false)?;
         // Event is now broadcast via SSE from the server
         Ok(())
@@ -166,6 +180,7 @@ impl WorkflowManager {
             return Ok(active);
         }
         self.check_workflow()?;
+        let snapshot = self.snapshot_files(force)?;
         self.cleanup_output_files(false)?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
@@ -194,7 +209,7 @@ impl WorkflowManager {
             }
         }
         // reset_workflow_status above bumps run_id — no separate bump call needed.
-        self.sync_file_stats(force, false)?;
+        self.sync_file_stats(&snapshot, force, false)?;
         self.initialize_jobs_async(false)
     }
 
@@ -387,6 +402,7 @@ impl WorkflowManager {
     /// run_id) and runs the startup script.
     pub fn reinitialize(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
         self.check_workflow()?;
+        let snapshot = self.snapshot_files(force || dry_run)?;
         if !dry_run {
             match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
                 Ok(_) => {
@@ -401,7 +417,7 @@ impl WorkflowManager {
                 }
             }
         }
-        self.reinitialize_jobs(force, dry_run)?;
+        self.reinitialize_jobs_from(&snapshot, force, dry_run)?;
         // Event is now broadcast via SSE from the server
         Ok(())
     }
@@ -429,8 +445,9 @@ impl WorkflowManager {
         }
 
         self.check_workflow()?;
+        let snapshot = self.snapshot_files(force || dry_run)?;
         if dry_run {
-            self.reinitialize_jobs(force, true)?;
+            self.reinitialize_jobs_from(&snapshot, force, true)?;
             return Ok(None);
         }
 
@@ -447,7 +464,7 @@ impl WorkflowManager {
             }
         }
 
-        self.sync_file_stats(force, false)?;
+        self.sync_file_stats(&snapshot, force, false)?;
         self.process_changed_user_data(false)?;
 
         let task = self.initialize_jobs_async(true)?;
@@ -771,7 +788,17 @@ impl WorkflowManager {
     /// Reinitialize jobs. Account for jobs that are new or have been reset.
     /// If force is false, return an error if required input files are missing.
     pub fn reinitialize_jobs(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
-        self.sync_file_stats(force, dry_run)?;
+        let snapshot = self.snapshot_files(force || dry_run)?;
+        self.reinitialize_jobs_from(&snapshot, force, dry_run)
+    }
+
+    fn reinitialize_jobs_from(
+        &self,
+        snapshot: &FileSnapshot,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<(), TorcError> {
+        self.sync_file_stats(snapshot, force, dry_run)?;
         self.process_changed_user_data(dry_run)?;
         if !dry_run {
             self.initialize_jobs(true)?;
@@ -782,19 +809,24 @@ impl WorkflowManager {
     /// Send the workflow's file stats to the server, which stores changed mtimes and resets
     /// affected jobs and their downstream jobs. Logs what changed (or would change, for a dry
     /// run). Returns an error if required input files are missing, unless force is true.
-    fn sync_file_stats(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
-        let (response, files) = self.update_file_stats(dry_run)?;
-        let describe = |id: &i64| match files.get(id) {
-            Some(f) => format!("'{}' (id: {}, path: {})", f.name, id, f.path),
-            None => format!("id {}", id),
-        };
+    fn sync_file_stats(
+        &self,
+        snapshot: &FileSnapshot,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<(), TorcError> {
+        let response = self.send_file_stats(snapshot, dry_run)?;
         let prefix = if dry_run {
             "Dry run: would reset"
         } else {
             "Reset"
         };
         for change in &response.changed_files {
-            let msg = format!("File {} {}", describe(&change.file_id), change.reason);
+            let msg = format!(
+                "File {} {}",
+                describe_file(&snapshot.files, change.file_id),
+                change.reason
+            );
             if dry_run {
                 info!("Dry run: {}", msg);
             } else {
@@ -808,13 +840,34 @@ impl WorkflowManager {
             );
         }
 
+        self.check_missing_required_files(&response, &snapshot.files, force)
+    }
+
+    /// Stat the workflow's files before anything is changed. Unless force is true, fail early
+    /// if required input files are missing, using a dry run so the workflow is left untouched.
+    fn snapshot_files(&self, force: bool) -> Result<FileSnapshot, TorcError> {
+        let snapshot = self.stat_files()?;
+        if !force {
+            let response = self.send_file_stats(&snapshot, true)?;
+            self.check_missing_required_files(&response, &snapshot.files, false)?;
+        }
+        Ok(snapshot)
+    }
+
+    /// Return an error listing missing required input files, or log them if force is true.
+    fn check_missing_required_files(
+        &self,
+        response: &models::FileStatsResponse,
+        files: &HashMap<i64, FileModel>,
+        force: bool,
+    ) -> Result<(), TorcError> {
         if response.missing_required_file_ids.is_empty() {
             return Ok(());
         }
         let missing: Vec<String> = response
             .missing_required_file_ids
             .iter()
-            .map(|id| format!("Required file {} does not exist", describe(id)))
+            .map(|id| format!("Required file {} does not exist", describe_file(files, *id)))
             .collect();
         if !force {
             return Err(TorcError::OperationNotAllowed(format!(
@@ -833,14 +886,19 @@ impl WorkflowManager {
         Ok(())
     }
 
-    /// List the workflow's files once, stat each path, and send the snapshot to the server's
-    /// `update_file_stats` endpoint in batches. Returns the merged responses and the files by
-    /// ID. Each batch is applied in its own transaction and is idempotent, so a rerun after a
-    /// failure reaches the same state.
+    /// Stat the workflow's files and send the snapshot to the server's `update_file_stats`
+    /// endpoint. Returns the merged responses and the files by ID.
     pub fn update_file_stats(
         &self,
         dry_run: bool,
     ) -> Result<(models::FileStatsResponse, HashMap<i64, FileModel>), TorcError> {
+        let snapshot = self.stat_files()?;
+        let response = self.send_file_stats(&snapshot, dry_run)?;
+        Ok((response, snapshot.files))
+    }
+
+    /// List the workflow's files once and stat each path.
+    fn stat_files(&self) -> Result<FileSnapshot, TorcError> {
         let mut files = HashMap::new();
         let mut entries = Vec::new();
         for file in iter_files(&self.config, self.workflow_id, FileListParams::new()) {
@@ -877,9 +935,19 @@ impl WorkflowManager {
             entries.push(entry);
             files.insert(id, file);
         }
+        Ok(FileSnapshot { entries, files })
+    }
 
+    /// Send a snapshot to `update_file_stats` in batches of up to `MAX_RECORD_TRANSFER_COUNT`.
+    /// Each batch is applied in its own transaction and is idempotent, so a rerun after a
+    /// failure reaches the same state.
+    fn send_file_stats(
+        &self,
+        snapshot: &FileSnapshot,
+        dry_run: bool,
+    ) -> Result<models::FileStatsResponse, TorcError> {
         let mut merged = models::FileStatsResponse::default();
-        for batch in entries.chunks(MAX_RECORD_TRANSFER_COUNT as usize) {
+        for batch in snapshot.entries.chunks(MAX_RECORD_TRANSFER_COUNT as usize) {
             let request = models::FileStatsRequest {
                 files: batch.to_vec(),
             };
@@ -896,7 +964,7 @@ impl WorkflowManager {
                 .missing_required_file_ids
                 .extend(response.missing_required_file_ids);
         }
-        Ok((merged, files))
+        Ok(merged)
     }
 
     /// A 404 from a server that predates `update_file_stats` gets an upgrade hint; a 404

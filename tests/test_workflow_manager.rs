@@ -2209,7 +2209,17 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
         "job_with_missing_input".to_string(),
         "echo 'test job with missing input'".to_string(),
     );
-    job.input_file_ids = Some(vec![missing_file.id.unwrap()]);
+    // A second input that exists on disk; a real file_stats pass would store its mtime.
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let present_path = temp_dir.path().join("present.txt");
+    fs::write(&present_path, "data").unwrap();
+    let present_file = create_test_file(
+        &config,
+        workflow_id,
+        "present_input",
+        present_path.to_str().unwrap(),
+    );
+    job.input_file_ids = Some(vec![missing_file.id.unwrap(), present_file.id.unwrap()]);
     job.resource_requirements_id = rr.id;
     let _created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
 
@@ -2218,6 +2228,7 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
         !std::path::Path::new(&missing_file.path).exists(),
         "File should not exist on disk"
     );
+    let run_id_before = manager.get_run_id().unwrap();
 
     // Without force, a missing required input is an error
     let err = manager
@@ -2229,6 +2240,11 @@ fn test_initialize_workflow_with_missing_files_ignore_missing_data_false(
         "unexpected error: {}",
         err
     );
+
+    // It fails before changing anything.
+    assert_eq!(manager.get_run_id().unwrap(), run_id_before);
+    let present = apis::files_api::get_file(&config, present_file.id.unwrap()).unwrap();
+    assert!(present.st_mtime.is_none(), "mtime must not be stored");
 }
 
 #[rstest]
@@ -2456,7 +2472,17 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
         "no_ignore_job_with_missing_input".to_string(),
         "echo 'no ignore test job with missing input'".to_string(),
     );
-    job.input_file_ids = Some(vec![missing_file.id.unwrap()]);
+    // A second input that exists on disk, so it can be modified after the run.
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let present_path = temp_dir.path().join("present.txt");
+    fs::write(&present_path, "data").unwrap();
+    let present_file = create_test_file(
+        &config,
+        workflow_id,
+        "present_no_ignore_input",
+        present_path.to_str().unwrap(),
+    );
+    job.input_file_ids = Some(vec![missing_file.id.unwrap(), present_file.id.unwrap()]);
     job.resource_requirements_id = rr.id;
     let created_job = apis::jobs_api::create_job(&config, job).expect("Failed to create job");
     let job_id = created_job.id.unwrap();
@@ -2494,6 +2520,12 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
         "File should not exist on disk"
     );
 
+    // Make the present input look modified since the run, so a real pass would reset the job.
+    let mut present = apis::files_api::get_file(&config, present_file.id.unwrap()).unwrap();
+    present.st_mtime = Some(1.0);
+    apis::files_api::update_file(&config, present_file.id.unwrap(), present).unwrap();
+    let run_id_before = manager.get_run_id().unwrap();
+
     // Without force, a missing required input is an error, in a dry run too
     for dry_run in [true, false] {
         let err = manager
@@ -2505,6 +2537,17 @@ fn test_reinitialize_workflow_with_missing_files_ignore_missing_data_false(
             err
         );
     }
+    let err = manager
+        .reinitialize_async(false, false)
+        .expect_err("Async reinitialize without force must fail on a missing required input");
+    assert!(err.to_string().contains("Missing required files"));
+
+    // It fails before changing anything: run_id, job status, and stored mtimes are untouched.
+    assert_eq!(manager.get_run_id().unwrap(), run_id_before);
+    let job = apis::jobs_api::get_job(&config, job_id).unwrap();
+    assert_eq!(job.status, Some(models::JobStatus::Completed));
+    let present = apis::files_api::get_file(&config, present_file.id.unwrap()).unwrap();
+    assert_eq!(present.st_mtime, Some(1.0));
 }
 
 /// Helper function to create a workflow with a chain of jobs connected by user_data dependencies

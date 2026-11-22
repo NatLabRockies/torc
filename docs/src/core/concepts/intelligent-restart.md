@@ -113,11 +113,12 @@ you pass `--force`. Missing outputs of completed jobs are not an error; those jo
 
 When you run `reinit`, Torc performs these steps:
 
-1. **Bump run_id** — Increments the workflow's run counter for tracking
-2. **Reset workflow status** — Clears the previous run's completion state
-3. **Check files** — Sends the file snapshot; the server stores changed `st_mtime` values and marks
+1. **Check required inputs** — Stats every file and, unless `--force`, fails before changing
+   anything if a required input file is missing
+2. **Bump run_id** — Increments the workflow's run counter for tracking
+3. **Reset workflow status** — Clears the previous run's completion state
+4. **Check files** — Sends the file snapshot; the server stores changed `st_mtime` values and marks
    jobs with changed inputs or missing outputs, and every job downstream of them, `uninitialized`
-4. **Check required inputs** — Fails if a required input file is missing, unless `--force`
 5. **Check user_data changes** — Computes and compares input hashes
 6. **Re-evaluate dependencies** — Runs `initialize_jobs` to set jobs to `ready` or `blocked`
 

@@ -68,7 +68,7 @@ POST   /workflows/{id}/claim_next_jobs           # Atomically claim ready jobs
 POST   /workflows/{id}/cancel                    # Cancel workflow execution
 POST   /workflows/{id}/reset_status              # Reset workflow state
 POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
-POST   /workflows/{id}/file_stats            # Apply a file stat snapshot, reset affected jobs
+POST   /workflows/{id}/file_stats                # Apply a file stat snapshot, reset affected jobs
 POST   /jobs/{id}/complete                       # Mark job completed
 POST   /jobs/{id}/manage_status_change           # Transition job status
 GET    /tasks/{id}                               # Poll async task status
