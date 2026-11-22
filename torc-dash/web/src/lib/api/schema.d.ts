@@ -2197,6 +2197,12 @@ export interface components {
         };
         ResetJobStatusResponse: {
             /**
+             * @description Direct completed or failed dependents of reset terminal jobs that were also reset (or,
+             *     for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the
+             *     request has a body.
+             */
+            downstream_reset?: number[] | null;
+            /**
              * @description IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
              *     request has a body.
              */

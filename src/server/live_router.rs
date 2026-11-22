@@ -81,8 +81,9 @@ pub fn app_router(state: LiveRouterState) -> Router {
     Router::new()
         .merge(
             Router::new()
-                // Axum defaults JSON request bodies to 2 MiB, so bulk creation endpoints need an
-                // explicit override to preserve large workflow submissions.
+                // Axum defaults JSON request bodies to 2 MiB, so bulk endpoints need an explicit
+                // override to preserve large workflow submissions, file-stat snapshots, and completion
+                // batches (whose entries carry per-output-file stats).
                 .route("/torc-service/v1/bulk_jobs", post(create_jobs))
                 .route("/torc-service/v1/bulk_files", post(create_files))
                 .route(
@@ -92,6 +93,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
                 .route(
                     "/torc-service/v1/workflows/{id}/file_stats",
                     post(update_file_stats),
+                )
+                .route(
+                    "/torc-service/v1/workflows/{id}/batch_complete_jobs",
+                    post(batch_complete_jobs),
                 )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
@@ -373,10 +378,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
         .route(
             "/torc-service/v1/workflows/{id}/claim_next_jobs",
             post(claim_next_jobs),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/batch_complete_jobs",
-            post(batch_complete_jobs),
         )
         .route("/torc-service/v1/jobs/{id}/spawn_jobs", post(spawn_jobs))
         .route(
@@ -5752,6 +5753,28 @@ mod live_router_tests {
             .expect("compute nodes response");
 
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn batch_complete_jobs_route_accepts_body_larger_than_default_limit() {
+        let server = test_server_with_schema().await;
+        let router = test_router(server);
+        // Invalid JSON, so the body is rejected after the size check, not by it.
+        let body = format!("{{\"pad\": \"{}\"", "x".repeat(3 * 1024 * 1024));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/torc-service/v1/workflows/1/batch_complete_jobs")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(body))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("batch complete response");
+
+        assert_ne!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[tokio::test]
