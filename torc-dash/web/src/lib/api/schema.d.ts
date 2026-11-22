@@ -868,6 +868,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/{id}/apply_scheduler_plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, unexecuted schedule_nodes actions are marked executed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored. */
+        post: operations["apply_scheduler_plan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows/{id}/archive": {
         parameters: {
             query?: never;
@@ -1392,6 +1409,41 @@ export interface components {
              * @description Number of rows affected by a write statement, when applicable.
              */
             rows_affected?: number | null;
+        };
+        /** @description A recovery action created by `apply_scheduler_plan`. */
+        AppliedSchedulerAction: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            num_allocations: number;
+            /**
+             * @description True if every gating job is ready, so the action can be submitted now. Otherwise it waits
+             *     for the remaining gating jobs to become ready.
+             */
+            pending: boolean;
+            /** Format: int64 */
+            scheduler_id: number;
+        };
+        /** @description A scheduler plan computed by the client, applied by `apply_scheduler_plan`. */
+        ApplySchedulerPlanRequest: {
+            recovery_actions?: components["schemas"]["SchedulerPlanAction"][];
+            schedulers: components["schemas"]["SchedulerPlanEntry"][];
+            /**
+             * @description Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as
+             *     executed so they cannot start allocations alongside the new schedulers.
+             */
+            suppress_existing_schedule_actions?: boolean;
+        };
+        /**
+         * @description IDs created by `apply_scheduler_plan`. In a dry run, the IDs are those that would have been
+         *     assigned; nothing is stored.
+         */
+        ApplySchedulerPlanResponse: {
+            /** @description Created recovery actions, in the order of the request's `recovery_actions`. */
+            actions: components["schemas"]["AppliedSchedulerAction"][];
+            /** @description Created scheduler IDs, in the order of the request's `schedulers`. */
+            scheduler_ids: number[];
+            suppressed_action_ids: number[];
         };
         /**
          * @description Request body for `POST /workflows/{id}/archive`. Setting `is_archived`
@@ -2380,6 +2432,24 @@ export interface components {
             status: string;
             /** Format: int64 */
             workflow_id: number;
+        };
+        /** @description An `on_jobs_ready` recovery action that schedules nodes for one planned scheduler. */
+        SchedulerPlanAction: {
+            /** @description Jobs that gate the action. Must be a subset of that scheduler's `job_ids`. */
+            job_ids: number[];
+            /** Format: int64 */
+            num_allocations: number;
+            /**
+             * Format: int64
+             * @description Index into `schedulers` of the scheduler this action submits.
+             */
+            scheduler_index: number;
+        };
+        /** @description A Slurm scheduler to create and the pending jobs to assign to it. */
+        SchedulerPlanEntry: {
+            job_ids: number[];
+            /** @description The scheduler to create. `id` is ignored; `workflow_id` is taken from the request path. */
+            scheduler: components["schemas"]["SlurmSchedulerModel"];
         };
         /**
          * @description One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
@@ -7920,6 +7990,71 @@ export interface operations {
             };
             /** @description Workflow not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_scheduler_plan: {
+        parameters: {
+            query?: {
+                dry_run?: boolean | null;
+            };
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplySchedulerPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplySchedulerPlanResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (jobs outside the workflow, non-pending jobs, jobs in more than one scheduler, invalid recovery actions) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

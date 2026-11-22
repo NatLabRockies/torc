@@ -427,17 +427,18 @@ _Full re-run_ (the gate itself is re-run):
 With multiple gating jobs, the action is only kept executed when **all** of them remain terminal;
 resetting any one of them re-arms it.
 
-The `recover`/`regenerate` paths keep their own `mark_satisfied_schedule_actions_executed` guard,
-and it is **load-bearing, not just redundant**: those paths take over allocation themselves (they
-submit the user's chosen count, or regenerate recovery actions and submit). After they reset the
-failed jobs and reinitialize, the server _correctly_ re-arms those jobs' `on_jobs_ready` actions
-(right for plain `reinit`, where they should fire), but the reset gate is now `Ready`, so the action
-is satisfied and would fire on the first worker and submit a second allocation. `mark_satisfied`
-marks those satisfied actions executed so recover's own submission is not duplicated. The server
-cannot do this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit,
-the action should fire." For the `on_workflow_start` and already-terminal-gated cases the guard is
-now a no-op (the server already keeps those executed, and `mark_satisfied` skips already-executed
-actions); the reset-`on_jobs_ready` case is the one it still handles.
+The `recover` path keeps its own `mark_satisfied_schedule_actions_executed` guard (the `regenerate`
+path suppresses the same actions inside the `apply_scheduler_plan` transaction), and it is
+**load-bearing, not just redundant**: those paths take over allocation themselves (they submit the
+user's chosen count, or regenerate recovery actions and submit). After they reset the failed jobs
+and reinitialize, the server _correctly_ re-arms those jobs' `on_jobs_ready` actions (right for
+plain `reinit`, where they should fire), but the reset gate is now `Ready`, so the action is
+satisfied and would fire on the first worker and submit a second allocation. `mark_satisfied` marks
+those satisfied actions executed so recover's own submission is not duplicated. The server cannot do
+this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit, the action
+should fire." For the `on_workflow_start` and already-terminal-gated cases the guard is now a no-op
+(the server already keeps those executed, and `mark_satisfied` skips already-executed actions); the
+reset-`on_jobs_ready` case is the one it still handles.
 
 ### Re-running a Slurm workflow
 

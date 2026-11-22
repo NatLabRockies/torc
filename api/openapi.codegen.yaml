@@ -4752,6 +4752,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/apply_scheduler_plan:
+    post:
+      tags:
+      - slurm_schedulers
+      description: Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, unexecuted schedule_nodes actions are marked executed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
+      operationId: apply_scheduler_plan
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: dry_run
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplySchedulerPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplySchedulerPlanResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (jobs outside the workflow, non-pending jobs, jobs in more than one scheduler, invalid recovery actions)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/archive:
     post:
       tags:
@@ -6170,6 +6228,74 @@ components:
           - 'null'
           format: int64
           description: Number of rows affected by a write statement, when applicable.
+    AppliedSchedulerAction:
+      type: object
+      description: A recovery action created by `apply_scheduler_plan`.
+      required:
+      - id
+      - scheduler_id
+      - num_allocations
+      - pending
+      properties:
+        id:
+          type: integer
+          format: int64
+        num_allocations:
+          type: integer
+          format: int64
+        pending:
+          type: boolean
+          description: |-
+            True if every gating job is ready, so the action can be submitted now. Otherwise it waits
+            for the remaining gating jobs to become ready.
+        scheduler_id:
+          type: integer
+          format: int64
+    ApplySchedulerPlanRequest:
+      type: object
+      description: A scheduler plan computed by the client, applied by `apply_scheduler_plan`.
+      required:
+      - schedulers
+      properties:
+        recovery_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerPlanAction'
+        schedulers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerPlanEntry'
+        suppress_existing_schedule_actions:
+          type: boolean
+          description: |-
+            Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as
+            executed so they cannot start allocations alongside the new schedulers.
+    ApplySchedulerPlanResponse:
+      type: object
+      description: |-
+        IDs created by `apply_scheduler_plan`. In a dry run, the IDs are those that would have been
+        assigned; nothing is stored.
+      required:
+      - scheduler_ids
+      - actions
+      - suppressed_action_ids
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedSchedulerAction'
+          description: Created recovery actions, in the order of the request's `recovery_actions`.
+        scheduler_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Created scheduler IDs, in the order of the request's `schedulers`.
+        suppressed_action_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
     ArchiveWorkflowRequest:
       type: object
       description: |-
@@ -8214,6 +8340,42 @@ components:
         workflow_id:
           type: integer
           format: int64
+    SchedulerPlanAction:
+      type: object
+      description: An `on_jobs_ready` recovery action that schedules nodes for one planned scheduler.
+      required:
+      - scheduler_index
+      - job_ids
+      - num_allocations
+      properties:
+        job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Jobs that gate the action. Must be a subset of that scheduler's `job_ids`.
+        num_allocations:
+          type: integer
+          format: int64
+        scheduler_index:
+          type: integer
+          format: int64
+          description: Index into `schedulers` of the scheduler this action submits.
+    SchedulerPlanEntry:
+      type: object
+      description: A Slurm scheduler to create and the pending jobs to assign to it.
+      required:
+      - scheduler
+      - job_ids
+      properties:
+        job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        scheduler:
+          $ref: '#/components/schemas/SlurmSchedulerModel'
+          description: The scheduler to create. `id` is ignored; `workflow_id` is taken from the request path.
     SlurmJobCorrelationModel:
       type: object
       description: |-

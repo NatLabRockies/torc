@@ -978,7 +978,7 @@ impl<C> Server<C> {
         // Activate on_workflow_start actions (workflow has started with initialization)
         if let Err(e) = self
             .workflow_actions_api
-            .check_and_trigger_actions(id, "on_workflow_start", None)
+            .check_and_trigger_actions(id, "on_workflow_start", None, None)
             .await
         {
             error!(
@@ -1015,7 +1015,7 @@ impl<C> Server<C> {
         // Check if any on_jobs_ready actions should be triggered based on job states
         if let Err(e) = self
             .workflow_actions_api
-            .check_and_trigger_actions(id, "on_jobs_ready", None)
+            .check_and_trigger_actions(id, "on_jobs_ready", None, None)
             .await
         {
             error!(
@@ -2275,6 +2275,19 @@ where
         context: &C,
     ) -> Result<UpdateFileStatsResponse, ApiError> {
         self.transport_update_file_stats(id, body, dry_run, context)
+            .await
+    }
+
+    /// Apply a client-computed Slurm scheduler plan in one transaction.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, dry_run = ?dry_run))]
+    async fn apply_scheduler_plan(
+        &self,
+        id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError> {
+        self.transport_apply_scheduler_plan(id, body, dry_run, context)
             .await
     }
 

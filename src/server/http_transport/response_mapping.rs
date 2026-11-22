@@ -652,6 +652,12 @@ map_response!(
     SuccessfulResponse
 );
 map_response!(
+    apply_scheduler_plan_response,
+    ApplySchedulerPlanResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
     update_file_stats_response,
     UpdateFileStatsResponse,
     SuccessfulResponse,

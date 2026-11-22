@@ -8,8 +8,8 @@ use log::{debug, error, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    CreateLocalSchedulerResponse, CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse,
-    DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
+    ApplySchedulerPlanResponse, CreateLocalSchedulerResponse, CreateScheduledComputeNodeResponse,
+    CreateSlurmSchedulerResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
     DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
     DeleteSlurmSchedulerResponse, DeleteSlurmSchedulersResponse, GetLocalSchedulerResponse,
     GetScheduledComputeNodeResponse, GetSlurmSchedulerResponse, ListLocalSchedulersResponse,
@@ -19,7 +19,10 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
+use super::{
+    ApiContext, SqlQueryBuilder, begin_immediate, database_error_with_msg,
+    database_lock_aware_error, message_error_response, resource_not_found_response,
+};
 
 /// Trait defining scheduler-related API operations
 #[async_trait]
@@ -170,6 +173,16 @@ pub trait SchedulersApi<C> {
         id: i64,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError>;
+
+    /// Apply a client-computed scheduler plan in one transaction: validate, suppress existing
+    /// schedule_nodes actions, create schedulers, assign jobs, and create armed recovery actions.
+    async fn apply_scheduler_plan(
+        &self,
+        workflow_id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: bool,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError>;
 }
 
 /// Implementation of schedulers API for the server
@@ -1459,5 +1472,238 @@ where
             }
             Err(e) => Err(database_error_with_msg(e, "Failed to delete scheduler")),
         }
+    }
+
+    async fn apply_scheduler_plan(
+        &self,
+        workflow_id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: bool,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError> {
+        debug!(
+            "apply_scheduler_plan(workflow_id={}, schedulers={}, actions={}, dry_run={}) - X-Span-ID: {:?}",
+            workflow_id,
+            body.schedulers.len(),
+            body.recovery_actions.len(),
+            dry_run,
+            context.get().0.clone()
+        );
+        let unprocessable = |msg: String| {
+            Ok(
+                ApplySchedulerPlanResponse::UnprocessableContentErrorResponse(
+                    message_error_response(msg),
+                ),
+            )
+        };
+        if body.schedulers.is_empty() {
+            return unprocessable("Scheduler plan has no schedulers".to_string());
+        }
+        // job_id -> index of the scheduler it is assigned to.
+        let mut job_scheduler = std::collections::HashMap::new();
+        for (idx, entry) in body.schedulers.iter().enumerate() {
+            for id in &entry.job_ids {
+                if job_scheduler.insert(*id, idx).is_some() {
+                    return unprocessable(format!(
+                        "job_id={} is listed more than once in the plan",
+                        id
+                    ));
+                }
+            }
+        }
+        for (i, action) in body.recovery_actions.iter().enumerate() {
+            let Some(idx) = usize::try_from(action.scheduler_index)
+                .ok()
+                .filter(|idx| *idx < body.schedulers.len())
+            else {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: scheduler_index {} is out of range",
+                    i, action.scheduler_index
+                ));
+            };
+            if action.job_ids.is_empty() || action.num_allocations < 1 {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: needs job_ids and num_allocations >= 1",
+                    i
+                ));
+            }
+            if let Some(id) = action
+                .job_ids
+                .iter()
+                .find(|id| job_scheduler.get(id) != Some(&idx))
+            {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: job_id={} is not assigned to scheduler_index {}",
+                    i, id, action.scheduler_index
+                ));
+            }
+        }
+        // Id sets are bound as one JSON array and expanded with json_each.
+        let to_json = |ids: &[i64]| serde_json::to_string(ids).expect("serialize ids");
+        let all_job_ids: Vec<i64> = job_scheduler.keys().copied().collect();
+
+        // The write lock is taken up front so validation, arming, and the writes see the same
+        // job statuses. A dry run does everything and rolls back.
+        let mut tx = begin_immediate(&self.context.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+
+        // Validate: every job belongs to the workflow and is pending.
+        let statuses: std::collections::HashMap<i64, i64> = sqlx::query_as::<_, (i64, i64)>(
+            "SELECT j.id, j.status FROM json_each(?1) p \
+                 JOIN job j ON j.id = p.value AND j.workflow_id = ?2",
+        )
+        .bind(to_json(&all_job_ids))
+        .bind(workflow_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to read job statuses"))?
+        .into_iter()
+        .collect();
+        let pending = [
+            models::JobStatus::Uninitialized.to_int() as i64,
+            models::JobStatus::Blocked.to_int() as i64,
+            models::JobStatus::Ready.to_int() as i64,
+        ];
+        let mut bad: Vec<String> = all_job_ids
+            .iter()
+            .filter_map(|id| match statuses.get(id) {
+                None => Some(format!("job_id={} (not in workflow)", id)),
+                Some(s) if !pending.contains(s) => Some(format!(
+                    "job_id={} (status {})",
+                    id,
+                    models::JobStatus::from_int(*s as i32)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|_| s.to_string())
+                )),
+                _ => None,
+            })
+            .collect();
+        if !bad.is_empty() {
+            bad.sort();
+            let total = bad.len();
+            bad.truncate(20);
+            return unprocessable(format!(
+                "{} job(s) in the plan are not pending jobs of workflow_id={}: {}",
+                total,
+                workflow_id,
+                bad.join(", ")
+            ));
+        }
+
+        let mut response = models::ApplySchedulerPlanResponse::default();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Suppress: the old schedule_nodes actions would otherwise start their own allocations.
+        // ponytail: marked executed like a claim; a distinct suppressed state is #529.
+        if body.suppress_existing_schedule_actions {
+            response.suppressed_action_ids = sqlx::query_scalar::<_, i64>(
+                "UPDATE workflow_action SET executed = 1, executed_at = ?1 \
+                 WHERE workflow_id = ?2 AND action_type = 'schedule_nodes' AND is_recovery = 0 \
+                 AND executed = 0 AND persistent = 0 RETURNING id",
+            )
+            .bind(&now)
+            .bind(workflow_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to suppress schedule actions"))?;
+            response.suppressed_action_ids.sort_unstable();
+        }
+
+        // Create schedulers and assign their jobs.
+        for entry in &body.schedulers {
+            let s = &entry.scheduler;
+            let id = sqlx::query_scalar::<_, i64>(
+                "INSERT INTO slurm_scheduler (workflow_id, name, account, gres, mem, nodes, \
+                 ntasks_per_node, partition, qos, tmp, walltime, extra, serialize_allocations) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            )
+            .bind(workflow_id)
+            .bind(&s.name)
+            .bind(&s.account)
+            .bind(&s.gres)
+            .bind(&s.mem)
+            .bind(s.nodes)
+            .bind(s.ntasks_per_node)
+            .bind(&s.partition)
+            .bind(&s.qos)
+            .bind(&s.tmp)
+            .bind(&s.walltime)
+            .bind(&s.extra)
+            .bind(s.serialize_allocations.unwrap_or(false))
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to create slurm scheduler"))?;
+            if !entry.job_ids.is_empty() {
+                sqlx::query(
+                    "UPDATE job SET scheduler_id = ?1 \
+                     WHERE id IN (SELECT value FROM json_each(?2))",
+                )
+                .bind(id)
+                .bind(to_json(&entry.job_ids))
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to assign jobs to scheduler"))?;
+            }
+            response.scheduler_ids.push(id);
+        }
+
+        // Recovery actions, armed from the jobs' statuses as of this transaction. Of the pending
+        // statuses only ready satisfies on_jobs_ready; later transitions to ready increment
+        // trigger_count through check_and_trigger_actions.
+        let ready = models::JobStatus::Ready.to_int() as i64;
+        for action in &body.recovery_actions {
+            let scheduler_id = response.scheduler_ids[action.scheduler_index as usize];
+            let required = action.job_ids.len() as i64;
+            let trigger_count = action
+                .job_ids
+                .iter()
+                .filter(|id| statuses[id] == ready)
+                .count() as i64;
+            let config = serde_json::json!({
+                "scheduler_type": "slurm",
+                "scheduler_id": scheduler_id,
+                "num_allocations": action.num_allocations,
+            });
+            let id = sqlx::query_scalar::<_, i64>(
+                "INSERT INTO workflow_action (workflow_id, trigger_type, action_type, \
+                 action_config, job_ids, trigger_count, required_triggers, executed, persistent, \
+                 is_recovery) \
+                 VALUES (?, 'on_jobs_ready', 'schedule_nodes', ?, ?, ?, ?, 0, 0, 1) RETURNING id",
+            )
+            .bind(workflow_id)
+            .bind(config.to_string())
+            .bind(to_json(&action.job_ids))
+            .bind(trigger_count)
+            .bind(required)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to create recovery action"))?;
+            response.actions.push(models::AppliedSchedulerAction {
+                id,
+                scheduler_id,
+                num_allocations: action.num_allocations,
+                pending: trigger_count >= required,
+            });
+        }
+
+        if dry_run {
+            tx.rollback()
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to roll back dry run"))?;
+        } else {
+            tx.commit()
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
+            info!(
+                "Applied scheduler plan workflow_id={} schedulers={} jobs={} actions={} suppressed={}",
+                workflow_id,
+                response.scheduler_ids.len(),
+                all_job_ids.len(),
+                response.actions.len(),
+                response.suppressed_action_ids.len()
+            );
+        }
+        Ok(ApplySchedulerPlanResponse::SuccessfulResponse(response))
     }
 }

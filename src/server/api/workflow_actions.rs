@@ -783,11 +783,17 @@ where
 impl WorkflowActionsApiImpl {
     /// Check and trigger workflow actions based on trigger type and job state changes
     /// This is called by other API endpoints when state changes occur
+    ///
+    /// `max_action_id` limits the check to actions with `id <= max_action_id`. Callers that commit
+    /// a state change before calling this pass the highest action id seen inside that transaction:
+    /// an action created after the commit (ids are AUTOINCREMENT, so it has a larger id) was armed
+    /// from the committed state and must not count the change again.
     pub async fn check_and_trigger_actions(
         &self,
         workflow_id: i64,
         trigger_type: &str,
         job_ids: Option<Vec<i64>>,
+        max_action_id: Option<i64>,
     ) -> Result<(), ApiError> {
         debug!(
             "check_and_trigger_actions(workflow_id={}, trigger_type={}, job_ids={:?})",
@@ -797,10 +803,13 @@ impl WorkflowActionsApiImpl {
         // Get all actions of this trigger type for this workflow that haven't reached required triggers yet
         let actions = match sqlx::query(
             "SELECT id, job_ids, trigger_count, required_triggers FROM workflow_action
-             WHERE workflow_id = ? AND trigger_type = ? AND trigger_count < required_triggers",
+             WHERE workflow_id = ? AND trigger_type = ? AND trigger_count < required_triggers
+             AND (? IS NULL OR id <= ?)",
         )
         .bind(workflow_id)
         .bind(trigger_type)
+        .bind(max_action_id)
+        .bind(max_action_id)
         .fetch_all(self.context.pool.as_ref())
         .await
         {

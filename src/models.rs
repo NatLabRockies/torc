@@ -2814,6 +2814,63 @@ pub struct FileStatsResponse {
     pub missing_required_file_ids: Vec<i64>,
 }
 
+/// A Slurm scheduler to create and the pending jobs to assign to it.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SchedulerPlanEntry {
+    /// The scheduler to create. `id` is ignored; `workflow_id` is taken from the request path.
+    pub scheduler: SlurmSchedulerModel,
+    pub job_ids: Vec<i64>,
+}
+
+/// An `on_jobs_ready` recovery action that schedules nodes for one planned scheduler.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SchedulerPlanAction {
+    /// Index into `schedulers` of the scheduler this action submits.
+    pub scheduler_index: i64,
+    /// Jobs that gate the action. Must be a subset of that scheduler's `job_ids`.
+    pub job_ids: Vec<i64>,
+    pub num_allocations: i64,
+}
+
+/// A scheduler plan computed by the client, applied by `apply_scheduler_plan`.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ApplySchedulerPlanRequest {
+    pub schedulers: Vec<SchedulerPlanEntry>,
+    #[serde(default)]
+    pub recovery_actions: Vec<SchedulerPlanAction>,
+    /// Mark the workflow's non-recovery, non-persistent, unexecuted `schedule_nodes` actions as
+    /// executed so they cannot start allocations alongside the new schedulers.
+    #[serde(default)]
+    pub suppress_existing_schedule_actions: bool,
+}
+
+/// A recovery action created by `apply_scheduler_plan`.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AppliedSchedulerAction {
+    pub id: i64,
+    pub scheduler_id: i64,
+    pub num_allocations: i64,
+    /// True if every gating job is ready, so the action can be submitted now. Otherwise it waits
+    /// for the remaining gating jobs to become ready.
+    pub pending: bool,
+}
+
+/// IDs created by `apply_scheduler_plan`. In a dry run, the IDs are those that would have been
+/// assigned; nothing is stored.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ApplySchedulerPlanResponse {
+    /// Created scheduler IDs, in the order of the request's `schedulers`.
+    pub scheduler_ids: Vec<i64>,
+    /// Created recovery actions, in the order of the request's `recovery_actions`.
+    pub actions: Vec<AppliedSchedulerAction>,
+    pub suppressed_action_ids: Vec<i64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

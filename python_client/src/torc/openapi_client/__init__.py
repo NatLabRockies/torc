@@ -52,6 +52,9 @@ __all__ = [
     "AdminAuditLogEntry",
     "AdminSqlRequest",
     "AdminSqlResponse",
+    "AppliedSchedulerAction",
+    "ApplySchedulerPlanRequest",
+    "ApplySchedulerPlanResponse",
     "ArchiveWorkflowRequest",
     "BatchCompleteJobsRequest",
     "BatchCompleteJobsResponse",
@@ -135,6 +138,8 @@ __all__ = [
     "RunningJobModel",
     "RunningJobsResponse",
     "ScheduledComputeNodesModel",
+    "SchedulerPlanAction",
+    "SchedulerPlanEntry",
     "SlurmJobCorrelationModel",
     "SlurmJobCorrelationsResponse",
     "SlurmSchedulerModel",
@@ -195,6 +200,9 @@ from torc.openapi_client.models.active_task_response import ActiveTaskResponse a
 from torc.openapi_client.models.admin_audit_log_entry import AdminAuditLogEntry as AdminAuditLogEntry
 from torc.openapi_client.models.admin_sql_request import AdminSqlRequest as AdminSqlRequest
 from torc.openapi_client.models.admin_sql_response import AdminSqlResponse as AdminSqlResponse
+from torc.openapi_client.models.applied_scheduler_action import AppliedSchedulerAction as AppliedSchedulerAction
+from torc.openapi_client.models.apply_scheduler_plan_request import ApplySchedulerPlanRequest as ApplySchedulerPlanRequest
+from torc.openapi_client.models.apply_scheduler_plan_response import ApplySchedulerPlanResponse as ApplySchedulerPlanResponse
 from torc.openapi_client.models.archive_workflow_request import ArchiveWorkflowRequest as ArchiveWorkflowRequest
 from torc.openapi_client.models.batch_complete_jobs_request import BatchCompleteJobsRequest as BatchCompleteJobsRequest
 from torc.openapi_client.models.batch_complete_jobs_response import BatchCompleteJobsResponse as BatchCompleteJobsResponse
@@ -278,6 +286,8 @@ from torc.openapi_client.models.ro_crate_entity_model import RoCrateEntityModel 
 from torc.openapi_client.models.running_job_model import RunningJobModel as RunningJobModel
 from torc.openapi_client.models.running_jobs_response import RunningJobsResponse as RunningJobsResponse
 from torc.openapi_client.models.scheduled_compute_nodes_model import ScheduledComputeNodesModel as ScheduledComputeNodesModel
+from torc.openapi_client.models.scheduler_plan_action import SchedulerPlanAction as SchedulerPlanAction
+from torc.openapi_client.models.scheduler_plan_entry import SchedulerPlanEntry as SchedulerPlanEntry
 from torc.openapi_client.models.slurm_job_correlation_model import SlurmJobCorrelationModel as SlurmJobCorrelationModel
 from torc.openapi_client.models.slurm_job_correlations_response import SlurmJobCorrelationsResponse as SlurmJobCorrelationsResponse
 from torc.openapi_client.models.slurm_scheduler_model import SlurmSchedulerModel as SlurmSchedulerModel

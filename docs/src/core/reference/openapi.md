@@ -294,3 +294,15 @@ curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/file_stats?dry_r
   -d '{"files": [{"id": 1, "exists": true, "st_mtime": 1700000000.123}, {"id": 2, "exists": false}]}' \
   | jq '.reset_jobs'
 ```
+
+**Apply Scheduler Plan** (`torc slurm regenerate`)
+
+```bash
+curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/apply_scheduler_plan?dry_run=true" \
+  -H "Content-Type: application/json" \
+  -d '{"schedulers": [{"scheduler": {"workflow_id": 1, "name": "regen", "account": "acct",
+        "nodes": 1, "walltime": "01:00:00"}, "job_ids": [1, 2]}],
+       "recovery_actions": [{"scheduler_index": 0, "job_ids": [1, 2], "num_allocations": 1}],
+       "suppress_existing_schedule_actions": true}' \
+  | jq '.actions'
+```

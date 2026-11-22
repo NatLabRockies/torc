@@ -273,6 +273,25 @@ where
         ));
     }
 
+    // Actions created after this commit (e.g. by apply_scheduler_plan) arm themselves from the
+    // committed job statuses, so the on_jobs_ready check below must skip them or it would count
+    // these jobs twice. This tx holds the write lock, so no action can be created in between.
+    let max_action_id = match sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(id) FROM workflow_action WHERE workflow_id = ?",
+    )
+    .bind(workflow_id)
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(id) => id.unwrap_or(0),
+        Err(e) => {
+            return Err(database_lock_aware_error(
+                e,
+                "Failed to read max workflow action id",
+            ));
+        }
+    };
+
     if let Err(e) = tx.commit().await {
         debug!(
             "Failed to commit transaction for workflow {}: {}",
@@ -309,6 +328,7 @@ where
                 workflow_id,
                 "on_jobs_ready",
                 Some(all_ready_job_ids.clone()),
+                Some(max_action_id),
             )
             .await
         {
