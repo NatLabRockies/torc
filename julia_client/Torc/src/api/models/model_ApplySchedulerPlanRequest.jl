@@ -13,7 +13,7 @@ A scheduler plan computed by the client, applied by &#x60;apply_scheduler_plan&#
 
     - recovery_actions::Vector{SchedulerPlanAction}
     - schedulers::Vector{SchedulerPlanEntry}
-    - suppress_existing_schedule_actions::Bool : Mark the workflow&#39;s non-recovery, non-persistent, unexecuted &#x60;schedule_nodes&#x60; actions as executed so they cannot start allocations alongside the new schedulers.
+    - suppress_existing_schedule_actions::Bool : Suppress the workflow&#39;s non-recovery, unexecuted &#x60;schedule_nodes&#x60; actions (persistent ones included) so they cannot start allocations alongside the new schedulers.
 """
 Base.@kwdef mutable struct ApplySchedulerPlanRequest <: OpenAPI.APIModel
     recovery_actions::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{SchedulerPlanAction} }

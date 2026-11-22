@@ -287,6 +287,8 @@ impl WorkflowManager {
 
         // Filter for schedule_nodes actions
         let mut outcome = StartOutcome::default();
+        // Whether the server records action outcomes; checked on the first claimed action.
+        let mut report_outcomes: Option<bool> = None;
         for action in actions {
             let action_type = &action.action_type;
             let action_id = action.id.unwrap_or(0);
@@ -355,7 +357,7 @@ impl WorkflowManager {
                     let poll_interval = poll_interval_override
                         .unwrap_or(self.torc_config.client.slurm.poll_interval);
 
-                    match crate::client::commands::slurm::schedule_slurm_nodes(
+                    let result = crate::client::commands::slurm::schedule_slurm_nodes(
                         &self.config,
                         self.workflow_id,
                         scheduler_id,
@@ -367,7 +369,19 @@ impl WorkflowManager {
                         max_parallel_jobs,
                         self.torc_config.client.slurm.keep_submission_scripts,
                         claim_backoff_max_secs_override,
-                    ) {
+                    );
+                    if *report_outcomes.get_or_insert_with(|| {
+                        version_check::check_version(&self.config).server_supports_action_outcomes()
+                    }) {
+                        crate::client::utils::report_action_result(
+                            &self.config,
+                            self.workflow_id,
+                            action_id,
+                            &result.as_ref().map(|_| ()).map_err(|e| e.to_string()),
+                            20,
+                        );
+                    }
+                    match result {
                         Ok(()) => {
                             outcome.allocations_submitted += num_allocations.max(0);
                             info!(

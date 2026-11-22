@@ -400,6 +400,80 @@ pub fn claim_action(
     Ok(claimed)
 }
 
+/// Report the outcome of an action this process claimed and executed. Failures to report are
+/// logged and otherwise ignored: the action already ran, and the report is bookkeeping. Callers
+/// skip this for servers older than API 1.4.0
+/// (see [`crate::client::version_check::VersionCheckResult::server_supports_action_outcomes`]).
+pub fn report_action_result(
+    config: &Configuration,
+    workflow_id: i64,
+    action_id: i64,
+    outcome: &Result<(), String>,
+    wait_for_healthy_database_minutes: u64,
+) {
+    let body = models::WorkflowActionResultRequest {
+        success: outcome.is_ok(),
+        error: outcome.as_ref().err().cloned(),
+    };
+    if let Err(e) = send_with_retries(
+        config,
+        || -> Result<_, Box<dyn std::error::Error>> {
+            Ok(apis::workflow_actions_api::report_action_result(
+                config,
+                workflow_id,
+                action_id,
+                body.clone(),
+            )?)
+        },
+        wait_for_healthy_database_minutes,
+    ) {
+        warn!(
+            "Failed to report action result workflow_id={} action_id={}: {}",
+            workflow_id, action_id, e
+        );
+    }
+}
+
+/// Suppress an action so it never fires. With `use_suppress` (server API >= 1.4.0) this calls the
+/// `suppress` endpoint, which also works for persistent actions; otherwise it falls back to
+/// claiming the action, which marks a non-persistent action executed (a persistent one stays
+/// armed).
+///
+/// Returns `Ok(true)` if the action is now suppressed, `Ok(false)` on a 409 (it was already
+/// claimed by another process and may run).
+pub fn suppress_action(
+    config: &Configuration,
+    workflow_id: i64,
+    action_id: i64,
+    use_suppress: bool,
+    wait_for_healthy_database_minutes: u64,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if !use_suppress {
+        return claim_action(
+            config,
+            workflow_id,
+            action_id,
+            None,
+            wait_for_healthy_database_minutes,
+        );
+    }
+    send_with_retries(
+        config,
+        || -> Result<bool, Box<dyn std::error::Error>> {
+            match apis::workflow_actions_api::suppress_action(config, workflow_id, action_id) {
+                Ok(_) => Ok(true),
+                Err(crate::client::apis::Error::ResponseError(ref r))
+                    if r.status == reqwest::StatusCode::CONFLICT =>
+                {
+                    Ok(false)
+                }
+                Err(e) => Err(Box::new(e)),
+            }
+        },
+        wait_for_healthy_database_minutes,
+    )
+}
+
 /// Detect the number of NVIDIA GPUs available on the system.
 ///
 /// Uses NVML (NVIDIA Management Library) to query the number of GPU devices.

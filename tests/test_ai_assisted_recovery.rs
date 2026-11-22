@@ -507,6 +507,8 @@ fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &
             executed_by: None,
             persistent: false,
             is_recovery: false,
+            state: None,
+            error: None,
         },
     )
     .expect("Failed to create action");

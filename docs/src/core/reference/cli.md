@@ -393,6 +393,7 @@ Workflow management commands
 - `get` — Get a specific workflow by ID
 - `execution-plan` — Show the execution plan for a workflow specification or existing workflow
 - `list-actions` — List workflow actions and their statuses
+- `reset-action` — Re-arm a failed, suppressed, or stuck workflow action
 - `update` — Update workflow properties
 - `archive` — Archive or unarchive workflows
 - `correct-resources` — Correct resource requirements based on actual job usage
@@ -643,6 +644,19 @@ List workflow actions and their statuses (useful for debugging action triggers)
 
 - `-u`, `--user <USER>` — User to filter by when selecting workflow interactively (defaults to USER
   environment variable)
+
+## `torc workflows reset-action`
+
+Re-arm a failed, suppressed, or stuck workflow action. Torc does not retry a failed action
+automatically; fix the cause, then reset it. It fires the next time a runner or `torc submit` looks
+for pending actions.
+
+**Usage:** `torc workflows reset-action <WORKFLOW_ID> <ACTION_ID>`
+
+###### **Arguments:**
+
+- `<WORKFLOW_ID>` — ID of the workflow that owns the action
+- `<ACTION_ID>` — ID of the action to reset (see `workflows list-actions`)
 
 ## `torc workflows is-complete`
 

@@ -283,6 +283,31 @@ When a Slurm job fails, follow this debugging workflow:
    cat torc_output/dmesg_slurm_wf<workflow_id>_sl<slurm_job_id>_*.log
    ```
 
+## Failed Allocation Submissions
+
+If `sbatch` rejects a `schedule_nodes` action's allocation (a bad account, a partition that is down,
+a QOS limit), the action is recorded as `failed` with sbatch's error, and its jobs wait for
+allocations that never arrive. Torc does not retry it, because a partly-submitted action could
+duplicate allocations. `torc status` lists failed actions:
+
+```console
+$ torc status 1
+...
+✗ 1 workflow action(s) failed:
+  action 2 (on_jobs_ready schedule_nodes): Job submission failed: sbatch: error: Batch job submission failed: Invalid account
+  Torc does not retry actions. Fix the cause, then run 'torc workflows reset-action 1 <action_id>'.
+```
+
+Fix the cause (for example, `torc slurm update 1 --account my_account`), then re-arm the action:
+
+```bash
+torc workflows reset-action 1 2
+torc submit 1   # or let a running worker pick it up
+```
+
+`torc recover 1` also lists failed `schedule_nodes` actions and, in the interactive wizard, offers
+to reset them and submit their allocations.
+
 ## Orphaned Jobs and Status Synchronization
 
 When a Slurm allocation terminates unexpectedly (e.g., due to timeout, node failure, or admin

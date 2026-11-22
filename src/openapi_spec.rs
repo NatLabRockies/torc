@@ -32,8 +32,8 @@ use crate::models::{
     SchedulerPlanAction, SchedulerPlanEntry, SlurmJobCorrelationModel,
     SlurmJobCorrelationsResponse, SlurmSchedulerModel, SlurmStatsModel, SpawnJobModel,
     SpawnJobsRequest, SpawnJobsResponse, UserDataListModel, UserDataModel,
-    UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel, WorkflowModel,
-    WorkflowStatusResponse,
+    UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel,
+    WorkflowActionResultRequest, WorkflowModel, WorkflowStatusResponse,
 };
 
 #[allow(unused_imports)]
@@ -149,9 +149,10 @@ mod openapi_user_data_paths {
 mod openapi_workflow_action_paths {
     pub use crate::server::live_router::{
         __path_claim_action, __path_create_workflow_action, __path_delete_workflow_action,
-        __path_get_pending_actions, __path_get_workflow_actions, __path_update_workflow_action,
-        claim_action, create_workflow_action, delete_workflow_action, get_pending_actions,
-        get_workflow_actions, update_workflow_action,
+        __path_get_pending_actions, __path_get_workflow_actions, __path_report_action_result,
+        __path_reset_action, __path_suppress_action, __path_update_workflow_action, claim_action,
+        create_workflow_action, delete_workflow_action, get_pending_actions, get_workflow_actions,
+        report_action_result, reset_action, suppress_action, update_workflow_action,
     };
 }
 
@@ -512,6 +513,9 @@ fn resolve_schema_properties<'a>(
         openapi_workflow_action_paths::get_workflow_actions,
         openapi_workflow_action_paths::get_pending_actions,
         openapi_workflow_action_paths::claim_action,
+        openapi_workflow_action_paths::suppress_action,
+        openapi_workflow_action_paths::report_action_result,
+        openapi_workflow_action_paths::reset_action,
         openapi_workflow_action_paths::update_workflow_action,
         openapi_workflow_action_paths::delete_workflow_action,
         openapi_result_paths::create_result,
@@ -615,6 +619,7 @@ fn resolve_schema_properties<'a>(
         WorkflowActionModel,
         ClaimActionRequest,
         ClaimActionResponse,
+        WorkflowActionResultRequest,
         JobStatus,
         ResultModel,
         ListResultsResponse,
@@ -1925,6 +1930,30 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
     check_operation_id(
         source,
         &emitted,
+        "/workflows/{id}/actions/{action_id}/suppress",
+        "post",
+        "suppress_action",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
+        "/workflows/{id}/actions/{action_id}/result",
+        "post",
+        "report_action_result",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
+        "/workflows/{id}/actions/{action_id}/reset",
+        "post",
+        "reset_action",
+        &mut issues,
+    );
+    check_operation_id(
+        source,
+        &emitted,
         "/workflows/{id}/actions/{action_id}",
         "put",
         "update_workflow_action",
@@ -1955,7 +1984,15 @@ pub fn parity_report(source: &str) -> Result<Vec<String>, Box<dyn std::error::Er
             "executed_by",
             "persistent",
             "is_recovery",
+            "state",
+            "error",
         ],
+        &mut issues,
+    );
+    check_component_properties(
+        &emitted,
+        "WorkflowActionResultRequest",
+        &["success", "error"],
         &mut issues,
     );
     check_component_properties(

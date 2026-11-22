@@ -1054,7 +1054,9 @@ fn test_apply_plan_arms_ready_and_deferred(start_server: &ServerProcess) {
 
     assert_eq!(response.scheduler_ids.len(), 2);
     assert_eq!(response.suppressed_action_ids, vec![existing]);
-    assert!(action(config, workflow_id, existing).executed);
+    let suppressed = action(config, workflow_id, existing);
+    assert!(suppressed.executed);
+    assert_eq!(suppressed.state.as_deref(), Some("suppressed"));
     for (job, sched) in [(0, 0), (1, 1), (2, 1)] {
         let job = apis::jobs_api::get_job(config, jobs[job]).unwrap();
         assert_eq!(job.scheduler_id, Some(response.scheduler_ids[sched]));
@@ -1132,4 +1134,59 @@ fn test_apply_plan_dry_run_changes_nothing(start_server: &ServerProcess) {
         vec![true, false]
     );
     assert_unchanged(config, workflow_id, &jobs, existing);
+}
+
+/// Persistent schedule_nodes actions would keep firing the old schedulers from every new worker,
+/// so the plan suppresses them too, even after a worker has claimed one. Actions that already
+/// ran (a claimed non-persistent action) are left alone.
+#[rstest]
+fn test_apply_plan_suppresses_persistent_actions(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, _) = create_plan_workflow(config, "apply_plan_persistent");
+    let scheduler_id = common::create_test_slurm_scheduler(config, workflow_id);
+    let config_json = serde_json::json!({"scheduler_type": "slurm", "scheduler_id": scheduler_id});
+    let create = |persistent: bool| {
+        let mut body = models::WorkflowActionModel::new(
+            workflow_id,
+            "on_worker_start".to_string(),
+            "schedule_nodes".to_string(),
+            config_json.clone(),
+        );
+        body.persistent = persistent;
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, body)
+            .unwrap()
+            .id
+            .unwrap()
+    };
+    let persistent = create(true);
+    let ran = create(false);
+    let claim = |id| {
+        apis::workflow_actions_api::claim_action(
+            config,
+            workflow_id,
+            id,
+            models::ClaimActionRequest {
+                compute_node_id: None,
+            },
+        )
+        .unwrap()
+    };
+    claim(persistent);
+    claim(ran);
+
+    let response = apis::slurm_schedulers_api::apply_scheduler_plan(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&jobs[..]]),
+        None,
+    )
+    .expect("apply_scheduler_plan failed");
+    assert_eq!(response.suppressed_action_ids, vec![existing, persistent]);
+    let stored = action(config, workflow_id, persistent);
+    assert!(stored.executed);
+    assert_eq!(stored.state.as_deref(), Some("suppressed"));
+    assert_eq!(
+        action(config, workflow_id, ran).state.as_deref(),
+        Some("claimed")
+    );
 }

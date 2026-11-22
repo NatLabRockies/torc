@@ -425,6 +425,53 @@ pub enum ClaimActionResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum SuppressActionResponse {
+    /// Successful response - the updated action
+    SuccessfulResponse(models::WorkflowActionModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Conflict - the action is not in a state that allows this transition
+    ConflictResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum ReportActionResultResponse {
+    /// Successful response - the updated action
+    SuccessfulResponse(models::WorkflowActionModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Conflict - the action is not in a state that allows this transition
+    ConflictResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub enum ResetActionResponse {
+    /// Successful response - the updated action
+    SuccessfulResponse(models::WorkflowActionModel),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Conflict - the action is not in a state that allows this transition
+    ConflictResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum UpdateWorkflowActionResponse {
     /// Successful response
     SuccessfulResponse(models::WorkflowActionModel),

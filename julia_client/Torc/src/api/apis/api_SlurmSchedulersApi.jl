@@ -28,7 +28,7 @@ function _oacinternal_apply_scheduler_plan(_api::SlurmSchedulersApi, id::Int64, 
     return _ctx
 end
 
-@doc raw"""Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, unexecuted schedule_nodes actions are marked executed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
+@doc raw"""Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
 
 Params:
 - id::Int64 (required)
