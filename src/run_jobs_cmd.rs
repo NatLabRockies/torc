@@ -334,7 +334,7 @@ pub fn run(args: &Args) -> WorkerResult {
     job_runner.override_claim_backoff_max_secs(args.claim_backoff_max_secs);
     job_runner.set_persistent(args.persistent);
 
-    register_sigchld_wakeup(&job_runner);
+    register_signal_handlers(&job_runner);
 
     match job_runner.run_worker() {
         Ok(result) => {
@@ -351,17 +351,22 @@ pub fn run(args: &Args) -> WorkerResult {
     }
 }
 
+/// SIGCHLD wakes the runner as soon as a job exits. SIGTERM (e.g., Stop in torc-dash, or `kill`)
+/// terminates the running jobs and ends the run, as the Slurm runner does at walltime, instead of
+/// exiting and leaving the jobs orphaned and marked running.
 #[cfg(unix)]
-fn register_sigchld_wakeup(job_runner: &JobRunner) {
-    use signal_hook::consts::SIGCHLD;
+fn register_signal_handlers(job_runner: &JobRunner) {
+    use signal_hook::consts::{SIGCHLD, SIGTERM};
     use signal_hook::iterator::Signals;
+    use std::sync::atomic::Ordering;
 
     let wakeup = job_runner.get_wakeup_handle();
-    let mut signals = match Signals::new([SIGCHLD]) {
+    let termination_flag = job_runner.get_termination_flag();
+    let mut signals = match Signals::new([SIGCHLD, SIGTERM]) {
         Ok(s) => s,
         Err(e) => {
             error!(
-                "Failed to register SIGCHLD handler ({}); subprocess completions will be observed only on the poll interval",
+                "Failed to register signal handlers ({}); subprocess completions will be observed only on the poll interval",
                 e
             );
             return;
@@ -373,18 +378,25 @@ fn register_sigchld_wakeup(job_runner: &JobRunner) {
             let mut set: libc::sigset_t = std::mem::zeroed();
             libc::sigemptyset(&mut set);
             libc::sigaddset(&mut set, libc::SIGCHLD);
+            libc::sigaddset(&mut set, libc::SIGTERM);
             libc::pthread_sigmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut());
         }
         for sig in signals.forever() {
-            if sig == SIGCHLD {
-                wakeup.notify();
+            match sig {
+                SIGCHLD => wakeup.notify(),
+                SIGTERM => {
+                    info!("Received SIGTERM. Terminating running jobs.");
+                    termination_flag.store(true, Ordering::SeqCst);
+                    wakeup.notify();
+                }
+                _ => {}
             }
         }
     });
 }
 
 #[cfg(not(unix))]
-fn register_sigchld_wakeup(_job_runner: &JobRunner) {}
+fn register_signal_handlers(_job_runner: &JobRunner) {}
 
 #[cfg(test)]
 mod tests {

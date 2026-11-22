@@ -943,6 +943,7 @@ impl JobRunner {
                 Some(&labels),
                 None, // ids
                 None, // statuses
+                None,
             )
             .map_err(|e| {
                 warn!(

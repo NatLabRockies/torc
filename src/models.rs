@@ -1348,6 +1348,24 @@ pub fn max_retries_from_rules(rules: &str) -> Result<Option<i64>, serde_json::Er
     Ok(rules.iter().map(|r| r.max_retries).max())
 }
 
+/// Why a job on attempt `attempt_id` has used up the retry budget of its failure handler
+/// `rules`, or None if another retry is allowed. Shared by the server's `retry_job` and the MCP
+/// classifier's dry run so both refuse with the same rule and message.
+pub fn retry_limit_refusal(
+    rules: &str,
+    attempt_id: i64,
+) -> Result<Option<String>, serde_json::Error> {
+    Ok(max_retries_from_rules(rules)?
+        .filter(|&max| attempt_id >= max)
+        .map(|max| {
+            format!(
+                "Job cannot be retried: attempt_id={} >= max_retries={} \
+                 (failure handler limit)",
+                attempt_id, max
+            )
+        }))
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListFailureHandlersResponse {
@@ -1833,6 +1851,22 @@ impl JobStatus {
         )
     }
 
+    /// Every status, indexed by its integer value. Adding a variant forces an edit to the
+    /// exhaustive match in `to_int` just below; add it here too (the unit test checks the order).
+    pub const ALL: [JobStatus; 11] = [
+        JobStatus::Uninitialized,
+        JobStatus::Blocked,
+        JobStatus::Ready,
+        JobStatus::Pending,
+        JobStatus::Running,
+        JobStatus::Completed,
+        JobStatus::Failed,
+        JobStatus::Canceled,
+        JobStatus::Terminated,
+        JobStatus::Disabled,
+        JobStatus::PendingFailed,
+    ];
+
     pub fn to_int(&self) -> i32 {
         match *self {
             JobStatus::Uninitialized => 0,
@@ -1850,20 +1884,10 @@ impl JobStatus {
     }
 
     pub fn from_int(value: i32) -> std::result::Result<Self, String> {
-        match value {
-            0 => Ok(JobStatus::Uninitialized),
-            1 => Ok(JobStatus::Blocked),
-            2 => Ok(JobStatus::Ready),
-            3 => Ok(JobStatus::Pending),
-            4 => Ok(JobStatus::Running),
-            5 => Ok(JobStatus::Completed),
-            6 => Ok(JobStatus::Failed),
-            7 => Ok(JobStatus::Canceled),
-            8 => Ok(JobStatus::Terminated),
-            9 => Ok(JobStatus::Disabled),
-            10 => Ok(JobStatus::PendingFailed),
-            _ => Err(format!("Invalid JobStatus integer value: {}", value)),
-        }
+        usize::try_from(value)
+            .ok()
+            .and_then(|i| Self::ALL.get(i).copied())
+            .ok_or_else(|| format!("Invalid JobStatus integer value: {}", value))
     }
 
     pub fn from_i64(value: i64) -> std::result::Result<Self, String> {
@@ -2856,6 +2880,16 @@ mod tests {
         ResultModel, UserDataModel, WorkflowModel,
     };
     use serde_json::json;
+
+    #[test]
+    fn job_status_all_is_indexed_by_int() {
+        for (i, status) in JobStatus::ALL.iter().enumerate() {
+            assert_eq!(status.to_int(), i as i32);
+            assert_eq!(JobStatus::from_int(i as i32), Ok(*status));
+        }
+        assert!(JobStatus::from_int(JobStatus::ALL.len() as i32).is_err());
+        assert!(JobStatus::from_int(-1).is_err());
+    }
 
     #[test]
     fn workflow_support_models_serialize_expected_shapes() {

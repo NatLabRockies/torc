@@ -3,6 +3,7 @@
   import { app, DARK_PALETTES, type DarkPalette, type ThemeMode } from "../../lib/state.svelte";
   import { dashGet } from "../../lib/api/dash";
   import Icon, { type IconName } from "../../lib/ui/Icon.svelte";
+  import { notify } from "../notify/notify.svelte";
   import ServerPanel from "./ServerPanel.svelte";
 
   type Version = {
@@ -113,6 +114,28 @@
         />
         Show workflows from all users by default
       </label>
+
+      <div class="field">
+        <label class="check">
+          <input
+            type="checkbox"
+            checked={notify.enabled}
+            disabled={notify.permission === "unsupported"}
+            onchange={(e) => notify.setEnabled(e.currentTarget.checked)}
+          />
+          Notify me when a workflow finishes
+        </label>
+        <span class="hint">
+          {#if notify.permission === "unsupported"}
+            This browser does not support notifications.
+          {:else if notify.enabled && notify.permission === "denied"}
+            Notifications are blocked for this site; allow them in the browser's site settings.
+          {:else}
+            For the selected workflow and those you run, watch, or submit here, while this window is
+            in the background.
+          {/if}
+        </span>
+      </div>
     </section>
 
     <section class="card card-body stack">

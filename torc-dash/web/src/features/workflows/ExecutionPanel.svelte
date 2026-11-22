@@ -16,7 +16,7 @@
   const STATE = {
     success: { text: "Completed", cls: "ok" },
     failed: { text: "Failed", cls: "bad" },
-    stopped: { text: "Detached", cls: "warn" },
+    stopped: { text: "Stopped", cls: "warn" },
   } as const;
   const TITLE = { run: "Run", watch: "Watch", "watch-recover": "Watch (recovery)" } as const;
   let outcome = $derived(execution.result ? STATE[execution.result] : null);
@@ -50,13 +50,11 @@
           Details
         </button>
       {/if}
-      {#if execution.running}
+      {#if execution.running && (execution.mode !== "run" || app.canStopRuns)}
         <button
           class="btn btn-danger btn-sm"
           onclick={() => execution.stop()}
-          title={execution.mode === "run"
-            ? "Stop following the output (the run itself keeps going on the server)"
-            : "Stop watching"}
+          title={execution.mode === "run" ? "Stop the run and terminate its jobs" : "Stop watching"}
         >
           <Icon name="stop" size={12} /> Stop
         </button>

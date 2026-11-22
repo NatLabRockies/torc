@@ -302,6 +302,7 @@ fn test_jobs_list_name_command_filter(start_server: &ServerProcess) {
             None, // labels
             None, // ids
             None, // statuses
+            None, // resource_requirements_id
         )
         .expect("list_jobs failed")
     };
@@ -1091,6 +1092,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // labels
         None, // ids
         None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs before deletion");
     assert_eq!(
@@ -1128,6 +1130,7 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // labels
         None, // ids
         None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after deletion");
     assert_eq!(
@@ -1337,6 +1340,75 @@ fn test_jobs_update_resource_requirements_id(start_server: &ServerProcess) {
     // Verify via API
     let job_after = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_after.resource_requirements_id, Some(rr_id));
+}
+
+#[rstest]
+fn test_list_jobs_filters_by_resource_requirements_id(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "test_rr_filter").id.unwrap();
+    let small = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "small",
+        1,
+        0,
+        1,
+        "1g",
+        "PT10M",
+    );
+    let large = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "large",
+        4,
+        0,
+        1,
+        "8g",
+        "PT1H",
+    );
+    for (name, rr) in [("a", &small), ("b", &small), ("c", &large)] {
+        let mut job = models::JobModel::new(workflow_id, name.to_string(), "true".to_string());
+        job.resource_requirements_id = rr.id;
+        apis::jobs_api::create_job(config, job).expect("Failed to create job");
+    }
+    let names = |rr_id: Option<i64>| {
+        let r = apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            rr_id,
+        )
+        .expect("Failed to list jobs");
+        let mut n: Vec<String> = r.items.into_iter().map(|j| j.name).collect();
+        n.sort();
+        assert_eq!(r.total_count as usize, n.len());
+        n
+    };
+    assert_eq!(names(small.id), ["a", "b"]);
+    assert_eq!(names(large.id), ["c"]);
+    assert_eq!(names(None).len(), 3);
+
+    let rr_id = large.id.unwrap().to_string();
+    let wf_id = workflow_id.to_string();
+    let args = ["jobs", "list", &wf_id, "--resource-requirements-id", &rr_id];
+    let out = run_cli_with_json(&args, start_server, None).expect("jobs list failed");
+    let jobs = out["items"].as_array().expect("jobs array");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["name"], "c");
 }
 
 #[rstest]
@@ -1620,6 +1692,7 @@ fn test_list_jobs_ids_and_multi_status_filters(start_server: &ServerProcess) {
             None,
             ids,
             statuses,
+            None,
         )
         .expect("list_jobs failed")
         .items

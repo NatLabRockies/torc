@@ -127,6 +127,24 @@ The connect page passes one of three choices to torc-dash (`server_flags`):
   `~/torc-desktop.db` on the login node or the app's data folder locally. Loopback-only, because a
   private server on a shared node must not be reachable by other users.
 
+## Downloads, file pickers, and notifications
+
+The window is created in `setup` (`"create": false` in `tauri.conf.json`) so it can have an
+`on_download` handler; without one, the webviews drop downloads. A download needs a destination
+before it starts, and a save dialog cannot answer synchronously from the webview's callback, so the
+file goes to a fresh temporary directory first. When it finishes, a native save dialog
+(tauri-plugin-dialog) asks where to keep it, and the file is moved there. The dashboard should start
+downloads from `<a download>` links: WebKit downloads a plain navigation only when it cannot display
+the response type, so a JSON attachment would replace the page.
+
+`<input type="file">` needs nothing: wry implements WebKit's open panel on macOS, and WebView2 and
+WebKitGTK show their own pickers.
+
+The dashboard notifies with the Web Notification API. tauri-plugin-notification injects a
+`window.Notification` polyfill into every page that sends it to the OS. The `dashboard` capability
+lets the remote origin `http://127.0.0.1:*` call only the plugin's permission and notify commands;
+it gets no other IPC.
+
 ## Build and distribution
 
 - CI (`.github/workflows/dashboard.yml`) type-checks the connect page and runs `cargo fmt`, clippy,
