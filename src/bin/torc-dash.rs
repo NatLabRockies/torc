@@ -481,11 +481,13 @@ async fn main() -> Result<()> {
     } else {
         dash_config.api_url.clone()
     };
-    let torc_bin = if explicit("torc_bin") {
+    // Some commands run in the workflow's submission directory, so a relative path like
+    // ./target/release/torc must not be resolved from there.
+    let torc_bin = absolute_if_relative_path(if explicit("torc_bin") {
         cli.torc_bin.clone()
     } else {
         dash_config.torc_bin.clone()
-    };
+    });
     let torc_server_bin = if explicit("torc_server_bin") {
         cli.torc_server_bin.clone()
     } else {
@@ -1081,6 +1083,19 @@ fn stop_process(pid: u32) {
     let _ = StdCommand::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
         .status();
+}
+
+/// `bin` made absolute against the current directory if it is a relative path (`./torc`,
+/// `bin/torc`). A bare name like `torc` is left alone so it is still found on PATH.
+fn absolute_if_relative_path(bin: String) -> String {
+    let path = std::path::Path::new(&bin);
+    if path.is_relative()
+        && path.components().count() > 1
+        && let Ok(abs) = std::path::absolute(path)
+    {
+        return abs.to_string_lossy().into_owned();
+    }
+    bin
 }
 
 /// Stops the process with this PID when dropped, unless cleared first.
@@ -2584,11 +2599,22 @@ struct StopRunRequest {
 }
 
 /// Stop a `torc run` started from the dashboard. SIGTERM makes the job runner terminate its
-/// jobs and exit, as Slurm does at walltime.
+/// jobs and exit, as Slurm does at walltime. Windows has no such signal: `taskkill /F` would kill
+/// the runner before it records its jobs as terminated, leaving them marked running, so Stop is
+/// refused there (and hidden in the UI via `can_stop_runs`).
 async fn cli_stop_run_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<StopRunRequest>,
 ) -> impl IntoResponse {
+    if !cfg!(unix) {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Stopping a local run is not supported on Windows",
+            })),
+        );
+    }
     let pids = state
         .local_runs
         .lock()
@@ -2603,7 +2629,10 @@ async fn cli_stop_run_handler(
         );
         stop_process(pid);
     }
-    Json(serde_json::json!({ "success": true, "stopped": !pids.is_empty() }))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "stopped": !pids.is_empty() })),
+    )
 }
 
 /// Read file contents from filesystem
@@ -3942,6 +3971,8 @@ struct VersionResponse {
     mismatch_severity: Option<String>,
     /// torc-server URL this dashboard talks to, without any embedded credentials.
     api_url: String,
+    /// Whether Stop can end a local run cleanly here (see `cli_stop_run_handler`).
+    can_stop_runs: bool,
 }
 
 /// Return the torc-dash version and check server version compatibility
@@ -4001,6 +4032,7 @@ async fn version_handler(State(state): State<Arc<AppState>>) -> impl IntoRespons
         version_mismatch,
         mismatch_severity,
         api_url: redact_url(&state.api_url),
+        can_stop_runs: cfg!(unix),
     })
 }
 
@@ -5399,6 +5431,19 @@ mod tests {
         check_request, expand_tilde, read_resource_samples, same_secret, tail_file,
         take_token_param, workflow_id_from_resource_db_name,
     };
+
+    #[test]
+    fn relative_bin_paths_become_absolute_but_bare_names_stay() {
+        assert_eq!(super::absolute_if_relative_path("torc".into()), "torc");
+        let rel = super::absolute_if_relative_path("./target/release/torc".into());
+        assert!(std::path::Path::new(&rel).is_absolute(), "{rel}");
+        assert!(rel.ends_with("torc"), "{rel}");
+        let abs = std::env::temp_dir()
+            .join("torc")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(super::absolute_if_relative_path(abs.clone()), abs);
+    }
 
     fn op_args(body: serde_json::Value) -> Result<Vec<String>, String> {
         let req: super::OpRequest = serde_json::from_value(body).unwrap();

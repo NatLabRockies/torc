@@ -29,12 +29,13 @@
   let mode = $state<"direct" | "reset" | string | undefined>(undefined);
   let saving = $state(false);
   let error = $state("");
+  let recordsError = $state("");
 
   function initial() {
     return {
       command: job.command,
       priority: job.priority ?? 0,
-      rrId: resources?.id ?? null,
+      rrId: job.resource_requirements_id ?? null,
       fields: valuesOf(resources),
       records: resources ? [resources] : [],
     };
@@ -58,8 +59,12 @@
         }),
       ),
     )
-      .then((r) => (records = r))
-      .catch(() => {});
+      .then((r) => {
+        records = r;
+        // The details view may have failed to load the job's requirement; show its real values.
+        if (!resources) fields = valuesOf(r.find((x) => x.id === rrId));
+      })
+      .catch((e) => (recordsError = errorText(e)));
     commandEditMode(job)
       .then((m) => (mode = m))
       .catch((e) => (mode = `Could not check job status: ${errorText(e)}`));
@@ -70,7 +75,9 @@
   let selected = $derived(records.find((r) => r.id === rrId) ?? null);
   let commandEditable = $derived(mode === "direct" || mode === "reset");
   let commandChanged = $derived(command.trim() !== job.command);
-  let rrChanged = $derived(rrId !== (resources?.id ?? null));
+  let rrChanged = $derived(rrId !== (job.resource_requirements_id ?? null));
+  // The job has a requirement that isn't loaded: saving would replace it with the form's defaults.
+  let rrMissing = $derived(rrId !== null && !selected);
   let fieldsChanged = $derived(
     !selected ||
       (Object.keys(fields) as (keyof ResourceFields)[]).some((k) => fields[k] !== selected[k]),
@@ -89,8 +96,17 @@
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (commandChanged && !command.trim()) return (error = "The command can't be empty.");
+    if (rrMissing) return (error = "The job's resource requirements haven't loaded; reopen this dialog.");
     saving = true;
     error = "";
+    // The job may have started since the dialog opened, and the server doesn't stop a running
+    // job's requirement from being rewritten.
+    const current = await getJob().catch((err) => (error = errorText(err)));
+    if (typeof current === "string" || JOB_BUSY.has(current.status ?? "")) {
+      saving = false;
+      if (typeof current !== "string") error = `This job is now ${current.status}. Edit it after it finishes.`;
+      return;
+    }
     const wid = { workflow_id: String(job.workflow_id) };
     // Mode may be stale: re-check right before a reset so nothing that started since is lost.
     const reset = commandChanged && (await commandEditMode(job).catch(() => "")) === "reset";
@@ -182,11 +198,16 @@
       </p>
     {/if}
     <p class="muted">New values apply the next time the job runs. Reset it to rerun it.</p>
+    {#if recordsError}
+      <p class="error-text">Could not load resource requirements: {recordsError}</p>
+    {:else if rrMissing && records.length}
+      <p class="error-text">The job's resource requirements (id {rrId}) were not found.</p>
+    {/if}
     {#if error}<p class="error-text">{error}</p>{/if}
   </form>
   {#snippet footer()}
     <button class="btn" onclick={() => (open = false)}>Cancel</button>
-    <button class="btn btn-primary" type="submit" form="edit-job" disabled={saving || busy}>
+    <button class="btn btn-primary" type="submit" form="edit-job" disabled={saving || busy || rrMissing}>
       {saving ? "Saving…" : "Save"}
     </button>
   {/snippet}

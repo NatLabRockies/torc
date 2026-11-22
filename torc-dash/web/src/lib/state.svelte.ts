@@ -101,6 +101,8 @@ class AppState {
   /** Access-group filter for the Workflows tab and the workflow picker. */
   accessGroup = $state("");
   version = $state<string | null>(null);
+  /** Whether Stop can end a local run cleanly on the dashboard's host (not on Windows). */
+  canStopRuns = $state(true);
   /** null until the first health check finishes. */
   connected = $state<boolean | null>(null);
   /** Why the last health check failed, if it did. */

@@ -106,19 +106,21 @@
     },
   };
 
+  // Stop can't end a run cleanly on a Windows host, so it isn't offered there.
+  let stopRun = $derived(app.canStopRuns ? [ACTIONS.stopRun] : []);
   // Groups separated by dividers in the menu.
   let menuGroups = $derived(
     compact
       ? [
           [ACTIONS.init, ACTIONS.reinit, ACTIONS.reset],
-          [ACTIONS.watch, ACTIONS.watchRecover, ACTIONS.stopRun],
+          [ACTIONS.watch, ACTIONS.watchRecover, ...stopRun],
           [ACTIONS.graph, ACTIONS.plan],
           [ACTIONS.schedule, ACTIONS.recover, ACTIONS.sync],
           [ACTIONS.edit, ACTIONS.export, ACTIONS.logs, ACTIONS.archive],
           [ACTIONS.cancel, ACTIONS.delete],
         ]
       : [
-          [ACTIONS.watch, ACTIONS.watchRecover, ACTIONS.stopRun],
+          [ACTIONS.watch, ACTIONS.watchRecover, ...stopRun],
           [ACTIONS.reset],
           [ACTIONS.schedule, ACTIONS.recover, ACTIONS.sync],
           [ACTIONS.edit, ACTIONS.export, ACTIONS.logs, ACTIONS.archive],

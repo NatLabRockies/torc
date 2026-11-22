@@ -50,7 +50,7 @@
           Details
         </button>
       {/if}
-      {#if execution.running}
+      {#if execution.running && (execution.mode !== "run" || app.canStopRuns)}
         <button
           class="btn btn-danger btn-sm"
           onclick={() => execution.stop()}
