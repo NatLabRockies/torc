@@ -367,6 +367,18 @@ cascade-delete the entire database contents.
 - User docs live under `docs/src/` and are built from `docs/` with `mdbook build`.
 - If source docs change, refresh the generated site in `docs/book/`.
 
+## Working on Large Changes
+
+- **Find every caller before editing shared code**: Before changing a function's signature or
+  behavior, run LSP find-references on it (rust-analyzer). Grep misses trait impls, re-exports, and
+  macro-generated call sites. API changes typically fan out to the server, CLI
+  (`src/client/commands/`), MCP tools, TUI, dash schema, and Python client.
+- **Don't review generated files**: Regenerate `api/openapi*.yaml`, `src/client/apis/`, and
+  `torc-dash/web/src/lib/api/schema.d.ts` via `api/sync_openapi.sh` and trust the output rather than
+  reading the diff.
+- **Prefer splitting PRs** that span the server API and multiple client surfaces: land the server
+  and API change first, then the clients.
+
 ## Common Tasks
 
 ### Adding a New API Endpoint
