@@ -1096,9 +1096,17 @@ pub fn build_workflow_summary_report(
     }
 
     // Actions whose execution failed, or that were claimed long ago with no outcome. Servers older
-    // than API 1.4.0 record no state, so both lists are empty there.
+    // than API 1.4.0 record no state, so both lists are empty there. Best-effort: a failure here
+    // must not break the rest of the summary.
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
-        .map_err(|e| format!("Error fetching workflow actions: {}", e))?;
+        .unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to fetch workflow actions for summary workflow_id={}: {}",
+                workflow_id,
+                e
+            );
+            Vec::new()
+        });
     let (failed, stuck) = problem_actions(&actions, chrono::Utc::now());
     report["failed_actions"] = serde_json::json!(failed);
     report["stuck_actions"] = serde_json::json!(stuck);

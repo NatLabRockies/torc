@@ -744,8 +744,17 @@ fn handle_failed_schedule_actions(
     config: &Configuration,
     args: &RecoverArgs,
 ) -> Result<bool, String> {
-    let actions = apis::workflow_actions_api::get_workflow_actions(config, args.workflow_id)
-        .map_err(|e| format!("Failed to list workflow actions: {}", e))?;
+    // Best-effort: this check must not block the rest of recovery (e.g. auto-recovery in watch).
+    let actions = match apis::workflow_actions_api::get_workflow_actions(config, args.workflow_id) {
+        Ok(actions) => actions,
+        Err(e) => {
+            warn!(
+                "Failed to list workflow actions workflow_id={}: {}",
+                args.workflow_id, e
+            );
+            return Ok(false);
+        }
+    };
     let failed: Vec<_> = actions
         .into_iter()
         .filter(|a| a.action_type == "schedule_nodes" && a.state.as_deref() == Some("failed"))

@@ -624,8 +624,20 @@ impl HpcInterface for SlurmInterface {
         let sbatch = Self::get_sbatch_exec();
         let filename_str = filename.to_string_lossy();
 
-        let (return_code, stdout, stderr) =
-            self.run_command_with_retries(&sbatch, &[&filename_str], 6, 10, &[], true)?;
+        // The fake sbatch used in tests fails deterministically; don't wait between its retries.
+        let retry_delay_secs = if env::var("TORC_FAKE_SBATCH").is_ok() {
+            0
+        } else {
+            10
+        };
+        let (return_code, stdout, stderr) = self.run_command_with_retries(
+            &sbatch,
+            &[&filename_str],
+            6,
+            retry_delay_secs,
+            &[],
+            true,
+        )?;
 
         if return_code != 0 {
             return Ok((return_code, String::new(), stderr));
