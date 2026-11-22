@@ -29,6 +29,10 @@ fn initialize(config: &Configuration, workflow_id: i64) {
 
 /// Move a ready job to failed through the normal start/complete path.
 fn fail_job(config: &Configuration, workflow_id: i64, job_id: i64) {
+    finish_job(config, workflow_id, job_id, JobStatus::Failed);
+}
+
+fn finish_job(config: &Configuration, workflow_id: i64, job_id: i64, final_status: JobStatus) {
     let run_id = run_id(config, workflow_id);
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id).unwrap();
     let attempt_id = apis::jobs_api::get_job(config, job_id)
@@ -44,9 +48,9 @@ fn fail_job(config: &Configuration, workflow_id: i64, job_id: i64) {
         1,
         0.1,
         "2026-01-01T00:00:00Z".to_string(),
-        JobStatus::Failed,
+        final_status,
     );
-    apis::jobs_api::complete_job(config, job_id, JobStatus::Failed, run_id, result).unwrap();
+    apis::jobs_api::complete_job(config, job_id, final_status, run_id, result).unwrap();
 }
 
 /// Selective reset; on an error response, returns its HTTP status code.
@@ -294,4 +298,34 @@ fn test_reset_without_body_keeps_legacy_behavior(start_server: &ServerProcess) {
         assert_eq!(response.reset, None);
         assert_eq!(status(config, failed), JobStatus::Uninitialized);
     }
+}
+
+#[rstest]
+fn test_reset_reports_downstream_side_effects(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let wf = create_test_workflow(config, "reset_downstream").id.unwrap();
+    let upstream = create_test_job(config, wf, "upstream").id.unwrap();
+    let mut job = models::JobModel::new(wf, "downstream".to_string(), "true".to_string());
+    job.depends_on_job_ids = Some(vec![upstream]);
+    job.cancel_on_blocking_job_failure = Some(false);
+    let downstream = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    initialize(config, wf);
+    fail_job(config, wf, upstream);
+    finish_job(config, wf, downstream, JobStatus::Completed);
+
+    // The completed dependent is not eligible itself but is reset as a side effect: it is
+    // reported in downstream_reset (also by a dry run), never as skipped.
+    let preview = reset(config, wf, Some(vec![upstream, downstream]), true, false).unwrap();
+    assert_eq!(preview.reset, Some(vec![upstream]));
+    assert_eq!(preview.downstream_reset, Some(vec![downstream]));
+    assert_eq!(preview.skipped, Some(vec![]));
+    assert_eq!(status(config, downstream), JobStatus::Completed);
+
+    let response = reset(config, wf, Some(vec![upstream, downstream]), false, false).unwrap();
+    assert_eq!(response.reset, Some(vec![upstream]));
+    assert_eq!(response.downstream_reset, Some(vec![downstream]));
+    assert_eq!(response.skipped, Some(vec![]));
+    assert_eq!(response.updated_count, 2);
+    assert_eq!(status(config, upstream), JobStatus::Uninitialized);
+    assert_eq!(status(config, downstream), JobStatus::Uninitialized);
 }

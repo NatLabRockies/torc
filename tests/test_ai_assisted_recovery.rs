@@ -404,6 +404,82 @@ fn test_classify_and_resolve_failures_applies(start_server: &ServerProcess) {
     assert_eq!(failed.status, Some(JobStatus::Failed));
 }
 
+/// A retry refused by the failure handler limit must not leave resource adjustments behind.
+#[cfg(feature = "mcp-server")]
+#[rstest]
+fn test_classify_refused_retry_leaves_resources_unchanged(start_server: &ServerProcess) {
+    use torc::mcp_server::tools::{FailureClassification, classify_and_resolve_failures};
+
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_classify_refused");
+    let mut workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    workflow.use_pending_failed = Some(true);
+    apis::workflows_api::update_workflow(config, workflow_id, workflow).unwrap();
+
+    let handler = apis::failure_handlers_api::create_failure_handler(
+        config,
+        models::FailureHandlerModel::new(
+            workflow_id,
+            "fh".to_string(),
+            r#"[{"exit_codes":[1],"max_retries":1}]"#.to_string(),
+        ),
+    )
+    .unwrap();
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        models::ResourceRequirementsModel {
+            id: None,
+            workflow_id,
+            name: "rr".to_string(),
+            num_cpus: 1,
+            num_gpus: 0,
+            num_nodes: 1,
+            memory: "1g".to_string(),
+            runtime: "PT10M".to_string(),
+        },
+    )
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "job".to_string(), "false".into());
+    job.failure_handler_id = handler.id;
+    job.resource_requirements_id = rr.id;
+    let job_id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None).unwrap();
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id).unwrap();
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::PendingFailed,
+    );
+    apis::jobs_api::complete_job(config, job_id, result.status, run_id, result).unwrap();
+
+    classify_and_resolve_failures(
+        config,
+        workflow_id,
+        vec![FailureClassification {
+            job_id,
+            action: "retry".to_string(),
+            memory: Some("4g".to_string()),
+            runtime: None,
+            reason: None,
+        }],
+        false,
+    )
+    .unwrap();
+
+    let job = apis::jobs_api::get_job(config, job_id).unwrap();
+    assert_eq!(job.status, Some(JobStatus::PendingFailed));
+    let rr =
+        apis::resource_requirements_api::get_resource_requirements(config, rr.id.unwrap()).unwrap();
+    assert_eq!(rr.memory, "1g");
+}
+
 /// regroup_job_resources must reject a group that omits num_gpus when its jobs currently
 /// use different values, instead of silently applying the first job's value to all.
 #[cfg(feature = "mcp-server")]
