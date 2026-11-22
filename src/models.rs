@@ -1314,6 +1314,39 @@ pub struct FailureHandlerModel {
     pub rules: String,
 }
 
+/// Largest `max_retries` among a failure handler's rules (JSON array), or None if it has no
+/// rules. A rule without `max_retries` defaults to 3, as in the workflow spec.
+pub fn max_retries_from_rules(rules: &str) -> Result<Option<i64>, serde_json::Error> {
+    #[derive(serde::Deserialize)]
+    struct Rule {
+        #[serde(default = "default_max_retries")]
+        max_retries: i64,
+    }
+    fn default_max_retries() -> i64 {
+        3
+    }
+    let rules: Vec<Rule> = serde_json::from_str(rules)?;
+    Ok(rules.iter().map(|r| r.max_retries).max())
+}
+
+/// Why a job on attempt `attempt_id` has used up the retry budget of its failure handler
+/// `rules`, or None if another retry is allowed. Shared by the server's `retry_job` and the MCP
+/// classifier's dry run so both refuse with the same rule and message.
+pub fn retry_limit_refusal(
+    rules: &str,
+    attempt_id: i64,
+) -> Result<Option<String>, serde_json::Error> {
+    Ok(max_retries_from_rules(rules)?
+        .filter(|&max| attempt_id >= max)
+        .map(|max| {
+            format!(
+                "Job cannot be retried: attempt_id={} >= max_retries={} \
+                 (failure handler limit)",
+                attempt_id, max
+            )
+        }))
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListFailureHandlersResponse {
@@ -1799,6 +1832,22 @@ impl JobStatus {
         )
     }
 
+    /// Every status, indexed by its integer value. Adding a variant forces an edit to the
+    /// exhaustive match in `to_int` just below; add it here too (the unit test checks the order).
+    pub const ALL: [JobStatus; 11] = [
+        JobStatus::Uninitialized,
+        JobStatus::Blocked,
+        JobStatus::Ready,
+        JobStatus::Pending,
+        JobStatus::Running,
+        JobStatus::Completed,
+        JobStatus::Failed,
+        JobStatus::Canceled,
+        JobStatus::Terminated,
+        JobStatus::Disabled,
+        JobStatus::PendingFailed,
+    ];
+
     pub fn to_int(&self) -> i32 {
         match *self {
             JobStatus::Uninitialized => 0,
@@ -1816,20 +1865,10 @@ impl JobStatus {
     }
 
     pub fn from_int(value: i32) -> std::result::Result<Self, String> {
-        match value {
-            0 => Ok(JobStatus::Uninitialized),
-            1 => Ok(JobStatus::Blocked),
-            2 => Ok(JobStatus::Ready),
-            3 => Ok(JobStatus::Pending),
-            4 => Ok(JobStatus::Running),
-            5 => Ok(JobStatus::Completed),
-            6 => Ok(JobStatus::Failed),
-            7 => Ok(JobStatus::Canceled),
-            8 => Ok(JobStatus::Terminated),
-            9 => Ok(JobStatus::Disabled),
-            10 => Ok(JobStatus::PendingFailed),
-            _ => Err(format!("Invalid JobStatus integer value: {}", value)),
-        }
+        usize::try_from(value)
+            .ok()
+            .and_then(|i| Self::ALL.get(i).copied())
+            .ok_or_else(|| format!("Invalid JobStatus integer value: {}", value))
     }
 
     pub fn from_i64(value: i64) -> std::result::Result<Self, String> {
@@ -2187,6 +2226,9 @@ impl ResetJobStatusResponse {
             updated_count,
             status,
             reset_type: None,
+            reset: None,
+            downstream_reset: None,
+            skipped: None,
         }
     }
 
@@ -2662,6 +2704,44 @@ pub struct ResetJobStatusResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reset_type: Option<String>,
+    /// IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
+    /// request has a body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset: Option<Vec<i64>>,
+    /// Direct completed or failed dependents of reset terminal jobs that were also reset (or,
+    /// for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the
+    /// request has a body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downstream_reset: Option<Vec<i64>>,
+    /// Requested jobs that were not reset, with the reason. Set only when the request has a
+    /// body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<Vec<ResetJobStatusSkipped>>,
+}
+
+/// Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
+/// only the listed jobs in the listed statuses are reset, in one transaction that first checks
+/// that the workflow is quiet (see the endpoint description).
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ResetJobStatusRequest {
+    /// Jobs to reset. Omit to select every job in the workflow whose status is in `statuses`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_ids: Option<Vec<i64>>,
+    /// Statuses a job must be in to be reset. Defaults to the recoverable statuses: failed,
+    /// terminated, canceled, and pending_failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub statuses: Option<Vec<JobStatus>>,
+    /// Report what would be reset without changing anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+}
+
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResetJobStatusSkipped {
+    pub job_id: i64,
+    pub reason: String,
 }
 
 #[cfg(test)]
@@ -2673,6 +2753,16 @@ mod tests {
         ResultModel, UserDataModel, WorkflowModel,
     };
     use serde_json::json;
+
+    #[test]
+    fn job_status_all_is_indexed_by_int() {
+        for (i, status) in JobStatus::ALL.iter().enumerate() {
+            assert_eq!(status.to_int(), i as i32);
+            assert_eq!(JobStatus::from_int(i as i32), Ok(*status));
+        }
+        assert!(JobStatus::from_int(JobStatus::ALL.len() as i32).is_err());
+        assert!(JobStatus::from_int(-1).is_err());
+    }
 
     #[test]
     fn workflow_support_models_serialize_expected_shapes() {

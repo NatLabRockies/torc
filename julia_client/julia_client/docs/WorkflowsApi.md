@@ -801,10 +801,12 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **reset_job_status**
-> reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, _mediaType=nothing) -> ResetJobStatusResponse, OpenAPI.Clients.ApiResponse <br/>
-> reset_job_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; failed_only=nothing, _mediaType=nothing) -> Channel{ ResetJobStatusResponse }, OpenAPI.Clients.ApiResponse
+> reset_job_status(_api::WorkflowsApi, id::Int64; failed_only=nothing, force=nothing, reset_job_status_request=nothing, _mediaType=nothing) -> ResetJobStatusResponse, OpenAPI.Clients.ApiResponse <br/>
+> reset_job_status(_api::WorkflowsApi, response_stream::Channel, id::Int64; failed_only=nothing, force=nothing, reset_job_status_request=nothing, _mediaType=nothing) -> Channel{ ResetJobStatusResponse }, OpenAPI.Clients.ApiResponse
 
 
+
+Reset job statuses to uninitialized. Without a body, resets every job (or, with failed_only, every failed, terminated, canceled, and pending_failed job). With a body, resets only the selected jobs in one transaction: jobs from other workflows or not in an eligible status are skipped with a reason, and the request is refused with 422 while the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs, unless force=true. As with manage_status_change, resetting a terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id.
 
 ### Required Parameters
 
@@ -817,7 +819,9 @@ Name | Type | Description  | Notes
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **failed_only** | **Bool** |  | [default to nothing]
+ **failed_only** | **Bool** | Without a body: reset only failed, terminated, canceled, and pending_failed jobs. Ignored when a body is sent. | [default to nothing]
+ **force** | **Bool** | With a body: reset even if the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs. | [default to nothing]
+ **reset_job_status_request** | [**ResetJobStatusRequest**](ResetJobStatusRequest.md) | Optional selective reset | 
 
 ### Return type
 
@@ -829,7 +833,7 @@ No authorization required
 
 ### HTTP request headers
 
- - **Content-Type**: Not defined
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

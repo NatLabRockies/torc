@@ -676,7 +676,7 @@ fn test_action_executed_flag_reset_on_reinitialize(start_server: &ServerProcess)
     assert_eq!(action.trigger_count, 1);
 
     // === Reset failed job and reinitialize using WorkflowManager ===
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("Failed to reset failed jobs");
 
     // Reinitialize workflow using WorkflowManager (this gets a new run_id)
@@ -1604,7 +1604,7 @@ fn test_satisfied_schedule_action_not_rearmed_on_reinitialize(start_server: &Ser
         1,
         JobStatus::Failed,
     );
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("reset failed jobs");
     manager.reinitialize(true, false).expect("reinitialize");
 
@@ -1899,7 +1899,7 @@ fn test_on_jobs_ready_satisfied_schedule_action_not_rearmed_on_subset_reinitiali
     );
 
     // Subset re-run: reset only the failed job, then reinitialize. The gate stays Completed.
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("reset failed jobs");
     manager.reinitialize(true, false).expect("reinitialize");
 
@@ -1999,7 +1999,7 @@ fn test_run_commands_action_suppressed_on_subset_reinitialize(start_server: &Ser
     );
 
     // Subset re-run: reset only the failed job, then reinitialize. The gate stays Completed.
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("reset failed jobs");
     manager.reinitialize(true, false).expect("reinitialize");
 
@@ -3071,7 +3071,7 @@ fn reset_and_reinit_via(
 ) {
     match entry {
         ReinitEntry::Reinit => {
-            apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+            apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
                 .expect("reset failed jobs");
             manager.reinitialize(true, false).expect("reinitialize");
         }

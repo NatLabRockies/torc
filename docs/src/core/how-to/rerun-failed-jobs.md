@@ -101,8 +101,10 @@ additional jobs after an earlier reset) as long as no workers are active. If a s
 completed successfully, the command warns you before resetting it, since resetting discards its
 results and reruns it.
 
-The `--force` flag bypasses two checks: (1) the no-active-workers check (compute nodes and Slurm
-allocations), and (2) the active-status guard (jobs in Running or Pending are normally rejected).
+The server resets all selected jobs in one transaction, and in the same transaction refuses the
+reset while the workflow is busy: active compute nodes, pending or active Slurm allocations, or any
+job in Running or Pending. A runner therefore cannot claim jobs or start between the check and the
+reset. The `--force` flag skips this check.
 
 ## Choosing the Right Tool
 

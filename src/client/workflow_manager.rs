@@ -164,7 +164,13 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        match apis::workflows_api::reset_job_status(&self.config, self.workflow_id, Some(false)) {
+        match apis::workflows_api::reset_job_status(
+            &self.config,
+            self.workflow_id,
+            Some(false),
+            None,
+            None,
+        ) {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -210,7 +216,13 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        match apis::workflows_api::reset_job_status(&self.config, self.workflow_id, Some(false)) {
+        match apis::workflows_api::reset_job_status(
+            &self.config,
+            self.workflow_id,
+            Some(false),
+            None,
+            None,
+        ) {
             Ok(_) => {}
             Err(err) => {
                 error!(

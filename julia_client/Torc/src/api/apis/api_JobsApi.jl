@@ -296,7 +296,7 @@ const _returntypes_retry_job_JobsApi = Dict{Regex,Type}(
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
-function _oacinternal_retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
+function _oacinternal_retry_job(_api::JobsApi, id::Int64, run_id::Int64; max_retries=nothing, _mediaType=nothing)
     _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_retry_job_JobsApi, "/jobs/{id}/retry/{run_id}", [])
     OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
     OpenAPI.Clients.set_param(_ctx.path, "run_id", run_id)  # type Int64
@@ -309,17 +309,17 @@ end
 @doc raw"""Params:
 - id::Int64 (required)
 - run_id::Int64 (required)
-- max_retries::Int64 (required)
+- max_retries::Int64
 
 Return: JobModel, OpenAPI.Clients.ApiResponse
 """
-function retry_job(_api::JobsApi, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
-    _ctx = _oacinternal_retry_job(_api, id, run_id, max_retries; _mediaType=_mediaType)
+function retry_job(_api::JobsApi, id::Int64, run_id::Int64; max_retries=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_retry_job(_api, id, run_id; max_retries=max_retries, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx)
 end
 
-function retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64, max_retries::Int64; _mediaType=nothing)
-    _ctx = _oacinternal_retry_job(_api, id, run_id, max_retries; _mediaType=_mediaType)
+function retry_job(_api::JobsApi, response_stream::Channel, id::Int64, run_id::Int64; max_retries=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_retry_job(_api, id, run_id; max_retries=max_retries, _mediaType=_mediaType)
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 

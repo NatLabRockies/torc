@@ -1321,13 +1321,10 @@ where
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError> {
         authorize_job!(self, id, context, RetryJobResponse);
-        self.jobs_api
-            .retry_job(id, run_id, max_retries, context)
-            .await
+        self.jobs_api.retry_job(id, run_id, context).await
     }
 
     pub(super) async fn transport_delete_job(
@@ -1343,40 +1340,51 @@ where
         &self,
         id: i64,
         failed_only: Option<bool>,
+        force: Option<bool>,
+        body: Option<models::ResetJobStatusRequest>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError> {
         log_call!(
             info,
             context,
-            "reset_job_status(workflow_id={}, failed_only={:?})",
+            "reset_job_status(workflow_id={}, failed_only={:?}, force={:?}, body={:?})",
             id,
             failed_only,
+            force,
+            body,
         );
 
         authorize_workflow!(self, id, context, ResetJobStatusResponse);
 
         let failed_only_value = failed_only.unwrap_or(false);
-        let result = self
-            .jobs_api
-            .reset_job_status(id, failed_only_value, context)
-            .await?;
+        let result = match body {
+            Some(body) => {
+                self.jobs_api
+                    .reset_selected_jobs(id, body, force.unwrap_or(false))
+                    .await?
+            }
+            None => {
+                self.jobs_api
+                    .reset_job_status(id, failed_only_value, context)
+                    .await?
+            }
+        };
 
         // Skip no-op resets (e.g. the pre-step of initializing a fresh workflow) so they don't
         // show up as user actions.
         if let ResetJobStatusResponse::SuccessfulResponse(ref response) = result
             && response.updated_count > 0
         {
-            self.record_user_action_event(
-                id,
-                "reset_job_status",
-                serde_json::json!({
-                    "workflow_id": id,
-                    "failed_only": failed_only_value,
-                    "updated_count": response.updated_count,
-                }),
-                context,
-            )
-            .await;
+            let mut data = serde_json::json!({
+                "workflow_id": id,
+                "failed_only": failed_only_value,
+                "updated_count": response.updated_count,
+            });
+            if let Some(ref reset) = response.reset {
+                data["job_ids"] = serde_json::json!(reset);
+            }
+            self.record_user_action_event(id, "reset_job_status", data, context)
+                .await;
         }
 
         Ok(result)

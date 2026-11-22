@@ -198,8 +198,7 @@ fn reset_failed_jobs_errors_when_nothing_recoverable(start_server: &ServerProces
     );
 }
 
-/// A job id from another workflow is refused (manage_status_change is not workflow-scoped,
-/// so reset_failed_jobs must guard ownership itself).
+/// A job id from another workflow is refused by the server-side selective reset.
 #[rstest]
 fn reset_failed_jobs_refuses_foreign_workflow(start_server: &ServerProcess) {
     let config = &start_server.config;
@@ -225,7 +224,7 @@ fn reset_failed_jobs_refuses_foreign_workflow(start_server: &ServerProcess) {
     let err =
         reset_failed_jobs(config, wf1, &[foreign_id]).expect_err("foreign job must be refused");
     assert!(
-        err.contains("belongs to workflow"),
+        err.contains(&format!("is not in workflow {}", wf1)),
         "unexpected message: {err}"
     );
     // The foreign job is untouched.

@@ -642,7 +642,8 @@ map_response!(
 map_response!(
     reset_job_status_response,
     ResetJobStatusResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     reset_workflow_status_response,

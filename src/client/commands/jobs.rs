@@ -528,7 +528,7 @@ EXAMPLES:
         /// interactively when omitted)
         #[arg(long)]
         workflow_id: Option<i64>,
-        /// Skip precondition checks (no active workers, target jobs not running)
+        /// Skip the busy-workflow check (active workers or allocations, running or pending jobs)
         #[arg(long)]
         force: bool,
         /// Preview which jobs would be reset without applying changes
@@ -1855,15 +1855,25 @@ fn handle_reset_job_status(
     // leaves jobs uninitialized, so the workflow is no longer "complete".
     let mut unique_jobs = unique_jobs;
     if !force {
-        // If workers look active, they may be dead runners that never deactivated
-        // (e.g. a killed `torc run`). Run the `torc recover` orphan cleanup to
-        // deactivate them and fail their stuck Running jobs before checking. The
-        // cleanup is workflow-wide, so preview it and confirm before applying.
+        // The server's quiet check (no active workers or allocations, no running or pending
+        // jobs), run up front so the user sees the problem before the tables and prompt.
+        let job_ids: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+        let precheck = || {
+            crate::client::commands::recover::preview_reset(
+                config,
+                workflow_id,
+                Some(job_ids.clone()),
+                Some(models::JobStatus::ALL.to_vec()),
+            )
+            .err()
+        };
+        let mut refusal = precheck();
+        // A busy workflow may only have dead runners that never deactivated (e.g. a killed
+        // `torc run`). Run the `torc recover` orphan cleanup to deactivate them and fail their
+        // stuck Running jobs, then check again. The cleanup is workflow-wide, so preview it
+        // and confirm before applying.
         use crate::client::commands::orphan_detection::cleanup_orphaned_jobs;
-        let preview = if !dry_run
-            && crate::client::commands::recover::check_no_active_workers(config, workflow_id)
-                .is_err()
-        {
+        let preview = if refusal.is_some() && !dry_run {
             cleanup_orphaned_jobs(config, workflow_id, true)
                 .ok()
                 .filter(|p| p.any_cleaned())
@@ -1899,34 +1909,11 @@ fn handle_reset_job_status(
                 Ok(_) => {}
                 Err(e) => log::warn!("Orphan cleanup failed workflow_id={}: {}", workflow_id, e),
             }
+            refusal = precheck();
         }
-        if let Err(msg) =
-            crate::client::commands::recover::check_no_active_workers(config, workflow_id)
-        {
+        if let Some(msg) = refusal {
             eprintln!("Error: {}", msg);
             eprintln!("Use --force to skip this check.");
-            std::process::exit(1);
-        }
-
-        // Reject jobs currently in Running or Pending status
-        let active_targets: Vec<i64> = unique_jobs
-            .iter()
-            .filter(|j| {
-                matches!(
-                    j.status,
-                    Some(models::JobStatus::Running) | Some(models::JobStatus::Pending)
-                )
-            })
-            .map(require_job_id)
-            .collect();
-        if !active_targets.is_empty() {
-            eprintln!(
-                "Error: the following jobs are currently Running or Pending and cannot be reset \
-                 without --force:"
-            );
-            for id in &active_targets {
-                eprintln!("  job {}", id);
-            }
             std::process::exit(1);
         }
     }
@@ -2112,34 +2099,33 @@ fn handle_reset_job_status(
     }
 
     // -----------------------------------------------------------------------
-    // 8. Apply: fetch run_id, then reset ONLY the requested jobs
+    // 8. Apply: reset ONLY the requested jobs, in one server transaction
     // -----------------------------------------------------------------------
-    let run_id = match apis::workflows_api::get_workflow(config, workflow_id) {
-        Ok(wf) => wf.run_id.unwrap_or(1),
-        Err(e) => {
-            eprintln!("Error: failed to fetch workflow {}: {}", workflow_id, e);
-            std::process::exit(1);
-        }
-    };
-
-    // The server's one-level reinitialize_downstream_jobs may incidentally reset
-    // some direct Completed/Failed dependents on complete→uninitialized; that is
+    // Resetting a terminal job also resets its downstream jobs on the server; that is
     // harmless — the recursive reset at reinit time covers the rest.
-    let mut succeeded: Vec<i64> = Vec::new();
-    let mut failures: Vec<(i64, String)> = Vec::new();
-
-    for job in &unique_jobs {
-        let id = require_job_id(job);
-        match apis::jobs_api::manage_status_change(
+    let requested: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+    let (succeeded, failures): (Vec<i64>, Vec<(i64, String)>) =
+        match crate::client::commands::recover::reset_jobs(
             config,
-            id,
-            models::JobStatus::Uninitialized,
-            run_id,
+            workflow_id,
+            Some(requested.clone()),
+            Some(models::JobStatus::ALL.to_vec()),
+            force,
         ) {
-            Ok(_) => succeeded.push(id),
-            Err(e) => failures.push((id, e.to_string())),
-        }
-    }
+            Ok(response) => (
+                response.reset.unwrap_or_default(),
+                response
+                    .skipped
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|s| (s.job_id, s.reason))
+                    .collect(),
+            ),
+            Err(msg) => (
+                Vec::new(),
+                requested.iter().map(|&id| (id, msg.clone())).collect(),
+            ),
+        };
 
     // -----------------------------------------------------------------------
     // 8b. Apply reinit (only when requested and all resets succeeded)
@@ -2191,7 +2177,7 @@ fn handle_reset_job_status(
             "status": status_str,
             "workflow_id": workflow_id,
             "reset_count": succeeded.len(),
-            "requested_job_ids": unique_jobs.iter().map(require_job_id).collect::<Vec<_>>(),
+            "requested_job_ids": requested,
             "reset_job_ids": succeeded,
             // Informational: these are reset by the server at reinit time,
             // not by this command.

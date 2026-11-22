@@ -666,7 +666,7 @@ pub fn retry_job(
     configuration: &configuration::Configuration,
     id: i64,
     run_id: i64,
-    max_retries: i32,
+    max_retries: Option<i32>,
 ) -> Result<models::JobModel, Error<RetryJobError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
@@ -683,7 +683,9 @@ pub fn retry_job(
         .client
         .request(reqwest::Method::POST, &uri_str);
 
-    req_builder = req_builder.query(&[("max_retries", &p_query_max_retries.to_string())]);
+    if let Some(ref param_value) = p_query_max_retries {
+        req_builder = req_builder.query(&[("max_retries", &param_value.to_string())]);
+    }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }

@@ -89,6 +89,11 @@ pub fn app_router(state: LiveRouterState) -> Router {
                     "/torc-service/v1/bulk_user_data",
                     post(create_user_data_list),
                 )
+                // Selective resets carry every selected job ID in one request.
+                .route(
+                    "/torc-service/v1/workflows/{id}/reset_job_status",
+                    post(reset_job_status),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -359,10 +364,6 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(reset_workflow_status),
         )
         .route(
-            "/torc-service/v1/workflows/{id}/reset_job_status",
-            post(reset_job_status),
-        )
-        .route(
             "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
             post(claim_jobs_based_on_resources),
         )
@@ -498,8 +499,14 @@ pub struct ResetWorkflowStatusQuery {
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ResetJobStatusQuery {
+    /// Without a body: reset only failed, terminated, canceled, and pending_failed jobs.
+    /// Ignored when a body is sent.
     #[param(nullable = true)]
     pub failed_only: Option<bool>,
+    /// With a body: reset even if the workflow has active compute nodes, pending or active
+    /// scheduled compute nodes, or running or pending jobs.
+    #[param(nullable = true)]
+    pub force: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2356,7 +2363,10 @@ pub struct DeleteJobsQuery {
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct RetryJobQuery {
-    pub max_retries: i32,
+    /// Deprecated and ignored: the server enforces the job's failure handler limit.
+    #[param(nullable = true)]
+    #[allow(dead_code)]
+    pub max_retries: Option<i32>,
 }
 
 #[utoipa::path(
@@ -2700,14 +2710,10 @@ pub async fn start_job(
 pub async fn retry_job(
     State(state): State<LiveRouterState>,
     Path((id, run_id)): Path<(i64, i64)>,
-    Query(query): Query<RetryJobQuery>,
+    Query(_query): Query<RetryJobQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
-    match state
-        .server
-        .retry_job(id, run_id, query.max_retries, &context)
-        .await
-    {
+    match state.server.retry_job(id, run_id, &context).await {
         Ok(response) => retry_job_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -4069,18 +4075,57 @@ pub async fn reset_workflow_status(
     tag = "workflows",
     path = "/workflows/{id}/reset_job_status",
     operation_id = "reset_job_status",
+    description = "Reset job statuses to uninitialized. Without a body, resets every job (or, \
+        with failed_only, every failed, terminated, canceled, and pending_failed job). With a \
+        body, resets only the selected jobs in one transaction: jobs from other workflows or not \
+        in an eligible status are skipped with a reason, and the request is refused with 422 \
+        while the workflow has active compute nodes, pending or active scheduled compute nodes, \
+        or running or pending jobs, unless force=true. As with manage_status_change, resetting a \
+        terminal job also resets its direct completed or failed dependents. Does not bump the \
+        workflow run_id.",
     params(("id" = i64, Path, description = "Workflow ID"), ResetJobStatusQuery),
-    responses((status = 200, description = "Successful response", body = models::ResetJobStatusResponse))
+    request_body(
+        content = Option<models::ResetJobStatusRequest>,
+        description = "Optional selective reset"
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::ResetJobStatusResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (
+            status = 422,
+            description = "Invalid request body, or the workflow is not quiet",
+            body = models::ErrorResponse
+        ),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn reset_job_status(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Query(query): Query<ResetJobStatusQuery>,
     Extension(context): Extension<EmptyContext>,
+    body: axum::body::Bytes,
 ) -> Response<Body> {
+    // No body, an empty body, and `null` all mean "no body". Parse by hand rather than with
+    // `Option<Json<_>>`: generated clients (Rust sends `null`; Python sends an empty body with a
+    // JSON content type) and plain callers that send no content type must all keep working.
+    let body = if body.iter().all(u8::is_ascii_whitespace) {
+        None
+    } else {
+        match serde_json::from_slice::<Option<models::ResetJobStatusRequest>>(&body) {
+            Ok(body) => body,
+            Err(e) => {
+                return error_response(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!("Invalid request body: {}", e),
+                );
+            }
+        }
+    };
     match state
         .server
-        .reset_job_status(id, query.failed_only, &context)
+        .reset_job_status(id, query.failed_only, query.force, body, &context)
         .await
     {
         Ok(response) => reset_job_status_response(response),
