@@ -7713,6 +7713,17 @@ components:
       - updated_count
       - status
       properties:
+        downstream_reset:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+          description: |-
+            Direct completed or failed dependents of reset terminal jobs that were also reset (or,
+            for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the
+            request has a body.
         reset:
           type:
           - array
