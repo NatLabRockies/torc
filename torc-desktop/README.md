@@ -24,6 +24,16 @@ docs.
 - `torc-dash` listens on `/tmp/torc-desktop-<random>.sock` (mode 0600). It stops and the socket is
   removed when the SSH session ends, including when the app quits or the connection drops.
 
+## Connect page and dashboard extras
+
+- Saved connections (named copies of the form) live in the connect page's `localStorage`
+  (`torc-desktop.profiles`), next to the last-used form (`torc-desktop.connection`).
+- Downloads from the dashboard go to a temporary file, then a native save dialog asks where to keep
+  them (`on_download` in `main.rs`, tauri-plugin-dialog).
+- tauri-plugin-notification polyfills `window.Notification` for the dashboard's workflow-finished
+  notifications. `capabilities/dashboard.json` lets the dashboard origin (`http://127.0.0.1:*`) call
+  only its permission and notify commands.
+
 Design notes (why a UNIX socket, the remote watcher, the askpass relay, the stable port):
 `docs/src/specialized/design/desktop.md`.
 

@@ -142,6 +142,7 @@ fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -200,6 +201,7 @@ fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -252,6 +254,19 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
     // an omitted serialize_allocations comes back as an explicit false, matching
     // what get/list return.
     assert_eq!(created.serialize_allocations, Some(false));
+
+    // Updates: a null optional field keeps its value, an empty one clears it.
+    let id = created.id.unwrap();
+    let update = models::SlurmSchedulerModel {
+        partition: None,
+        mem: Some(String::new()),
+        ..created.clone()
+    };
+    apis::slurm_schedulers_api::update_slurm_scheduler(config, id, update)
+        .expect("Failed to update scheduler");
+    let updated = apis::slurm_schedulers_api::get_slurm_scheduler(config, id).unwrap();
+    assert_eq!(updated.partition.as_deref(), Some("standard"));
+    assert_eq!(updated.mem, None);
 
     // Verify we can list the scheduler
     let response = apis::slurm_schedulers_api::list_slurm_schedulers(

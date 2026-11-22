@@ -4285,6 +4285,8 @@ export interface operations {
                  *     these labels would claim. An empty value returns only unlabeled jobs.
                  */
                 labels?: string | null;
+                /** @description Returns only the jobs that use this resource requirements record. */
+                resource_requirements_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -8611,7 +8613,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Workflow is not quiet */
+            /** @description Invalid request body, or the workflow is not quiet */
             422: {
                 headers: {
                     [name: string]: unknown;

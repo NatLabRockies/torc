@@ -181,6 +181,7 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list pending_failed jobs");
 
@@ -458,19 +459,28 @@ fn test_classify_refused_retry_leaves_resources_unchanged(start_server: &ServerP
     );
     apis::jobs_api::complete_job(config, job_id, result.status, run_id, result).unwrap();
 
-    classify_and_resolve_failures(
-        config,
-        workflow_id,
-        vec![FailureClassification {
-            job_id,
-            action: "retry".to_string(),
-            memory: Some("4g".to_string()),
-            runtime: None,
-            reason: None,
-        }],
-        false,
-    )
-    .unwrap();
+    let classify = |dry_run| {
+        classify_and_resolve_failures(
+            config,
+            workflow_id,
+            vec![FailureClassification {
+                job_id,
+                action: "retry".to_string(),
+                memory: Some("4g".to_string()),
+                runtime: None,
+                reason: None,
+            }],
+            dry_run,
+        )
+        .unwrap()
+    };
+
+    // The dry-run preview must report the same refusal the apply would hit.
+    let preview = serde_json::to_string(&classify(true)).unwrap();
+    assert!(preview.contains("cannot be retried"), "{preview}");
+    assert!(!preview.contains("would_apply"), "{preview}");
+
+    classify(false);
 
     let job = apis::jobs_api::get_job(config, job_id).unwrap();
     assert_eq!(job.status, Some(JobStatus::PendingFailed));

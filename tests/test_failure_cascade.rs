@@ -32,6 +32,7 @@ fn job_statuses(
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 

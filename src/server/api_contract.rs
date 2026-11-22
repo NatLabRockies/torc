@@ -538,6 +538,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 

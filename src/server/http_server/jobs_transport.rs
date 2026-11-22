@@ -1174,6 +1174,7 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -1200,6 +1201,7 @@ where
                 name,
                 command,
                 labels,
+                resource_requirements_id,
                 context,
             )
             .await

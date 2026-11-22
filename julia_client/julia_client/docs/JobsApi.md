@@ -190,8 +190,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_jobs**
-> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
+> list_jobs(_api::JobsApi, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, resource_requirements_id=nothing, _mediaType=nothing) -> ListJobsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_jobs(_api::JobsApi, response_stream::Channel, workflow_id::Int64; status=nothing, needs_file_id=nothing, upstream_job_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, include_relationships=nothing, active_compute_node_id=nothing, origin_is_set=nothing, name=nothing, command=nothing, labels=nothing, resource_requirements_id=nothing, _mediaType=nothing) -> Channel{ ListJobsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -219,6 +219,7 @@ Name | Type | Description  | Notes
  **name** | **String** | Substring filter on the job name (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
  **command** | **String** | Substring filter on the job command (SQL &#x60;LIKE %value%&#x60;, case-insensitive for ASCII). | [default to nothing]
  **labels** | **String** | Comma-separated runner labels: returns the jobs a runner started with these labels would claim. An empty value returns only unlabeled jobs. | [default to nothing]
+ **resource_requirements_id** | **Int64** | Returns only the jobs that use this resource requirements record. | [default to nothing]
 
 ### Return type
 

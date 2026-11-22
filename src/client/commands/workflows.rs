@@ -2647,6 +2647,7 @@ pub fn handle_delete(config: &Configuration, ids: &[i64], no_prompts: bool, form
             None,    // name
             None,    // command
             None,    // label
+            None,    // resource_requirements_id
         ) {
             Ok(response) => response.total_count,
             Err(e) => {

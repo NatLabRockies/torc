@@ -157,6 +157,7 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
         None,                  // name
         None,                  // command
         None,                  // labels
+        None,                  // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -235,6 +236,7 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs before completion");
     assert_eq!(jobs_before.items.len(), 1);
@@ -271,6 +273,7 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after completion");
     assert_eq!(jobs_after.items.len(), 0);
@@ -368,6 +371,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list orphaned jobs");
 
@@ -411,6 +415,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list failed jobs");
     assert_eq!(failed_jobs.items.len(), 2);
@@ -432,6 +437,7 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list active jobs");
     assert_eq!(active_jobs.items.len(), 0);
@@ -845,6 +851,7 @@ fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {
         None,        // name
         None,        // command
         None,        // labels
+        None,        // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -949,6 +956,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn1 jobs");
     let cn1_items = cn1_jobs.items;
@@ -974,6 +982,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn2 jobs");
     let cn2_items = cn2_jobs.items;
@@ -1017,6 +1026,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn1 jobs after");
     assert_eq!(cn1_after.items.len(), 0);
@@ -1038,6 +1048,7 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn2 jobs after");
     assert_eq!(cn2_after.items.len(), 2);
@@ -1111,6 +1122,7 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list before reset");
     assert_eq!(before_reset.items.len(), 1);
@@ -1136,6 +1148,7 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // resource_requirements_id
     )
     .expect("Failed to list after reset");
     assert_eq!(after_reset.items.len(), 0);
