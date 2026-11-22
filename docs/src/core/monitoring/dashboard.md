@@ -217,10 +217,13 @@ scheduled compute nodes, and Slurm stats.
   `>`, `<`, `>=`, `<=`, `~` (contains), and `:` (e.g. `status=failed`, `exec_time>10`, `name:work`).
   Quick-filter buttons cover common job statuses.
 - **Job details**: click a job to see its command, results, logs (stdout/stderr), files, user data,
-  resources, and dependencies. Other tabs open the same view. **Edit** changes the job's priority
-  and resources (not while it is running). If its resource requirement is shared with other jobs,
-  the job gets its own copy, named `<name>_job<id>`, so the others keep their values. **Reset for
-  rerun** resets the job and its dependents.
+  resources, and dependencies. Other tabs open the same view. **Edit** changes the job's command,
+  priority, and resources (not while it is running). Pick another of the workflow's resource
+  requirements or adjust the values; if the requirement is shared with other jobs, the job gets its
+  own copy, named `<name>_job<id>`, so the others keep their values. The command can change while no
+  job in the workflow has run yet (every job is uninitialized, blocked, or ready); for an
+  initialized workflow the dashboard resets its jobs, saves the command, and initializes it again.
+  **Reset for rerun** resets the job and its dependents.
 - **Editing resource requirements and Slurm schedulers**: click a row in the Resources or Schedulers
   sub-tab to edit it. The change applies to every job (or future allocation) that uses it, so
   editing is allowed only when no jobs are running or pending and no Slurm allocations are queued or

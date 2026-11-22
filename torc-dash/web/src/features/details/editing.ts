@@ -32,6 +32,30 @@ export async function editBlockedReason(workflowId: number): Promise<string | nu
 /** Job statuses whose resources can't change: the job is (about to be) running with them. */
 export const JOB_BUSY: ReadonlySet<string> = new Set(["running", "pending"]);
 
+const PRE_RUN: ReadonlySet<string> = new Set(["uninitialized", "blocked", "ready"]);
+
+/**
+ * How a job's command can be changed. The server accepts command changes only for uninitialized
+ * jobs (initialization hashes the command). A blocked or ready job can still be edited while the
+ * whole workflow is pre-run: reset every job, edit, and initialize again, losing nothing.
+ * Returns "direct", "reset", or why the command can't change.
+ */
+export async function commandEditMode(job: Job): Promise<"direct" | "reset" | string> {
+  if (job.status === "uninitialized") return "direct";
+  const wf = job.workflow_id;
+  const [status, blocked] = await Promise.all([
+    unwrap(api.GET("/workflows/{id}/status", { params: { path: { id: wf } } })),
+    editBlockedReason(wf),
+  ]);
+  if (blocked) return blocked;
+  const ran = Object.entries(status.jobs_by_status ?? {})
+    .filter(([s, n]) => !PRE_RUN.has(s) && (n ?? 0) > 0)
+    .map(([s, n]) => `${n} ${s}`);
+  return ran.length
+    ? `Commands can change only before any job runs (${ran.join(", ")}). Reset the workflow first.`
+    : "reset";
+}
+
 export type ResourceFields = Pick<
   ResourceRequirements,
   "num_cpus" | "memory" | "num_gpus" | "num_nodes" | "runtime"
