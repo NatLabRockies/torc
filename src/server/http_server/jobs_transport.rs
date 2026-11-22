@@ -1337,12 +1337,24 @@ where
             ));
         };
         let status = parse_job_status(status_int as i32, id)?;
+        // A disabled job in a workflow that was never initialized has uninitialized dependents,
+        // the same hazard as canceling an uninitialized job.
+        let has_uninitialized_dependent = status == models::JobStatus::Disabled
+            && sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM job_depends_on d JOIN job j ON j.id = d.job_id \
+                 WHERE d.depends_on_job_id = ? AND j.status = ?)",
+            )
+            .bind(id)
+            .bind(models::JobStatus::Uninitialized.to_int())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to fetch dependents"))?;
         match status {
-            models::JobStatus::Blocked | models::JobStatus::Ready | models::JobStatus::Disabled => {
-            }
+            models::JobStatus::Blocked | models::JobStatus::Ready | models::JobStatus::Disabled
+                if !has_uninitialized_dependent => {}
             // Its dependents are uninitialized too, so nothing would cascade now, and a later
             // initialize_jobs treats a canceled dependency as satisfied and would run them.
-            models::JobStatus::Uninitialized => {
+            models::JobStatus::Uninitialized | models::JobStatus::Disabled => {
                 return Ok(CancelJobResponse::ConflictResponse(message_error_response(
                     format!(
                         "job_id={} is uninitialized; initialize the workflow first, or disable \

@@ -656,15 +656,32 @@ where
             context.get().0.clone()
         );
 
-        if let Some(file_id) = body.file_id
-            && let Some(err) = super::ref_outside_workflow(
-                self.context.pool.as_ref(),
-                "file",
-                "file_id",
-                file_id,
-                body.workflow_id,
-            )
+        let pool = self.context.pool.as_ref();
+        // Reject a workflow_id change before checking file_id, so the file check only ever runs
+        // against the stored (authorized) workflow and cannot probe another workflow's files.
+        if super::ref_outside_workflow(pool, "ro_crate_entity", "id", id, body.workflow_id)
             .await?
+            .is_some()
+        {
+            return Ok(
+                if super::workflow_id_mismatch(pool, "ro_crate_entity", id).await? {
+                    UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateRoCrateEntityResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "RO-Crate entity",
+                        id,
+                    ))
+                },
+            );
+        }
+
+        // body.workflow_id now equals the stored workflow_id.
+        if let Some(file_id) = body.file_id
+            && let Some(err) =
+                super::ref_outside_workflow(pool, "file", "file_id", file_id, body.workflow_id)
+                    .await?
         {
             return Ok(UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(err));
         }
@@ -712,7 +729,6 @@ where
         };
 
         if result.rows_affected() == 0 {
-            let pool = self.context.pool.as_ref();
             return Ok(
                 if super::workflow_id_mismatch(pool, "ro_crate_entity", id).await? {
                     UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(

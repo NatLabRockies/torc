@@ -22,7 +22,6 @@ description = "Workflow management system"
 [workspace.dependencies]
 # Shared dependencies
 serde = { version = "1.0", features = ["derive"] }
-# float_roundtrip: parse floats exactly so values (e.g. file mtimes) survive a JSON round trip.
 serde_json = { version = "1.0", features = ["float_roundtrip"] }
 csv = "1.3"
 

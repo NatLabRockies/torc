@@ -1393,6 +1393,21 @@ pub struct FailureHandlerModel {
     pub rules: String,
 }
 
+/// Largest `max_retries` among a failure handler's rules (JSON array), or None if it has no
+/// rules. A rule without `max_retries` defaults to 3, as in the workflow spec.
+pub fn max_retries_from_rules(rules: &str) -> Result<Option<i64>, serde_json::Error> {
+    #[derive(serde::Deserialize)]
+    struct Rule {
+        #[serde(default = "default_max_retries")]
+        max_retries: i64,
+    }
+    fn default_max_retries() -> i64 {
+        3
+    }
+    let rules: Vec<Rule> = serde_json::from_str(rules)?;
+    Ok(rules.iter().map(|r| r.max_retries).max())
+}
+
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListFailureHandlersResponse {
@@ -2271,6 +2286,7 @@ impl ResetJobStatusResponse {
             status,
             reset_type: None,
             reset: None,
+            downstream_reset: None,
             skipped: None,
         }
     }
@@ -2769,6 +2785,11 @@ pub struct ResetJobStatusResponse {
     /// request has a body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reset: Option<Vec<i64>>,
+    /// Direct completed or failed dependents of reset terminal jobs that were also reset (or,
+    /// for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the
+    /// request has a body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downstream_reset: Option<Vec<i64>>,
     /// Requested jobs that were not reset, with the reason. Set only when the request has a
     /// body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
