@@ -157,12 +157,12 @@ impl VersionCheckResult {
             .is_some_and(|v| v >= (1, 1, 0))
     }
 
-    /// True if the server has the `apply_scheduler_plan` endpoint (API 1.3.0).
+    /// True if the server has the `apply_scheduler_plan` endpoint (API 1.1.0).
     pub fn server_supports_apply_scheduler_plan(&self) -> bool {
         self.server_api_version
             .as_deref()
             .and_then(parse_version)
-            .is_some_and(|v| v >= (1, 3, 0))
+            .is_some_and(|v| v >= (1, 1, 0))
     }
 }
 

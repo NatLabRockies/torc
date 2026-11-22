@@ -5492,7 +5492,7 @@ fn handle_regenerate(
             {
                 eprintln!(
                     "The torc server is too old for this client: it has no apply_scheduler_plan \
-                     endpoint (HTTP API 1.3.0). Upgrade torc-server."
+                     endpoint (HTTP API 1.1.0). Upgrade torc-server."
                 );
                 std::process::exit(1);
             }
