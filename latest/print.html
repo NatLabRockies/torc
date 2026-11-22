@@ -13719,6 +13719,15 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
   -d '{"files": [{"id": 1, "exists": true, "st_mtime": 1700000000.123}, {"id": 2, "exists": false}]}' \
   | jq '.reset_jobs'
 </code></pre>
+<p><strong>Apply Scheduler Plan</strong> (<code>torc slurm regenerate</code>)</p>
+<pre><code class="language-bash">curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/apply_scheduler_plan?dry_run=true" \
+  -H "Content-Type: application/json" \
+  -d '{"schedulers": [{"scheduler": {"workflow_id": 1, "name": "regen", "account": "acct",
+        "nodes": 1, "walltime": "01:00:00"}, "job_ids": [1, 2]}],
+       "recovery_actions": [{"scheduler_index": 0, "job_ids": [1, 2], "num_allocations": 1}],
+       "suppress_existing_schedule_actions": true}' \
+  | jq '.actions'
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="hpc--slurm"><a class="header" href="#hpc--slurm">HPC &amp; Slurm</a></h1>
 <p>Running Torc workflows on HPC clusters with Slurm.</p>
 <ul>
@@ -24139,6 +24148,7 @@ POST   /workflows/{id}/cancel                    # Cancel workflow execution
 POST   /workflows/{id}/reset_status              # Reset workflow state
 POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
 POST   /workflows/{id}/file_stats                # Apply a file stat snapshot, reset affected jobs
+POST   /workflows/{id}/apply_scheduler_plan      # Apply a Slurm scheduler plan atomically
 POST   /jobs/{id}/complete                       # Mark job completed
 POST   /jobs/{id}/manage_status_change           # Transition job status
 GET    /tasks/{id}                               # Poll async task status
@@ -24767,17 +24777,18 @@ when a worker starts.</li>
 </ol>
 <p>With multiple gating jobs, the action is only kept executed when <strong>all</strong> of them remain terminal;
 resetting any one of them re-arms it.</p>
-<p>The <code>recover</code>/<code>regenerate</code> paths keep their own <code>mark_satisfied_schedule_actions_executed</code> guard,
-and it is <strong>load-bearing, not just redundant</strong>: those paths take over allocation themselves (they
-submit the user's chosen count, or regenerate recovery actions and submit). After they reset the
-failed jobs and reinitialize, the server <em>correctly</em> re-arms those jobs' <code>on_jobs_ready</code> actions
-(right for plain <code>reinit</code>, where they should fire), but the reset gate is now <code>Ready</code>, so the action
-is satisfied and would fire on the first worker and submit a second allocation. <code>mark_satisfied</code>
-marks those satisfied actions executed so recover's own submission is not duplicated. The server
-cannot do this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit,
-the action should fire." For the <code>on_workflow_start</code> and already-terminal-gated cases the guard is
-now a no-op (the server already keeps those executed, and <code>mark_satisfied</code> skips already-executed
-actions); the reset-<code>on_jobs_ready</code> case is the one it still handles.</p>
+<p>The <code>recover</code> path keeps its own <code>mark_satisfied_schedule_actions_executed</code> guard (the <code>regenerate</code>
+path suppresses the same actions inside the <code>apply_scheduler_plan</code> transaction), and it is
+<strong>load-bearing, not just redundant</strong>: those paths take over allocation themselves (they submit the
+user's chosen count, or regenerate recovery actions and submit). After they reset the failed jobs
+and reinitialize, the server <em>correctly</em> re-arms those jobs' <code>on_jobs_ready</code> actions (right for
+plain <code>reinit</code>, where they should fire), but the reset gate is now <code>Ready</code>, so the action is
+satisfied and would fire on the first worker and submit a second allocation. <code>mark_satisfied</code> marks
+those satisfied actions executed so recover's own submission is not duplicated. The server cannot do
+this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit, the action
+should fire." For the <code>on_workflow_start</code> and already-terminal-gated cases the guard is now a no-op
+(the server already keeps those executed, and <code>mark_satisfied</code> skips already-executed actions); the
+reset-<code>on_jobs_ready</code> case is the one it still handles.</p>
 <h3 id="re-running-a-slurm-workflow"><a class="header" href="#re-running-a-slurm-workflow">Re-running a Slurm workflow</a></h3>
 <p><code>torc submit</code> fires <strong>every pending Slurm <code>schedule_nodes</code> action</strong>, regardless of trigger type
 (<code>on_workflow_start</code> to bootstrap, plus <code>on_jobs_ready</code>/<code>on_jobs_complete</code> whose gating jobs are
@@ -25312,6 +25323,8 @@ but long-lived processes on login nodes are discouraged and would outlive the us
 <li><code>POST /workflows/{id}/process_changed_job_inputs</code> - Detect changed inputs and reset jobs</li>
 <li><code>POST /workflows/{id}/file_stats</code> - Compare a client's file stat snapshot with stored mtimes and
 reset jobs with changed inputs or missing outputs, plus their downstream jobs</li>
+<li><code>POST /workflows/{id}/apply_scheduler_plan</code> - Apply a client-computed Slurm scheduler plan in one
+transaction: suppress old schedule actions, create schedulers, assign jobs, arm recovery actions</li>
 </ul>
 <h2 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h2>
 <p>The <code>claim_next_jobs</code> endpoint uses database-level write locks to prevent multiple workers from
@@ -25461,11 +25474,11 @@ detection logic to clean up any orphaned jobs before checking if the workflow ca
     B --&gt; C{Has pending jobs?}
     C --&gt;|No| D[Exit - nothing to do]
     C --&gt;|Yes| E[Build WorkflowGraph from pending jobs]
-    E --&gt; F[Mark existing schedule_nodes actions as executed]
-    F --&gt; G[Group jobs using scheduler_groups]
-    G --&gt; H[Create schedulers for each group]
-    H --&gt; I[Update jobs with scheduler assignments]
-    I --&gt; J[Create on_jobs_ready recovery actions for deferred groups]
+    E --&gt; G[Group jobs using scheduler_groups]
+    G --&gt; F[apply_scheduler_plan: one server transaction]
+    F --&gt; H[Suppress existing schedule_nodes actions]
+    H --&gt; I[Create schedulers and assign jobs]
+    I --&gt; J[Create armed on_jobs_ready recovery actions]
     J --&gt; K{Submit allocations?}
     K --&gt;|Yes| L[Submit Slurm allocations]
     K --&gt;|No| M[Done]
@@ -25485,23 +25498,7 @@ detection logic to clean up any orphaned jobs before checking if the workflow ca
     style L fill:#ffc107,color:#000
     style M fill:#28a745,color:#fff
 </pre>
-<h3 id="step-1-mark-existing-actions-as-executed"><a class="header" href="#step-1-mark-existing-actions-as-executed">Step 1: Mark Existing Actions as Executed</a></h3>
-<p>All existing <code>schedule_nodes</code> actions are marked as executed using the <code>claim_action</code> API. This
-prevents them from firing again and creating duplicate allocations:</p>
-<pre class="mermaid">sequenceDiagram
-    participant R as regenerate
-    participant S as Server
-    participant A as workflow_action table
-
-    R-&gt;&gt;S: get_workflow_actions(workflow_id)
-    S--&gt;&gt;R: [action1, action2, ...]
-
-    loop For each schedule_nodes action
-        R-&gt;&gt;S: claim_action(action_id)
-        S-&gt;&gt;A: UPDATE executed=1, executed_at=NOW()
-    end
-</pre>
-<h3 id="step-2-group-jobs-using-workflowgraph"><a class="header" href="#step-2-group-jobs-using-workflowgraph">Step 2: Group Jobs Using WorkflowGraph</a></h3>
+<h3 id="step-1-group-jobs-using-workflowgraph"><a class="header" href="#step-1-group-jobs-using-workflowgraph">Step 1: Group Jobs Using WorkflowGraph</a></h3>
 <p>The system builds a <code>WorkflowGraph</code> from pending jobs and uses <code>scheduler_groups()</code> to group them by
 <code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of <code>torc slurm generate</code>:</p>
 <ul>
@@ -25536,9 +25533,30 @@ become ready</li>
     style G2 fill:#28a745,color:#fff
     style G3 fill:#28a745,color:#fff
 </pre>
-<h3 id="step-3-create-recovery-actions-for-deferred-groups"><a class="header" href="#step-3-create-recovery-actions-for-deferred-groups">Step 3: Create Recovery Actions for Deferred Groups</a></h3>
-<p>For groups with <code>has_dependencies = true</code>, the system creates <code>on_jobs_ready</code> recovery actions.
-These actions:</p>
+<h3 id="step-2-apply-the-plan-on-the-server"><a class="header" href="#step-2-apply-the-plan-on-the-server">Step 2: Apply the Plan on the Server</a></h3>
+<p>Planning stays on the client because it depends on the HPC profile. The client sends the plan in one
+request, <code>POST /workflows/{id}/apply_scheduler_plan</code>, and the server applies it in one transaction:</p>
+<ol>
+<li><strong>Validate.</strong> Every job must belong to the workflow, be pending (uninitialized, blocked, or
+ready), and appear in at most one scheduler. Otherwise the server returns 422 and changes
+nothing, so the existing actions stay in place.</li>
+<li><strong>Suppress.</strong> The workflow's non-recovery, non-persistent, unexecuted <code>schedule_nodes</code> actions
+are marked executed, so they cannot fire again and create duplicate allocations.</li>
+<li><strong>Create.</strong> The schedulers are created and their jobs are assigned with one bulk update.</li>
+<li><strong>Arm.</strong> Each recovery action's <code>trigger_count</code> is set from its gating jobs' statuses inside the
+transaction. An action whose jobs are all ready is Pending and is submitted by <code>--submit</code>. The
+others wait for their jobs to become ready. A gate job that completes between planning and
+applying is therefore counted.</li>
+</ol>
+<p>Any error from the endpoint fails the command. The request is not idempotent, so the client retries
+it only when it cannot have been applied: the connection was refused, or the server reported lock
+contention. If the request was sent but no response arrived, the command fails without retrying and
+asks you to check <code>torc slurm list</code> and <code>torc workflows list-actions</code> before rerunning, since a
+second apply would create duplicate schedulers and allocations. With <code>?dry_run=true</code> the server
+reports the same result and rolls back. <code>torc slurm regenerate --dry-run</code> does not call the
+endpoint; the plan alone answers it.</p>
+<h3 id="step-3-recovery-actions"><a class="header" href="#step-3-recovery-actions">Step 3: Recovery Actions</a></h3>
+<p>Each scheduler gets an <code>on_jobs_ready</code> recovery action. These actions:</p>
 <ul>
 <li>Have <code>is_recovery = true</code> to mark them as ephemeral</li>
 <li>Use a <code>_deferred</code> suffix in the scheduler name</li>
@@ -25610,6 +25628,7 @@ torc slurm regenerate &lt;workflow_id&gt; --account &lt;account&gt; --profile ke
 <code>watch</code>, and <code>workflows sync-status</code></li>
 <li><code>src/client/commands/recover.rs</code>: Main recovery command implementation</li>
 <li><code>src/client/commands/slurm.rs</code>: <code>handle_regenerate</code> function for Slurm scheduler regeneration</li>
+<li><code>src/server/api/schedulers.rs</code>: <code>apply_scheduler_plan</code>, which applies the plan in one transaction</li>
 <li><code>src/client/workflow_graph.rs</code>: <code>WorkflowGraph::from_jobs()</code> and <code>scheduler_groups()</code> methods</li>
 <li><code>src/server/api/workflow_actions.rs</code>: <code>reset_actions_for_reinitialize</code> function</li>
 <li><code>migrations/20251225000000_add_is_recovery_to_workflow_action.up.sql</code>: Schema migration</li>

@@ -532,17 +532,18 @@ when a worker starts.</li>
 </ol>
 <p>With multiple gating jobs, the action is only kept executed when <strong>all</strong> of them remain terminal;
 resetting any one of them re-arms it.</p>
-<p>The <code>recover</code>/<code>regenerate</code> paths keep their own <code>mark_satisfied_schedule_actions_executed</code> guard,
-and it is <strong>load-bearing, not just redundant</strong>: those paths take over allocation themselves (they
-submit the user's chosen count, or regenerate recovery actions and submit). After they reset the
-failed jobs and reinitialize, the server <em>correctly</em> re-arms those jobs' <code>on_jobs_ready</code> actions
-(right for plain <code>reinit</code>, where they should fire), but the reset gate is now <code>Ready</code>, so the action
-is satisfied and would fire on the first worker and submit a second allocation. <code>mark_satisfied</code>
-marks those satisfied actions executed so recover's own submission is not duplicated. The server
-cannot do this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit,
-the action should fire." For the <code>on_workflow_start</code> and already-terminal-gated cases the guard is
-now a no-op (the server already keeps those executed, and <code>mark_satisfied</code> skips already-executed
-actions); the reset-<code>on_jobs_ready</code> case is the one it still handles.</p>
+<p>The <code>recover</code> path keeps its own <code>mark_satisfied_schedule_actions_executed</code> guard (the <code>regenerate</code>
+path suppresses the same actions inside the <code>apply_scheduler_plan</code> transaction), and it is
+<strong>load-bearing, not just redundant</strong>: those paths take over allocation themselves (they submit the
+user's chosen count, or regenerate recovery actions and submit). After they reset the failed jobs
+and reinitialize, the server <em>correctly</em> re-arms those jobs' <code>on_jobs_ready</code> actions (right for
+plain <code>reinit</code>, where they should fire), but the reset gate is now <code>Ready</code>, so the action is
+satisfied and would fire on the first worker and submit a second allocation. <code>mark_satisfied</code> marks
+those satisfied actions executed so recover's own submission is not duplicated. The server cannot do
+this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit, the action
+should fire." For the <code>on_workflow_start</code> and already-terminal-gated cases the guard is now a no-op
+(the server already keeps those executed, and <code>mark_satisfied</code> skips already-executed actions); the
+reset-<code>on_jobs_ready</code> case is the one it still handles.</p>
 <h3 id="re-running-a-slurm-workflow"><a class="header" href="#re-running-a-slurm-workflow">Re-running a Slurm workflow</a></h3>
 <p><code>torc submit</code> fires <strong>every pending Slurm <code>schedule_nodes</code> action</strong>, regardless of trigger type
 (<code>on_workflow_start</code> to bootstrap, plus <code>on_jobs_ready</code>/<code>on_jobs_complete</code> whose gating jobs are

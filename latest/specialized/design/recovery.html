@@ -289,11 +289,11 @@ detection logic to clean up any orphaned jobs before checking if the workflow ca
     B --&gt; C{Has pending jobs?}
     C --&gt;|No| D[Exit - nothing to do]
     C --&gt;|Yes| E[Build WorkflowGraph from pending jobs]
-    E --&gt; F[Mark existing schedule_nodes actions as executed]
-    F --&gt; G[Group jobs using scheduler_groups]
-    G --&gt; H[Create schedulers for each group]
-    H --&gt; I[Update jobs with scheduler assignments]
-    I --&gt; J[Create on_jobs_ready recovery actions for deferred groups]
+    E --&gt; G[Group jobs using scheduler_groups]
+    G --&gt; F[apply_scheduler_plan: one server transaction]
+    F --&gt; H[Suppress existing schedule_nodes actions]
+    H --&gt; I[Create schedulers and assign jobs]
+    I --&gt; J[Create armed on_jobs_ready recovery actions]
     J --&gt; K{Submit allocations?}
     K --&gt;|Yes| L[Submit Slurm allocations]
     K --&gt;|No| M[Done]
@@ -313,23 +313,7 @@ detection logic to clean up any orphaned jobs before checking if the workflow ca
     style L fill:#ffc107,color:#000
     style M fill:#28a745,color:#fff
 </pre>
-<h3 id="step-1-mark-existing-actions-as-executed"><a class="header" href="#step-1-mark-existing-actions-as-executed">Step 1: Mark Existing Actions as Executed</a></h3>
-<p>All existing <code>schedule_nodes</code> actions are marked as executed using the <code>claim_action</code> API. This
-prevents them from firing again and creating duplicate allocations:</p>
-<pre class="mermaid">sequenceDiagram
-    participant R as regenerate
-    participant S as Server
-    participant A as workflow_action table
-
-    R-&gt;&gt;S: get_workflow_actions(workflow_id)
-    S--&gt;&gt;R: [action1, action2, ...]
-
-    loop For each schedule_nodes action
-        R-&gt;&gt;S: claim_action(action_id)
-        S-&gt;&gt;A: UPDATE executed=1, executed_at=NOW()
-    end
-</pre>
-<h3 id="step-2-group-jobs-using-workflowgraph"><a class="header" href="#step-2-group-jobs-using-workflowgraph">Step 2: Group Jobs Using WorkflowGraph</a></h3>
+<h3 id="step-1-group-jobs-using-workflowgraph"><a class="header" href="#step-1-group-jobs-using-workflowgraph">Step 1: Group Jobs Using WorkflowGraph</a></h3>
 <p>The system builds a <code>WorkflowGraph</code> from pending jobs and uses <code>scheduler_groups()</code> to group them by
 <code>(resource_requirements, has_dependencies)</code>. This aligns with the behavior of <code>torc slurm generate</code>:</p>
 <ul>
@@ -364,9 +348,30 @@ become ready</li>
     style G2 fill:#28a745,color:#fff
     style G3 fill:#28a745,color:#fff
 </pre>
-<h3 id="step-3-create-recovery-actions-for-deferred-groups"><a class="header" href="#step-3-create-recovery-actions-for-deferred-groups">Step 3: Create Recovery Actions for Deferred Groups</a></h3>
-<p>For groups with <code>has_dependencies = true</code>, the system creates <code>on_jobs_ready</code> recovery actions.
-These actions:</p>
+<h3 id="step-2-apply-the-plan-on-the-server"><a class="header" href="#step-2-apply-the-plan-on-the-server">Step 2: Apply the Plan on the Server</a></h3>
+<p>Planning stays on the client because it depends on the HPC profile. The client sends the plan in one
+request, <code>POST /workflows/{id}/apply_scheduler_plan</code>, and the server applies it in one transaction:</p>
+<ol>
+<li><strong>Validate.</strong> Every job must belong to the workflow, be pending (uninitialized, blocked, or
+ready), and appear in at most one scheduler. Otherwise the server returns 422 and changes
+nothing, so the existing actions stay in place.</li>
+<li><strong>Suppress.</strong> The workflow's non-recovery, non-persistent, unexecuted <code>schedule_nodes</code> actions
+are marked executed, so they cannot fire again and create duplicate allocations.</li>
+<li><strong>Create.</strong> The schedulers are created and their jobs are assigned with one bulk update.</li>
+<li><strong>Arm.</strong> Each recovery action's <code>trigger_count</code> is set from its gating jobs' statuses inside the
+transaction. An action whose jobs are all ready is Pending and is submitted by <code>--submit</code>. The
+others wait for their jobs to become ready. A gate job that completes between planning and
+applying is therefore counted.</li>
+</ol>
+<p>Any error from the endpoint fails the command. The request is not idempotent, so the client retries
+it only when it cannot have been applied: the connection was refused, or the server reported lock
+contention. If the request was sent but no response arrived, the command fails without retrying and
+asks you to check <code>torc slurm list</code> and <code>torc workflows list-actions</code> before rerunning, since a
+second apply would create duplicate schedulers and allocations. With <code>?dry_run=true</code> the server
+reports the same result and rolls back. <code>torc slurm regenerate --dry-run</code> does not call the
+endpoint; the plan alone answers it.</p>
+<h3 id="step-3-recovery-actions"><a class="header" href="#step-3-recovery-actions">Step 3: Recovery Actions</a></h3>
+<p>Each scheduler gets an <code>on_jobs_ready</code> recovery action. These actions:</p>
 <ul>
 <li>Have <code>is_recovery = true</code> to mark them as ephemeral</li>
 <li>Use a <code>_deferred</code> suffix in the scheduler name</li>
@@ -438,6 +443,7 @@ torc slurm regenerate &lt;workflow_id&gt; --account &lt;account&gt; --profile ke
 <code>watch</code>, and <code>workflows sync-status</code></li>
 <li><code>src/client/commands/recover.rs</code>: Main recovery command implementation</li>
 <li><code>src/client/commands/slurm.rs</code>: <code>handle_regenerate</code> function for Slurm scheduler regeneration</li>
+<li><code>src/server/api/schedulers.rs</code>: <code>apply_scheduler_plan</code>, which applies the plan in one transaction</li>
 <li><code>src/client/workflow_graph.rs</code>: <code>WorkflowGraph::from_jobs()</code> and <code>scheduler_groups()</code> methods</li>
 <li><code>src/server/api/workflow_actions.rs</code>: <code>reset_actions_for_reinitialize</code> function</li>
 <li><code>migrations/20251225000000_add_is_recovery_to_workflow_action.up.sql</code>: Schema migration</li>
