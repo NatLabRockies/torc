@@ -358,6 +358,383 @@ pub(crate) async fn job_refs_outside_workflow(
     )))
 }
 
+/// Return the nodes of one cycle in a directed graph (node -> deps), if any.
+/// Iterative DFS so long dependency chains cannot overflow the stack.
+pub(crate) fn find_cycle<T>(adjacency: &std::collections::HashMap<T, Vec<T>>) -> Option<Vec<T>>
+where
+    T: Copy + Eq + std::hash::Hash + Ord,
+{
+    #[derive(Clone, Copy, PartialEq)]
+    enum Mark {
+        Visiting,
+        Done,
+    }
+    let mut marks: std::collections::HashMap<T, Mark> = std::collections::HashMap::new();
+    let mut starts: Vec<T> = adjacency.keys().copied().collect();
+    starts.sort();
+    for start in starts {
+        if marks.contains_key(&start) {
+            continue;
+        }
+        marks.insert(start, Mark::Visiting);
+        // (node, index of the next dependency to visit); the stack is the current path.
+        let mut stack: Vec<(T, usize)> = vec![(start, 0)];
+        while let Some(&(node, idx)) = stack.last() {
+            let deps = adjacency.get(&node).map(|v| v.as_slice()).unwrap_or(&[]);
+            if idx == deps.len() {
+                marks.insert(node, Mark::Done);
+                stack.pop();
+                continue;
+            }
+            if let Some(top) = stack.last_mut() {
+                top.1 += 1;
+            }
+            let next = deps[idx];
+            match marks.get(&next) {
+                Some(Mark::Visiting) => {
+                    let pos = stack.iter().position(|(n, _)| *n == next).unwrap_or(0);
+                    return Some(stack[pos..].iter().map(|(n, _)| *n).collect());
+                }
+                Some(Mark::Done) => {}
+                None => {
+                    marks.insert(next, Mark::Visiting);
+                    stack.push((next, 0));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// A `name_refs` problem in a `create_jobs` request (422), or an internal error (500).
+enum NameRefError {
+    Invalid(String),
+    Api(ApiError),
+}
+
+impl From<ApiError> for NameRefError {
+    fn from(e: ApiError) -> Self {
+        NameRefError::Api(e)
+    }
+}
+
+/// `name -> ids` for the records of `table` in the workflow. With `names`, only those names are
+/// loaded; without, every named record is (regexes need them all). `table` is a trusted static.
+async fn record_ids_by_name(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+    workflow_id: i64,
+    names: Option<&std::collections::BTreeSet<&str>>,
+) -> Result<HashMap<String, Vec<i64>>, ApiError> {
+    let mut sql =
+        format!("SELECT id, name FROM {table} WHERE workflow_id = ?1 AND name IS NOT NULL");
+    let names_json = match names {
+        Some(names) => {
+            sql.push_str(" AND name IN (SELECT value FROM json_each(?2))");
+            Some(
+                serde_json::to_string(names)
+                    .map_err(|e| ApiError(format!("Failed to serialize names: {}", e)))?,
+            )
+        }
+        None => None,
+    };
+    let rows: Vec<(i64, String)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+        .bind(workflow_id)
+        .bind(names_json)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| database_error_with_msg(e, format!("Failed to resolve {} names", table)))?;
+    let mut out: HashMap<String, Vec<i64>> = HashMap::new();
+    for (id, name) in rows {
+        out.entry(name).or_default().push(id);
+    }
+    Ok(out)
+}
+
+/// Resolve one job's names and regexes for one reference type against `ids_by_name` and
+/// return the matching ids (deduplicated, in first-match order).
+fn resolve_job_names(
+    label: &str,
+    job_name: &str,
+    names: Option<&Vec<String>>,
+    regexes: Option<&Vec<String>>,
+    ids_by_name: &HashMap<String, Vec<i64>>,
+) -> Result<Vec<i64>, NameRefError> {
+    let mut ids = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |id: i64, ids: &mut Vec<i64>| {
+        if seen.insert(id) {
+            ids.push(id);
+        }
+    };
+    for name in names.into_iter().flatten() {
+        match ids_by_name.get(name).map(Vec::as_slice) {
+            Some([id]) => push(*id, &mut ids),
+            Some(matches) => {
+                return Err(NameRefError::Invalid(format!(
+                    "{} '{}' for job '{}' is ambiguous: {} records have that name",
+                    label,
+                    name,
+                    job_name,
+                    matches.len()
+                )));
+            }
+            None => {
+                return Err(NameRefError::Invalid(format!(
+                    "{} '{}' not found for job '{}'",
+                    label, name, job_name
+                )));
+            }
+        }
+    }
+    for pattern in regexes.into_iter().flatten() {
+        let re = regex::Regex::new(pattern).map_err(|e| {
+            NameRefError::Invalid(format!(
+                "Invalid regex '{}' for {} in job '{}': {}",
+                pattern,
+                label.to_lowercase(),
+                job_name,
+                e
+            ))
+        })?;
+        let mut matched = false;
+        for (name, name_ids) in ids_by_name {
+            if re.is_match(name) {
+                matched = true;
+                for id in name_ids {
+                    push(*id, &mut ids);
+                }
+            }
+        }
+        if !matched {
+            return Err(NameRefError::Invalid(format!(
+                "{} regex '{}' did not match any names for job '{}'",
+                label, pattern, job_name
+            )));
+        }
+    }
+    Ok(ids)
+}
+
+/// A list-valued name reference: label, table, (names, regexes) accessor, id field accessor.
+type ListNameRef = (
+    &'static str,
+    &'static str,
+    fn(&models::JobNameRefs) -> (Option<&Vec<String>>, Option<&Vec<String>>),
+    fn(&mut models::JobModel) -> &mut Option<Vec<i64>>,
+);
+const LIST_NAME_REFS: [ListNameRef; 4] = [
+    (
+        "Input file",
+        "file",
+        |r| (r.input_files.as_ref(), r.input_file_regexes.as_ref()),
+        |j| &mut j.input_file_ids,
+    ),
+    (
+        "Output file",
+        "file",
+        |r| (r.output_files.as_ref(), r.output_file_regexes.as_ref()),
+        |j| &mut j.output_file_ids,
+    ),
+    (
+        "Input user data",
+        "user_data",
+        |r| {
+            (
+                r.input_user_data.as_ref(),
+                r.input_user_data_regexes.as_ref(),
+            )
+        },
+        |j| &mut j.input_user_data_ids,
+    ),
+    (
+        "Output user data",
+        "user_data",
+        |r| {
+            (
+                r.output_user_data.as_ref(),
+                r.output_user_data_regexes.as_ref(),
+            )
+        },
+        |j| &mut j.output_user_data_ids,
+    ),
+];
+
+/// A single-valued name reference: label, table, name accessor, id field accessor.
+type ScalarNameRef = (
+    &'static str,
+    &'static str,
+    fn(&models::JobNameRefs) -> Option<&String>,
+    fn(&mut models::JobModel) -> &mut Option<i64>,
+);
+const SCALAR_NAME_REFS: [ScalarNameRef; 3] = [
+    (
+        "Resource requirements",
+        "resource_requirements",
+        |r| r.resource_requirements.as_ref(),
+        |j| &mut j.resource_requirements_id,
+    ),
+    (
+        "Scheduler",
+        "slurm_scheduler",
+        |r| r.scheduler.as_ref(),
+        |j| &mut j.scheduler_id,
+    ),
+    (
+        "Failure handler",
+        "failure_handler",
+        |r| r.failure_handler.as_ref(),
+        |j| &mut j.failure_handler_id,
+    ),
+];
+
+/// Resolve the `name_refs` of a `create_jobs` batch inside its transaction.
+///
+/// Ids of existing records are added to each job's id fields. Dependencies on other jobs of the
+/// batch have no ids yet, so they are returned per job as batch indexes for the caller to insert
+/// after the job rows; the batch's own dependency graph is checked for cycles here. Clears
+/// `name_refs` on every job.
+async fn resolve_batch_name_refs(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    jobs: &mut [&mut models::JobModel],
+) -> Result<Vec<Vec<usize>>, NameRefError> {
+    let refs: Vec<Option<models::JobNameRefs>> =
+        jobs.iter_mut().map(|j| j.name_refs.take()).collect();
+    let mut batch_deps: Vec<Vec<usize>> = vec![Vec::new(); jobs.len()];
+    if refs.iter().all(Option::is_none) {
+        return Ok(batch_deps);
+    }
+
+    // Per table: whether any job uses a regex (then every name is loaded) and the exact names.
+    let mut wanted: BTreeMap<&'static str, (bool, std::collections::BTreeSet<&str>)> =
+        BTreeMap::new();
+    fn want<'a>(
+        wanted: &mut BTreeMap<&'static str, (bool, std::collections::BTreeSet<&'a str>)>,
+        table: &'static str,
+        names: Option<&'a Vec<String>>,
+        regex: bool,
+    ) {
+        let entry = wanted.entry(table).or_default();
+        entry.0 |= regex;
+        entry
+            .1
+            .extend(names.into_iter().flatten().map(String::as_str));
+    }
+    for r in refs.iter().flatten() {
+        want(
+            &mut wanted,
+            "job",
+            r.depends_on.as_ref(),
+            r.depends_on_regexes.is_some(),
+        );
+        for (_, table, names, _) in LIST_NAME_REFS {
+            let (names, regexes) = names(r);
+            want(&mut wanted, table, names, regexes.is_some());
+        }
+        for (_, table, name, _) in SCALAR_NAME_REFS {
+            if let Some(name) = name(r) {
+                wanted.entry(table).or_default().1.insert(name.as_str());
+            }
+        }
+    }
+    let mut ids_by_table: HashMap<&str, HashMap<String, Vec<i64>>> = HashMap::new();
+    for (table, (all, names)) in &wanted {
+        if *all || !names.is_empty() {
+            let filter = if *all { None } else { Some(names) };
+            let ids = record_ids_by_name(conn, table, workflow_id, filter).await?;
+            ids_by_table.insert(table, ids);
+        }
+    }
+    let mut job_ids = ids_by_table.remove("job").unwrap_or_default();
+    // The batch's own jobs get placeholder ids -1, -2, ... (batch index i -> -(i + 1)). A name
+    // that is both in the batch and in the workflow then resolves as ambiguous.
+    for (i, job) in jobs.iter().enumerate() {
+        job_ids
+            .entry(job.name.clone())
+            .or_default()
+            .push(-(i as i64) - 1);
+    }
+    let empty = HashMap::new();
+
+    for (i, (job, r)) in jobs.iter_mut().zip(&refs).enumerate() {
+        let Some(r) = r else { continue };
+        for (label, table, names, field) in LIST_NAME_REFS {
+            let (names, regexes) = names(r);
+            let table_ids = ids_by_table.get(table).unwrap_or(&empty);
+            let ids = resolve_job_names(label, &job.name, names, regexes, table_ids)?;
+            extend_unique(field(job), ids);
+        }
+        for (label, table, name, field) in SCALAR_NAME_REFS {
+            let Some(name) = name(r) else { continue };
+            let table_ids = ids_by_table.get(table).unwrap_or(&empty);
+            let names = vec![name.clone()];
+            let id = resolve_job_names(label, &job.name, Some(&names), None, table_ids)?[0];
+            let slot = field(job);
+            if slot.is_some_and(|existing| existing != id) {
+                return Err(NameRefError::Invalid(format!(
+                    "Job '{}' sets both an id and the name '{}' for {}",
+                    job.name,
+                    name,
+                    label.to_lowercase()
+                )));
+            }
+            *slot = Some(id);
+        }
+        let dep_ids = resolve_job_names(
+            "Job dependency",
+            &job.name,
+            r.depends_on.as_ref(),
+            r.depends_on_regexes.as_ref(),
+            &job_ids,
+        )
+        .map_err(|e| match e {
+            NameRefError::Invalid(msg) if msg.contains("not found") => {
+                NameRefError::Invalid(format!(
+                    "{} (a name must be a job already in workflow_id={} or in the same request)",
+                    msg, workflow_id
+                ))
+            }
+            other => other,
+        })?;
+        let (batch, existing): (Vec<i64>, Vec<i64>) = dep_ids.into_iter().partition(|id| *id < 0);
+        extend_unique(&mut job.depends_on_job_ids, existing);
+        batch_deps[i] = batch.into_iter().map(|id| (-id - 1) as usize).collect();
+    }
+
+    // Edges to existing jobs can't close a cycle (existing jobs can't depend on new ones), so
+    // only the batch's own graph needs checking.
+    let adjacency: HashMap<usize, Vec<usize>> = batch_deps
+        .iter()
+        .enumerate()
+        .filter(|(_, deps)| !deps.is_empty())
+        .map(|(i, deps)| (i, deps.clone()))
+        .collect();
+    if let Some(cycle) = find_cycle(&adjacency) {
+        let path = cycle
+            .iter()
+            .chain(cycle.first())
+            .map(|i| format!("'{}'", jobs[*i].name))
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        return Err(NameRefError::Invalid(format!(
+            "Job dependencies in this request contain a cycle (job depends on job): {}",
+            path
+        )));
+    }
+    Ok(batch_deps)
+}
+
+/// Append `ids` to an optional id list, skipping ids already present.
+fn extend_unique(target: &mut Option<Vec<i64>>, ids: Vec<i64>) {
+    if ids.is_empty() {
+        return;
+    }
+    let target = target.get_or_insert_with(Vec::new);
+    let mut seen: std::collections::HashSet<i64> = target.iter().copied().collect();
+    target.extend(ids.into_iter().filter(|id| seen.insert(*id)));
+}
+
 /// Trait defining job-related API operations
 #[async_trait]
 pub trait JobsApi<C> {
@@ -861,6 +1238,7 @@ impl JobsApiImpl {
             priority: record.try_get("priority").ok(),
             origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
             labels: labels_column(&record, "labels"),
+            name_refs: None,
         })
     }
 
@@ -2039,6 +2417,23 @@ where
                 )),
             ));
         }
+        let batch_deps = {
+            let mut jobs: Vec<&mut models::JobModel> =
+                prepared.iter_mut().map(|p| &mut p.job).collect();
+            match resolve_batch_name_refs(&mut transaction, workflow_id, &mut jobs).await {
+                Ok(deps) => deps,
+                Err(NameRefError::Invalid(msg)) => {
+                    let _ = transaction.rollback().await;
+                    return Ok(CreateJobsResponse::UnprocessableContentErrorResponse(
+                        message_error_response(msg),
+                    ));
+                }
+                Err(NameRefError::Api(e)) => {
+                    let _ = transaction.rollback().await;
+                    return Err(e);
+                }
+            }
+        };
         let job_refs: Vec<&models::JobModel> = prepared.iter().map(|p| &p.job).collect();
         let refs_check = job_refs_outside_workflow(&mut transaction, workflow_id, &job_refs).await;
         match refs_check {
@@ -2117,19 +2512,30 @@ where
         let mut input_user_data_rows: Vec<(i64, i64)> = Vec::new();
         let mut output_user_data_rows: Vec<(i64, i64)> = Vec::new();
 
-        for prep in prepared {
-            let mut job = prep.job;
-            let job_id = match id_by_name.remove(&job.name) {
-                Some(id) => id,
+        let mut new_ids: Vec<i64> = Vec::with_capacity(prepared.len());
+        for prep in &prepared {
+            match id_by_name.get(&prep.job.name) {
+                Some(id) => new_ids.push(*id),
                 None => {
                     let _ = transaction.rollback().await;
                     return Err(ApiError(format!(
                         "Bulk job insert returned no id for name '{}'",
-                        job.name
+                        prep.job.name
                     )));
                 }
-            };
+            }
+        }
+        drop(id_by_name);
+
+        for ((prep, job_id), deps) in prepared.into_iter().zip(&new_ids).zip(batch_deps) {
+            let mut job = prep.job;
+            let job_id = *job_id;
             job.id = Some(job_id);
+            // Dependencies on jobs of this batch, resolved from name_refs.
+            extend_unique(
+                &mut job.depends_on_job_ids,
+                deps.iter().map(|d| new_ids[*d]).collect(),
+            );
 
             if let Some(ids) = &job.depends_on_job_ids {
                 for &blocking_id in ids {
@@ -2560,6 +2966,7 @@ where
                     priority: record.try_get("priority").ok(),
                     origin: record.try_get::<Option<String>, _>("origin").ok().flatten(),
                     labels: labels_column(&record, "labels"),
+                    name_refs: None,
                 });
             }
         }
@@ -3149,6 +3556,7 @@ where
                 priority: row.try_get("priority").ok(),
                 origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
                 labels: labels_column(&row, "labels"),
+                name_refs: None,
             };
 
             selected_jobs.push(job);
@@ -3708,6 +4116,7 @@ where
             // a statically-declared job becomes 'retry'.
             origin: Some(existing_origin.unwrap_or_else(|| "retry".to_string())),
             labels: labels_column(&job_record, "labels"),
+            name_refs: None,
         };
 
         Ok(RetryJobResponse::SuccessfulResponse(job_model))

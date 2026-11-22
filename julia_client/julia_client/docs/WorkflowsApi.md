@@ -11,6 +11,7 @@ Method | HTTP request | Description
 [**claim_next_jobs**](WorkflowsApi.md#claim_next_jobs) | **POST** /workflows/{id}/claim_next_jobs | 
 [**create_workflow**](WorkflowsApi.md#create_workflow) | **POST** /workflows | 
 [**delete_workflow**](WorkflowsApi.md#delete_workflow) | **DELETE** /workflows/{id} | 
+[**finalize_workflow**](WorkflowsApi.md#finalize_workflow) | **POST** /workflows/{id}/finalize | 
 [**get_active_task_for_workflow**](WorkflowsApi.md#get_active_task_for_workflow) | **GET** /workflows/{id}/active_task | 
 [**get_ready_job_requirements**](WorkflowsApi.md#get_ready_job_requirements) | **GET** /workflows/{id}/ready_job_requirements | 
 [**get_running_jobs**](WorkflowsApi.md#get_running_jobs) | **GET** /workflows/{id}/running_jobs | 
@@ -238,6 +239,42 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**WorkflowModel**](WorkflowModel.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+# **finalize_workflow**
+> finalize_workflow(_api::WorkflowsApi, id::Int64; force=nothing, _mediaType=nothing) -> FinalizeWorkflowResponse, OpenAPI.Clients.ApiResponse <br/>
+> finalize_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; force=nothing, _mediaType=nothing) -> Channel{ FinalizeWorkflowResponse }, OpenAPI.Clients.ApiResponse
+
+
+
+Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, execution_config rules, and Slurm scheduler node counts are errors; job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
+
+### Required Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **_api** | **WorkflowsApi** | API context | 
+**id** | **Int64** | Workflow ID |
+
+### Optional Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **force** | **Bool** | Finalize even if there are warnings. Errors always block finalization. | [default to nothing]
+
+### Return type
+
+[**FinalizeWorkflowResponse**](FinalizeWorkflowResponse.md)
 
 ### Authorization
 

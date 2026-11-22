@@ -42,6 +42,10 @@ pub struct ServerConfig {
     /// Caching avoids repeated bcrypt verification for the same credentials.
     pub credential_cache_ttl_secs: u64,
 
+    /// Seconds after creation at which a draft workflow that was never finalized is deleted
+    /// (0 disables the cleanup).
+    pub draft_workflow_timeout_secs: u64,
+
     /// Enforce access control based on workflow ownership and group membership
     pub enforce_access_control: bool,
 
@@ -79,6 +83,7 @@ impl Default for ServerConfig {
             auth_file: None,
             require_auth: false,
             credential_cache_ttl_secs: 60,
+            draft_workflow_timeout_secs: 86400,
             enforce_access_control: false,
             completion_check_interval_secs: None,
             logging: ServerLoggingConfig::default(),

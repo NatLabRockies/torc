@@ -1,6 +1,8 @@
 use super::*;
 use crate::CLAIM_START_MISMATCH;
-use crate::server::api::jobs::{ClaimStart, claim_start_is_valid, finish_claim, run_id_mismatch};
+use crate::server::api::jobs::{
+    ClaimStart, claim_start_is_valid, find_cycle, finish_claim, run_id_mismatch,
+};
 use crate::server::api::{
     JobsApi, ResultsApi, WorkflowsApi, begin_immediate, claimable_labels_sql,
     database_lock_aware_error, labels_column, message_error_response, parse_job_status,
@@ -20,54 +22,6 @@ const RESOURCE_CLAIM_ORDER_BY: &str = "\
 /// Used to reject self-referential `spawn_jobs` batches.
 fn has_cycle(adjacency: &std::collections::HashMap<&str, Vec<&str>>) -> bool {
     find_cycle(adjacency).is_some()
-}
-
-/// Return the nodes of one cycle in a directed graph (node -> deps), if any.
-/// Iterative DFS so long dependency chains cannot overflow the stack.
-fn find_cycle<T>(adjacency: &std::collections::HashMap<T, Vec<T>>) -> Option<Vec<T>>
-where
-    T: Copy + Eq + std::hash::Hash + Ord,
-{
-    #[derive(Clone, Copy, PartialEq)]
-    enum Mark {
-        Visiting,
-        Done,
-    }
-    let mut marks: std::collections::HashMap<T, Mark> = std::collections::HashMap::new();
-    let mut starts: Vec<T> = adjacency.keys().copied().collect();
-    starts.sort();
-    for start in starts {
-        if marks.contains_key(&start) {
-            continue;
-        }
-        marks.insert(start, Mark::Visiting);
-        // (node, index of the next dependency to visit); the stack is the current path.
-        let mut stack: Vec<(T, usize)> = vec![(start, 0)];
-        while let Some(&(node, idx)) = stack.last() {
-            let deps = adjacency.get(&node).map(|v| v.as_slice()).unwrap_or(&[]);
-            if idx == deps.len() {
-                marks.insert(node, Mark::Done);
-                stack.pop();
-                continue;
-            }
-            if let Some(top) = stack.last_mut() {
-                top.1 += 1;
-            }
-            let next = deps[idx];
-            match marks.get(&next) {
-                Some(Mark::Visiting) => {
-                    let pos = stack.iter().position(|(n, _)| *n == next).unwrap_or(0);
-                    return Some(stack[pos..].iter().map(|(n, _)| *n).collect());
-                }
-                Some(Mark::Done) => {}
-                None => {
-                    marks.insert(next, Mark::Visiting);
-                    stack.push((next, 0));
-                }
-            }
-        }
-    }
-    None
 }
 
 /// Find a cycle in the workflow's job dependency graph, combining explicit dependencies
@@ -852,6 +806,7 @@ fn claim_candidate_row(
         priority: Some(row.get("priority")),
         origin: row.try_get::<Option<String>, _>("origin").ok().flatten(),
         labels: labels_column(row, "labels"),
+        name_refs: None,
     });
 
     Ok(true)
@@ -1003,6 +958,14 @@ where
     ) -> Result<CreateJobResponse, ApiError> {
         authorize_workflow!(self, job.workflow_id, context, CreateJobResponse);
 
+        if job.name_refs.is_some() {
+            return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "name_refs is supported only by create_jobs (bulk)".to_string(),
+                ),
+            ));
+        }
+
         if job.resource_requirements_id.is_none() {
             let default_id = self
                 .get_default_resource_requirements_id(job.workflow_id, context)
@@ -1049,7 +1012,11 @@ where
             .await?;
 
         for job in &mut body.jobs {
-            if job.resource_requirements_id.is_none() {
+            let named_rr = job
+                .name_refs
+                .as_ref()
+                .is_some_and(|r| r.resource_requirements.is_some());
+            if job.resource_requirements_id.is_none() && !named_rr {
                 job.resource_requirements_id = Some(default_resource_requirements_id);
             }
         }
@@ -1075,6 +1042,15 @@ where
             async_,
         );
         authorize_workflow!(self, id, context, InitializeJobsResponse);
+
+        if crate::server::api::workflows::workflow_is_draft(self.pool.as_ref(), id).await? {
+            return Ok(InitializeJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(format!(
+                    "workflow_id={} is a draft; finalize it before initializing jobs",
+                    id
+                )),
+            ));
+        }
 
         // Reject dependency cycles (explicit, file-derived, or user_data-derived): jobs in a
         // cycle would stay blocked forever and the workflow would never complete.
@@ -2406,6 +2382,7 @@ where
             priority: None,
             origin: None,
             labels: None,
+            name_refs: None,
         };
 
         Ok(CompletedJobRecord {

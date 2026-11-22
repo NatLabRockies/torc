@@ -18,6 +18,7 @@ Name | Type | Description | Notes
 **id** | **Int64** |  | [optional] [default to nothing]
 **is_archived** | **Bool** | True when the workflow has been archived. Read-only on the API: set via &#x60;POST /workflows/{id}/archive&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored. | [optional] [readonly] [default to nothing]
 **is_canceled** | **Bool** | True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via &#x60;POST /workflows/{id}/cancel&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored. | [optional] [readonly] [default to nothing]
+**is_draft** | **Bool** | True while the workflow is a draft. Set it on create to build a workflow with chunked bulk requests; &#x60;POST /workflows/{id}/finalize&#x60; validates the workflow and clears it. Drafts are hidden from &#x60;list_workflows&#x60;, can&#39;t be initialized, and are deleted by the server if not finalized within its draft timeout. Ignored by &#x60;update_workflow&#x60;. | [optional] [default to nothing]
 **metadata** | **Dict{String, Any}** |  | [optional] [default to nothing]
 **name** | **String** |  | [default to nothing]
 **project** | **String** |  | [optional] [default to nothing]

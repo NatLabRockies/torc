@@ -32,6 +32,7 @@ pub struct ServiceConfig {
     pub auth_file: Option<String>,
     pub require_auth: bool,
     pub credential_cache_ttl_secs: u64,
+    pub draft_workflow_timeout_secs: u64,
     pub enforce_access_control: bool,
     pub log_level: String,
     pub json_logs: bool,
@@ -47,6 +48,9 @@ impl ServiceConfig {
     /// Default credential cache TTL in seconds
     pub const DEFAULT_CREDENTIAL_CACHE_TTL_SECS: u64 = 60;
 
+    /// Default age in seconds at which unfinalized draft workflows are deleted
+    pub const DEFAULT_DRAFT_WORKFLOW_TIMEOUT_SECS: u64 = 86400;
+
     /// Create default configuration for system-level service
     fn default_system() -> Self {
         Self {
@@ -58,6 +62,7 @@ impl ServiceConfig {
             auth_file: None,
             require_auth: false,
             credential_cache_ttl_secs: Self::DEFAULT_CREDENTIAL_CACHE_TTL_SECS,
+            draft_workflow_timeout_secs: Self::DEFAULT_DRAFT_WORKFLOW_TIMEOUT_SECS,
             enforce_access_control: false,
             log_level: "info".to_string(),
             json_logs: false,
@@ -84,6 +89,7 @@ impl ServiceConfig {
             auth_file: None,
             require_auth: false,
             credential_cache_ttl_secs: Self::DEFAULT_CREDENTIAL_CACHE_TTL_SECS,
+            draft_workflow_timeout_secs: Self::DEFAULT_DRAFT_WORKFLOW_TIMEOUT_SECS,
             enforce_access_control: false,
             log_level: "info".to_string(),
             json_logs: false,
@@ -198,6 +204,9 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
 
     args.push("--credential-cache-ttl-secs".into());
     args.push(config.credential_cache_ttl_secs.to_string().into());
+
+    args.push("--draft-workflow-timeout-secs".into());
+    args.push(config.draft_workflow_timeout_secs.to_string().into());
 
     if config.enforce_access_control {
         args.push("--enforce-access-control".into());

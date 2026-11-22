@@ -1,8 +1,10 @@
+use super::jobs_transport::find_dependency_cycle;
 use super::*;
 use crate::server::api::{
     EventsApi, FailureHandlersApi, ResourceRequirementsApi, WorkflowActionsApi, WorkflowsApi,
-    message_error_response,
+    database_lock_aware_error, message_error_response, resource_not_found_response,
 };
+use crate::server::transport_types::context_types::EmptyContext;
 
 #[allow(clippy::too_many_arguments)]
 impl<C> Server<C>
@@ -136,6 +138,79 @@ where
                 Ok(CreateWorkflowResponse::DefaultErrorResponse(err))
             }
         }
+    }
+
+    /// Validate a draft workflow and clear `is_draft` if it passes. The checks read the
+    /// workflow without the write lock so a large workflow doesn't stall other writers;
+    /// `initialize_jobs` re-checks cycles in its own transaction.
+    pub(super) async fn transport_finalize_workflow(
+        &self,
+        id: i64,
+        force: Option<bool>,
+        context: &C,
+    ) -> Result<FinalizeWorkflowResponse, ApiError> {
+        authorize_workflow!(self, id, context, FinalizeWorkflowResponse);
+        let pool = self.pool.as_ref();
+        let row: Option<(i64, Option<String>)> =
+            sqlx::query_as("SELECT is_draft, execution_config FROM workflow WHERE id = ?")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to read workflow"))?;
+        let Some((is_draft, execution_config)) = row else {
+            return Ok(FinalizeWorkflowResponse::NotFoundErrorResponse(
+                resource_not_found_response("Workflow", id),
+            ));
+        };
+        if is_draft == 0 {
+            return Ok(FinalizeWorkflowResponse::SuccessfulResponse(
+                models::FinalizeWorkflowResponse {
+                    finalized: true,
+                    errors: vec![],
+                    warnings: vec![],
+                },
+            ));
+        }
+
+        let execution_config = match execution_config.as_deref().map(serde_json::from_str) {
+            Some(Ok(ec)) => Some(ec),
+            Some(Err(e)) => {
+                return Err(ApiError(format!(
+                    "Failed to parse execution_config of workflow_id={}: {}",
+                    id, e
+                )));
+            }
+            None => None,
+        };
+        let (input, mut errors) = load_check_input(pool, id, execution_config).await?;
+        let findings = crate::workflow_validation::check_workflow(&input);
+        errors.extend(findings.errors);
+        if let Some(cycle) = find_dependency_cycle(pool, id).await? {
+            errors.push(named_cycle_message(pool, &cycle).await?);
+        }
+        let warnings = findings.warnings;
+        let finalized = errors.is_empty() && (warnings.is_empty() || force.unwrap_or(false));
+        if finalized {
+            sqlx::query("UPDATE workflow SET is_draft = 0 WHERE id = ?")
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to finalize workflow"))?;
+        }
+        info!(
+            "finalize_workflow workflow_id={} finalized={} errors={} warnings={}",
+            id,
+            finalized,
+            errors.len(),
+            warnings.len()
+        );
+        Ok(FinalizeWorkflowResponse::SuccessfulResponse(
+            models::FinalizeWorkflowResponse {
+                finalized,
+                errors,
+                warnings,
+            },
+        ))
     }
 
     pub(super) async fn transport_create_workflow_action(
@@ -717,4 +792,213 @@ where
         }
         Ok(response)
     }
+}
+
+/// Build the shared-check input for a workflow from its rows. Also returns errors for workflow
+/// actions whose `scheduler_id` is not a Slurm scheduler of the workflow (action configs are
+/// JSON, so no foreign key catches them).
+async fn load_check_input(
+    pool: &sqlx::SqlitePool,
+    workflow_id: i64,
+    execution_config: Option<models::ExecutionConfig>,
+) -> Result<(crate::workflow_validation::WorkflowCheckInput, Vec<String>), ApiError> {
+    use crate::workflow_validation::{
+        ActionInfo, JobInfo, ResourceInfo, SchedulerInfo, WorkflowCheckInput,
+    };
+    use std::collections::HashMap;
+    let db_err = |what: &'static str| {
+        move |e: sqlx::Error| database_lock_aware_error(e, format!("Failed to load {}", what))
+    };
+
+    type SchedRow = (
+        i64,
+        Option<String>,
+        i64,
+        String,
+        Option<String>,
+        Option<String>,
+    );
+    let sched_rows: Vec<SchedRow> = sqlx::query_as(
+        "SELECT id, name, nodes, walltime, mem, gres FROM slurm_scheduler WHERE workflow_id = ?",
+    )
+    .bind(workflow_id)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err("slurm schedulers"))?;
+    let mut sched_idx = HashMap::new();
+    let mut schedulers = Vec::with_capacity(sched_rows.len());
+    for (i, (id, name, nodes, walltime, mem, gres)) in sched_rows.into_iter().enumerate() {
+        sched_idx.insert(id, i);
+        schedulers.push(SchedulerInfo {
+            name: name.unwrap_or_else(|| format!("id={}", id)),
+            nodes,
+            walltime,
+            mem,
+            gres,
+        });
+    }
+
+    let rr_rows: Vec<(i64, String, i64, i64, String, String)> = sqlx::query_as(
+        "SELECT id, name, num_nodes, num_gpus, memory, runtime \
+         FROM resource_requirements WHERE workflow_id = ?",
+    )
+    .bind(workflow_id)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err("resource requirements"))?;
+    let mut rr_idx = HashMap::new();
+    let mut resource_requirements = Vec::with_capacity(rr_rows.len());
+    for (i, (id, name, num_nodes, num_gpus, memory, runtime)) in rr_rows.into_iter().enumerate() {
+        rr_idx.insert(id, i);
+        resource_requirements.push(ResourceInfo {
+            name,
+            num_nodes,
+            num_gpus,
+            memory,
+            runtime,
+        });
+    }
+
+    // Only the scheduler and resource checks look at jobs, and only when there are schedulers.
+    let jobs = if schedulers.is_empty() {
+        Vec::new()
+    } else {
+        let job_rows: Vec<(String, Option<i64>, Option<i64>)> = sqlx::query_as(
+            "SELECT name, resource_requirements_id, scheduler_id FROM job WHERE workflow_id = ?",
+        )
+        .bind(workflow_id)
+        .fetch_all(pool)
+        .await
+        .map_err(db_err("jobs"))?;
+        job_rows
+            .into_iter()
+            .map(|(name, rr_id, sched_id)| JobInfo {
+                name,
+                resource_requirements: rr_id.and_then(|id| rr_idx.get(&id).copied()),
+                scheduler: sched_id.and_then(|id| sched_idx.get(&id).copied()),
+            })
+            .collect()
+    };
+
+    let action_rows: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, action_type, action_config FROM workflow_action WHERE workflow_id = ?",
+    )
+    .bind(workflow_id)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err("workflow actions"))?;
+    let mut errors = Vec::new();
+    let mut actions = Vec::with_capacity(action_rows.len());
+    for (id, action_type, config) in action_rows {
+        let config: serde_json::Value = serde_json::from_str(&config).unwrap_or_default();
+        let scheduler_type = config["scheduler_type"].as_str().map(str::to_string);
+        let mut scheduler = None;
+        if action_type == "schedule_nodes"
+            && scheduler_type.as_deref() == Some("slurm")
+            && let Some(sched_id) = config["scheduler_id"].as_i64()
+        {
+            scheduler = sched_idx.get(&sched_id).copied();
+            if scheduler.is_none() {
+                errors.push(format!(
+                    "Workflow action {} references slurm scheduler_id={}, which is not a \
+                     scheduler of workflow_id={}",
+                    id, sched_id, workflow_id
+                ));
+            }
+        }
+        actions.push(ActionInfo {
+            action_type,
+            scheduler_type,
+            scheduler,
+            start_one_worker_per_node: config["start_one_worker_per_node"]
+                .as_bool()
+                .unwrap_or(false),
+        });
+    }
+
+    Ok((
+        WorkflowCheckInput {
+            execution_config,
+            schedulers,
+            resource_requirements,
+            jobs,
+            actions,
+        },
+        errors,
+    ))
+}
+
+/// Cycle message naming the jobs, since the ids of a draft that a client then deletes are of
+/// no use to the user.
+async fn named_cycle_message(pool: &sqlx::SqlitePool, cycle: &[i64]) -> Result<String, ApiError> {
+    let ids_json = serde_json::to_string(cycle)
+        .map_err(|e| ApiError(format!("Failed to serialize job ids: {}", e)))?;
+    let names: std::collections::HashMap<i64, String> =
+        sqlx::query_as("SELECT id, name FROM job WHERE id IN (SELECT value FROM json_each(?))")
+            .bind(ids_json)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to load job names"))?
+            .into_iter()
+            .collect();
+    let path = cycle
+        .iter()
+        .chain(cycle.first())
+        .map(|id| match names.get(id) {
+            Some(name) => format!("'{}'", name),
+            None => format!("job_id={}", id),
+        })
+        .collect::<Vec<_>>()
+        .join(" -> ");
+    Ok(format!(
+        "Job dependency graph contains a cycle (job depends on job): {}",
+        path
+    ))
+}
+
+/// Delete draft workflows created more than `timeout_secs` ago, every `timeout_secs / 4`
+/// seconds (between 1 second and 5 minutes). A draft is abandoned when the client that was
+/// building it died before calling `finalize_workflow`.
+pub(super) async fn background_draft_cleanup_task<C>(server: Server<C>, timeout_secs: u64)
+where
+    C: Has<XSpanIdString> + Send + Sync,
+{
+    let interval = std::time::Duration::from_secs((timeout_secs / 4).clamp(1, 300));
+    info!(
+        "Starting abandoned draft workflow cleanup (timeout = {}s, interval = {:?})",
+        timeout_secs, interval
+    );
+    loop {
+        tokio::time::sleep(interval).await;
+        if let Err(e) = delete_abandoned_drafts(&server, timeout_secs).await {
+            error!("Failed to delete abandoned draft workflows: {}", e);
+        }
+    }
+}
+
+async fn delete_abandoned_drafts<C>(server: &Server<C>, timeout_secs: u64) -> Result<(), ApiError>
+where
+    C: Has<XSpanIdString> + Send + Sync,
+{
+    // workflow.timestamp is the creation time, formatted so that string order is time order.
+    let cutoff = (chrono::Utc::now()
+        - chrono::Duration::seconds(i64::try_from(timeout_secs).unwrap_or(i64::MAX)))
+    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+    .to_string();
+    let ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM workflow WHERE is_draft = 1 AND timestamp < ?")
+            .bind(&cutoff)
+            .fetch_all(server.pool.as_ref())
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to list abandoned drafts"))?;
+    let context = EmptyContext::default();
+    for id in ids {
+        match WorkflowsApi::<EmptyContext>::delete_workflow(&server.workflows_api, id, &context)
+            .await
+        {
+            Ok(_) => info!("Deleted abandoned draft workflow_id={}", id),
+            Err(e) => error!("Failed to delete abandoned draft workflow_id={}: {}", id, e),
+        }
+    }
+    Ok(())
 }

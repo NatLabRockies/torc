@@ -342,6 +342,19 @@ const JOB_USER_DATA_RELATIONSHIP_COLUMNS: &[&str] = &[
     "workflow_id",
 ];
 
+/// True if the workflow exists and is a draft.
+pub(crate) async fn workflow_is_draft(
+    pool: &sqlx::SqlitePool,
+    workflow_id: i64,
+) -> Result<bool, ApiError> {
+    let is_draft: Option<i64> = sqlx::query_scalar("SELECT is_draft FROM workflow WHERE id = ?")
+        .bind(workflow_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to read workflow"))?;
+    Ok(is_draft == Some(1))
+}
+
 impl WorkflowsApiImpl {
     pub fn new(context: ApiContext) -> Self {
         Self { context }
@@ -412,8 +425,8 @@ impl WorkflowsApiImpl {
             "
         .to_string();
 
-        // Build WHERE clause conditions
-        let mut where_conditions = Vec::new();
+        // Build WHERE clause conditions. Drafts are never listed.
+        let mut where_conditions = vec!["is_draft = 0".to_string()];
 
         if name.is_some() {
             where_conditions.push("name = ?".to_string());
@@ -598,6 +611,7 @@ impl WorkflowsApiImpl {
                 submission_directory: record
                     .try_get::<Option<String>, _>("submission_directory")
                     .unwrap_or(None),
+                is_draft: Some(false),
             });
         }
 
@@ -731,6 +745,8 @@ where
             .unwrap_or(300);
 
         let use_pending_failed_int = body.use_pending_failed.map(|v| if v { 1 } else { 0 });
+        body.is_draft = Some(body.is_draft.unwrap_or(false));
+        let is_draft = body.is_draft == Some(true);
         let enable_ro_crate_int = body.enable_ro_crate.map(|v| if v { 1 } else { 0 });
 
         // Validate access_groups for duplicates up front so we can return a
@@ -781,9 +797,10 @@ where
                 submission_directory,
                 run_id,
                 is_archived,
-                is_canceled
+                is_canceled,
+                is_draft
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 0, 0, 0)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 0, 0, 0, $20)
             RETURNING rowid
             "#,
             body.name,
@@ -805,6 +822,7 @@ where
             execution_config_json,
             dynamic_jobs_json,
             body.submission_directory,
+            is_draft,
         )
         .fetch_one(&mut *tx)
         .await
@@ -1122,7 +1140,8 @@ where
                     dynamic_jobs,
                     run_id,
                     is_canceled,
-                    is_archived
+                    is_archived,
+                    is_draft
                 FROM workflow
                 WHERE id = ?
             "#,
@@ -1194,6 +1213,7 @@ where
                         submission_directory: row
                             .try_get::<Option<String>, _>("submission_directory")
                             .unwrap_or(None),
+                        is_draft: Some(row.get::<i64, _>("is_draft") != 0),
                     },
                 ))
             }
