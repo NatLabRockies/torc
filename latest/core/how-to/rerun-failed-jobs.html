@@ -269,8 +269,10 @@ torc -f json jobs reset-status 101 102 --no-prompts
 additional jobs after an earlier reset) as long as no workers are active. If a selected job
 completed successfully, the command warns you before resetting it, since resetting discards its
 results and reruns it.</p>
-<p>The <code>--force</code> flag bypasses two checks: (1) the no-active-workers check (compute nodes and Slurm
-allocations), and (2) the active-status guard (jobs in Running or Pending are normally rejected).</p>
+<p>The server resets all selected jobs in one transaction, and in the same transaction refuses the
+reset while the workflow is busy: active compute nodes, pending or active Slurm allocations, or any
+job in Running or Pending. A runner therefore cannot claim jobs or start between the check and the
+reset. The <code>--force</code> flag skips this check.</p>
 <h2 id="choosing-the-right-tool"><a class="header" href="#choosing-the-right-tool">Choosing the Right Tool</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Use</th></tr></thead><tbody>
 <tr><td>Slurm workflow with OOM/timeout failures</td><td><code>torc recover</code></td></tr>

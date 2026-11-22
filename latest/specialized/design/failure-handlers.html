@@ -424,19 +424,26 @@ where multiple processes might try to retry the same job.</p>
   "rules": "[{\"exit_codes\":[10,11],\"max_retries\":3}]"
 }
 </code></pre>
-<h3 id="post-jobsidretryrun_idmax_retriesn"><a class="header" href="#post-jobsidretryrun_idmax_retriesn">POST /jobs/{id}/retry/{run_id}?max_retries=N</a></h3>
+<h3 run_id="">POST /jobs/{id}/retry/</h3>
 <p>Retries a failed job by resetting its status to Ready.</p>
 <p><strong>Query Parameters:</strong></p>
 <ul>
-<li><code>max_retries</code> (required): Maximum retries allowed by the matching rule</li>
+<li><code>max_retries</code> (deprecated, ignored): The server reads the limit from the job's failure handler</li>
 </ul>
 <p><strong>Validations:</strong></p>
 <ol>
 <li>Job must exist</li>
 <li><code>run_id</code> must match workflow's current run</li>
 <li>Job status must be Running, Failed, Terminated, or PendingFailed</li>
-<li><code>attempt_id</code> must be less than <code>max_retries</code></li>
+<li>If the job has a failure handler, <code>attempt_id</code> must be less than the largest <code>max_retries</code> among
+its rules</li>
 </ol>
+<p>The server enforces the largest limit among the rules, not the limit of the rule that matched,
+because the job runner calls <code>retry_job</code> before <code>complete_job</code>, so the server does not know the exit
+code yet. The job runner still checks the matching rule's limit before it calls the endpoint.</p>
+<p><code>attempt_id</code> counts every attempt, whoever asked for the retry. Retries decided by AI classification
+(<code>classify_and_resolve_failures</code>) and retries requested from the TUI go through the same endpoint,
+so they count against the failure handler's limit. A job without a failure handler has no limit.</p>
 <p><strong>Transaction Safety:</strong></p>
 <pre><code class="language-sql">BEGIN IMMEDIATE;  -- Acquire write lock
 

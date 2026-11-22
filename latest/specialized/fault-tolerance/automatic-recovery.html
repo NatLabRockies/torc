@@ -345,7 +345,8 @@ for scripting or when you want the default behavior without interaction:</p>
 <li>Diagnoses failure causes (OOM, timeout, etc.)</li>
 <li>Adjusts resource requirements based on heuristics</li>
 <li>Runs optional recovery hook for custom logic</li>
-<li>Resets failed jobs and regenerates Slurm schedulers</li>
+<li>Resets failed jobs in one server transaction, which repeats the no-active-workers check so a
+runner cannot start in between, and regenerates Slurm schedulers</li>
 <li>Submits new allocations</li>
 </ol>
 <blockquote>
