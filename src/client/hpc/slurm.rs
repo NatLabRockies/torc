@@ -374,45 +374,7 @@ fn infer_gpu_from_name(name: &str) -> Option<(u32, String)> {
     Some((4, "gpu".to_string()))
 }
 
-/// Parse GRES string to extract GPU count and type
-pub(crate) fn parse_gres(gres: &Option<String>) -> (Option<u32>, Option<String>) {
-    let gres = match gres {
-        Some(g) => g,
-        None => return (None, None),
-    };
-
-    // Find gpu entry (might be multiple GRES separated by comma)
-    for entry in gres.split(',') {
-        // Strip socket info like "(S:0-3)" before parsing
-        let entry = entry.split('(').next().unwrap_or(entry);
-
-        let parts: Vec<&str> = entry.split(':').collect();
-        if parts.first() != Some(&"gpu") {
-            continue;
-        }
-
-        match parts.len() {
-            2 => {
-                // gpu:COUNT
-                let count: u32 = parts[1].parse().unwrap_or(0);
-                if count > 0 {
-                    return (Some(count), None);
-                }
-            }
-            3 => {
-                // gpu:TYPE:COUNT
-                let gpu_type = parts[1].to_string();
-                let count: u32 = parts[2].parse().unwrap_or(0);
-                if count > 0 {
-                    return (Some(count), Some(gpu_type));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    (None, None)
-}
+pub(crate) use crate::workflow_validation::parse_gres;
 
 // ============================================================================
 // Live cluster state queries

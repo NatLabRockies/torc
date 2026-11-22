@@ -181,6 +181,15 @@ impl VersionCheckResult {
             .and_then(parse_version)
             .is_some_and(|v| v >= (1, 5, 0))
     }
+
+    /// True if the server has draft workflows, `finalize_workflow`, and `name_refs` on
+    /// `create_jobs` (API 1.6.0).
+    pub fn server_supports_draft_workflows(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 6, 0))
+    }
 }
 
 /// Parses a version string into (major, minor, patch) components.

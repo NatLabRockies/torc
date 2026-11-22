@@ -1066,6 +1066,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers or jobs outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true. */
+        post: operations["finalize_workflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows/{id}/initialize_jobs": {
         parameters: {
             query?: never;
@@ -1822,6 +1839,21 @@ export interface components {
         FilesModel: {
             files: components["schemas"]["FileModel"][];
         };
+        /** @description Response of `finalize_workflow`. */
+        FinalizeWorkflowResponse: {
+            /**
+             * @description Problems that block finalization: dependency cycles, dangling references, and
+             *     execution_config rule violations.
+             */
+            errors: string[];
+            /** @description True if the workflow is no longer a draft (also true if it never was one). */
+            finalized: boolean;
+            /**
+             * @description Slurm scheduler node-count mismatches and job resource requirements that don't fit the
+             *     Slurm schedulers. They block finalization unless `force=true`.
+             */
+            warnings: string[];
+        };
         GetReadyJobRequirementsResponse: {
             /** Format: int64 */
             max_num_nodes: number;
@@ -1922,6 +1954,11 @@ export interface components {
             labels?: string[] | null;
             name: string;
             /**
+             * @description References by name, accepted only by `create_jobs` (bulk). The server resolves them
+             *     and adds the ids to the matching `*_id(s)` fields. Never returned.
+             */
+            name_refs?: components["schemas"]["JobNameRefs"];
+            /**
              * @description Provenance marker: NULL for jobs declared at workflow creation,
              *     `"retry"` for jobs resurrected by failure-handler retries,
              *     `"spawn"` for jobs added at runtime by `spawn_jobs`. `torc watch
@@ -1960,6 +1997,42 @@ export interface components {
             enabled: boolean;
             /** @default summary */
             granularity: components["schemas"]["MonitorGranularity"];
+        };
+        /**
+         * @description Name-based references for a job in a `create_jobs` request.
+         *
+         *     Names resolve against records already in the workflow. `depends_on` and
+         *     `depends_on_regexes` also match the other jobs in the same request, so a request can carry a
+         *     whole dependency chain; references to jobs in a later request are not possible. Each regex
+         *     must match at least one name. Resolved ids are added to the job's id fields.
+         */
+        JobNameRefs: {
+            /** @description Names of jobs this job depends on. */
+            depends_on?: string[] | null;
+            /** @description Regexes over job names; every matching job becomes a dependency. */
+            depends_on_regexes?: string[] | null;
+            /** @description Name of the failure handler. */
+            failure_handler?: string | null;
+            /** @description Regexes over file names for input files. */
+            input_file_regexes?: string[] | null;
+            /** @description Names of input files. */
+            input_files?: string[] | null;
+            /** @description Names of input user_data records. */
+            input_user_data?: string[] | null;
+            /** @description Regexes over user_data names for input user_data. */
+            input_user_data_regexes?: string[] | null;
+            /** @description Regexes over file names for output files. */
+            output_file_regexes?: string[] | null;
+            /** @description Names of output files. */
+            output_files?: string[] | null;
+            /** @description Names of output user_data records. */
+            output_user_data?: string[] | null;
+            /** @description Regexes over user_data names for output user_data. */
+            output_user_data_regexes?: string[] | null;
+            /** @description Name of the resource requirements record. Takes precedence over the "default" fallback. */
+            resource_requirements?: string | null;
+            /** @description Name of the Slurm scheduler. */
+            scheduler?: string | null;
         };
         /** @enum {string} */
         JobStatus: "uninitialized" | "blocked" | "ready" | "pending" | "running" | "completed" | "failed" | "canceled" | "terminated" | "disabled" | "pending_failed";
@@ -2820,6 +2893,13 @@ export interface components {
              *     create/update workflow endpoints are ignored.
              */
             readonly is_canceled?: boolean | null;
+            /**
+             * @description True while the workflow is a draft. Set it on create to build a workflow with chunked
+             *     bulk requests; `POST /workflows/{id}/finalize` validates the workflow and clears it.
+             *     Drafts are hidden from `list_workflows`, can't be initialized, and are deleted by the
+             *     server if not finalized within its draft timeout. Ignored by `update_workflow`.
+             */
+            is_draft?: boolean | null;
             metadata?: {
                 [key: string]: unknown;
             } | null;
@@ -8771,6 +8851,59 @@ export interface operations {
             };
             /** @description Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finalize_workflow: {
+        parameters: {
+            query?: {
+                /** @description Finalize even if there are warnings. Errors always block finalization. */
+                force?: boolean | null;
+            };
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Checks ran; see `finalized` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinalizeWorkflowResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

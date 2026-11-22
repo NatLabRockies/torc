@@ -1142,6 +1142,19 @@ pub enum GetRunningJobsResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[must_use]
+pub enum FinalizeWorkflowResponse {
+    /// Successful response; `finalized` says whether the workflow left the draft state
+    SuccessfulResponse(models::FinalizeWorkflowResponse),
+    /// Forbidden - user does not have access
+    ForbiddenErrorResponse(models::ErrorResponse),
+    /// Not found error response
+    NotFoundErrorResponse(models::ErrorResponse),
+    /// Default error response
+    DefaultErrorResponse(models::ErrorResponse),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub enum IsWorkflowUninitializedResponse {
     /// Successful response
     SuccessfulResponse(serde_json::Value),

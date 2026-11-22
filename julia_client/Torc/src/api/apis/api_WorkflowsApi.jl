@@ -233,6 +233,40 @@ function delete_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_finalize_workflow_WorkflowsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => FinalizeWorkflowResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_finalize_workflow(_api::WorkflowsApi, id::Int64; force=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_finalize_workflow_WorkflowsApi, "/workflows/{id}/finalize", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "force", force; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers or jobs outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
+
+Params:
+- id::Int64 (required)
+- force::Bool
+
+Return: FinalizeWorkflowResponse, OpenAPI.Clients.ApiResponse
+"""
+function finalize_workflow(_api::WorkflowsApi, id::Int64; force=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_finalize_workflow(_api, id; force=force, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function finalize_workflow(_api::WorkflowsApi, response_stream::Channel, id::Int64; force=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_finalize_workflow(_api, id; force=force, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_get_active_task_for_workflow_WorkflowsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => ActiveTaskResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
@@ -873,6 +907,7 @@ export claim_jobs_based_on_resources
 export claim_next_jobs
 export create_workflow
 export delete_workflow
+export finalize_workflow
 export get_active_task_for_workflow
 export get_ready_job_requirements
 export get_running_jobs

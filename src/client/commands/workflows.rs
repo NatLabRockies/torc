@@ -4047,6 +4047,7 @@ fn handle_import(
         new_workflow.name = name.to_string();
     }
     new_workflow.user = current_user.to_string(); // Set current user as owner
+    new_workflow.is_draft = None; // An export of a draft imports as a normal workflow
 
     let created_workflow = match apis::workflows_api::create_workflow(config, new_workflow) {
         Ok(w) => w,

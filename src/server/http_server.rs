@@ -338,6 +338,7 @@ pub async fn create(
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
     admin_sql: crate::server::live_state::AdminSqlConfig,
+    draft_workflow_timeout_secs: u64,
 ) -> u16 {
     bootstrap::create_server(
         addr,
@@ -353,6 +354,7 @@ pub async fn create(
         auth_file_path,
         shutdown_on_stdin_eof,
         admin_sql,
+        draft_workflow_timeout_secs,
     )
     .await
 }
@@ -2230,6 +2232,15 @@ where
     ) -> Result<GetRunningJobsResponse, ApiError> {
         self.transport_get_running_jobs(id, offset, limit, context)
             .await
+    }
+
+    async fn finalize_workflow(
+        &self,
+        id: i64,
+        force: Option<bool>,
+        context: &C,
+    ) -> Result<FinalizeWorkflowResponse, ApiError> {
+        self.transport_finalize_workflow(id, force, context).await
     }
 
     async fn is_workflow_uninitialized(

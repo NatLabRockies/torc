@@ -189,18 +189,19 @@ Settings for `torc-server`.
 
 ### `[server]` Section
 
-| Option                   | Type         | Default   | Description                                             |
-| ------------------------ | ------------ | --------- | ------------------------------------------------------- |
-| `log_level`              | string       | `info`    | Log level                                               |
-| `https`                  | bool         | `false`   | Enable HTTPS                                            |
-| `host`                   | string       | `0.0.0.0` | Hostname/IP to bind to (`url` is accepted as an alias)  |
-| `port`                   | int          | `8080`    | Port to listen on                                       |
-| `threads`                | int          | `1`       | Number of worker threads                                |
-| `database`               | string       | (none)    | SQLite database path (falls back to `DATABASE_URL` env) |
-| `auth_file`              | string       | (none)    | Path to htpasswd file                                   |
-| `require_auth`           | bool         | `false`   | Require authentication for all requests                 |
-| `enforce_access_control` | bool         | `false`   | Enforce access control based on workflow ownership      |
-| `admin_users`            | string array | `[]`      | Users to add to the admin group                         |
+| Option                        | Type         | Default   | Description                                                 |
+| ----------------------------- | ------------ | --------- | ----------------------------------------------------------- |
+| `log_level`                   | string       | `info`    | Log level                                                   |
+| `https`                       | bool         | `false`   | Enable HTTPS                                                |
+| `host`                        | string       | `0.0.0.0` | Hostname/IP to bind to (`url` is accepted as an alias)      |
+| `port`                        | int          | `8080`    | Port to listen on                                           |
+| `threads`                     | int          | `1`       | Number of worker threads                                    |
+| `database`                    | string       | (none)    | SQLite database path (falls back to `DATABASE_URL` env)     |
+| `auth_file`                   | string       | (none)    | Path to htpasswd file                                       |
+| `require_auth`                | bool         | `false`   | Require authentication for all requests                     |
+| `enforce_access_control`      | bool         | `false`   | Enforce access control based on workflow ownership          |
+| `draft_workflow_timeout_secs` | int          | `86400`   | Delete draft workflows not finalized by this age (0: never) |
+| `admin_users`                 | string array | `[]`      | Users to add to the admin group                             |
 
 ### `[server.logging]` Section
 
@@ -345,18 +346,19 @@ Environment variables use double underscore (`__`) to separate nested keys.
 
 ### Server Variables
 
-| Variable                              | Maps To                         |
-| ------------------------------------- | ------------------------------- |
-| `TORC_SERVER__URL`                    | `server.url`                    |
-| `TORC_SERVER__PORT`                   | `server.port`                   |
-| `TORC_SERVER__THREADS`                | `server.threads`                |
-| `TORC_SERVER__DATABASE`               | `server.database`               |
-| `TORC_SERVER__AUTH_FILE`              | `server.auth_file`              |
-| `TORC_SERVER__REQUIRE_AUTH`           | `server.require_auth`           |
-| `TORC_SERVER__ENFORCE_ACCESS_CONTROL` | `server.enforce_access_control` |
-| `TORC_SERVER__LOG_LEVEL`              | `server.log_level`              |
-| `TORC_SERVER__LOGGING__LOG_DIR`       | `server.logging.log_dir`        |
-| `TORC_SERVER__LOGGING__JSON_LOGS`     | `server.logging.json_logs`      |
+| Variable                                   | Maps To                              |
+| ------------------------------------------ | ------------------------------------ |
+| `TORC_SERVER__URL`                         | `server.url`                         |
+| `TORC_SERVER__PORT`                        | `server.port`                        |
+| `TORC_SERVER__THREADS`                     | `server.threads`                     |
+| `TORC_SERVER__DATABASE`                    | `server.database`                    |
+| `TORC_SERVER__AUTH_FILE`                   | `server.auth_file`                   |
+| `TORC_SERVER__REQUIRE_AUTH`                | `server.require_auth`                |
+| `TORC_SERVER__ENFORCE_ACCESS_CONTROL`      | `server.enforce_access_control`      |
+| `TORC_SERVER__DRAFT_WORKFLOW_TIMEOUT_SECS` | `server.draft_workflow_timeout_secs` |
+| `TORC_SERVER__LOG_LEVEL`                   | `server.log_level`                   |
+| `TORC_SERVER__LOGGING__LOG_DIR`            | `server.logging.log_dir`             |
+| `TORC_SERVER__LOGGING__JSON_LOGS`          | `server.logging.json_logs`           |
 
 ### Dashboard Variables
 

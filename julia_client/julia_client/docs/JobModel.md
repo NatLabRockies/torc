@@ -17,6 +17,7 @@ Name | Type | Description | Notes
 **invocation_script** | **String** |  | [optional] [default to nothing]
 **labels** | **Vector{String}** | Routing labels. A labeled runner claims only labeled jobs whose every label it has; a runner with no labels claims only unlabeled jobs. | [optional] [default to nothing]
 **name** | **String** |  | [default to nothing]
+**name_refs** | [***JobNameRefs**](JobNameRefs.md) | References by name, accepted only by &#x60;create_jobs&#x60; (bulk). The server resolves them and adds the ids to the matching &#x60;*_id(s)&#x60; fields. Never returned. | [optional] [default to nothing]
 **origin** | **String** | Provenance marker: NULL for jobs declared at workflow creation, &#x60;\&quot;retry\&quot;&#x60; for jobs resurrected by failure-handler retries, &#x60;\&quot;spawn\&quot;&#x60; for jobs added at runtime by &#x60;spawn_jobs&#x60;. &#x60;torc watch --auto-schedule&#x60; uses this to detect jobs that need unplanned Slurm allocations (deferred &#x60;schedule_nodes&#x60; actions only account for the originally-declared workload). | [optional] [default to nothing]
 **output_file_ids** | **Vector{Int64}** |  | [optional] [default to nothing]
 **output_user_data_ids** | **Vector{Int64}** |  | [optional] [default to nothing]

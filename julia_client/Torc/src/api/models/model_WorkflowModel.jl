@@ -19,6 +19,7 @@
         id=nothing,
         is_archived=nothing,
         is_canceled=nothing,
+        is_draft=nothing,
         metadata=nothing,
         name=nothing,
         project=nothing,
@@ -45,6 +46,7 @@
     - id::Int64
     - is_archived::Bool : True when the workflow has been archived. Read-only on the API: set via &#x60;POST /workflows/{id}/archive&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
     - is_canceled::Bool : True when a user (or scheduler) has canceled the workflow. Read-only on the API: set via &#x60;POST /workflows/{id}/cancel&#x60;, cleared via &#x60;POST /workflows/{id}/reset_status&#x60;. Values supplied to create/update workflow endpoints are ignored.
+    - is_draft::Bool : True while the workflow is a draft. Set it on create to build a workflow with chunked bulk requests; &#x60;POST /workflows/{id}/finalize&#x60; validates the workflow and clears it. Drafts are hidden from &#x60;list_workflows&#x60;, can&#39;t be initialized, and are deleted by the server if not finalized within its draft timeout. Ignored by &#x60;update_workflow&#x60;.
     - metadata::Dict{String, Any}
     - name::String
     - project::String
@@ -71,6 +73,7 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
     is_archived::Union{Nothing, Bool} = nothing
     is_canceled::Union{Nothing, Bool} = nothing
+    is_draft::Union{Nothing, Bool} = nothing
     metadata::Union{Nothing, Dict{String, Any}} = nothing
     name::Union{Nothing, String} = nothing
     project::Union{Nothing, String} = nothing
@@ -82,14 +85,14 @@ Base.@kwdef mutable struct WorkflowModel <: OpenAPI.APIModel
     use_pending_failed::Union{Nothing, Bool} = nothing
     user::Union{Nothing, String} = nothing
 
-    function WorkflowModel(access_groups, compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, submission_directory, timestamp, use_pending_failed, user, )
-        o = new(access_groups, compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, submission_directory, timestamp, use_pending_failed, user, )
+    function WorkflowModel(access_groups, compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, is_draft, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, submission_directory, timestamp, use_pending_failed, user, )
+        o = new(access_groups, compute_node_expiration_buffer_seconds, compute_node_ignore_workflow_completion, compute_node_min_time_for_new_jobs_seconds, compute_node_wait_for_healthy_database_minutes, compute_node_wait_for_new_jobs_seconds, description, dynamic_jobs, enable_ro_crate, env, execution_config, id, is_archived, is_canceled, is_draft, metadata, name, project, resource_monitor_config, run_id, slurm_defaults, submission_directory, timestamp, use_pending_failed, user, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type WorkflowModel
 
-const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("access_groups")=>"Vector{String}", Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("dynamic_jobs")=>"DynamicJobsConfig", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"ExecutionConfig", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("metadata")=>"Dict{String, Any}", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"ResourceMonitorConfig", Symbol("run_id")=>"Int64", Symbol("slurm_defaults")=>"Dict{String, Any}", Symbol("submission_directory")=>"String", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
+const _property_types_WorkflowModel = Dict{Symbol,String}(Symbol("access_groups")=>"Vector{String}", Symbol("compute_node_expiration_buffer_seconds")=>"Int64", Symbol("compute_node_ignore_workflow_completion")=>"Bool", Symbol("compute_node_min_time_for_new_jobs_seconds")=>"Int64", Symbol("compute_node_wait_for_healthy_database_minutes")=>"Int64", Symbol("compute_node_wait_for_new_jobs_seconds")=>"Int64", Symbol("description")=>"String", Symbol("dynamic_jobs")=>"DynamicJobsConfig", Symbol("enable_ro_crate")=>"Bool", Symbol("env")=>"Dict{String, String}", Symbol("execution_config")=>"ExecutionConfig", Symbol("id")=>"Int64", Symbol("is_archived")=>"Bool", Symbol("is_canceled")=>"Bool", Symbol("is_draft")=>"Bool", Symbol("metadata")=>"Dict{String, Any}", Symbol("name")=>"String", Symbol("project")=>"String", Symbol("resource_monitor_config")=>"ResourceMonitorConfig", Symbol("run_id")=>"Int64", Symbol("slurm_defaults")=>"Dict{String, Any}", Symbol("submission_directory")=>"String", Symbol("timestamp")=>"String", Symbol("use_pending_failed")=>"Bool", Symbol("user")=>"String", )
 OpenAPI.property_type(::Type{ WorkflowModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_WorkflowModel[name]))}
 
 function OpenAPI.check_required(o::WorkflowModel)
@@ -113,6 +116,7 @@ function OpenAPI.validate_properties(o::WorkflowModel)
     OpenAPI.validate_property(WorkflowModel, Symbol("id"), o.id)
     OpenAPI.validate_property(WorkflowModel, Symbol("is_archived"), o.is_archived)
     OpenAPI.validate_property(WorkflowModel, Symbol("is_canceled"), o.is_canceled)
+    OpenAPI.validate_property(WorkflowModel, Symbol("is_draft"), o.is_draft)
     OpenAPI.validate_property(WorkflowModel, Symbol("metadata"), o.metadata)
     OpenAPI.validate_property(WorkflowModel, Symbol("name"), o.name)
     OpenAPI.validate_property(WorkflowModel, Symbol("project"), o.project)
@@ -153,6 +157,7 @@ function OpenAPI.validate_property(::Type{ WorkflowModel }, name::Symbol, val)
     if name === Symbol("id")
         OpenAPI.validate_param(name, "WorkflowModel", :format, val, "int64")
     end
+
 
 
 

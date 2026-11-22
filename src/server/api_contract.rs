@@ -847,6 +847,14 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<GetRunningJobsResponse, ApiError>;
 
+    /// Validate a draft workflow and, if it passes, make it visible and runnable.
+    async fn finalize_workflow(
+        &self,
+        id: i64,
+        force: Option<bool>,
+        context: &C,
+    ) -> Result<FinalizeWorkflowResponse, ApiError>;
+
     /// Return true if all jobs in the workflow are uninitialized or disabled.
     async fn is_workflow_uninitialized(
         &self,

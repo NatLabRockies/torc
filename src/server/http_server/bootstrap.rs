@@ -405,6 +405,7 @@ pub(super) async fn create_server(
     auth_file_path: Option<String>,
     shutdown_on_stdin_eof: bool,
     admin_sql: crate::server::live_state::AdminSqlConfig,
+    draft_workflow_timeout_secs: u64,
 ) -> u16 {
     let addr = tokio::net::lookup_host(addr)
         .await
@@ -466,6 +467,17 @@ pub(super) async fn create_server(
     tokio::spawn(async move {
         super::unblock_processing::background_unblock_task(server_clone).await;
     });
+
+    if draft_workflow_timeout_secs > 0 {
+        let server_clone = server.clone();
+        tokio::spawn(async move {
+            super::workflows_transport::background_draft_cleanup_task(
+                server_clone,
+                draft_workflow_timeout_secs,
+            )
+            .await;
+        });
+    }
 
     #[cfg(unix)]
     if let Some(sig) = sigusr1 {

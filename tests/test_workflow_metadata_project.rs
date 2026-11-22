@@ -36,6 +36,7 @@ fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) 
         dynamic_jobs: None,
         access_groups: None,
         submission_directory: None,
+        is_draft: None,
     };
 
     // Create the workflow
@@ -81,6 +82,7 @@ fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess)
         dynamic_jobs: None,
         access_groups: None,
         submission_directory: None,
+        is_draft: None,
     };
 
     let created =
@@ -137,6 +139,7 @@ fn test_create_workflow_with_fields_then_change(start_server: &ServerProcess) {
         dynamic_jobs: None,
         access_groups: None,
         submission_directory: None,
+        is_draft: None,
     };
 
     let created =
@@ -196,6 +199,7 @@ fn test_partial_update_preserves_fields(start_server: &ServerProcess) {
         dynamic_jobs: None,
         access_groups: None,
         submission_directory: None,
+        is_draft: None,
     };
 
     let created =

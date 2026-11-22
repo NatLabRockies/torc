@@ -637,6 +637,11 @@ map_response!(
     SuccessfulResponse
 );
 map_response!(
+    finalize_workflow_response,
+    FinalizeWorkflowResponse,
+    SuccessfulResponse
+);
+map_response!(
     is_workflow_uninitialized_response,
     IsWorkflowUninitializedResponse,
     SuccessfulResponse

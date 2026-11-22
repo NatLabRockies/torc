@@ -73,6 +73,15 @@ struct ServerConfig {
     #[arg(long, default_value_t = 60, env = "TORC_CREDENTIAL_CACHE_TTL_SECS")]
     credential_cache_ttl_secs: u64,
 
+    /// Seconds after creation at which the server deletes a draft workflow that was never
+    /// finalized (for example, because `torc create` was interrupted). 0 disables the cleanup.
+    #[arg(
+        long,
+        default_value_t = 86400,
+        env = "TORC_DRAFT_WORKFLOW_TIMEOUT_SECS"
+    )]
+    draft_workflow_timeout_secs: u64,
+
     /// Enforce access control based on workflow ownership and group membership.
     /// When enabled, users can only access workflows they own or have group access to.
     #[arg(long, default_value_t = false)]
@@ -387,6 +396,11 @@ fn handle_service_action(
                 } else {
                     defaults.credential_cache_ttl_secs
                 },
+                draft_workflow_timeout_secs: if explicit("draft_workflow_timeout_secs") {
+                    config.draft_workflow_timeout_secs
+                } else {
+                    defaults.draft_workflow_timeout_secs
+                },
                 enforce_access_control: config.enforce_access_control
                     || defaults.enforce_access_control,
                 log_level: if explicit("log_level") {
@@ -465,6 +479,11 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
             cli_config.credential_cache_ttl_secs
         } else {
             server_file_config.credential_cache_ttl_secs
+        },
+        draft_workflow_timeout_secs: if explicit("draft_workflow_timeout_secs") {
+            cli_config.draft_workflow_timeout_secs
+        } else {
+            server_file_config.draft_workflow_timeout_secs
         },
         enforce_access_control: cli_config.enforce_access_control
             || server_file_config.enforce_access_control,
@@ -788,6 +807,7 @@ fn run_server(cli_config: ServerConfig, run_matches: Option<&ArgMatches>) -> Res
             config.auth_file.clone(),
             config.shutdown_on_stdin_eof,
             admin_sql,
+            config.draft_workflow_timeout_secs,
         )
         .await;
         Ok(())

@@ -361,6 +361,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(initialize_jobs),
         )
         .route(
+            "/torc-service/v1/workflows/{id}/finalize",
+            post(finalize_workflow),
+        )
+        .route(
             "/torc-service/v1/workflows/{id}/is_complete",
             get(is_workflow_complete),
         )
@@ -510,6 +514,13 @@ pub struct InitializeJobsQuery {
     #[serde(rename = "async")]
     #[param(nullable = true)]
     pub async_: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct FinalizeWorkflowQuery {
+    /// Finalize even if there are warnings. Errors always block finalization.
+    #[param(nullable = true)]
+    pub force: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -4196,6 +4207,44 @@ pub async fn get_active_task_for_workflow(
         .await
     {
         Ok(response) => get_active_task_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflows",
+    path = "/workflows/{id}/finalize",
+    operation_id = "finalize_workflow",
+    description = "Validate a draft workflow (created with is_draft = true) and, if it passes, \
+        clear is_draft so the workflow is listed and can be initialized. The checks span the \
+        whole workflow: dependency cycles (explicit and through files and user_data), actions \
+        that reference schedulers or jobs outside the workflow, and execution_config rules are \
+        errors; Slurm scheduler node-count mismatches and job resource requirements that \
+        exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response \
+        always has status 200 when the checks ran; `finalized` says whether the workflow left \
+        the draft state. Finalizing a workflow that is not a draft is a no-op that reports \
+        finalized = true.",
+    params(("id" = i64, Path, description = "Workflow ID"), FinalizeWorkflowQuery),
+    responses(
+        (status = 200, description = "Checks ran; see `finalized`", body = models::FinalizeWorkflowResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn finalize_workflow(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Query(query): Query<FinalizeWorkflowQuery>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .finalize_workflow(id, query.force, &context)
+        .await
+    {
+        Ok(response) => finalize_workflow_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }

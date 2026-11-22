@@ -49,6 +49,7 @@ pub mod models;
 pub mod network_utils;
 pub mod ro_crate_json_ld;
 pub mod time_utils;
+pub mod workflow_validation;
 
 // Configuration module (requires config feature, enabled by client)
 #[cfg(feature = "config")]

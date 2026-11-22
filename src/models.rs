@@ -298,6 +298,60 @@ pub struct JobModel {
     /// label it has; a runner with no labels claims only unlabeled jobs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<Vec<String>>,
+    /// References by name, accepted only by `create_jobs` (bulk). The server resolves them
+    /// and adds the ids to the matching `*_id(s)` fields. Never returned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_refs: Option<JobNameRefs>,
+}
+
+/// Name-based references for a job in a `create_jobs` request.
+///
+/// Names resolve against records already in the workflow. `depends_on` and
+/// `depends_on_regexes` also match the other jobs in the same request, so a request can carry a
+/// whole dependency chain; references to jobs in a later request are not possible. Each regex
+/// must match at least one name. Resolved ids are added to the job's id fields.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct JobNameRefs {
+    /// Names of jobs this job depends on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<Vec<String>>,
+    /// Regexes over job names; every matching job becomes a dependency.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depends_on_regexes: Option<Vec<String>>,
+    /// Names of input files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_files: Option<Vec<String>>,
+    /// Regexes over file names for input files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_file_regexes: Option<Vec<String>>,
+    /// Names of output files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_files: Option<Vec<String>>,
+    /// Regexes over file names for output files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_file_regexes: Option<Vec<String>>,
+    /// Names of input user_data records.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_user_data: Option<Vec<String>>,
+    /// Regexes over user_data names for input user_data.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_user_data_regexes: Option<Vec<String>>,
+    /// Names of output user_data records.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_user_data: Option<Vec<String>>,
+    /// Regexes over user_data names for output user_data.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_user_data_regexes: Option<Vec<String>>,
+    /// Name of the resource requirements record. Takes precedence over the "default" fallback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_requirements: Option<String>,
+    /// Name of the Slurm scheduler.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduler: Option<String>,
+    /// Name of the failure handler.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_handler: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -657,6 +711,12 @@ pub struct WorkflowModel {
     /// `schedule-nodes`/`watch` invocations.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub submission_directory: Option<String>,
+    /// True while the workflow is a draft. Set it on create to build a workflow with chunked
+    /// bulk requests; `POST /workflows/{id}/finalize` validates the workflow and clears it.
+    /// Drafts are hidden from `list_workflows`, can't be initialized, and are deleted by the
+    /// server if not finalized within its draft timeout. Ignored by `update_workflow`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_draft: Option<bool>,
 }
 
 /// Dynamic job spawning configuration. Used both as the user-authored
@@ -1715,6 +1775,7 @@ impl JobModel {
             priority: None,
             origin: None,
             labels: None,
+            name_refs: None,
         }
     }
 }
@@ -2120,6 +2181,7 @@ impl WorkflowModel {
             dynamic_jobs: None,
             access_groups: None,
             submission_directory: None,
+            is_draft: None,
         }
     }
 }
@@ -2734,6 +2796,20 @@ pub struct ResetJobStatusResponse {
     pub skipped: Option<Vec<ResetJobStatusSkipped>>,
 }
 
+/// Response of `finalize_workflow`.
+#[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FinalizeWorkflowResponse {
+    /// True if the workflow is no longer a draft (also true if it never was one).
+    pub finalized: bool,
+    /// Problems that block finalization: dependency cycles, dangling references, and
+    /// execution_config rule violations.
+    pub errors: Vec<String>,
+    /// Slurm scheduler node-count mismatches and job resource requirements that don't fit the
+    /// Slurm schedulers. They block finalization unless `force=true`.
+    pub warnings: Vec<String>,
+}
+
 /// Response of `cancel_job`.
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2917,6 +2993,7 @@ mod tests {
             dynamic_jobs: None,
             access_groups: None,
             submission_directory: Some("/home/alice/runs/wf".to_string()),
+            is_draft: None,
         };
         let serialized = serde_json::to_value(&workflow).unwrap();
         assert_eq!(serialized["name"], "wf");
@@ -2986,6 +3063,7 @@ mod tests {
             priority: Some(0),
             origin: None,
             labels: None,
+            name_refs: None,
         };
         let result = ResultModel {
             id: Some(1),

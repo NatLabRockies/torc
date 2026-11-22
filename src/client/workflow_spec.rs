@@ -50,9 +50,6 @@ enum ParameterValueSchema {
     Number(f64),
 }
 
-static SRUN_MPI_MODE_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+_.-]+$").expect("hardcoded regex must compile"));
-
 /// Build the set of parameter combinations for a parameterized spec.
 ///
 /// The combinations come from exactly one source:
@@ -152,22 +149,7 @@ static WORKFLOW_VARIABLE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         .expect("hardcoded regex must compile")
 });
 
-pub(crate) fn validate_srun_mpi_value(value: &str) -> Result<(), String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err("srun_mpi must not be empty when provided. \
-             Set a non-empty Slurm MPI mode such as 'pmix' or omit the field."
-            .to_string());
-    }
-    if trimmed != value || !SRUN_MPI_MODE_REGEX.is_match(trimmed) {
-        return Err(
-            "srun_mpi must be a single safe token matching [A-Za-z0-9+_.-]+ \
-             (for example 'none' or 'pmix')."
-                .to_string(),
-        );
-    }
-    Ok(())
-}
+pub(crate) use crate::workflow_validation::validate_srun_mpi_value;
 
 fn validate_env_var_name(name: &str) -> Result<(), String> {
     if models::is_valid_env_var_name(name) {
@@ -2425,109 +2407,7 @@ impl WorkflowSpec {
     /// The validation rejects the case where jobs request a different multi-node count
     /// than the scheduler provides (e.g., scheduler allocates 4 nodes but jobs request 2).
     pub fn validate_scheduler_node_requirements(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Build lookup maps for resource requirements and schedulers
-        let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
-            .resource_requirements
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| (r.name.as_str(), r)).collect())
-            .unwrap_or_default();
-
-        let scheduler_map: HashMap<&str, &SlurmSchedulerSpec> = self
-            .slurm_schedulers
-            .as_ref()
-            .map(|schedulers| {
-                schedulers
-                    .iter()
-                    .filter_map(|s| s.name.as_ref().map(|n| (n.as_str(), s)))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        // If no schedulers or no actions, skip validation
-        if scheduler_map.is_empty() {
-            return Ok(());
-        }
-
-        let actions = match &self.actions {
-            Some(actions) => actions,
-            None => return Ok(()),
-        };
-
-        let mut errors: Vec<String> = Vec::new();
-
-        // Check each schedule_nodes action
-        for action in actions {
-            if action.action_type != "schedule_nodes" {
-                continue;
-            }
-
-            // Get scheduler name from action
-            let scheduler_name = match &action.scheduler {
-                Some(name) => name,
-                None => continue, // Validation of required fields is done elsewhere
-            };
-
-            // Only validate slurm schedulers
-            let scheduler_type = action.scheduler_type.as_deref().unwrap_or("");
-            if scheduler_type != "slurm" {
-                continue;
-            }
-
-            // Get the scheduler spec
-            let scheduler = match scheduler_map.get(scheduler_name.as_str()) {
-                Some(s) => s,
-                None => continue, // Missing scheduler is validated elsewhere
-            };
-
-            // If scheduler only allocates 1 node, no special validation needed
-            if scheduler.nodes <= 1 {
-                continue;
-            }
-
-            // Find jobs that reference this scheduler
-            let jobs_using_scheduler: Vec<&JobSpec> = self
-                .jobs
-                .iter()
-                .filter(|job| job.scheduler.as_ref() == Some(scheduler_name))
-                .collect();
-
-            // If no jobs explicitly reference this scheduler, skip
-            if jobs_using_scheduler.is_empty() {
-                continue;
-            }
-
-            // Check for mismatched multi-node requirements: reject jobs that request
-            // a different multi-node count than the scheduler provides.
-            // Single-node jobs (num_nodes=1 or unset) are always valid in any allocation.
-            let mismatched_jobs: Vec<&str> = jobs_using_scheduler
-                .iter()
-                .filter(|job| {
-                    let job_num_nodes = job
-                        .resource_requirements
-                        .as_ref()
-                        .and_then(|name| resource_req_map.get(name.as_str()))
-                        .map(|req| req.num_nodes)
-                        .unwrap_or(1);
-                    // Mismatch: job wants >1 node but not the same count as scheduler
-                    job_num_nodes > 1 && job_num_nodes != scheduler.nodes
-                })
-                .map(|j| j.name.as_str())
-                .collect();
-
-            if !mismatched_jobs.is_empty() {
-                errors.push(format!(
-                    "Scheduler '{}' allocates {} nodes but jobs ({}) request a different \
-                     multi-node count in their resource requirements. Set num_nodes={} \
-                     on job resource requirements to match the scheduler, or use \
-                     num_nodes=1 for single-node jobs.",
-                    scheduler_name,
-                    scheduler.nodes,
-                    mismatched_jobs.join(", "),
-                    scheduler.nodes,
-                ));
-            }
-        }
-
+        let errors = crate::workflow_validation::scheduler_node_errors(&self.check_input());
         if errors.is_empty() {
             Ok(())
         } else {
@@ -2549,226 +2429,102 @@ impl WorkflowSpec {
     /// Scheduler fields that are not set (e.g., `mem: None`, `gres: None`) are skipped
     /// for that dimension.
     pub fn validate_scheduler_resources(&self) -> Vec<String> {
-        let resource_req_map: HashMap<&str, &ResourceRequirementsSpec> = self
-            .resource_requirements
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| (r.name.as_str(), r)).collect())
-            .unwrap_or_default();
+        crate::workflow_validation::scheduler_resource_warnings(&self.check_input())
+    }
 
-        let schedulers: Vec<&SlurmSchedulerSpec> = self
+    /// Errors from the execution_config rules shared with the server's `finalize_workflow`.
+    fn execution_config_errors(&self) -> Vec<String> {
+        crate::workflow_validation::execution_config_errors(
+            self.execution_config.as_ref(),
+            self.slurm_schedulers
+                .as_ref()
+                .is_some_and(|s| s.iter().any(|s| s.name.is_some())),
+            self.actions.as_ref().is_some_and(|actions| {
+                actions.iter().any(|a| {
+                    a.action_type == "schedule_nodes" && a.start_one_worker_per_node == Some(true)
+                })
+            }),
+        )
+    }
+
+    /// Build the input for the checks in [`crate::workflow_validation`]. Only named Slurm
+    /// schedulers are included, since those are the ones creation stores. References that
+    /// don't resolve are left out; reference validation reports them.
+    pub fn check_input(&self) -> crate::workflow_validation::WorkflowCheckInput {
+        use crate::workflow_validation::{
+            ActionInfo, JobInfo, ResourceInfo, SchedulerInfo, WorkflowCheckInput,
+        };
+        let schedulers: Vec<SchedulerInfo> = self
             .slurm_schedulers
-            .as_ref()
-            .map(|s| s.iter().collect())
-            .unwrap_or_default();
-
-        if resource_req_map.is_empty() || schedulers.is_empty() {
-            return Vec::new();
+            .iter()
+            .flatten()
+            .filter_map(|s| {
+                Some(SchedulerInfo {
+                    name: s.name.clone()?,
+                    nodes: s.nodes,
+                    walltime: s.walltime.clone(),
+                    mem: s.mem.clone(),
+                    gres: s.gres.clone(),
+                })
+            })
+            .collect();
+        let resource_requirements: Vec<ResourceInfo> = self
+            .resource_requirements
+            .iter()
+            .flatten()
+            .map(|r| ResourceInfo {
+                name: r.name.clone(),
+                num_nodes: r.num_nodes,
+                num_gpus: r.num_gpus,
+                memory: r.memory.clone(),
+                runtime: r.runtime.clone(),
+            })
+            .collect();
+        // First occurrence wins; duplicate names are reported elsewhere.
+        let mut sched_idx: HashMap<&str, usize> = HashMap::new();
+        for (i, s) in schedulers.iter().enumerate() {
+            sched_idx.entry(s.name.as_str()).or_insert(i);
         }
-
-        // Pre-parse scheduler resources into a structured form
-        struct ParsedScheduler<'a> {
-            name: &'a str,
-            sched: &'a SlurmSchedulerSpec,
-            walltime_secs: Option<u64>,
-            memory_bytes: Option<i64>,
-            gpu_count: Option<u32>,
+        let mut rr_idx: HashMap<&str, usize> = HashMap::new();
+        for (i, r) in resource_requirements.iter().enumerate() {
+            rr_idx.entry(r.name.as_str()).or_insert(i);
         }
-
-        let mut warnings: Vec<String> = Vec::new();
-
-        let mut parsed_schedulers: Vec<ParsedScheduler> = Vec::new();
-        for sched in &schedulers {
-            let Some(name) = sched.name.as_deref() else {
-                continue;
-            };
-            let walltime_secs =
-                match crate::client::commands::slurm::parse_walltime_secs(&sched.walltime) {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        warnings.push(format!(
-                            "Scheduler '{}': invalid walltime '{}': {}",
-                            name, sched.walltime, e,
-                        ));
-                        None
-                    }
-                };
-            let memory_bytes = match sched.mem.as_ref() {
-                Some(m) => match crate::memory_utils::memory_string_to_bytes(m) {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        warnings.push(format!(
-                            "Scheduler '{}': invalid memory '{}': {}",
-                            name, m, e,
-                        ));
-                        None
-                    }
-                },
-                None => None,
-            };
-            let gpu_count = if sched.gres.as_ref().is_some_and(|g| !g.trim().is_empty()) {
-                let (parsed, _) = crate::client::hpc::slurm::parse_gres(&sched.gres);
-                // Non-empty but unparseable gres → treat as 0 GPUs so validation
-                // isn't silently bypassed
-                Some(parsed.unwrap_or(0))
-            } else {
-                None
-            };
-            parsed_schedulers.push(ParsedScheduler {
-                name,
-                sched,
-                walltime_secs,
-                memory_bytes,
-                gpu_count,
-            });
+        let jobs = self
+            .jobs
+            .iter()
+            .map(|j| JobInfo {
+                name: j.name.clone(),
+                resource_requirements: j
+                    .resource_requirements
+                    .as_deref()
+                    .and_then(|n| rr_idx.get(n).copied()),
+                scheduler: j
+                    .scheduler
+                    .as_deref()
+                    .and_then(|n| sched_idx.get(n).copied()),
+            })
+            .collect();
+        let actions = self
+            .actions
+            .iter()
+            .flatten()
+            .map(|a| ActionInfo {
+                action_type: a.action_type.clone(),
+                scheduler_type: a.scheduler_type.clone(),
+                scheduler: a
+                    .scheduler
+                    .as_deref()
+                    .and_then(|n| sched_idx.get(n).copied()),
+                start_one_worker_per_node: a.start_one_worker_per_node == Some(true),
+            })
+            .collect();
+        WorkflowCheckInput {
+            execution_config: self.execution_config.clone(),
+            schedulers,
+            resource_requirements,
+            jobs,
+            actions,
         }
-
-        if parsed_schedulers.is_empty() {
-            return warnings;
-        }
-
-        for job in &self.jobs {
-            let rr_name = match &job.resource_requirements {
-                Some(name) => name,
-                None => continue,
-            };
-            let rr = match resource_req_map.get(rr_name.as_str()) {
-                Some(r) => r,
-                None => continue,
-            };
-
-            // Parse job resource values
-            let job_runtime_secs = match crate::time_utils::duration_string_to_seconds(&rr.runtime)
-            {
-                Ok(secs) => Some(secs as u64),
-                Err(e) => {
-                    warnings.push(format!(
-                        "Job '{}': invalid runtime '{}': {}",
-                        job.name, rr.runtime, e,
-                    ));
-                    None
-                }
-            };
-            let job_memory_bytes = match crate::memory_utils::memory_string_to_bytes(&rr.memory) {
-                Ok(bytes) => Some(bytes),
-                Err(e) => {
-                    warnings.push(format!(
-                        "Job '{}': invalid memory '{}': {}",
-                        job.name, rr.memory, e,
-                    ));
-                    None
-                }
-            };
-            let job_gpus = rr.num_gpus;
-
-            if job_gpus < 0 {
-                warnings.push(format!(
-                    "Job '{}': invalid negative num_gpus {}",
-                    job.name, job_gpus,
-                ));
-                continue;
-            }
-
-            if let Some(ref scheduler_name) = job.scheduler {
-                // Job has an explicit scheduler — check each dimension against it
-                let Some(ps) = parsed_schedulers
-                    .iter()
-                    .find(|ps| ps.name == scheduler_name.as_str())
-                else {
-                    continue; // Missing scheduler validated elsewhere
-                };
-
-                if let (Some(rt), Some(wt)) = (job_runtime_secs, ps.walltime_secs)
-                    && rt > wt
-                {
-                    warnings.push(format!(
-                        "Job '{}': runtime '{}' ({} s) exceeds scheduler '{}' \
-                         walltime '{}' ({} s)",
-                        job.name, rr.runtime, rt, scheduler_name, ps.sched.walltime, wt,
-                    ));
-                }
-                if let (Some(jm), Some(sm)) = (job_memory_bytes, ps.memory_bytes)
-                    && jm > sm
-                {
-                    warnings.push(format!(
-                        "Job '{}': memory '{}' exceeds scheduler '{}' mem '{}'",
-                        job.name,
-                        rr.memory,
-                        scheduler_name,
-                        ps.sched.mem.as_deref().unwrap_or("?"),
-                    ));
-                }
-                if let Some(sg) = ps.gpu_count
-                    && job_gpus > sg as i64
-                {
-                    warnings.push(format!(
-                        "Job '{}': num_gpus {} exceeds scheduler '{}' gres '{}'",
-                        job.name,
-                        job_gpus,
-                        scheduler_name,
-                        ps.sched.gres.as_deref().unwrap_or("?"),
-                    ));
-                }
-            } else {
-                // Job has no explicit scheduler — at least one must be suitable
-                // across ALL dimensions simultaneously
-                let suitable = parsed_schedulers.iter().any(|ps| {
-                    let runtime_ok = match (job_runtime_secs, ps.walltime_secs) {
-                        (Some(rt), Some(wt)) => rt <= wt,
-                        _ => true, // Can't check, assume ok
-                    };
-                    let memory_ok = match (job_memory_bytes, ps.memory_bytes) {
-                        (Some(jm), Some(sm)) => jm <= sm,
-                        _ => true,
-                    };
-                    let gpu_ok = match ps.gpu_count {
-                        Some(sg) => job_gpus <= sg as i64,
-                        None => true,
-                    };
-                    runtime_ok && memory_ok && gpu_ok
-                });
-
-                if !suitable {
-                    let mut reasons: Vec<String> = Vec::new();
-                    for ps in &parsed_schedulers {
-                        let mut mismatches: Vec<String> = Vec::new();
-                        if let (Some(rt), Some(wt)) = (job_runtime_secs, ps.walltime_secs)
-                            && rt > wt
-                        {
-                            mismatches.push(format!("runtime {} s > walltime {} s", rt, wt));
-                        }
-                        if let (Some(jm), Some(sm)) = (job_memory_bytes, ps.memory_bytes)
-                            && jm > sm
-                        {
-                            mismatches.push(format!(
-                                "memory '{}' > mem '{}'",
-                                rr.memory,
-                                ps.sched.mem.as_deref().unwrap_or("?"),
-                            ));
-                        }
-                        if let Some(sg) = ps.gpu_count
-                            && job_gpus > sg as i64
-                        {
-                            mismatches.push(format!(
-                                "num_gpus {} > gres '{}'",
-                                job_gpus,
-                                ps.sched.gres.as_deref().unwrap_or("?"),
-                            ));
-                        }
-                        if !mismatches.is_empty() {
-                            reasons.push(format!("'{}': {}", ps.name, mismatches.join(", ")));
-                        }
-                    }
-                    warnings.push(format!(
-                        "Job '{}' has no explicit scheduler and no scheduler can \
-                         accommodate its resource requirements. Mismatches: [{}]",
-                        job.name,
-                        reasons.join("; "),
-                    ));
-                }
-            }
-        }
-
-        warnings
     }
 
     /// Validate a spec file for creation by non-interactive callers (MCP server, TUI).
@@ -3001,7 +2757,9 @@ impl WorkflowSpec {
             errors.push(format!("Validation error: {}", e));
         }
 
-        // Step 4: Validate scheduler node requirements
+        // Step 4: Validate execution_config and scheduler node requirements. These are the
+        // rules the server's finalize_workflow applies too.
+        errors.extend(spec.execution_config_errors());
         if let Err(e) = spec.validate_scheduler_node_requirements() {
             errors.push(format!("{}", e));
         }
@@ -3513,123 +3271,140 @@ impl WorkflowSpec {
 
     /// Create a workflow from a spec that has already been prepared (user set,
     /// parameters expanded, actions validated, variables substituted).
+    ///
+    /// Against a server with draft workflows (API 1.6.0), the workflow is built as a hidden
+    /// draft, its jobs are sent by name in `MAX_RECORD_TRANSFER_COUNT`-sized `create_jobs`
+    /// requests, and `finalize_workflow` makes it visible. If the client dies partway, no
+    /// partial workflow is visible and the server deletes the draft later. Against an older
+    /// server, jobs are created one dependency level at a time with resolved ids.
     fn create_from_prepared_spec(
         config: &Configuration,
-        mut spec: WorkflowSpec,
+        spec: WorkflowSpec,
     ) -> Result<i64, Box<dyn std::error::Error>> {
-        // Step 1.6: Collect per-job stdio overrides into execution_config
-        {
-            let overrides: HashMap<String, StdioConfig> = spec
-                .jobs
-                .iter()
-                .filter_map(|job| {
-                    job.stdio
-                        .as_ref()
-                        .map(|stdio| (job.name.clone(), stdio.clone()))
-                })
-                .collect();
-            if !overrides.is_empty() {
-                let ec = spec
-                    .execution_config
-                    .get_or_insert_with(ExecutionConfig::default);
-                ec.job_stdio_overrides = Some(overrides);
-            }
+        let use_draft =
+            crate::client::version_check::check_version(config).server_supports_draft_workflows();
+        Self::create_prepared(config, spec, use_draft)
+    }
+
+    /// [`create_workflow_from_spec`] for servers older than API 1.6.0: no draft, jobs created
+    /// level by level. Exposed so tests can exercise the fallback against a current server.
+    #[doc(hidden)]
+    pub fn create_workflow_from_spec_without_draft<P: AsRef<Path>>(
+        config: &Configuration,
+        path: P,
+        user: &str,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        let mut spec = Self::from_spec_file(path)?;
+        Self::prepare_spec_for_creation(&mut spec, user, false)?;
+        Self::create_prepared(config, spec, false)
+    }
+
+    fn create_prepared(
+        config: &Configuration,
+        mut spec: WorkflowSpec,
+        use_draft: bool,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        // Collect per-job stdio overrides into execution_config
+        let overrides: HashMap<String, StdioConfig> = spec
+            .jobs
+            .iter()
+            .filter_map(|job| {
+                job.stdio
+                    .as_ref()
+                    .map(|stdio| (job.name.clone(), stdio.clone()))
+            })
+            .collect();
+        if !overrides.is_empty() {
+            let ec = spec
+                .execution_config
+                .get_or_insert_with(ExecutionConfig::default);
+            ec.job_stdio_overrides = Some(overrides);
         }
-        // Step 2: Create WorkflowModel
-        let workflow_id = Self::create_workflow(config, &spec)?;
 
-        // If any step fails, delete the workflow (which cascades to all other objects)
-        let rollback = |workflow_id: i64| {
+        let workflow_id = Self::create_workflow(config, &spec, use_draft)?;
+        // If any step fails, delete the workflow (which cascades to all other objects).
+        if let Err(e) = Self::populate_workflow(config, workflow_id, &spec, use_draft) {
             let _ = apis::workflows_api::delete_workflow(config, workflow_id);
-        };
+            return Err(e);
+        }
+        Ok(workflow_id)
+    }
 
-        // Step 3: Create supporting models and build name-to-id mappings
-        let file_name_to_id = match Self::create_files(config, workflow_id, &spec) {
-            Ok(mapping) => mapping,
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
-        };
-
-        let user_data_name_to_id = match Self::create_user_data(config, workflow_id, &spec) {
-            Ok(mapping) => mapping,
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
-        };
-
+    /// Create everything in the spec inside an existing workflow, then finalize it if it is a
+    /// draft.
+    fn populate_workflow(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+        use_draft: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let file_name_to_id = Self::create_files(config, workflow_id, spec)?;
+        let user_data_name_to_id = Self::create_user_data(config, workflow_id, spec)?;
         let resource_req_name_to_id =
-            match Self::create_resource_requirements(config, workflow_id, &spec) {
-                Ok(mapping) => mapping,
-                Err(e) => {
-                    rollback(workflow_id);
-                    return Err(e);
-                }
-            };
+            Self::create_resource_requirements(config, workflow_id, spec)?;
+        let slurm_scheduler_to_id = Self::create_slurm_schedulers(config, workflow_id, spec)?;
+        let failure_handler_name_to_id = Self::create_failure_handlers(config, workflow_id, spec)?;
 
-        let slurm_scheduler_to_id = match Self::create_slurm_schedulers(config, workflow_id, &spec)
-        {
-            Ok(mapping) => mapping,
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
+        let job_name_to_id = if use_draft {
+            Self::create_jobs_by_name(
+                config,
+                workflow_id,
+                spec,
+                &file_name_to_id,
+                &user_data_name_to_id,
+            )?
+        } else {
+            Self::create_jobs(
+                config,
+                workflow_id,
+                spec,
+                &file_name_to_id,
+                &user_data_name_to_id,
+                &resource_req_name_to_id,
+                &slurm_scheduler_to_id,
+                &failure_handler_name_to_id,
+            )?
+            .0
         };
 
-        let failure_handler_name_to_id =
-            match Self::create_failure_handlers(config, workflow_id, &spec) {
-                Ok(mapping) => mapping,
-                Err(e) => {
-                    rollback(workflow_id);
-                    return Err(e);
-                }
-            };
-
-        // Step 4: Create JobModels (with dependencies set during creation)
-        let (job_name_to_id, _created_jobs) = match Self::create_jobs(
+        Self::create_actions(
             config,
             workflow_id,
-            &spec,
-            &file_name_to_id,
-            &user_data_name_to_id,
-            &resource_req_name_to_id,
-            &slurm_scheduler_to_id,
-            &failure_handler_name_to_id,
-        ) {
-            Ok((mapping, jobs)) => (mapping, jobs),
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
-            }
-        };
-
-        // Step 5: Create workflow actions
-        match Self::create_actions(
-            config,
-            workflow_id,
-            &spec,
+            spec,
             &slurm_scheduler_to_id,
             &job_name_to_id,
-        ) {
-            Ok(_) => {}
-            Err(e) => {
-                rollback(workflow_id);
-                return Err(e);
+        )?;
+
+        if use_draft {
+            // Test hook: die like an interrupted `torc create`, without cleanup, to check that
+            // the unfinalized draft stays hidden.
+            if std::env::var_os("TORC_TEST_CREATE_EXIT_BEFORE_FINALIZE").is_some() {
+                std::process::exit(3);
+            }
+            // Interactive resource warnings were already shown (or skipped with
+            // --skip-checks) before creation, so only errors stop finalization here.
+            let result = apis::workflows_api::finalize_workflow(config, workflow_id, Some(true))
+                .map_err(|e| format!("Failed to finalize workflow: {:?}", e))?;
+            if !result.finalized {
+                return Err(format!(
+                    "Workflow validation failed:\n  - {}",
+                    result.errors.join("\n  - ")
+                )
+                .into());
             }
         }
-
-        Ok(workflow_id)
+        Ok(())
     }
 
     /// Create the workflow on the server
     fn create_workflow(
         config: &Configuration,
         spec: &WorkflowSpec,
+        is_draft: bool,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         let user = spec.user.clone().unwrap_or_else(|| "unknown".to_string());
         let mut workflow_model = models::WorkflowModel::new(spec.name.clone(), user);
+        workflow_model.is_draft = is_draft.then_some(true);
         workflow_model.description = spec.description.clone();
         workflow_model.env = spec.env.clone().filter(|env| !env.is_empty());
 
@@ -3680,116 +3455,9 @@ impl WorkflowSpec {
             workflow_model.execution_config = Some(execution_config.clone());
         }
 
-        // Validate that execution_config fields match the effective mode.
-        // For mode=auto, infer from slurm_schedulers presence.
-        if let Some(ref ec) = spec.execution_config {
-            let will_use_slurm = match ec.mode {
-                ExecutionMode::Slurm => true,
-                ExecutionMode::Auto => spec
-                    .slurm_schedulers
-                    .as_ref()
-                    .is_some_and(|s| !s.is_empty()),
-                ExecutionMode::Direct => false,
-            };
-            let will_use_direct = match ec.mode {
-                ExecutionMode::Direct => true,
-                ExecutionMode::Auto => !will_use_slurm,
-                ExecutionMode::Slurm => false,
-            };
-
-            let mut errors = Vec::new();
-            let has_worker_per_node_schedule_action =
-                spec.actions.as_ref().is_some_and(|actions| {
-                    actions.iter().any(|action| {
-                        action.action_type == "schedule_nodes"
-                            && action.start_one_worker_per_node == Some(true)
-                    })
-                });
-
-            if let Some(value) = ec.srun_mpi.as_deref() {
-                if let Err(err) = validate_srun_mpi_value(value) {
-                    errors.push(err);
-                }
-                if !has_worker_per_node_schedule_action {
-                    errors.push(
-                        "srun_mpi requires schedule_nodes.start_one_worker_per_node = true. \
-                        It only applies to the outer srun that launches one job runner per node."
-                            .to_string(),
-                    );
-                }
-            }
-
-            if will_use_slurm {
-                if ec.limit_resources == Some(false) {
-                    errors.push(
-                        "limit_resources: false is only supported in direct mode. \
-                        Slurm mode requires resource limits for correct srun behavior."
-                            .to_string(),
-                    );
-                }
-                if ec.termination_signal.is_some() {
-                    errors.push(
-                        "termination_signal is only supported in direct mode. \
-                        In slurm mode, use srun_termination_signal instead."
-                            .to_string(),
-                    );
-                }
-                if ec.sigterm_lead_seconds.is_some() {
-                    errors.push(
-                        "sigterm_lead_seconds is only supported in direct mode. \
-                        In slurm mode, termination timing is controlled by \
-                        srun_termination_signal."
-                            .to_string(),
-                    );
-                }
-                if ec.oom_exit_code.is_some() {
-                    errors.push(
-                        "oom_exit_code is only supported in direct mode. \
-                        In slurm mode, Slurm manages OOM detection."
-                            .to_string(),
-                    );
-                }
-            }
-
-            if will_use_direct {
-                if ec.srun_termination_signal.is_some() {
-                    errors.push(
-                        "srun_termination_signal is only supported in slurm mode. \
-                        In direct mode, use termination_signal instead."
-                            .to_string(),
-                    );
-                }
-                if ec.enable_cpu_bind == Some(true) {
-                    errors.push(
-                        "enable_cpu_bind is only supported in slurm mode. \
-                        It has no effect in direct mode."
-                            .to_string(),
-                    );
-                }
-            }
-
-            if !errors.is_empty() {
-                return Err(errors.join(" ").into());
-            }
-        }
-
-        if spec.actions.as_ref().is_some_and(|actions| {
-            actions.iter().any(|action| {
-                action.action_type == "schedule_nodes"
-                    && action.start_one_worker_per_node == Some(true)
-            })
-        }) {
-            let mode = spec
-                .execution_config
-                .as_ref()
-                .map(|config| &config.mode)
-                .unwrap_or(&ExecutionMode::Direct);
-            if *mode != ExecutionMode::Direct {
-                return Err(
-                    "start_one_worker_per_node requires execution_config.mode to be 'direct'"
-                        .into(),
-                );
-            }
+        let ec_errors = spec.execution_config_errors();
+        if !ec_errors.is_empty() {
+            return Err(ec_errors.join(" ").into());
         }
 
         // Set enable_ro_crate if present
@@ -4494,32 +4162,20 @@ impl WorkflowSpec {
         Ok(levels)
     }
 
-    /// Create JobModels with proper ID mapping using bulk API in batches
-    /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
-    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
-    fn create_jobs(
-        config: &Configuration,
-        workflow_id: i64,
+    /// Each job's dependencies by name: `depends_on` plus every job matched by
+    /// `depends_on_regexes`. Errors on unknown names, bad regexes, and regexes that match
+    /// nothing.
+    fn job_dependencies(
         spec: &WorkflowSpec,
-        file_name_to_id: &HashMap<String, i64>,
-        user_data_name_to_id: &HashMap<String, i64>,
-        resource_req_name_to_id: &HashMap<String, i64>,
-        slurm_scheduler_to_id: &HashMap<String, i64>,
-        failure_handler_name_to_id: &HashMap<String, i64>,
-    ) -> Result<(HashMap<String, i64>, HashMap<String, models::JobModel>), Box<dyn std::error::Error>>
-    {
-        let mut job_name_to_id = HashMap::new();
-        let mut created_jobs = HashMap::new();
-
-        // Step 1: Build a set of all job names for validation
+    ) -> Result<HashMap<String, Vec<String>>, Box<dyn std::error::Error>> {
         let all_job_names: std::collections::HashSet<String> =
             spec.jobs.iter().map(|j| j.name.clone()).collect();
 
-        // Step 2: Build dependency graph (job_name -> Vec<dependency_job_names>)
         let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
 
         for job_spec in &spec.jobs {
             let mut deps = Vec::new();
+            let mut seen: HashSet<&str> = HashSet::new();
 
             // Add explicit dependencies
             if let Some(ref names) = job_spec.depends_on {
@@ -4532,6 +4188,7 @@ impl WorkflowSpec {
                         )
                         .into());
                     }
+                    seen.insert(dep_name);
                     deps.push(dep_name.clone());
                 }
             }
@@ -4547,7 +4204,7 @@ impl WorkflowSpec {
                     })?;
                     let mut found_match = false;
                     for other_job in &spec.jobs {
-                        if re.is_match(&other_job.name) && !deps.contains(&other_job.name) {
+                        if re.is_match(&other_job.name) && seen.insert(&other_job.name) {
                             deps.push(other_job.name.clone());
                             found_match = true;
                         }
@@ -4566,6 +4223,233 @@ impl WorkflowSpec {
             dependencies.insert(job_spec.name.clone(), deps);
         }
 
+        Ok(dependencies)
+    }
+
+    /// A job's own fields from its spec; references are filled in by the caller.
+    fn base_job_model(
+        workflow_id: i64,
+        job_spec: &JobSpec,
+    ) -> Result<models::JobModel, Box<dyn std::error::Error>> {
+        let mut job_model =
+            models::JobModel::new(workflow_id, job_spec.name.clone(), job_spec.command.clone());
+        job_model.invocation_script = job_spec.invocation_script.clone();
+        job_model.env = job_spec.env.clone().filter(|env| !env.is_empty());
+        // Only override cancel_on_blocking_job_failure if explicitly set in spec
+        // (JobModel::new() defaults to Some(true))
+        if job_spec.cancel_on_blocking_job_failure.is_some() {
+            job_model.cancel_on_blocking_job_failure = job_spec.cancel_on_blocking_job_failure;
+        }
+        // supports_termination is deprecated — Slurm manages termination signals via srun
+        // --time and KillWait. Accept the field silently to avoid breaking existing specs.
+        if let Some(p) = job_spec.priority {
+            if p < 0 {
+                return Err(format!(
+                    "priority must be >= 0, got {} for job '{}'",
+                    p, job_spec.name
+                )
+                .into());
+            }
+            job_model.priority = Some(p);
+        }
+        job_model.labels.clone_from(&job_spec.labels);
+        Ok(job_model)
+    }
+
+    /// Create the jobs with references by name (`name_refs`), in dependency order and in
+    /// requests of up to `MAX_RECORD_TRANSFER_COUNT` jobs, so a job's dependencies are in an
+    /// earlier request or the same one. Dependency regexes are expanded here, over all of the
+    /// spec's jobs, because the server would match them only against jobs created so far.
+    /// File and user_data regexes are expanded here too, so the server doesn't spend its write
+    /// lock matching every regex against every name. Returns job name -> id.
+    fn create_jobs_by_name(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+        file_name_to_id: &HashMap<String, i64>,
+        user_data_name_to_id: &HashMap<String, i64>,
+    ) -> Result<HashMap<String, i64>, Box<dyn std::error::Error>> {
+        let dependencies = Self::job_dependencies(spec)?;
+        let mut job_models = Vec::with_capacity(spec.jobs.len());
+        for job_spec in Self::topological_order(&spec.jobs, &dependencies)? {
+            let mut job_model = Self::base_job_model(workflow_id, job_spec)?;
+            let deps = &dependencies[&job_spec.name];
+            job_model.name_refs = Some(models::JobNameRefs {
+                depends_on: (!deps.is_empty()).then(|| deps.clone()),
+                depends_on_regexes: None,
+                input_files: Self::expand_name_regexes(
+                    &job_spec.input_files,
+                    &job_spec.input_file_regexes,
+                    file_name_to_id,
+                    "Input file",
+                    &job_spec.name,
+                )?,
+                input_file_regexes: None,
+                output_files: Self::expand_name_regexes(
+                    &job_spec.output_files,
+                    &job_spec.output_file_regexes,
+                    file_name_to_id,
+                    "Output file",
+                    &job_spec.name,
+                )?,
+                output_file_regexes: None,
+                input_user_data: Self::expand_name_regexes(
+                    &job_spec.input_user_data,
+                    &job_spec.input_user_data_regexes,
+                    user_data_name_to_id,
+                    "Input user data",
+                    &job_spec.name,
+                )?,
+                input_user_data_regexes: None,
+                output_user_data: Self::expand_name_regexes(
+                    &job_spec.output_user_data,
+                    &job_spec.output_user_data_regexes,
+                    user_data_name_to_id,
+                    "Output user data",
+                    &job_spec.name,
+                )?,
+                output_user_data_regexes: None,
+                resource_requirements: job_spec.resource_requirements.clone(),
+                scheduler: job_spec.scheduler.clone(),
+                failure_handler: job_spec.failure_handler.clone(),
+            });
+            job_models.push(job_model);
+        }
+
+        let mut job_name_to_id = HashMap::with_capacity(job_models.len());
+        let batch_size = crate::MAX_RECORD_TRANSFER_COUNT as usize;
+        for (batch_index, batch) in job_models.chunks(batch_size).enumerate() {
+            let response =
+                apis::jobs_api::create_jobs(config, models::JobsModel::new(batch.to_vec()))
+                    .map_err(|e| match e {
+                        apis::Error::ResponseError(r) => format!(
+                            "Failed to create batch {} of jobs: {}",
+                            batch_index + 1,
+                            r.content
+                        ),
+                        e => format!(
+                            "Failed to create batch {} of jobs: {:?}",
+                            batch_index + 1,
+                            e
+                        ),
+                    })?;
+            for created in response.jobs.ok_or("Create jobs response missing items")? {
+                let id = created.id.ok_or("Created job missing ID")?;
+                job_name_to_id.insert(created.name, id);
+            }
+        }
+        if job_name_to_id.len() != spec.jobs.len() {
+            return Err(format!(
+                "create_jobs returned {} jobs, expected {}",
+                job_name_to_id.len(),
+                spec.jobs.len()
+            )
+            .into());
+        }
+        Ok(job_name_to_id)
+    }
+
+    /// `names` plus every name in `all` that one of `regexes` matches (unanchored, like
+    /// `resolve_names_and_regexes`), deduplicated. Errors on a bad regex or one that matches
+    /// nothing.
+    fn expand_name_regexes(
+        names: &Option<Vec<String>>,
+        regexes: &Option<Vec<String>>,
+        all: &HashMap<String, i64>,
+        resource_type: &str,
+        job_name: &str,
+    ) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+        let Some(patterns) = regexes else {
+            return Ok(names.clone());
+        };
+        let mut out = names.clone().unwrap_or_default();
+        let mut seen: HashSet<String> = out.iter().cloned().collect();
+        for pattern in patterns {
+            let re = Regex::new(pattern).map_err(|e| {
+                format!(
+                    "Invalid regex '{}' for {} in job '{}': {}",
+                    pattern,
+                    resource_type.to_lowercase(),
+                    job_name,
+                    e
+                )
+            })?;
+            let mut found_match = false;
+            for name in all.keys() {
+                if re.is_match(name) {
+                    found_match = true;
+                    if seen.insert(name.clone()) {
+                        out.push(name.clone());
+                    }
+                }
+            }
+            if !found_match {
+                return Err(format!(
+                    "{} regex '{}' did not match any names for job '{}'",
+                    resource_type, pattern, job_name
+                )
+                .into());
+            }
+        }
+        Ok((!out.is_empty()).then_some(out))
+    }
+
+    /// Jobs ordered so that each comes after its dependencies (Kahn's algorithm, linear in
+    /// jobs plus edges; `topological_sort_jobs` is quadratic on long chains).
+    fn topological_order<'a>(
+        jobs: &'a [JobSpec],
+        dependencies: &HashMap<String, Vec<String>>,
+    ) -> Result<Vec<&'a JobSpec>, Box<dyn std::error::Error>> {
+        let index: HashMap<&str, usize> = jobs
+            .iter()
+            .enumerate()
+            .map(|(i, j)| (j.name.as_str(), i))
+            .collect();
+        let mut remaining_deps = vec![0usize; jobs.len()];
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); jobs.len()];
+        for (i, job) in jobs.iter().enumerate() {
+            for dep in &dependencies[&job.name] {
+                remaining_deps[i] += 1;
+                dependents[index[dep.as_str()]].push(i);
+            }
+        }
+        let mut queue: std::collections::VecDeque<usize> = (0..jobs.len())
+            .filter(|i| remaining_deps[*i] == 0)
+            .collect();
+        let mut order = Vec::with_capacity(jobs.len());
+        while let Some(i) = queue.pop_front() {
+            order.push(&jobs[i]);
+            for &d in &dependents[i] {
+                remaining_deps[d] -= 1;
+                if remaining_deps[d] == 0 {
+                    queue.push_back(d);
+                }
+            }
+        }
+        if order.len() != jobs.len() {
+            return Err("Circular dependency detected in job graph".into());
+        }
+        Ok(order)
+    }
+
+    /// Create JobModels with proper ID mapping using bulk API in batches
+    /// Jobs are created in dependency order with depends_on_job_ids set during initial creation
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    fn create_jobs(
+        config: &Configuration,
+        workflow_id: i64,
+        spec: &WorkflowSpec,
+        file_name_to_id: &HashMap<String, i64>,
+        user_data_name_to_id: &HashMap<String, i64>,
+        resource_req_name_to_id: &HashMap<String, i64>,
+        slurm_scheduler_to_id: &HashMap<String, i64>,
+        failure_handler_name_to_id: &HashMap<String, i64>,
+    ) -> Result<(HashMap<String, i64>, HashMap<String, models::JobModel>), Box<dyn std::error::Error>>
+    {
+        let mut job_name_to_id = HashMap::new();
+        let mut created_jobs = HashMap::new();
+        let dependencies = Self::job_dependencies(spec)?;
+
         // Step 3: Topologically sort jobs into levels
         let levels = Self::topological_sort_jobs(&spec.jobs, &dependencies)?;
 
@@ -4578,24 +4462,7 @@ impl WorkflowSpec {
             let mut job_spec_mapping = Vec::new();
 
             for job_spec in level {
-                let mut job_model = models::JobModel::new(
-                    workflow_id,
-                    job_spec.name.clone(),
-                    job_spec.command.clone(),
-                );
-
-                // Set optional fields
-                job_model.invocation_script = job_spec.invocation_script.clone();
-                job_model.env = job_spec.env.clone().filter(|env| !env.is_empty());
-                // Only override cancel_on_blocking_job_failure if explicitly set in spec
-                // (JobModel::new() defaults to Some(true))
-                if job_spec.cancel_on_blocking_job_failure.is_some() {
-                    job_model.cancel_on_blocking_job_failure =
-                        job_spec.cancel_on_blocking_job_failure;
-                }
-                // supports_termination is deprecated — Slurm manages termination
-                // signals via srun --time and KillWait. Accept the field silently
-                // to avoid breaking existing specs.
+                let mut job_model = Self::base_job_model(workflow_id, job_spec)?;
 
                 // Map file names and regexes to IDs
                 let input_file_ids = Self::resolve_names_and_regexes(
@@ -4702,18 +4569,6 @@ impl WorkflowSpec {
                     }
                     job_model.depends_on_job_ids = Some(depends_on_ids);
                 }
-
-                if let Some(p) = job_spec.priority {
-                    if p < 0 {
-                        return Err(format!(
-                            "priority must be >= 0, got {} for job '{}'",
-                            p, job_spec.name
-                        )
-                        .into());
-                    }
-                    job_model.priority = Some(p);
-                }
-                job_model.labels.clone_from(&job_spec.labels);
 
                 job_models.push(job_model);
                 job_spec_mapping.push(job_spec);
