@@ -323,13 +323,40 @@ fn test_name_refs_errors(start_server: &ServerProcess) {
         Err(apis::Error::ResponseError(r)) => assert_eq!(r.status.as_u16(), 422),
         other => panic!("expected 422, got {:?}", other.map(|_| ())),
     }
+
+    // Nor does update_job; it rejects name_refs instead of ignoring them.
+    let existing = &listed.items[0];
+    let mut update = existing.clone();
+    update.name_refs = Some(JobNameRefs {
+        depends_on: names(&["existing"]),
+        ..Default::default()
+    });
+    match apis::jobs_api::update_job(config, existing.id.unwrap(), update) {
+        Err(apis::Error::ResponseError(r)) => {
+            assert_eq!(r.status.as_u16(), 422);
+            assert!(r.content.contains("name_refs"), "{}", r.content);
+        }
+        other => panic!("expected 422, got {:?}", other.map(|_| ())),
+    }
 }
 
 #[rstest]
 fn test_draft_hidden_and_not_initializable_until_finalized(start_server: &ServerProcess) {
     let config = &start_server.config;
     let wf = create_workflow(config, "draft_visibility", true);
-    create_jobs(config, vec![job(wf, "only", JobNameRefs::default())]);
+    let created = create_jobs(config, vec![job(wf, "only", JobNameRefs::default())]);
+
+    // Even a job forced to ready can't be claimed from a draft.
+    apis::jobs_api::manage_status_change(
+        config,
+        created["only"].id.unwrap(),
+        models::JobStatus::Ready,
+        0,
+    )
+    .expect("set job ready");
+    let claimed =
+        apis::workflows_api::claim_next_jobs(config, wf, Some(10), None, None, None).unwrap();
+    assert!(claimed.jobs.unwrap_or_default().is_empty());
 
     assert!(!listed(config, wf));
     assert_eq!(
@@ -432,8 +459,33 @@ fn test_finalize_rejects_cross_batch_problems(start_server: &ServerProcess) {
         error: None,
     };
     apis::workflow_actions_api::create_workflow_action(config, wf, action).unwrap();
+    // An action whose job_ids point at a job of another workflow.
+    let other_wf = create_workflow(config, "finalize_other", false);
+    let foreign_job = create_jobs(
+        config,
+        vec![job(other_wf, "foreign", JobNameRefs::default())],
+    )["foreign"]
+        .id
+        .unwrap();
+    let mut action = models::WorkflowActionModel::new(
+        wf,
+        "on_jobs_complete".into(),
+        "run_commands".into(),
+        serde_json::json!({"commands": ["true"]}),
+    );
+    action.job_ids = Some(vec![foreign_job]);
+    apis::workflow_actions_api::create_workflow_action(config, wf, action).unwrap();
+
     let result = finalize(config, wf, true);
     assert!(!result.finalized);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.contains(&format!("references job_id={}", foreign_job))),
+        "{:?}",
+        result.errors
+    );
     assert!(
         result
             .errors

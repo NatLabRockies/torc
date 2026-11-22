@@ -3429,13 +3429,16 @@ where
             ApiError("Database connection error".to_string())
         })?;
 
+        // A draft is never runnable, so nothing is claimed from it, as for a canceled workflow.
         let workflow_is_canceled =
-            match sqlx::query("SELECT is_canceled FROM workflow WHERE id = $1")
+            match sqlx::query("SELECT is_canceled, is_draft FROM workflow WHERE id = $1")
                 .bind(id)
                 .fetch_optional(&mut *conn)
                 .await
             {
-                Ok(Some(row)) => row.get::<bool, _>("is_canceled"),
+                Ok(Some(row)) => {
+                    row.get::<bool, _>("is_canceled") || row.get::<bool, _>("is_draft")
+                }
                 Ok(None) => {
                     return Ok(ClaimNextJobsResponse::NotFoundErrorResponse(
                         resource_not_found_response("Workflow", id),

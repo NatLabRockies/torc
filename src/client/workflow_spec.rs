@@ -3346,7 +3346,13 @@ impl WorkflowSpec {
         let failure_handler_name_to_id = Self::create_failure_handlers(config, workflow_id, spec)?;
 
         let job_name_to_id = if use_draft {
-            Self::create_jobs_by_name(config, workflow_id, spec)?
+            Self::create_jobs_by_name(
+                config,
+                workflow_id,
+                spec,
+                &file_name_to_id,
+                &user_data_name_to_id,
+            )?
         } else {
             Self::create_jobs(
                 config,
@@ -4254,11 +4260,14 @@ impl WorkflowSpec {
     /// requests of up to `MAX_RECORD_TRANSFER_COUNT` jobs, so a job's dependencies are in an
     /// earlier request or the same one. Dependency regexes are expanded here, over all of the
     /// spec's jobs, because the server would match them only against jobs created so far.
-    /// Returns job name -> id.
+    /// File and user_data regexes are expanded here too, so the server doesn't spend its write
+    /// lock matching every regex against every name. Returns job name -> id.
     fn create_jobs_by_name(
         config: &Configuration,
         workflow_id: i64,
         spec: &WorkflowSpec,
+        file_name_to_id: &HashMap<String, i64>,
+        user_data_name_to_id: &HashMap<String, i64>,
     ) -> Result<HashMap<String, i64>, Box<dyn std::error::Error>> {
         let dependencies = Self::job_dependencies(spec)?;
         let mut job_models = Vec::with_capacity(spec.jobs.len());
@@ -4268,14 +4277,38 @@ impl WorkflowSpec {
             job_model.name_refs = Some(models::JobNameRefs {
                 depends_on: (!deps.is_empty()).then(|| deps.clone()),
                 depends_on_regexes: None,
-                input_files: job_spec.input_files.clone(),
-                input_file_regexes: job_spec.input_file_regexes.clone(),
-                output_files: job_spec.output_files.clone(),
-                output_file_regexes: job_spec.output_file_regexes.clone(),
-                input_user_data: job_spec.input_user_data.clone(),
-                input_user_data_regexes: job_spec.input_user_data_regexes.clone(),
-                output_user_data: job_spec.output_user_data.clone(),
-                output_user_data_regexes: job_spec.output_user_data_regexes.clone(),
+                input_files: Self::expand_name_regexes(
+                    &job_spec.input_files,
+                    &job_spec.input_file_regexes,
+                    file_name_to_id,
+                    "Input file",
+                    &job_spec.name,
+                )?,
+                input_file_regexes: None,
+                output_files: Self::expand_name_regexes(
+                    &job_spec.output_files,
+                    &job_spec.output_file_regexes,
+                    file_name_to_id,
+                    "Output file",
+                    &job_spec.name,
+                )?,
+                output_file_regexes: None,
+                input_user_data: Self::expand_name_regexes(
+                    &job_spec.input_user_data,
+                    &job_spec.input_user_data_regexes,
+                    user_data_name_to_id,
+                    "Input user data",
+                    &job_spec.name,
+                )?,
+                input_user_data_regexes: None,
+                output_user_data: Self::expand_name_regexes(
+                    &job_spec.output_user_data,
+                    &job_spec.output_user_data_regexes,
+                    user_data_name_to_id,
+                    "Output user data",
+                    &job_spec.name,
+                )?,
+                output_user_data_regexes: None,
                 resource_requirements: job_spec.resource_requirements.clone(),
                 scheduler: job_spec.scheduler.clone(),
                 failure_handler: job_spec.failure_handler.clone(),
@@ -4314,6 +4347,51 @@ impl WorkflowSpec {
             .into());
         }
         Ok(job_name_to_id)
+    }
+
+    /// `names` plus every name in `all` that one of `regexes` matches (unanchored, like
+    /// `resolve_names_and_regexes`), deduplicated. Errors on a bad regex or one that matches
+    /// nothing.
+    fn expand_name_regexes(
+        names: &Option<Vec<String>>,
+        regexes: &Option<Vec<String>>,
+        all: &HashMap<String, i64>,
+        resource_type: &str,
+        job_name: &str,
+    ) -> Result<Option<Vec<String>>, Box<dyn std::error::Error>> {
+        let Some(patterns) = regexes else {
+            return Ok(names.clone());
+        };
+        let mut out = names.clone().unwrap_or_default();
+        let mut seen: HashSet<String> = out.iter().cloned().collect();
+        for pattern in patterns {
+            let re = Regex::new(pattern).map_err(|e| {
+                format!(
+                    "Invalid regex '{}' for {} in job '{}': {}",
+                    pattern,
+                    resource_type.to_lowercase(),
+                    job_name,
+                    e
+                )
+            })?;
+            let mut found_match = false;
+            for name in all.keys() {
+                if re.is_match(name) {
+                    found_match = true;
+                    if seen.insert(name.clone()) {
+                        out.push(name.clone());
+                    }
+                }
+            }
+            if !found_match {
+                return Err(format!(
+                    "{} regex '{}' did not match any names for job '{}'",
+                    resource_type, pattern, job_name
+                )
+                .into());
+            }
+        }
+        Ok((!out.is_empty()).then_some(out))
     }
 
     /// Jobs ordered so that each comes after its dependencies (Kahn's algorithm, linear in

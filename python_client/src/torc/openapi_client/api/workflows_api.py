@@ -2158,7 +2158,7 @@ class WorkflowsApi:
     ) -> FinalizeWorkflowResponse:
         """finalize_workflow
 
-        Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
+        Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers or jobs outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
 
         :param id: Workflow ID (required)
         :type id: int
@@ -2232,7 +2232,7 @@ class WorkflowsApi:
     ) -> ApiResponse[FinalizeWorkflowResponse]:
         """finalize_workflow
 
-        Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
+        Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers or jobs outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
 
         :param id: Workflow ID (required)
         :type id: int
@@ -2306,7 +2306,7 @@ class WorkflowsApi:
     ) -> RESTResponseType:
         """finalize_workflow
 
-        Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
+        Validate a draft workflow (created with is_draft = true) and, if it passes, clear is_draft so the workflow is listed and can be initialized. The checks span the whole workflow: dependency cycles (explicit and through files and user_data), actions that reference schedulers or jobs outside the workflow, and execution_config rules are errors; Slurm scheduler node-count mismatches and job resource requirements that exceed the Slurm schedulers are warnings, which block finalization unless force=true. The response always has status 200 when the checks ran; `finalized` says whether the workflow left the draft state. Finalizing a workflow that is not a draft is a no-op that reports finalized = true.
 
         :param id: Workflow ID (required)
         :type id: int

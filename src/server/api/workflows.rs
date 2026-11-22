@@ -360,6 +360,235 @@ impl WorkflowsApiImpl {
         Self { context }
     }
 
+    /// Delete a workflow and all its rows. With `draft_cutoff`, delete it only if it is still a
+    /// draft created before that timestamp (checked under the write lock) and return whether it
+    /// was deleted.
+    pub(crate) async fn delete_workflow_rows(
+        &self,
+        id: i64,
+        draft_cutoff: Option<&str>,
+    ) -> Result<bool, ApiError> {
+        // Explicitly delete from child tables instead of relying on CASCADE.
+        // With PRAGMA foreign_keys = ON (our default), SQLite checks FK constraints
+        // on every deleted row by scanning all referencing tables. For a 100K-job
+        // workflow this causes ~46s deletes. Since we delete children first, we can
+        // safely disable FK checks for the delete transaction. Benchmarked: 46s → <1s.
+        //
+        // PRAGMA foreign_keys is a no-op inside a transaction, so we must set it
+        // on the connection before BEGIN and restore it after COMMIT.
+        let pool = self.context.pool.as_ref();
+
+        let mut conn = pool
+            .acquire()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to acquire connection"))?;
+
+        // Disable FK checks — safe because we explicitly delete all child rows
+        // before parents. Must be set outside a transaction.
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to disable foreign keys"))?;
+
+        // Wrap all deletes in a transaction for atomicity. If anything fails,
+        // the transaction rolls back and we re-enable FK checks in the cleanup below.
+        let result = async {
+            sqlx::query("BEGIN IMMEDIATE")
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
+
+            // Under the write lock, so finalize_workflow can't clear is_draft between this
+            // check and the deletes.
+            if let Some(cutoff) = draft_cutoff {
+                let abandoned: Option<i64> = sqlx::query_scalar(
+                    "SELECT 1 FROM workflow WHERE id = ? AND is_draft = 1 AND timestamp < ?",
+                )
+                .bind(id)
+                .bind(cutoff)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to check draft"))?;
+                if abandoned.is_none() {
+                    sqlx::query("COMMIT")
+                        .execute(&mut *conn)
+                        .await
+                        .map_err(|e| database_error_with_msg(e, "Failed to commit transaction"))?;
+                    return Ok::<bool, ApiError>(false);
+                }
+            }
+
+            // Tier 1: Leaf junction tables (no other tables reference these)
+            sqlx::query!("DELETE FROM workflow_result WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete workflow_result"))?;
+            sqlx::query!("DELETE FROM job_depends_on WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete job_depends_on"))?;
+            sqlx::query!("DELETE FROM job_input_file WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete job_input_file"))?;
+            sqlx::query!("DELETE FROM job_output_file WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete job_output_file"))?;
+            // These junction tables lack workflow_id, so delete via job subquery.
+            sqlx::query!(
+                "DELETE FROM job_input_user_data WHERE job_id IN \
+                 (SELECT id FROM job WHERE workflow_id = $1)",
+                id
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to delete job_input_user_data"))?;
+            sqlx::query!(
+                "DELETE FROM job_output_user_data WHERE job_id IN \
+                 (SELECT id FROM job WHERE workflow_id = $1)",
+                id
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to delete job_output_user_data"))?;
+            sqlx::query!(
+                "DELETE FROM job_internal WHERE job_id IN \
+                 (SELECT id FROM job WHERE workflow_id = $1)",
+                id
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to delete job_internal"))?;
+            sqlx::query!("DELETE FROM event WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete event"))?;
+            sqlx::query!(
+                "DELETE FROM workflow_access_group WHERE workflow_id = $1",
+                id
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to delete workflow_access_group"))?;
+            sqlx::query!("DELETE FROM remote_worker WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete remote_worker"))?;
+
+            // Tier 2: Tables referenced by tier 1 (now safe to delete)
+            sqlx::query!("DELETE FROM result WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete result"))?;
+            sqlx::query!("DELETE FROM workflow_action WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete workflow_action"))?;
+
+            // Tier 3: Core entity tables
+            sqlx::query!("DELETE FROM job WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete job"))?;
+            sqlx::query!("DELETE FROM file WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete file"))?;
+            sqlx::query!("DELETE FROM user_data WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete user_data"))?;
+            sqlx::query!("DELETE FROM compute_node WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete compute_node"))?;
+            sqlx::query!(
+                "DELETE FROM resource_requirements WHERE workflow_id = $1",
+                id
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to delete resource_requirements"))?;
+            sqlx::query!("DELETE FROM failure_handler WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete failure_handler"))?;
+            sqlx::query!("DELETE FROM local_scheduler WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete local_scheduler"))?;
+            sqlx::query!("DELETE FROM slurm_scheduler WHERE workflow_id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete slurm_scheduler"))?;
+            sqlx::query!(
+                "DELETE FROM scheduled_compute_node WHERE workflow_id = $1",
+                id
+            )
+            .execute(&mut *conn)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to delete scheduled_compute_node"))?;
+
+            // Tier 4: The workflow itself (should be fast now with no children)
+            let res = sqlx::query!("DELETE FROM workflow WHERE id = $1", id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete workflow"))?;
+
+            if res.rows_affected() > 1 {
+                error!(
+                    "Unexpected number of rows affected when deleting workflow {}: {}",
+                    id,
+                    res.rows_affected()
+                );
+                return Err(ApiError(format!(
+                    "Database error: Unexpected number of rows affected: {}",
+                    res.rows_affected()
+                )));
+            }
+
+            sqlx::query("COMMIT")
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to commit transaction"))?;
+
+            Ok::<bool, ApiError>(true)
+        }
+        .await;
+
+        // On error, ROLLBACK to close the transaction before restoring FK checks.
+        // PRAGMA foreign_keys is a no-op inside an open transaction, so we must
+        // close it first. If rollback fails, detach the connection to prevent
+        // returning it to the pool with an open write lock.
+        let deleted = match result {
+            Ok(deleted) => deleted,
+            Err(delete_err) => {
+                if let Err(rb_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
+                    error!("Failed to rollback transaction: {rb_err}; dropping connection");
+                    conn.detach();
+                } else {
+                    // Rollback succeeded. Re-enable FK checks before returning.
+                    let _ = sqlx::query("PRAGMA foreign_keys = ON")
+                        .execute(&mut *conn)
+                        .await;
+                }
+                return Err(delete_err);
+            }
+        };
+
+        // Success path: re-enable FK checks before returning connection to pool.
+        if sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *conn)
+            .await
+            .is_err()
+        {
+            error!("Failed to re-enable foreign key checks; dropping connection");
+            conn.detach();
+        }
+        Ok(deleted)
+    }
+
     /// List workflows with optional access control filtering.
     ///
     /// When `accessible_ids` is `Some(ids)`, only workflows with IDs in the list are returned.
@@ -2029,202 +2258,7 @@ where
             }
         };
 
-        // Explicitly delete from child tables instead of relying on CASCADE.
-        // With PRAGMA foreign_keys = ON (our default), SQLite checks FK constraints
-        // on every deleted row by scanning all referencing tables. For a 100K-job
-        // workflow this causes ~46s deletes. Since we delete children first, we can
-        // safely disable FK checks for the delete transaction. Benchmarked: 46s → <1s.
-        //
-        // PRAGMA foreign_keys is a no-op inside a transaction, so we must set it
-        // on the connection before BEGIN and restore it after COMMIT.
-        let pool = self.context.pool.as_ref();
-
-        let mut conn = pool
-            .acquire()
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to acquire connection"))?;
-
-        // Disable FK checks — safe because we explicitly delete all child rows
-        // before parents. Must be set outside a transaction.
-        sqlx::query("PRAGMA foreign_keys = OFF")
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to disable foreign keys"))?;
-
-        // Wrap all deletes in a transaction for atomicity. If anything fails,
-        // the transaction rolls back and we re-enable FK checks in the cleanup below.
-        let result = async {
-            sqlx::query("BEGIN IMMEDIATE")
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
-
-            // Tier 1: Leaf junction tables (no other tables reference these)
-            sqlx::query!("DELETE FROM workflow_result WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete workflow_result"))?;
-            sqlx::query!("DELETE FROM job_depends_on WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete job_depends_on"))?;
-            sqlx::query!("DELETE FROM job_input_file WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete job_input_file"))?;
-            sqlx::query!("DELETE FROM job_output_file WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete job_output_file"))?;
-            // These junction tables lack workflow_id, so delete via job subquery.
-            sqlx::query!(
-                "DELETE FROM job_input_user_data WHERE job_id IN \
-                 (SELECT id FROM job WHERE workflow_id = $1)",
-                id
-            )
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to delete job_input_user_data"))?;
-            sqlx::query!(
-                "DELETE FROM job_output_user_data WHERE job_id IN \
-                 (SELECT id FROM job WHERE workflow_id = $1)",
-                id
-            )
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to delete job_output_user_data"))?;
-            sqlx::query!(
-                "DELETE FROM job_internal WHERE job_id IN \
-                 (SELECT id FROM job WHERE workflow_id = $1)",
-                id
-            )
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to delete job_internal"))?;
-            sqlx::query!("DELETE FROM event WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete event"))?;
-            sqlx::query!(
-                "DELETE FROM workflow_access_group WHERE workflow_id = $1",
-                id
-            )
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to delete workflow_access_group"))?;
-            sqlx::query!("DELETE FROM remote_worker WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete remote_worker"))?;
-
-            // Tier 2: Tables referenced by tier 1 (now safe to delete)
-            sqlx::query!("DELETE FROM result WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete result"))?;
-            sqlx::query!("DELETE FROM workflow_action WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete workflow_action"))?;
-
-            // Tier 3: Core entity tables
-            sqlx::query!("DELETE FROM job WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete job"))?;
-            sqlx::query!("DELETE FROM file WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete file"))?;
-            sqlx::query!("DELETE FROM user_data WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete user_data"))?;
-            sqlx::query!("DELETE FROM compute_node WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete compute_node"))?;
-            sqlx::query!(
-                "DELETE FROM resource_requirements WHERE workflow_id = $1",
-                id
-            )
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to delete resource_requirements"))?;
-            sqlx::query!("DELETE FROM failure_handler WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete failure_handler"))?;
-            sqlx::query!("DELETE FROM local_scheduler WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete local_scheduler"))?;
-            sqlx::query!("DELETE FROM slurm_scheduler WHERE workflow_id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete slurm_scheduler"))?;
-            sqlx::query!(
-                "DELETE FROM scheduled_compute_node WHERE workflow_id = $1",
-                id
-            )
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| database_error_with_msg(e, "Failed to delete scheduled_compute_node"))?;
-
-            // Tier 4: The workflow itself (should be fast now with no children)
-            let res = sqlx::query!("DELETE FROM workflow WHERE id = $1", id)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to delete workflow"))?;
-
-            if res.rows_affected() > 1 {
-                error!(
-                    "Unexpected number of rows affected when deleting workflow {}: {}",
-                    id,
-                    res.rows_affected()
-                );
-                return Err(ApiError(format!(
-                    "Database error: Unexpected number of rows affected: {}",
-                    res.rows_affected()
-                )));
-            }
-
-            sqlx::query("COMMIT")
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| database_error_with_msg(e, "Failed to commit transaction"))?;
-
-            Ok::<(), ApiError>(())
-        }
-        .await;
-
-        // On error, ROLLBACK to close the transaction before restoring FK checks.
-        // PRAGMA foreign_keys is a no-op inside an open transaction, so we must
-        // close it first. If rollback fails, detach the connection to prevent
-        // returning it to the pool with an open write lock.
-        if let Err(delete_err) = result {
-            if let Err(rb_err) = sqlx::query("ROLLBACK").execute(&mut *conn).await {
-                error!("Failed to rollback transaction: {rb_err}; dropping connection");
-                conn.detach();
-            } else {
-                // Rollback succeeded. Re-enable FK checks before returning.
-                let _ = sqlx::query("PRAGMA foreign_keys = ON")
-                    .execute(&mut *conn)
-                    .await;
-            }
-            return Err(delete_err);
-        }
-
-        // Success path: re-enable FK checks before returning connection to pool.
-        if sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&mut *conn)
-            .await
-            .is_err()
-        {
-            error!("Failed to re-enable foreign key checks; dropping connection");
-            conn.detach();
-        }
-
+        self.delete_workflow_rows(id, None).await?;
         info!(
             "Successfully deleted workflow {} (name: {:?})",
             id, workflow.name

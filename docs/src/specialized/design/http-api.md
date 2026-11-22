@@ -205,7 +205,7 @@ other jobs in the same request, in any order. A name that matches nothing, match
 record, or a regex that matches nothing is a 422, as is a dependency cycle within the request. A
 request cannot refer to jobs in a later request, so send jobs in dependency order when a workflow
 needs more than one request (`MAX_RECORD_TRANSFER_COUNT`, 100,000 jobs, per request). The single-job
-`POST /jobs` endpoint rejects `name_refs`.
+`POST /jobs` endpoint and `PUT /jobs/{id}` reject `name_refs`.
 
 ### Draft Workflows
 
@@ -213,18 +213,18 @@ To build a large workflow without exposing a partial one, create it as a draft, 
 requests, and finalize it:
 
 1. `POST /workflows` with `"is_draft": true`. Drafts are left out of `GET /workflows`, and
-   `initialize_jobs` rejects them with 422. `GET /workflows/{id}` returns them with
-   `is_draft: true`.
+   `initialize_jobs` rejects them with 422, and claim requests return no jobs. `GET /workflows/{id}`
+   returns them with `is_draft: true`.
 2. Create files, user data, resource requirements, schedulers, failure handlers, jobs, and actions
    as usual, in as many requests as needed.
 3. `POST /workflows/{id}/finalize`. The server checks the whole workflow: dependency cycles
-   (explicit and through files and user data), actions that reference schedulers outside the
+   (explicit and through files and user data), actions that reference schedulers or jobs outside the
    workflow, and `execution_config` rules are errors; Slurm scheduler node-count mismatches and job
    resource requirements that exceed the Slurm schedulers are warnings. The response is
    `{"finalized": bool, "errors": [...], "warnings": [...]}` with status 200. Warnings block
-   finalization unless the request has `?force=true`; errors always do. On success the workflow is
-   no longer a draft. Finalizing a workflow that is not a draft does nothing and reports
-   `finalized: true`.
+   finalization unless the request has `?force=true`; errors always do. The checks and the update
+   run in one write transaction. On success the workflow is no longer a draft. Finalizing a workflow
+   that is not a draft does nothing and reports `finalized: true`.
 
 The server deletes drafts that are not finalized within `--draft-workflow-timeout-secs` (default one
 day) of their creation, so an interrupted client leaves nothing behind. `torc create` uses this flow

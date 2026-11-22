@@ -1208,6 +1208,13 @@ where
         context: &C,
     ) -> Result<UpdateJobResponse, ApiError> {
         authorize_job!(self, id, context, UpdateJobResponse);
+        if body.name_refs.is_some() {
+            return Ok(UpdateJobResponse::UnprocessableContentErrorResponse(
+                message_error_response(
+                    "name_refs is supported only by create_jobs (bulk)".to_string(),
+                ),
+            ));
+        }
         self.jobs_api.update_job(id, body, context).await
     }
 
