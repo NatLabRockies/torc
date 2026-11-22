@@ -27,13 +27,14 @@ class ResetJobStatusResponse(BaseModel):
     """
     ResetJobStatusResponse
     """ # noqa: E501
+    downstream_reset: Optional[List[StrictInt]] = Field(default=None, description="Direct completed or failed dependents of reset terminal jobs that were also reset (or, for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the request has a body.")
     reset: Optional[List[StrictInt]] = Field(default=None, description="IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the request has a body.")
     reset_type: Optional[StrictStr] = None
     skipped: Optional[List[ResetJobStatusSkipped]] = Field(default=None, description="Requested jobs that were not reset, with the reason. Set only when the request has a body.")
     status: StrictStr
     updated_count: StrictInt
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["reset", "reset_type", "skipped", "status", "updated_count", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["downstream_reset", "reset", "reset_type", "skipped", "status", "updated_count", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,6 +82,11 @@ class ResetJobStatusResponse(BaseModel):
                 if _item_skipped:
                     _items.append(_item_skipped.to_dict())
             _dict['skipped'] = _items
+        # set to None if downstream_reset (nullable) is None
+        # and model_fields_set contains the field
+        if self.downstream_reset is None and "downstream_reset" in self.model_fields_set:
+            _dict['downstream_reset'] = None
+
         # set to None if reset (nullable) is None
         # and model_fields_set contains the field
         if self.reset is None and "reset" in self.model_fields_set:
@@ -108,6 +114,7 @@ class ResetJobStatusResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "downstream_reset": obj.get("downstream_reset"),
             "reset": obj.get("reset"),
             "reset_type": obj.get("reset_type"),
             "skipped": [ResetJobStatusSkipped.from_dict(_item) for _item in obj["skipped"]] if obj.get("skipped") is not None else None,

@@ -57,8 +57,8 @@ use crate::client::commands::pagination::{
 };
 use crate::client::commands::reports::check_resource_utilization;
 use crate::client::commands::workflow_export::{
-    EXPORT_VERSION, ExportImportStats, IdMappings, WorkflowExport, job_levels, map_positionally,
-    unique_name_chunks,
+    EXPORT_VERSION, ExportImportStats, IdMappings, MAX_IMPORT_BATCH_BYTES, WorkflowExport,
+    job_levels, map_positionally, unique_name_chunks,
 };
 use crate::client::commands::{
     get_env_user_name,
@@ -4062,7 +4062,9 @@ fn handle_import(
 
     // Create files in bulk. The server returns them in request order, so map old to new
     // IDs by position: names are not unique in exported workflows.
-    for chunk in unique_name_chunks(&export.files, batch_size, |f| &f.name) {
+    for chunk in unique_name_chunks(&export.files, batch_size, MAX_IMPORT_BATCH_BYTES, |f| {
+        &f.name
+    }) {
         let body = models::FilesModel::new(
             chunk
                 .iter()
@@ -4096,7 +4098,12 @@ fn handle_import(
     // Create user_data in bulk, mapped by position like files.
     // Note: consumer_job_id and producer_job_id relationships are established
     // via job's input_user_data_ids and output_user_data_ids, not here
-    for chunk in unique_name_chunks(&export.user_data, batch_size, |ud| &ud.name) {
+    for chunk in unique_name_chunks(
+        &export.user_data,
+        batch_size,
+        MAX_IMPORT_BATCH_BYTES,
+        |ud| &ud.name,
+    ) {
         let body = models::UserDataListModel::new(
             chunk
                 .iter()
@@ -4253,7 +4260,7 @@ fn handle_import(
     // Create jobs in bulk, one dependency level at a time, so that every job's
     // depends_on_job_ids already exist on the server when it is created.
     for level in levels {
-        for chunk in unique_name_chunks(&level, batch_size, |j| &j.name) {
+        for chunk in unique_name_chunks(&level, batch_size, MAX_IMPORT_BATCH_BYTES, |j| &j.name) {
             let new_jobs = chunk
                 .iter()
                 .map(|job_model| {

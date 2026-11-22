@@ -273,22 +273,38 @@ impl IdMappings {
     }
 }
 
-/// Split `items` into consecutive chunks of at most `max_len` items, starting a new chunk
-/// whenever a name repeats within the current one.
+/// Byte budget for one bulk create request during import: half the server's default 200 MiB
+/// bulk body limit, leaving headroom for JSON framing.
+pub const MAX_IMPORT_BATCH_BYTES: usize = 100 * 1024 * 1024;
+
+/// Split `items` into consecutive chunks of at most `max_len` items and roughly `max_bytes`
+/// serialized bytes, starting a new chunk whenever a name repeats within the current one.
+/// An item larger than `max_bytes` gets a chunk of its own.
 ///
 /// The bulk create endpoints reject duplicate names within one request, but exported
 /// workflows can contain duplicates because the database doesn't enforce unique names.
-pub fn unique_name_chunks<T>(items: &[T], max_len: usize, name: impl Fn(&T) -> &str) -> Vec<&[T]> {
+pub fn unique_name_chunks<T: serde::Serialize>(
+    items: &[T],
+    max_len: usize,
+    max_bytes: usize,
+    name: impl Fn(&T) -> &str,
+) -> Vec<&[T]> {
     let mut chunks = Vec::new();
     let mut start = 0;
+    let mut bytes = 0;
     let mut seen = std::collections::HashSet::new();
     for (i, item) in items.iter().enumerate() {
-        if i - start == max_len || !seen.insert(name(item)) {
+        let item_bytes = serde_json::to_vec(item).map_or(0, |v| v.len());
+        if i > start
+            && (i - start == max_len || bytes + item_bytes > max_bytes || seen.contains(name(item)))
+        {
             chunks.push(&items[start..i]);
             start = i;
+            bytes = 0;
             seen.clear();
-            seen.insert(name(item));
         }
+        seen.insert(name(item));
+        bytes += item_bytes;
     }
     if start < items.len() {
         chunks.push(&items[start..]);
@@ -437,12 +453,19 @@ mod tests {
     #[test]
     fn test_unique_name_chunks() {
         let names = ["a", "b", "a", "c", "d", "e", "f"];
-        let chunks = unique_name_chunks(&names, 3, |n| n);
+        let chunks = unique_name_chunks(&names, 3, usize::MAX, |n| n);
         assert_eq!(
             chunks,
             vec![&["a", "b"][..], &["a", "c", "d"][..], &["e", "f"][..]]
         );
-        assert!(unique_name_chunks(&[] as &[&str], 3, |n| n).is_empty());
+        assert!(unique_name_chunks(&[] as &[&str], 3, usize::MAX, |n| n).is_empty());
+
+        // Each name serializes to 3 bytes ("a" with quotes); a 7-byte budget fits two.
+        let chunks = unique_name_chunks(&names, 10, 7, |n| n);
+        assert_eq!(chunks.len(), 4);
+        assert!(chunks.iter().all(|c| c.len() <= 2));
+        // An item over budget still goes out, alone.
+        assert_eq!(unique_name_chunks(&names[..2], 10, 1, |n| n).len(), 2);
     }
 
     fn job(id: i64, deps: &[i64]) -> JobModel {

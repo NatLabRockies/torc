@@ -636,7 +636,9 @@ where
             return Ok(UpdateFileStatsResponse::SuccessfulResponse(response));
         }
         // Id sets are bound as one JSON array and expanded with json_each, so a 100k-entry
-        // batch needs one query per step instead of chunked IN lists.
+        // batch needs one query per step instead of chunked IN lists. CROSS JOIN keeps
+        // json_each outermost (SQLite never reorders it), so each id is an index lookup rather
+        // than a rescan of the batch per row.
         let to_json = |ids: &[i64]| serde_json::to_string(ids).expect("serialize ids");
         let ids: Vec<i64> = ids.into_iter().collect();
 
@@ -652,7 +654,7 @@ where
         let stored: std::collections::HashMap<i64, Option<f64>> =
             sqlx::query_as::<_, (i64, Option<f64>)>(
                 "SELECT f.id, f.st_mtime FROM json_each(?1) j \
-                 JOIN file f ON f.id = j.value AND f.workflow_id = ?2",
+                 CROSS JOIN file f ON f.id = j.value AND f.workflow_id = ?2",
             )
             .bind(to_json(&ids))
             .bind(workflow_id)
@@ -705,8 +707,8 @@ where
         if !changed_ids.is_empty() {
             let rows = sqlx::query_as::<_, (i64, String, i64)>(
                 "SELECT DISTINCT j.id, j.name, j.status FROM json_each(?1) c \
-                 JOIN job_input_file jif ON jif.file_id = c.value \
-                 JOIN job j ON j.id = jif.job_id \
+                 CROSS JOIN job_input_file jif ON jif.file_id = c.value \
+                 CROSS JOIN job j ON j.id = jif.job_id \
                  WHERE j.workflow_id = ?2 AND j.status IN (?3, ?4, ?5)",
             )
             .bind(to_json(&changed_ids))
@@ -725,8 +727,8 @@ where
             let missing_json = to_json(&missing_ids);
             let rows = sqlx::query_as::<_, (i64, String, i64)>(
                 "SELECT DISTINCT j.id, j.name, j.status FROM json_each(?1) m \
-                 JOIN job_output_file jof ON jof.file_id = m.value \
-                 JOIN job j ON j.id = jof.job_id \
+                 CROSS JOIN job_output_file jof ON jof.file_id = m.value \
+                 CROSS JOIN job j ON j.id = jof.job_id \
                  WHERE j.workflow_id = ?2 AND j.status = ?3",
             )
             .bind(&missing_json)

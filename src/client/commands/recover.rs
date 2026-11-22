@@ -864,7 +864,10 @@ pub(crate) fn reset_jobs(
         .map_err(|e| {
             if let apis::Error::ResponseError(ref r) = e
                 && let Ok(v) = serde_json::from_str::<serde_json::Value>(&r.content)
-                && let Some(msg) = v.get("message").and_then(|m| m.as_str())
+                && let Some(msg) = v
+                    .pointer("/error/message")
+                    .or_else(|| v.get("message"))
+                    .and_then(|m| m.as_str())
             {
                 return msg.to_string();
             }
