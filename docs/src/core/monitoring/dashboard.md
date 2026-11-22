@@ -227,7 +227,9 @@ scheduled compute nodes, and Slurm stats.
 - **Editing resource requirements and Slurm schedulers**: click a row in the Resources or Schedulers
   sub-tab to edit it. The change applies to every job (or future allocation) that uses it, so
   editing is allowed only when no jobs are running or pending and no Slurm allocations are queued or
-  active.
+  active. **Add resource requirements…** and **Add Slurm scheduler…** in those sub-tabs create new
+  records at any time; then point jobs at a new requirement from the job's **Edit** dialog, or use a
+  new scheduler from **Schedule Slurm nodes**.
 
 Tables render only the visible rows, so workflows with very large job counts stay responsive.
 

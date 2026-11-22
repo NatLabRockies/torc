@@ -1,6 +1,7 @@
 <!--
-  Edit a resource requirement or a Slurm scheduler in place. Every job (or allocation) that uses
-  it picks up the change, so editing is allowed only while nothing in the workflow is running.
+  Add a resource requirement or a Slurm scheduler (a record without an id), or edit one in place.
+  Every job (or allocation) that uses an existing record picks up the change, so editing is
+  allowed only while nothing in the workflow is running. Adding is always allowed.
 -->
 <script lang="ts">
   import { api, unwrap, type ResourceRequirements, type SlurmScheduler } from "../../lib/api/client";
@@ -30,7 +31,10 @@
   let saving = $state(false);
   let error = $state("");
 
+  const isNew = $derived(target.record.id == null);
+
   async function check() {
+    if (isNew) return (blocked = null);
     const wf = target.record.workflow_id;
     blocked = await editBlockedReason(wf).catch((e) => `Could not check job status: ${errorText(e)}`);
     if (target.kind === "resources") {
@@ -46,21 +50,30 @@
     try {
       // Work may have started since the dialog opened.
       // ponytail: check-then-update is not atomic; enforce on the server if that window matters.
-      blocked = await editBlockedReason(target.record.workflow_id);
-      if (blocked) return;
+      if (!isNew) {
+        blocked = await editBlockedReason(target.record.workflow_id);
+        if (blocked) return;
+      }
       if (rr) {
         await unwrap(
-          api.PUT("/resource_requirements/{id}", { params: { path: { id: rr.id! } }, body: rr }),
+          isNew
+            ? api.POST("/resource_requirements", { body: rr })
+            : api.PUT("/resource_requirements/{id}", { params: { path: { id: rr.id! } }, body: rr }),
         );
       } else if (sched) {
-        // Optional text fields: the server keeps a null value and clears an empty one.
+        // Optional text fields: on update the server keeps a null value and clears an empty one;
+        // a new scheduler leaves blank ones unset.
         const body = { ...sched };
         for (const k of ["partition", "qos", "mem", "gres", "tmp", "extra"] as const) {
-          body[k] = body[k]?.trim() ?? "";
+          body[k] = body[k]?.trim() || (isNew ? null : "");
         }
-        await unwrap(api.PUT("/slurm_schedulers/{id}", { params: { path: { id: sched.id! } }, body }));
+        await unwrap(
+          isNew
+            ? api.POST("/slurm_schedulers", { body })
+            : api.PUT("/slurm_schedulers/{id}", { params: { path: { id: sched.id! } }, body }),
+        );
       }
-      toast.success("Saved");
+      toast.success(isNew ? "Added" : "Saved");
       app.refresh();
       open = false;
     } catch (err) {
@@ -71,9 +84,13 @@
   }
 
   let title = $derived(
-    target.kind === "resources"
-      ? `Edit resource requirements ${target.record.name}`
-      : `Edit Slurm scheduler ${target.record.name ?? target.record.id}`,
+    isNew
+      ? target.kind === "resources"
+        ? "Add resource requirements"
+        : "Add Slurm scheduler"
+      : target.kind === "resources"
+        ? `Edit resource requirements ${target.record.name}`
+        : `Edit Slurm scheduler ${target.record.name ?? target.record.id}`,
   );
   let disabled = $derived(blocked !== null);
 </script>
@@ -143,14 +160,14 @@
         Extra sbatch options
         <input class="input mono" bind:value={sched.extra} {disabled} placeholder="--constraint=…" />
       </label>
-      <p class="muted">Applies to allocations submitted from now on.</p>
+      {#if !isNew}<p class="muted">Applies to allocations submitted from now on.</p>{/if}
     {/if}
     {#if error}<p class="error-text">{error}</p>{/if}
   </form>
   {#snippet footer()}
     <button class="btn" onclick={() => (open = false)}>Cancel</button>
     <button class="btn btn-primary" type="submit" form="edit-definition" disabled={saving || disabled}>
-      {saving ? "Saving…" : "Save"}
+      {saving ? "Saving…" : isNew ? "Add" : "Save"}
     </button>
   {/snippet}
 </Modal>

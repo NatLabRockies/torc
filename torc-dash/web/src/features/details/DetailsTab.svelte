@@ -177,6 +177,27 @@
           onclick={() => (filters[sub] = filterText === q.filter ? "" : q.filter)}>{q.label}</button
         >
       {/each}
+      {#if sub === "resources" && app.workflowId !== null}
+        {@const workflow_id = app.workflowId}
+        <button
+          class="btn btn-sm"
+          onclick={() =>
+            (editTarget = {
+              kind: "resources",
+              record: { workflow_id, name: "", num_cpus: 1, memory: "1g", num_gpus: 0, num_nodes: 1, runtime: "PT1H" },
+            })}>Add resource requirements…</button
+        >
+      {:else if sub === "schedulers" && app.workflowId !== null}
+        {@const workflow_id = app.workflowId}
+        <button
+          class="btn btn-sm"
+          onclick={() =>
+            (editTarget = {
+              kind: "scheduler",
+              record: { workflow_id, name: "", account: "", nodes: 1, walltime: "04:00:00" },
+            })}>Add Slurm scheduler…</button
+        >
+      {/if}
       {#if sub === "jobs" && selectedJobs.size}
         <span class="selection">
           {selectedJobs.size.toLocaleString()} selected
