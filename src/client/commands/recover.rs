@@ -688,7 +688,8 @@ fn handle_failed_schedule_actions(
     }
 
     eprintln!(
-        "{} schedule_nodes action(s) failed; their allocations were never submitted:",
+        "{} schedule_nodes action(s) failed; some of their allocations may have been submitted \
+         before the failure (check 'squeue --me' before resetting):",
         failed.len()
     );
     for a in &failed {
@@ -702,23 +703,49 @@ fn handle_failed_schedule_actions(
 
     let status = apis::workflows_api::is_workflow_complete(config, args.workflow_id)
         .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
-    if args.dry_run || !args.interactive || status.is_complete || status.is_canceled {
+    // Only these triggers are fired by `fire_pending_schedule_nodes_actions` (via
+    // `WorkflowManager::start`); a reset worker-lifecycle action would submit nothing here.
+    let (offerable, other): (Vec<_>, Vec<_>) = failed.into_iter().partition(|a| {
+        matches!(
+            a.trigger_type.as_str(),
+            "on_workflow_start" | "on_jobs_ready" | "on_jobs_complete"
+        )
+    });
+    if args.dry_run
+        || !args.interactive
+        || status.is_complete
+        || status.is_canceled
+        || offerable.is_empty()
+    {
         eprintln!(
             "  Fix the cause, then re-arm each with 'torc workflows reset-action {} <action_id>'.",
             args.workflow_id
         );
         return Ok(false);
     }
+    if !other.is_empty() {
+        eprintln!(
+            "  Actions with worker triggers ({}) must be re-armed with \
+             'torc workflows reset-action {} <action_id>'; they fire when a worker starts or exits.",
+            other
+                .iter()
+                .map(|a| a.id.unwrap_or(-1).to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            args.workflow_id
+        );
+    }
 
     let answer = prompt_choice(
-        "Fixed the cause? Reset these actions and submit their allocations now? [y/N]: ",
+        "Fixed the cause and cancelled any partial allocations? Reset these actions and \
+         submit their allocations now? [y/N]: ",
         &["y", "n"],
         "n",
     )?;
     if answer != "y" {
         return Ok(false);
     }
-    for a in &failed {
+    for a in &offerable {
         let id = a.id.unwrap_or(-1);
         apis::workflow_actions_api::reset_action(config, args.workflow_id, id)
             .map_err(|e| format!("Failed to reset action {}: {}", id, e))?;
@@ -731,7 +758,7 @@ fn handle_failed_schedule_actions(
     )?;
     eprintln!(
         "Reset {} action(s) and submitted {} Slurm allocation(s).",
-        failed.len(),
+        offerable.len(),
         submitted
     );
     Ok(true)

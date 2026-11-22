@@ -3632,7 +3632,9 @@ impl JobRunner {
                 self.workflow_id,
                 action_id,
                 &outcome,
-                self.rules.compute_node_wait_for_healthy_database_minutes,
+                // Bookkeeping on the worker loop: keep the fast lock retries but skip the long
+                // health wait, which would stall job reaping. A lost report leaves it `claimed`.
+                0,
             );
         }
     }
