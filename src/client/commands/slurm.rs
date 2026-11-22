@@ -5506,6 +5506,13 @@ fn handle_regenerate(
         );
     }
 
+    // Reversed so the first action per scheduler wins, as a linear find would.
+    let action_pending: HashMap<i64, bool> = applied
+        .actions
+        .iter()
+        .rev()
+        .map(|a| (a.scheduler_id, a.pending))
+        .collect();
     let schedulers_created: Vec<SchedulerInfo> = plan
         .schedulers
         .iter()
@@ -5521,11 +5528,9 @@ fn handle_regenerate(
             job_count: planned.job_count,
             // The server armed the actions from current job statuses, which may differ from the
             // plan (e.g., a gate job completed after planning).
-            has_dependencies: applied
-                .actions
-                .iter()
-                .find(|a| a.scheduler_id == *id)
-                .map_or(planned.has_dependencies, |a| !a.pending),
+            has_dependencies: action_pending
+                .get(id)
+                .map_or(planned.has_dependencies, |pending| !pending),
         })
         .collect();
     let total_allocations: i64 = plan.schedulers.iter().map(|p| p.num_allocations).sum();
