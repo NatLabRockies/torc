@@ -570,10 +570,11 @@ fn test_reset_status_active_job_guard(start_server: &ServerProcess) {
         start_server,
         None,
     );
-    assert!(
-        result_no_force.is_err(),
-        "Should fail for Running job without --force"
-    );
+    let err = result_no_force
+        .expect_err("Should fail for Running job without --force")
+        .to_string();
+    // The server's message is shown, not the raw HTTP error.
+    assert!(!err.contains("reset failed"), "{err}");
     // Job must still be Running
     assert_eq!(
         apis::jobs_api::get_job(config, job_id)

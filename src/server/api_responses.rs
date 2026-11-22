@@ -281,7 +281,7 @@ pub enum CancelJobResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
-    /// Conflict - the job is running, pending, or already in a terminal status
+    /// Conflict - the job is running, pending, uninitialized, or already in a terminal status
     ConflictResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),

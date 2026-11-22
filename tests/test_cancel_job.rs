@@ -206,3 +206,56 @@ fn test_cancel_job_unauthorized_user_rejected(
     let response = apis::jobs_api::cancel_job(&owner, a).expect("owner cancels");
     assert_eq!(response.canceled_job_ids, vec![a]);
 }
+
+#[rstest]
+fn test_cancel_uninitialized_job_conflicts(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cancel_uninitialized")
+        .id
+        .unwrap();
+    let a = create_job(config, workflow_id, "a", vec![], true);
+    let b = create_job(config, workflow_id, "b", vec![a], true);
+
+    // Canceling a would leave b uninitialized, and initialize_jobs would then make it ready.
+    match apis::jobs_api::cancel_job(config, a) {
+        Err(apis::Error::ResponseError(r)) => {
+            assert_eq!(r.status.as_u16(), 409);
+            assert!(
+                r.content.contains("initialize the workflow first"),
+                "{}",
+                r.content
+            );
+        }
+        other => panic!("expected 409, got {:?}", other.map(|_| ())),
+    }
+    assert_eq!(status(config, a), JobStatus::Uninitialized);
+
+    initialize(config, workflow_id);
+    let response = apis::jobs_api::cancel_job(config, a).expect("cancel job");
+    assert_eq!(response.canceled_job_ids, vec![a, b]);
+}
+
+#[rstest]
+fn test_cancel_response_excludes_unrelated_cascade(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cancel_unrelated").id.unwrap();
+    let x = create_job(config, workflow_id, "x", vec![], true);
+    let y = create_job(config, workflow_id, "y", vec![x], true);
+    let b = create_job(config, workflow_id, "b", vec![], true);
+    initialize(config, workflow_id);
+    // Leave y's cancellation pending: x is terminated but marked processed, so the background
+    // task never cascades it. No API reaches this state deterministically (the background task
+    // races any completion), so write it directly. The cascade run by canceling b picks it up.
+    let db = rusqlite::Connection::open(start_server.db_file.path()).expect("open db");
+    db.busy_timeout(Duration::from_secs(10)).unwrap();
+    db.execute(
+        "UPDATE job SET status = ?1, unblocking_processed = 1 WHERE id = ?2",
+        (JobStatus::Terminated.to_int(), x),
+    )
+    .expect("terminate x");
+    assert_eq!(status(config, y), JobStatus::Blocked);
+
+    let response = apis::jobs_api::cancel_job(config, b).expect("cancel job");
+    assert_eq!(response.canceled_job_ids, vec![b]);
+    assert_eq!(status(config, y), JobStatus::Canceled);
+}

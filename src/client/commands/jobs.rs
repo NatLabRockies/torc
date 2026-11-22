@@ -376,9 +376,10 @@ EXAMPLES:
     },
     /// Cancel a job that is not running, plus the downstream jobs that cancellation triggers
     #[command(after_long_help = "\
-Cancels an uninitialized, blocked, ready, or disabled job. Downstream jobs are canceled as for any
-other canceled dependency. Running or pending jobs cannot be canceled individually; use
-'torc cancel <workflow_id>' instead.
+Cancels a blocked, ready, or disabled job. Downstream jobs are canceled as for a failed
+dependency. Running or pending jobs cannot be canceled individually; use
+'torc cancel <workflow_id>' instead. An uninitialized job is rejected: initialize the workflow
+first, or disable the job.
 
 EXAMPLES:
     torc jobs cancel 456

@@ -27,7 +27,7 @@ function _oacinternal_cancel_job(_api::JobsApi, id::Int64; _mediaType=nothing)
     return _ctx
 end
 
-@doc raw"""Cancel a job that is not running (uninitialized, blocked, ready, or disabled). The job becomes canceled and the server immediately runs the same dependency processing as for any other terminal status: downstream jobs with cancel_on_blocking_job_failure whose dependencies are all terminal are canceled, and other dependents whose dependencies are all terminal become ready. Downstream jobs that still wait on other dependencies are canceled when those finish. The response lists every job canceled by the request. 409 if the job is running or pending (running jobs cannot be canceled individually; cancel the workflow instead) or already terminal.
+@doc raw"""Cancel a job that is blocked, ready, or disabled. The job becomes canceled and the server immediately runs the same dependency processing as for a failed job: downstream jobs with cancel_on_blocking_job_failure whose dependencies are all terminal are canceled, and other dependents whose dependencies are all terminal become ready. Downstream jobs that still wait on other dependencies are canceled when those finish. The response lists the job and the downstream jobs the request canceled. 409 if the job is running or pending (running jobs cannot be canceled individually; cancel the workflow instead), uninitialized (initialize the workflow first, or disable the job), or already terminal.
 
 Params:
 - id::Int64 (required)

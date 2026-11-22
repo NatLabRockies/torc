@@ -328,5 +328,5 @@ curl -X POST http://localhost:8080/torc-service/v1/workflows/1/actions/2/reset |
 curl -X POST http://localhost:8080/torc-service/v1/jobs/5/cancel | jq '.canceled_job_ids'
 ```
 
-The response lists the job and every downstream job the cancellation canceled. A running or pending
-job returns 409.
+The response lists the job and every downstream job the cancellation canceled. A running, pending,
+uninitialized, or already terminal job returns 409.

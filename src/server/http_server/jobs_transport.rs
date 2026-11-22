@@ -1355,10 +1355,19 @@ where
         };
         let status = parse_job_status(status_int as i32, id)?;
         match status {
-            models::JobStatus::Uninitialized
-            | models::JobStatus::Blocked
-            | models::JobStatus::Ready
-            | models::JobStatus::Disabled => {}
+            models::JobStatus::Blocked | models::JobStatus::Ready | models::JobStatus::Disabled => {
+            }
+            // Its dependents are uninitialized too, so nothing would cascade now, and a later
+            // initialize_jobs treats a canceled dependency as satisfied and would run them.
+            models::JobStatus::Uninitialized => {
+                return Ok(CancelJobResponse::ConflictResponse(message_error_response(
+                    format!(
+                        "job_id={} is uninitialized; initialize the workflow first, or disable \
+                         the job",
+                        id
+                    ),
+                )));
+            }
             models::JobStatus::Running | models::JobStatus::Pending => {
                 return Ok(CancelJobResponse::ConflictResponse(message_error_response(
                     format!(
@@ -1375,9 +1384,20 @@ where
             }
         }
 
+        // The job and every job downstream of it that is canceled. Diffing it before and after
+        // the cascade gives exactly the jobs this request canceled, leaving out jobs elsewhere
+        // in the workflow canceled by the same pass for pending failures.
+        const DOWNSTREAM_CANCELED: &str = "WITH RECURSIVE downstream(job_id) AS ( \
+                 SELECT ?1 \
+                 UNION \
+                 SELECT d.job_id FROM job_depends_on d \
+                 JOIN downstream ds ON d.depends_on_job_id = ds.job_id \
+             ) \
+             SELECT j.id FROM job j JOIN downstream ds ON ds.job_id = j.id \
+             WHERE j.status = ?2 ORDER BY j.id";
         let canceled_before: std::collections::HashSet<i64> =
-            sqlx::query_scalar("SELECT id FROM job WHERE workflow_id = ? AND status = ?")
-                .bind(workflow_id)
+            sqlx::query_scalar(DOWNSTREAM_CANCELED)
+                .bind(id)
                 .bind(canceled)
                 .fetch_all(&mut *tx)
                 .await
@@ -1410,15 +1430,13 @@ where
                 .await
                 .map_err(|e| database_lock_aware_error(e, "Failed to read max action id"))?;
 
-        let mut canceled_job_ids: Vec<i64> =
-            sqlx::query_scalar("SELECT id FROM job WHERE workflow_id = ? AND status = ?")
-                .bind(workflow_id)
-                .bind(canceled)
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(|e| database_lock_aware_error(e, "Failed to fetch canceled jobs"))?;
+        let mut canceled_job_ids: Vec<i64> = sqlx::query_scalar(DOWNSTREAM_CANCELED)
+            .bind(id)
+            .bind(canceled)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to fetch canceled jobs"))?;
         canceled_job_ids.retain(|job_id| !canceled_before.contains(job_id));
-        canceled_job_ids.sort_unstable();
 
         tx.commit()
             .await

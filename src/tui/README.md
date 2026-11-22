@@ -27,7 +27,7 @@ torc tui
 
 - **View job details** including full command and status
 - **View job logs** (stdout/stderr) with search and navigation
-- **Cancel**, **terminate**, **retry**, or **reset** individual jobs
+- **Cancel**, **retry**, or **reset** individual jobs
 - Color-coded job status for quick visual scanning
 
 ### Real-time Monitoring

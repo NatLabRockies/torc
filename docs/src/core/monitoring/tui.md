@@ -38,7 +38,7 @@ configuration.
 ## Features
 
 - **Workflow Management**: Create, initialize, run, submit, cancel, reset, and delete workflows
-- **Job Management**: View details, logs, cancel, terminate, or retry jobs
+- **Job Management**: View details, logs, cancel, or retry jobs
 - **Real-time Monitoring**: Auto-refresh, manual refresh, color-coded status
 - **Live Event Streaming**: Server-Sent Events (SSE) for real-time job and compute node events
 - **Server Management**: Start/stop torc-server directly from the TUI
@@ -126,9 +126,9 @@ Navigate to the Jobs tab (`→` then `Tab` if needed) to manage individual jobs:
 | `y`         | Retry failed job                            |
 | `1`/`2`/`3` | Sort by ID / Name / Status (cycles ↓ ↑ off) |
 
-Cancel works on jobs that are not running (uninitialized, blocked, ready, or disabled) and also
-cancels the downstream jobs that depend on them. A running or pending job cannot be canceled
-individually yet; cancel the workflow instead.
+Cancel works on blocked, ready, or disabled jobs and also cancels the downstream jobs that depend on
+them. A running or pending job cannot be canceled individually yet; cancel the workflow instead. An
+uninitialized job cannot be canceled; initialize the workflow first, or disable the job.
 
 ### Job Status Colors
 
