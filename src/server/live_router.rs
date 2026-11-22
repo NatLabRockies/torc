@@ -93,6 +93,10 @@ pub fn app_router(state: LiveRouterState) -> Router {
                     "/torc-service/v1/workflows/{id}/file_stats",
                     post(update_file_stats),
                 )
+                .route(
+                    "/torc-service/v1/workflows/{id}/apply_scheduler_plan",
+                    post(apply_scheduler_plan),
+                )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
         .route(
@@ -571,6 +575,12 @@ pub struct UpdateFileStatsQuery {
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct ApplySchedulerPlanQuery {
+    #[param(nullable = true)]
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ReadyJobRequirementsQuery {
     #[param(nullable = true)]
     pub scheduler_config_id: Option<i64>,
@@ -603,6 +613,47 @@ pub async fn version(State(state): State<LiveRouterState>) -> Response<Body> {
         git_hash: (!state.openapi_state.access_control_enabled)
             .then_some(state.openapi_state.git_hash.clone()),
     })
+}
+
+#[utoipa::path(
+    post,
+    tag = "slurm_schedulers",
+    path = "/workflows/{id}/apply_scheduler_plan",
+    operation_id = "apply_scheduler_plan",
+    description = "Apply a client-computed Slurm scheduler plan in one transaction. Every job \
+        must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in \
+        at most one scheduler; otherwise the plan is rejected and nothing changes. When \
+        suppress_existing_schedule_actions is set, the workflow's non-recovery, non-persistent, \
+        unexecuted schedule_nodes actions are marked executed. The schedulers are created, their \
+        jobs are assigned, and an on_jobs_ready recovery action is created for each \
+        recovery_actions entry, armed from the gating jobs' current statuses. The response lists \
+        the created IDs and which actions are pending (ready to submit now). With dry_run=true, \
+        the same result is reported and nothing is stored.",
+    params(("id" = i64, Path, description = "Workflow ID"), ApplySchedulerPlanQuery),
+    request_body = models::ApplySchedulerPlanRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::ApplySchedulerPlanResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (jobs outside the workflow, non-pending jobs, jobs in more than one scheduler, invalid recovery actions)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn apply_scheduler_plan(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Query(query): Query<ApplySchedulerPlanQuery>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::ApplySchedulerPlanRequest>,
+) -> Response<Body> {
+    match state
+        .server
+        .apply_scheduler_plan(id, body, query.dry_run, &context)
+        .await
+    {
+        Ok(response) => apply_scheduler_plan_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
 }
 
 #[utoipa::path(

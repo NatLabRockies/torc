@@ -5165,63 +5165,6 @@ fn handle_regenerate(
 
     let mut warnings: Vec<String> = Vec::new();
 
-    // Mark existing schedule_nodes actions as executed to prevent duplicate allocations
-    // This is critical for recovery scenarios where original actions would otherwise fire again.
-    // Claiming is a state change, so skip it in dry-run mode.
-    if !dry_run {
-        match utils::send_with_retries(
-            config,
-            || apis::workflow_actions_api::get_workflow_actions(config, workflow_id),
-            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-        ) {
-            Ok(actions) => {
-                for action in actions {
-                    // Only mark non-recovery, unexecuted schedule_nodes actions
-                    if action.action_type == "schedule_nodes"
-                        && !action.is_recovery
-                        && !action.executed
-                        && let Some(action_id) = action.id
-                    {
-                        match utils::send_with_retries(
-                            config,
-                            || {
-                                apis::workflow_actions_api::claim_action(
-                                    config,
-                                    workflow_id,
-                                    action_id,
-                                    models::ClaimActionRequest {
-                                        compute_node_id: None,
-                                    },
-                                )
-                            },
-                            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-                        ) {
-                            Ok(_) => {
-                                info!(
-                                    "Marked action {} ({} -> schedule_nodes) as executed for recovery",
-                                    action_id, action.trigger_type
-                                );
-                            }
-                            Err(e) => {
-                                // 409 Conflict means already claimed, which is fine
-                                if !format!("{:?}", e).contains("409") {
-                                    warnings.push(format!(
-                                        "Failed to mark action {} as executed: {:?}",
-                                        action_id, e
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                // Non-fatal: we can still proceed with regeneration
-                warnings.push(format!("Failed to fetch workflow actions: {:?}", e));
-            }
-        }
-    }
-
     // Fetch all resource requirements for the workflow
     let resource_requirements = match paginate_resource_requirements(
         config,
@@ -5434,200 +5377,123 @@ fn handle_regenerate(
         return;
     }
 
-    // Apply plan to database: create schedulers and track IDs
-    let mut schedulers_created: Vec<SchedulerInfo> = Vec::new();
-    let mut total_allocations: i64 = 0;
-    // Maps scheduler name -> scheduler_id
-    let mut scheduler_name_to_id: HashMap<String, i64> = HashMap::new();
-
-    for planned in &plan.schedulers {
-        // Create the scheduler in the database
-        let scheduler = models::SlurmSchedulerModel {
-            id: None,
-            workflow_id,
-            name: Some(planned.name.clone()),
-            account: planned.account.clone(),
-            partition: planned.partition.clone(),
-            mem: planned.mem.clone(),
-            walltime: planned.walltime.clone(),
-            nodes: planned.nodes,
-            gres: planned.gres.clone(),
-            ntasks_per_node: None,
-            qos: planned.qos.clone(),
-            tmp: None,
-            extra: None,
-            // Auto-generated schedulers size themselves for parallel work; serializing
-            // is an explicit opt-in on a user-authored scheduler.
-            serialize_allocations: None,
-        };
-
-        let created_scheduler = match utils::send_with_retries(
-            config,
-            || apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler.clone()),
-            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                print_error("creating scheduler", &e);
+    // Apply the plan on the server in one transaction: suppress the existing schedule_nodes
+    // actions (the original ones would otherwise fire again during recovery), create the
+    // schedulers, assign jobs, and create recovery actions armed from current job statuses.
+    let mut job_name_to_id: HashMap<&str, i64> = HashMap::with_capacity(pending_jobs.len());
+    for job in &pending_jobs {
+        if let Some(id) = job.id {
+            job_name_to_id.entry(job.name.as_str()).or_insert(id);
+        }
+    }
+    let ids_for = |names: &[String]| -> Vec<i64> {
+        names
+            .iter()
+            .filter_map(|n| job_name_to_id.get(n.as_str()).copied())
+            .collect()
+    };
+    let scheduler_index: HashMap<&str, usize> = plan
+        .schedulers
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.name.as_str(), i))
+        .collect();
+    let request = models::ApplySchedulerPlanRequest {
+        schedulers: plan
+            .schedulers
+            .iter()
+            .map(|planned| models::SchedulerPlanEntry {
+                scheduler: models::SlurmSchedulerModel {
+                    id: None,
+                    workflow_id,
+                    name: Some(planned.name.clone()),
+                    account: planned.account.clone(),
+                    partition: planned.partition.clone(),
+                    mem: planned.mem.clone(),
+                    walltime: planned.walltime.clone(),
+                    nodes: planned.nodes,
+                    gres: planned.gres.clone(),
+                    ntasks_per_node: None,
+                    qos: planned.qos.clone(),
+                    tmp: None,
+                    extra: None,
+                    // Auto-generated schedulers size themselves for parallel work; serializing
+                    // is an explicit opt-in on a user-authored scheduler.
+                    serialize_allocations: None,
+                },
+                job_ids: ids_for(&planned.job_names),
+            })
+            .collect(),
+        // The planner gates every recovery action on exact job names.
+        recovery_actions: plan
+            .actions
+            .iter()
+            .filter(|a| a.is_recovery)
+            .filter_map(|a| {
+                let idx = *scheduler_index.get(a.scheduler_name.as_str())?;
+                let job_ids = ids_for(a.job_names.as_deref().unwrap_or_default());
+                (!job_ids.is_empty()).then_some(models::SchedulerPlanAction {
+                    scheduler_index: idx as i64,
+                    job_ids,
+                    num_allocations: a.num_allocations,
+                })
+            })
+            .collect(),
+        suppress_existing_schedule_actions: true,
+    };
+    let applied = match utils::send_with_retries(
+        config,
+        || {
+            apis::slurm_schedulers_api::apply_scheduler_plan(
+                config,
+                workflow_id,
+                request.clone(),
+                None,
+            )
+        },
+        WAIT_FOR_HEALTHY_DATABASE_MINUTES,
+    ) {
+        Ok(applied) => applied,
+        Err(e) => {
+            if let apis::Error::ResponseError(ref content) = e
+                && content.status == reqwest::StatusCode::NOT_FOUND
+                && !crate::client::version_check::check_version(config)
+                    .server_supports_apply_scheduler_plan()
+            {
+                eprintln!(
+                    "The torc server is too old for this client: it has no apply_scheduler_plan \
+                     endpoint (HTTP API 1.3.0). Upgrade torc-server."
+                );
                 std::process::exit(1);
             }
-        };
+            print_error("applying scheduler plan", &e);
+            std::process::exit(1);
+        }
+    };
+    for id in &applied.suppressed_action_ids {
+        info!(
+            "Suppressed schedule_nodes action workflow_id={} action_id={}",
+            workflow_id, id
+        );
+    }
 
-        let scheduler_id = created_scheduler.id.unwrap_or(-1);
-
-        scheduler_name_to_id.insert(planned.name.clone(), scheduler_id);
-
-        schedulers_created.push(SchedulerInfo {
-            id: scheduler_id,
+    let schedulers_created: Vec<SchedulerInfo> = plan
+        .schedulers
+        .iter()
+        .zip(&applied.scheduler_ids)
+        .map(|(planned, id)| SchedulerInfo {
+            id: *id,
             name: planned.name.clone(),
             account: planned.account.clone(),
-            partition: created_scheduler.partition.clone(),
-            walltime: created_scheduler.walltime.clone(),
+            partition: planned.partition.clone(),
+            walltime: planned.walltime.clone(),
             nodes: planned.nodes,
             num_allocations: planned.num_allocations,
             job_count: planned.job_count,
             has_dependencies: planned.has_dependencies,
-        });
-
-        total_allocations += planned.num_allocations;
-
-        // Update jobs in this group to reference this scheduler
-        for job_name in &planned.job_names {
-            if let Some(job) = pending_jobs.iter().find(|j| &j.name == job_name)
-                && let Some(job_id) = job.id
-            {
-                let mut updated_job = job.clone();
-                updated_job.scheduler_id = Some(scheduler_id);
-                // Clear status so server ignores it during comparison
-                updated_job.status = None;
-                if let Err(e) = utils::send_with_retries(
-                    config,
-                    || apis::jobs_api::update_job(config, job_id, updated_job.clone()),
-                    WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-                ) {
-                    warnings.push(format!(
-                        "Failed to update job {} with scheduler: {}",
-                        job_id, e
-                    ));
-                }
-            }
-        }
-    }
-
-    // Map each created scheduler to whether its jobs still depend on unfinished work. A ready-now
-    // scheduler (no pending dependencies) gets a Pending recovery action that the submit path below
-    // fires immediately; a deferred scheduler gets a Waiting action that a running worker fires once
-    // the gate jobs complete.
-    let scheduler_has_deps: HashMap<&str, bool> = schedulers_created
-        .iter()
-        .map(|s| (s.name.as_str(), s.has_dependencies))
+        })
         .collect();
-
-    // Create recovery actions tying each generated scheduler to its jobs (one per generated
-    // scheduler, from planned actions with is_recovery=true).
-    for action in &plan.actions {
-        if !action.is_recovery {
-            continue; // Skip non-recovery actions
-        }
-
-        let scheduler_id = match scheduler_name_to_id.get(&action.scheduler_name) {
-            Some(id) => *id,
-            None => continue,
-        };
-
-        // Get job IDs for this action's jobs
-        // Prefer exact job_names over job_name_patterns (regexes) when available
-        let job_ids: Vec<i64> = if let Some(ref names) = action.job_names {
-            // Use exact name matching
-            pending_jobs
-                .iter()
-                .filter(|j| names.contains(&j.name))
-                .filter_map(|j| j.id)
-                .collect()
-        } else if let Some(ref patterns) = action.job_name_patterns {
-            // Fall back to regex patterns
-            pending_jobs
-                .iter()
-                .filter(|j| {
-                    patterns.iter().any(|p| {
-                        regex::Regex::new(p)
-                            .map(|re| re.is_match(&j.name))
-                            .unwrap_or(false)
-                    })
-                })
-                .filter_map(|j| j.id)
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        if job_ids.is_empty() {
-            continue;
-        }
-
-        let action_config = serde_json::json!({
-            "scheduler_type": "slurm",
-            "scheduler_id": scheduler_id,
-            "num_allocations": action.num_allocations,
-        });
-
-        let has_dependencies = scheduler_has_deps
-            .get(action.scheduler_name.as_str())
-            .copied()
-            .unwrap_or(false);
-        // A ready-now action's gate jobs are all satisfied (Ready) right now, so arm it to Pending:
-        // trigger_count == required_triggers, which the server sets to job_ids.len() for job-gated
-        // triggers. A deferred action stays Waiting (0) until its gate jobs complete and a worker
-        // fires it.
-        let trigger_count = if has_dependencies {
-            0
-        } else {
-            job_ids.len() as i64
-        };
-
-        let action_body = models::WorkflowActionModel {
-            id: None,
-            workflow_id,
-            trigger_type: "on_jobs_ready".to_string(),
-            action_type: "schedule_nodes".to_string(),
-            action_config,
-            job_ids: Some(job_ids.clone()),
-            trigger_count,
-            required_triggers: 1,
-            executed: false,
-            executed_at: None,
-            executed_by: None,
-            persistent: false,
-            is_recovery: true,
-        };
-
-        match utils::send_with_retries(
-            config,
-            || {
-                apis::workflow_actions_api::create_workflow_action(
-                    config,
-                    workflow_id,
-                    action_body.clone(),
-                )
-            },
-            WAIT_FOR_HEALTHY_DATABASE_MINUTES,
-        ) {
-            Ok(created_action) => {
-                info!(
-                    "Created recovery action {} for {} deferred jobs using scheduler {}",
-                    created_action.id.unwrap_or(-1),
-                    job_ids.len(),
-                    scheduler_id
-                );
-            }
-            Err(e) => {
-                warnings.push(format!(
-                    "Failed to create recovery action for scheduler {}: {:?}",
-                    scheduler_id, e
-                ));
-            }
-        }
-    }
+    let total_allocations: i64 = plan.schedulers.iter().map(|p| p.num_allocations).sum();
 
     // Submit allocations if requested
     // Only submit allocations for schedulers without dependencies.
@@ -5644,17 +5510,22 @@ fn handle_regenerate(
             std::process::exit(1);
         }
 
-        // Deferred schedulers (jobs still gated on unfinished dependencies) keep their on_jobs_ready
-        // recovery action in the Waiting state; a running worker fires it once the gate jobs
-        // complete. Only report them here -- there is nothing to submit yet.
-        for scheduler_info in &schedulers_created {
-            if scheduler_info.has_dependencies {
-                eprintln!(
-                    "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action when dependencies complete",
-                    scheduler_info.name, scheduler_info.num_allocations
-                );
-                allocations_deferred += scheduler_info.num_allocations;
-            }
+        // Actions the server armed Waiting (gating jobs not all ready) fire from a running worker
+        // once those jobs become ready. Only report them here -- there is nothing to submit yet.
+        let scheduler_names: HashMap<i64, &str> = schedulers_created
+            .iter()
+            .map(|s| (s.id, s.name.as_str()))
+            .collect();
+        for action in applied.actions.iter().filter(|a| !a.pending) {
+            eprintln!(
+                "  Deferring scheduler '{}' ({} allocation(s)) - will submit via on_jobs_ready action when dependencies complete",
+                scheduler_names
+                    .get(&action.scheduler_id)
+                    .copied()
+                    .unwrap_or_default(),
+                action.num_allocations
+            );
+            allocations_deferred += action.num_allocations;
         }
 
         // Submit the ready-now allocations through the SAME path `torc submit` uses: fire every

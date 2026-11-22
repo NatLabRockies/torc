@@ -879,6 +879,15 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<UpdateFileStatsResponse, ApiError>;
 
+    /// Apply a client-computed Slurm scheduler plan in one transaction.
+    async fn apply_scheduler_plan(
+        &self,
+        id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError>;
+
     /// Update a job.
     async fn update_job(
         &self,

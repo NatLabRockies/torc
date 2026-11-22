@@ -8,6 +8,7 @@ use utoipa::ToSchema;
 use crate::api_version::HTTP_API_VERSION;
 use crate::models::{
     AccessCheckResponse, AccessGroupModel, AdminAuditLogEntry, AdminSqlRequest, AdminSqlResponse,
+    AppliedSchedulerAction, ApplySchedulerPlanRequest, ApplySchedulerPlanResponse,
     ArchiveWorkflowRequest, BatchCompleteJobsRequest, BatchCompleteJobsResponse,
     ClaimActionRequest, ClaimActionResponse, ClaimJobsBasedOnResources, ClaimNextJobsResponse,
     ComputeNodeModel, ComputeNodesResources, CreateFilesResponse, CreateJobsResponse,
@@ -28,8 +29,9 @@ use crate::models::{
     ProcessChangedJobInputsResponse, ReloadAuthResponse, RemoteWorkerModel, ResetJobStatusRequest,
     ResetJobStatusResponse, ResetJobStatusSkipped, ResourceRequirementsModel, ResultModel,
     RoCrateEntityModel, RunningJobModel, RunningJobsResponse, ScheduledComputeNodesModel,
-    SlurmJobCorrelationModel, SlurmJobCorrelationsResponse, SlurmSchedulerModel, SlurmStatsModel,
-    SpawnJobModel, SpawnJobsRequest, SpawnJobsResponse, UserDataListModel, UserDataModel,
+    SchedulerPlanAction, SchedulerPlanEntry, SlurmJobCorrelationModel,
+    SlurmJobCorrelationsResponse, SlurmSchedulerModel, SlurmStatsModel, SpawnJobModel,
+    SpawnJobsRequest, SpawnJobsResponse, UserDataListModel, UserDataModel,
     UserGroupMembershipModel, WorkflowAccessGroupModel, WorkflowActionModel, WorkflowModel,
     WorkflowStatusResponse,
 };
@@ -220,11 +222,11 @@ mod openapi_scheduled_compute_node_paths {
 #[allow(unused_imports)]
 mod openapi_slurm_scheduler_paths {
     pub use crate::server::live_router::{
-        __path_create_slurm_scheduler, __path_delete_slurm_scheduler,
+        __path_apply_scheduler_plan, __path_create_slurm_scheduler, __path_delete_slurm_scheduler,
         __path_delete_slurm_schedulers, __path_get_slurm_scheduler, __path_list_slurm_schedulers,
-        __path_update_slurm_scheduler, create_slurm_scheduler, delete_slurm_scheduler,
-        delete_slurm_schedulers, get_slurm_scheduler, list_slurm_schedulers,
-        update_slurm_scheduler,
+        __path_update_slurm_scheduler, apply_scheduler_plan, create_slurm_scheduler,
+        delete_slurm_scheduler, delete_slurm_schedulers, get_slurm_scheduler,
+        list_slurm_schedulers, update_slurm_scheduler,
     };
 }
 
@@ -530,6 +532,7 @@ fn resolve_schema_properties<'a>(
         openapi_slurm_scheduler_paths::delete_slurm_scheduler,
         openapi_slurm_scheduler_paths::get_slurm_scheduler,
         openapi_slurm_scheduler_paths::update_slurm_scheduler,
+        openapi_slurm_scheduler_paths::apply_scheduler_plan,
         openapi_slurm_stats_paths::create_slurm_stats,
         openapi_slurm_stats_paths::list_slurm_stats,
         openapi_remote_worker_paths::create_remote_workers,
@@ -681,6 +684,11 @@ fn resolve_schema_properties<'a>(
         FileStatChange,
         FileStatsResetJob,
         FileStatsResponse,
+        SchedulerPlanEntry,
+        SchedulerPlanAction,
+        ApplySchedulerPlanRequest,
+        AppliedSchedulerAction,
+        ApplySchedulerPlanResponse,
         UserDataModel,
         ListUserDataResponse
     )),

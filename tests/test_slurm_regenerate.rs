@@ -846,3 +846,290 @@ fn test_regenerate_ready_jobs_create_pending_recovery_action(start_server: &Serv
         );
     }
 }
+
+// ============== apply_scheduler_plan endpoint ==============
+
+/// Workflow with job `a` (ready) and `b1`, `b2` (blocked on `a`), plus an unexecuted
+/// non-recovery schedule_nodes action that a plan should suppress. Returns
+/// (workflow_id, [a, b1, b2], existing_action_id, compute_node_id).
+fn create_plan_workflow(config: &Configuration, name: &str) -> (i64, [i64; 3], i64, i64) {
+    let workflow = common::create_test_workflow(config, name);
+    let workflow_id = workflow.id.unwrap();
+    let a = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "a".to_string(), "true".to_string()),
+    )
+    .unwrap()
+    .id
+    .unwrap();
+    let mut ids = [a, 0, 0];
+    for (i, name) in ["b1", "b2"].iter().enumerate() {
+        let mut job = models::JobModel::new(workflow_id, name.to_string(), "true".to_string());
+        job.depends_on_job_ids = Some(vec![a]);
+        ids[i + 1] = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    }
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to initialize jobs");
+    let scheduler_id = common::create_test_slurm_scheduler(config, workflow_id);
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        models::WorkflowActionModel::new(
+            workflow_id,
+            "on_workflow_start".to_string(),
+            "schedule_nodes".to_string(),
+            serde_json::json!({"scheduler_type": "slurm", "scheduler_id": scheduler_id,
+                "num_allocations": 1}),
+        ),
+    )
+    .unwrap();
+    let cn = common::create_test_compute_node(config, workflow_id)
+        .id
+        .unwrap();
+    (workflow_id, ids, action.id.unwrap(), cn)
+}
+
+fn plan_scheduler(workflow_id: i64, name: &str) -> models::SlurmSchedulerModel {
+    models::SlurmSchedulerModel {
+        id: None,
+        workflow_id,
+        name: Some(name.to_string()),
+        account: "acct".to_string(),
+        partition: None,
+        mem: None,
+        walltime: "01:00:00".to_string(),
+        nodes: 1,
+        gres: None,
+        ntasks_per_node: None,
+        qos: None,
+        tmp: None,
+        extra: None,
+        serialize_allocations: None,
+    }
+}
+
+/// One scheduler per group, each with a recovery action gated on all of its jobs.
+fn plan(workflow_id: i64, groups: &[&[i64]]) -> models::ApplySchedulerPlanRequest {
+    models::ApplySchedulerPlanRequest {
+        schedulers: groups
+            .iter()
+            .enumerate()
+            .map(|(i, ids)| models::SchedulerPlanEntry {
+                scheduler: plan_scheduler(workflow_id, &format!("regen_{i}")),
+                job_ids: ids.to_vec(),
+            })
+            .collect(),
+        recovery_actions: groups
+            .iter()
+            .enumerate()
+            .map(|(i, ids)| models::SchedulerPlanAction {
+                scheduler_index: i as i64,
+                job_ids: ids.to_vec(),
+                num_allocations: 1,
+            })
+            .collect(),
+        suppress_existing_schedule_actions: true,
+    }
+}
+
+fn complete(config: &Configuration, workflow_id: i64, job_id: i64, cn: i64) {
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        cn,
+        0,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        models::JobStatus::Completed,
+    );
+    apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+        .expect("Failed to complete job");
+}
+
+fn wait_until_ready(config: &Configuration, job_id: i64) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while apis::jobs_api::get_job(config, job_id).unwrap().status != Some(models::JobStatus::Ready)
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "job_id={job_id} not ready"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+fn action(config: &Configuration, workflow_id: i64, id: i64) -> models::WorkflowActionModel {
+    apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .unwrap()
+        .into_iter()
+        .find(|a| a.id == Some(id))
+        .unwrap()
+}
+
+/// A rejected plan changes nothing: no schedulers, no job assignments, no recovery actions, and
+/// the existing schedule_nodes action stays unsuppressed.
+fn assert_unchanged(config: &Configuration, workflow_id: i64, jobs: &[i64], existing: i64) {
+    // The workflow's own test scheduler from create_plan_workflow.
+    assert_eq!(get_scheduler_count(config, workflow_id), 1);
+    for id in jobs {
+        let job = apis::jobs_api::get_job(config, *id).unwrap();
+        // Unassigned jobs report scheduler_id 0.
+        assert!(
+            matches!(job.scheduler_id, None | Some(0)),
+            "job_id={id} was assigned: {:?}",
+            job.scheduler_id
+        );
+    }
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id).unwrap();
+    assert!(actions.iter().all(|a| !a.is_recovery));
+    assert!(!action(config, workflow_id, existing).executed);
+}
+
+fn assert_rejected(
+    config: &Configuration,
+    workflow_id: i64,
+    request: models::ApplySchedulerPlanRequest,
+) {
+    match apis::slurm_schedulers_api::apply_scheduler_plan(config, workflow_id, request, None) {
+        Err(apis::Error::ResponseError(content)) => {
+            assert_eq!(content.status, reqwest::StatusCode::UNPROCESSABLE_ENTITY)
+        }
+        other => panic!("expected 422, got {other:?}"),
+    }
+}
+
+#[rstest]
+fn test_apply_plan_rejects_job_from_other_workflow(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, _) = create_plan_workflow(config, "apply_plan_foreign");
+    let (_, other_jobs, _, _) = create_plan_workflow(config, "apply_plan_foreign_other");
+    assert_rejected(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[0], other_jobs[0]]]),
+    );
+    assert_unchanged(config, workflow_id, &jobs, existing);
+}
+
+#[rstest]
+fn test_apply_plan_rejects_non_pending_job(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, cn) = create_plan_workflow(config, "apply_plan_completed");
+    complete(config, workflow_id, jobs[0], cn);
+    assert_rejected(config, workflow_id, plan(workflow_id, &[&jobs[..]]));
+    assert_unchanged(config, workflow_id, &jobs, existing);
+}
+
+#[rstest]
+fn test_apply_plan_rejects_job_in_two_schedulers(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, _) = create_plan_workflow(config, "apply_plan_duplicate");
+    assert_rejected(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[0], jobs[1]], &[jobs[1], jobs[2]]]),
+    );
+    assert_unchanged(config, workflow_id, &jobs, existing);
+}
+
+/// A scheduler for ready jobs gets a Pending action; one for blocked jobs gets a Waiting action
+/// that fires once its jobs become ready.
+#[rstest]
+fn test_apply_plan_arms_ready_and_deferred(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, cn) = create_plan_workflow(config, "apply_plan_mixed");
+    let response = apis::slurm_schedulers_api::apply_scheduler_plan(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[0]], &[jobs[1], jobs[2]]]),
+        None,
+    )
+    .expect("apply_scheduler_plan failed");
+
+    assert_eq!(response.scheduler_ids.len(), 2);
+    assert_eq!(response.suppressed_action_ids, vec![existing]);
+    assert!(action(config, workflow_id, existing).executed);
+    for (job, sched) in [(0, 0), (1, 1), (2, 1)] {
+        let job = apis::jobs_api::get_job(config, jobs[job]).unwrap();
+        assert_eq!(job.scheduler_id, Some(response.scheduler_ids[sched]));
+    }
+
+    let [ready, deferred] = &response.actions[..] else {
+        panic!("expected two actions: {:?}", response.actions);
+    };
+    assert!(ready.pending);
+    assert!(!deferred.pending);
+    let stored = action(config, workflow_id, deferred.id);
+    assert_eq!((stored.trigger_count, stored.required_triggers), (0, 2));
+    assert!(stored.is_recovery && !stored.executed);
+    assert_eq!(
+        stored.action_config["scheduler_id"],
+        response.scheduler_ids[1]
+    );
+
+    // Completing the gate job readies b1 and b2, which arms the deferred action.
+    complete(config, workflow_id, jobs[0], cn);
+    wait_until_ready(config, jobs[1]);
+    wait_until_ready(config, jobs[2]);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while action(config, workflow_id, deferred.id).trigger_count < 2 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "deferred action not armed"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert_eq!(action(config, workflow_id, deferred.id).trigger_count, 2);
+}
+
+/// If the gate job completes after the client planned (b1, b2 deferred) but before the plan is
+/// applied, the action is armed from the jobs' statuses at apply time, so it is Pending instead
+/// of waiting for a ready transition that already happened.
+#[rstest]
+fn test_apply_plan_gate_job_completed_before_apply(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, _, cn) = create_plan_workflow(config, "apply_plan_gate_done");
+    complete(config, workflow_id, jobs[0], cn);
+    wait_until_ready(config, jobs[1]);
+    wait_until_ready(config, jobs[2]);
+    let response = apis::slurm_schedulers_api::apply_scheduler_plan(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[1], jobs[2]]]),
+        None,
+    )
+    .expect("apply_scheduler_plan failed");
+    assert!(response.actions[0].pending);
+    let stored = action(config, workflow_id, response.actions[0].id);
+    assert_eq!((stored.trigger_count, stored.required_triggers), (2, 2));
+}
+
+#[rstest]
+fn test_apply_plan_dry_run_changes_nothing(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, _) = create_plan_workflow(config, "apply_plan_dry_run");
+    let response = apis::slurm_schedulers_api::apply_scheduler_plan(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[0]], &[jobs[1], jobs[2]]]),
+        Some(true),
+    )
+    .expect("apply_scheduler_plan dry run failed");
+    assert_eq!(response.scheduler_ids.len(), 2);
+    assert_eq!(response.suppressed_action_ids, vec![existing]);
+    assert_eq!(
+        response
+            .actions
+            .iter()
+            .map(|a| a.pending)
+            .collect::<Vec<_>>(),
+        vec![true, false]
+    );
+    assert_unchanged(config, workflow_id, &jobs, existing);
+}

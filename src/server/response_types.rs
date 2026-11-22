@@ -50,9 +50,9 @@ pub mod jobs {
 
 pub mod scheduling {
     pub use crate::server::api_responses::{
-        CreateComputeNodeResponse, CreateLocalSchedulerResponse, CreateRemoteWorkersResponse,
-        CreateResourceRequirementsResponse, CreateScheduledComputeNodeResponse,
-        CreateSlurmSchedulerResponse, CreateSlurmStatsResponse,
+        ApplySchedulerPlanResponse, CreateComputeNodeResponse, CreateLocalSchedulerResponse,
+        CreateRemoteWorkersResponse, CreateResourceRequirementsResponse,
+        CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse, CreateSlurmStatsResponse,
         DeleteAllResourceRequirementsResponse, DeleteComputeNodeResponse,
         DeleteComputeNodesResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
         DeleteRemoteWorkerResponse, DeleteResourceRequirementsResponse,

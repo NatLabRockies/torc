@@ -2276,6 +2276,19 @@ where
             .await
     }
 
+    /// Apply a client-computed Slurm scheduler plan in one transaction.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, dry_run = ?dry_run))]
+    async fn apply_scheduler_plan(
+        &self,
+        id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError> {
+        self.transport_apply_scheduler_plan(id, body, dry_run, context)
+            .await
+    }
+
     /// Update a job.
     async fn update_job(
         &self,
